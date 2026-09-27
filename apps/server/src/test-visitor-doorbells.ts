@@ -21,6 +21,13 @@
  *   5. the table: every type in PUBLIC_WS_EVENTS broadcast once, and a state_synced for an import that counted only
  *      groups: the key-less sockets get exactly this node's row of the table, bare, and never a member-only event; the
  *      member's socket gets every one in full; the visitor's and the suspended member's every public one, bare
+ *   6. listings that leave the board or come back with no post event of their own (review 4113937195): a community
+ *      removal (tickDecisions at the end of the grace), an admin prune of a member with two listings, an enterprise
+ *      paused and resumed, winding up and cancelled, and paused when its only keeper, the lead, is unbound; a member on
+ *      holiday and back; a report actioned with a suspension; a Delete account over HTTP; a trade's step
+ *      (othersGetDoorbell). Every socket off the member feed gets one bare listing doorbell per change, and an unsigned
+ *      reader's board changes to match; the member's socket gets that change's own events and no listing doorbell, as
+ *      before
  *
  * The node kinds, one per process (the parent is the first, and runs the others as children with fresh data dirs):
  *   - global: NODE_PROFILE=global as it ships: listings only
@@ -29,6 +36,7 @@
  *   - local: NODE_PROFILE unset: unchanged, every public doorbell (section 4 runs)
  *   - standby-read-open: a global standby started with ENFORCE_READ_AUTH=false (a main server refuses to start so), where
  *     every read is open to anyone: every public doorbell, as before (section 5 only: a standby makes no changes)
+ * Section 6 runs on each of the other three.
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-visitor-doorbells.ts
  */
@@ -319,6 +327,139 @@ async function main(): Promise<void> {
         assert(bare(s), `${who} socket gets them bare: { type } only`);
         assert(got(s).filter(e => e.type === 'state_synced').length === 2, `${who} socket gets state_synced for the import that counted only groups too`);
         assert(!t.has('system_announcement'), `${who} socket gets no member-only event`);
+    }
+
+    if (!STANDBY) {
+        // ── 6. listings that leave the board, or come back, with no post event ──────────────────────
+        console.log('\n── 6. listings that leave the board or come back with no post event of their own ──');
+        const { createDecision, executeDecision, tickDecisions } = await import('./decisions-engine.js');
+        /** The listings' ids an unsigned reader reads here: the guest view where the switch is on, the board elsewhere. */
+        const board = async (): Promise<string[]> => {
+            beforeCall();
+            const res = await fetch(`${BASE}/api/marketplace/posts?limit=100`);
+            const body = await res.json().catch(() => null);
+            return Array.isArray(body) ? body.map((p: any) => p.id) : [];
+        };
+        const offer = async (who: Id, title: string): Promise<string> => {
+            const made = await call(who, '/api/marketplace/posts', {
+                type: 'offer', category: 'other', title, description: `${title}, a doorbell test`, authorPublicKey: who.pk, lat: -28.5, lng: 153.5,
+            });
+            const id = made.body?.post?.id as string | undefined;
+            assert(made.status === 200 && !!id, `setup: "${title}" posted over HTTP (got ${made.status} ${JSON.stringify(made.body).slice(0, 120)})`);
+            return id ?? '';
+        };
+        const listingDoorbells = (s: Sock) => got(s).filter(e => LISTING_EVENTS.includes(e.type));
+        /**
+         * After a change that no post event announces: every socket off the member feed gets exactly one bare `doorbell`
+         * for it, however many listings it moved; the member's socket gets that change's own events, and no listing
+         * doorbell, as before.
+         */
+        const rings = async (what: string, doorbell: 'post_removed' | 'post_updated', memberGets: string[]): Promise<void> => {
+            await until(S.unsigned, doorbell);
+            await until(S.member, memberGets[memberGets.length - 1]);
+            for (const [who, s] of [...keyless, ...keyed]) {
+                const bells = listingDoorbells(s);
+                assert(bells.length === 1 && bells[0].type === doorbell && bare(s), `${what}: ${who} socket gets one bare ${doorbell} (${show(s)})`);
+            }
+            assert(memberGets.every(t => typesOf(S.member).has(t)), `${what}: the member's socket gets ${memberGets.join(', ')} as before (${show(S.member)})`);
+            assert(listingDoorbells(S.member).length === 0, `${what}: the member's socket gets no listing doorbell, as before (${show(S.member)})`);
+        };
+
+        // A community removal: the Decision's grace runs out, tickDecisions prunes the member, and their listings go.
+        const dora = member('DoorbellDora');
+        const doraOffer = await offer(dora, 'Doorbell Dora offer');
+        const proposer = member('DoorbellProposer', { earned: 50 });
+        const removal = createDecision({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', touches: 'member',
+            effect: 'remove_member', subject: dora.pk });
+        const graced = executeDecision(removal.id);
+        db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), removal.id);
+        assert(graced.status === 'execution_pending_grace' && (await board()).includes(doraOffer),
+            `setup: the removal of Dora is in its grace, past its end, and an unsigned reader still reads her offer (${graced.status})`);
+        await sleep(100);
+        clear();
+        const tick = tickDecisions();
+        assert(tick.graceExpired === 1 && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(dora.pk) as any)?.status === 'pruned',
+            `the community removes Dora: tickDecisions prunes her (${JSON.stringify(tick)})`);
+        await rings('a community removal', 'post_removed', ['user_pruned', 'decision_updated']);
+        assert(!(await board()).includes(doraOffer), 'a community removal: an unsigned reader no longer reads her offer');
+
+        // An admin prune of a member with two listings: one doorbell, not one per listing.
+        const erin = member('DoorbellErin');
+        const erinOffers = [await offer(erin, 'Doorbell Erin offer 1'), await offer(erin, 'Doorbell Erin offer 2')];
+        await sleep(100);
+        clear();
+        se.adminPruneUser(erin.pk, 'owner:password');
+        await rings('an admin prune', 'post_removed', ['profile_updated', 'user_pruned']);
+        const afterPrune = await board();
+        assert(erinOffers.every(id => !afterPrune.includes(id)), 'an admin prune: an unsigned reader reads neither of her offers');
+
+        // An enterprise with a listing: paused and resumed, winding up and not, and paused when its only keeper, the lead,
+        // is unbound (promoteOrPauseAfterLeadLeft).
+        const { publicKey: shed } = se.createTreasury('DoorbellShed', 'https://example.com/shed.jpg', 0);
+        const lead = member('DoorbellLead', { earned: 10 });
+        se.adminAssignTreasuryOperator(shed, lead.pk);
+        db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, lead.pk);
+        const shedOffer = se.createPost('offer', 'tools', 'Doorbell shovel', 'A doorbell test listing of an enterprise', 0, 'fixed', shed)?.id ?? '';
+        assert(!!shedOffer && (await board()).includes(shedOffer), 'setup: an enterprise lists an offer, and an unsigned reader reads it');
+        const step = async (what: string, act: () => unknown, doorbell: 'post_removed' | 'post_updated', shown: boolean, memberGets: string[]): Promise<void> => {
+            await sleep(100);
+            clear();
+            act();
+            await rings(what, doorbell, memberGets);
+            assert((await board()).includes(shedOffer) === shown, `${what}: an unsigned reader ${shown ? 'reads its offer again' : 'no longer reads its offer'}`);
+        };
+        await step('an enterprise paused', () => se.pauseEnterprise(shed, 'owner:password'), 'post_removed', false, ['profile_updated', 'enterprise_paused']);
+        await step('the enterprise resumed', () => se.resumeEnterprise(shed, 'owner:password'), 'post_updated', true, ['profile_updated', 'enterprise_resumed']);
+        await step('the enterprise winding up', () => se.initiateWindUp(shed, lead.pk), 'post_removed', false, ['profile_updated', 'enterprise_winding_up']);
+        await step('its wind-up cancelled', () => se.cancelWindUp(shed, lead.pk), 'post_updated', true, ['profile_updated', 'enterprise_wind_up_cancelled']);
+        await step('its only keeper, the lead, unbound: it pauses', () => se.adminRevokeTreasuryOperator(shed, lead.pk), 'post_removed', false, ['profile_updated']);
+
+        // Holiday mode, on and off.
+        const fay = member('DoorbellFay');
+        const fayOffer = await offer(fay, 'Doorbell Fay offer');
+        await sleep(100);
+        clear();
+        se.setHolidayMode(fay.pk, true);
+        await rings('a member on holiday', 'post_removed', ['profile_updated']);
+        assert(!(await board()).includes(fayOffer), 'a member on holiday: an unsigned reader no longer reads her offer');
+        await sleep(100);
+        clear();
+        se.setHolidayMode(fay.pk, false);
+        await rings('back from holiday', 'post_updated', ['profile_updated']);
+        assert((await board()).includes(fayOffer), 'back from holiday: an unsigned reader reads her offer again');
+
+        // A report actioned with a suspension: the member's listings are paused.
+        const gus = member('DoorbellGus');
+        const gusOffer = await offer(gus, 'Doorbell Gus offer');
+        db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status) VALUES ('doorbell-report', ?, ?, 'spam', 'pending')").run(carol.pk, gus.pk);
+        await sleep(100);
+        clear();
+        assert(se.actionReport('doorbell-report', false, true), 'a moderator actions a report on Gus and suspends him');
+        await rings("a report's suspension", 'post_removed', ['profile_updated']);
+        assert(!(await board()).includes(gusOffer), "a report's suspension: an unsigned reader no longer reads his offer");
+
+        // Delete account, over HTTP.
+        const hal = member('DoorbellHal');
+        const halOffer = await offer(hal, 'Doorbell Hal offer');
+        await sleep(100);
+        clear();
+        const purged = await call(hal, '/api/member/purge', {});
+        assert(purged.status === 200, `Hal deletes his account (got ${purged.status} ${JSON.stringify(purged.body).slice(0, 120)})`);
+        await rings('a Delete account', 'post_removed', ['profile_updated', 'user_pruned']);
+        assert(!(await board()).includes(halOffer), 'a Delete account: an unsigned reader no longer reads his offer');
+
+        // A trade's step, sent to its parties with a bare doorbell for the other members (othersGetDoorbell): the listing
+        // went pending, came back or went, so every socket off the member feed gets the listings' doorbell.
+        await sleep(100);
+        clear();
+        se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade', transaction: { id: 'doorbell-trade-tx' } }, [alice.pk], { othersGetDoorbell: true });
+        await until(S.member, 'post_accepted');
+        await until(S.unsigned, 'post_updated');
+        for (const [who, s] of [...keyless, ...keyed]) {
+            assert(typesOf(s).has('post_updated') && !typesOf(s).has('post_accepted') && bare(s), `a trade's step: ${who} socket gets a bare post_updated, and not the trade's own event (${show(s)})`);
+        }
+        assert(typesOf(S.member).has('post_accepted') && bare(S.member) && listingDoorbells(S.member).length === 0,
+            `a trade's step: the member's socket, no party to it, gets the bare post_accepted as before, and no listing doorbell (${show(S.member)})`);
     }
 
     for (const s of Object.values(S)) s.ws.close();

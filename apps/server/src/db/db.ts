@@ -280,9 +280,13 @@ const BOARD_STANDING_FILLED = 'migration_board_standing_v1';
  *     every phone's next delta carries their listings, as paused, whatever its cursor. That includes a phone that synced
  *     past the switch on a node from before the delta read the author's row at all (#1238), which holds them live.
  *     It tells a reader nothing the sync read doesn't already say: that those listings are off the board.
- *   - Everyone else: their updated_at, so a phone's next delta carries exactly the authors it would have carried the
- *     moment before the upgrade, a member back on the board since that phone's cursor among them. The node told any
- *     delta reader those times until the upgrade; from here on nothing but a change of standing moves the column.
+ *   - Everyone else: nothing (NULL), so no delta carries them until their standing next changes. Filling their
+ *     updated_at instead would publish, for good, when each one's row last changed before the upgrade (a bio, a
+ *     contact, a moderator's mute), readable by bisecting `updatedAfter`: exactly what this column exists to stop, and
+ *     on a node from before #1238 (both live communities) never exposed until then (#1250's review, 4115438316). On such
+ *     a node no phone ever masked anyone, so there is nothing to undo. The one cost: a phone that synced against a #1238
+ *     build and holds a member masked who came back on the board before the upgrade keeps them masked until one of
+ *     their listings next changes (only the test node ran #1238).
  * A fresh install fills nothing and writes the marker. A standby fills its own copy the same way (a whole copy of its
  * main server's then brings the main server's value, engine/sync.ts's member import).
  */
@@ -295,7 +299,7 @@ function backfillBoardStanding(): void {
                     WHEN public_key IN (${ON_HOLIDAY_SQL})
                       OR public_key IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))
                     THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                    ELSE updated_at END
+                    ELSE NULL END
                 WHERE board_standing_changed_at IS NULL
             `).run().changes;
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(BOARD_STANDING_FILLED);

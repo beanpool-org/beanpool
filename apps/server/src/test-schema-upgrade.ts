@@ -1103,7 +1103,8 @@ END`;
             assert((r(pk).s ?? '') >= bootedAt && r(pk).u === OLD, `off the board, filled with the upgrade's time, updated_at left: ${label} (${r(pk).s})`);
         }
         for (const [label, pk] of [['a member on the board', onBoard], ['a suspended member, still on it', suspended]] as const) {
-            assert(r(pk).s === OLD && r(pk).u === OLD, `on the board, filled with its updated_at: ${label} (${r(pk).s})`);
+            // Left empty: filling updated_at would publish when each row last changed (#1250's review, 4115438316).
+            assert(r(pk).s === null && r(pk).u === OLD, `on the board, left empty and updated_at left: ${label} (${r(pk).s})`);
         }
         assert(!!after.prepare("SELECT 1 FROM node_config WHERE key = 'migration_board_standing_v1'").get(), 'the one-time marker is written');
         // A row with no standing yet (a member who joined since) stays so at every boot: the fill ran once.

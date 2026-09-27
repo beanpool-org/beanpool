@@ -3,8 +3,8 @@
  *
  * The Market delta's author half read members.updated_at before this version and reads members.board_standing_changed_at
  * from it (engine posts.ts getPosts). Phones hold cursors from before the upgrade, so the node fills the column once, as
- * it gains it (db.ts backfillBoardStanding): the upgrade's time for a member off the board then, their updated_at for
- * everyone else.
+ * it gains it (db.ts backfillBoardStanding): the upgrade's time for a member off the board then, nothing for everyone
+ * else (their updated_at would publish when each row last changed: #1250's review, 4115438316).
  *
  * The fixture is a node from before the column (a booted node with the column, its index, its trigger and its one-time
  * marker taken away) holding, from before the upgrade:
@@ -15,10 +15,11 @@
  * Farm's and Ben's as paused (it synced while Ben was away) and Olly's live.
  *
  * Booted on this version, over real HTTP:
- *   - the column is filled: Hana's and Farm's with the upgrade's time, Ben's and Olly's with their updated_at; no
- *     updated_at moves, and the marker is written;
- *   - Carol's next delta carries Hana's and Farm's offers as paused, Ben's live, and not Olly's; after it each phone's
- *     Market is the board. An unsigned delta from the same cursor carries the same offers;
+ *   - the column is filled: Hana's and Farm's with the upgrade's time, Ben's and Olly's left empty; no updated_at
+ *     moves, and the marker is written;
+ *   - Carol's next delta carries Hana's and Farm's offers as paused, and neither Ben's nor Olly's; after it the phone
+ *     from before #1238 (both live communities) has the board. An unsigned delta from the same cursor carries the same
+ *     offers, and no unsigned delta reveals when Ben's or Olly's row changed before the upgrade;
  *   - after the upgrade, Ben's bio edit moves no standing: a delta from just before it doesn't carry his offer.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-board-standing-upgrade.ts
@@ -156,8 +157,8 @@ async function main() {
     const standing = (key: string) => row(key).board_standing_changed_at as string | undefined;
     assert((standing(hana.pubKeyHex) ?? '') >= upgradedAt && (standing(farm) ?? '') >= upgradedAt,
         `Hana (on holiday) and Farm (paused), off the board at the upgrade, have its time (${standing(hana.pubKeyHex)}, ${standing(farm)})`);
-    assert(standing(ben.pubKeyHex) === seeded.ben && standing(olly.pubKeyHex) === seeded.olly,
-        `Ben (back on the board) and Olly have their updated_at (${standing(ben.pubKeyHex)}, ${standing(olly.pubKeyHex)})`);
+    assert(standing(ben.pubKeyHex) == null && standing(olly.pubKeyHex) == null,
+        `Ben (back on the board) and Olly are left empty, so nothing publishes when their rows changed (${standing(ben.pubKeyHex)}, ${standing(olly.pubKeyHex)})`);
     const stamps = [[hana.pubKeyHex, seeded.hana], [farm, seeded.farm], [ben.pubKeyHex, seeded.ben], [olly.pubKeyHex, seeded.olly], [carol.pubKeyHex, seeded.carol]];
     assert(stamps.every(([key, at]) => row(key).updated_at === at), 'no member\'s updated_at moves: the fill stamps no row for delta sync');
     assert(!!db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_board_standing_v1'").get(), 'the one-time marker is written');
@@ -168,16 +169,18 @@ async function main() {
     const statusIn = (rows: any[], id: string) => rows.find(r => r.id === id)?.status as string | undefined;
     assert(statusIn(delta, offers.hana) === 'paused' && statusIn(delta, offers.farm) === 'paused',
         `it carries Hana's and Farm's offers as paused (${statusIn(delta, offers.hana)}, ${statusIn(delta, offers.farm)})`);
-    assert(statusIn(delta, offers.ben) === 'active', `and Ben's, live (${statusIn(delta, offers.ben)})`);
+    assert(statusIn(delta, offers.ben) === undefined, `and not Ben's (${statusIn(delta, offers.ben)})`);
     assert(statusIn(delta, offers.olly) === undefined, 'and not Olly\'s, which nothing changed since her cursor');
 
     const ours = new Set(Object.values(offers));
     const title = (id: string) => (db.prepare('SELECT title FROM posts WHERE id = ?').get(id) as any)?.title;
     const show = (s: Iterable<string>) => [...s].map(title).sort().join(', ');
     const board = new Set((await getJson(`/api/marketplace/posts?limit=200&${TYPES}`, carol)).map(p => p.id as string).filter(id => ours.has(id)));
+    // A phone from a node before #1238 (both live communities: they never masked anyone). A phone that synced against a
+    // #1238 build and holds Ben masked keeps him masked until one of his listings next changes: the accepted cost of not
+    // publishing on-board members' update times (db.ts backfillBoardStanding; only the test node ran #1238).
     const phones: Array<[string, Record<string, string>]> = [
         ['a phone from a node before #1238', { hana: 'active', farm: 'active', ben: 'active', olly: 'active' }],
-        ['a phone from a node with #1238', { hana: 'paused', farm: 'paused', ben: 'paused', olly: 'active' }],
     ];
     for (const [which, held] of phones) {
         const rows = new Map(Object.entries(held).map(([who, status]) => [offers[who], status]));
@@ -189,12 +192,18 @@ async function main() {
     const open = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}${since}`, null);
     const carried = (rows: any[]) => rows.map(r => r.id as string).filter(id => ours.has(id)).sort().join(',');
     assert(carried(open) === carried(delta), `an unsigned delta from the same cursor carries the same offers (${show(open.map(r => r.id).filter(id => ours.has(id)))})`);
+    // The offers were written 4 h ago, Olly's row changed 2 h ago and Ben's 30 min ago. A delta from between those times
+    // must not carry their offers, or bisecting such cursors would give each row's time to the millisecond.
+    for (const [who, from] of [['olly', 150], ['ben', 45]] as const) {
+        const probe = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(ago(from * MIN))}`, null);
+        assert(!probe.some(r => r.id === offers[who]), `an unsigned delta from ${from} min ago doesn't carry ${who}'s offer: his row's time stays private`);
+    }
 
     console.log('\n── after the upgrade ──');
     const beforeBio = new Date(Date.now() - 1).toISOString();
     await new Promise(r => setTimeout(r, 5));
     const edited = await postJson('/api/profile/update', { bio: 'Bakes on Fridays' }, ben);
-    assert(edited === 200 && row(ben.pubKeyHex).updated_at > seeded.ben && standing(ben.pubKeyHex) === seeded.ben,
+    assert(edited === 200 && row(ben.pubKeyHex).updated_at > seeded.ben && standing(ben.pubKeyHex) == null,
         `Ben edits his bio over HTTP: his updated_at moves, his standing doesn't (${edited}, ${standing(ben.pubKeyHex)})`);
     const afterBio = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(beforeBio)}`, null);
     assert(!afterBio.some(r => r.id === offers.ben), 'a delta from just before it doesn\'t carry his offer');

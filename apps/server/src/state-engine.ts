@@ -396,6 +396,7 @@ import {
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
     writeSyncAuditLog,
+    type ImportOptions,
     type ImportResult,
     type SyncAuditEntry,
 } from './engine/sync.js';
@@ -580,7 +581,11 @@ export function initStateEngine(): void {
     applyRecordedRecoveryTombstones();
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
-    seedPulseCurated();
+    // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
+    // (G9): one of its own, made under its own key at every boot, met the main server's on the callsign index and refused
+    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. The Daily
+    // Pulse skips a standby the same way (daily-pulse.ts scheduleDailyPulse). A take-over's restart runs as a main server.
+    if (getNodeRole() !== 'backup') seedPulseCurated();
     
     // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');
@@ -2275,6 +2280,10 @@ export function conservingTransaction<T>(fn: () => T): T {
  * point. After the PRE-FLUSH itself fails there is no such snapshot — the global already carries the decay
  * credit whose debit just rolled back — so `null` says to read the `COMMONS_POOL` row, which is the pot as
  * a restart would load it and the only half that matches the accounts being reloaded.
+ *
+ * A standby's import uses it too, with `null`, once a replicated copy has committed (engine/sync.ts): the rows
+ * are the main server's ledger, both halves, and memory is set from nothing else. Halting there is the same
+ * call as here: a standby whose memory kept its previous copy would flush that pot over the new one.
  *
  * The row read is inside the try on purpose: if SQLite is failing badly enough to break it, that is the
  * halt case below, not an exception thrown out of a catch block.
@@ -5610,8 +5619,8 @@ function getSyncCb() {
         getPrivateKey,
         publicKeyToProtobuf,
         publicKeyFromProtobuf,
-        loadLedgerState: (accs: any[]) => ledger.loadState(accs),
-        setCommonsBalance: (bal: number) => setCommonsBalance(bal),
+        // After a replicated copy commits: accounts and the pot from the rows, or halt (resyncMemoryToRows).
+        resyncLedgerToRows: () => resyncMemoryToRows(null, 'a replicated copy that landed'),
         broadcast
     };
 }
@@ -5626,11 +5635,12 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies the main server no longer holds.
+ * which recovery copies the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
+ * copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
  */
-export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } = {}): Promise<ImportResult> {
+export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote)
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new

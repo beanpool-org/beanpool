@@ -373,6 +373,7 @@ run_federation_suites() {
       test-standby-rekey
       test-takeover-parity
       test-replication-manifest
+      test-standby-ledger-copy
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

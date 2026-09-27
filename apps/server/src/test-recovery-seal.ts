@@ -28,7 +28,9 @@
  *      pulls one whole copy, after which none of the deleted copies is a row, none of any dropped or replaced copy is left
  *      in its state.db, -wal or -shm, and after a take-over (the real one, by recovery code: the main server's key comes
  *      inside its take-over envelope, S2) every current copy opens to exactly what its member deposited and no deleted
- *      one came back;
+ *      one came back. (That standby's copy records the current importer format, engine/sync.ts REPLICA_FORMAT; the same
+ *      one with no record, as at the update that brings it, first takes the format's force-resync, which leaves no copy
+ *      in the old form either.);
  *  14. a data folder without hard links (link() fails with EPERM, ENOTSUP, EMLINK, ENOSYS or EXDEV) still gets its key,
  *      made in place, never over a file already there, and a failed write leaves nothing behind;
  *  15. on a standby, only a whole copy removes a copy in the old form, and only one its main server no longer holds;
@@ -509,6 +511,24 @@ async function main(): Promise<void> {
         check(replaced === 0, `nor any current copy in the form the wrapped ones replaced (found ${replaced} of ${currentCopies.length})`);
         const orphanAfter = resultOf(await runChild([SCRIPT], snapshotOf(standbyDir), { RECOVERY_SEAL_CHILD: 'open-without-key', SEAL_OWNER: owners[18] }));
         check(orphanAfter.rowFound === false, `the copy member 18 deleted is no longer a row on the standby (${orphanAfter.rowFound})`);
+
+        // The update that brings the importer's format record (engine/sync.ts REPLICA_FORMAT): a standby from before it has
+        // none, so its first pull is that format's one force-resync, before the seal's whole copy. The same history, the
+        // same sealed main server: the re-seed leaves no copy in the form stored before the seal, in its rows or its files.
+        const unformattedDir = tempDir('history-standby-unformatted');
+        resultOf(await runChild([SCRIPT], unformattedDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'standby', SEAL_NO_REPLICA_FORMAT: '1' }));
+        const unformattedBefore = copiesFoundIn(unformattedDir, h.gen1);
+        check(unformattedBefore > 0, `control: a standby with no record of its importer's format holds ${unformattedBefore} of the dropped copies in its state.db`);
+        const ur = await runChild([SCRIPT], unformattedDir, { RECOVERY_SEAL_CHILD: 'standby-pull', NODE_ROLE: 'backup', SEAL_MAIN_EXPORT: exportFile, SEAL_SINCE: SINCE });
+        const us = resultOf(ur);
+        const u1 = us.pulls?.[0];
+        check(u1?.route === 'snapshot' && u1.since === null && /made by an older importer \(format 0, now \d+\): taking one force-resync/.test(ur.stdout + ur.stderr),
+            `its first pull after the seal is that format's force-resync (${JSON.stringify(u1 && { route: u1.route, since: u1.since })})`);
+        check(us.final?.unwrapped === 0 && us.final.rows === current.length && JSON.stringify(us.final.owners) === JSON.stringify([...current].sort()),
+            `...after which every copy the main server holds is here, wrapped, and none it deleted (${brief(us.final)})`);
+        const unformattedLeft = copiesFoundIn(unformattedDir, [...h.gen1, ...h.gen2]);
+        check(unformattedLeft === 0,
+            `...and none of the ${h.gen1.length + h.gen2.length} copies in the form stored before the seal is left in its state.db, -wal or -shm (found ${unformattedLeft}; ${unformattedBefore} re-deposits before)`);
 
         // A take-over, the real one (S2): the main server's own envelope service seals its keys, the key that opens these
         // copies among them; the standby keeps that envelope, pinned to its main server, and the recovery code opens it.

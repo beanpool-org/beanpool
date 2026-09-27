@@ -23,6 +23,8 @@ export interface Transaction {
     authSigner?: string | null;
     authSignature?: string | null;
     authPayload?: string | null;
+    /** The crowdfund project a pledge, a sweep or a refund belongs to (null when none, or once the project is deleted). */
+    projectId?: string | null;
 }
 
 export interface PostPhoto {
@@ -49,7 +51,8 @@ export interface Project {
 export interface SyncAccount {
     publicKey: string;
     balance: number;
-    lastUpdatedAt: string;
+    /** As the main server holds it: a standby's copy is its rows verbatim (null only for a row that has none). */
+    lastUpdatedAt: string | null;
     lastDemurrageEpoch: number;
 }
 
@@ -672,11 +675,13 @@ export function exportSyncState(
         createdAt: r.created_at,
     }));
 
+    // Every account, in every payload, delta or whole: a standby's ledger is this one exactly (apps/server engine/sync.ts
+    // importRemoteState), so it needs the whole set each time, and each row as it is here, its stamp included.
     const accountRows = db.prepare("SELECT * FROM accounts").all() as any[];
     const accounts: SyncAccount[] = accountRows.map(row => ({
         publicKey: row.public_key,
         balance: row.balance,
-        lastUpdatedAt: row.last_updated_at || row.joined_at || new Date().toISOString(),
+        lastUpdatedAt: row.last_updated_at ?? null,
         lastDemurrageEpoch: row.last_demurrage_epoch,
     }));
 
@@ -686,6 +691,10 @@ export function exportSyncState(
         from: row.from_pubkey,
         to: row.to_pubkey,
         amount: row.amount,
+        // The Commons' fee on the trade and the project it belongs to, so a standby's trades are these ones (the grant cap
+        // counts the fees, decisions-engine.ts commonsGrantCap).
+        taxFee: row.tax_fee ?? 0,
+        projectId: row.project_id ?? null,
         memo: row.memo || '',
         timestamp: row.timestamp,
         authSigner: row.auth_signer ?? null,

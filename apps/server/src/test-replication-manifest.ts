@@ -6,10 +6,11 @@
  *  1. Every table (PRAGMA table_list) is in the manifest, and every table the manifest names exists.
  *  2. Every column (PRAGMA table_info) of a copied table is named once: copied, or not copied with the reason. Every
  *     column the manifest names exists.
- *  3. Every copied table has a watermark column, or is declared a whole set; its payload key is in the sync payload.
- *     Every write to it moves the watermark: a touch trigger stamps it, or each UPDATE and upsert in the source sets
- *     it, or writes only columns the table doesn't copy (a write that moves nothing reaches a standby only in a whole
- *     copy).
+ *  3. Every copied table has a watermark column, or is declared a whole set and a delta carries all of it (a row stamped
+ *     long ago included); its payload key is in the sync payload. Every write to it moves the watermark: a touch trigger
+ *     stamps it, or each UPDATE and upsert in the source sets it, or writes only columns the table doesn't copy (a write
+ *     that moves nothing reaches a standby only in a whole copy), or clears a column the standby clears itself when the
+ *     named tombstone arrives (the importer is read for the clear).
  *  4. Every members column except the declared ones is in `members_touch_updated_at`'s column list (read from
  *     sqlite_master), and each declared one is really missing from it, so the fix that adds one deletes its line.
  *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified.
@@ -115,6 +116,9 @@ async function main(): Promise<void> {
         const actual = columnsOf(t);
         const except = 'except' in entry ? Object.keys(entry.except ?? {}) : [];
         const key = 'key' in entry ? entry.key ?? [] : [];
+        const cleared = 'clearedByTombstone' in entry ? Object.keys(entry.clearedByTombstone ?? {}) : [];
+        const clearedNotCopied = 'columns' in entry ? cleared.filter((c) => !entry.columns.includes(c)) : cleared;
+        if (cleared.length > 0) assert(clearedNotCopied.length === 0, `${t}: each column a tombstone clears is a copied one (not: ${list(clearedNotCopied)})`);
         const notAColumn = [...except, ...key].filter((c) => !actual.includes(c));
         if (entry.kind === 'replicated' || entry.kind === 'replicated-except') {
             const named = [...entry.columns, ...except];
@@ -134,16 +138,33 @@ async function main(): Promise<void> {
     console.log('\n— 3. watermarks and payload keys —');
     const { exportSyncState } = await import('@beanpool/engine');
     const payload = exportSyncState(db as any, 'manifest-test', null, 0) as unknown as Record<string, unknown>;
+    // A whole-set table is carried whole by a delta too: a row stamped long ago, planted here, in a delta from now. A
+    // whole-set table with no row to plant fails, so the next one gets its check.
+    const WHOLE_SET_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
+        accounts: () => {
+            db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('manifest-whole-set', 1, '2000-01-01T00:00:00.000Z', 0)`).run();
+            return (x) => x?.publicKey === 'manifest-whole-set';
+        },
+    };
     for (const [t, entry] of Object.entries(TABLES)) {
         if (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') continue;
-        const ok = entry.watermark === WHOLE_SET || (tables.includes(t) && columnsOf(t).includes(entry.watermark));
-        assert(ok, `${t}: a delta finds a change by ${entry.watermark === WHOLE_SET ? 'carrying the whole set' : `\`${entry.watermark}\``}`);
+        if (entry.watermark === WHOLE_SET) {
+            const plant = WHOLE_SET_ROW[t];
+            const isIt = plant?.();
+            const delta = isIt ? exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown> : {};
+            const carried = !!isIt && Array.isArray(delta[entry.payload]) && (delta[entry.payload] as unknown[]).some(isIt);
+            assert(carried, `${t}: a delta carries the whole set, a row stamped long ago included${plant ? '' : ' (no row to plant for it here: add one)'}`);
+        } else {
+            assert(tables.includes(t) && columnsOf(t).includes(entry.watermark), `${t}: a delta finds a change by \`${entry.watermark}\``);
+        }
         assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
     }
+    db.prepare(`DELETE FROM accounts WHERE public_key = 'manifest-whole-set'`).run();
 
     // A delta finds a change only if the write moved the watermark. A touch trigger that stamps it moves it on every
     // update (members' trigger names its columns: §4). Every other copied table's writes must set it, or write only
-    // columns it doesn't copy. The importer (engine/sync.ts) is left out: it writes the main server's rows, stamps and all.
+    // columns it doesn't copy, or clear one a tombstone carries (the manifest's `clearedByTombstone`, checked in the
+    // importer below). The importer (engine/sync.ts) is left out: it writes the main server's rows, stamps and all.
     const triggers = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger'").all() as { sql: string }[]).map((r) => r.sql);
     const stamps = (t: string, watermark: string) => triggers.some((sql) =>
         new RegExp(`AFTER\\s+UPDATE\\b[\\s\\S]*?\\bON\\s+${t}\\b[\\s\\S]*\\bUPDATE\\s+${t}\\s+SET\\s+${watermark}\\b`, 'i').test(sql));
@@ -155,17 +176,32 @@ async function main(): Promise<void> {
         `the server's and the engine's source are read (${serverWrites.length} and ${engineWrites.length} writes)`);
     const still: string[] = [];
     const notCopiedOnly: string[] = [];
+    const tombstoneCleared: string[] = [];
     for (const w of [...serverWrites, ...engineWrites]) {
         const entry = TABLES[w.table];
         if (!entry || (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || entry.watermark === WHOLE_SET) continue;
         if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark)) continue;
         const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
+        const cleared = entry.clearedByTombstone ?? {};
         if (w.set.length > 0 && w.set.every((c) => notCopied[c])) notCopiedOnly.push(`${w.table}.${w.set.join('+')} (${w.at})`);
+        else if (w.set.length > 0 && w.set.every((c) => cleared[c])) tombstoneCleared.push(`${w.table}.${w.set.join('+')} (${w.at})`);
         else still.push(`${w.table} SET ${w.set.join(', ') || '?'} (${w.at})`);
     }
     assert(still.length === 0,
-        `every write to a copied table moves its watermark, or writes only columns it doesn't copy (moves nothing: ${list(still)})`);
+        `every write to a copied table moves its watermark, or writes only columns it doesn't copy or a tombstone clears (moves nothing: ${list(still)})`);
     console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
+    console.log(`  writes that move no watermark, of columns a tombstone clears: ${list(tombstoneCleared)}`);
+    // The standby makes each such clear itself: the importer's case for that tombstone sets the column to NULL.
+    const importerSource = fs.readFileSync(importer, 'utf-8');
+    for (const [t, entry] of Object.entries(TABLES)) {
+        if (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') continue;
+        for (const [c, clear] of Object.entries(entry.clearedByTombstone ?? {})) {
+            const at = importerSource.indexOf(`case '${clear.tombstone}': {`);
+            const body = at < 0 ? '' : importerSource.slice(at, importerSource.indexOf('\n        case ', at + 1));
+            assert(new RegExp(`UPDATE\\s+${t}\\s+SET\\s+${c}\\s*=\\s*NULL\\b`, 'i').test(body),
+                `${t}.${c}: the importer clears it when a \`${clear.tombstone}\` tombstone arrives (engine/sync.ts applyTombstoneLocally)`);
+        }
+    }
 
     console.log('\n— 4. the members touch trigger —');
     const trigger = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'members_touch_updated_at'").get() as { sql: string } | undefined)?.sql ?? '';

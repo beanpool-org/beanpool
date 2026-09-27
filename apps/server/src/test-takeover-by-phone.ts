@@ -74,7 +74,9 @@ async function child(): Promise<void> {
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             se.grantNodeRole(ben, 'admin', anna);
-            try { se.transfer('COMMONS_POOL', cara, 5, 'a commons grant'); } catch { /* the audit still has a ledger */ }
+            // Paid as a real grant is (payFromCommons): transfer() out of COMMONS_POOL made the Beans from nowhere, its row
+            // written back from the pot, which a standby's faithful copy now shows its audit.
+            try { se.payFromCommons(cara, 5, 'a commons grant', { allowDeficit: true }); } catch { /* the audit still has a ledger */ }
             const neighbour = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
             addConnector(`/ip4/127.0.0.1/tcp/4999/p2p/${neighbour}`, 'peer', 'Neighbours', 'https://neighbours.example', true);
             se.updateNodeConfig({ publicAddress: { name: 'phonetown', mode: 'tunnel', hostname: 'phonetown.beanpool.org', status: 'live', tunnelToken: a.tunnelToken } } as any);

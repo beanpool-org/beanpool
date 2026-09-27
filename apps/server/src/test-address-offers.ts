@@ -11,28 +11,41 @@
  * signature middleware. The requests reach it at localhost; the host each is signed for is the one an app would have
  * connected to. U knows none of its names; its members are an owner, an admin, a moderator and ordinary members.
  *
+ * Settings offers with ONE TAP only the host it is open at itself (`?host=`, the host the owner's or admin's browser
+ * reaches the node at: the director's call, 2026-09-27, f8). Every other host is shown with its counts and needs a tick
+ * before it can be confirmed: members' keys can all be one person's (invites she made for herself), and an operator can
+ * relay requests members, or the owner, signed for its own host (4114742184).
+ *
  *  1. One ordinary member's app, signing for mullum.beanpool.org and for a random host: both requests are accepted
- *     (unchanged), neither host is offered plainly. Each is held back and says why, with the count (1) and no owner's
- *     or admin's app. The same member signing again still counts as one.
- *  2. The owner's own app → offered, saying an owner's or admin's app reached it. An admin's too. A moderator's is an
- *     ordinary member's. The owner's app signing for a beanpool.org name (a hostile node relaying the owner's own
- *     request makes it look like that) is still held back as another community's; so is beanpool.org itself.
- *  3. Several members: two → held back with the count; three (MEMBERS_TO_OFFER) → offered with the count.
- *  4. A host the directory this node already holds (directory_cache) lists as another community's → held back with
- *     its name, even when an admin's app and three members reached it there. The host Settings reached the node at,
- *     which it sends (?host=) because it suggests that host with one tap: listed, it is held back with the directory's
- *     name though no app reached the node there; not listed, it is on neither list; reached by apps, it is listed once.
+ *     (unchanged), neither host is offered. Each is held back and says why, with the count (1) and no owner's or
+ *     admin's app. The same member signing again still counts as one.
+ *  2. The owner's own app, and an admin's: shown with the count and saying an owner's or admin's app reached it, but
+ *     not one tap (held back, `not-this-page`) unless Settings is open at that host: then it is offered, and nothing
+ *     else is. A moderator's is an ordinary member's. The owner's app signing for a beanpool.org name (a hostile node
+ *     relaying the owner's own request makes it look like that) is still held back as another community's, even from a
+ *     Settings open at it; so is beanpool.org itself.
+ *  3. Several members: two and three → held back with the count, never one tap. One member who made two invites for
+ *     herself and redeemed them with fresh keys, her three keys signing for mallory.example (the deciding pass's
+ *     sequence, 4114742184) → shown with its count (3), never one tap.
+ *  4. A host the directory this node holds (directory_cache: on a node that mirrors it) lists as another community's →
+ *     held back with its name, even when an admin's app and three members reached it there. The host Settings is open
+ *     at: listed, it is held back with the directory's name though no app reached the node there; not listed, it is
+ *     offered with one tap and no count; reached by apps, it is listed once.
  *  5. Keys with no member row here count for nothing: not listed, and they move no other host's count.
  *  6. Bounded: one member signing for many hosts puts at most 3 of them on the list, and a real host signed for after
- *     that is still offered; many members' hosts stop at the day's cap (50), in the report, in the counts table and in
+ *     that is still counted; many members' hosts stop at the day's cap (50), in the report, in the counts table and in
  *     the stored owner/admin sightings; a flood of non-member keys adds nothing. Once members' apps have filled the
- *     day's list, another member's host is left off it, but an admin's app reaching the real address is still counted
- *     and offered: members can't crowd it out.
+ *     day's list, another member's host is left off it, but an admin's app reaching the real address is still counted:
+ *     members can't crowd it out.
  *  7. A restart: the counts and whether an owner's or admin's app reached a host are still there.
  *  8. Confirming works as before: one tap on an offered host makes it this community's name; requests for it are
  *     accepted and for any other host refused. An owner-confirmed address stays one whatever it is (a beanpool.org
  *     name confirmed before this change is not taken away). A node with a name doesn't hold back the page's host; once
  *     its confirmed names are removed it does again, in the answer to the remove too.
+ *  9. A one-person node (its only member is the owner): Settings open at its domain offers it with one tap before any
+ *     app reached it there, with the owner's app's count once it has, and still after the switch; one tap confirms it.
+ *     The page's host must be one a member's app could sign for here: something that isn't a host, this machine or
+ *     its network, or a beanpool.org name is never offered.
  *
  * The node's switch clock is pinned just before the switch (unboundSignaturesCutoff), so the suite holds for any date.
  *
@@ -259,7 +272,7 @@ async function main(): Promise<void> {
         return { pk: Buffer.from(ed25519.getPublicKey(seed)).toString('hex'), sign: core.ed25519Signer(seed), callsign };
     };
     // One app puts at most 3 hosts a day on the list, so each step uses keys that haven't reached that.
-    const owner = id('Olive'), ada = id('Ada'), ben = id('Ben'), cy = id('Cy'), mo = id('Mo'), mia = id('Mia');
+    const owner = id('Olive'), ada = id('Ada'), ben = id('Ben'), cy = id('Cy'), mo = id('Mo'), mia = id('Mia'), mallory = id('Mallory');
     const members = Array.from({ length: 20 }, (_, i) => id(`M${i + 1}`));
     const [m1, m2, m3, m4, m5, m6, m7] = members;
 
@@ -270,12 +283,19 @@ async function main(): Promise<void> {
         const headers = await core.buildBoundRequestHeaders({ method: 'GET', url, body: '', publicKeyHex: who.pk, sign: who.sign });
         return call(node, 'GET', core.signedPathOf(url), headers);
     }
+    /** A member's signed POST, as a current app sends it for `host`. */
+    async function postAs(node: Node, who: Id, host: string, reqPath: string, body: unknown): Promise<Reply> {
+        const url = `https://${host}${reqPath}`;
+        const text = JSON.stringify(body);
+        const headers = await core.buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: who.pk, sign: who.sign });
+        return call(node, 'POST', core.signedPathOf(url), headers, text);
+    }
     let U: Node;
     /** The Settings report; `host` is the host Settings reached the node at, sent as it sends it. */
     const report = async (host?: string) => {
         const r = await call(U, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, adminPw);
         if (r.status !== 200) throw new Error(`the Settings report: ${show(r)}`);
-        return r.body as { addresses: { address: string; source: string }[]; unconfirmed: Offer[]; heldBack?: Held[]; membersToOffer?: number; named?: boolean };
+        return r.body as { addresses: { address: string; source: string }[]; unconfirmed: Offer[]; heldBack?: Held[]; named?: boolean };
     };
     const offered = (rep: { unconfirmed: Offer[] }, host: string) => rep.unconfirmed.find((u) => u.address === host);
     const held = (rep: { heldBack?: Held[] }, host: string) => (rep.heldBack ?? []).find((u) => u.address === host);
@@ -299,6 +319,7 @@ async function main(): Promise<void> {
                 { pk: cy.pk, callsign: cy.callsign, role: 'admin' },
                 { pk: mo.pk, callsign: mo.callsign, role: 'moderator' },
                 { pk: mia.pk, callsign: mia.callsign },
+                { pk: mallory.pk, callsign: mallory.callsign },
                 ...members.map((m) => ({ pk: m.pk, callsign: m.callsign })),
             ],
         });
@@ -325,9 +346,8 @@ async function main(): Promise<void> {
             assert(mullum?.reason === 'another-community' && mullum.busiestDay === 1 && mullum.ownerOrAdmin === false,
                 `mullum.beanpool.org is held back as another community's name, with 1 member's app and no owner's or admin's (${j(mullum)})`);
             const random = held(rep, 'random-host.example');
-            assert(random?.reason === 'few-members' && random.busiestDay === 1 && random.today === 1 && random.ownerOrAdmin === false,
+            assert(random?.reason === 'not-this-page' && random.busiestDay === 1 && random.today === 1 && random.ownerOrAdmin === false,
                 `random-host.example is held back: 1 member's app (the same member four times counts once), no owner's or admin's (${j(random)})`);
-            assert(rep.membersToOffer === 3, `the report says how many members' apps it takes (${j(rep.membersToOffer)})`);
         });
 
         // ── 2. The owner's and an admin's own apps ──
@@ -338,13 +358,20 @@ async function main(): Promise<void> {
             await readAs(U, ada, 'admin.example.org');
             await readAs(U, mo, 'mod.example.org');
             const rep = await report();
-            const home = offered(rep, 'home.example.org');
-            assert(home?.ownerOrAdmin === true && home.busiestDay === 1 && !held(rep, 'home.example.org'),
-                `home.example.org is offered, saying an owner's or admin's app reached it (a one-person node confirms its name with one tap) (${j(home)})`);
-            const admin = offered(rep, 'admin.example.org');
-            assert(admin?.ownerOrAdmin === true && admin.busiestDay === 1, `an admin's app's host is offered too (${j(admin)})`);
+            const home = held(rep, 'home.example.org');
+            assert(!offered(rep, 'home.example.org') && home?.reason === 'not-this-page' && home.ownerOrAdmin === true && home.busiestDay === 1,
+                `home.example.org, which the owner's app reached, is not one tap from a Settings open elsewhere: shown with its count, saying an owner's or admin's app reached it (${j(home)})`);
+            const atHome = await report('home.example.org');
+            const homeOffer = offered(atHome, 'home.example.org');
+            assert(homeOffer?.ownerOrAdmin === true && homeOffer.busiestDay === 1 && !held(atHome, 'home.example.org'),
+                `from a Settings open at home.example.org it is offered with one tap, saying an owner's or admin's app reached it (${j(homeOffer)})`);
+            assert(atHome.unconfirmed.length === 1 && held(atHome, 'admin.example.org')?.reason === 'not-this-page',
+                `and nothing else is: one tap is for the page's own host only (${j(atHome.unconfirmed)})`);
+            const admin = held(rep, 'admin.example.org');
+            assert(!offered(rep, 'admin.example.org') && admin?.reason === 'not-this-page' && admin.ownerOrAdmin === true && admin.busiestDay === 1,
+                `an admin's app's host: shown with the count, saying an owner's or admin's app reached it, not one tap (${j(admin)})`);
             const mod = held(rep, 'mod.example.org');
-            assert(!offered(rep, 'mod.example.org') && mod?.reason === 'few-members' && mod.ownerOrAdmin === false,
+            assert(!offered(rep, 'mod.example.org') && mod?.reason === 'not-this-page' && mod.ownerOrAdmin === false,
                 `a moderator's app counts as one member's: held back (${j(mod)})`);
 
             // A hostile community's operator relaying the owner's own request (signed for that community) here.
@@ -358,6 +385,9 @@ async function main(): Promise<void> {
                     `${host}: the owner's (or an admin's) app signed for it, and it is still not offered: another community's name (${j(h)})`);
             }
             assert(held(after, 'mullum.beanpool.org')?.busiestDay === 2, 'mullum.beanpool.org counts 2 members\' apps now (Mia and the owner)');
+            const atMullum = await report('mullum.beanpool.org');
+            assert(!offered(atMullum, 'mullum.beanpool.org') && held(atMullum, 'mullum.beanpool.org')?.reason === 'another-community',
+                `a Settings open at mullum.beanpool.org is not offered it either: another community's name (${j(atMullum.unconfirmed)})`);
         });
 
         // ── 3. Several members ──
@@ -367,11 +397,31 @@ async function main(): Promise<void> {
             for (const m of [m1, m2, m3]) await readAs(U, m, 'crowd.example.org');
             const rep = await report();
             const pair = held(rep, 'pair.example.org');
-            assert(!offered(rep, 'pair.example.org') && pair?.reason === 'few-members' && pair.busiestDay === 2,
+            assert(!offered(rep, 'pair.example.org') && pair?.reason === 'not-this-page' && pair.busiestDay === 2,
                 `two members' apps: held back, with the count (${j(pair)})`);
-            const crowd = offered(rep, 'crowd.example.org');
-            assert(crowd?.busiestDay === 3 && crowd.today === 3 && crowd.ownerOrAdmin === false && !held(rep, 'crowd.example.org'),
-                `three members' apps: offered, with the count, and no owner's or admin's app among them (${j(crowd)})`);
+            const crowd = held(rep, 'crowd.example.org');
+            assert(!offered(rep, 'crowd.example.org') && crowd?.reason === 'not-this-page' && crowd.busiestDay === 3 && crowd.today === 3 && crowd.ownerOrAdmin === false,
+                `three members' apps: shown with the count and no owner's or admin's app among them, never one tap (${j(crowd)})`);
+
+            // One member, three keys: two invites she made for herself, redeemed with fresh keys (4114742184).
+            await U.send('resetLimits');
+            const keys: Id[] = [mallory];
+            for (let i = 1; i <= 2; i++) {
+                const gen = await postAs(U, mallory, 'mallory.example', '/api/invite/generate', { publicKey: mallory.pk });
+                const code = gen.body?.invite?.code;
+                const fresh = id(`Mallory${i + 1}`);
+                const joined = await call(U, 'POST', '/api/invite/redeem', {}, j({ code, publicKey: fresh.pk, callsign: fresh.callsign }));
+                assert(gen.status === 200 && typeof code === 'string' && joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember,
+                    `Mallory, an ordinary member, makes invite ${i} for herself and redeems it with a fresh key (${show(gen)}; ${show(joined)})`);
+                keys.push(fresh);
+            }
+            const reads: number[] = [];
+            for (const k of keys) reads.push((await readAs(U, k, 'mallory.example')).status);
+            assert(reads.every((st) => st === 200), `her three keys each sign a read for mallory.example: accepted until the switch, as before (${reads.join(',')})`);
+            const after = await report();
+            const mal = held(after, 'mallory.example');
+            assert(!offered(after, 'mallory.example') && mal?.reason === 'not-this-page' && mal.busiestDay === 3 && mal.ownerOrAdmin === false,
+                `mallory.example is shown with its count (3 members' apps, no owner's or admin's), never offered with one tap (${j(mal)}; offered: ${j(after.unconfirmed)})`);
         });
 
         // ── 4. The directory ──
@@ -394,9 +444,9 @@ async function main(): Promise<void> {
             const nameless = held(rep, 'nameless.example');
             assert(!offered(rep, 'nameless.example') && nameless?.reason === 'directory' && nameless.directory !== undefined && nameless.directory?.name === null,
                 `a listed community with no name: held back all the same (${j(nameless)})`);
-            const home = offered(rep, 'home.example.org');
+            const home = offered(await report('home.example.org'), 'home.example.org');
             assert(home && !('directory' in home),
-                'a host the directory does not list is offered as before');
+                'a host the directory does not list is offered as before, from a Settings open at it');
 
             // The host Settings reached the node at. Settings suggests it with one tap as the owner's own doing, so the
             // node says when the directory lists it, though no app has reached the node there yet (4114569450).
@@ -410,12 +460,14 @@ async function main(): Promise<void> {
             assert(addedPage === 1, `U's directory holds a third community (${addedPage})`);
             const page = await report('https://Hillside.example:8443');
             const hill = held(page, 'hillside.example');
-            assert(!offered(page, 'hillside.example') && hill?.reason === 'few-members' && hill.directory?.name === 'Hillside Co-op'
+            assert(!offered(page, 'hillside.example') && hill?.reason === 'directory' && hill.directory?.name === 'Hillside Co-op'
                 && hill.today === 0 && hill.busiestDay === 0 && hill.ownerOrAdmin === false,
                 `the page's host, listed as Hillside Co-op and reached by no app: held back with the directory's name and no count (${j(hill)})`);
             assert(!listedAnywhere(await report()).includes('hillside.example'), 'a report asked for with no host does not list it');
             const quiet = await report('quiet.example');
-            assert(!listedAnywhere(quiet).includes('quiet.example'), `a page host the directory does not list is on neither list (${j(listedAnywhere(quiet))})`);
+            const q = offered(quiet, 'quiet.example');
+            assert(q?.today === 0 && q.busiestDay === 0 && q.ownerOrAdmin === false && !held(quiet, 'quiet.example') && quiet.unconfirmed.length === 1,
+                `a page host the directory does not list, reached by no app: offered with one tap and no count, and nothing else is (${j(quiet.unconfirmed)})`);
             const counted = (await report('riverbend.example')).heldBack?.filter((h) => h.address === 'riverbend.example') ?? [];
             assert(counted.length === 1 && counted[0].busiestDay === 4, `a page host apps reached is listed once, with their count (${j(counted)})`);
         });
@@ -448,7 +500,9 @@ async function main(): Promise<void> {
             assert(flooded.length === 3, `only 3 of them are listed: one member's app puts at most 3 hosts on the list in a day (${j(flooded)})`);
             await readAs(U, ada, 'after-flood.example');
             const after = await report();
-            assert(offered(after, 'after-flood.example')?.ownerOrAdmin === true, `a host an admin's app reached after the flood is still offered (${j(offered(after, 'after-flood.example'))})`);
+            const afterFlood = held(after, 'after-flood.example');
+            assert(afterFlood?.ownerOrAdmin === true && afterFlood.busiestDay === 1,
+                `a host an admin's app reached after the flood is still counted, saying an owner's or admin's app reached it (${j(afterFlood)})`);
 
             // Many members, 3 new hosts each: the day's list stops at its cap.
             await U.send('resetLimits');
@@ -487,9 +541,12 @@ async function main(): Promise<void> {
             const crowded = await report();
             assert(rows === 50 && late.status === 200 && !listedAnywhere(crowded).includes('late-member.example'),
                 `with the day's list full (${rows} hosts), a member's app reaching late-member.example is answered and left off the list (${late.status})`);
-            const realOffer = offered(crowded, 'real-home.example');
-            assert(real.status === 200 && realOffer?.ownerOrAdmin === true && realOffer.busiestDay === 1,
-                `an admin's app reaching real-home.example then: still offered, saying an owner's or admin's app reached it (${real.status}, ${j(realOffer)})`);
+            const realHome = held(crowded, 'real-home.example');
+            assert(real.status === 200 && realHome?.ownerOrAdmin === true && realHome.busiestDay === 1,
+                `an admin's app reaching real-home.example then: still counted, saying an owner's or admin's app reached it (${real.status}, ${j(realHome)})`);
+            const realOffer = offered(await report('real-home.example'), 'real-home.example');
+            assert(realOffer?.ownerOrAdmin === true && realOffer.busiestDay === 1,
+                `and a Settings open at real-home.example offers it with one tap, with that count (${j(realOffer)})`);
             const staffNow = await U.send('staffRow');
             assert(staffNow !== null && Object.keys(JSON.parse(staffNow)).includes('real-home.example'),
                 `and stored as an owner/admin sighting (${staffNow})`);
@@ -502,11 +559,13 @@ async function main(): Promise<void> {
             await stopNode(U);
             await bootU();
             const rep = await report();
-            const home = offered(rep, 'home.example.org');
-            assert(home?.ownerOrAdmin === true && home.busiestDay === 1, `after a restart home.example.org is still offered as the owner's app's (${j(home)})`);
-            const crowd = offered(rep, 'crowd.example.org');
+            const home = held(rep, 'home.example.org');
+            assert(home?.ownerOrAdmin === true && home.busiestDay === 1, `after a restart home.example.org still says the owner's app reached it (${j(home)})`);
+            const homeOffer = offered(await report('home.example.org'), 'home.example.org');
+            assert(homeOffer?.ownerOrAdmin === true && homeOffer.busiestDay === 1, `and is still offered as the owner's app's from a Settings open at it (${j(homeOffer)})`);
+            const crowd = held(rep, 'crowd.example.org');
             assert(crowd?.busiestDay === 3, `crowd.example.org still counts 3 members' apps (${j(crowd)})`);
-            assert(held(rep, 'random-host.example')?.reason === 'few-members' && held(rep, 'mullum.beanpool.org')?.reason === 'another-community',
+            assert(held(rep, 'random-host.example')?.reason === 'not-this-page' && held(rep, 'mullum.beanpool.org')?.reason === 'another-community',
                 'and the held-back hosts are still held back');
         });
 
@@ -544,6 +603,51 @@ async function main(): Promise<void> {
             const hill = held(removed!.body, 'hillside.example');
             assert(removed!.status === 200 && removed!.body?.named === false && hill?.directory?.name === 'Hillside Co-op' && !offered(removed!.body, 'hillside.example'),
                 `once its confirmed names are removed, the remove's answer holds the page's host back again (${removed ? show(removed) : 'no reply'})`);
+        });
+
+        // ── 9. A one-person node, and which page hosts count ──
+        console.log('\n— 9. a one-person node confirms its name with one tap, from the page it is using —');
+        await section('9', async () => {
+            const solo = id('Solo');
+            const S = await startNode('s', {});
+            await S.send('seed', { owner: { pk: solo.pk, callsign: solo.callsign }, members: [] });
+            await beforeSwitch(S);
+            await S.send('resetLimits');
+            const soloReport = async (host?: string) => {
+                const r = await call(S, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, adminPw);
+                if (r.status !== 200) throw new Error(`S's Settings report: ${show(r)}`);
+                return r.body as { unconfirmed: Offer[]; heldBack?: Held[]; named?: boolean };
+            };
+            const fresh = await soloReport('https://Solo.example');
+            const first = offered(fresh, 'solo.example');
+            assert(fresh.named === false && first?.today === 0 && first.busiestDay === 0 && first.ownerOrAdmin === false && fresh.unconfirmed.length === 1
+                && (fresh.heldBack ?? []).length === 0,
+                `Settings open at solo.example, before any app reached the node there: offered with one tap (${j(fresh)})`);
+            const nothing = [
+                ['not a host at all', 'not a host!'], ['a home-network address', '192.168.1.20'], ['this machine', 'localhost'],
+                ['another community\'s beanpool.org name', 'solo.beanpool.org'], ['beanpool.org itself', 'beanpool.org'],
+            ];
+            for (const [what, host] of nothing) {
+                const r = await soloReport(host);
+                assert(r.unconfirmed.length === 0 && (r.heldBack ?? []).length === 0, `a page host that is ${what} (${host}) is never offered (${j(r)})`);
+            }
+            const app = await readAs(S, solo, 'solo.example');
+            assert(app.status === 200 && app.body?.publicKey === solo.pk, `the owner's app reaches S at solo.example (${show(app)})`);
+            const counted = offered(await soloReport('solo.example'), 'solo.example');
+            assert(counted?.busiestDay === 1 && counted.ownerOrAdmin === true, `then it is offered with the owner's app's count (${j(counted)})`);
+            const elsewhere = await soloReport('192.168.1.20');
+            assert(elsewhere.unconfirmed.length === 0 && held(elsewhere, 'solo.example')?.reason === 'not-this-page',
+                `from a Settings open at the home-network address it is shown with its count, to tick, not one tap (${j(elsewhere)})`);
+            await S.send('switchClock', { at: SWITCH + 1000 });
+            const refused = await readAs(S, solo, 'solo.example');
+            const late = offered(await soloReport('solo.example'), 'solo.example');
+            assert(refused.status === 421 && late?.busiestDay === 1, `after the switch the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
+            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', adminPw, j({ address: 'solo.example' }));
+            const now = await readAs(S, solo, 'solo.example');
+            assert(confirmed.status === 200 && confirmed.body?.named === true && confirmed.body?.addresses?.some((a: any) => a.address === 'solo.example' && a.source === 'owner')
+                && confirmed.body?.unconfirmed?.length === 0 && now.status === 200,
+                `one tap confirms it: S's name, and the owner's app is accepted there again (${show(confirmed)}; ${now.status})`);
+            await stopNode(S);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

@@ -31,8 +31,8 @@
  *  6. Z, with ONLY BEANPOOL_ADDRESSES=localhost (an owner who followed the SSH-tunnel advice on a node with no other
  *     name): still a node that knows none of its names (4113741087). Before the switch it accepts its domain
  *     (community.example.org) and a home-network address as it did with nothing set, and localhost and 127.0.0.1;
- *     Settings says it has no name, offers the domain to confirm (the owner's app reached it there) and lists
- *     localhost as set on the server;
+  *     Settings says it has no name, offers the domain to confirm (Settings open at it) and lists localhost as set on
+ *     the server;
  *     /api/community/info lists nothing. After the switch the domain is refused, localhost and the home network not.
  *  7. T, named (tunnel.test) with BEANPOOL_ADDRESSES=localhost: localhost and tunnel.test are accepted; the domain,
  *     a home-network address and 127.0.0.1 (not listed) are refused with the nonce unspent. Settings says it has a
@@ -428,10 +428,11 @@ async function main(): Promise<void> {
 
             const info = await call(U, 'GET', '/api/community/info');
             assert(Array.isArray(info.body?.addresses) && info.body.addresses.length === 0, `/api/community/info lists no address (${JSON.stringify(info.body?.addresses)})`);
-            // One ordinary member's app doesn't get a host offered (engine/address-offers.ts); the owner's does.
+            // Settings offers with one tap only the host it is open at itself (engine/address-offers.ts): asked as
+            // Settings open at community.example.org asks (?host=).
             const ownersApp = await sendTo(U, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
             assert(ownersApp.status === 200, `the owner's app reaches U at community.example.org too (${show(ownersApp)})`);
-            const listed = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const listed = await call(U, 'GET', '/api/local/admin/app-addresses?host=community.example.org', adminPw);
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && unconfirmed.includes('community.example.org')
                 && !unconfirmed.some((a) => a === '127.0.0.2' || LOOPBACK.includes(a)),
@@ -468,10 +469,11 @@ async function main(): Promise<void> {
                 const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
                 assert(r.status === 200 && r.body?.publicKey === mia.pk, `before the switch, a read signed for ${host} is accepted (${show(r)})`);
             }
-            // One ordinary member's app doesn't get a host offered (engine/address-offers.ts); the owner's does.
+            // Settings offers with one tap only the host it is open at itself (engine/address-offers.ts): asked as
+            // Settings open at community.example.org asks (?host=).
             const ownersApp = await sendTo(Z, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
             assert(ownersApp.status === 200, `the owner's app reaches Z at community.example.org too (${show(ownersApp)})`);
-            const listed = await call(Z, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const listed = await call(Z, 'GET', '/api/local/admin/app-addresses?host=community.example.org', adminPw);
             const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
             assert(listed.status === 200 && listed.body?.named === false, `Settings says the community has no name set up (named: ${JSON.stringify(listed.body?.named)})`);

@@ -12,7 +12,10 @@
  *   - a registration that doesn't land stays due for its community, written down, and lands at the next return to the
  *     app once the network is back, even after an app restart; the community is then on the push record;
  *   - a community that refused it, or never answered, is left alone for a while, longer after each refusal in a row;
- *     one the phone never reached (no connection) is tried at the next chance;
+ *     one whose request failed with no answer (no connection, or a node that drops it: the phone can't tell them apart)
+ *     is left alone a minute, never longer; one that was never sent (no token to be had) is tried at the next chance;
+ *   - it is tried only where the phone still keeps the community: Forget Community and Wipe Connection end it (#1267
+ *     review 4117004415);
  *   - #1258's rules hold: a retry goes through the same registration (stamped, never for a key that is leaving or has
  *     left); what was due for a key is dropped as its leave starts; nothing is tried for any key but the one on the
  *     phone; a key signing back in takes back its statements, and its registration then lands, stamped after them.
@@ -49,6 +52,7 @@ vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() })
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from '../account-leaves-phone';
 import { discardUnjoinedIdentity, draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
+import { addSavedNode, markGuestNode, removeSavedNode } from '../nodes';
 import { pendingLeaveStatements, presentLeaveStatements, type LeaveStatement } from '../push-leave';
 import {
     leaveState, registerAccountForPush, registerPushTokenWithCommunity, retryDueRegistrations, RETRY_FIRST_WAIT_MS, RETRY_LONGEST_WAIT_MS,
@@ -175,19 +179,24 @@ describe('a registration that fails is tried again as the app comes back', () =>
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
     });
 
-    it('one that never reached its community is still due after an app restart, and lands at the next return: at that community, whatever the phone is set to since', async () => {
+    it('one that never reached its community is still due after an app restart, and lands at the next return once its minute is over: at that community, whatever the phone is set to since, as long as the phone keeps it', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const t0 = Date.now();
         // The token is had, but Mullum can't be reached.
         await importIdentity(kim);
         mem.async.set(ANCHOR, MULLUM);
+        await addSavedNode(MULLUM);
         nodes.answer = () => 'down';
         expect(await registerAccountForPush(kim.publicKey, phoneToken, 'android')).toBe(PHONE_TOKEN);
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
         expect(recorded()).toEqual([MULLUM]);
 
-        // The app is killed and started again, and the phone is set to Byron meanwhile.
+        // The app is killed and started again, and the phone is set to Byron meanwhile; Mullum stays in its list.
         const restarted = await afterRestart();
         mem.async.set(ANCHOR, BYRON);
+        await addSavedNode(BYRON);
         nodes.answer = () => 'up';
+        vi.setSystemTime(t0 + RETRY_FIRST_WAIT_MS);
         await restarted.retryDueRegistrations(phoneToken, 'android');
 
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
@@ -215,7 +224,7 @@ describe('a registration that fails is tried again as the app comes back', () =>
 });
 
 describe('a community that keeps failing isn\'t tried on every return', () => {
-    it('one that answers 500 waits a minute, then two, then four, up to an hour; the phone having no connection never adds to the wait', async () => {
+    it('one that answers 500 waits a minute, then two, then four, up to an hour; a request that fails with no answer waits a minute and never adds to the wait', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         const t0 = Date.now();
         nodes.answer = () => 500;
@@ -239,15 +248,19 @@ describe('a community that keeps failing isn\'t tried on every return', () => {
         expect(due()[0]).toMatchObject({ refusals: 3, retryAt: t0 + 3 * MINUTE + 4 * MINUTE });
         expect(await returnAt(7 * MINUTE - 1)).toBe(3);
 
-        // Once the wait is over, the phone has no connection: tried at each return, and the wait doesn't grow.
+        // Once the wait is over, the request fails with no answer (no connection, or the node drops it): tried, then left
+        // alone a minute, not at each return, and the wait doesn't grow.
         nodes.answer = () => 'down';
         expect(await returnAt(7 * MINUTE)).toBe(4);
-        expect(due()[0]).toMatchObject({ refusals: 3, retryAt: t0 + 7 * MINUTE });
-        expect(await returnAt(7 * MINUTE + 1000)).toBe(5);
+        expect(due()[0]).toMatchObject({ refusals: 3, retryAt: t0 + 8 * MINUTE });
+        expect(await returnAt(7 * MINUTE + 1000)).toBe(4);
+        expect(await returnAt(8 * MINUTE - 1)).toBe(4);
+        expect(await returnAt(8 * MINUTE)).toBe(5);
+        expect(due()[0]).toMatchObject({ refusals: 3, retryAt: t0 + 9 * MINUTE });
 
         // Refused again and again: the wait doubles, and stops at an hour.
         nodes.answer = () => 500;
-        let at = 7 * MINUTE + 2000;
+        let at = 9 * MINUTE;
         for (const expectedWait of [8, 16, 32, 60, 60].map((m) => m * MINUTE)) {
             await returnAt(at);
             expect(Number(due()[0].retryAt) - (t0 + at)).toBe(expectedWait);
@@ -280,6 +293,99 @@ describe('a community that keeps failing isn\'t tried on every return', () => {
         expect(registrations()).toHaveLength(2);
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
     });
+
+    it('one that drops every connection is tried at most once a minute, however often the app comes back, and the wait doesn\'t grow; once it is back, the first return after the minute lands', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const t0 = Date.now();
+        nodes.answer = () => 'down';
+        await kimSignsIn();
+        expect(registrations()).toHaveLength(1);
+        expect(due()).toEqual([{ publicKey: kim.publicKey, community: MULLUM, refusals: 0, retryAt: t0 + RETRY_FIRST_WAIT_MS }]);
+
+        // Twenty returns in twenty seconds: none tries it.
+        for (let s = 1; s <= 20; s++) {
+            vi.setSystemTime(t0 + s * 1000);
+            await comeBack();
+        }
+        expect(registrations()).toHaveLength(1);
+
+        // Twenty more once the minute is over: one try, then another minute; the wait is still a minute.
+        for (let s = 0; s < 20; s++) {
+            vi.setSystemTime(t0 + RETRY_FIRST_WAIT_MS + s * 1000);
+            await comeBack();
+        }
+        expect(registrations()).toHaveLength(2);
+        expect(due()).toEqual([{ publicKey: kim.publicKey, community: MULLUM, refusals: 0, retryAt: t0 + 2 * RETRY_FIRST_WAIT_MS }]);
+
+        // Mullum is back half a minute later: not tried before the minute is over, and the first return after it lands.
+        nodes.answer = () => 'up';
+        vi.setSystemTime(t0 + RETRY_FIRST_WAIT_MS + 30000);
+        await comeBack();
+        expect(registrations()).toHaveLength(2);
+        vi.setSystemTime(t0 + 2 * RETRY_FIRST_WAIT_MS);
+        await comeBack();
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+        expect(mem.async.has(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe(false);
+    });
+});
+
+describe('a community the phone no longer keeps is never tried again', () => {
+    const HOSTILE = 'https://hostile.example.org';
+    const at = (community: string) => registrations().filter((s) => s.community === community).length;
+
+    /** Twenty returns to the app, a second apart. */
+    async function twentyReturns(): Promise<void> {
+        for (let i = 0; i < 20; i++) {
+            vi.setSystemTime(Date.now() + 1000);
+            await comeBack();
+        }
+    }
+
+    it.each([
+        ['one she saved', false],
+        ['one she visited as a guest', true],
+    ])('Forget Community, on %s that drops every connection: not contacted again, and nothing is due there any more', async (_how, guest) => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        // The phone is set to it when the app registers her (settings.tsx saves it, and marks a guest visit).
+        await addSavedNode(HOSTILE);
+        if (guest) await markGuestNode(HOSTILE);
+        nodes.answer = (s) => (s.community === HOSTILE ? 'down' : 'up');
+        await kimSignsIn(HOSTILE);
+        expect(at(HOSTILE)).toBe(1);
+        expect(due()).toMatchObject([{ publicKey: kim.publicKey, community: HOSTILE }]);
+
+        // She switches to Mullum and forgets it (settings.tsx handleForgetNode, use-communities.ts remove).
+        await addSavedNode(MULLUM);
+        mem.async.set(ANCHOR, MULLUM);
+        await removeSavedNode(HOSTILE);
+
+        await twentyReturns();
+        expect(at(HOSTILE)).toBe(1);
+        expect(due()).toEqual([]);
+        // An hour on, and twenty more: still never.
+        vi.setSystemTime(Date.now() + RETRY_LONGEST_WAIT_MS);
+        await twentyReturns();
+        expect(at(HOSTILE)).toBe(1);
+    });
+
+    it('Wipe Connection, on the community that drops every connection: not contacted again, and nothing is due there any more', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await addSavedNode(HOSTILE);
+        nodes.answer = (s) => (s.community === HOSTILE ? 'down' : 'up');
+        await kimSignsIn(HOSTILE);
+        expect(due()).toMatchObject([{ publicKey: kim.publicKey, community: HOSTILE }]);
+
+        // people.tsx handleTroubleWipe (and _layout.tsx's "Wipe & Join Fresh"): the phone's community and its saved entry
+        // go; her key stays.
+        await AsyncStorage.removeItem(ANCHOR);
+        await removeSavedNode(HOSTILE);
+
+        await twentyReturns();
+        vi.setSystemTime(Date.now() + RETRY_LONGEST_WAIT_MS);
+        await twentyReturns();
+        expect(at(HOSTILE)).toBe(1);
+        expect(due()).toEqual([]);
+    });
 });
 
 describe('#1258\'s rules hold for a retry', () => {
@@ -308,9 +414,11 @@ describe('#1258\'s rules hold for a retry', () => {
     });
 
     it('a retry already under way as her Sign Out starts sends nothing once it has the token: it goes through the same registration, which stops for a leaving key', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
         nodes.answer = () => 'down';
         await kimSignsIn();
         nodes.answer = () => 'up';
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS);
 
         // Back to the app: the retry asks for the token, which is slow to come.
         let giveToken: (() => void) | undefined;

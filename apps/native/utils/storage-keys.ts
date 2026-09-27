@@ -58,8 +58,8 @@ export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
  * The registrations the account on the phone still needs, one per community, each with when it may next be tried
  * (utils/push-registrations.ts `retryDueRegistrations`): one that failed (no connection, no answer, an error) is tried
  * again as the app comes back until it lands. Each is dropped as its account starts leaving the phone
- * (push-registrations.ts `stopRegistering`), and Sign Out wipes it with the account (utils/identity.ts
- * wipeIdentityScopedStorage).
+ * (push-registrations.ts `stopRegistering`), or once the phone no longer keeps its community (Forget Community, Wipe
+ * Connection), and Sign Out wipes it with the account (utils/identity.ts wipeIdentityScopedStorage).
  */
 export const PUSH_REGISTRATIONS_DUE_STORE_KEY = 'beanpool_push_registrations_due';
 

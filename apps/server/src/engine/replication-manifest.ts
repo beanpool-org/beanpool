@@ -58,7 +58,7 @@ export const TABLES: Record<string, TableEntry> = {
     // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status elder_vouched_by archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at'),
+        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status elder_vouched_by archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
             ...Object.fromEntries(MEMBERS_STANDING_NOT_COPIED.map((c) => [c, { reason: 'not in the import (a member\'s and an enterprise\'s standing)', gap: 'G2a' as const }])),
@@ -295,6 +295,7 @@ export function isInternalTable(name: string, type: string): boolean {
 export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
     updated_at: { reason: 'the stamp itself' },
     last_active_at: { reason: 'travels only with another change of the row, by design' },
+    board_standing_changed_at: { reason: 'every change of standing moves updated_at in the same statement (paused and status are in the trigger; setHolidayMode stamps both), so a delta carries it; listed, the trigger would restamp a copied row' },
     earned_surplus: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
     working_capital_ceiling: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
 };

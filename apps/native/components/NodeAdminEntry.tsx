@@ -89,7 +89,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.menuText}>{computerLabel}</Text>
-                        <Text style={styles.menuSub}>Scan the code on its Settings page in a browser · your key stays on this phone</Text>
+                        <Text style={styles.menuSub}>Scan the code on its Settings page · your key stays on this phone</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

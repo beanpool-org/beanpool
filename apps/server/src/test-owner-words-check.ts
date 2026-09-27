@@ -291,6 +291,14 @@ async function main() {
     {
         const srcDir = path.dirname(fileURLToPath(import.meta.url));
         const allowed = new Set(['engine/owner-words-checks.ts', 'routes/owner-words-check.ts', 'test-owner-words-check.ts']);
+        // The replication manifest names every table in schema.sql to say how a standby holds it (both of these are
+        // 'local', never copied): a classification, not a read. Only its entry line for each table is skipped; any
+        // other mention in that file still counts.
+        const MANIFEST = 'engine/replication-manifest.ts';
+        const sourceText = (rel: string, full: string) => {
+            const text = fs.readFileSync(full, 'utf8');
+            return rel === MANIFEST ? text.replace(/^ *(owner_words_checks|owner_lock_opens): \{ kind: 'local', reason: '[^'\n]*' \},$/gm, '') : text;
+        };
         const hits: string[] = [];
         const walk = (dir: string) => {
             for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -299,7 +307,7 @@ async function main() {
                 if (!e.name.endsWith('.ts')) continue;
                 const rel = path.relative(srcDir, full);
                 if (allowed.has(rel)) continue;
-                const text = fs.readFileSync(full, 'utf8');
+                const text = sourceText(rel, full);
                 if (/owner_words_checks|owner-words-checks|getOwnerWordsCheckedAt|listOwnerWordsStatus/.test(text)) hits.push(rel);
             }
         };
@@ -316,7 +324,7 @@ async function main() {
                 if (!e.name.endsWith('.ts')) continue;
                 const rel = path.relative(srcDir, full);
                 if (openAllowed.has(rel)) continue;
-                if (/owner_lock_opens|owner-lock-opens|recordOwnerLockOpen/.test(fs.readFileSync(full, 'utf8'))) openHits.push(rel);
+                if (/owner_lock_opens|owner-lock-opens|recordOwnerLockOpen/.test(sourceText(rel, full))) openHits.push(rel);
             }
         };
         walkOpen(srcDir);

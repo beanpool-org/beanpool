@@ -8,7 +8,8 @@
  * kept under its own key: another account on the phone never reads it, and the same account restored gets it back.
  *
  * The reports a block sends, queued while the node can't be reached, are the account's too: a node files a report as
- * whoever signs it, so a report one account made must never go out signed by another.
+ * whoever signs it, so a report one account made must never go out signed by another. And each goes only to the
+ * community it was made at, wherever the phone is set to when it is retried.
  *
  * Real identity, Sign Out and restore code over in-memory storage; each `startApp()` is a fresh app run. Nothing here
  * contacts a node: fetch is a stub that records what would have been sent, and the node's name for a key is a stub.
@@ -23,6 +24,8 @@ const mem = vi.hoisted(() => ({
     slowKey: '',
     /** How many reads have been made slow. */
     slowReadsMade: 0,
+    /** Called after each AsyncStorage write, to act at that moment. */
+    afterWrite: null as ((key: string, value: string) => void) | null,
 }));
 const rn = vi.hoisted(() => ({ emit: vi.fn() }));
 vi.mock('react-native', () => ({
@@ -32,7 +35,10 @@ vi.mock('react-native', () => ({
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
         getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
-        setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
+        setItem: vi.fn(async (key: string, value: string) => {
+            mem.async.set(key, value);
+            mem.afterWrite?.(key, value);
+        }),
         removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
         getAllKeys: vi.fn(async () => [...mem.async.keys()]),
         multiRemove: vi.fn(async (keys: string[]) => { keys.forEach((k) => mem.async.delete(k)); }),
@@ -71,6 +77,8 @@ vi.mock('../db', async (importOriginal) => ({
 import type { BeanPoolIdentity } from '../identity';
 
 const NODE = 'https://test.beanpool.org';
+/** Another community. */
+const OTHER = 'https://other.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const IDENTITY_KEY = 'sovereign-identity';
 /** The phone-wide list and the offline report queue of the builds before this one. */
@@ -79,6 +87,8 @@ const PHONE_WIDE_REPORTS = 'beanpool_pending_abuse_reports';
 const HARASSER = 'ee'.repeat(32);
 const SPAMMER = 'dd'.repeat(32);
 const listKey = (publicKey: string) => `beanpool_blocked_users:${publicKey}`;
+const reportsKey = (publicKey: string) => `beanpool_pending_abuse_reports:${publicKey}`;
+const DAY = 24 * 60 * 60 * 1000;
 
 /** A fresh run of the app: every module loads again, so nothing is remembered but what the phone stored. */
 async function startApp() {
@@ -101,26 +111,30 @@ async function startApp() {
             await leaves.signOutOfThisPhone(account);
             await identity.wipeIdentityScopedStorage(AsyncStorage);
         },
-        /** Welcome → Recover with 12 Words, onto an empty phone. */
-        restore: (account: BeanPoolIdentity) => restore.restoreFromWords(account.mnemonic!, NODE, { nameOnNode }),
+        /** Welcome → Recover with 12 Words, onto an empty phone, at `node`. */
+        restore: (account: BeanPoolIdentity, node = NODE) => restore.restoreFromWords(account.mnemonic!, node, { nameOnNode }),
         /** Recover with 12 Words over the account on the phone, and "Replace this phone's account?" → Replace. */
-        replaceWith: (account: BeanPoolIdentity) =>
-            restore.restoreFromWords(account.mnemonic!, NODE, { nameOnNode, confirmReplace: async () => true }),
+        replaceWith: (account: BeanPoolIdentity, node = NODE) =>
+            restore.restoreFromWords(account.mnemonic!, node, { nameOnNode, confirmReplace: async () => true }),
     };
 }
 
-/** The node, as far as these tests go: it answers, or it can't be reached. The next report's answer can be held. */
+/**
+ * The node, as far as these tests go: it answers, or it can't be reached. The next report's answer can be held, and
+ * what it answers can be set.
+ */
 const net = {
     up: true,
     hold: null as Promise<void> | null,
+    answer: { success: true } as Record<string, unknown>,
     sent: [] as { url: string; headers: Record<string, string>; body: string | undefined }[],
 };
 
-/** Each report the phone sent: who signed it, and what it said. */
+/** Each report the phone sent: where to, who signed it, and what it said. */
 function reportsSent() {
     return net.sent
         .filter((s) => s.url.endsWith('/api/reports'))
-        .map((s) => ({ signedBy: s.headers['X-Public-Key'], ...JSON.parse(s.body ?? '{}') }));
+        .map((s) => ({ at: s.url, signedBy: s.headers['X-Public-Key'], ...JSON.parse(s.body ?? '{}') }));
 }
 
 let ana: BeanPoolIdentity;
@@ -132,9 +146,11 @@ beforeEach(async () => {
     mem.slowSecureReads = null;
     mem.slowKey = '';
     mem.slowReadsMade = 0;
+    mem.afterWrite = null;
     rn.emit.mockClear();
     net.up = true;
     net.hold = null;
+    net.answer = { success: true };
     net.sent = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         net.sent.push({ url: String(input), headers: (init?.headers ?? {}) as Record<string, string>, body: init?.body as string | undefined });
@@ -144,7 +160,8 @@ beforeEach(async () => {
             await hold;
         }
         if (!net.up) throw new TypeError('Network request failed');
-        return { ok: true, status: 200, json: async () => ({ success: true }), text: async () => '{"success":true}' } as unknown as Response;
+        const answer = net.answer;
+        return { ok: true, status: 200, json: async () => answer, text: async () => JSON.stringify(answer) } as unknown as Response;
     }));
     const { draftIdentity } = await import('../identity');
     ana = await draftIdentity('Ana');
@@ -322,7 +339,7 @@ describe('the report a block sends', () => {
         await app.restore(ana);
         await app.retryPendingReports();
         expect(reportsSent()).toEqual([
-            expect.objectContaining({ signedBy: ana.publicKey, reporterPubkey: ana.publicKey, targetPubkey: HARASSER, reason: 'User Blocked by Member' }),
+            expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, reporterPubkey: ana.publicKey, targetPubkey: HARASSER, reason: 'User Blocked by Member' }),
         ]);
 
         // Sent once: the queue is empty now.
@@ -373,7 +390,153 @@ describe('the report a block sends', () => {
 
         const app = await startApp();
         await app.retryPendingReports();
-        expect(reportsSent()).toEqual([expect.objectContaining({ signedBy: ben.publicKey, reporterPubkey: ben.publicKey, targetPubkey: SPAMMER })]);
+        expect(reportsSent()).toEqual([expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ben.publicKey, reporterPubkey: ben.publicKey, targetPubkey: SPAMMER })]);
+    });
+
+    it('goes only to the community it was made at, wherever the phone is set to when it is retried', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'User Blocked by Member', 'post-at-test')).toBe(true);
+        net.up = true;
+        net.sent = [];
+
+        // Ana signs out, and Ben restores his account onto another community: nothing of Ana's goes anywhere.
+        await app.signOut(ana);
+        await app.restore(ben, OTHER);
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([]);
+
+        // Ana restores hers onto the other community: her report goes to the one she blocked at, signed by her.
+        await app.signOut(ben);
+        await app.restore(ana, OTHER);
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([
+            expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, reporterPubkey: ana.publicKey, targetPubkey: HARASSER, targetPostId: 'post-at-test' }),
+        ]);
+    });
+
+    it('never reaches the next account\'s community, even when retried as Replace has written that community and not yet its key', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        await app.blockUser(HARASSER, ana.publicKey);
+        net.up = true;
+        net.sent = [];
+
+        // The app comes back to the front just as Replace has written Ben's community, before his key.
+        let retry: Promise<void> | undefined;
+        mem.afterWrite = (key, value) => {
+            if (key === ANCHOR && value === OTHER) retry = app.retryPendingReports();
+        };
+        await app.replaceWith(ben, OTHER);
+        mem.afterWrite = null;
+        expect(retry).toBeDefined();
+        await retry;
+
+        // Sent to where Ana blocked, signed by her, or still waiting for her.
+        for (const report of reportsSent()) {
+            expect(report).toEqual(expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey }));
+        }
+        await app.replaceWith(ana, OTHER);
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, targetPubkey: HARASSER })]);
+    });
+
+    it('an older build\'s queued report is stamped with the community the phone is set to when this build starts, and goes only there', async () => {
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(PHONE_WIDE_REPORTS, JSON.stringify([
+            { reporterPubkey: ana.publicKey, targetPubkey: HARASSER, reason: 'User Blocked by Member', postId: 'post-at-test', timestamp: Date.now() },
+            // Past the 7 days a report is kept.
+            { reporterPubkey: ana.publicKey, targetPubkey: SPAMMER, reason: 'User Blocked by Member', timestamp: Date.now() - 8 * DAY },
+        ]));
+
+        const app = await startApp();
+        // Moved at start, before anything can change the community, and stamped with it.
+        await vi.waitFor(() => expect(mem.async.has(PHONE_WIDE_REPORTS)).toBe(false));
+        expect(JSON.parse(mem.async.get(reportsKey(ana.publicKey)) ?? 'null')).toEqual([
+            expect.objectContaining({ community: NODE, targetPubkey: HARASSER }),
+            expect.objectContaining({ community: NODE, targetPubkey: SPAMMER }),
+        ]);
+
+        // Ana signs out and restores onto another community before the app retries: it goes where it was made.
+        await app.signOut(ana);
+        await app.restore(ana, OTHER);
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([
+            expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, targetPubkey: HARASSER, targetPostId: 'post-at-test' }),
+        ]);
+        expect(mem.async.has(reportsKey(ana.publicKey))).toBe(false);
+    });
+
+    it('an older build\'s queued report on a phone set to no community when this build starts has nowhere to go, and is dropped', async () => {
+        mem.async.delete(ANCHOR);
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(PHONE_WIDE_REPORTS, JSON.stringify([
+            { reporterPubkey: ana.publicKey, targetPubkey: HARASSER, reason: 'User Blocked by Member', timestamp: Date.now() },
+        ]));
+
+        const app = await startApp();
+        await vi.waitFor(() => expect(mem.async.has(PHONE_WIDE_REPORTS)).toBe(false));
+        mem.async.set(ANCHOR, OTHER);
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([]);
+        expect(mem.async.has(reportsKey(ana.publicKey))).toBe(false);
+    });
+
+    it('the same person blocked at two communities is reported to each', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.unblockUser(HARASSER);
+        // Ana switches to another community she belongs to, and blocks the same person there.
+        mem.async.set(ANCHOR, OTHER);
+        await app.blockUser(HARASSER, ana.publicKey);
+        net.up = true;
+        net.sent = [];
+
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([
+            expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, targetPubkey: HARASSER }),
+            expect.objectContaining({ at: `${OTHER}/api/reports`, signedBy: ana.publicKey, targetPubkey: HARASSER }),
+        ]);
+    });
+
+    it('is dropped unsent once it is 7 days old', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        await app.blockUser(SPAMMER, ana.publicKey);
+        net.up = true;
+        net.sent = [];
+        // And one Ana queued at the same community eight days ago.
+        const queued = JSON.parse(mem.async.get(reportsKey(ana.publicKey)) ?? '[]');
+        expect(queued).toEqual([expect.objectContaining({ community: NODE, targetPubkey: SPAMMER })]);
+        mem.async.set(reportsKey(ana.publicKey), JSON.stringify([{ ...queued[0], targetPubkey: HARASSER, timestamp: Date.now() - 8 * DAY }, ...queued]));
+
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, targetPubkey: SPAMMER })]);
+        expect(mem.async.has(reportsKey(ana.publicKey))).toBe(false);
+    });
+
+    it('leaves the queue when the node says it already has it on file (duplicate)', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        await app.blockUser(HARASSER, ana.publicKey);
+        net.up = true;
+        net.sent = [];
+
+        // The first try reached the node after all: it has the report on file, and says so.
+        net.answer = { success: true, duplicate: true };
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([expect.objectContaining({ at: `${NODE}/api/reports`, signedBy: ana.publicKey, targetPubkey: HARASSER })]);
+        expect(mem.async.has(reportsKey(ana.publicKey))).toBe(false);
+
+        net.sent = [];
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([]);
     });
 });
 

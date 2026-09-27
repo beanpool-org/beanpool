@@ -11,12 +11,13 @@
  * unblock everyone a member had blocked, without telling them, the moment they signed out and back in (Marty,
  * 2026-09-27: the list is the account's).
  *
- * Builds before this one kept one list for the whole phone. It moves under the account on the phone when this build
- * starts ({@link moveAtStart}), before anything can change that account.
+ * Builds before this one kept one list, and one queue of offline reports, for the whole phone. They move under the
+ * account on the phone when this build starts ({@link moveAtStart}), before anything can change that account.
  *
- * A block also reports the person to the community's moderators (Apple Guideline 1.2). A report the node didn't take is
- * queued under the account that made it and retried when the app comes back ({@link retryPendingReports}). A node files
- * a report as whoever signs it, so a report goes out only signed by the key that made it ({@link sendReport}): never by
+ * A block also reports the person to the moderators of the community the member blocked them in (Apple Guideline 1.2).
+ * A report the node didn't take is queued under the account that made it, with that community, and retried when the
+ * app comes back ({@link retryPendingReports}). It goes only to that community, whichever the phone is set to by then,
+ * and only signed by the key that made it ({@link sendReport}): a node files a report as whoever signs it, so never by
  * the next account on the phone.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,19 +32,24 @@ export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
 /** The list the builds before this one kept for the whole phone (AsyncStorage, and SecureStore before that). */
 const PHONE_WIDE_LIST_KEY = 'beanpool_blocked_users';
-/** Set once the phone-wide list has gone to an account: it is never read again. */
-const PHONE_WIDE_LIST_MOVED_KEY = 'beanpool_blocked_users_moved';
+/** Set once the phone-wide list and queue have gone to an account: they are never read again. */
+const PHONE_WIDE_MOVED_KEY = 'beanpool_blocked_users_moved';
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const REPORTS_PATH = '/api/reports';
 const REPORT_TIMEOUT_MS = 12000;
 
 interface PendingReport {
     reporterPubkey: string;
+    /** The community the member blocked at, where the report was made: the only one it is ever sent to. */
+    community: string;
     targetPubkey: string;
     reason: string;
     postId?: string;
     timestamp: number;
 }
+
+/** A queued report as stored: the builds before this one named no community. */
+type StoredReport = Omit<PendingReport, 'community'> & { community?: string };
 
 /** The account the phone holds, as far as this module knows: undefined until it has been read or announced. */
 let knownOwner: string | null | undefined;
@@ -51,11 +57,14 @@ let knownOwner: string | null | undefined;
 let cached: { owner: string; list: string[] } | null = null;
 /** Goes up with each account change, so what was read for the account before never lands as the next one's. */
 let accountGeneration = 0;
-let phoneWideListMoved = false;
-/** The move of the phone-wide list under way, if any: one at a time, so it goes to one account only. */
-let movingPhoneWideList: Promise<void> | null = null;
-/** The account the phone held as this build started, read at that moment: the phone-wide list is its. */
-let ownerAtStart: string | null = null;
+let phoneWideMoved = false;
+/** The move of the phone-wide list and queue under way, if any: one at a time, so they go to one account only. */
+let movingPhoneWide: Promise<void> | null = null;
+/**
+ * The account the phone held as this build started, and the community it was set to, both read at that moment: the
+ * phone-wide list and queue are that account's, and the queued reports were made at that community.
+ */
+let atStart: { owner: string | null; community: string | null } = { owner: null, community: null };
 
 onAccountOnPhone((publicKey) => {
     // The same account written again (a new name, its words added): nothing changes.
@@ -95,28 +104,34 @@ function parseKeys(raw: string | null): string[] {
 }
 
 /**
- * The list the builds before this one kept for the whole phone goes to the account on the phone when this build starts,
- * and the old keys go. Once: a marker says it is done, so a copy that could not be deleted is never handed to a later
- * account.
+ * The list and the queue of offline reports the builds before this one kept for the whole phone go to the account on
+ * the phone when this build starts, and the old keys go. Once: a marker says it is done, so a copy that could not be
+ * deleted is never handed to a later account.
  *
  * At start, not at the first list read: a phone can start on a screen that reads no list (a half-finished join wizard
  * opens Welcome) and Replace its account from there. Moved at the first read, the old list would go to the replacing
- * account, and the member whose blocks they are would find them gone (confirmation review 4113557050). The account is
- * read at the moment the app starts, and an account written while that read is out doesn't change the answer.
+ * account, and the member whose blocks they are would find them gone (confirmation review 4113557050). The account and
+ * its community are read at the moment the app starts, and an account written while those reads are out doesn't change
+ * the answer.
  */
 async function moveAtStart(): Promise<void> {
     try {
-        ownerAtStart = (await loadIdentity())?.publicKey || null;
-        if (ownerAtStart) await moveOnce(ownerAtStart);
+        // A community that can't be read is none: the old reports are dropped, and the account is still the one at start.
+        const [identity, community] = await Promise.all([
+            loadIdentity(),
+            AsyncStorage.getItem(ANCHOR_STORE_KEY).catch(() => null),
+        ]);
+        atStart = { owner: identity?.publicKey || null, community };
+        if (atStart.owner) await moveOnce(atStart.owner);
     } catch (e) {
         console.warn('[blocklist] Could not move the phone-wide list at start; the first list read tries again', e);
     }
 }
 
 /**
- * Every list read and "Unblock All" first waits for the move begun at start. If that didn't happen (the phone held no
- * account then, or storage failed), it happens now, still for the account on the phone at start when there was one,
- * and only once however many callers race.
+ * Every list read, "Unblock All" and report retry first waits for the move begun at start. If that didn't happen (the
+ * phone held no account then, or storage failed), it happens now, still for the account on the phone at start when
+ * there was one, and only once however many callers race.
  *
  * A phone with no account at start leaves the list where it is until one appears, and it goes to that account. Such a
  * list was left by an older build's Sign Out, and the next account is likeliest the same member restoring theirs:
@@ -124,20 +139,20 @@ async function moveAtStart(): Promise<void> {
  * new account getting it, is what the older build did anyway; it happens at most once per phone, and that account sees
  * the list in Settings and can clear it.
  */
-async function movePhoneWideList(owner: string): Promise<void> {
+async function movePhoneWide(owner: string): Promise<void> {
     await startedMove;
-    if (phoneWideListMoved) return;
-    if (!movingPhoneWideList) {
-        movingPhoneWideList = moveOnce(ownerAtStart ?? owner).finally(() => {
-            movingPhoneWideList = null;
+    if (phoneWideMoved) return;
+    if (!movingPhoneWide) {
+        movingPhoneWide = moveOnce(atStart.owner ?? owner).finally(() => {
+            movingPhoneWide = null;
         });
     }
-    return movingPhoneWideList;
+    return movingPhoneWide;
 }
 
 async function moveOnce(owner: string): Promise<void> {
-    if (await AsyncStorage.getItem(PHONE_WIDE_LIST_MOVED_KEY)) {
-        phoneWideListMoved = true;
+    if (await AsyncStorage.getItem(PHONE_WIDE_MOVED_KEY)) {
+        phoneWideMoved = true;
         return;
     }
     // The SecureStore copy counts only when AsyncStorage has none, as it did when the list was read from there.
@@ -149,16 +164,18 @@ async function moveOnce(owner: string): Promise<void> {
         const own = parseKeys(await AsyncStorage.getItem(key));
         await AsyncStorage.setItem(key, JSON.stringify([...new Set([...own, ...inherited])]));
     }
-    await AsyncStorage.setItem(PHONE_WIDE_LIST_MOVED_KEY, '1');
-    phoneWideListMoved = true;
+    await movePhoneWideReports(owner, atStart.community);
+    await AsyncStorage.setItem(PHONE_WIDE_MOVED_KEY, '1');
+    phoneWideMoved = true;
     await AsyncStorage.removeItem(PHONE_WIDE_LIST_KEY);
+    await AsyncStorage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
     await SecureStore.deleteItemAsync(PHONE_WIDE_LIST_KEY).catch(() => {});
 }
 
 /** `owner`'s list: the one in memory when it is theirs, otherwise read from the phone. */
 async function listOf(owner: string): Promise<string[]> {
     if (cached?.owner === owner) return cached.list;
-    await movePhoneWideList(owner);
+    await movePhoneWide(owner);
     return parseKeys(await AsyncStorage.getItem(blockedUsersStoreKey(owner)));
 }
 
@@ -221,12 +238,18 @@ export async function blockUser(
             if (reporterPubkey && reporterPubkey !== owner) {
                 console.warn('[blocklist] Not reporting the block: the reporter is not the account on this phone');
             } else if (reporterPubkey) {
-                const report: PendingReport = { reporterPubkey, targetPubkey, reason, postId, timestamp: Date.now() };
-                try {
-                    if (!(await sendReport(report))) await queueReportForRetry(report);
-                } catch (err) {
-                    console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
-                    await queueReportForRetry(report);
+                // Made at the community the phone is set to now, where the member blocked, and sent only there.
+                const community = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+                if (!community) {
+                    console.warn('[blocklist] Not reporting the block: the phone is set to no community');
+                } else {
+                    const report: PendingReport = { reporterPubkey, community, targetPubkey, reason, postId, timestamp: Date.now() };
+                    try {
+                        if (!(await sendReport(report))) await queueReportForRetry(report);
+                    } catch (err) {
+                        console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
+                        await queueReportForRetry(report);
+                    }
                 }
             }
 
@@ -275,7 +298,7 @@ export async function clearBlocklist(): Promise<boolean> {
         if (!owner) return false;
         const generation = accountGeneration;
         // First, so a list an older build kept can't come back after it.
-        await movePhoneWideList(owner);
+        await movePhoneWide(owner);
         await AsyncStorage.removeItem(blockedUsersStoreKey(owner));
         if (generation === accountGeneration) {
             cached = { owner, list: [] };
@@ -291,16 +314,22 @@ export async function clearBlocklist(): Promise<boolean> {
 const REPORT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAX_PENDING_REPORTS = 50;
 
-function parseReports(raw: string | null): PendingReport[] {
+function parseReports(raw: string | null): StoredReport[] {
     if (!raw) return [];
     try {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
-        return parsed.filter((p): p is PendingReport =>
-            !!p && typeof p.reporterPubkey === 'string' && typeof p.targetPubkey === 'string' && typeof p.timestamp === 'number');
+        return parsed.filter((p): p is StoredReport =>
+            !!p && typeof p.reporterPubkey === 'string' && typeof p.targetPubkey === 'string' && typeof p.timestamp === 'number'
+            && (p.community === undefined || typeof p.community === 'string'));
     } catch {
         return [];
     }
+}
+
+/** The same report twice: one member, one person, one community. */
+function sameReport(a: StoredReport, b: StoredReport): boolean {
+    return a.targetPubkey === b.targetPubkey && a.community === b.community;
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -312,29 +341,30 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Send one report to the community the phone is set to, signed by the key that made it: the phone's key is loaded,
- * checked to be the reporter's, and that same key signs. False, with nothing sent, when the phone holds another account
- * or none. Throws when the community can't be reached or doesn't take the report.
+ * Send one report to the community it was made at, signed by the key that made it: the phone's key is loaded, checked
+ * to be the reporter's, and that same key signs. Whichever community the phone is set to now plays no part: a report
+ * made at one community never reaches another's moderators, not after the member signs out and restores onto another,
+ * nor in the moment Replace has written the next account's community and not yet its key (confirmation review
+ * 4113557097). False, with nothing sent, when the phone holds another account or none. Throws when the community can't
+ * be reached or doesn't take the report.
  */
 async function sendReport(report: PendingReport): Promise<boolean> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== report.reporterPubkey) return false;
-    const anchorUrl = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
-    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.');
     const body = {
         reporterPubkey: report.reporterPubkey,
         targetPubkey: report.targetPubkey,
         reason: report.reason,
         targetPostId: report.postId,
     };
-    const res = await withTimeout(signedPost(anchorUrl, REPORTS_PATH, body, signer), REPORT_TIMEOUT_MS);
+    const res = await withTimeout(signedPost(report.community, REPORTS_PATH, body, signer), REPORT_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     return true;
 }
 
 /**
- * Queues a moderation report locally, under the account that made it, to retry when network is restored.
- * Deduplicates by targetPubkey, enforces a 7-day TTL, and caps at 50 entries.
+ * Queues a moderation report locally, under the account that made it and with the community it was made at, to retry
+ * when network is restored. Deduplicates by target and community, enforces a 7-day TTL, and caps at 50 entries.
  */
 async function queueReportForRetry(report: PendingReport) {
     try {
@@ -343,8 +373,8 @@ async function queueReportForRetry(report: PendingReport) {
         // TTL: drop reports older than 7 days
         const now = Date.now();
         pending = pending.filter(p => now - p.timestamp < REPORT_TTL_MS);
-        // Deduplicate: keep only the latest report per target
-        pending = pending.filter(p => p.targetPubkey !== report.targetPubkey);
+        // Deduplicate: keep only the latest report per target at each community
+        pending = pending.filter(p => !sameReport(p, report));
         // Cap queue size
         if (pending.length >= MAX_PENDING_REPORTS) pending.shift();
         pending.push(report);
@@ -355,32 +385,37 @@ async function queueReportForRetry(report: PendingReport) {
 }
 
 /**
- * The one offline queue the builds before this one kept for the whole phone: the reports `owner` made move into its own
- * queue, and the old queue goes. Any others were made by another account, which this phone can't sign for, and are
- * dropped (that build's Sign Out and Replace wiped the queue anyway).
+ * Part of the move at start ({@link moveOnce}): of the one offline queue the builds before this one kept for the whole
+ * phone, the reports `owner` made move into its own queue (the old queue goes with the old list). Any others were made
+ * by another account, which this phone can't sign for, and are dropped (that build's Sign Out and Replace wiped the
+ * queue anyway).
+ *
+ * That build's reports name no community: it sent them to the one the phone was set to, and that is `community`, the
+ * one it was set to as this build started. Each is stamped with it here, so it is sent only there, never to a community
+ * the phone is set to later. With none set then, they have nowhere to go and are dropped.
  */
-async function movePhoneWideReports(owner: string): Promise<void> {
+async function movePhoneWideReports(owner: string, community: string | null): Promise<void> {
     const raw = await AsyncStorage.getItem(PENDING_ABUSE_REPORTS_STORE_KEY);
-    if (raw === null) return;
-    const theirs = parseReports(raw).filter(p => p.reporterPubkey === owner);
-    if (theirs.length > 0) {
-        const key = pendingAbuseReportsStoreKey(owner);
-        const own = parseReports(await AsyncStorage.getItem(key));
-        const queued = new Set(own.map(p => p.targetPubkey));
-        await AsyncStorage.setItem(key, JSON.stringify([...own, ...theirs.filter(p => !queued.has(p.targetPubkey))]));
-    }
-    await AsyncStorage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
+    if (raw === null || !community) return;
+    const theirs = parseReports(raw)
+        .filter(p => p.reporterPubkey === owner)
+        .map((p): PendingReport => ({ ...p, community }));
+    if (theirs.length === 0) return;
+    const key = pendingAbuseReportsStoreKey(owner);
+    const own = parseReports(await AsyncStorage.getItem(key));
+    await AsyncStorage.setItem(key, JSON.stringify([...own, ...theirs.filter(p => !own.some(q => sameReport(p, q)))]));
 }
 
 /**
- * Retries sending the reports the account on this phone queued offline. Another account's queue waits on the phone for
- * that account, and a report goes out only while its own account is still on the phone (see {@link sendReport}).
+ * Retries sending the reports the account on this phone queued offline, each to the community it was made at. Another
+ * account's queue waits on the phone for that account, and a report goes out only while its own account is still on
+ * the phone (see {@link sendReport}).
  */
 export async function retryPendingReports(): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        await movePhoneWideReports(owner);
+        await movePhoneWide(owner);
         const key = pendingAbuseReportsStoreKey(owner);
         const stored = parseReports(await AsyncStorage.getItem(key));
         if (!stored.length) {
@@ -388,9 +423,11 @@ export async function retryPendingReports(): Promise<void> {
             return;
         }
 
-        // Prune stale reports, and any this account didn't make, before retrying
+        // Prune stale reports, any this account didn't make, and any that name no community to send them to, before
+        // retrying
         const now = Date.now();
-        const pending = stored.filter(p => now - p.timestamp < REPORT_TTL_MS && p.reporterPubkey === owner);
+        const pending = stored.filter((p): p is PendingReport =>
+            now - p.timestamp < REPORT_TTL_MS && p.reporterPubkey === owner && !!p.community);
 
         const remaining: PendingReport[] = [];
         for (const item of pending) {

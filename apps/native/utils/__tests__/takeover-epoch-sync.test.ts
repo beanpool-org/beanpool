@@ -49,7 +49,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { applyDelta, getDb } from '../db';
-import { applyLivePostChange, performSync, resetSyncFingerprints, EPOCH_HEADER } from '../../services/pillar-sync';
+import { applyLivePostChange, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 import { livePostChange } from '@beanpool/core';
 
 const ANN = 'a'.repeat(64);
@@ -80,7 +80,8 @@ let requests: string[] = [];
 function answer(status: number, body: string, epoch: string | null) {
     return {
         ok: status >= 200 && status < 300, status,
-        headers: { get: (name: string) => (name.toLowerCase() === EPOCH_HEADER.toLowerCase() ? epoch : null) },
+        // The name on the wire (apps/server services/identity-epoch.ts), matched as a platform's headers match it.
+        headers: { get: (name: string) => (name.toLowerCase() === 'x-beanpool-epoch' ? epoch : null) },
         text: async () => body, json: async () => JSON.parse(body),
     };
 }

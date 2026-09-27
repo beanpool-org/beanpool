@@ -368,6 +368,8 @@ run_federation_suites() {
       test-standby-owner-deleted
       test-place-watch-failover
       test-standby-rekey
+      test-takeover-parity
+      test-replication-manifest
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

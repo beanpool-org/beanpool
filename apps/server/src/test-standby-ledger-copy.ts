@@ -902,6 +902,9 @@ async function main(): Promise<void> {
         const after14: Ledger = await standby0.send('ledger');
         assert(infinite.ok === false && /beyond what any ledger holds/.test(infinite.error ?? ''), `a balance that parses to Infinity is refused (${infinite.ok ? 'imported' : infinite.error})`);
         assert(absurd.ok === false && /beyond what any ledger holds/.test(absurd.error ?? ''), `so are two of ±1e15 that cancel (${absurd.ok ? 'imported' : absurd.error})`);
+        // As a conservation violation, which the puller logs at SECURITY (services/backup-puller.ts), not as a pull to retry.
+        assert(/Conservation violation/.test(infinite.error ?? '') && /Conservation violation/.test(absurd.error ?? ''),
+            `both are refused as conservation violations (${infinite.error}; ${absurd.error})`);
         assert(ledgerDiff(s0l, after14).length === 0 && after14.posts === s0l.posts,
             `neither wrote anything: S0's ledger is as it was, and it doesn't hold Gwen's plums (differences ${first(ledgerDiff(s0l, after14))}; listings ${s0l.posts} → ${after14.posts})`);
         const real14 = await standby0.send('pull', {});

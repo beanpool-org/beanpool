@@ -816,10 +816,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     }
     // A balance no ledger holds (MAX_LEDGER_BALANCE), before anything is written, the photo store included. An entry with
     // no number for a balance isn't one: the import leaves that account as it is, and the whole-copy check counts it.
+    // A conservation violation, as the guard's refusals are, so the puller logs it at SECURITY, not as a pull to retry.
     for (const acc of Array.isArray(remote.accounts) ? remote.accounts : []) {
         const b = acc?.balance as unknown;
         if (typeof b === 'number' && !(Math.abs(b) <= MAX_LEDGER_BALANCE)) {
-            throw new Error(`[Sync] Import payload account ${String(acc?.publicKey).slice(0, 16)} has a balance of ${b}, beyond what any ledger holds (|balance| ≤ ${MAX_LEDGER_BALANCE}); rejecting payload`);
+            throw new Error(`[Sync] Conservation violation: import payload account ${String(acc?.publicKey).slice(0, 16)} has a balance of ${b}, beyond what any ledger holds (|balance| ≤ ${MAX_LEDGER_BALANCE}); rejecting payload`);
         }
     }
 

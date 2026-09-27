@@ -96,7 +96,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
     deleted_by_owner_at TEXT,
     -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), or an
-    -- enterprise's `paused` or off-board `status` (members_touch_board_standing). A phone's Market delta carries a
+    -- enterprise's `paused` or off-board `status` (members_touch_board_standing); and, while an enterprise is off the
+    -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
+    -- engine and not a trigger, so a standby's import never stamps it). A phone's Market delta carries a
     -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader nothing the board doesn't:
     -- unlike updated_at, a bio, contact or mute never moves it. NULL: never changed since this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same

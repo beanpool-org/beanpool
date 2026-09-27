@@ -426,6 +426,22 @@ function enterprisesKeptBy(db: Db, member: string): Set<string> {
 }
 
 /**
+ * A keeper was bound to this enterprise or unbound from it. Every writer of treasury_operators that binds or unbinds
+ * calls this after its write, in the same transaction (never a standby's import, which holds its main server's stamps
+ * as they are, nor a boot migration). Nothing on the listings or the enterprise's standing moves, but while the
+ * enterprise is off the board a keeper's phone holds its listings as they are and everyone else's as paused
+ * (enterprisesKeptBy), so the keeper who came or went needs them again: stamping the enterprise's
+ * board_standing_changed_at puts them in every phone's next delta, each with its own reader's mask. On the board they
+ * go to everyone as they are, keeper or not, so nothing is stamped and no delta tells anyone the keepers changed.
+ * updated_at moves with it, as setHolidayMode's does, so delta sync takes the stamp to a standby.
+ */
+export function keepersChanged(db: Db, enterprise: string): void {
+    if (!authorsOffBoard(db, [enterprise]).has(enterprise)) return;
+    db.prepare(`UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(enterprise);
+}
+
+/**
  * The off-board events each member read by id outside a sync, with how long that read counts (noteEventReadOutsideSync).
  * The phone's event page reads the event that way (apps/native utils/db.ts fetchEventDetail), however the member got
  * there (a shared link, a reminder, "Your events", the event's chat), and writes its real status into the cached row
@@ -484,6 +500,10 @@ const HEALED_DEALS = 50;
  *   repeatable listing. Each time the phone applies a changed list of those deals it writes those listings back as
  *   active (apps/native utils/db.ts applyDelta, after the posts: the deal heal). A new deal, a rating or a cold start
  *   changes or re-applies that list with no listing row moving, so these go in every delta.
+ * - An open listing of an off-board author on which one of those deals is rejected. While the request was open the
+ *   phone held the listing as it is (an open deal's exemption, postsInOpenDealWith); declining it moves no listing row
+ *   (engine escrow.ts rejectPostRequest), and the author may decline while off the board. (Approving another request,
+ *   which rejects the rest, moves the listing's row, and only an author on the board may approve.)
  * Every other way the phone writes a listing's status outside a sync moves posts.updated_at on the node, so the delta
  * carries it anyway: a vote, an RSVP, an event edit, a deal accepted, completed or cancelled. Nothing of the member's
  * own, of an enterprise they keep, nor a listing they have an open deal on or have taken: those go as they are.
@@ -499,12 +519,13 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
         WITH mine AS MATERIALIZED (SELECT post_id, status, created_at FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer),
              edge AS (SELECT created_at FROM mine ORDER BY created_at DESC LIMIT 1 OFFSET ${HEALED_DEALS - 1})
         SELECT post_id, status FROM mine
-        WHERE post_id IS NOT NULL AND status IN ('cancelled', 'completed')
+        WHERE post_id IS NOT NULL AND status IN ('cancelled', 'completed', 'rejected')
           AND (NOT EXISTS (SELECT 1 FROM edge) OR created_at >= (SELECT created_at FROM edge))`)
         .all({ viewer }) as Array<{ post_id: string; status: string }>;
     const cancelled = new Set(deals.filter(d => d.status === 'cancelled').map(d => d.post_id));
     const completed = new Set(deals.filter(d => d.status === 'completed').map(d => d.post_id));
-    const candidates = [...new Set([...reads, ...cancelled, ...completed])];
+    const rejected = new Set(deals.filter(d => d.status === 'rejected').map(d => d.post_id));
+    const candidates = [...new Set([...reads, ...cancelled, ...completed, ...rejected])];
     if (candidates.length === 0) return [];
     const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
         db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
@@ -515,7 +536,7 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
         if (r.accepted_by === viewer || open.has(r.id) || r.active !== 1) return false;
         if (!(r.status === 'active' || r.status === 'pending' || (r.type === 'poll' && r.status === 'completed'))) return false;
         const readEvent = reads.has(r.id) && r.type === 'event' && (!r.event_end_at || r.event_end_at > nowIso);
-        return readEvent || cancelled.has(r.id) || (completed.has(r.id) && r.repeatable === 1);
+        return readEvent || cancelled.has(r.id) || rejected.has(r.id) || (completed.has(r.id) && r.repeatable === 1);
     }).map(r => r.id);
 }
 
@@ -864,7 +885,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Changed since then, or its author's standing did. Whether the board shows an author's listings (holiday, a
         // paused or winding-up enterprise) is on the author's row, not the listing's, so a delta by the listing alone
         // never told a phone to take them off or put them back. members.board_standing_changed_at moves for exactly
-        // that: the members_touch_board_standing trigger for `paused` and `status`, setHolidayMode for holiday. Not
+        // that: the members_touch_board_standing trigger for `paused` and `status`, setHolidayMode for holiday, and
+        // keepersChanged for a keeper who comes or goes while an enterprise is off the board (whose phone then reads its
+        // listings differently). Not
         // members.updated_at, which about forty columns move (a bio, a contact, a moderator's mute…): any delta reader,
         // unsigned included, could learn when one of those changed for any author with listings. Searched on
         // idx_members_board_standing_changed_at. Local authors only (origin_node IS NULL), which is every author whose

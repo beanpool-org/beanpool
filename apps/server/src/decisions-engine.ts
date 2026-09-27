@@ -1179,6 +1179,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                             "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
                         ).run(entPubkey, leadPubkey);
                         if (removed.changes === 0) continue;
+                        engine.keepersChanged(db, entPubkey);
                         closePendingKeeperChangesFor(entPubkey, leadPubkey, 'The community removed this lead keeper');
                         const { promoted } = promoteOrPauseAfterLeadLeft(entPubkey, `decision:${decision.id}`);
                         touchedEnterprises.push(entPubkey);

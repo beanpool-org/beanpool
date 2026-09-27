@@ -62,6 +62,45 @@ describe('profileArrived: a copy or an answer for a community landed', () => {
     });
 });
 
+describe('the tab strip follows the phone\'s community, not the node status alone', () => {
+    // The screen can't run here, so its source is read: Settings, the community list and joining another community
+    // switch without rechecking the node status, so `nodeUrl` alone kept the strip on the community before.
+    const strip = async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/_layout.tsx'), 'utf-8');
+        const start = src.indexOf('useState<AnchoredNodeProfile>(UNKNOWN_NODE_PROFILE)');
+        expect(start).toBeGreaterThan(-1);
+        const end = src.indexOf('}, [nodeUrl, pathname]);', start);
+        expect(end).toBeGreaterThan(start);
+        return src.slice(start, end);
+    };
+
+    it('reads the phone\'s community itself, at each screen change', async () => {
+        const src = await strip();
+        expect(src).toMatch(/const url = await AsyncStorage\.getItem\('beanpool_anchor_url'\)/);
+        expect(src).not.toMatch(/nodeUrl \?\?/);
+    });
+
+    it('drops to unknown on a different community, and keeps only answers for the one it is on', async () => {
+        const src = await strip();
+        expect(src).toMatch(/setStrip\(s => anchorRead\(s, url\)\);\s*if \(!url\) return;\s*const cached = await getCachedNodeProfile\(url\);/);
+        expect(src).toMatch(/setStrip\(s => profileArrived\(s, url, cached\)\)/);
+        expect(src).toMatch(/setStrip\(s => profileArrived\(s, url, fresh\)\)/);
+        expect(src).not.toMatch(/setStrip\(\{/);
+    });
+
+    it('asks the node only when the community changed', async () => {
+        const src = await strip();
+        expect(src).toMatch(/if \(url === undefined \|\| url === stripReadFor\.current\) return;\s*stripReadFor\.current = url;/);
+    });
+
+    it('hides tabs from that state alone', async () => {
+        const src = await strip();
+        expect(src).toMatch(/const hiddenTabs: HideableTab\[\] = hiddenTabsFor\(strip\.profile\?\.features\);/);
+    });
+});
+
 describe('the helper stays out of React and storage', () => {
     it('imports nothing but node-profile types', async () => {
         const fs = await import('node:fs');

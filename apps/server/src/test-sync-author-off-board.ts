@@ -240,7 +240,8 @@ async function main() {
 
     // Opening one of Hana's listings (a chat's "View Post") refreshes the cached row by id: it must not come back.
     const opened = await phone.openListing(hanaPosts[0]);
-    assert(!!opened && opened.id === hanaPosts[0], 'the phone can still open Hana\'s listing by id');
+    assert(!!opened && opened.id === hanaPosts[0] && opened.title === 'Lemons' && opened.status === 'paused',
+        `the phone can still open Hana's listing by id, whole, and it reads as paused (status ${opened?.status})`);
     assert(!phone.market().has(hanaPosts[0]), 'opening it by id doesn\'t put it back on the phone\'s Market');
 
     // A fresh install's first sync while she is away.

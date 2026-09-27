@@ -373,6 +373,38 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
     };
 }
 
+/**
+ * The board leaves out every listing of an author on holiday, and of an enterprise that is paused, winding up or wound
+ * up (the list read in getPostsRankedBy, with `m` the author's row). A sync read keeps those rows, so that a phone
+ * holding one can take it off: each goes as paused (see the output loop), which every app leaves off its Market and map.
+ */
+const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
+const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+
+/** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
+function authorsOffBoard(db: Db, authors: string[]): Set<string> {
+    const off = new Set<string>();
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph => `${ON_HOLIDAY_SQL} AND public_key IN (${ph})`)) off.add(r.public_key);
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph =>
+        `SELECT m.public_key FROM members m WHERE m.public_key IN (${ph}) AND NOT (${ENTERPRISE_ON_BOARD_SQL})`)) off.add(r.public_key);
+    return off;
+}
+
+/** The posts this member has an open deal on, as buyer or seller: asked for, or accepted and not yet completed. */
+function postsInOpenDealWith(db: Db, member: string): Set<string> {
+    const rows = db.prepare(`
+        SELECT post_id FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('requested', 'pending')
+        UNION
+        SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = ? AND status IN ('requested', 'pending')`)
+        .all(member, member) as Array<{ post_id: string | null }>;
+    return new Set(rows.flatMap(r => r.post_id ? [r.post_id] : []));
+}
+
+/** Whether the list read's own status conditions keep this post: live, and open or taken, or a closed poll. */
+function onBoardByStatus(post: MarketplacePost): boolean {
+    return post.active && (post.status === 'active' || post.status === 'pending' || (post.type === 'poll' && post.status === 'completed'));
+}
+
 export function hasListedOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1").get(publicKey);
     return !!row;
@@ -596,10 +628,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += ` AND p.author_pubkey NOT IN (${ON_HOLIDAY_SQL})`;
+            where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         } else if (!selfView && !filter?.includeInactive) {
-            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
@@ -698,8 +730,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     if (filter?.updatedAfter) {
-        where += " AND p.updated_at >= ?";
-        params.push(filter.updatedAfter);
+        // Changed since then, or its author did. Whether the board shows an author's listings (holiday, a paused or
+        // winding-up enterprise) is on the author's row, not the listing's, so a delta by the listing alone never told
+        // a phone to take them off or put them back. Every writer of that moves members.updated_at: the
+        // members_touch_updated_at trigger for `paused` and `status`, setHolidayMode for holiday. Local authors only
+        // (origin_node IS NULL), which is every author whose standing is kept here, and keeps this half on
+        // idx_posts_author_created_local: both halves are then an index search (MULTI-INDEX OR). Without it the
+        // planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
+        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?)))";
+        params.push(filter.updatedAfter, filter.updatedAfter);
     }
 
     let rows: any[];
@@ -781,6 +820,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // Table absent on an older schema
         }
     }
+
+    // A sync read gives the listings the board leaves out for their author's sake as paused (ON_HOLIDAY_SQL), so a
+    // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's row
+    // next changes (the delta above). Not to the author, whose own listings the node shows them as they are, nor to a
+    // member with an open deal on one, whose phone finds the deal by its listing.
+    const offBoard = syncRead ? authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : new Set<string>();
+    const viewerDeals = offBoard.size > 0 && viewer ? postsInOpenDealWith(db, viewer) : new Set<string>();
 
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
@@ -866,6 +912,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                     createdAt: v.created_at
                 }));
             }
+        }
+
+        if (offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && r.accepted_by !== viewer
+            && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
+            post.status = 'paused';
         }
 
         out.push(post);

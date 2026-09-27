@@ -388,6 +388,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 if (postsIsIncremental) {
                     postsIsIncremental = false;
                     postsRes = await pullPosts('');
+                    // The epoch stored is that of the server whose whole pull replaces the cache. If the old one
+                    // answered it (the address flipping back), that is its own epoch, and the next cycle does this again.
+                    epochNow = epochOf(postsRes);
                 }
             }
             if (!postsRes.ok) {

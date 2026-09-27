@@ -202,6 +202,24 @@ describe('a take-over: the epoch changes, the cursors go, and a whole sync repla
         expect(store.get(EPOCH_KEY)).toBe('1');
     });
 
+    it('when the old server answers the whole pull (the address flipping back), its epoch is kept, and the next cycle does it again', async () => {
+        await phoneThatSyncedTheTail();
+        // The delta is answered by the new server, the whole pull by the old one, tail and all.
+        Object.assign(node, { epoch: '1', whole: [N, B, A], delta: [N] });
+        fetchMock.mockImplementationOnce(async (url: string) => { requests.push(url); return answer(200, JSON.stringify([N]), '1'); });
+        fetchMock.mockImplementationOnce(async (url: string) => { requests.push(url); return answer(200, JSON.stringify([T, B_TAIL, A]), '0'); });
+        await sync();
+        expect(postsPulls()).toHaveLength(2);
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump (and the tyre levers)', 'post-t:Firewood, a trailer load']);
+        expect(store.get(EPOCH_KEY)).toBe('0');
+
+        // The new server answers again: the phone still holds the old one's copy, so it syncs whole again.
+        await sync();
+        expect(postsPulls()).toHaveLength(2);
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-n:Seedlings']);
+        expect(store.get(EPOCH_KEY)).toBe('1');
+    });
+
     it('when the whole pull fails, the epoch is not stored, and the next cycle does it again', async () => {
         await phoneThatSyncedTheTail();
         Object.assign(node, { epoch: '1', whole: [N, B, A], delta: [N], postsStatus: 503 });

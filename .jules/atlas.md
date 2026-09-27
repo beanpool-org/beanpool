@@ -135,3 +135,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `ActivityPauseProvider`, `useActivityPause`, and `usePausablePoll` in `apps/manager/src/lib/activity-pause.tsx` lacked dedicated unit test coverage.
 **Learning:** Testing `activity-pause` required using Vitest fake timers (`vi.useFakeTimers()`) to verify idle threshold transitions (`idleAfterMs`), user event triggers (`keydown`, `pointermove`), visibility changes (`visibilitychange`), and `usePausablePoll` polling state lifecycle (immediate polling on resume, interval resets on `restartKey` change).
 **Action:** Check remaining utility files in `apps/manager/src/lib/` (e.g. `mode.ts`) for unit test coverage gaps.
+
+## 2026-09-17 - [manager tests] IS_FLEET_MODE mode detection unit tests
+**Gap:** `IS_FLEET_MODE` mode detection in `apps/manager/src/lib/mode.ts` was untested.
+**Learning:** Testing `IS_FLEET_MODE` required resetting Vitest modules (`vi.resetModules()`), stubbing environment variables (`vi.stubEnv`), and dynamically re-importing `mode.ts` to verify global build definition (`__FLEET_MODE__`) and `import.meta.env.VITE_FLEET_MODE` logic.
+**Action:** Continue identifying any remaining untested helper utilities or React components in `apps/manager/`.

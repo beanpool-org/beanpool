@@ -454,6 +454,7 @@ export function loadBlocklist(): Promise<string[]> {
             throw readError ?? toBlocklistError(e, 'read');
         } finally {
             reading = null;
+            explicitUnblocks.clear();
             if (readAgain) {
                 readAgain = false;
                 loadBlocklist().catch(() => { /* told through getBlocklistStatus */ });
@@ -555,6 +556,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     takeNodeAnswer(res, asked);
     leaving.delete(targetPubkey);
     unrecordMovedKey(targetPubkey);
+    if (!reading) explicitUnblocks.delete(targetPubkey);
     emit();
     return true;
 }
@@ -577,6 +579,7 @@ export async function clearBlocklist(): Promise<void> {
     takeNodeAnswer(res, asked);
     for (const k of shown) leaving.delete(k);
     clearMovedKeys();
+    explicitUnblocks.clear();
     clearedAll = false;
     emit();
 }

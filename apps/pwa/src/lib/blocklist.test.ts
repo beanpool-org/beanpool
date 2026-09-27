@@ -625,6 +625,24 @@ describe('the block list the community keeps for the account', () => {
         expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull();
     });
 
+    it('unblocking someone outside of a move does not retain them in explicitUnblocks so future moves do not unblock them again', async () => {
+        node.list = [K1];
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K1]));
+        await unblockUser(K1);
+        expect(node.list).toEqual([]);
+
+        // Later, the user is re-blocked (e.g. from mobile), and another block K2 waits to move from browser
+        node.list = [K1];
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K2]));
+        vi.clearAllMocks();
+        await loadBlocklist();
+
+        expect(api.removeFromBlockList).not.toHaveBeenCalledWith(K1);
+        expect(node.list).toEqual([K1, K2]);
+        expect(getBlockedUsers()).toEqual([K1, K2]);
+    });
+
     it('a block sends a report to the moderators; one that can\'t go waits in memory, never in the browser, and goes on the next try', async () => {
         startBlocklist(ME);
         await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));

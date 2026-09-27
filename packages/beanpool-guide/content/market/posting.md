@@ -29,6 +29,8 @@ Until everything needed is filled in, the button tells you what is missing, like
 
 ## On the global community
 
+There are no Beans on the global community, so a post there has no price. In the phone app the form has no **Price**: say in the description what you would like in return, or that it is free.
+
 Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos.
 
 ## Not sure what to charge?

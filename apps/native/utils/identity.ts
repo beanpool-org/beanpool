@@ -5,6 +5,7 @@ import {
     normaliseRecoveryWords,
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
+import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
 import { Platform } from 'react-native';
@@ -135,6 +136,7 @@ export async function discardUnjoinedIdentity(publicKey: string): Promise<boolea
     } else {
         await SecureStore.deleteItemAsync(KEY_ID);
     }
+    announceAccountOnPhone(null);
     return true;
 }
 
@@ -221,6 +223,10 @@ export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdent
     return identity;
 }
 
+/**
+ * Every write of the phone's key comes through here, and announces the key the phone now holds (account-on-phone.ts):
+ * what the phone keeps per account (blocklist.ts) follows it without a restart.
+ */
 async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
     const payload = JSON.stringify(identity);
     if (isWeb) {
@@ -228,6 +234,7 @@ async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
     } else {
         await SecureStore.setItemAsync(KEY_ID, payload);
     }
+    announceAccountOnPhone(identity.publicKey);
 }
 
 interface WipeableStorage {
@@ -250,13 +257,17 @@ interface WipeableStorage {
  * So does an unfinished post (map.tsx `OFFER_DRAFT_KEY`: its words, photos and map pin). It is kept per
  * community, not per account, so the next account there would be offered it to finish and post as its own
  * (PR #1183 review 4110094960).
- * And so do the reports this key queued while offline (blocklist.ts). A node files a report as whoever
- * signs it, whatever reporter the body names, so the next account's retry would file them in its own name.
+ * And so does the one phone-wide queue of offline reports older builds kept (blocklist.ts moves the account's
+ * own reports out of it first). A node files a report as whoever signs it, whatever reporter the body names.
  * And the record of where the phone sent its push token for this key (push-registrations.ts): the account
  * leaving the phone has already unregistered there (account-leaves-phone.ts), and the next account starts its own.
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
+ *
+ * The account's block list and its own queue of offline reports stay too, under its own key (storage-keys.ts
+ * `blockedUsersStoreKey`, `pendingAbuseReportsStoreKey`): restoring the same account here brings its blocks back, and
+ * no other account reads them or sends those reports (Marty, 2026-09-27: the list is the account's).
  */
 export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
     await storage.removeItem('beanpool_anchor_url');
@@ -285,6 +296,7 @@ export async function removeStoredIdentity(): Promise<void> {
     } else {
         await SecureStore.deleteItemAsync(KEY_ID);
     }
+    announceAccountOnPhone(null);
 }
 
 export async function wipeIdentity(): Promise<void> {

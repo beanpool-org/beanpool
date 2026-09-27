@@ -20,7 +20,7 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 - Type **WIPE** and tap **Confirm Sign Out**.
 - Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
-Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first.
+Your account and every community you saved are removed from this phone. In the phone app, your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, signing out clears your blocks: block them again when you come back. **Without your 12 words you cannot get back in.** Check you have them first.
 
 A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see "Your 12 words").
 

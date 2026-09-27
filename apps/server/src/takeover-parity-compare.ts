@@ -105,7 +105,8 @@ export function diffSettings(twin: SettingsDump, promoted: SettingsDump, c: Sett
             note(out, `setting:${where}.${name}`, `twin ${show(a)}, promoted ${show(b)}`);
         }
     };
-    for (const f of new Set([...twin.localConfigKeys, ...promoted.localConfigKeys, ...Object.keys(twin.localConfig)])) {
+    // Both sides' fields as each uses them: a server with no local-config.json runs on the defaults, fields the other's file may lack.
+    for (const f of new Set([...twin.localConfigKeys, ...promoted.localConfigKeys, ...Object.keys(twin.localConfig), ...Object.keys(promoted.localConfig)])) {
         compare('local-config', f, c.localConfig(f), twin.localConfig[f], promoted.localConfig[f]);
     }
     for (const k of new Set([...Object.keys(twin.nodeConfig), ...Object.keys(promoted.nodeConfig)])) {

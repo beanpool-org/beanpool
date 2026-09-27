@@ -32,6 +32,7 @@ import {
     completePostTransaction,
     getEscrowDispute,
     resolveEscrowDispute,
+    getPostsVersion,
     type EscrowDisputeAction,
 } from './state-engine.js';
 import { runLedgerAudit } from './engine/audit.js';
@@ -724,6 +725,17 @@ async function main() {
     } finally {
         migDb.close();
     }
+
+    // A ruling on a listing visitors can't see still moves the listings' version (#1265 review 4116859583): its step
+    // no longer rings visitors' doorbells, and members' boards revalidate on that version, so without the bump they
+    // got a 304 and kept showing the listing as spoken for.
+    const wheelbarrowPost = createPost('offer', 'tools', 'Wheelbarrow', 'Wheelbarrow loan', 5, 'fixed', bob,
+        undefined, undefined, undefined, undefined, undefined, undefined, { audienceScope: 'direct', targetPubkey: alice });
+    assert(wheelbarrowPost?.audienceScope === 'direct', 'Bob offered a wheelbarrow to Alice alone (a listing visitors cannot see)');
+    const txDirect = acceptPost(wheelbarrowPost!.id, alice);
+    const versionBeforeRuling = getPostsVersion();
+    resolveEscrowDispute(txDirect.id, 'release_to_seller', 'admin_pubkey_operator_1', { reason: 'Delivered' });
+    assert(getPostsVersion() !== versionBeforeRuling, 'A ruling on a direct listing moves the listings\' version, so members\' boards refresh');
 
     console.log(`\n========================================`);
     console.log(`✅ All ${passed}/${run} assertions passed!`);

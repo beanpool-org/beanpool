@@ -101,8 +101,8 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   That means `/settings`, `/app` and the website stay in the browser.
 - *Web app (PWA):* shows the same owner/admin-only entry, as a plain link to `/settings`, which then asks
   for the password. The browser does not mint key links, because it has no equivalent of the phone unlock.
-- *Admin queue:* `GET /api/node-admin/queue` (owner/admin, signed) returns counts only, each with its
-  `/settings#section=` target, for the header's "needs you" badge.
+- *Admin queue:* `GET /api/node-admin/queue` (signed; owner/admin: every count; moderator: the reports alone)
+  returns counts only, each with its `/settings#section=` target, for the header's "needs you" badge.
 - *Header 🛡️ icon (app):* owners, admins and moderators, while the queue total is above 0 (for a moderator,
   the reports queue alone). First in the needs-you priority (rightmost, last to fold into "•••"), amber accent,
   label in words ("2 reports to review"). Tapping it is the Manage press (phone unlock → key sign-in link)

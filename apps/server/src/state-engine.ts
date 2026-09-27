@@ -1278,7 +1278,12 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // A trade's step: the sockets below that are neither its parties nor on the member feed or the open feed get the
     // listings' doorbell for it (BroadcastOptions above), only when that trade's listing is visible to visitors.
     const tradeListingPublic = (recipients && opts?.othersGetDoorbell) ? tradeListingVisibleToVisitors(event) : false;
-    if (recipients && opts?.othersGetDoorbell && tradeListingPublic) ringListingDoorbell('post_updated');
+    // The ring also moves the listings' version; a step on a listing visitors can't see still changes the board members
+    // read (a dispute ruling has no other bump), or their revalidation gets a 304 and keeps the old state (#1265 4116859583).
+    if (recipients && opts?.othersGetDoorbell) {
+        if (tradeListingPublic) ringListingDoorbell('post_updated');
+        else bumpPostsVersion();
+    }
     const msg = JSON.stringify(event);
     // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
     // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a

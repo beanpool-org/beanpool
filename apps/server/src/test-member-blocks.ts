@@ -113,6 +113,8 @@ async function unsigned(method: 'GET' | 'POST', path: string, body?: unknown): P
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 160)}`;
 const listed = (r: Res): string[] => Array.isArray(r.body?.blocked) ? r.body.blocked.map((b: any) => b.publicKey) : [];
 const same = (a: string[], b: string[]) => JSON.stringify(a) === JSON.stringify(b);
+/** The same keys in any order: keys blocked in one request share a stamp, and are then in key order. */
+const sameSet = (a: string[], b: string[]) => a.length === b.length && b.every(k => a.includes(k));
 
 // ── what is kept, read straight from the database ─────────────────────────────────────────────────
 interface Row { owner_pubkey: string; blocked_pubkey: string; created_at: string; updated_at: string }
@@ -187,6 +189,7 @@ async function main(): Promise<void> {
     const again = await call('POST', ann, '/api/blocks', { targetPubkey: bo.pk });
     assert(again.status === 200 && same(again.body?.added ?? ['x'], []) && same(listed(again), [bo.pk]) && rowsOf(ann).length === 1,
         `blocking him again changes nothing (${show(again)})`);
+    await sleep(5); // a later millisecond, so "oldest first" has an order to show
     const a2 = await call('POST', ann, '/api/blocks', { targetPubkey: cy.pk });
     const read = await call('GET', ann, '/api/blocks');
     assert(same(listed(a2), [bo.pk, cy.pk]) && same(listed(read), [bo.pk, cy.pk]), `she blocks Cy; her list, oldest first (${show(read)})`);
@@ -218,7 +221,7 @@ async function main(): Promise<void> {
     // ── 2. nobody else reads or changes it ──────────────────────────────────────────────────────
     console.log('\n── 2. nobody else reads or changes it ──');
     const annList = () => keysOf(ann);
-    const annHas = same(annList(), [bo.pk, cy.pk]);
+    const annHas = sameSet(annList(), [bo.pk, cy.pk]);
     assert(annHas, `Ann blocks Bo and Cy (${annList().length})`);
     const q = await call('GET', bo, `/api/blocks?publicKey=${ann.pk}&owner=${ann.pk}&pubkey=${ann.pk}&ownerPubkey=${ann.pk}`);
     assert(q.status === 200 && listed(q).length === 0 && !JSON.stringify(q.body).includes(ann.pk) && !JSON.stringify(q.body).includes(cy.pk),
@@ -232,7 +235,7 @@ async function main(): Promise<void> {
     ];
     for (const [what, path, body] of spoofs) {
         const r = await call('POST', bo, path, body);
-        assert(r.status >= 400 && r.status < 500 && same(annList(), [bo.pk, cy.pk]) && keysOf(bo).length === 0,
+        assert(r.status >= 400 && r.status < 500 && sameSet(annList(), [bo.pk, cy.pk]) && keysOf(bo).length === 0,
             `Bo can't ${what} with a body naming her: ${r.status}, her list and his unchanged`);
     }
     const forged = [
@@ -240,29 +243,29 @@ async function main(): Promise<void> {
         await call('POST', bo, '/api/blocks/clear', {}, { headerKey: ann.pk }),
         await call('POST', bo, '/api/blocks/remove', { targetPubkey: cy.pk }, { headerKey: ann.pk }),
     ];
-    assert(forged.every(r => (r.status === 401 || r.status === 403) && !JSON.stringify(r.body).includes(cy.pk)) && same(annList(), [bo.pk, cy.pk]),
+    assert(forged.every(r => (r.status === 401 || r.status === 403) && !JSON.stringify(r.body).includes(cy.pk)) && sameSet(annList(), [bo.pk, cy.pk]),
         `her key on Bo's signature reads and changes nothing (${forged.map(r => r.status).join(', ')})`);
     const boClear = await call('POST', bo, '/api/blocks/clear', {});
-    assert(boClear.status === 200 && boClear.body?.removed === 0 && same(annList(), [bo.pk, cy.pk]), `Bo's own Unblock All touches only his (${show(boClear)})`);
+    assert(boClear.status === 200 && boClear.body?.removed === 0 && sameSet(annList(), [bo.pk, cy.pk]), `Bo's own Unblock All touches only his (${show(boClear)})`);
     const u = [await unsigned('GET', '/api/blocks'), await unsigned('POST', '/api/blocks', { targetPubkey: dee.pk }),
         await unsigned('POST', '/api/blocks/remove', { targetPubkey: cy.pk }), await unsigned('POST', '/api/blocks/clear', {})];
-    assert(u.every(r => r.status === 401) && same(annList(), [bo.pk, cy.pk]), `unsigned: 401 every time, and nothing changes (${u.map(r => r.status).join(', ')})`);
+    assert(u.every(r => r.status === 401) && sameSet(annList(), [bo.pk, cy.pk]), `unsigned: 401 every time, and nothing changes (${u.map(r => r.status).join(', ')})`);
     const nobodyAns = [await call('GET', nobody, '/api/blocks'), await call('POST', nobody, '/api/blocks', { targetPubkey: dee.pk }),
         await call('POST', nobody, '/api/blocks/remove', { targetPubkey: cy.pk }), await call('POST', nobody, '/api/blocks/clear', {})];
     assert(nobodyAns.every(r => r.status === 403) && nobodyAns.slice(1).every(r => r.body?.code === 'not_a_member')
-        && everyRow().every(r => r.owner_pubkey !== nobody.pk) && same(annList(), [bo.pk, cy.pk]),
+        && everyRow().every(r => r.owner_pubkey !== nobody.pk) && sameSet(annList(), [bo.pk, cy.pk]),
         `a key with no row: 403 to the read and to every change, and nothing is written (${nobodyAns.map(show).join(' | ')})`);
     const veraAns = [await call('GET', vera, '/api/blocks'), await call('POST', vera, '/api/blocks', { targetPubkey: dee.pk }),
         await call('POST', vera, '/api/blocks/remove', { targetPubkey: cy.pk }), await call('POST', vera, '/api/blocks/clear', {})];
     assert(veraAns.every((r, i) => r.status === nobodyAns[i].status && JSON.stringify(r.body) === JSON.stringify(nobodyAns[i].body))
-        && everyRow().every(r => r.owner_pubkey !== vera.pk) && same(annList(), [bo.pk, cy.pk]),
+        && everyRow().every(r => r.owner_pubkey !== vera.pk) && sameSet(annList(), [bo.pk, cy.pk]),
         `a visitor's row is answered as the key with no row is, every time, and keeps no list (${veraAns.map(show).join(' | ')})`);
     // A request Ann signed, caught on the way and sent again later, after she blocked Cy again: refused, Cy stays blocked.
     const caught = signed('POST', '/api/blocks/remove', ann, { targetPubkey: cy.pk });
     const first = await send(caught);
     await call('POST', ann, '/api/blocks', { targetPubkey: cy.pk });
     const replay = await send(caught);
-    assert(first.status === 200 && replay.status >= 400 && replay.status < 500 && same(annList(), [bo.pk, cy.pk]),
+    assert(first.status === 200 && replay.status >= 400 && replay.status < 500 && sameSet(annList(), [bo.pk, cy.pk]),
         `her unblock, replayed after she blocked Cy again, is refused and Cy stays blocked (${first.status} then ${show(replay)})`);
 
     // ── 3. the blocked member learns nothing ────────────────────────────────────────────────────
@@ -375,7 +378,7 @@ async function main(): Promise<void> {
     const annNew = newId('AnnNew');
     const moved = attempt(() => { const code = issueRekeyCode(ann.pk, owner.pk).code; return completeRekey(ann.pk, annNew.pk, code, owner.pk); });
     assert(moved?.success === true, 'Ann is re-keyed');
-    assert(rowsOf(ann).length === 0 && same(keysOf(annNew), [bo.pk, eve.pk])
+    assert(rowsOf(ann).length === 0 && sameSet(keysOf(annNew), [bo.pk, eve.pk])
         && rowsOf(annNew).every(r => r.created_at === annBefore.find(b => b.blocked_pubkey === r.blocked_pubkey)?.created_at),
         `her list is hers on the new key, each with when she blocked them (${keysOf(annNew).length})`);
     assert(same(keysOf(bo), [annNew.pk]), "Bo's block of her names her new key: a re-key unblocks nobody");
@@ -386,7 +389,7 @@ async function main(): Promise<void> {
     assert(doorbells(boSock).length === boBells + 1, `Bo's socket hears a bare doorbell, his list having changed (${doorbells(boSock).length - boBells})`);
     const newRead = await call('GET', annNew, '/api/blocks');
     const oldRead = await call('GET', ann, '/api/blocks');
-    assert(newRead.status === 200 && same(listed(newRead), [bo.pk, eve.pk]), `she reads it on her new key (${show(newRead)})`);
+    assert(newRead.status === 200 && sameSet(listed(newRead), [bo.pk, eve.pk]), `she reads it on her new key (${show(newRead)})`);
     assert(oldRead.status === 403 && oldRead.body?.code === 'key_invalidated', `the old key reads nothing (${show(oldRead)})`);
 
     // ── 8. replication ──────────────────────────────────────────────────────────────────────────

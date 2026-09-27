@@ -4,8 +4,13 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import {
-    toEd25519Pkcs8,
+    buildBoundRequestHeaders,
+    buildBoundWsParams,
+    buildInviteTicket,
+    ed25519Signer,
+    type Signer,
     onboardingEventKey,
     oncePerPersonVariant,
     type PublicCreatorChannel,
@@ -64,52 +69,53 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
     }
 }
 
-// Helper to convert hex string to Uint8Array
-function hexToBytes(hex: string): Uint8Array {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
-}
-
-// Helper to convert Uint8Array to base64
-function bytesToBase64(bytes: Uint8Array): string {
-    return btoa(String.fromCharCode(...bytes));
-}
-
-// Native devices persist the raw 32-byte Ed25519 seed; WebCrypto's importKey('pkcs8')
-// needs it wrapped. toEd25519Pkcs8 accepts either form, so a key imported from a phone
-// signs here — and the wrapping bytes are stated once, in @beanpool/core, rather than
-// copied into each file that needs them.
-async function signEd25519(privateKeyHex: string, message: string): Promise<string> {
-    const pkcs8 = toEd25519Pkcs8(hexToBytes(privateKeyHex));
-    const privateKey = await crypto.subtle.importKey(
-        'pkcs8',
-        pkcs8 as unknown as BufferSource,
-        { name: 'Ed25519' },
-        false,
-        ['sign']
-    );
-    const signatureBytes = await crypto.subtle.sign('Ed25519', privateKey, new TextEncoder().encode(message));
-    return bytesToBase64(new Uint8Array(signatureBytes));
+/**
+ * The address of the node this web app talks to: the detached `bp_node_url` when one is set, else this page's own
+ * origin (the node that served it). Every signature the web app makes names this address's host (request binding,
+ * @beanpool/core request-signing.ts), the host the fetch actually reaches, so a node can't take what a member signed
+ * for it to another community.
+ */
+function nodeAddress(): string {
+    return getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 }
 
 /**
- * WebSocket connect auth (SRV-4). Signed query params for the `/ws` handshake,
- * mirroring the replay-proof scheme (method=WS, empty body): signs
- * `WS\n${path}\n${ts}\n${nonce}\n`. The node gives the full live feed only to a
- * socket signed by a member; without this, only public doorbells arrive.
+ * The member key as core's builders take it. The web app signs nothing itself: every signature is made by one of
+ * core's builders, over bytes it built (lib/signing-source-rule.test.ts). Either stored form of the key (the
+ * browser's PKCS8 or a phone's raw seed) signs; core's ed25519-key reads both.
+ */
+function memberSigner(privateKeyHex: string): Signer {
+    return ed25519Signer(hexToBytes(privateKeyHex));
+}
+
+/**
+ * WebSocket connect auth (SRV-4). Signed query params for the `/ws` handshake, in format 2 (method WS, empty body,
+ * `for=<host>&v=2`): the host is the one `wsUrl` reaches, so the token is good only at that node. The node gives the
+ * full live feed only to a socket signed by a member; without this, only public doorbells arrive.
  * Returns a `&`-joinable fragment, or '' if no identity.
  */
-export async function buildSignedWsParams(path: string): Promise<string> {
+export async function buildSignedWsParams(wsUrl: string): Promise<string> {
     const identity = await loadIdentity();
     if (!identity?.privateKey || !identity?.publicKey) return '';
-    const timestamp = String(Date.now());
-    const nonce = crypto.randomUUID();
-    const canonical = `WS\n${path}\n${timestamp}\n${nonce}\n`;
-    const sig = await signEd25519(identity.privateKey, canonical);
-    return `pubkey=${encodeURIComponent(identity.publicKey)}&ts=${timestamp}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    return buildBoundWsParams({ wsUrl, publicKeyHex: identity.publicKey, sign: memberSigner(identity.privateKey) });
+}
+
+/** The signed-request headers for `method path` with `bodyString`, for the node this web app talks to. */
+function signedHeaders(method: string, path: string, bodyString: string, privateKeyHex: string, publicKeyHex: string) {
+    return buildBoundRequestHeaders({
+        method, url: `${nodeAddress()}${path}`, body: bodyString, publicKeyHex, sign: memberSigner(privateKeyHex),
+    });
+}
+
+/**
+ * An offline invite ticket (`BP-` and the ticket, URL-safe base64 with no padding) for the community this web app
+ * talks to, made with no connection. It names that community's host, so it joins only there.
+ */
+export async function buildOfflineInviteCode(
+    inviterPublicKey: string, privateKeyHex: string, intendedFor?: string | null,
+): Promise<string> {
+    const ticket = await buildInviteTicket(nodeAddress(), inviterPublicKey, memberSigner(privateKeyHex), { intendedFor });
+    return `BP-${ticket.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
 }
 
 // Base request helper with auth
@@ -134,18 +140,10 @@ export async function request<T>(method: string, path: string, body?: any): Prom
     const identity = await loadIdentity();
     if (identity && identity.privateKey) {
         try {
-            // Replay-proof signature over method+path+timestamp+nonce+body.
-            // Path is signed without the query string to match the server's ctx.path.
-            const timestamp = String(Date.now());
-            const nonce = crypto.randomUUID();
-            const signPath = path.split('?')[0];
-            const canonical = `${method}\n${signPath}\n${timestamp}\n${nonce}\n${bodyString}`;
-            const signature = await signEd25519(identity.privateKey, canonical);
-            const h = opts.headers as Record<string, string>;
-            h['X-Public-Key'] = identity.publicKey;
-            h['X-Signature'] = signature;
-            h['X-Timestamp'] = timestamp;
-            h['X-Nonce'] = nonce;
+            // Replay-proof signature over the host, method, path, timestamp, nonce and body (format 2).
+            // The path is signed without the query string, to match the server's ctx.path.
+            Object.assign(opts.headers as Record<string, string>,
+                await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
         } catch (e) {
             console.warn('[API] Could not sign request:', e);
         }
@@ -218,16 +216,8 @@ export async function signedFetchWithKey(
         opts.body = bodyString;
     }
 
-    const timestamp = String(Date.now());
-    const nonce = crypto.randomUUID();
-    const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${timestamp}\n${nonce}\n${bodyString}`;
-    const signature = await signEd25519(privateKeyHex, canonical);
-    const h = opts.headers as Record<string, string>;
-    h['X-Public-Key'] = publicKeyHex;
-    h['X-Signature'] = signature;
-    h['X-Timestamp'] = timestamp;
-    h['X-Nonce'] = nonce;
+    Object.assign(opts.headers as Record<string, string>,
+        await signedHeaders(method, path, bodyString, privateKeyHex, publicKeyHex));
 
     const baseUrl = getNodeApiUrl();
     return fetch(`${baseUrl}${path}`, opts);

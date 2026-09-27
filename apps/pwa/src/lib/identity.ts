@@ -859,10 +859,11 @@ export async function wipeIdentity(): Promise<void> {
 /**
  * Update the callsign on the existing identity in IndexedDB, read and written in one transaction (so it never writes
  * back an identity another tab has just signed out). Returns the updated identity, or null when there is none.
+ * `publicKey`: only when the stored identity is that key (the join renaming the account it made), else null.
  */
-export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdentity | null> {
+export async function updateCallsign(newCallsign: string, publicKey?: string): Promise<BeanPoolIdentity | null> {
     return withStoredSlots<BeanPoolIdentity | null>(({ identity }) => {
-        if (!identity) return { result: null };
+        if (!identity || (publicKey !== undefined && identity.publicKey !== publicKey)) return { result: null };
         const next = { ...identity, callsign: newCallsign };
         return { identity: next, result: next };
     });

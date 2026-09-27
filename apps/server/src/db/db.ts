@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
-import { registerGeoFunctions } from '@beanpool/engine';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole } from '../config/node-role.js';
 
@@ -265,6 +265,50 @@ export function markExistingVisitors(): void {
         // Nobody is marked and the marker isn't written, so the next boot tries again; until then visitors read as
         // members, as they did before this version.
         console.error('[DB] ❌ Could not mark visitors\' rows:', e);
+    }
+}
+
+/** node_config: members.board_standing_changed_at has been filled on the rows this node held when it came in. */
+const BOARD_STANDING_FILLED = 'migration_board_standing_v1';
+
+/**
+ * Fills members.board_standing_changed_at once, on the rows a node holds when it gains the column (node_config
+ * `migration_board_standing_v1`, written in the same transaction, so a crash leaves it to run again). The Market delta
+ * reads it where it read updated_at before (engine posts.ts getPosts), and the phones already hold cursors, so the first
+ * delta after the upgrade has to carry every author a phone still has to hear about:
+ *   - A member off the board now (on holiday, or an enterprise paused, winding up or wound up): the upgrade's time, so
+ *     every phone's next delta carries their listings, as paused, whatever its cursor. That includes a phone that synced
+ *     past the switch on a node from before the delta read the author's row at all (#1238), which holds them live.
+ *     It tells a reader nothing the sync read doesn't already say: that those listings are off the board.
+ *   - Everyone else: nothing (NULL), so no delta carries them until their standing next changes. Filling their
+ *     updated_at instead would publish, for good, when each one's row last changed before the upgrade (a bio, a
+ *     contact, a moderator's mute), readable by bisecting `updatedAfter`: exactly what this column exists to stop, and
+ *     on a node from before #1238 (both live communities) never exposed until then (#1250's review, 4115438316). On such
+ *     a node no phone ever masked anyone, so there is nothing to undo. The one cost: a phone that synced against a #1238
+ *     build and holds a member masked who came back on the board before the upgrade keeps them masked until one of
+ *     their listings next changes (only the test node ran #1238).
+ * A fresh install fills nothing and writes the marker. A standby fills its own copy the same way (a whole copy of its
+ * main server's then brings the main server's value, engine/sync.ts's member import).
+ */
+function backfillBoardStanding(): void {
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(BOARD_STANDING_FILLED)) return;
+        db.transaction(() => {
+            const filled = db.prepare(`
+                UPDATE members SET board_standing_changed_at = CASE
+                    WHEN public_key IN (${ON_HOLIDAY_SQL})
+                      OR public_key IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))
+                    THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                    ELSE NULL END
+                WHERE board_standing_changed_at IS NULL
+            `).run().changes;
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(BOARD_STANDING_FILLED);
+            if (filled > 0) console.log(`[DB] Board standing filled on ${filled} member row(s)`);
+        })();
+    } catch (e) {
+        // Nothing is filled and the marker isn't written, so the next boot tries again. Until then the delta carries no
+        // author for their standing, and their listings reach a phone only when they change themselves.
+        console.error('[DB] ❌ Could not fill board standing:', e);
     }
 }
 
@@ -612,6 +656,10 @@ export function initSchema() {
     // When the key's owner deleted the account (state-engine.ts isDeletedByOwner). Before the schema.sql exec, whose
     // members_touch_updated_at (dropped below, so the exec recreates it) lists it. NULL on every existing row.
     try { db.prepare(`ALTER TABLE members ADD COLUMN deleted_by_owner_at TEXT`).run(); } catch { }
+    // When what decides whether the board shows a member's listings last changed (the Market delta reads it, engine
+    // posts.ts). Before the schema.sql exec, which indexes it and whose members_touch_board_standing sets it. Filled
+    // once after the exec (backfillBoardStanding), when member_preferences exists.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN board_standing_changed_at TEXT`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape
@@ -840,6 +888,7 @@ export function initSchema() {
     } catch { }
 
     markExistingVisitors();
+    backfillBoardStanding();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only

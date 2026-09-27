@@ -565,6 +565,16 @@ function deletedByOwnerAt(rm: any): string | null {
 }
 
 /**
+ * members.board_standing_changed_at: when what decides whether the board shows the member's listings last changed, which
+ * the Market delta reads (engine posts.ts). The main server's, as it wrote it. It never clears one, so an update keeps
+ * this copy's when a main server from before the column sends none; then a `status` it sends that changes the member's
+ * standing stamps it here (members_touch_board_standing).
+ */
+function boardStandingChangedAt(rm: any): string | null {
+    return instantOrNull(rm.boardStandingChangedAt);
+}
+
+/**
  * members.is_visitor, as the main server has it: 1 or 0, so a visitor who joins there is a member here too. Null from a
  * main server that predates the column, which sends no `isVisitor`: an update then keeps this row's own, and a new row
  * is a member's (the column's default), as every row was there. Once that server upgrades it marks its visitors
@@ -733,11 +743,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             for (const rm of remote.members ?? []) {
-                const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, is_visitor, board_standing_changed_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null; board_standing_changed_at: string | null } | undefined;
                 if (!existing) {
                     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
-                                area_lat, area_lng, area_updated_at, is_visitor, deleted_by_owner_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                area_lat, area_lng, area_updated_at, is_visitor, deleted_by_owner_at, board_standing_changed_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -756,7 +766,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         mutedUntil(rm),
                         ...importedArea(rm),
                         importedVisitor(rm) ?? 0,
-                        deletedByOwnerAt(rm)
+                        deletedByOwnerAt(rm),
+                        boardStandingChangedAt(rm)
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
@@ -767,13 +778,22 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         // main server is the only writer of a standby's copy, so its mark is the row's. The touch trigger
                         // restamps a change of the mark, so the main server's stamp is put back (updated_at fires nothing).
                         const visitor = importedVisitor(rm);
+                        // Likewise the board standing a node fills once as it gains the column (db.ts backfillBoardStanding),
+                        // which stamps no row: this copy filled its own, and a whole copy brings the main server's. Setting it
+                        // fires no trigger.
+                        const standing = boardStandingChangedAt(rm);
+                        let took = false;
                         if (existing.updated_at === rm.updatedAt && visitor !== null && visitor !== existing.is_visitor) {
                             db.prepare('UPDATE members SET is_visitor = ? WHERE public_key = ?').run(visitor, rm.publicKey);
                             db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(rm.updatedAt, rm.publicKey);
-                            updatedMembers++;
-                        } else {
-                            conflictsSkipped++;
+                            took = true;
                         }
+                        if (existing.updated_at === rm.updatedAt && standing !== null && standing !== existing.board_standing_changed_at) {
+                            db.prepare('UPDATE members SET board_standing_changed_at = ? WHERE public_key = ?').run(standing, rm.publicKey);
+                            took = true;
+                        }
+                        if (took) updatedMembers++;
+                        else conflictsSkipped++;
                         continue;
                     }
                     // A visitor who joined on the primary: the row takes the join with it (who invited them, the code and
@@ -798,6 +818,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         area_updated_at = ?,
                         is_visitor = COALESCE(?, is_visitor),
                         deleted_by_owner_at = COALESCE(?, deleted_by_owner_at),
+                        board_standing_changed_at = COALESCE(?, board_standing_changed_at),
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -813,6 +834,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         ...importedArea(rm),
                         importedVisitor(rm),
                         deletedByOwnerAt(rm),
+                        boardStandingChangedAt(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );

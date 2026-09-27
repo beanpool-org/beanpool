@@ -6744,33 +6744,35 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         }
     }
 
-    // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records
+    // The guards, before the transaction: a refusal thrown inside conservingTransaction is taken for a possible
+    // conservation breach and rebuilds the ledger. Nothing can slip in between (better-sqlite3 is synchronous).
+    // 1. Guard against active or pending escrows (as buyer or seller)
+    const activeEscrows = db.prepare(`
+        SELECT COUNT(*) as c FROM marketplace_transactions
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
+          AND status IN ('requested', 'pending')
+    `).get(publicKey, publicKey) as any;
+
+    if (activeEscrows && activeEscrows.c > 0) {
+        // A closed account can't complete or cancel the deal itself (the middleware refuses its key): say who can.
+        throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
+            : 'Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
+    }
+
+    // 2. Guard against in-flight cross-node settlements
+    const activeSettlements = db.prepare(`
+        SELECT COUNT(*) as c FROM settlements
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
+          AND state IN ('escrowed', 'reserved', 'committed', 'held')
+    `).get(publicKey, publicKey) as any;
+
+    if (activeSettlements && activeSettlements.c > 0) {
+        throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
+            : 'Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
+    }
+
+    // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
-        // 1. Guard against active or pending escrows (as buyer or seller)
-        const activeEscrows = db.prepare(`
-            SELECT COUNT(*) as c FROM marketplace_transactions
-            WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
-              AND status IN ('requested', 'pending')
-        `).get(publicKey, publicKey) as any;
-
-        if (activeEscrows && activeEscrows.c > 0) {
-            // A closed account can't complete or cancel the deal itself (the middleware refuses its key): say who can.
-            throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
-                : 'Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
-        }
-
-        // 2. Guard against in-flight cross-node settlements
-        const activeSettlements = db.prepare(`
-            SELECT COUNT(*) as c FROM settlements
-            WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
-              AND state IN ('escrowed', 'reserved', 'committed', 'held')
-        `).get(publicKey, publicKey) as any;
-
-        if (activeSettlements && activeSettlements.c > 0) {
-            throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
-                : 'Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
-        }
-
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;

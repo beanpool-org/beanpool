@@ -11,7 +11,8 @@
  *     copies. They sign Delete account: all of it is erased, and the friends and recovery copies are tombstoned so a
  *     standby deletes them too. Their Beans went to the Commons at the removal; nothing moves now and the ledger audit
  *     is unchanged. The key is still refused everything else, the open door still refuses it and their sign-in account
- *     is not released. Asking again is answered as before ("already") and changes nothing, activity included.
+ *     is not released. Asking again is answered as before ("already") and changes nothing, activity included. A removed
+ *     member with a deal still under way, which their key can't close, is told who can, and nothing changes until then.
  *  2. The community can no longer bring that account back: a reinstate proposal over HTTP is refused in plain words; a
  *     reinstate vote already open when they deleted it closes without doing anything; an admin halting a removal whose
  *     grace period they deleted the account in, and a report's suspension, both leave the account closed.
@@ -37,7 +38,7 @@ process.env.ADMIN_PASSWORD = PW;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit,
+    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost,
 } from './state-engine.js';
 import { createDecision, executeDecision, getDecision } from './decisions-engine.js';
 import { openJoinTaken } from './engine/open-join.js';
@@ -56,6 +57,7 @@ let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const OWNER_DELETED = 'This account was deleted by its owner; they can rejoin with a new invite';
 const CLOSED = 'This key’s account in this community was closed, so the community no longer accepts it.';
+const DEAL_UNDER_WAY = 'This account can’t be erased while a deal or a payment between communities is still under way. Once the other member or an admin closes it, it can be.';
 
 type Id = { pk: string; privateKey: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
@@ -222,6 +224,23 @@ async function main(): Promise<void> {
         const changed = changedTables(before, snapshot());
         assert(again.status === 200 && again.body?.ok === true && again.body?.message === 'Account is already pruned' && changed.length === 0 && wholeRow(rita.pk) === row,
             `asking again is answered "already" and changes nothing, activity included (${show(again)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
+    }
+
+    // Rex is removed while Alice is buying from him: his key can't close that deal, so the answer says who can.
+    {
+        const rex = makeMember('RexRD', 0);
+        const offer = createPost('offer', 'produce', 'Rex walnuts', 'A bag of walnuts', 5, 'fixed', rex.pk)!;
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at)
+                    VALUES ('rex-deal', ?, ?, ?, 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(offer.id, alice.pk, rex.pk);
+        adminPruneUser(rex.pk, 'owner:password');
+        const before = snapshot();
+        const refused = await call('POST', '/api/member/purge', rex, {});
+        const changed = changedTables(before, snapshot());
+        assert(refused.status === 400 && refused.body?.error === DEAL_UNDER_WAY && changed.length === 0 && profileOf(rex.pk)?.callsign === 'RexRD',
+            `a removed member with a deal still under way is told who can close it, and nothing changes (${show(refused)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
+        db.prepare("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = 'rex-deal'").run();
+        const later = await call('POST', '/api/member/purge', rex, {});
+        assert(later.status === 200 && erased(rex.pk), `once it is closed, his Delete account erases his profile (${show(later)})`);
     }
 
     // ── 2. Nothing brings that account back ────────────────────────────────────────────────────────

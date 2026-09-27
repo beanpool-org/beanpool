@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 59,
-  "hash": "e28cb326abd79debc6aa1934094b0c712022eb348621eaa1f32d84d3af1b2775",
+  "version": 60,
+  "hash": "340a725de055346fb6aa9d10116283d405dba072348889d371e82f04b078d781",
   "sections": [
     {
       "id": "about",
@@ -3488,6 +3488,29 @@
         },
         {
           "type": "h2",
+          "text": "How big a grant can be"
+        },
+        {
+          "type": "p",
+          "text": "A grant to an enterprise or a hardship grant can't be bigger than the Commons could pay. The most you can ask for is:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "what the Commons holds now,",
+            "plus every bean that came into it over the last 30 days: the market fee, the circulation fee, and any other beans paid in."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Beans paid out of the Commons in those 30 days are not taken off. If you ask for more, the app says no before anyone votes, and tells you the most you can ask for now. That amount goes up as beans come into the Commons."
+        },
+        {
+          "type": "p",
+          "text": "This keeps the queue free. If a grant passes when the Commons is short, it waits for the beans, and only one grant can wait at a time. See \"Rules and how decisions work\"."
+        },
+        {
+          "type": "h2",
           "text": "If the app says no"
         },
         {
@@ -3495,6 +3518,8 @@
           "items": [
             "**Complete a Trade First:** you cannot propose yet.",
             "**Limit Reached:** you already have an open Decision. Wait for it to close.",
+            "**This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.",
+            "**A grant needs an amount in Beans above 0:** fill in how many beans.",
             "**Error:** check your description is at least 10 characters long."
           ]
         }

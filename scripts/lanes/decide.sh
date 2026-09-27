@@ -6,13 +6,16 @@
 # (LANE_LOCK_DIR) because lanes from different checkouts share that quota. Every deciding pass — review()'s final
 # pass, land()'s post-sync pass and decide_pass — goes through decide_review below.
 
-LANE_DECIDE_BRIEF="DECIDING pass — the code merges if you find nothing new. Earlier fast-model passes on this PR have missed
+# A run script may set its own LANE_DECIDE_BRIEF before sourcing lib.sh; this default applies only when it didn't (an
+# unconditional assignment here once overwrote a director's brief without anyone noticing, 2026-09-27).
+: ${LANE_DECIDE_BRIEF:="DECIDING pass — the code merges if you find nothing new. Earlier fast-model passes on this PR have missed
 real authorization and data-leak defects that a stronger model found on first look, so do not assume their coverage.
 Order: data loss and privacy leaks, then authorization, then money conservation, then performance on hot paths,
 then everything else. Every authorization decision must act on the same row it decided about; anything moving
 beans belongs inside conservingTransaction with SUM(balances)+COMMONS_POOL unchanged.
 Read the existing comments first and do not repeat them. Post only NEW real defects, with file and line.
-If you find nothing new, post exactly one summary comment saying so."
+Whatever you find, ALSO post exactly one summary issue comment (gh pr comment), CLEAN or NOT CLEAN in its first line,
+saying what you verified: a pass with inline findings and no summary leaves the rest of the PR unreviewed."}
 
 decide_review(){ # PR BRANCH [SUFFIX] [ALLOWANCE] [BRIEF] — one deciding pass; sets CLEAN. Never merges.
   # SUFFIX names the stage CCR-<branch>-<SUFFIX> (3 or sync). ALLOWANCE is how many new comments still count as

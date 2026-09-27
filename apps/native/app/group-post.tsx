@@ -13,6 +13,10 @@ import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { hapticSuccess, hapticWarning } from '../utils/haptics';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { beansOn } from '../utils/node-profile';
+import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
+import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
 
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
@@ -30,6 +34,9 @@ export default function GroupPostScreen() {
     const [category, setCategory] = useState('general');
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
+    // On a community with Beans off (the worldwide one) a post has no price: no field, and it goes up at 0 Beans.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
     const [description, setDescription] = useState('');
     const [repeatable, setRepeatable] = useState(false);
     const [cashAlsoNeeded, setCashAlsoNeeded] = useState(false);
@@ -191,11 +198,11 @@ export default function GroupPostScreen() {
         const errs = new Set<string>();
         if (!title.trim()) errs.add('title');
         if (!category) errs.add('category');
-        if (!credits.trim() || isNaN(Number(credits)) || Number(credits) < 0) errs.add('credits');
+        if (groupPostPriceInvalid(credits, nodeProfile?.features)) errs.add('credits');
         setErrors(errs);
         if (errs.size > 0) {
             hapticWarning();
-            Alert.alert('Missing Fields', 'Please provide a title, category, and price/credits.');
+            Alert.alert('Missing Fields', groupPostMissingFields(nodeProfile?.features));
             return;
         }
 
@@ -218,8 +225,7 @@ export default function GroupPostScreen() {
                 title: title.trim(),
                 description: description.trim(),
                 category,
-                credits: Number(credits) || 0,
-                price_type: priceType,
+                ...groupPostPrice(credits, priceType, nodeProfile?.features),
                 repeatable: repeatable ? 1 : 0,
                 cash_also_needed: cashAlsoNeeded ? 1 : 0,
                 author_pubkey: identity.publicKey,
@@ -328,7 +334,8 @@ export default function GroupPostScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Price / Credits */}
+                    {/* Price / Credits; where there are no Beans, a note instead */}
+                    {showsBeans ? (
                     <View style={styles.field}>
                         <Text style={styles.label}>PRICE (BEANS) *</Text>
                         <View style={styles.priceRow}>
@@ -351,6 +358,11 @@ export default function GroupPostScreen() {
                             </Pressable>
                         </View>
                     </View>
+                    ) : (
+                    <View style={styles.field}>
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                    </View>
+                    )}
 
                     {/* Description */}
                     <View style={styles.field}>

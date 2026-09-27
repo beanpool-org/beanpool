@@ -11,6 +11,9 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { useLocalSearchParams } from 'expo-router';
 import PeopleScreen from './people';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { beansOn } from '../../utils/node-profile';
+import { talkSort } from '../../utils/beans-off';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
@@ -47,6 +50,14 @@ export default function ChatsScreen() {
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
+    // Sorting by Beans is not offered on a community with Beans off (the worldwide one): every figure there is 0.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
+    // A Beans sort picked before the profile said Beans are off goes back to Recent (utils/beans-off.ts talkSort).
+    React.useEffect(() => {
+        const allowed = talkSort(sortBy, nodeProfile?.features);
+        if (allowed !== sortBy) setSortBy(allowed);
+    }, [sortBy, nodeProfile]);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
@@ -610,6 +621,8 @@ export default function ChatsScreen() {
                 >
                     <Text style={[styles.chipText, sortBy === 'unread' && styles.chipTextActive]}>✉ Unread</Text>
                 </Pressable>
+                {showsBeans && (
+                <>
                 <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ selected: sortBy === 'credits_desc' }}
@@ -634,6 +647,8 @@ export default function ChatsScreen() {
                     />
                     <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>Credits: Low</Text>
                 </Pressable>
+                </>
+                )}
             </View>
 
             {/* Read State Filter Section */}

@@ -1362,7 +1362,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             onClick={() => { setCallsign(s); setNameSuggestions([]); setError(null); }}
                                             disabled={loading}
                                             style={{
-                                                padding: '0.5rem 0.9rem', borderRadius: '999px', maxWidth: '100%',
+                                                padding: '0.5rem 0.9rem', borderRadius: '12px', maxWidth: '100%',
                                                 border: '1px solid var(--border-primary, #334155)', background: 'var(--bg-secondary, #1e293b)',
                                                 color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600,
                                                 cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',

@@ -15,6 +15,8 @@
  *     key it kept ("Finish joining" while the node is unreachable) and shows its 12 words; and another tab's account
  *     saved while the invite was out leaves the held screen offering the sent key's words; and a kept key the node
  *     doesn't have yet, with the door open at the reload (4112075367), waits on "Finish joining", never the door's lobby
+ *   - the invite join's ← Back on the photo step (card invite-back-step): the name alone on the same key, a name another
+ *     member has refused with suggestions checked with that key left out, then a new name and that key's 12 words
  *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google (the round
  *     trip through the same return page) and GitHub (the node's device flow): the stub node keeps the copy each join
  *     carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is opened
@@ -85,6 +87,8 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         // the redeem that takes it is lost (loseInviteAnswer) or something happens first (onInviteTaken). dropInvite:
         // the redeem never reaches the node (the connection drops on the way there).
         redeems: [], names: new Map(), inviteUsedBy: null, loseInviteAnswer: false, onInviteTaken: null, dropInvite: false,
+        // Every name check (with the key it left out) and every profile update (with the key that signed it).
+        nameChecks: [], profileUpdates: [],
     };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
@@ -159,7 +163,29 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         if (p === '/api/community/info') {
             return reply(200, { memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: !seen.doorShut, beans: false } });
         }
-        if (p.startsWith('/api/members/callsign-available/')) return reply(200, { callsign: decodeURIComponent(p.split('/').pop()), available: true, tooShort: false });
+        // Free unless another member has it, case forgiven; `exclude` leaves a member's own name out (isCallsignAvailable).
+        if (p.startsWith('/api/members/callsign-available/')) {
+            const name = decodeURIComponent(p.split('/').pop());
+            const exclude = url.searchParams.get('exclude');
+            seen.nameChecks.push({ name, exclude });
+            const taken = [...seen.names].some(([k, n]) => k !== exclude && n.toLowerCase() === name.trim().toLowerCase());
+            return reply(200, { callsign: name, available: !taken, tooShort: false });
+        }
+        // A rename, as routes/community.ts and engine/updateProfile answer it: the member's own key, a name another
+        // member has refused with a 409, the member's own never taken. Anything else falls through to the old answer.
+        if (p === '/api/profile/update') {
+            const body = JSON.parse(req.postData() || '{}');
+            seen.profileUpdates.push({ body, key });
+            if (typeof body.callsign === 'string') {
+                if (!key || !seen.members.has(key)) return reply(401, { error: 'A signed request is required' });
+                const name = body.callsign.trim();
+                if ([...seen.names].some(([k, n]) => k !== key && n.toLowerCase() === name.toLowerCase())) {
+                    return reply(409, { error: 'callsign_taken', message: 'That name is already taken on this community. Try another.' });
+                }
+                seen.names.set(key, name);
+                return reply(200, { success: true, profile: { publicKey: key, callsign: name } });
+            }
+        }
         if (p === '/api/join/sso-nonce') {
             if (key && seen.members.has(key)) return reply(409, { error: 'This key is already a member of this community.', code: 'already_member' });
             const nonce = `nonce-${++nonceCount}-${'x'.repeat(30)}`;
@@ -1085,6 +1111,58 @@ const SCENARIOS = [
             if (words.join(' ') !== (await storedIdentity(page)).mnemonic.join(' ')) throw new Failure("the 12 words shown are not the saved key's");
             await noSideScroll(page, "the kept key's 12 words");
             await shot(page, view, 'invite-kept-key-words');
+        },
+    },
+    {
+        name: 'the invite join, ← Back on the photo step (card invite-back-step): the name alone, a taken name refused with suggestions, a new name on the same key, then its 12 words',
+        async run(page, origin, view, seen) {
+            seen.doorShut = true;
+            // Another member's name, long enough that its suggestions are long too.
+            seen.names.set('a-neighbour', 'Samantha Greenwood-Hughes');
+            await sendInvite(page, origin, 'Rowan');
+            await page.getByText(/Choose your look/).waitFor({ timeout: 20_000 });
+            const key = await storedIdentityKey(page);
+            if (!key || seen.redeems[0]?.body.publicKey !== key) throw new Failure('the key saved is not the one the node took');
+
+            await page.getByRole('button', { name: '← Back' }).click();
+            await page.getByRole('heading', { name: /Your name/ }).waitFor();
+            if (await page.getByLabel('Invite Code').count()) throw new Failure('the invite field came back after Back');
+            if (await page.getByRole('button', { name: 'Create Identity & Join →' }).count()) throw new Failure('the invite form came back after Back');
+            const field = page.getByLabel('Your Callsign (Name)');
+            if ((await field.inputValue()) !== 'Rowan') throw new Failure(`the name step holds "${await field.inputValue()}"`);
+            await noSideScroll(page, 'the name again');
+            await shot(page, view, 'invite-back-name');
+
+            await field.fill('Samantha Greenwood-Hughes');
+            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByRole('alert').filter({ hasText: 'is already taken in this community' }).waitFor();
+            const offered = page.getByRole('button', { name: /^Use the name Samantha / });
+            await offered.first().waitFor();
+            if ((await offered.count()) !== 3) throw new Failure(`${await offered.count()} names were suggested`);
+            if (!seen.nameChecks.length || seen.nameChecks.some((c) => c.exclude !== key)) throw new Failure("a suggestion was checked without this member's key left out");
+            if (seen.names.get(key) !== 'Rowan') throw new Failure('the taken name was written');
+            await noSideScroll(page, 'a taken name, with suggestions');
+            await shot(page, view, 'invite-back-name-taken');
+
+            await field.fill('Robin');
+            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByText(/Choose your look/).waitFor();
+            await page.getByText('Robin', { exact: true }).waitFor();
+            if (seen.redeems.length !== 1) throw new Failure(`${seen.redeems.length} redeems were sent`);
+            const renames = seen.profileUpdates.filter((u) => typeof u.body.callsign === 'string');
+            if (renames.some((u) => u.key !== key)) throw new Failure('a rename was signed by another key');
+            if (seen.names.get(key) !== 'Robin') throw new Failure(`the node has "${seen.names.get(key)}"`);
+            const saved = await storedIdentity(page);
+            if (saved?.publicKey !== key || saved?.callsign !== 'Robin') throw new Failure(`this browser holds ${saved?.callsign} (${saved?.publicKey})`);
+            if (await inviteSentRecord(page)) throw new Failure('an invite-sent record was left');
+
+            await page.getByTitle('Green Bean').click();
+            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByText(/Your Safety Backup/).waitFor();
+            const words = await page.getByTestId('backup-words').locator('strong').allInnerTexts();
+            if (words.join(' ') !== saved.mnemonic.join(' ')) throw new Failure("the 12 words shown are not the saved key's");
+            await noSideScroll(page, "the renamed account's 12 words");
+            await shot(page, view, 'invite-back-words');
         },
     },
     {

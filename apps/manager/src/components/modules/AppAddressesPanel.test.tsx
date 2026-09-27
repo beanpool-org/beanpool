@@ -221,6 +221,29 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(confirm.disabled).toBe(false);
     });
 
+    it("this page's own address the directory lists, though no member's app reached it yet: says this page did, and confirms only once ticked", async () => {
+        // The node holds back the page's host (sent as ?host=) when the directory lists it, with no count (4114569450).
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [{ address: 'community.example.org', today: 0, busiestDay: 0, ownerOrAdmin: false, reason: 'few-members', directory: { name: 'Riverbend Commons' } }],
+        }));
+        render(<AppAddressesPanel activeNode={node} />);
+        const held = await screen.findByTestId('app-address-held');
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+        expect(screen.queryByTestId('app-address-few')).toBeNull();
+        expect(held.getAttribute('data-reason')).toBe('directory');
+        expect(held.textContent).toBe('This page reached the community at community.example.org.'
+            + 'The BeanPool directory lists community.example.org as the address of Riverbend Commons. Confirm it only if that is this community: '
+            + "if it isn't, what members' apps send Riverbend Commons could be copied and used here."
+            + 'Riverbend Commons is this community'
+            + 'Yes, community.example.org is its address');
+        const confirm = screen.getByText('Yes, community.example.org is its address') as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        fireEvent.click(confirm);
+        expect(nodeClient.confirmAppAddress).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByLabelText('Riverbend Commons is this community'));
+        expect(confirm.disabled).toBe(false);
+    });
+
     it("never offers this machine's or a LAN address", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report());
         render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);

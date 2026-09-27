@@ -12,7 +12,8 @@
  *                                                 `heldBack`, not offered, each with its reason (engine/address-offers.ts;
  *                                                 a Settings from before that shows `unconfirmed` only, so it never
  *                                                 offers a held-back one); how many signed in the old format (apps too
- *                                                 old to name a community); and the switch date.
+ *                                                 old to name a community); and the switch date. `?host=` (on all three)
+ *                                                 is the host Settings reached the node at: see appAddressesReport.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
@@ -24,7 +25,8 @@
 import Router from '@koa/router';
 import { updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
+    configuredAddresses, forgetOwnAddresses, isBeanPoolName, isLocalNetworkHost, knowsItsNames, normalizeAddress,
+    ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
 import {
     signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
@@ -36,7 +38,14 @@ import type { RouteDeps } from './types.js';
 /** More than any real community needs; a bound on what one Settings session can write. */
 export const MAX_OWNER_ADDRESSES = 20;
 
-export function appAddressesReport() {
+/**
+ * `pageHost` is the host Settings reached the node at (`?host=`). Settings suggests that host with one tap, as the
+ * owner's own doing, on a node that knows none of its names; only the node holds the directory. So when the directory
+ * lists it and no app's count has put it on either list, it is held back here with no count, and Settings warns and
+ * asks for the tick as it does for an app's (4114569450). A beanpool.org name Settings never suggests, and a host on
+ * this machine or its network is already this node's own.
+ */
+export function appAddressesReport(pageHost?: unknown) {
     const usage = signatureUsage();
     const count = (kind: string, address: string) => usage.find((u) => u.kind === kind && u.address === address);
     const addresses = configuredAddresses().map((a) => {
@@ -56,6 +65,13 @@ export function appAddressesReport() {
         const standing = offerStanding(sighting);
         if (standing.offer) unconfirmed.push(sighting);
         else heldBack.push({ ...sighting, reason: standing.reason, ...(standing.directory ? { directory: standing.directory } : {}) });
+    }
+    const page = normalizeAddress(pageHost);
+    if (page && !knowsItsNames() && !known.has(page) && !isBeanPoolName(page) && !isLocalNetworkHost(page)
+        && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
+        const sighting: AddressSighting = { address: page, today: 0, busiestDay: 0, ownerOrAdmin: false };
+        const standing = offerStanding(sighting);
+        if (!standing.offer && standing.directory) heldBack.push({ ...sighting, reason: standing.reason, directory: standing.directory });
     }
     const old = count('old_app', '');
     return {
@@ -78,7 +94,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
     router.get('/api/local/admin/app-addresses', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport();
+        ctx.body = appAddressesReport(ctx.query.host);
     });
 
     router.post('/api/local/admin/app-addresses/confirm', async (ctx) => {
@@ -101,7 +117,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         }
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport();
+        ctx.body = appAddressesReport(ctx.query.host);
     });
 
     router.post('/api/local/admin/app-addresses/remove', async (ctx) => {
@@ -119,7 +135,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         forgetOwnAddresses();
         logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport();
+        ctx.body = appAddressesReport(ctx.query.host);
     });
 
     return router;

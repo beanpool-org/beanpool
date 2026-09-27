@@ -19,7 +19,9 @@
  *     request makes it look like that) is still held back as another community's; so is beanpool.org itself.
  *  3. Several members: two → held back with the count; three (MEMBERS_TO_OFFER) → offered with the count.
  *  4. A host the directory this node already holds (directory_cache) lists as another community's → held back with
- *     its name, even when an admin's app and three members reached it there.
+ *     its name, even when an admin's app and three members reached it there. The host Settings reached the node at,
+ *     which it sends (?host=) because it suggests that host with one tap: listed, it is held back with the directory's
+ *     name though no app reached the node there; not listed, it is on neither list; reached by apps, it is listed once.
  *  5. Keys with no member row here count for nothing: not listed, and they move no other host's count.
  *  6. Bounded: one member signing for many hosts puts at most 3 of them on the list, and a real host signed for after
  *     that is still offered; many members' hosts stop at the day's cap (50), in the report, in the counts table and in
@@ -29,7 +31,8 @@
  *  7. A restart: the counts and whether an owner's or admin's app reached a host are still there.
  *  8. Confirming works as before: one tap on an offered host makes it this community's name; requests for it are
  *     accepted and for any other host refused. An owner-confirmed address stays one whatever it is (a beanpool.org
- *     name confirmed before this change is not taken away).
+ *     name confirmed before this change is not taken away). A node with a name doesn't hold back the page's host; once
+ *     its confirmed names are removed it does again, in the answer to the remove too.
  *
  * The node's switch clock is pinned just before the switch (unboundSignaturesCutoff), so the suite holds for any date.
  *
@@ -268,8 +271,9 @@ async function main(): Promise<void> {
         return call(node, 'GET', core.signedPathOf(url), headers);
     }
     let U: Node;
-    const report = async () => {
-        const r = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
+    /** The Settings report; `host` is the host Settings reached the node at, sent as it sends it. */
+    const report = async (host?: string) => {
+        const r = await call(U, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, adminPw);
         if (r.status !== 200) throw new Error(`the Settings report: ${show(r)}`);
         return r.body as { addresses: { address: string; source: string }[]; unconfirmed: Offer[]; heldBack?: Held[]; membersToOffer?: number; named?: boolean };
     };
@@ -393,6 +397,27 @@ async function main(): Promise<void> {
             const home = offered(rep, 'home.example.org');
             assert(home && !('directory' in home),
                 'a host the directory does not list is offered as before');
+
+            // The host Settings reached the node at. Settings suggests it with one tap as the owner's own doing, so the
+            // node says when the directory lists it, though no app has reached the node there yet (4114569450).
+            const addedPage = await U.send('directory', {
+                rows: [
+                    { node_id: 'riverbend-peer', community_name: 'Riverbend Commons', node_url: 'https://Riverbend.example:8443' },
+                    { node_id: 'nameless-peer', node_url: 'nameless.example' },
+                    { node_id: 'hillside-peer', community_name: 'Hillside Co-op', node_url: 'https://hillside.example' },
+                ],
+            });
+            assert(addedPage === 1, `U's directory holds a third community (${addedPage})`);
+            const page = await report('https://Hillside.example:8443');
+            const hill = held(page, 'hillside.example');
+            assert(!offered(page, 'hillside.example') && hill?.reason === 'few-members' && hill.directory?.name === 'Hillside Co-op'
+                && hill.today === 0 && hill.busiestDay === 0 && hill.ownerOrAdmin === false,
+                `the page's host, listed as Hillside Co-op and reached by no app: held back with the directory's name and no count (${j(hill)})`);
+            assert(!listedAnywhere(await report()).includes('hillside.example'), 'a report asked for with no host does not list it');
+            const quiet = await report('quiet.example');
+            assert(!listedAnywhere(quiet).includes('quiet.example'), `a page host the directory does not list is on neither list (${j(listedAnywhere(quiet))})`);
+            const counted = (await report('riverbend.example')).heldBack?.filter((h) => h.address === 'riverbend.example') ?? [];
+            assert(counted.length === 1 && counted[0].busiestDay === 4, `a page host apps reached is listed once, with their count (${j(counted)})`);
         });
 
         // ── 5. Keys with no member row ──
@@ -508,6 +533,17 @@ async function main(): Promise<void> {
             const rep = await report();
             assert(kept.status === 200 && rep.addresses.some((a) => a.address === 'kept.beanpool.org' && a.source === 'owner') && !listedAnywhere(rep).includes('kept.beanpool.org'),
                 `an already-confirmed kept.beanpool.org is still this community's: accepted, listed as confirmed, offered nowhere (${kept.status}, ${j(rep.addresses)})`);
+
+            // The page's host on a node with a name: Settings suggests nothing there, and the node holds nothing back.
+            assert(!listedAnywhere(await report('hillside.example')).includes('hillside.example'), 'a named node does not hold back the page\'s host');
+            // Removing its confirmed names leaves it none again: the remove's own answer holds the page's host back.
+            let removed: Reply | null = null;
+            for (const address of ['home.example.org', 'kept.beanpool.org']) {
+                removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove?host=hillside.example', adminPw, j({ address }));
+            }
+            const hill = held(removed!.body, 'hillside.example');
+            assert(removed!.status === 200 && removed!.body?.named === false && hill?.directory?.name === 'Hillside Co-op' && !offered(removed!.body, 'hillside.example'),
+                `once its confirmed names are removed, the remove's answer holds the page's host back again (${removed ? show(removed) : 'no reply'})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

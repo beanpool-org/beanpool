@@ -33,6 +33,9 @@ import {
     fetchReports,
     dismissNodeReport,
     removeReportedPulseItem,
+    getAppAddresses,
+    confirmAppAddress,
+    removeAppAddress,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -962,6 +965,27 @@ describe('report normalisation keeps enterprise reports off the post line', () =
         await removeReportedPulseItem('https://node.example', 'rep_456');
         expect(fetchMock.mock.calls[1][1].credentials).toBe('same-origin');
 
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('app addresses (Settings → Network)', () => {
+    it("sends the host the node is reached at, so the node can say when the directory lists it (4114569450)", async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }) });
+        vi.stubGlobal('fetch', fetchMock);
+        await getAppAddresses('https://Community.Example.org:8443', 'pw');
+        await confirmAppAddress('https://Community.Example.org:8443', 'bp.example.net', 'pw');
+        await removeAppAddress('https://Community.Example.org:8443', 'bp.example.net', 'pw');
+        const sent = fetchMock.mock.calls.map(([url]) => {
+            const u = new URL(String(url), 'http://x');
+            return [u.pathname.replace(/^.*\/api\//, '/api/'), u.searchParams.get('host')];
+        });
+        expect(sent).toEqual([
+            ['/api/local/admin/app-addresses', 'community.example.org'],
+            ['/api/local/admin/app-addresses/confirm', 'community.example.org'],
+            ['/api/local/admin/app-addresses/remove', 'community.example.org'],
+        ]);
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ address: 'bp.example.net' });
         vi.unstubAllGlobals();
     });
 });

@@ -2,6 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+import { audienceOf } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 
 export interface ShutdownStatus {
@@ -2457,8 +2458,13 @@ export interface AppAddressesReport {
     unboundSignaturesAccepted: boolean;
 }
 
+/**
+ * Each call sends the host Settings reaches the node at (`host`): Settings suggests it with one tap, and the node says
+ * when the directory lists it as a community's, which only the node knows (apps/server routes/app-addresses.ts).
+ */
 async function appAddressesCall(nodeUrl: string, path: string, init: RequestInit): Promise<AppAddressesReport> {
-    const res = await fetch(resolveNodeApiUrl(nodeUrl, path), init);
+    const host = audienceOf(nodeUrl);
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, path, host ? { host } : undefined), init);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}: ${res.statusText}`);
     return body as AppAddressesReport;

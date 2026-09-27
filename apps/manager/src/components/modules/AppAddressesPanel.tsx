@@ -116,7 +116,8 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const pageHost = audienceOf(activeNode.url);
     // This page reaching the community at an address is the owner's own doing, as an owner's app is: offered, unless
     // it is another community's name or one the directory lists. One the directory lists is shown as the node shows an
-    // owner's app's (engine/address-offers.ts): named, with the warning, and confirmed only once ticked.
+    // owner's app's (engine/address-offers.ts): named, with the warning, and confirmed only once ticked. The node holds
+    // it back with no count when no app has reached it there yet (it is sent as ?host=, node-client.ts).
     const pageCounts = !named && offerable(pageHost) && !isBeanPoolName(pageHost);
     const pageHeld = pageCounts ? heldBack.find((h) => h.address === pageHost) : undefined;
     const suggestPage = pageCounts && !offered.some((u) => u.address === pageHost)
@@ -197,7 +198,9 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
 
             {shownHeld.filter((h) => h.reason === 'directory').map((h) => (
                 <div key={h.address} className="p-3 rounded-xl bg-nature-950/60 border border-red-700/60 space-y-2" data-testid="app-address-held" data-reason={h.reason}>
-                    <p className="text-sm text-nature-200 m-0 break-words">{reachedText(h)}</p>
+                    <p className="text-sm text-nature-200 m-0 break-words">
+                        {h.address === pageHost && h.busiestDay === 0 ? `This page reached the community at ${h.address}.` : reachedText(h)}
+                    </p>
                     <p className="text-sm text-red-300 m-0 break-words">
                         The BeanPool directory lists {h.address} as the address of {listedName(h)}. Confirm it only if that is
                         this community: if it isn&apos;t, what members&apos; apps send {h.directory?.name || 'that community'} could be

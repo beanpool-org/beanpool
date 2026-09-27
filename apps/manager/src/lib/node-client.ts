@@ -2426,11 +2426,12 @@ export interface AddressSighting {
 
 export interface HeldBackAddress extends AddressSighting {
     /**
-     * another-community: a beanpool.org name that isn't this community's (never confirmed here); few-members: only one
-     * or two members' apps, none an owner's or admin's (not confirmed here until more do); directory: the BeanPool
-     * directory lists it as a community's address (confirmed here only on purpose, after a warning).
+     * another-community: a beanpool.org name that isn't this community's (never confirmed here); directory: the
+     * BeanPool directory the node holds lists it as a community's address (confirmed only once ticked, after a warning
+     * naming that community; only a node that holds the directory says so); not-this-page: any other address but the
+     * one Settings is open at (confirmed only once ticked, whoever's apps reached it).
      */
-    reason: 'another-community' | 'few-members' | 'directory';
+    reason: 'another-community' | 'directory' | 'not-this-page';
     /** The directory's entry for it, when it lists it: that community's name, or null when it gives none. */
     directory?: { name: string | null };
 }
@@ -2443,14 +2444,13 @@ export interface AppAddressesReport {
      */
     named?: boolean;
     /**
-     * Addresses apps reached this node at while it knew none of its own, offered to confirm: an owner's or admin's app
-     * reached it there, or several members' apps did (apps/server engine/address-offers.ts).
+     * Addresses offered to confirm with one tap. From a server with the guard, only ever the one Settings is open at
+     * (sent as `host`), with the count of apps that reached the node there (apps/server engine/address-offers.ts). A
+     * server from before it lists every address apps reached this node at while it knew none of its own.
      */
     unconfirmed: AddressSighting[];
-    /** Addresses apps reached it at that are not offered, and why. Absent from a server before 2026-09-27's guard. */
+    /** Addresses apps reached it at that are not offered with one tap, and why. Absent from a server before the guard. */
     heldBack?: HeldBackAddress[];
-    /** How many members' apps in one day get an address offered without an owner's or admin's. */
-    membersToOffer?: number;
     /** Apps that signed in the old format, bound to no community. */
     oldApps: { today: number; busiestDay: number };
     /** The day (UTC) old apps stop working here, or null when they already don't. */
@@ -2459,8 +2459,8 @@ export interface AppAddressesReport {
 }
 
 /**
- * Each call sends the host Settings reaches the node at (`host`): Settings suggests it with one tap, and the node says
- * when the directory lists it as a community's, which only the node knows (apps/server routes/app-addresses.ts).
+ * Each call sends the host Settings reaches the node at (`host`): the only address the node offers with one tap, unless
+ * the directory it holds lists it as a community's, which only the node knows (apps/server routes/app-addresses.ts).
  */
 async function appAddressesCall(nodeUrl: string, path: string, init: RequestInit): Promise<AppAddressesReport> {
     const host = audienceOf(nodeUrl);

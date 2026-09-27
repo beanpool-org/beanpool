@@ -33,11 +33,14 @@ import { audienceStanding } from './own-addresses.js';
 /**
  * The first day (UTC) on which this server refuses a member signature in the old format, bound to no community.
  *
- * PLACEHOLDER: Marty's card replay-old-apps. The director sets the real date before merge. Until then: old apps keep
- * working, and a hostile community's operator can still replay their requests elsewhere, or have an old app's Manage
- * button sign one.
+ * Marty's card replay-old-apps (2026-09-27): "On launch day". Launch day has no date yet, so until the launch release
+ * this is a day clearly after any launch, and it must never come before the new apps (request binding PRs 2 and 3) are
+ * in the stores. On launch day our own communities set ACCEPT_UNBOUND_SIGNATURES_UNTIL to that day, and the launch
+ * release sets this constant to it, so every other community closes on its own. Until then old apps keep working, and
+ * a hostile community's operator could still replay their requests elsewhere or have an old app's Manage button sign
+ * one: harmless while every community is ours.
  */
-export const UNBOUND_SIGNATURES_UNTIL = '2026-12-15';
+export const UNBOUND_SIGNATURES_UNTIL = '2027-06-30';
 
 let clock: () => number = () => Date.now();
 

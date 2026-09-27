@@ -387,26 +387,28 @@ describe('two tabs, and a node that takes time to answer', () => {
         stops.push(A.startBlocklist(ME));
 
         let unblocking: Promise<boolean> | null = null;
-        let unblockedDone = false;
         if (sameTab) {
             unblocking = A.unblockUser(K1);
-            void unblocking.then(() => { unblockedDone = true; });
         } else {
             // Wait until move acts on node (at 32ms) and is held in backQueue, then unblock K1 via storage event
             await vi.advanceTimersByTimeAsync(40);
             localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K2]));
             tellTabs(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]), JSON.stringify([K2]));
-            unblockedDone = true;
         }
 
         const reblocked: number[] = [];
-        const check = () => { if (unblockedDone && A.isUserBlocked(K1) && reblocked.length < 3) reblocked.push(Date.now()); };
+        let sawUnblocked = false;
+        const check = () => {
+            if (!A.isUserBlocked(K1)) sawUnblocked = true;
+            else if (sawUnblocked && reblocked.length < 3) reblocked.push(Date.now());
+        };
         window.addEventListener(BLOCKLIST_UPDATED_EVENT, check);
 
         await vi.advanceTimersByTimeAsync(1000);
         window.removeEventListener(BLOCKLIST_UPDATED_EVENT, check);
         if (unblocking) await unblocking;
 
+        expect(sawUnblocked).toBe(true);
         expect(reblocked).toEqual([]);
         expect(node.list).toEqual([K2]);
         expect(A.getBlockedUsers()).toEqual([K2]);

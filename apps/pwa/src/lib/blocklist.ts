@@ -10,10 +10,17 @@
  *
  * A list kept in this browser by a build from before (bp_blocked_users, and the older beanpool_blocked_users) belongs to
  * whoever is signed in when this build first reads the node's list, as #1225 decided for the phone. It is moved up to the
- * node once, and the local keys are deleted only when the node has taken every one of them; until then what is left still
+ * node, and a key leaves it only once the node's list holds that key, or the member unblocks them; until then it still
  * hides whom it names, and the next read tries again. Of a list, the node takes only the keys it has a row for, so each of
  * the rest (an author from a connected community's board, blocked through the Market's peer browse) goes up on its own,
- * as a block made now does. Past the node's limit, the newest it has room for go up.
+ * as a block made now does. Past the node's limit, the newest it has room for go up and the rest wait here, still
+ * blocked, until the member makes room (getBlocklistFullNote says so where they block). Sign-out clears them with the
+ * rest of this browser's storage, as before.
+ *
+ * Another tab may change that list at any time: one still on the build from before (open since the deploy, it keeps
+ * blocking in this browser), or one on this build moving or unblocking. So the list is read again from the browser before
+ * every change made to it, and a change removes only the keys it is about; this page's copy is for showing, never for
+ * writing back. The browser tells this page when another tab changed it, and the page reads the node's list again then.
  *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
@@ -67,13 +74,17 @@ function toBlocklistError(e: unknown, action: keyof typeof UNREACHABLE): Blockli
 
 /** The account whose list this is (startBlocklist). */
 let owner: string | null = null;
-/** The node's list for `owner`, as it last answered. */
+/** The node's list for `owner`, as it last answered, and how many it may hold. */
 let nodeList: string[] = [];
+let nodeMax = 0;
 /** Whether the node's list has been read for `owner`. */
 let loaded = false;
 /** Why the last read failed, until one succeeds. */
 let readError: BlocklistError | null = null;
-/** A list from before still in this browser, not yet moved up: undefined until read, null once there is none. */
+/**
+ * This page's copy of a list from before still in this browser, not yet moved up, for showing: undefined until read (or
+ * once another tab changed it), null when there is none. Never written back: see readStoredList and keepStoredList.
+ */
 let localList: string[] | null | undefined;
 /** What the screens see: the node's list and anything still waiting to move up. */
 let current: string[] = [];
@@ -81,8 +92,13 @@ let current: string[] = [];
 let reading: Promise<string[]> | null = null;
 let readAgain = false;
 
+/** This page's copy of the list from before, read from the browser only when there is none yet. For showing. */
 function readLocalList(): string[] | null {
-    if (localList !== undefined) return localList;
+    return localList !== undefined ? localList : readStoredList();
+}
+
+/** The list from before as the browser holds it now (another tab may have changed it since this page last looked). */
+function readStoredList(): string[] | null {
     localList = null;
     try {
         if (typeof localStorage === 'undefined') return null;
@@ -104,30 +120,40 @@ function readLocalList(): string[] | null {
     return localList;
 }
 
-function forgetLocalList(): void {
-    localList = null;
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(BLOCKLIST_STORAGE_KEY);
-            localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
-        }
-    } catch (e) {
-        console.warn('[blocklist] Could not delete the list this browser kept before', e);
-    }
+/** A key in the list from before that is still a block to keep: well spelled, and not the member themself. */
+function isWaiting(k: string): boolean {
+    return MEMBER_KEY.test(k) && k !== owner;
 }
 
-/** What is left of the list this browser kept before, until it has gone up: kept as the build from before kept it. */
-function keepLocalList(keys: string[]): void {
-    if (keys.length === 0) return forgetLocalList();
-    localList = keys;
+/**
+ * Takes keys off the list from before, as the browser holds it NOW: only those `gone` names (the node's list holds them,
+ * or the member unblocked them). Every other block stays, whoever wrote it: a tab on the build from before may have added
+ * one since this page last looked, and another tab may have taken one off, which stays off. Read and written with nothing
+ * awaited in between. Deleted, both keys, once nothing is left.
+ */
+function keepStoredList(gone: (k: string) => boolean): void {
+    const stored = readStoredList();
+    if (stored === null) return;
+    const keys = stored.filter(k => isWaiting(k) && !gone(k));
+    localList = keys.length > 0 ? keys : null;
     try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify(keys));
+        if (typeof localStorage === 'undefined') return;
+        if (keys.length === 0) {
+            localStorage.removeItem(BLOCKLIST_STORAGE_KEY);
             localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
+            return;
         }
+        const json = JSON.stringify(keys);
+        if (localStorage.getItem(BLOCKLIST_STORAGE_KEY) !== json) localStorage.setItem(BLOCKLIST_STORAGE_KEY, json);
+        localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
     } catch (e) {
         console.warn('[blocklist] Could not keep what is left of the list this browser kept before; this page still hides them', e);
     }
+}
+
+/** The keys a node's answer holds. */
+function heldBy(res: BlockList): Set<string> {
+    return new Set(Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey) : []);
 }
 
 function recompute(): void {
@@ -144,6 +170,7 @@ function emit(): void {
 
 function takeNodeAnswer(res: BlockList): void {
     nodeList = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
+    nodeMax = typeof res?.max === 'number' ? res.max : 0;
     loaded = true;
     readError = null;
 }
@@ -165,52 +192,70 @@ export function getBlocklistStatus(): { loaded: boolean; error: string | null } 
 }
 
 /**
+ * What to tell the member, where they block, while blocks from before wait in this browser because their list on the
+ * community is full; null otherwise. Those blocks still hold here, and go up once they unblock someone.
+ */
+export function getBlocklistFullNote(): string | null {
+    if (!loaded || nodeMax <= 0 || nodeList.length < nodeMax) return null;
+    const onNode = new Set(nodeList);
+    const n = (readLocalList() ?? []).filter(k => isWaiting(k) && !onNode.has(k)).length;
+    if (n === 0) return null;
+    return n === 1
+        ? 'Your block list is full, so 1 block is kept in this browser only. Unblock someone to make room for it.'
+        : `Your block list is full, so ${n} blocks are kept in this browser only. Unblock someone to make room for them.`;
+}
+
+/**
  * The list this browser kept before, moved up to the node for the signed-in account. Answers the node's list after it:
- * the move's last answer, or `res` when there was nothing to move or the node didn't take it (the local list then stays,
+ * the move's last answer, or `res` when there was nothing to move or the node didn't take it (what is left then stays,
  * and the next read tries again).
  *
  * Of a list the node takes only the keys it has a row for (routes/blocks.ts), so each key still missing from its answer
  * then goes up on its own, which takes any key, as a block made now does: a member's blocks are never dropped with
- * nothing said. The local list is deleted only once all of them are on the node's list. The first that doesn't go (the
- * node unreachable, or the list full, 409 block_limit) stops the rest, since they would meet the same: it and those after
- * it stay in this browser, still hiding whom they name, and the next read (the node's doorbell, the socket back, the next
- * page) sends them the same way. A key the member unblocks meanwhile has left the local list, and is not sent.
+ * nothing said. The first that doesn't go (the node unreachable, or the list full, 409 block_limit) stops the rest, since
+ * they would meet the same. When the list has no room for them all, the newest go up.
+ *
+ * The browser's list is read again before each key goes on its own, so a key another tab unblocked meanwhile is not sent,
+ * and again at the end: what another tab added meanwhile (a tab still on the build from before, blocking there) goes up
+ * too, once. At the end only the keys the node's last answer holds leave the browser's list (keepStoredList). What is left
+ * (no room, the node unreachable) stays there, still hiding whom it names, and the next read (the node's doorbell, the
+ * socket back, the next page) sends it the same way.
  */
 async function moveLocalListUp(res: BlockList): Promise<BlockList> {
-    const local = readLocalList();
-    if (local === null) return res;
-    const have = new Set(res.blocked.map(b => b.publicKey));
-    let moving = local.filter(k => MEMBER_KEY.test(k) && k !== owner && !have.has(k));
-    const room = Math.max(0, (res.max ?? 0) - res.blocked.length);
-    if (moving.length > room) {
-        console.warn(`[blocklist] ${moving.length - room} of the ${moving.length} blocks this browser kept don't fit in your list on the community; the newest go up.`);
-        moving = moving.slice(moving.length - room);
-    }
-    if (moving.length === 0) {
-        forgetLocalList();
-        return res;
-    }
-    let now: BlockList;
-    try {
-        now = await addToBlockList(moving);
-    } catch (e) {
-        console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
-        return res;
-    }
-    const taken = new Set(now.blocked.map(b => b.publicKey));
-    const alone = moving.filter(k => !taken.has(k));
-    for (let i = 0; i < alone.length; i++) {
-        if (!readLocalList()?.includes(alone[i])) continue;
+    if (readStoredList() === null) return res;
+    let now = res;
+    /** The keys this move has sent, or found no room for: what another tab adds meanwhile is new to it. */
+    const seen = new Set<string>();
+    moving: for (;;) {
+        const have = heldBy(now);
+        const fresh = (readStoredList() ?? []).filter(k => isWaiting(k) && !have.has(k) && !seen.has(k));
+        if (fresh.length === 0) break;
+        fresh.forEach(k => seen.add(k));
+        const room = Math.max(0, (now.max ?? 0) - have.size);
+        const going = fresh.slice(Math.max(0, fresh.length - room));
+        if (going.length < fresh.length) {
+            console.warn(`[blocklist] ${fresh.length - going.length} of the blocks this browser kept don't fit in your list on the community; they stay here, still blocked, until there is room.`);
+        }
+        if (going.length === 0) break;
         try {
-            now = await addToBlockList(alone[i]);
+            now = await addToBlockList(going);
         } catch (e) {
-            const left = alone.slice(i).filter(k => readLocalList()?.includes(k));
-            console.warn(`[blocklist] ${left.length} of the blocks this browser kept did not go up to the community; they stay here and are tried again`, e);
-            keepLocalList(left);
-            return now;
+            console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
+            break;
+        }
+        const taken = heldBy(now);
+        for (const k of going) {
+            if (taken.has(k) || !readStoredList()?.includes(k)) continue;
+            try {
+                now = await addToBlockList(k);
+            } catch (e) {
+                console.warn('[blocklist] Some of the blocks this browser kept did not go up to the community; they stay here and are tried again', e);
+                break moving;
+            }
         }
     }
-    forgetLocalList();
+    const held = heldBy(now);
+    keepStoredList(k => held.has(k));
     return now;
 }
 
@@ -261,15 +306,30 @@ export function startBlocklist(ownerPubkey: string): () => void {
     if (owner !== ownerPubkey) {
         owner = ownerPubkey;
         nodeList = [];
+        nodeMax = 0;
         loaded = false;
         readError = null;
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
+    // Another tab changed the list from before kept in this browser (a block or an unblock in a tab still on the build
+    // from before, or this build's move there): show it now, and read again, which sends up what is new.
+    const changedElsewhere = (e: StorageEvent) => {
+        if (e.key !== null && e.key !== BLOCKLIST_STORAGE_KEY && e.key !== LEGACY_BLOCKLIST_KEY) return;
+        const before = current.join();
+        localList = undefined;
+        recompute();
+        if (current.join() !== before) emit();
+        read();
+    };
     read();
     if (typeof window === 'undefined') return () => {};
     window.addEventListener(BLOCKLIST_DOORBELL_EVENT, read);
-    return () => window.removeEventListener(BLOCKLIST_DOORBELL_EVENT, read);
+    window.addEventListener('storage', changedElsewhere);
+    return () => {
+        window.removeEventListener(BLOCKLIST_DOORBELL_EVENT, read);
+        window.removeEventListener('storage', changedElsewhere);
+    };
 }
 
 // ── changes, each shown only once the node has taken it ────────────────────────────────────────
@@ -314,9 +374,10 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     } catch (e) {
         throw toBlocklistError(e, 'unblock');
     }
-    // A block still waiting to move up from this browser goes too, or it would be moved up again.
-    const local = readLocalList();
-    if (local?.includes(targetPubkey)) keepLocalList(local.filter(k => k !== targetPubkey));
+    // A block still waiting to move up from this browser goes too, or it would be moved up again; so do those the node now
+    // holds. Whatever else is there stays, whoever wrote it.
+    const held = heldBy(res);
+    keepStoredList(k => k === targetPubkey || held.has(k));
     takeNodeAnswer(res);
     emit();
     return true;
@@ -324,13 +385,17 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
 
 /** Unblock All. Resolves once the node has; throws a BlocklistError, with nothing changed here, when it didn't. */
 export async function clearBlocklist(): Promise<void> {
+    // Everyone the member saw blocked goes, those still waiting in this browser too. A block another tab makes while this
+    // is on its way stays, and goes up with the next read.
+    const shown = new Set(getBlockedUsers());
     let res: BlockList;
     try {
         res = await clearBlockList();
     } catch (e) {
         throw toBlocklistError(e, 'clear');
     }
-    if (readLocalList() !== null) forgetLocalList();
+    const held = heldBy(res);
+    keepStoredList(k => shown.has(k) || held.has(k));
     takeNodeAnswer(res);
     emit();
 }
@@ -410,6 +475,7 @@ export function onBlocklistUpdated(callback: (blocked: string[]) => void): () =>
 export function resetBlocklistForTests(): void {
     owner = null;
     nodeList = [];
+    nodeMax = 0;
     loaded = false;
     readError = null;
     localList = undefined;

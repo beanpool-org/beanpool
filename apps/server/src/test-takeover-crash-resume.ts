@@ -52,7 +52,9 @@ async function child(): Promise<void> {
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
             db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             se.grantNodeRole(ben, 'admin', anna);
-            se.transfer('COMMONS_POOL', ben, 3, 'a commons grant');
+            // Paid as a real grant is (payFromCommons): transfer() out of COMMONS_POOL made the Beans from nowhere, its row
+            // written back from the pot, which a standby's faithful copy now shows its audit.
+            se.payFromCommons(ben, 3, 'a commons grant', { allowDeficit: true });
             addConnector('/ip4/127.0.0.1/tcp/4999/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA', 'peer', 'Neighbours', 'https://neighbours.example', true);
             se.updateNodeConfig({ publicAddress: { name: 'crashtown', mode: 'tunnel', hostname: 'crashtown.beanpool.org', status: 'live', tunnelToken: a.tunnelToken } } as any);
             setReplicationToken(a.replicationToken);

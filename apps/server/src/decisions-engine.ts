@@ -33,6 +33,9 @@
  *     - Admin brake: adminHaltDecision (requires public signed reason) or adminAccelerateDecision.
  * - Emergency suspension: an admin suspends at once and the node opens a 7-day "Keep this suspension?"
  *   Decision in the same transaction. If it does not pass (or misses quorum) the suspension lifts itself.
+ * - A node with formal Decisions switched off (the `decisions` profile switch, off on the global node) opens,
+ *   votes on and carries out none: see assertDecisionsOn. Its emergency suspensions open no vote and lift
+ *   themselves after the same 7 days.
  */
 
 import crypto from 'node:crypto';
@@ -41,7 +44,7 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { isNodeOwner } from './engine/node-roles.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
-import { getProfileSwitches, BeansOffError, FeatureOffError, type ProfileSwitch } from './config/node-profile.js';
+import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
@@ -236,15 +239,38 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
 
 /**
- * The node profile switch an effect needs (config/node-profile.ts), or null. The pool effects pay Beans out of the
- * Commons, outside transfer(), so they are refused here when Beans are off: at the proposal, and again at execution.
+ * The node profile switch an effect needs (config/node-profile.ts), or null. Every effect needs `decisions`: with
+ * formal Decisions off nothing a vote decides is carried out. The pool effects pay Beans out of the Commons, outside
+ * transfer(), so they are refused here when Beans are off: at the proposal, and again at execution.
  */
 function switchOffFor(effect: DecisionEffect): ProfileSwitch | null {
     const s = getProfileSwitches();
+    if (!s.decisions) return 'decisions';
     if (TOUCHES_FOR_EFFECT[effect] === 'pool' && !s.beans) return 'beans';
     if (effect === 'remove_lead_keeper' && !(s.enterprises && s.treasuries)) return 'enterprises';
     return null;
 }
+
+/** Whether this node runs formal Decisions at all (the `decisions` switch). */
+export function decisionsOn(): boolean {
+    return getProfileSwitches().decisions;
+}
+
+/**
+ * For every path that opens, votes on or carries out a Decision: throws FeatureOffError('decisions') (404
+ * `feature_off`, with the plain sentence) when formal Decisions are switched off here. The routes are refused before
+ * this by routes/profile-feature-gate.ts; this is the guard underneath, whoever calls.
+ */
+export function assertDecisionsOn(): void {
+    if (!decisionsOn()) throw new FeatureOffError('decisions');
+}
+
+/** Why a Decision whose vote closed is not carried out, on a node with formal Decisions off. */
+export const DECISIONS_OFF_NOT_CARRIED_OUT = 'Community votes are switched off on this node, so what this vote decided is not carried out';
+
+/** Why an emergency suspension ended, on a node with formal Decisions off. */
+export const NO_VOTE_SUSPENSION_ENDED = 'Community votes are switched off on this node, so an emergency suspension lasts '
+    + '7 days and nobody votes to keep it';
 
 function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
@@ -593,8 +619,10 @@ export interface CreateDecisionOptions {
  * - Fixed 7-day duration (closes on tick).
  */
 export function createDecision(opts: CreateDecisionOptions): Decision {
-    // First: a Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls
-    // through to the checks below as before.
+    // First: a node with formal Decisions off opens none, whatever the effect (an unknown one included). Then a
+    // Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls through
+    // to the checks below as before.
+    assertDecisionsOn();
     if (Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) assertEffectAllowedHere(opts.effect);
     const check = checkCanProposeDecision(opts.authorPubkey);
     if (!check.ok) {
@@ -699,7 +727,9 @@ export function castDecisionVote(
     support: boolean,
     voteCount = 1,
     signature?: string
-): { success: boolean; creditsUsed: number; error?: string } {
+): { success: boolean; creditsUsed: number; error?: string; code?: typeof FEATURE_OFF } {
+    // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
+    if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
     if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
@@ -867,6 +897,7 @@ export function preflightAssert(decision: Decision): {
 } {
     // 0. A switch this node runs with off: nothing to execute (config/node-profile.ts).
     const off = switchOffFor(decision.effect);
+    if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
     if (off) return { status: 'blocked', reason: `${off} is switched off on this node` };
 
     // 1. Check subject existence
@@ -960,8 +991,15 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: false, status: decision.status, error: `Cannot execute decision in status ${decision.status}` };
     }
 
-    const preflight = preflightAssert(decision);
     const now = new Date().toISOString();
+    // Keeping an emergency suspension is the one effect a block would turn into a sanction with no end: with formal
+    // Decisions off nothing keeps it, so it lifts, as a vote that did not pass would.
+    if (decision.effect === 'keep_suspension' && !decisionsOn() && (decision.status === 'open' || decision.status === 'passed')) {
+        closeUnkeptSuspension(decision, 'unresolved', NO_VOTE_SUSPENSION_ENDED, now);
+        return { success: false, status: 'unresolved', error: NO_VOTE_SUSPENSION_ENDED };
+    }
+
+    const preflight = preflightAssert(decision);
 
     if (preflight.status === 'void') {
         db.prepare(
@@ -1312,6 +1350,8 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
     }
+    // Completing a removal carries out a vote. With formal Decisions off an admin halts it or removes the member.
+    if (!decisionsOn()) return { success: false, status: 404, error: featureOffMessage('decisions') };
 
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, error: 'Decision not found' };
@@ -1467,6 +1507,12 @@ export interface EmergencySuspendResult {
  * If it does not pass, or misses quorum, the suspension lifts by itself on the tick.
  *
  * The reason is shown to members on the Decision card, so they can judge it.
+ *
+ * With formal Decisions off (the global node) the moderators decide, not a vote: the suspension still starts at
+ * once and lasts 7 days, and nothing can keep it longer. The same row records it (its end, the reason, the node
+ * role held aside), titled as a suspension rather than a question, and nobody can vote on it; it is not announced
+ * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
+ * moderator who wants the member kept out longer suspends them again, or removes the account.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     // Guards first, outside any transaction.
@@ -1495,6 +1541,12 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
     const memberName = member.callsign || subjectPubkey.slice(0, 8);
     const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason };
+    const votes = decisionsOn();
+    const title = votes ? `Keep ${memberName}'s suspension?` : `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
+    const description = votes
+        ? `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${cleanReason}`
+        : `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Community votes are switched off on this node, so `
+            + `the suspension lifts by itself on ${closesAt.slice(0, 10)}, or sooner if a moderator lifts it. Reason given: ${cleanReason}`;
 
     db.transaction(() => {
         // Hold the member's node role aside before the suspension deletes it, so a suspension the
@@ -1513,8 +1565,8 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
         `).run(
             id,
             SYSTEM_AUTHOR,
-            `Keep ${memberName}'s suspension?`,
-            `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${cleanReason}`,
+            title,
+            description,
             subjectPubkey,
             JSON.stringify(params),
             opensAt,
@@ -1526,7 +1578,8 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 
     const decision = getDecision(id)!;
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    broadcast({ type: 'decision_created', decision: publicDecision(decision) });
+    // Only a vote is announced: with formal Decisions off there is nothing for members to open or vote on.
+    if (votes) broadcast({ type: 'decision_created', decision: publicDecision(decision) });
     return { success: true, decision };
 }
 
@@ -1606,6 +1659,14 @@ export function tickDecisions(asOfTime?: number): {
                 continue;
             }
 
+            // Formal Decisions off: an emergency suspension ends with its 7 days, whatever votes it held before the
+            // switch went off (executeDecision lifts it). Anything else that closes is not carried out: it passes to
+            // executeDecision below, which blocks it.
+            if (r.effect === 'keep_suspension' && !decisionsOn()) {
+                executeDecision(r.id);
+                continue;
+            }
+
             const tally = tallyDecision(r.id, asOfTime);
 
             if (r.effect === 'keep_suspension' && !tally.passed) {
@@ -1669,7 +1730,9 @@ export function tickDecisions(asOfTime?: number): {
         "SELECT * FROM decisions WHERE status = 'execution_pending_grace' AND grace_period_ends_at <= ? ORDER BY grace_period_ends_at ASC"
     ).all(nowIso) as any[];
 
-    for (const r of graceDue) {
+    // Formal Decisions off: a removal voted before the switch went off is not completed. It stays in its grace window,
+    // the member suspended, until a moderator halts it (which gives the member back) or removes the member.
+    for (const r of decisionsOn() ? graceDue : []) {
         graceExpired++;
         const now = nowIso;
         if (r.effect === 'remove_member' && r.subject) {

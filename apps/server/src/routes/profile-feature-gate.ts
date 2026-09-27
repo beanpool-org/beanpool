@@ -26,8 +26,10 @@ import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
     needs: ProfileSwitch[];
-    /** Matched against the path, any method. */
+    /** Matched against the path, any method unless `writesOnly`. */
     paths: RegExp[];
+    /** Only requests that change something (every method but GET and HEAD) are off: reads still answer. */
+    writesOnly?: boolean;
 }
 
 export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
@@ -80,11 +82,27 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['knocks'],
         paths: [/^\/api\/join\/knocks?(\/|$)/],
     },
+    // Formal Decisions: proposing and voting (every write under /api/commons/decisions, so a write route added there
+    // later is off with them), and an admin cutting short a removal's grace window, which carries out a vote. Reads of
+    // existing Decisions still answer, and so does the admin brake (halt), which only ever stops one.
+    {
+        needs: ['decisions'],
+        writesOnly: true,
+        paths: [
+            /^\/api\/commons\/decisions(\/|$)/,
+            /^\/api\/local\/admin\/decisions\/[^/]+\/accelerate\/?$/,
+        ],
+    },
 ];
 
-/** The switch that has this path off right now, or null when it is served. Reads the switches only for a gated path. */
-export function featureOffFor(path: string, switches?: ProfileSwitches): ProfileSwitch | null {
+/**
+ * The switch that has this request off right now, or null when it is served. Reads the switches only for a gated
+ * path. Without a method, only the groups that are off for every method are asked.
+ */
+export function featureOffFor(path: string, switches?: ProfileSwitches, method?: string): ProfileSwitch | null {
+    const reads = method === undefined || method === 'GET' || method === 'HEAD';
     for (const group of PROFILE_GATED_ROUTES) {
+        if (group.writesOnly && reads) continue;
         if (!group.paths.some((re) => re.test(path))) continue;
         switches ??= getProfileSwitches();
         const off = group.needs.find((k) => !switches![k]);
@@ -96,7 +114,7 @@ export function featureOffFor(path: string, switches?: ProfileSwitches): Profile
 /** Koa middleware: 404 `feature_off` for a route whose switch is off. Mounted before the route modules (https-server.ts). */
 export async function profileFeatureGate(ctx: Context, next: Next): Promise<void> {
     if (!ctx.path.startsWith('/api/')) return next();
-    const off = featureOffFor(ctx.path);
+    const off = featureOffFor(ctx.path, undefined, ctx.method.toUpperCase());
     if (!off) return next();
     ctx.status = 404;
     ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };

@@ -749,14 +749,16 @@ async function main(): Promise<void> {
 
     // ── 7. Beans, escrow and enterprises on ──────────────────────────────────────────────────────
     // A live community switched to global keeps them (the ledger lock), and an operator can override them on. Forced
-    // on here with the overrides, as the reviewer did; on a fresh global node the routes below answer 404.
-    console.log('\n── 7. global with Beans, escrow and enterprises on ──');
+    // on here with the overrides, as the reviewer did; on a fresh global node the routes below answer 404. Formal
+    // Decisions too (off on the global profile, test-decisions-off): an operator can switch them back on, and a muted
+    // member must still be refused a proposal there.
+    console.log('\n── 7. global with Beans, escrow, enterprises and Decisions on ──');
     const setOverride = (name: string, value: string) =>
         db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(`nodeProfile.${name}`, value);
-    for (const k of ['beans', 'escrow', 'enterprises', 'treasuries', 'crowdfund']) setOverride(k, 'true');
+    for (const k of ['beans', 'escrow', 'enterprises', 'treasuries', 'crowdfund', 'decisions']) setOverride(k, 'true');
     f = (await info()).features ?? {};
-    assert(f.beans === true && f.escrow === true && f.enterprises === true && f.autoHideReports === true && f.autoMute === true,
-        `setup: global, with Beans, escrow and enterprises on (${JSON.stringify(f)})`);
+    assert(f.beans === true && f.escrow === true && f.enterprises === true && f.decisions === true && f.autoHideReports === true && f.autoMute === true,
+        `setup: global, with Beans, escrow, enterprises and Decisions on (${JSON.stringify(f)})`);
 
     // 7a. Acting on a hidden post.
     console.log('\n── 7a. a deal on a hidden post ──');

@@ -1,5 +1,5 @@
 /**
- * Settings → "Sign in on a computer": an owner or admin scans the QR on their node's /settings page in a browser,
+ * Settings → "Manage this community from a computer": an owner, admin or moderator scans the QR on their node's /settings page in a browser,
  * and — after the phone's own unlock — signs that browser in with their member key. Like WhatsApp Web.
  *
  *   1. The scan is read with @beanpool/core's parseSettingsSigninQr and must name THIS app's node: a code from any

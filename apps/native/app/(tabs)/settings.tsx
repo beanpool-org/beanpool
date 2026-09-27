@@ -1586,11 +1586,12 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel="Link another device or computer">
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel="Use your account on another device" accessibilityHint="Copies your own account to a browser, to use BeanPool there as you">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
+                        {/* Not "Manage this community from a computer" (NodeAdminEntry), which signs a browser into the community's Settings. Older apps: "Link Another Device". */}
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Link Another Device</Text>
-                            <Text style={styles.menuSub}>Scan QR code on desktop browser to sign in</Text>
+                            <Text style={styles.menuText}>Use your account on another device</Text>
+                            <Text style={styles.menuSub}>Copies your own account to a browser, to use BeanPool there as you</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>

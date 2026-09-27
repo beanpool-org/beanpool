@@ -9,6 +9,7 @@ import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, sign
 import { createRefreshGate } from '../utils/refresh-gate';
 import { anchorUrl } from '../utils/node-post';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
+import { getCachedNodeProfile, decisionsOn } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
     buildNeedsYou, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_SLOT,
@@ -88,10 +89,19 @@ async function loadAdmin(identity: BeanPoolIdentity): Promise<Pick<NodeParts, 'a
     return { admin: { role: mine.role, queue }, communityName: mine.communityName };
 }
 
-/** Two signed requests to the node, plus the admin queue for owners and admins. */
+/** Whether the community the phone is on has formal Decisions, as it last said (the tab strip keeps that copy current). */
+async function votesHere(): Promise<boolean> {
+    const profile = await settle((async () => getCachedNodeProfile(await anchorUrl()))());
+    return decisionsOn(profile?.features);
+}
+
+/**
+ * Two signed requests to the node, plus the admin queue for owners and admins. No Decisions where the node has none
+ * (the worldwide community): nothing there is open to a vote, so there is no vote to show.
+ */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
     const [decisions, yourGroups, admin] = await Promise.all([
-        settle(getDecisions('open')),
+        settle(votesHere().then(votes => (votes ? getDecisions('open') : null))),
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
     ]);

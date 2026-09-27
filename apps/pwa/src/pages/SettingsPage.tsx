@@ -238,8 +238,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     /** The key being unblocked, or 'all' for Unblock All, while the community answers. */
     const [blockedBusy, setBlockedBusy] = useState<string | null>(null);
     const blockedNames = useRef(new Map<string, string>());
+    /** The latest list asked to show: an older one whose names come in after it never replaces it. */
+    const blockedShown = useRef(0);
 
     const showBlockedList = async (pubkeys: string[]) => {
+        const shown = ++blockedShown.current;
         const items = await Promise.all(pubkeys.map(async (pk) => {
             let callsign = blockedNames.current.get(pk) ?? (pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk);
             if (!blockedNames.current.has(pk)) {
@@ -253,7 +256,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             }
             return { pubkey: pk, callsign };
         }));
-        setBlockedUsersList(items);
+        if (shown === blockedShown.current) setBlockedUsersList(items);
     };
 
     const loadBlockedList = async () => {

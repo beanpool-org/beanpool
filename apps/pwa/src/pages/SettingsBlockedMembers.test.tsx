@@ -1,16 +1,18 @@
 /**
  * Settings → Manage Blocked Members, with the list the community keeps for the account (Marty's card web-blocklist-where,
- * 2026-09-27): read from the node, never "No blocked members" when it couldn't be read, and an unblock shown only once
- * the node has taken it. The real lib/blocklist; the node's routes are mocked at lib/api.
+ * 2026-09-27): read from the node, never "No blocked members" when it couldn't be read, an unblock shown only once
+ * the node has taken it, and an older list never shown over a newer one. The real lib/blocklist; the node's routes are
+ * mocked at lib/api.
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
-import { resetBlocklistForTests } from '../lib/blocklist';
+import { resetBlocklistForTests, blockUser } from '../lib/blocklist';
 
 const BO = 'b2'.repeat(32);
 const CY = 'c3'.repeat(32);
+const DX = 'd4'.repeat(32);
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -45,6 +47,7 @@ beforeEach(() => {
     vi.mocked(api.getBlockList).mockReset().mockResolvedValue(listOf([BO, CY]));
     vi.mocked(api.removeFromBlockList).mockReset();
     vi.mocked(api.clearBlockList).mockReset();
+    vi.mocked(api.addToBlockList).mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -100,5 +103,31 @@ describe('Settings → Manage Blocked Members, kept by the community', () => {
         vi.mocked(api.clearBlockList).mockResolvedValueOnce({ ...listOf([]), removed: 2 });
         fireEvent.click(screen.getByRole('button', { name: 'Unblock All' }));
         expect(await screen.findByText('No blocked members')).toBeInTheDocument();
+    });
+
+    it('an older list whose names come in last never replaces a newer one: an unblocked member stays off', async () => {
+        await openBlocked();
+        await screen.findByText('Bo');
+        // Dx's name is slow to come in, each time it is asked for.
+        const names: ((p: { callsign: string }) => void)[] = [];
+        const profile = vi.mocked(api.getMemberProfile).getMockImplementation()!;
+        vi.mocked(api.getMemberProfile).mockImplementation(async (pk: string) =>
+            pk === DX ? new Promise(r => names.push(r)) as any : profile(pk));
+
+        // Dx is blocked elsewhere: the list is Bo, Cy, Dx, waiting on Dx's name.
+        vi.mocked(api.addToBlockList).mockResolvedValueOnce({ ...listOf([BO, CY, DX]), added: [DX] });
+        await act(async () => { await blockUser(DX); });
+        // Bo is unblocked here: the list is Cy, Dx, waiting on Dx's name again.
+        vi.mocked(api.removeFromBlockList).mockResolvedValueOnce({ ...listOf([CY, DX]), removed: true });
+        fireEvent.click(within(rowOf('Bo')).getByRole('button', { name: 'Unblock' }));
+        await waitFor(() => expect(names.length).toBe(2));
+
+        // The newer list's name comes in first, the older one's last.
+        await act(async () => { names[1]({ callsign: 'Dx' }); });
+        expect(await screen.findByText('Dx')).toBeInTheDocument();
+        await act(async () => { names[0]({ callsign: 'Dx' }); });
+        expect(screen.queryByText('Bo')).toBeNull();
+        expect(screen.getByText('Cy')).toBeInTheDocument();
+        expect(screen.getByText('Dx')).toBeInTheDocument();
     });
 });

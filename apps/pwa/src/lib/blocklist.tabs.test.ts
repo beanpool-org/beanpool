@@ -148,7 +148,6 @@ describe('two tabs, and a node that takes time to answer', () => {
 
     beforeEach(() => {
         localStorage.clear();
-        delete (window as Window & { __bp_moved?: Set<string> }).__bp_moved;
         node.list = [];
         node.max = 500;
         node.hop = 50;
@@ -389,6 +388,8 @@ describe('two tabs, and a node that takes time to answer', () => {
 
         let unblocking: Promise<boolean> | null = null;
         if (sameTab) {
+            // Wait until move acts on node (at 32ms) and is held in backQueue, then unblock K1
+            await vi.advanceTimersByTimeAsync(40);
             unblocking = A.unblockUser(K1);
         } else {
             // Wait until move acts on node (at 32ms) and is held in backQueue, then unblock K1 via storage event

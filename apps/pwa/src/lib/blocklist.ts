@@ -112,10 +112,67 @@ let current: string[] = [];
 let reading: Promise<string[]> | null = null;
 let readAgain = false;
 
-/** Keys moved up to the node by this build, so another tab moving concurrently does not mistake their removal for an unblock. */
-const movedByTabs: Set<string> = typeof window !== 'undefined'
-    ? ((window as Window & { __bp_moved?: Set<string> }).__bp_moved ??= new Set<string>())
-    : new Set<string>();
+/** Keys moved up to the node by this build, stored in localStorage so other tabs coordinate without mistaking move deletions for unblocks. */
+export const MOVED_STORAGE_KEY = 'bp_moved_blocks';
+const localMoved = new Set<string>();
+const explicitUnblocks = new Set<string>();
+let clearedAll = false;
+
+function storedMovedList(): Set<string> {
+    try {
+        if (typeof localStorage === 'undefined') return new Set();
+        const raw = localStorage.getItem(MOVED_STORAGE_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        return new Set(Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function isKeyMoved(key: string): boolean {
+    return localMoved.has(key) || storedMovedList().has(key);
+}
+
+function recordMovedKeys(keys: string[]): void {
+    if (keys.length === 0) return;
+    keys.forEach(k => localMoved.add(k));
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const current = storedMovedList();
+        keys.forEach(k => current.add(k));
+        localStorage.setItem(MOVED_STORAGE_KEY, JSON.stringify([...current]));
+    } catch (e) {
+        console.warn('[blocklist] Could not record moved keys', e);
+    }
+}
+
+function unrecordMovedKey(key: string): void {
+    localMoved.delete(key);
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const current = storedMovedList();
+        if (current.delete(key)) {
+            if (current.size === 0) {
+                localStorage.removeItem(MOVED_STORAGE_KEY);
+            } else {
+                localStorage.setItem(MOVED_STORAGE_KEY, JSON.stringify([...current]));
+            }
+        }
+    } catch (e) {
+        console.warn('[blocklist] Could not update moved keys', e);
+    }
+}
+
+function clearMovedKeys(): void {
+    localMoved.clear();
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.removeItem(MOVED_STORAGE_KEY);
+    } catch (e) {
+        console.warn('[blocklist] Could not clear moved keys', e);
+    }
+}
 
 /** This page's copy of the list from before, read from the browser only when there is none yet. For showing. */
 function readLocalList(): string[] | null {
@@ -135,7 +192,14 @@ function readStoredList(): string[] | null {
     if (before) {
         const still = new Set(localList ?? []);
         const tick = ++ticks;
-        for (const k of before) if (isWaiting(k) && !still.has(k)) leaving.set(k, tick);
+        for (const k of before) {
+            if (isWaiting(k) && !still.has(k)) {
+                leaving.set(k, tick);
+                if (!isKeyMoved(k)) {
+                    explicitUnblocks.add(k);
+                }
+            }
+        }
     }
     return localList;
 }
@@ -283,7 +347,7 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
         }
         if (going.length === 0) break;
         const still = new Set(readStoredList() ?? []);
-        const send = going.filter(k => still.has(k));
+        const send = going.filter(k => still.has(k) && !explicitUnblocks.has(k) && !clearedAll);
         if (send.length > 0) {
             try {
                 now = await addToBlockList(send);
@@ -292,30 +356,42 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
                 break;
             }
         }
-        const after = new Set(readStoredList() ?? []);
-        for (const k of going) {
-            if (!after.has(k) && !movedByTabs.has(k) && heldBy(now).has(k)) {
-                try {
-                    now = await removeFromBlockList(k);
-                    leaving.delete(k);
-                } catch (e) {
-                    console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+        if (clearedAll) {
+            try {
+                now = await clearBlockList();
+                leaving.clear();
+                explicitUnblocks.clear();
+                clearedAll = false;
+            } catch (e) {
+                console.warn('[blocklist] Could not send clear to the community for clear during move', e);
+            }
+        } else {
+            for (const k of going) {
+                if (explicitUnblocks.has(k) && heldBy(now).has(k)) {
+                    try {
+                        now = await removeFromBlockList(k);
+                        leaving.delete(k);
+                        explicitUnblocks.delete(k);
+                    } catch (e) {
+                        console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+                    }
                 }
             }
         }
         const taken = heldBy(now);
         for (const k of going) {
-            if (taken.has(k) || !readStoredList()?.includes(k)) continue;
+            if (taken.has(k) || !readStoredList()?.includes(k) || explicitUnblocks.has(k) || clearedAll) continue;
             try {
                 now = await addToBlockList(k);
             } catch (e) {
                 console.warn('[blocklist] Some of the blocks this browser kept did not go up to the community; they stay here and are tried again', e);
                 break moving;
             }
-            if (!readStoredList()?.includes(k) && !movedByTabs.has(k) && heldBy(now).has(k)) {
+            if ((clearedAll || explicitUnblocks.has(k)) && heldBy(now).has(k)) {
                 try {
                     now = await removeFromBlockList(k);
                     leaving.delete(k);
+                    explicitUnblocks.delete(k);
                 } catch (e) {
                     console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
                 }
@@ -323,8 +399,10 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
         }
     }
     const held = heldBy(now);
+    const stored = readStoredList() ?? [];
+    const moving = stored.filter(k => isWaiting(k) && held.has(k));
+    recordMovedKeys(moving);
     const moved = keepStoredList(k => held.has(k));
-    moved.forEach(k => movedByTabs.add(k));
     return { res: now, moved };
 }
 
@@ -395,6 +473,8 @@ export function startBlocklist(ownerPubkey: string): () => void {
         loaded = false;
         readError = null;
         leaving.clear();
+        explicitUnblocks.clear();
+        clearedAll = false;
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
@@ -433,6 +513,8 @@ export async function blockUser(
     postId?: string
 ): Promise<boolean> {
     if (!targetPubkey) return false;
+    explicitUnblocks.delete(targetPubkey);
+    clearedAll = false;
     const asked = ++ticks;
     let res: BlockList & { added: string[] };
     try {
@@ -456,20 +538,21 @@ export async function blockUser(
 /** Unblocks a member. Resolves once the node has; throws a BlocklistError, with nothing changed here, when it didn't. */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
+    explicitUnblocks.add(targetPubkey);
     const asked = ++ticks;
     let res: BlockList & { removed: boolean };
     try {
         res = await removeFromBlockList(targetPubkey);
     } catch (e) {
+        explicitUnblocks.delete(targetPubkey);
         throw toBlocklistError(e, 'unblock');
     }
-    // A block still waiting to move up from this browser goes too, or it would be moved up again; so do those the node now
-    // holds. Whatever else is there stays, whoever wrote it.
-    const held = heldBy(res);
-    keepStoredList(k => k === targetPubkey || held.has(k));
+    // A block still waiting to move up from this browser goes too, or it would be moved up again.
+    // Whatever else is there stays, whoever wrote it.
+    keepStoredList(k => k === targetPubkey);
     takeNodeAnswer(res, asked);
     leaving.delete(targetPubkey);
-    movedByTabs.delete(targetPubkey);
+    unrecordMovedKey(targetPubkey);
     emit();
     return true;
 }
@@ -479,18 +562,19 @@ export async function clearBlocklist(): Promise<void> {
     // Everyone the member saw blocked goes, those still waiting in this browser too. A block another tab makes while this
     // is on its way stays, and goes up with the next read.
     const shown = new Set(getBlockedUsers());
+    clearedAll = true;
     const asked = ++ticks;
     let res: BlockList;
     try {
         res = await clearBlockList();
     } catch (e) {
+        clearedAll = false;
         throw toBlocklistError(e, 'clear');
     }
-    const held = heldBy(res);
-    keepStoredList(k => shown.has(k) || held.has(k));
+    keepStoredList(k => shown.has(k));
     takeNodeAnswer(res, asked);
     for (const k of shown) leaving.delete(k);
-    movedByTabs.clear();
+    clearMovedKeys();
     emit();
 }
 
@@ -580,5 +664,7 @@ export function resetBlocklistForTests(): void {
     reading = null;
     readAgain = false;
     pendingReports = [];
-    movedByTabs.clear();
+    clearMovedKeys();
+    explicitUnblocks.clear();
+    clearedAll = false;
 }

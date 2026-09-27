@@ -69,6 +69,9 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
     // removal. Not its event or poll, nor a listing of an enterprise it keeps; pausing a listing and closing a poll stay refused.
     { method: 'POST', path: '/api/marketplace/posts/remove', why: 'taking down an offer or a need it wrote here, as any author takes one down',
         own: (b, s) => isOwnListing(b.id, s) },
+    // Deleting its own row (the director's call on Marty's card removed-member-delete, 2026-09-27; #1187's choice 3 answered
+    // it "Member not found"): its name goes and the Beans it holds go to the Commons, as a member's Delete account does.
+    { method: 'POST', path: '/api/member/purge', why: 'deleting its own row, as a member deletes their account; the route acts for the signer alone' },
     // The join doors, signed by the key that joins; each makes its row a member's.
     { method: 'POST', path: '/api/join', why: 'the open door' },
     { method: 'POST', path: '/api/join/sso-nonce', why: "the open door's sign-in" },

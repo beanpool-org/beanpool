@@ -1171,6 +1171,8 @@ router.post('/api/profile/update', async (ctx) => {
     ctx.body = { success: true, profile };
 });
 
+// Delete account, for the signer alone (never a key the body names): a member, an account the community closed (the
+// signature middleware's one exception for its key) or a visitor's row (visitor-allowlist.ts). purgeMemberSelf.
 router.post('/api/member/purge', async (ctx) => {
     const activeKey = ctx.state.actor;
     if (!activeKey) {

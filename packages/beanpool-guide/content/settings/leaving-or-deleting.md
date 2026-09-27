@@ -36,6 +36,16 @@ This cannot be undone, even with your 12 words.
 - If you hold beans, they go to the Commons.
 - If you are below zero, the Commons covers the debt.
 - Your profile becomes "Deleted Member", and your posts come down.
+- If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
+- Your community can never bring the account back. To come back, join again with a new invite.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
+
+### If your community removed you
+
+When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:
+
+- Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.
+- After that, your community cannot vote to bring the account back. To come back, join again with a new invite.
+- If a deal of yours is still under way, the other member or an admin must close it first.

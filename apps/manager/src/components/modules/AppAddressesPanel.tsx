@@ -81,8 +81,10 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     if (loadFailed || !report) return null;
 
     const known = new Set(report.addresses.map((a) => a.address));
+    // A node whose only listed name is localhost (BEANPOOL_ADDRESSES, for an SSH tunnel) still knows none of its own.
+    const named = report.named ?? report.addresses.length > 0;
     const pageHost = audienceOf(activeNode.url);
-    const suggestPage = report.addresses.length === 0 && offerable(pageHost) && !report.unconfirmed.some((u) => u.address === pageHost);
+    const suggestPage = !named && offerable(pageHost) && !report.unconfirmed.some((u) => u.address === pageHost);
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);
     const button = 'min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
 
@@ -94,12 +96,13 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                 accepts only the addresses below, so a request copied from another community can&apos;t be used here.
             </p>
 
-            {report.addresses.length === 0 ? (
+            {!named && (
                 <p className="text-sm text-amber-300 m-0 leading-relaxed" data-testid="app-addresses-none">
                     This community has no address set up yet
                     {report.unboundSignaturesAccepted ? `, so until ${switchDay} it accepts any address. After that it refuses addresses it doesn't know, so confirm yours below.` : ', so it refuses apps that reach it by name. Confirm its address below.'}
                 </p>
-            ) : (
+            )}
+            {report.addresses.length > 0 && (
                 <ul className="m-0 p-0 list-none space-y-3">
                     {report.addresses.map((a) => (
                         <li key={a.address} className="text-sm text-nature-200 break-words" data-testid="app-address">

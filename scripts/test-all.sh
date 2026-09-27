@@ -387,6 +387,7 @@ run_federation_suites() {
       test-request-auth
       test-api-path-auth
       test-request-binding
+      test-loopback-audience
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility

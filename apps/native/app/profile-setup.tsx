@@ -339,6 +339,8 @@ export default function ProfileSetupScreen() {
                                 disabled={loading}
                                 onPress={handleFinish}
                                 accessibilityRole="button"
+                                accessibilityLabel={loading ? 'Saving profile...' : 'Done'}
+                                accessibilityState={{ disabled: loading, busy: loading }}
                             >
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Done ✓</Text>}
                             </Pressable>

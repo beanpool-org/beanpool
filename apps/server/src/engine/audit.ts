@@ -12,9 +12,12 @@ import {
     runConservationCheck,
     computeWashSybilMetrics,
     getReplicaConsistency as engineGetReplicaConsistency,
+    summariseLedger,
+    type LedgerSummary,
     type ReplicaConsistency,
     type AuditSyncPayload
 } from '@beanpool/engine';
+import { mainLedgerAtLastCopy, type MainLedgerRecord } from './sync.js';
 
 export type { ReplicaConsistency, AuditSyncPayload };
 
@@ -140,14 +143,35 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 }
 
 /**
+ * This server's ledger against its main server's as it last copied it, while it was a standby (engine/sync.ts
+ * `replica_main_ledger`): the same Beans in the same accounts, to the cent. A take-over's audit asks it as well as
+ * the conservation check, which says "ok" on any ledger that sums to its baseline, one with every balance at 0 or with
+ * no accounts at all among them. `lastCopy` null: this server has no record of copying one (it never copied, or not
+ * since this check existed), and then it can't say the ledger is the main server's.
+ */
+export function ledgerAgainstLastCopy(): { match: boolean; here: LedgerSummary; lastCopy: MainLedgerRecord | null } {
+    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance FROM accounts').all() as { publicKey: string; balance: number }[]);
+    const lastCopy = mainLedgerAtLastCopy();
+    return { match: !!lastCopy && lastCopy.digest === here.digest, here, lastCopy };
+}
+
+/**
  * Generates CSV exports of the ledger balances and transaction history for auditing.
  */
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
     const members = db.prepare("SELECT public_key as publicKey, callsign FROM members").all() as { publicKey: string; callsign: string }[];
     
     const projectsRow = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const allProjects = projectsRow ? JSON.parse(projectsRow.value) : [];
-    const projects = allProjects.filter((p: any) => p.status !== 'rejected');
+    let allProjects: any[] = [];
+    if (projectsRow?.value) {
+        try {
+            allProjects = JSON.parse(projectsRow.value);
+            if (!Array.isArray(allProjects)) allProjects = [];
+        } catch {
+            allProjects = [];
+        }
+    }
+    const projects = allProjects.filter((p: any) => p?.status !== 'rejected');
 
     const commonsBalance = Math.round(COMMONS_BALANCE * 100) / 100;
     const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));

@@ -24,6 +24,11 @@ export interface PublicAddressStatus {
     communityName?: string;
     contact?: string;
     warning?: string;
+    /**
+     * With `none`: the name this server keeps although the address service has no record of it (apps/server
+     * engine/registrar-names.ts). Members' apps that use it are still accepted.
+     */
+    kept?: { hostname?: string; mode?: string | null };
 }
 
 export interface PublicAddressPanelProps {
@@ -382,6 +387,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const hostname = typeof statusData?.hostname === 'string' ? statusData.hostname : '';
     const mode = typeof statusData?.mode === 'string' ? statusData.mode : 'tunnel';
     const tunnelToken = typeof statusData?.tunnelToken === 'string' ? statusData.tunnelToken : '';
+    const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
     const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
     const currentStep = typeof lastLog?.step === 'string' ? lastLog.step : 'Ready';
 
@@ -534,6 +540,15 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             </div>
                             <p className="text-xs text-nature-400 m-0">
                                 Your registration request was signed and submitted. Once reviewed, Cloudflare DNS and edge tunnels will provision automatically.
+                            </p>
+                        </div>
+                    ) : isNone && keptHostname ? (
+                        <div className="space-y-1 text-xs" data-testid="public-address-kept">
+                            <p className="m-0 text-amber-400 font-bold">
+                                The address service has no record of this community&apos;s name.
+                            </p>
+                            <p className="m-0 text-nature-400">
+                                This server keeps <span className="font-mono text-white break-all">{keptHostname}</span>, and members&apos; apps that use it are still accepted.
                             </p>
                         </div>
                     ) : isNone ? (

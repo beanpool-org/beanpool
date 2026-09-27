@@ -189,3 +189,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-24 - OwnerWordsPrompt Action Button Focus Rings
 **Learning:** `OwnerWordsPrompt.tsx` action buttons ("Check now" and "Later") lacked visible focus ring indicators for keyboard users during navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2` styling to interactive buttons in `OwnerWordsPrompt.tsx`.
+
+## 2026-09-25 - NodeAdminLink Focus Ring Styling
+**Learning:** `NodeAdminLink.tsx` rendered the community admin settings link `<a>` without explicit focus-visible ring styling, making keyboard focus highlights invisible during navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl` to the `<a>` element in `NodeAdminLink.tsx` and added test coverage in `NodeAdminLink.test.tsx`.

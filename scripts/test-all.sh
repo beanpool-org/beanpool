@@ -362,12 +362,18 @@ run_federation_suites() {
       test-takeover-by-phone
       test-takeover-keeps-app-addresses
       test-takeover-split-brain
+      test-sync-reads-carry-epoch
+      test-takeover-keeps-listing-times
       test-profile-takeover
       test-open-join-failover
       test-standby-visitor-marks
       test-standby-owner-deleted
+      test-standby-board-standing
       test-place-watch-failover
       test-standby-rekey
+      test-takeover-parity
+      test-replication-manifest
+      test-standby-ledger-copy
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed
@@ -390,6 +396,8 @@ run_federation_suites() {
       test-loopback-audience
       test-address-offers
       test-staff-seen-prune
+      test-never-forget-registrar-name
+      test-registrar-names-record
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
@@ -413,6 +421,7 @@ run_federation_suites() {
       test-manager-backups
       test-push-preferences
       test-push-token-own-rows
+      test-push-leave-statement
       test-settings
       test-srv20-ledger-reset
       test-harvester
@@ -432,11 +441,13 @@ run_federation_suites() {
       test-non-members-cant-act
       test-marketplace-auth
       test-sync-author-off-board
+      test-sync-board-standing-upgrade
       test-escrow-fail-closed
       test-escrow-floor
       test-escrow-write-off
       test-version-resolution
       test-avatar-endpoint
+      test-avatar-keys
       test-etag-short-circuit
       test-api-headers-and-feed-etag
       test-directory-publisher

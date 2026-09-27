@@ -7,7 +7,7 @@ import {
     adminSigninText, audienceOf, bodyOfSignedText, buildBoundRequestHeaders, buildBoundWsParams, buildInviteTicket,
     bytesOfSignedText, ed25519Signer, inviteTicketText, parseInviteTicketText, parseSignedText, signAdminSignin,
     signSettingsSignin, settingsSigninText, signedPathOf, signedRequestBytes, signedRequestText, timestampOfSignedText,
-    toBase64, unboundRequestText, utf8Bytes, reEnrollText, signReEnroll,
+    toBase64, unboundRequestText, utf8Bytes, reEnrollText, signReEnroll, pushLeaveText, signPushLeave,
 } from '../request-signing.js';
 
 const SEED = new Uint8Array(32).map((_, i) => i + 1);
@@ -160,6 +160,25 @@ describe('builders', () => {
 
         const re = await signReEnroll('https://a.example', ' abc-123 ', ed25519Signer(SEED));
         expect(ed25519.verify(b64(re), signedRequestBytes(reEnrollText('a.example', 'ABC-123')), ed25519.getPublicKey(SEED))).toBe(true);
+    });
+
+    it('a push leave statement is bound to its host, key, token and stamp, and refuses what it can\'t carry', async () => {
+        const token = 'ExponentPushToken[kims-phone]';
+        const sig = await signPushLeave('https://a.example:8443/', PUB, token, 1759000000000, ed25519Signer(SEED));
+        const text = pushLeaveText('a.example', PUB, token, 1759000000000);
+        expect(text).toBe(`beanpool-push-leave/2\na.example\n${PUB}\n${token}\n1759000000000`);
+        expect(ed25519.verify(b64(sig), signedRequestBytes(text), ed25519.getPublicKey(SEED))).toBe(true);
+        for (const other of [
+            pushLeaveText('b.example', PUB, token, 1759000000000), pushLeaveText('a.example', PUB, 'ExponentPushToken[x]', 1759000000000),
+            pushLeaveText('a.example', PUB, token, 1759000000001),
+        ]) expect(ed25519.verify(b64(sig), signedRequestBytes(other), ed25519.getPublicKey(SEED))).toBe(false);
+        const signs: Uint8Array[] = [];
+        const counting = (bytes: Uint8Array) => { signs.push(bytes); return ed25519Signer(SEED)(bytes); };
+        for (const [url, key, t, at] of [
+            ['mailto:x@a.example', PUB, token, 1], ['https://a.example', PUB.toUpperCase(), token, 1], ['https://a.example', PUB, `${token}\nx`, 1],
+            ['https://a.example', PUB, '', 1], ['https://a.example', PUB, token, 0], ['https://a.example', PUB, token, 1.5],
+        ] as const) await expect(signPushLeave(url, key, t, at, counting)).rejects.toThrow();
+        expect(signs).toHaveLength(0);
     });
 
     it('toBase64 is Buffer base64', () => {

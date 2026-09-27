@@ -66,6 +66,8 @@ const PROTECTED_ROUTES = [
 const PUBLIC_POST_ROUTES = [
     '/api/invite/redeem',
     '/api/invite/redeem-offline',
+    // A leave statement carries the leaving key's own signature (POST /api/push-tokens/leave/:publicKey).
+    '/api/push-tokens/leave/:publicKey',
     // /api/local/* and /api/admin/* are password-gated separately.
 ];
 

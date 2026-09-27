@@ -12,6 +12,7 @@ import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
+import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -2752,6 +2753,20 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
 }
 
 /**
+ * After a take-over, the listings the whole pull `posts` shows the node no longer has go (utils/posts-replace.ts says
+ * which: its rule, and why).
+ */
+async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
+    const held = await txn.getAllAsync<HeldListing>('SELECT id, COALESCE(updated_at, created_at) AS at, audience_scope AS scope FROM posts');
+    const gone = postsTheNodeNoLongerHas(posts, held);
+    for (let i = 0; i < gone.length; i += 500) {
+        const batch = gone.slice(i, i + 500);
+        await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
+    }
+    if (gone.length > 0) console.log(`[DB] applyDelta: ${gone.length} listing(s) the node no longer has left this phone`);
+}
+
+/**
  * A pushed listing change, inside applyDelta's lock and transaction. An upsert goes through the same row writer as
  * the delta sync, unless the cached copy is strictly newer (a late push must not move a listing backwards). A
  * removal cancels the row exactly as the node's own removal does (status 'cancelled', active 0, and an event's
@@ -2787,7 +2802,12 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
     return { authorPubkey: post?.author_pubkey ?? null, type: post?.type ?? null, openDeal: !!deal, conversation: !!conversation };
 }
 
-export async function applyDelta(delta: any, expectedDbName?: string) {
+/**
+ * Writes a sync's delta to this node's cache. True once it has committed; false when it wrote nothing because the
+ * member switched community while the delta was on its way (the guard below): a caller that must know the write
+ * landed (a take-over's replace, services/pillar-sync.ts) reads this, since that case does not throw.
+ */
+export async function applyDelta(delta: any, expectedDbName?: string): Promise<boolean> {
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -2799,7 +2819,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
         // Skip the write; the newly-active node syncs cleanly on its own cycle.
         if (expectedDbName && currentDbName !== expectedDbName) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
-            return;
+            return false;
         }
         // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,
         // and awaiting it between SQLite statements would hold the write transaction open on
@@ -2907,6 +2927,9 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             for (const p of delta.posts) {
                 await writeSyncedPost(txn, p);
             }
+            // After a take-over, the whole pull replaces what the phone holds (services/pillar-sync.ts). Before the
+            // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
+            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
         }
 
         // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they
@@ -3060,6 +3083,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
+        return true;
     } finally {
         releaseSyncLock();
     }

@@ -39,7 +39,7 @@ import { pushRegisteredCommunities, registerPushTokenWithCommunity } from '../pu
 import { signOutOfThisPhone } from '../account-leaves-phone';
 import { draftIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid } from './server-signature-check';
-import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
 const BELLINGEN = 'https://bellingen.beanpool.org';
@@ -130,7 +130,10 @@ describe('registering the push token', () => {
         const [req] = sent;
         expect(req.url).toBe(`${MULLUM}/api/push-tokens`);
         expect(req.method).toBe('POST');
-        expect(JSON.parse(req.body)).toEqual({ publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android' });
+        // With the phone's push stamp, written down before the request went out (push-leave.ts orders a leave after it).
+        expect(JSON.parse(req.body)).toEqual({
+            publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android', registeredAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)),
+        });
         expect(await signedBy(req, kim)).toBe(true);
         expect(JSON.parse(req.recordAtSend ?? 'null')).toEqual([MULLUM]);
         expect(record()).toEqual([MULLUM]);
@@ -226,8 +229,11 @@ describe('an account leaving the phone, after it registered', () => {
 
         const deletes = sent.filter((s) => s.method === 'DELETE');
         expect(deletes.map((s) => s.url).sort()).toEqual([BYRON, MULLUM].map((c) => `${c}/api/push-tokens`));
+        const registeredAt = sent.filter((s) => s.method === 'POST').map((s) => JSON.parse(s.body).registeredAt as number);
         for (const req of deletes) {
-            expect(JSON.parse(req.body)).toEqual({ publicKey: kim.publicKey, token: PHONE_TOKEN });
+            // With the leave's stamp, later than every registration the phone made.
+            expect(JSON.parse(req.body)).toEqual({ publicKey: kim.publicKey, token: PHONE_TOKEN, leftAt: expect.any(Number) });
+            expect(JSON.parse(req.body).leftAt).toBeGreaterThan(Math.max(...registeredAt));
             expect(await signedBy(req, kim)).toBe(true);
         }
         // Bellingen was never sent the token, on the way in or on the way out.

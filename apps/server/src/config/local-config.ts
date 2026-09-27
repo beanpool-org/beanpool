@@ -93,8 +93,13 @@ export interface LocalConfig {
     nodeRole?: 'primary' | 'backup' | null;
     // Set by a take-over: the next boot runs the ledger conservation audit once, then clears it.
     promotionAuditPending?: boolean;
-    // What that audit found, so Settings can show it after the restart.
-    lastPromotionAudit?: { at: string; ok: boolean; sumBalances: number; drift: number; strandedEscrows: number } | null;
+    // What that audit found, so Settings can show it after the restart. `copy`: whether the ledger is the main server's as
+    // this server last copied it (accounts holding Beans and what they hold, here and in that copy; null when this server
+    // has no record of one). `ok` needs both.
+    lastPromotionAudit?: {
+        at: string; ok: boolean; sumBalances: number; drift: number; strandedEscrows: number;
+        copy?: { match: boolean; here: { accounts: number; holdings: number }; lastCopy: { accounts: number; holdings: number; generatedAt: string | null } | null };
+    } | null;
     // The recovery code a take-over was opened with. While recoveryCode is still that code, Settings says "Your
     // recovery code was used. Make a new one" (a used code is a spent code, §5.3). Making a new code ends it.
     recoveryCodeUsed?: { codeId: number; at: string } | null;

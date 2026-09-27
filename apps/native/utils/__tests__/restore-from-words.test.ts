@@ -39,7 +39,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { restoreFromWords, ReplaceNotSaved, saveRestoredAccount } from '../restore-account';
 import { UnsafeNodeAddressError } from '../node-url';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
-import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import {
+    KNOCKS_STORE_KEY, PUSH_LEAVE_STATEMENTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY,
+} from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
@@ -353,7 +355,13 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(sent).toHaveLength(2);
         expect(restored).toMatchObject({ publicKey: restoredPub, callsign: 'Marty' });
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub });
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        const { [PUSH_LEAVE_STATEMENTS_STORE_KEY]: leaves, [PUSH_STAMP_STORE_KEY]: stamp, ...rest } = asyncStorage();
+        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        // Kept on purpose: the old account's leave statements for the communities it couldn't reach, presented later
+        // until each confirms (push-leave.ts), and the phone's push stamp.
+        const asked = sent.map((s) => new URL(s.url).origin).sort();
+        expect(JSON.parse(leaves).map((l: any) => [l.community, l.publicKey, l.token, l.leftAt]).sort())
+            .toEqual(asked.map((c) => [c, phone.publicKey, PHONE_TOKEN, Number(stamp)]));
     });
 
     it('Cancel: no community is asked, and the token, the saved communities and their copies stay', async () => {

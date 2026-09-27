@@ -551,10 +551,15 @@ async function main() {
         const directory = (await get('/api/members', gen)).body;
         assert(Array.isArray(directory) && directory.length > 0 && directory.every((m: any) => !('isVisitor' in m)), 'the member directory never carries it');
         // A standby that never had Zed (the insert path), holds Yan as a member (an older copy: the update path), and
-        // holds Dee as the visitor she was before she joined.
+        // holds Dee as the visitor she was before she joined. Never having had Zed, it never had genesis's gift to him
+        // either: genesis still holds that Bean. Without it the planted ledger sums to a Bean less than the main server's,
+        // which no standby can reach, and the conservation guard refuses the copy (the importer before the ledger fix
+        // hid it, by keeping a zero account the members import made for Zed over the main server's).
         const OLD = '2000-01-01T00:00:00.000Z';
         db.prepare('DELETE FROM members WHERE public_key = ?').run(zed.pubKeyHex);
+        const zedHeld = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(zed.pubKeyHex) as { balance: number }).balance;
         db.prepare('DELETE FROM accounts WHERE public_key = ?').run(zed.pubKeyHex);
+        db.prepare("UPDATE accounts SET balance = balance + ? WHERE public_key = 'genesis'").run(zedHeld);
         db.prepare('UPDATE members SET is_visitor = 0, updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
         db.prepare('UPDATE members SET is_visitor = 1, invited_by = NULL, invite_code = NULL, updated_at = ? WHERE public_key = ?').run(OLD, dee.pubKeyHex);
         se.setNodeRole('backup');

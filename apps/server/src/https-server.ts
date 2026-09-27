@@ -778,7 +778,9 @@ function isSignatureBypassed(p: string): boolean {
         p.startsWith('/api/pricing-guide/admin/') ||
         p.startsWith('/api/pricing-guide/reports') ||
         p === '/api/invite/redeem' ||
-        p === '/api/invite/redeem-offline';
+        p === '/api/invite/redeem-offline' ||
+        // A leave statement carries the leaving key's own signature (routes/community.ts); it is presented unsigned.
+        p.startsWith('/api/push-tokens/leave/');
 }
 
 /**

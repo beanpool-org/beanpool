@@ -396,6 +396,7 @@ import {
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
     writeSyncAuditLog,
+    type ImportOptions,
     type ImportResult,
     type SyncAuditEntry,
 } from './engine/sync.js';
@@ -546,6 +547,11 @@ export interface NodeConfig {
      * in the take-over envelope, so a promoted standby accepts the same names.
      */
     ownerAddresses?: string[];
+    /**
+     * Every BeanPool registrar name this key has held, current and former (engine/registrar-names.ts). No registrar
+     * answer deletes an entry. Carried in the take-over envelope beside `ownerAddresses`.
+     */
+    registrarNames?: RegistrarName[];
 }
 
 const wsClients: Set<any> = new Set();
@@ -575,7 +581,11 @@ export function initStateEngine(): void {
     applyRecordedRecoveryTombstones();
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
-    seedPulseCurated();
+    // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
+    // (G9): one of its own, made under its own key at every boot, met the main server's on the callsign index and refused
+    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. The Daily
+    // Pulse skips a standby the same way (daily-pulse.ts scheduleDailyPulse). A take-over's restart runs as a main server.
+    if (getNodeRole() !== 'backup') seedPulseCurated();
     
     // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');
@@ -786,13 +796,21 @@ function backfillSearchKeywords(): void {
         console.warn('[FTS] Cleanup failed:', e);
     }
 
-    // Step 2: Update keywords on all posts
-    const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
+    // Step 2: Update keywords on all posts, leaving every listing's updated_at as it was. The keywords are this server's
+    // own search index: no read sends them and no copy carries them. So posts_touch_updated_at is set aside for these
+    // writes, inside the transaction, and put back exactly as the database held it. Once it stamped each listing
+    // with this boot's time. That lifted every one to the top of the board (ordered by updated_at). On a standby, whose
+    // import writes no keywords, it hit every listing copied since its last boot, and the import then skipped the main
+    // server's older changes to them. After a take-over, phones kept what the old server wrote in its last minute.
     db.transaction(() => {
+        const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string } | undefined)?.sql;
+        if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
+        const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
         for (const p of posts) {
             const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general');
             update.run(keywords, p.id);
         }
+        if (touch) db.exec(touch);
     })();
 
     // Step 3: Recreate FTS5 table and triggers (now all data has keywords)
@@ -1048,6 +1066,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
@@ -1202,6 +1221,19 @@ function visitorMayReceive(event: any): boolean {
     return conv?.type === 'dm';
 }
 
+/**
+ * Whether a trade's listing is visible to visitors on the board (audience_scope is NULL or 'public',
+ * matching the board query in beanpool-engine posts.ts). Sockets off the member feed are rung for
+ * a trade's step only when its listing is on their board.
+ */
+function tradeListingVisibleToVisitors(event: any): boolean {
+    const postId = event?.postId ?? event?.transaction?.postId ?? event?.transaction?.post_id ?? event?.post?.id ?? event?.id;
+    if (!postId || typeof postId !== 'string') return false;
+    const row = db.prepare('SELECT audience_scope FROM posts WHERE id = ?').get(postId) as { audience_scope: string | null } | undefined;
+    if (!row) return false;
+    return row.audience_scope === null || row.audience_scope === 'public';
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1249,8 +1281,14 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
     }
     // A trade's step: the sockets below that are neither its parties nor on the member feed or the open feed get the
-    // listings' doorbell for it (BroadcastOptions above).
-    if (recipients && opts?.othersGetDoorbell) ringListingDoorbell('post_updated');
+    // listings' doorbell for it (BroadcastOptions above), only when that trade's listing is visible to visitors.
+    const tradeListingPublic = (recipients && opts?.othersGetDoorbell) ? tradeListingVisibleToVisitors(event) : false;
+    // The ring also moves the listings' version; a step on a listing visitors can't see still changes the board members
+    // read (a dispute ruling has no other bump), or their revalidation gets a 304 and keeps the old state (#1265 4116859583).
+    if (recipients && opts?.othersGetDoorbell) {
+        if (tradeListingPublic) ringListingDoorbell('post_updated');
+        else bumpPostsVersion();
+    }
     const msg = JSON.stringify(event);
     // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
     // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a
@@ -1288,7 +1326,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
-            if (!ws._memberFeed && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            if (!ws._memberFeed && !ws._openFeed && (!tradeListingPublic || !PUBLIC_WS_EVENTS.has(event?.type))) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (recipients && ws._visitor) {
             if (!(forVisitor ??= visitorMayReceive(event))) continue;
@@ -2262,6 +2300,10 @@ export function conservingTransaction<T>(fn: () => T): T {
  * credit whose debit just rolled back — so `null` says to read the `COMMONS_POOL` row, which is the pot as
  * a restart would load it and the only half that matches the accounts being reloaded.
  *
+ * A standby's import uses it too, with `null`, once a replicated copy has committed (engine/sync.ts): the rows
+ * are the main server's ledger, both halves, and memory is set from nothing else. Halting there is the same
+ * call as here: a standby whose memory kept its previous copy would flush that pot over the new one.
+ *
  * The row read is inside the try on purpose: if SQLite is failing badly enough to break it, that is the
  * halt case below, not an exception thrown out of a catch block.
  */
@@ -2806,9 +2848,12 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
+        const had = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(treasuryPubkey, memberPubkey);
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
                     VALUES (?, ?, 'keeper', ?, ?)
                     ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing`).run(treasuryPubkey, memberPubkey, grantedBy, backing);
+        // Only a new binding changes who reads its listings as they are; a new pledge alone changes nobody's.
+        if (!had) engine.keepersChanged(db, treasuryPubkey);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
@@ -2872,8 +2917,9 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
  * Otherwise: the part of the pledge the deficit still needs stays locked, the rest is released (Rule 3).
  */
 function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
-    db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+    const unbound = db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .run(treasuryPubkey, memberPubkey);
+    if (unbound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
     const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
         .get(memberPubkey) as any;
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
@@ -3411,6 +3457,7 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
         INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
         VALUES (?, ?, 'keeper', ?, ?)
     `).run(enterprisePubkey, memberPubkey, grantedBy, pledged);
+    engine.keepersChanged(db, enterprisePubkey);
     if (!hadBinding) {
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     }
@@ -4871,6 +4918,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
 
         const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
         db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
+        if (ops.length > 0) engine.keepersChanged(db, enterprisePubkey);
 
         for (const op of ops) {
             const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;
@@ -5590,8 +5638,8 @@ function getSyncCb() {
         getPrivateKey,
         publicKeyToProtobuf,
         publicKeyFromProtobuf,
-        loadLedgerState: (accs: any[]) => ledger.loadState(accs),
-        setCommonsBalance: (bal: number) => setCommonsBalance(bal),
+        // After a replicated copy commits: accounts and the pot from the rows, or halt (resyncMemoryToRows).
+        resyncLedgerToRows: () => resyncMemoryToRows(null, 'a replicated copy that landed'),
         broadcast
     };
 }
@@ -5606,11 +5654,12 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies the main server no longer holds.
+ * which recovery copies the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
+ * copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
  */
-export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } = {}): Promise<ImportResult> {
+export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote)
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
@@ -6583,8 +6632,9 @@ export function createTreasury(
             .run(pubKeyHex, trimmed, now, avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.leadKeeperPubkey) {
-            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
+            const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
+            if (bound.changes > 0) engine.keepersChanged(db, pubKeyHex);
             raiseCreatorOperatorSwitch(opts.leadKeeperPubkey, pubKeyHex);
         }
         db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
@@ -6993,7 +7043,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             leftEnterprises.push({ enterprise: treasury_pubkey, promoted });
         }
         // An enterprise's own key deleting it: its keepers' bindings go with it.
-        try { db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey); } catch { }
+        try {
+            if (db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey).changes > 0) engine.keepersChanged(db, publicKey);
+        } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
@@ -7115,6 +7167,7 @@ export function getNodeConfig(): NodeConfig {
         lastDirectoryPush: config.lastDirectoryPush,
         publicAddress: config.publicAddress ?? null,
         ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
+        ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
     };
 
     if (migrated) {
@@ -7131,6 +7184,7 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');
+    if ('registrarNames' in update) noteTakeoverInputsChanged('registrar names changed');
     return next;
 }
 
@@ -7267,11 +7321,12 @@ export function createProject(proposerPubkey: string, title: string, description
             ledger.initializeGenesisAccount(project.id);
             ledger.setDecayExempt(project.id);
             if (proposerPubkey) {
-                db.prepare(`
+                const bound = db.prepare(`
                     INSERT OR IGNORE INTO treasury_operators (
                         treasury_pubkey, member_pubkey, role, granted_at, granted_by
                     ) VALUES (?, ?, 'lead', ?, 'creator')
                 `).run(project.id, proposerPubkey, now);
+                if (bound.changes > 0) engine.keepersChanged(db, project.id);
                 raiseCreatorOperatorSwitch(proposerPubkey, project.id);
             }
         }
@@ -7334,7 +7389,7 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     projects.splice(index, 1);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-        db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
+        if (db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId).changes > 0) engine.keepersChanged(db, projectId);
         db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);
@@ -7650,17 +7705,73 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
  * Adds this key's row for the device token and touches no other key's row. Every community a phone registered with
  * holds its token, so a take-over by token would let any of them remove a member's rows and silence their recovery
  * alerts (#1184 review 4110460184). The phone removes a leaving account's rows itself, signed by that account's key
- * (apps/native utils/account-leaves-phone.ts). The key is the request's signer (routes/community.ts).
+ * (apps/native utils/account-leaves-phone.ts), with a DELETE or a leave statement ({@link applyPushLeave}). The key is
+ * the request's signer (routes/community.ts).
+ *
+ * `registeredAt` is the phone's own stamp for this registration (null from an app before leave statements), ordered
+ * only against the same phone's leave statements, never against this node's clock. A registration stamped no later than
+ * a leave statement for the same key and token applied here in the last day is refused ('left'): the phone sent it
+ * before the account left and it arrived after the statement. A registration never replaces the row's stamp with an
+ * earlier one, or with none (an older app on the phone), so one delivered late can't bring the row back within reach of
+ * a statement made after a later one.
  */
-export function registerPushToken(publicKey: string, token: string, platform: string = 'ios'): boolean {
+export function registerPushToken(
+    publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null,
+): PushRegistration {
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)`).run(publicKey, token, platform);
-        console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
-        return true;
+        return db.transaction((): PushRegistration => {
+            if (registeredAt !== null) {
+                const left = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ? AND left_at >= ?
+                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, token, registeredAt, PUSH_LEAVE_REMEMBERED);
+                if (left) {
+                    console.log(`[Push] A registration for ${publicKey.slice(0, 8)} from before its leave statement arrived late; not registered`);
+                    return 'left';
+                }
+            }
+            db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (public_key, token) DO UPDATE SET
+                    platform = excluded.platform, created_at = excluded.created_at,
+                    registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
+                WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
+                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
+            console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
+            return 'registered';
+        })();
     } catch (e) {
         console.error('[Push] Failed to register token:', e);
-        return false;
+        return 'failed';
     }
+}
+
+export type PushRegistration = 'registered' | 'left' | 'failed';
+
+/** How long a leave statement applied here refuses a registration the phone sent before it (SQLite date modifier). */
+const PUSH_LEAVE_REMEMBERED = '-1 day';
+
+/**
+ * Clears the leaves applied more than a day ago, on every leave applied. Keys with no row here can add leaves too, so
+ * this reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
+ */
+export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+
+/**
+ * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
+ * key's row for `token` goes when its stamp is not later than `leftAt`, or it has none (an app from before leave
+ * statements). A row stamped later is a registration made after the leave, on purpose (the same account back on the
+ * same phone), and stays. No other key's row and no other token's is touched. For a day, a registration of the same key
+ * and token stamped no later than `leftAt` is refused ({@link registerPushToken}). Returns how many rows went (0 or 1).
+ */
+export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
+    return db.transaction((): number => {
+        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED);
+        const removed = db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)`)
+            .run(publicKey, token, leftAt).changes;
+        db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)
+            ON CONFLICT (public_key, token) DO UPDATE SET
+                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, token, leftAt);
+        console.log(`[Push] Leave statement for ${publicKey.slice(0, 8)}: ${removed} registration(s) removed`);
+        return removed;
+    })();
 }
 
 export function removePushToken(publicKey: string, token?: string): boolean {
@@ -7820,9 +7931,12 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
     const was = isOnHoliday(publicKey);
     db.transaction(() => {
         db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
-        // Holiday is on no listing and no column of the member's row, so the switch moves the row's updated_at itself:
-        // a phone's delta sync takes their listings off its Market by it, and puts them back (engine posts.ts getPosts).
-        if (was !== enabled) db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
+        // Holiday is on no listing and no column of the member's row, so a real switch stamps the row's
+        // board_standing_changed_at itself: a phone's delta sync takes their listings off its Market by it, and puts
+        // them back (engine posts.ts getPosts). And updated_at with it, so delta sync takes the stamp to a standby.
+        if (was !== enabled) {
+            db.prepare(`UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
+        }
     })();
     broadcast({ type: 'profile_updated', publicKey });
     // Their listings leave the board, or come back.

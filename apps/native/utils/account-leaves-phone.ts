@@ -7,11 +7,14 @@
  *   text can carry names and message previews. Left registered, the phone goes on getting them after Sign Out and after
  *   "Replace this phone's account". So each community on the record is asked to drop the token, signed by the account's
  *   own key while the phone still holds it, and no other: a community this phone never sent the token to is never sent
- *   it. Best effort, with a short timeout: a node that can't be reached never holds up or fails the member's Sign Out or
- *   Replace, and keeps the old account's row until that key is used there again or the account is closed or re-keyed
- *   there. The node never drops a key's row because another key registered the same token: any community that holds
- *   the token could then silence a member's recovery alerts (server state-engine.ts `registerPushToken`, #1184 review
- *   4110460184).
+ *   it. First nothing more registers for the key, and a registration already on its way is waited for
+ *   (push-registrations.ts `stopRegistering`), so it can't land after the leave. Then the phone signs a leave statement
+ *   for each of those communities and writes it down (push-leave.ts), and sends each the signed DELETE with the leave's
+ *   stamp, with a short timeout: a node that can't be reached never holds up or fails the member's Sign Out or Replace.
+ *   A community that took the DELETE has its statement crossed off; every other one is presented later, when the app
+ *   starts or comes back, until it is confirmed. The node never drops a key's row because another key registered the
+ *   same token: any community that holds the token could then silence a member's recovery alerts (server
+ *   state-engine.ts `registerPushToken`, #1184 review 4110460184).
  * - Communities. The list the community switcher shows (`beanpool_saved_nodes`) and each one's cached copy
  *   (community-cache.ts).
  *
@@ -22,13 +25,15 @@
  * phone, takes nothing (#1183's rule).
  *
  * Every caller runs this BEFORE the key, the push record, the community address or the guest markers are wiped: the
- * unregister needs the key and the record, and the cached copies need the addresses.
+ * unregister and the statements need the key and the record, and the cached copies need the addresses. The statements
+ * themselves outlive the wipe.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
-import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities } from './push-registrations';
+import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
+import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 
 /** How long the whole unregister may take. The requests go out together, so this is also each one's limit. */
@@ -78,14 +83,18 @@ export async function communitiesOnThisPhone(storage: Storage = AsyncStorage): P
     return [...new Set(urls)];
 }
 
-/** One community's DELETE /api/push-tokens, signed by the leaving key. Never throws; gives up at the deadline. */
-async function unregisterAt(community: string, body: string, account: LeavingAccount, timeoutMs: number): Promise<void> {
+/**
+ * One community's DELETE /api/push-tokens, signed by the leaving key. Never throws; gives up at the deadline. True when
+ * the community answered that it took it, in the route's own words (`{ success: true }`): any other 2xx, a captive
+ * portal's sign-in page on a plain-http address say, never reached it.
+ */
+async function unregisterAt(community: string, body: string, account: LeavingAccount, timeoutMs: number): Promise<boolean> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<void>((resolve) => {
+    const deadline = new Promise<boolean>((resolve) => {
         timer = setTimeout(() => {
             controller.abort();
-            resolve();
+            resolve(false);
         }, timeoutMs);
     });
     const attempt = (async () => {
@@ -93,38 +102,53 @@ async function unregisterAt(community: string, body: string, account: LeavingAcc
             const url = `${community}${PUSH_TOKENS_PATH}`;
             const headers = await buildSignedHeaders('DELETE', url, body, account.privateKey, account.publicKey);
             const res = await fetch(url, { method: 'DELETE', headers, body, signal: controller.signal });
-            if (!res.ok) console.warn(`[Push] ${community} did not unregister this phone (${res.status})`);
+            const answer: { success?: unknown } | undefined = await res.json().catch(() => undefined);
+            const took = res.ok && answer?.success === true;
+            if (!took) console.warn(`[Push] ${community} did not unregister this phone (${res.status})`);
+            return took;
         } catch (e) {
             console.warn(`[Push] Could not reach ${community} to unregister this phone:`, e instanceof Error ? e.message : e);
+            return false;
         }
     })();
     try {
-        await Promise.race([attempt, deadline]);
+        return await Promise.race([attempt, deadline]);
     } finally {
         clearTimeout(timer);
     }
 }
 
 /**
- * Unregister this phone's push token for `account` on each of `communities`, signed by that account's key. Nothing to
- * do when the phone never got a token (a simulator, Expo Go, permission refused). All together, and done within
- * `timeoutMs` whatever the nodes do. Never throws.
+ * Unregister this phone's push token for `account` on each of `communities`, signed by that account's key. First no
+ * registration goes out for the key any more and one on its way is waited for; then the leave statements are written
+ * down (push-leave.ts `recordLeave`), then each community is sent the signed DELETE with the leave's stamp, and its
+ * statement is crossed off if it took it. Nothing to do when the phone never got a token (a simulator, Expo Go,
+ * permission refused). All together, and done within `timeoutMs` of the DELETEs going out whatever the nodes do (a
+ * registration already on its way first finishes within its own timeout). Never throws.
  */
 export async function unregisterPushToken(
     account: LeavingAccount,
     communities: readonly string[],
     timeoutMs: number = UNREGISTER_TIMEOUT_MS,
 ): Promise<void> {
+    if (!account.publicKey) return;
+    await stopRegistering(account.publicKey);
     let token: string | null = null;
     try {
         token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);
     } catch (e) {
         console.warn('[Push] Could not read this phone\'s push token to unregister it', e);
     }
-    if (!token || !account.privateKey || !account.publicKey) return;
+    if (!token || !account.privateKey) return;
 
-    const body = JSON.stringify({ publicKey: account.publicKey, token });
-    await Promise.all(communities.map((community) => unregisterAt(community, body, account, timeoutMs)));
+    const statements = await recordLeave(account, token, communities);
+    const leftAt = statements[0]?.leftAt;
+    const body = JSON.stringify({ publicKey: account.publicKey, token, ...(leftAt ? { leftAt } : {}) });
+    await Promise.all(communities.map(async (community) => {
+        if (!await unregisterAt(community, body, account, timeoutMs)) return;
+        const statement = statements.find((s) => s.community === communityAddress(community));
+        if (statement) await confirmLeave(statement);
+    }));
     // The next account fetches the token again when it registers (push-notifications.ts).
     try {
         await SecureStore.deleteItemAsync(PUSH_TOKEN_STORE_KEY);
@@ -139,6 +163,10 @@ export async function unregisterPushToken(
  */
 export async function stopPushAlerts(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
     if (!account) return;
+    // Before the record is read, so that no registration can put another community on it afterwards.
+    if (account.publicKey) await stopRegistering(account.publicKey);
+    // And after the account's sign-in has taken back its old statements, whose communities that puts back on it.
+    await leaveStatementsSettled();
     await unregisterPushToken(account, await pushRegisteredCommunities(storage));
     await forgetPushRegistrations(storage);
 }

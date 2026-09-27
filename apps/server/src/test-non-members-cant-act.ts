@@ -606,7 +606,8 @@ async function main(): Promise<void> {
     // key with a body that would reach its data.
     /** The routes the middleware never sees (https-server.ts isSignatureBypassed): each has its own authorization. */
     const outside = (p: string) => ['/api/local/', '/api/admin/', '/api/manager/', '/api/pair/', '/api/pricing-guide/admin/', '/api/pricing-guide/reports']
-        .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline';
+        .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline'
+        || p.startsWith('/api/push-tokens/leave/');
     const app = getKoaApp() as any;
     const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
         .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();

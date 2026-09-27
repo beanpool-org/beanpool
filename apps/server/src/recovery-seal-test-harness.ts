@@ -342,6 +342,15 @@ export async function child(mode: string): Promise<void> {
         };
         stage(h.gen1, 1, h.at?.[0] ?? '2026-06-01T00:00:00.000Z');
         stage(h.gen2, 2, h.at?.[1] ?? '2026-06-02T00:00:00.000Z');
+        if (standby && process.env.SEAL_NO_REPLICA_FORMAT !== '1') {
+            // A copy the current importer made (engine/sync.ts REPLICA_FORMAT), so the pulls these suites drive are the
+            // seal's own: the path of any later update that doesn't raise the format. Without the record (the release that
+            // introduced it) the standby's first pull is the format's one force-resync, before the seal's whole copy:
+            // test-recovery-seal 13 runs that one with SEAL_NO_REPLICA_FORMAT.
+            const { REPLICA_FORMAT } = await import('./engine/sync.js');
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', ?)`).run(String(REPLICA_FORMAT));
+            db.pragma('wal_checkpoint(TRUNCATE)');
+        }
         if (!standby) {
             // Left in the WAL, as the last writes before the upgrade.
             for (const i of h.deleted) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(h.owners[i]);

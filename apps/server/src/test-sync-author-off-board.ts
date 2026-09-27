@@ -18,7 +18,8 @@
  * on the board the same member reads.
  *   - a member goes on holiday (POST /api/members/holiday) → gone at the next delta; holiday off → back;
  *   - an enterprise is paused → gone; resumed → back;
- *   - an enterprise starts winding up → gone; the wind-up is cancelled → back;
+ *   - an enterprise starts winding up → gone; the wind-up is cancelled → back; it winds up again and is finalised →
+ *     its keeper's next delta carries what he held as it was (a closed poll), now as paused, since he keeps it no more;
  *   - a fresh install's first (full) sync while a member is on holiday leaves their listings off;
  *   - the delta after a holiday switch carries that member's listings and no one else's (it stays a delta);
  *   - reading a listing by id for the cache (utils/db.ts getPost, `?id=…&sync=true`) doesn't put it back;
@@ -33,8 +34,21 @@
  *     is; the member withdraws the request: the next delta carries the listing as paused, but the heal in the same sync
  *     puts it back, and the delta after that takes it off their phone; the same after a cold start;
  *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
- *   - on 2,000 members, 20,000 posts and 5,000 ended deals, no statement of the delta read walks every post, and the
- *     heal's deals are looked up by the reader's own indexes (EXPLAIN QUERY PLAN).
+ *   - a change of who sees an off-board author's listings as they are, which moves no listing and no standing: a keeper
+ *     steps down from a paused enterprise (over HTTP) → their next delta carries its listings as paused; an admin binds a
+ *     keeper to it → theirs carries them as they are; and unbinds them → as paused again. Binding a keeper it already
+ *     has stamps nothing. A keeper bound to and unbound from an enterprise on the board: no delta carries its listings,
+ *     signed or not, so none tells anyone its keepers changed. A request crowded out by another's approval (which the
+ *     node refuses an off-board author, so it moves the listing's own row on the board) → the requester's next delta
+ *     carries the listing as paused once the enterprise pauses; a request the paused enterprise declines, which moves
+ *     nothing → the same, and the delta after that and after a cold start (a declined deal's heal writes nothing);
+ *   - what the board never shows moves no author's listings into a delta: a member's bio edit, a contact change, a
+ *     moderator's mute (three removals on the global profile) and its lift each move members.updated_at, and neither
+ *     the member's next delta nor an unsigned delta from just before the change carries their listings. A delta
+ *     carries an author for members.board_standing_changed_at, which only a change of standing moves; a re-key keeps it;
+ *   - on 2,000 members, 20,000 posts and 5,000 ended deals, no statement of the delta read walks every post, the
+ *     authors whose standing changed are found by idx_members_board_standing_changed_at, and the heal's deals are
+ *     looked up by the reader's own indexes (EXPLAIN QUERY PLAN).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-author-off-board.ts
  */
@@ -77,6 +91,13 @@ async function getText(path: string, id: Id): Promise<string> {
 
 async function getJson(path: string, id: Id): Promise<any[]> {
     return JSON.parse(await getText(path, id));
+}
+
+/** A read nobody signs: what any stranger gets. */
+async function getUnsigned(path: string): Promise<any[]> {
+    const res = await fetch(`${BASE}${path}`);
+    if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
+    return res.json() as Promise<any[]>;
 }
 
 async function postJson(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
@@ -243,11 +264,22 @@ async function main() {
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { moveMemberKeyRows } = await import('./engine/key-move.js');
+    const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+
+    // Time passing, for a member: their row last changed at `at`, whatever changed it. On a node from before
+    // members.board_standing_changed_at there is only updated_at.
+    const hasStanding = (db.prepare('PRAGMA table_info(members)').all() as Array<{ name: string }>).some(c => c.name === 'board_standing_changed_at');
+    const age = (key: string, at: string) => {
+        db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(at, key);
+        if (hasStanding) db.prepare('UPDATE members SET board_standing_changed_at = ? WHERE public_key = ? AND board_standing_changed_at IS NOT NULL').run(at, key);
+    };
 
     const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
     const seed = (callsign: string): Id => {
@@ -303,6 +335,11 @@ async function main() {
     const { publicKey: mill } = se.createTreasury('WindingMill', AVATAR, 100);
     keep(mill, pat, 'lead');
     const millPosts = [offer(mill, 'Flour'), need(mill, 'Sacks')];
+    // A poll the mill ran and closed: on the board (a closed poll is) for as long as the mill is.
+    const millPoll = se.createPost('poll', 'community', 'Mill open day?', '', 0, 'fixed', mill,
+        undefined, undefined, undefined, false, undefined, false,
+        { pollOptions: [{ id: 'a', text: 'Saturday' }, { id: 'b', text: 'Sunday' }] })!.id;
+    se.closePoll(millPoll, mill);
 
     // Bob asks for the farm's eggs before the farm pauses: his deal stays open while it is paused.
     se.transfer('genesis', bob.pubKeyHex, 50, 'seed', 'direct', true);
@@ -328,7 +365,7 @@ async function main() {
     db.prepare('UPDATE posts SET updated_at = ?').run(anHourAgo);
     db.prepare('UPDATE members SET updated_at = ?').run(anHourAgo);
 
-    const ours = new Set<string>([...hanaPosts, ollyPost, farmOffer, farmNeed, ...millPosts, bread, shift]);
+    const ours = new Set<string>([...hanaPosts, ollyPost, farmOffer, farmNeed, ...millPosts, millPoll, bread, shift]);
     const mine = (ids: Iterable<string>) => new Set([...ids].filter(id => ours.has(id)));
     const same = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
     const show = (s: Set<string>) => [...s].map(id => (db.prepare('SELECT title FROM posts WHERE id = ?').get(id) as any)?.title).sort().join(', ');
@@ -373,8 +410,8 @@ async function main() {
     const seedSwap = hanaPosts[3];
     await ollyPhone.sync();
     // Time passes: Hana's switch is older than any cursor from here on (each phone asks from its last sync less
-    // five minutes), so no delta below carries her listings for her own row's sake.
-    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), hana.pubKeyHex);
+    // five minutes), so no delta below carries her listings for her own standing's sake.
+    age(hana.pubKeyHex, new Date(Date.now() - 600_000).toISOString());
     for (const [who, p] of [['Carol, from a shared link', phone], ['Olly, Going, from "Your events"', ollyPhone]] as const) {
         // Nothing changes for a while: the first idle delta differs from the holiday one, the next is the same page,
         // and the phone's gate skips it. A member with nothing to send again gets the same page every time.
@@ -506,7 +543,7 @@ async function main() {
     // cursor: his phone still holds the eggs as they were while his deal was open. The sync after it applies his
     // deals too (the withdrawn one changed them), and the phone's heal writes the eggs back as active after the posts.
     // The delta after that takes them off: its page differs (a new resentAt) and his deals don't, so no heal.
-    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), farm);
+    age(farm, new Date(Date.now() - 600_000).toISOString());
     const withdrawn = se.cancelPostRequest(bobDeal.id, bob.pubKeyHex);
     assert(withdrawn?.status === 'cancelled', `Bob withdraws his request for the eggs (status ${withdrawn?.status})`);
     const firstAfter = await bobPhone.sync();
@@ -563,7 +600,277 @@ async function main() {
     assert(!afterClaim.has(shift), 'the completed Bake shift is off the phone\'s Market');
     assert(phone.rows.get(shift)?.status === 'completed', 'the delta carried it as completed');
 
+    console.log('\n── an enterprise wound up ──');
+    // The mill winds up again. Pat keeps it, so his phone holds its listings as they are while it does: the closed poll
+    // is on his Market. Finalising cancels its open listings (their own rows move) and ends his keeping, but the closed
+    // poll's row stays as it was: only the mill's standing tells his phone to take it off.
+    se.initiateWindUp(mill, pat.pubKeyHex);
+    await phone.sync();
+    const patMill = new Phone(pat);
+    await patMill.sync();
+    assert(patMill.market().has(millPoll), 'Pat, who keeps the winding-up mill, holds its closed poll as it is');
+    // Time passes: the week of grace (finalise reads when it started), and the start is older than Pat's cursor.
+    db.prepare('UPDATE members SET wind_up_initiated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 8 * 86_400_000).toISOString(), mill);
+    age(mill, new Date(Date.now() - 600_000).toISOString());
+    const wound = se.finaliseWindUp(mill, pat.pubKeyHex);
+    assert(wound?.status === 'completed', `the mill's wind-up is finalised (status ${wound?.status})`);
+    const patDelta = await patMill.sync();
+    assert(patDelta.some(r => r.id === millPoll && r.status === 'paused'),
+        'Pat\'s next delta carries the closed poll, as paused: he keeps the mill no more');
+    const patAfter = await matchesBoard(patMill, 'the mill wound up, Pat\'s next delta');
+    assert(![...millPosts, millPoll].some(id => patAfter.has(id)), 'none of the mill\'s listings is on Pat\'s Market');
+    await phone.sync();
+    await matchesBoard(phone, 'the mill wound up, next delta');
+
+    console.log('\n── who sees an off-board author\'s listings as they are changes ──');
+    // This test syncs far faster than a phone does: each member's gateway allowance (120 a minute) starts afresh here
+    // and at each section below.
+    resetGatewayRateLimit();
+    // Nothing on the listings or the author's standing moves when a keeper comes or goes, or when a request ends
+    // declined: only the reader's own exemption changes. Ada signs in as an admin with her key, as Mo does below.
+    const ada = seed('AdminAda');
+    se.grantNodeRole(ada.pubKeyHex, 'admin', 'owner:password');
+    const adaChal = createAdminChallenge();
+    const adaSolved = verifyAndSolveChallenge({
+        challengeId: adaChal.challengeId, memberPubkey: ada.pubKeyHex,
+        signature: crypto.sign(null, Buffer.from(adaChal.challenge, 'utf-8'), ada.privateKey).toString('hex'),
+    });
+    const adaSession = adaSolved.ok ? consumeHandshakeToken(adaSolved.handshakeToken!).sessionId : undefined;
+    assert(!!adaSession, 'Ada signs in as an admin with her key');
+    const asAdmin = async (method: 'POST' | 'DELETE', path: string, payload?: unknown): Promise<number> => {
+        const res = await fetch(`${BASE}${path}`, {
+            method, headers: { 'Content-Type': 'application/json', 'x-admin-session': adaSession ?? '' },
+            ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        });
+        await res.text();
+        return res.status;
+    };
+    const kim = seed('KeeperKim');       // keeps the shut orchard, then steps down
+    const nell = seed('NewKeeperNell');  // an admin binds her to the shut orchard, then unbinds her
+    const rita = seed('RequesterRita');  // her requests to the apiary end crowded out and declined
+    const ron = seed('RivalRon');        // his request is approved over Rita's
+    const { publicKey: shut } = se.createTreasury('ShutOrchard', AVATAR, 100);
+    keep(shut, pat, 'lead');
+    keep(shut, kim);
+    const shutPosts = [offer(shut, 'Apples'), need(shut, 'Pruning')];
+    const { publicKey: open } = se.createTreasury('OpenOrchard', AVATAR, 100);
+    keep(open, pat, 'lead');
+    const pears = offer(open, 'Pears');
+    const { publicKey: apiary } = se.createTreasury('Apiary', AVATAR, 100);
+    keep(apiary, pat, 'lead');
+    const honey = offer(apiary, 'Honey');
+    const jam = offer(apiary, 'Jam', false);
+    for (const id of [...shutPosts, pears, honey, jam]) ours.add(id);
+    offer(rita.pubKeyHex, 'Mending');
+    offer(ron.pubKeyHex, 'Tutoring');
+    se.transfer('genesis', rita.pubKeyHex, 50, 'seed', 'direct', true);
+    se.transfer('genesis', ron.pubKeyHex, 50, 'seed', 'direct', true);
+    const ritaHoney = se.requestPost(honey, rita.pubKeyHex);
+    const ritaJam = se.requestPost(jam, rita.pubKeyHex);
+    const ronJam = se.requestPost(jam, ron.pubKeyHex);
+    assert(!!ritaHoney?.id && !!ritaJam?.id && !!ronJam?.id, 'Rita asks for the apiary\'s Honey and its one-off Jam; Ron asks for the Jam too');
+    se.pauseEnterprise(shut, 'admin');
+    const ritaPhone = new Phone(rita);
+    await ritaPhone.sync();
+    await phone.sync();
+    // Time passes: the orchards and their listings are older than any cursor from here on.
+    const tenMinutesAgo = new Date(Date.now() - 600_000).toISOString();
+    for (const key of [shut, open]) age(key, tenMinutesAgo);
+    db.prepare('UPDATE posts SET updated_at = ? WHERE author_pubkey IN (?, ?)').run(tenMinutesAgo, shut, open);
+    const standing = (key: string) =>
+        (db.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(key) as { s: string | null } | undefined)?.s ?? null;
+    const carries = (delta: Array<{ id: string }>, ids: string[]) => ids.filter(id => delta.some(r => r.id === id));
+    const deltaFrom = (since: string) => getUnsigned(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`);
+
+    // Keepers. Kim keeps the paused orchard, so her phone holds its listings as they are; Nell's, as paused.
+    const kimPhone = new Phone(kim);
+    await kimPhone.sync();
+    const nellPhone = new Phone(nell);
+    await nellPhone.sync();
+    assert(shutPosts.every(id => kimPhone.rows.get(id)?.status === 'active') && shutPosts.every(id => nellPhone.rows.get(id)?.status === 'paused'),
+        `Kim, who keeps the paused orchard, holds its listings as they are; Nell holds them as paused (${shutPosts.map(id => `${kimPhone.rows.get(id)?.status}/${nellPhone.rows.get(id)?.status}`).join(', ')})`);
+    const kimIdle = await kimPhone.sync();
+    assert(carries(kimIdle, shutPosts).length === 0, 'nothing has changed since: Kim\'s next delta doesn\'t carry them');
+
+    // Kim steps down (over HTTP, signed). The orchard's listings and its standing are as they were.
+    const kimSince = new Date(Date.now() - 1).toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    const steppedDown = await postJson(`/api/treasury/${shut}/keepers/step-down`, {}, kim);
+    assert(steppedDown.status === 200, `Kim steps down from the paused orchard over HTTP (got ${steppedDown.status})`);
+    const kimDelta = await kimPhone.sync();
+    assert(shutPosts.every(id => kimDelta.some(r => r.id === id && r.status === 'paused')),
+        `Kim's next delta carries the orchard's listings, as paused: she keeps it no more (${kimDelta.filter(r => r.authorPublicKey === shut).map(r => `${r.title} ${r.status}`).join(', ') || 'none of them'})`);
+    const kimAfter = await matchesBoard(kimPhone, 'Kim stepped down from the paused orchard, next delta');
+    assert(shutPosts.every(id => !kimAfter.has(id)), 'the orchard\'s listings are off Kim\'s Market');
+    const strangerSaw = await deltaFrom(kimSince);
+    assert(shutPosts.every(id => strangerSaw.some(r => r.id === id && r.status === 'paused')) && !strangerSaw.some(r => r.authorPublicKey === shut && r.status !== 'paused'),
+        'an unsigned delta from just before gets them too, as paused only');
+
+    // An admin binds Nell (over HTTP): her next delta carries them as they are.
+    const bound = await asAdmin('POST', `/api/local/admin/treasury/${shut}/operators`, { pubkey: nell.pubKeyHex });
+    assert(bound === 200, `an admin binds Nell to the paused orchard over HTTP (got ${bound})`);
+    const nellDelta = await nellPhone.sync();
+    assert(shutPosts.every(id => nellDelta.some(r => r.id === id && r.status === 'active')) && shutPosts.every(id => nellPhone.rows.get(id)?.status === 'active'),
+        `Nell's next delta carries the orchard's listings as they are, as a keeper's phone holds them (${nellDelta.filter(r => r.authorPublicKey === shut).map(r => `${r.title} ${r.status}`).join(', ') || 'none of them'})`);
+    // Binding her again with a pledge changes no one's view: nothing is stamped.
+    const nellStanding = standing(shut);
+    se.adminAssignTreasuryOperator(shut, nell.pubKeyHex, 'admin', 0);
+    assert(standing(shut) === nellStanding, `binding a keeper the orchard already has stamps nothing (${nellStanding} → ${standing(shut)})`);
+
+    // And unbinds her (over HTTP): her next delta takes them off again.
+    const unbound = await asAdmin('DELETE', `/api/local/admin/treasury/${shut}/operators/${nell.pubKeyHex}`);
+    assert(unbound === 200, `an admin unbinds Nell over HTTP (got ${unbound})`);
+    const nellAgain = await nellPhone.sync();
+    assert(shutPosts.every(id => nellAgain.some(r => r.id === id && r.status === 'paused')),
+        `Nell's next delta carries them again, as paused (${nellAgain.filter(r => r.authorPublicKey === shut).map(r => `${r.title} ${r.status}`).join(', ') || 'none of them'})`);
+    const nellAfter = await matchesBoard(nellPhone, 'Nell unbound from the paused orchard, next delta');
+    assert(shutPosts.every(id => !nellAfter.has(id)), 'the orchard\'s listings are off Nell\'s Market');
+
+    // The other ways a keeper comes or goes move it the same way (in process): the lead approves a request to keep it
+    // (at once while it has one keeper), and the community removes its lead by a Decision.
+    const { createDecision, executeDecision } = await import('./decisions-engine.js');
+    for (const [what, change] of [
+        ['Pat approves Kim\'s request to keep the paused orchard again', () =>
+            se.approveKeeperRequest(se.requestToJoinEnterprise(shut, kim.pubKeyHex, 0).id, pat.pubKeyHex).applied],
+        ['a Decision removes Pat as its lead', () => executeDecision(createDecision({
+            authorPubkey: ada.pubKeyHex, title: 'Remove the orchard\'s lead', description: 'exemptions', touches: 'member',
+            effect: 'remove_lead_keeper', subject: pat.pubKeyHex, params: { enterprisePubkey: shut, leadPubkey: pat.pubKeyHex },
+        }).id).success],
+    ] as const) {
+        const before = standing(shut);
+        await new Promise(r => setTimeout(r, 5));
+        const done = change();
+        const after = standing(shut);
+        assert(done === true && !!after && !!before && after > before, `${what}: the orchard's standing moves (${before} → ${after})`);
+    }
+
+    // A keeper change on an enterprise on the board: everyone gets its listings as they are anyway, so no delta carries
+    // them, and none tells anyone the keepers changed.
+    await phone.sync();
+    await kimPhone.sync();
+    for (const [what, change] of [
+        ['an admin binds Kim to the open orchard', () => asAdmin('POST', `/api/local/admin/treasury/${open}/operators`, { pubkey: kim.pubKeyHex })],
+        ['an admin unbinds her', () => asAdmin('DELETE', `/api/local/admin/treasury/${open}/operators/${kim.pubKeyHex}`)],
+    ] as const) {
+        const before = standing(open);
+        const since = new Date(Date.now() - 1).toISOString();
+        await new Promise(r => setTimeout(r, 5));
+        const status = await change();
+        assert(status === 200 && standing(open) === before, `${what} (over HTTP): its standing doesn't move (${before} → ${standing(open)})`);
+        const carolDelta = await phone.sync();
+        const kimOpen = await kimPhone.sync();
+        const unsigned = await deltaFrom(since);
+        assert(!carolDelta.some(r => r.id === pears) && !kimOpen.some(r => r.id === pears) && !unsigned.some(r => r.id === pears),
+            `${what}: neither Carol's next delta, nor Kim's, nor an unsigned delta from just before carries its Pears`);
+    }
+    await matchesBoard(phone, 'keepers changed on both orchards, Carol\'s next delta');
+
+    // Deals. A member on holiday has no open deal (holiday is refused with one), and approving or accepting is refused
+    // for an author off the board; declining isn't. The apiary's lead approves Ron's request for its one-off Jam (over
+    // HTTP), which crowds Rita's out; then the apiary is paused, with Rita's request for its Honey still open.
+    const approved = await postJson(`/api/treasury/${apiary}/approve`, { transactionId: ronJam.id }, pat);
+    const ritaJamNow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ritaJam.id) as { status: string } | undefined;
+    assert(approved.status === 200 && ritaJamNow?.status === 'rejected',
+        `Pat approves Ron's request for the Jam over HTTP; Rita's is crowded out (got ${approved.status}, Rita's ${ritaJamNow?.status})`);
+    se.pauseEnterprise(apiary, 'admin');
+    const ritaCrowded = await ritaPhone.sync();
+    assert(ritaCrowded.some(r => r.id === jam && r.status === 'paused') && ritaPhone.rows.get(jam)?.status === 'paused',
+        `crowded out: Rita's next delta carries the Jam, as paused (${ritaPhone.rows.get(jam)?.status})`);
+    assert(ritaPhone.rows.get(honey)?.status === 'active', `her request for the Honey is still open, so she holds it as it is (${ritaPhone.rows.get(honey)?.status})`);
+    await phone.sync();
+    // Time passes: the pause and the apiary's listings are older than Rita's cursor.
+    age(apiary, tenMinutesAgo);
+    db.prepare('UPDATE posts SET updated_at = ? WHERE author_pubkey = ?').run(tenMinutesAgo, apiary);
+    const ritaIdle = await ritaPhone.sync();
+    assert(!ritaIdle.some(r => r.id === honey), 'nothing about the Honey has changed since: Rita\'s next delta doesn\'t carry it');
+
+    // Pat declines Rita's request for the Honey (over HTTP). That writes no listing row, and the apiary's standing is as it was.
+    const declined = await postJson(`/api/treasury/${apiary}/reject`, { transactionId: ritaHoney.id }, pat);
+    assert(declined.status === 200 && declined.body?.transaction?.status === 'rejected', `Pat declines Rita's request for the Honey over HTTP (got ${declined.status})`);
+    const ritaDeclined = await ritaPhone.sync();
+    assert(ritaDeclined.some(r => r.id === honey && r.status === 'paused' && typeof r.resentAt === 'string'),
+        `declined: Rita's next delta carries the Honey again, as paused (${ritaDeclined.filter(r => r.id === honey).map(r => r.status).join(', ') || 'not carried'})`);
+    const ritaAfter = await matchesBoard(ritaPhone, 'Rita crowded out and declined, next delta');
+    assert(!ritaAfter.has(honey) && !ritaAfter.has(jam), 'neither the Honey nor the Jam is on Rita\'s Market');
+    await ritaPhone.sync();
+    await matchesBoard(ritaPhone, 'Rita crowded out and declined, the delta after that');
+    // A cold start applies her deals again; a declined deal's heal writes nothing.
+    ritaPhone.coldStart();
+    await ritaPhone.sync();
+    await matchesBoard(ritaPhone, 'Rita\'s phone after a cold start');
+    await phone.sync();
+    await matchesBoard(phone, 'the apiary paused, Carol\'s next delta');
+
+    console.log('\n── what the board doesn\'t show moves nobody\'s listings ──');
+    resetGatewayRateLimit();
+    // Olly's row changes in ways no listing shows and the board doesn't read. Each moves members.updated_at (delta sync
+    // takes it to a standby by that), and none may put his listings in a delta: any delta reader, unsigned included,
+    // would learn when it happened.
+    const mo = seed('ModeratorMo');
+    se.grantNodeRole(mo.pubKeyHex, 'moderator', 'owner:password');
+    const chal = createAdminChallenge();
+    const solved = verifyAndSolveChallenge({
+        challengeId: chal.challengeId, memberPubkey: mo.pubKeyHex,
+        signature: crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), mo.privateKey).toString('hex'),
+    });
+    const modSession = solved.ok ? consumeHandshakeToken(solved.handshakeToken!).sessionId : undefined;
+    assert(!!modSession, 'Mo signs in as a moderator with his key');
+    const moderator = async (path: string): Promise<number> => {
+        const res = await fetch(`${BASE}${path}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-session': modSession ?? '' }, body: JSON.stringify({ reasonCategory: 'spam' }),
+        });
+        await res.text();
+        return res.status;
+    };
+    const ollyRow = () => db.prepare('SELECT * FROM members WHERE public_key = ?').get(olly.pubKeyHex) as Record<string, any>;
+    const spam = [1, 2, 3].map(i => offer(olly.pubKeyHex, `Olly spam ${i}`));
+    const changes: Array<[string, () => Promise<boolean>]> = [
+        ['Olly edits his bio', async () => (await postJson('/api/profile/update', { bio: 'Splits and stacks it too' }, olly)).status === 200],
+        ['Olly changes his contact', async () =>
+            (await postJson('/api/profile/update', { contact: { value: 'olly@example.test', visibility: 'community' } }, olly)).status === 200],
+        ['a moderator\'s third removal mutes Olly', async () => {
+            // Auto-mute runs on the global profile only.
+            process.env.NODE_PROFILE = 'global';
+            try {
+                for (const id of spam) {
+                    const reported = await postJson('/api/reports', { reporterPubkey: carol.pubKeyHex, targetPubkey: olly.pubKeyHex, targetPostId: id, reason: 'spam' }, carol);
+                    if (reported.status !== 200 || await moderator(`/api/local/admin/posts/${encodeURIComponent(id)}/delete`) !== 200) return false;
+                }
+            } finally {
+                delete process.env.NODE_PROFILE;
+            }
+            return Date.parse(ollyRow().moderation_muted_until ?? '') > Date.now();
+        }],
+        ['a moderator lifts his mute', async () => await moderator(`/api/local/admin/members/${olly.pubKeyHex}/unmute`) === 200],
+    ];
+    for (const [what, change] of changes) {
+        await phone.sync();
+        const before = ollyRow();
+        const since = new Date(Date.now() - 1).toISOString();
+        await new Promise(r => setTimeout(r, 5));
+        const done = await change();
+        const after = ollyRow();
+        assert(done && after.updated_at > before.updated_at && after.board_standing_changed_at === before.board_standing_changed_at,
+            `${what} (over HTTP): his updated_at moves (${before.updated_at} → ${after.updated_at}), his standing doesn't (${after.board_standing_changed_at})`);
+        const delta = await phone.sync();
+        assert(!delta.some(r => r.id === ollyPost), `${what}: Carol's next delta doesn't carry his listing (${delta.filter(r => r.authorPublicKey === olly.pubKeyHex).map(r => r.title).join(', ') || 'none of his'})`);
+        const open = await getUnsigned(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`);
+        assert(!open.some(r => r.id === ollyPost), `${what}: nor does an unsigned delta from just before it`);
+        await matchesBoard(phone, `${what}, next delta`);
+    }
+
+    // A re-key moves the member's row to the new key, the stamp with it (engine/key-move.ts).
+    // (Every column, so a node without it fails the check rather than the run.)
+    const standingOf = (key: string) => (db.prepare('SELECT * FROM members WHERE public_key = ?').get(key) as any)?.board_standing_changed_at;
+    const hanaStanding = standingOf(hana.pubKeyHex);
+    const hanaAgain = keypair();
+    moveMemberKeyRows(hana.pubKeyHex, hanaAgain.pubKeyHex, new Date().toISOString(), { keepStamps: false });
+    const moved = standingOf(hanaAgain.pubKeyHex);
+    assert(!!hanaStanding && moved === hanaStanding,
+        `a re-key moves Hana's standing with her to her new key (${hanaStanding} → ${moved})`);
+
     console.log('\n── the delta read searches its indexes, on a node\'s worth of posts ──');
+    resetGatewayRateLimit();
     // 2,000 members, 20,000 posts and 5,000 ended deals that nothing has changed in a year, and twenty members on holiday
     // with an upcoming event each. Like a node, no sqlite_stat1: nothing runs ANALYZE.
     // Walking idx_posts_updated_at for the ORDER BY read every post and tested the OR on each (5 ms a delta here).
@@ -622,6 +929,12 @@ async function main() {
     const walks = plans.filter(p => p.plan.some(d => /^SCAN p\b/.test(d)));
     assert(plans.length >= 2 && walks.length === 0,
         `no statement of the delta read walks every post (${walks.map(w => `${w.sql}…: ${w.plan.join('; ')}`).join(' | ') || `${plans.length} statements, none has SCAN p`})`);
+    // Its author half finds the authors whose standing changed since the cursor on their own index: never every member,
+    // and never members.updated_at, which a bio or a mute moves.
+    const deltaPlan = deltaRead ? (db.prepare(`EXPLAIN QUERY PLAN ${deltaRead.sql}`).all(...deltaRead.params) as Array<{ detail: string }>).map(p => p.detail) : [];
+    assert(deltaPlan.some(d => /^SEARCH members USING COVERING INDEX idx_members_board_standing_changed_at \(board_standing_changed_at>\?\)/.test(d))
+        && !deltaPlan.some(d => /^SCAN members\b|idx_members_updated_at/.test(d)),
+        `the delta read finds the authors whose standing changed by idx_members_board_standing_changed_at alone (${deltaPlan.join('; ')})`);
     // The heal's deals are the reader's own, found by the buyer and seller indexes: never every ended deal on the node
     // (folded into one query, the planner picks idx_marketplace_transactions_status_completed).
     const dealsRead = ran.find(r => /FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer/.test(r.sql));

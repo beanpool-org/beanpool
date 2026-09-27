@@ -95,9 +95,26 @@ CREATE TABLE IF NOT EXISTS members (
     -- cleared: the row stays 'pruned', and nothing brings such an account back (no reinstate vote, no admin path;
     -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
     deleted_by_owner_at TEXT,
+    -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), or an
+    -- enterprise's `paused` or off-board `status` (members_touch_board_standing); and, while an enterprise is off the
+    -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
+    -- engine and not a trigger, so a standby's import never stamps it). A phone's Market delta carries a
+    -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader little the board doesn't:
+    -- unlike updated_at, a bio, contact or mute never moves it. The one thing beyond the board: when an off-board
+    -- enterprise's keepers changed (not who). That is public where /api/treasuries is (it lists keepers with grantedAt);
+    -- on a node with the visitors' view and enterprises on, /api/treasuries is members-only and an unsigned delta still
+    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). NULL: never changed since
+    -- this column came in.
+    -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
+    -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
+    -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
+    board_standing_changed_at TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
+-- The Market delta's author half (engine posts.ts getPosts): the authors whose standing changed since the cursor, from
+-- the index alone.
+CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
@@ -490,8 +507,24 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     token TEXT NOT NULL,
     platform TEXT DEFAULT 'ios',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
+    -- an app before leave statements. A leave statement removes the row only when this is not later than its own.
+    registered_at INTEGER,
     PRIMARY KEY (public_key, token)
 );
+
+-- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
+-- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused.
+CREATE TABLE IF NOT EXISTS push_token_leaves (
+    public_key TEXT NOT NULL,
+    token TEXT NOT NULL,
+    left_at INTEGER NOT NULL,
+    applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, token)
+);
+-- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
+-- leaves: a search on this, never a scan of the table per leave.
+CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
@@ -891,6 +924,24 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+-- members.board_standing_changed_at, for the two columns the board reads off an author's row (engine posts.ts
+-- ENTERPRISE_ON_BOARD_SQL): moved when `paused` goes on or off, or `status` goes into, out of or between 'winding_up'
+-- and 'completed' (a pause, a resume and the automatic pause; a wind-up, its cancel and its finalise, where the keepers'
+-- own view of the listings ends; a re-key that ends one), whichever writer does it. Nothing else a status says
+-- (suspended, pruned, funded…) changes what the board shows. The WHEN guard skips a write that sets the column itself:
+-- a standby taking its main server's. Holiday isn't on this row: setHolidayMode stamps it. Both columns are in
+-- members_touch_updated_at's list, so updated_at moves in the same statement.
+CREATE TRIGGER IF NOT EXISTS members_touch_board_standing
+AFTER UPDATE OF paused, status ON members
+FOR EACH ROW
+WHEN NEW.board_standing_changed_at IS OLD.board_standing_changed_at
+    AND ((OLD.paused IS NULL OR OLD.paused = 0) IS NOT (NEW.paused IS NULL OR NEW.paused = 0)
+        OR (CASE WHEN OLD.status IN ('winding_up', 'completed') THEN OLD.status END)
+            IS NOT (CASE WHEN NEW.status IN ('winding_up', 'completed') THEN NEW.status END))
+BEGIN
+    UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS post_photos_touch_updated_at

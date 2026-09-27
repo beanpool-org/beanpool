@@ -97,18 +97,21 @@ async function votesHere(): Promise<boolean> {
 
 /**
  * Two signed requests to the node, plus the admin queue for owners and admins. No Decisions where the node has none
- * (the worldwide community): nothing there is open to a vote, so there is no vote to show.
+ * (the worldwide community): nothing there is open to a vote, so there is no vote to show, and the 🛡️ words don't
+ * say an emergency suspension is being voted on.
  */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
-    const [decisions, yourGroups, admin] = await Promise.all([
+    const [decisions, yourGroups, admin, votesOn] = await Promise.all([
         settle(votesHere().then(votes => (votes ? getDecisions('open') : null))),
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
+        // A second read of the phone's own copy: no request.
+        votesHere(),
     ]);
     return {
         decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
-        admin: admin?.admin ?? null,
+        admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,
         communityName: admin?.communityName ?? null,
     };
 }

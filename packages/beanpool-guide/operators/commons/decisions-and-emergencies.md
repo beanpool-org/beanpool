@@ -21,6 +21,8 @@ What a passed Decision can do by itself: suspend or restore a member, freeze or 
 
 **Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far.
 
+On the global community there are no community votes. There the list shows emergency suspensions, each with the day it lifts and no vote totals, under the heading **Suspensions**. A suspension made while votes were switched off stays one nobody votes on, and shows that way, even if votes are switched back on before it ends.
+
 ![The Proposals and Decisions screen in Settings](images/economy-decisions.webp)
 
 ## Emergency suspension
@@ -33,6 +35,8 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The suspended person gets no notification. Tell them yourself.
 
+On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account.
+
 ## Removing someone
 
 Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons.
@@ -43,6 +47,7 @@ Only the community removes a member, by a Decision. When it passes, the person i
 
 - Halting a removal in its grace period restores the person.
 - Halting a "keep the suspension" vote lifts the suspension.
+- A suspension nobody votes on (on the global community) has **Lift suspension now** instead. It asks for a reason the same way, and lifts the suspension straight away.
 - **Owner only**: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short.
 
 Halting overrides the community. Use it for a mistake or an abuse of the process, not because you dislike the result, and say why.

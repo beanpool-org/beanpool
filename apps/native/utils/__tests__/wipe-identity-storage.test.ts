@@ -41,6 +41,8 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_pending_abuse_reports: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             // Where the phone sent its push token for this key (push-registrations.ts). The next account starts its own.
             beanpool_push_registered_at: JSON.stringify(['https://test.beanpool.org']),
+            // A registration of this key still due there (push-registrations.ts): never tried for another key.
+            beanpool_push_registrations_due: JSON.stringify([{ publicKey: 'ab'.repeat(32), community: 'https://test.beanpool.org', refusals: 0, retryAt: 0 }]),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',
@@ -49,6 +51,10 @@ describe('wipeIdentityScopedStorage', () => {
             [`beanpool_blocked_users:${'ab'.repeat(32)}`]: JSON.stringify(['cd'.repeat(32)]),
             [`beanpool_pending_abuse_reports:${'ab'.repeat(32)}`]: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             beanpool_blocked_users_moved: '1',
+            // The leave statements not yet confirmed (push-leave.ts), and the phone's push stamp: they are how the
+            // leaving account's alerts stop where the phone had no connection as it left, so they outlive the wipe.
+            beanpool_push_leave_statements: JSON.stringify([{ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32) }]),
+            beanpool_push_stamp: '1759000000000',
         });
 
         await wipeIdentityScopedStorage(storage);
@@ -57,6 +63,8 @@ describe('wipeIdentityScopedStorage', () => {
             `beanpool_blocked_users:${'ab'.repeat(32)}`,
             'beanpool_blocked_users_moved',
             `beanpool_pending_abuse_reports:${'ab'.repeat(32)}`,
+            'beanpool_push_leave_statements',
+            'beanpool_push_stamp',
             'beanpool_saved_nodes',
             `bp_tier_${'cd'.repeat(32)}`,
             'some_ui_pref',

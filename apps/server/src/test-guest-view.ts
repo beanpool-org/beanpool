@@ -993,6 +993,7 @@ async function main(): Promise<void> {
             if (tarpit) tarpitsAnsweredAtOnce++;
             return realSetTimeout(fn, tarpit ? 0 : ms, ...args);
         }) as unknown as typeof setTimeout;
+        try {
         // Bob brought Alice in and vouches for her as an elder, and they are friends: her trust profile names him, with his face.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         db.prepare('INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?), (?, ?)').run(alice.pk, bob.pk, bob.pk, alice.pk);
@@ -1288,7 +1289,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/reports/:id/status',
             'GET /api/profile/:publicKey', 'POST /api/profile/unvouch', 'POST /api/profile/update', 'POST /api/profile/vouch',
             'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
-            'DELETE /api/push-tokens', 'POST /api/push-tokens',
+            'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
             'POST /api/recovery/collect/github/poll', 'POST /api/recovery/collect/github/start', 'POST /api/recovery/collect/hub',
@@ -1404,8 +1405,10 @@ async function main(): Promise<void> {
             assert(clubEventNow() === clubEventBefore, `the group event it convenes has not moved (${clubEventNow()})`);
             assert(!db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(pruned.pk), 'and it made no invite');
         }
-        beforeCall = earlier;
-        globalThis.setTimeout = realSetTimeout;
+        } finally {
+            beforeCall = earlier;
+            globalThis.setTimeout = realSetTimeout;
+        }
     }
 
     /**

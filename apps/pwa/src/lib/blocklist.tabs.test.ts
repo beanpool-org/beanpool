@@ -148,6 +148,7 @@ describe('two tabs, and a node that takes time to answer', () => {
 
     beforeEach(() => {
         localStorage.clear();
+        delete (window as Window & { __bp_moved?: Set<string> }).__bp_moved;
         node.list = [];
         node.max = 500;
         node.hop = 50;

@@ -112,6 +112,11 @@ let current: string[] = [];
 let reading: Promise<string[]> | null = null;
 let readAgain = false;
 
+/** Keys moved up to the node by this build, so another tab moving concurrently does not mistake their removal for an unblock. */
+const movedByTabs: Set<string> = typeof window !== 'undefined'
+    ? ((window as Window & { __bp_moved?: Set<string> }).__bp_moved ??= new Set<string>())
+    : new Set<string>();
+
 /** This page's copy of the list from before, read from the browser only when there is none yet. For showing. */
 function readLocalList(): string[] | null {
     return localList !== undefined ? localList : readStoredList();
@@ -277,11 +282,26 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
             console.warn(`[blocklist] ${fresh.length - going.length} of the blocks this browser kept don't fit in your list on the community; they stay here, still blocked, until there is room.`);
         }
         if (going.length === 0) break;
-        try {
-            now = await addToBlockList(going);
-        } catch (e) {
-            console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
-            break;
+        const still = new Set(readStoredList() ?? []);
+        const send = going.filter(k => still.has(k));
+        if (send.length > 0) {
+            try {
+                now = await addToBlockList(send);
+            } catch (e) {
+                console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
+                break;
+            }
+        }
+        const after = new Set(readStoredList() ?? []);
+        for (const k of going) {
+            if (!after.has(k) && !movedByTabs.has(k) && heldBy(now).has(k)) {
+                try {
+                    now = await removeFromBlockList(k);
+                    leaving.delete(k);
+                } catch (e) {
+                    console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+                }
+            }
         }
         const taken = heldBy(now);
         for (const k of going) {
@@ -292,10 +312,19 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
                 console.warn('[blocklist] Some of the blocks this browser kept did not go up to the community; they stay here and are tried again', e);
                 break moving;
             }
+            if (!readStoredList()?.includes(k) && !movedByTabs.has(k) && heldBy(now).has(k)) {
+                try {
+                    now = await removeFromBlockList(k);
+                    leaving.delete(k);
+                } catch (e) {
+                    console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+                }
+            }
         }
     }
     const held = heldBy(now);
     const moved = keepStoredList(k => held.has(k));
+    moved.forEach(k => movedByTabs.add(k));
     return { res: now, moved };
 }
 
@@ -440,6 +469,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     keepStoredList(k => k === targetPubkey || held.has(k));
     takeNodeAnswer(res, asked);
     leaving.delete(targetPubkey);
+    movedByTabs.delete(targetPubkey);
     emit();
     return true;
 }
@@ -460,6 +490,7 @@ export async function clearBlocklist(): Promise<void> {
     keepStoredList(k => shown.has(k) || held.has(k));
     takeNodeAnswer(res, asked);
     for (const k of shown) leaving.delete(k);
+    movedByTabs.clear();
     emit();
 }
 
@@ -549,4 +580,5 @@ export function resetBlocklistForTests(): void {
     reading = null;
     readAgain = false;
     pendingReports = [];
+    movedByTabs.clear();
 }

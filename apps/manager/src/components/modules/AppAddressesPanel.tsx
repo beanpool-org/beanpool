@@ -115,11 +115,17 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     ].filter((h) => !known.has(h.address));
     const pageHost = audienceOf(activeNode.url);
     // This page reaching the community at an address is the owner's own doing, as an owner's app is: offered, unless
-    // it is another community's name or one the directory lists.
-    const pageHeld = heldBack.find((h) => h.address === pageHost);
-    const suggestPage = !named && offerable(pageHost) && !isBeanPoolName(pageHost) && !offered.some((u) => u.address === pageHost)
-        && (!pageHeld || pageHeld.reason === 'few-members');
-    const shownHeld = suggestPage ? heldBack.filter((h) => h.address !== pageHost) : heldBack;
+    // it is another community's name or one the directory lists. One the directory lists is shown as the node shows an
+    // owner's app's (engine/address-offers.ts): named, with the warning, and confirmed only once ticked.
+    const pageCounts = !named && offerable(pageHost) && !isBeanPoolName(pageHost);
+    const pageHeld = pageCounts ? heldBack.find((h) => h.address === pageHost) : undefined;
+    const suggestPage = pageCounts && !offered.some((u) => u.address === pageHost)
+        && (!pageHeld || (pageHeld.reason === 'few-members' && !pageHeld.directory));
+    const shownHeld = heldBack.flatMap((h) => {
+        if (h !== pageHeld) return [h];
+        if (suggestPage) return [];
+        return [h.reason === 'few-members' && h.directory ? { ...h, reason: 'directory' as const } : h];
+    });
     const fewMembers = shownHeld.filter((h) => h.reason === 'few-members');
     const membersToOffer = report.membersToOffer ?? 3;
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);

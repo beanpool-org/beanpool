@@ -203,6 +203,24 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
 
+    it("this page's own address the directory lists as a community's: never one tap; named, warned, and confirmed only once ticked", async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [{ address: 'community.example.org', today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'few-members', directory: { name: 'Riverbend Commons' } }],
+        }));
+        render(<AppAddressesPanel activeNode={node} />);
+        const held = await screen.findByTestId('app-address-held');
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+        expect(screen.queryByTestId('app-address-few')).toBeNull();
+        expect(held.getAttribute('data-reason')).toBe('directory');
+        expect(held.textContent).toMatch(/The BeanPool directory lists community\.example\.org as the address of Riverbend Commons\. Confirm it only if that is this community/);
+        const confirm = screen.getByText('Yes, community.example.org is its address') as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        fireEvent.click(confirm);
+        expect(nodeClient.confirmAppAddress).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByLabelText('Riverbend Commons is this community'));
+        expect(confirm.disabled).toBe(false);
+    });
+
     it("never offers this machine's or a LAN address", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report());
         render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);

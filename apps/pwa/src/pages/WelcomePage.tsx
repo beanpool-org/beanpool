@@ -21,11 +21,11 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
     recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityInfo, isRouteMissing, type CommunityInfo,
+    getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { WebRestore } from '../components/WebRestore';
-import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, probeMembership, providerLabel } from '../lib/web-join';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -500,6 +500,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         // Redeemed already, so the final step has nothing left to redeem.
         setInviteRedeemed(true);
         setShowAvatarSetup(true);
+        setRenaming(false);
         setError(null);
     }
 
@@ -529,6 +530,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
+    // Back from the photo step to the name, on the account the invite made (backFromPhotoStep), and the names offered
+    // there for one another member has.
+    const [renaming, setRenaming] = useState(false);
+    const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
 
     // QR Device Pairing states (#89)
     const [showQrPairing, setShowQrPairing] = useState(false);
@@ -820,19 +825,82 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     }
 
     /**
-     * "← Back" on the photo step after an invite (the open door has none). By then the key is saved here and the node
-     * has taken the invite for it. Going back leaves both as they are and forgets them on this page only, so the name
-     * form's next try makes a new key, which the saved one refuses (IdentityHeldError: "This browser already has an
-     * account"). What Back should do instead is an open product call (board card invite-back-step): this is its seam.
+     * "← Back" on the photo step after an invite (the open door has none): back to the name, on the same account (Marty,
+     * card invite-back-step, 2026-09-27). By then the node has taken the invite for this key and it is saved here, so the
+     * name step that follows (handleRename) makes no key and redeems nothing: a new name is this member's own profile
+     * update, and the photo and the 12 words come after it as before. The invite form is not shown again: its next try
+     * made a second key, which the saved one refused ("This browser already has an account"), and that screen's Open
+     * went into the app past the photo and the 12 words.
      */
     function backFromPhotoStep() {
-        setPendingIdentity(null);
-        setPendingAvatar(null);
-        // Going back discards the identity, so what was redeemed
-        // no longer describes what is about to be submitted.
-        setInviteRedeemed(false);
-        setShowAvatarSetup(false);
+        if (!pendingIdentity) return;
+        setCallsign(pendingIdentity.callsign);
+        setNameSuggestions([]);
         setError(null);
+        setRenaming(true);
+    }
+
+    /**
+     * The name step again, for the account this join made (backFromPhotoStep). The same name carries on with nothing
+     * sent. A new one goes to the node as this member's profile update, signed with this key rather than whichever is
+     * saved here (the same one, unless another tab has changed that since): the node refuses a name another member has
+     * (409), and never counts the member's own as taken (engine/members.ts updateProfile, isCallsignAvailable with this
+     * key excluded). The suggestions for a taken name are asked with this key excluded the same way.
+     *
+     * A name here is held to what a join keeps (MAX_JOIN_CALLSIGN), and so are its suggestions: the app registers the
+     * member as soon as it opens (App.tsx registerMember), /api/community/register cuts the name to 20, and the node
+     * renames the member to the cut name, one they never saw, or a numbered variant of it (deciding pass 4113903999).
+     */
+    async function handleRename() {
+        const member = pendingIdentity;
+        if (!member || loading) return;
+        const name = callsign.trim();
+        if (name.length < 2) {
+            setError('Callsign must be at least 2 characters.');
+            return;
+        }
+        if (name.length > MAX_JOIN_CALLSIGN) {
+            setError(`Callsign must be at most ${MAX_JOIN_CALLSIGN} characters.`);
+            return;
+        }
+        setError(null);
+        setNameSuggestions([]);
+        if (name === member.callsign) {
+            setRenaming(false);
+            return;
+        }
+        setLoading(true);
+        try {
+            let res: Response;
+            try {
+                res = await signedFetchWithKey('POST', '/api/profile/update', { publicKey: member.publicKey, callsign: name }, member.privateKey, member.publicKey);
+            } catch {
+                setError("Can't reach the community right now. Try again in a minute.");
+                return;
+            }
+            const body = await res.json().catch(() => ({}));
+            if (res.status === 409) {
+                const suggestions = await suggestCallsigns(name, member.publicKey, 3, MAX_JOIN_CALLSIGN);
+                setNameSuggestions(suggestions);
+                setError(suggestions.length
+                    ? `"${name}" is already taken in this community. Pick one of the suggestions below, or choose another name.`
+                    : `"${name}" is already taken in this community. Choose another name.`);
+                return;
+            }
+            if (!res.ok) {
+                const said = typeof body?.message === 'string' && body.message ? body.message : typeof body?.error === 'string' ? body.error : null;
+                setError(res.status < 500 && said ? said : "Can't reach the community right now. Try again in a minute.");
+                return;
+            }
+            const renamed = typeof body?.profile?.callsign === 'string' && body.profile.callsign ? body.profile.callsign : name;
+            // This browser's copy of the account says the same. The node has the new name whatever happens here.
+            await updateCallsign(renamed, member.publicKey).catch((e) => console.warn('[Welcome] the new name not saved in this browser:', e));
+            setPendingIdentity({ ...member, callsign: renamed });
+            setCallsign(renamed);
+            setRenaming(false);
+        } finally {
+            setLoading(false);
+        }
     }
 
     const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -981,6 +1049,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 : null);
         setPendingIdentity(joined.identity);
         setShowAvatarSetup(true);
+        setRenaming(false);
         setError(null);
     }
 
@@ -1251,6 +1320,84 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {heldIdentity.callsign.trim() ? `Open ${heldIdentity.callsign.trim()}` : 'Open it'}
                             </button>
                         </>
+                    ) : hasMnemonic(pendingIdentity) && renaming ? (
+                        /* ===== STEP 1 AGAIN: THE NAME, ON THE ACCOUNT THE INVITE MADE (card invite-back-step) =====
+                           The name alone: the invite is spent, and no way off leads to another account from here. Next
+                           goes back to the photo, with the same name or a new one. */
+                        <>
+                            <OnboardingStepper step={1} />
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                                ✏️ Your name
+                            </h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                                You've joined. This is the name people here see: change it, or keep it and carry on.
+                            </p>
+
+                            <label htmlFor="callsign" style={{
+                                display: 'block', textAlign: 'left',
+                                fontSize: '0.85rem', fontWeight: 600,
+                                color: 'var(--text-secondary)', marginBottom: '0.5rem',
+                            }}>
+                                Your Callsign (Name)
+                            </label>
+                            <input
+                                id="callsign"
+                                type="text"
+                                value={callsign}
+                                onChange={(e) => {
+                                    setCallsign(e.target.value);
+                                    if (nameSuggestions.length) setNameSuggestions([]);
+                                }}
+                                maxLength={MAX_JOIN_CALLSIGN}
+                                disabled={loading}
+                                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+                                style={inputStyle}
+                            />
+
+                            {error && (
+                                <p role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                                    {error}
+                                </p>
+                            )}
+
+                            {nameSuggestions.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                                    {nameSuggestions.map((s) => (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            aria-label={`Use the name ${s}`}
+                                            onClick={() => { setCallsign(s); setNameSuggestions([]); setError(null); }}
+                                            disabled={loading}
+                                            style={{
+                                                padding: '0.5rem 0.9rem', borderRadius: '12px', maxWidth: '100%',
+                                                border: '1px solid var(--border-primary, #334155)', background: 'var(--bg-secondary, #1e293b)',
+                                                color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600,
+                                                cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
+                                            }}
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={handleRename}
+                                disabled={loading}
+                                style={{
+                                    width: '100%', padding: '0.85rem', borderRadius: '10px',
+                                    border: 'none',
+                                    background: loading ? '#555' : '#2563eb',
+                                    color: '#fff', fontSize: '1rem',
+                                    fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+                                    fontFamily: 'inherit', transition: 'background 0.2s',
+                                }}
+                            >
+                                {loading ? 'Saving…' : 'Next →'}
+                            </button>
+                        </>
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
@@ -1470,8 +1617,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 Next →
                             </button>
 
-                            {/* Not after the open door: that member exists on the node and is saved here, so there is no
-                                name screen to go back to, and discarding the identity would strand the account. */}
+                            {/* After an invite: back to the name, on the same account (backFromPhotoStep). Not after the
+                                open door, whose name is settled with its sign-in: that step has no going back to. */}
                             {!joinedByDoor && (
                             <button
                                 onClick={backFromPhotoStep}

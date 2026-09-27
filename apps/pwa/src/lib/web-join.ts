@@ -686,18 +686,63 @@ export function doorRefusalMessage(answer: DoorAnswer): string {
 
 export type CallsignCheck = 'available' | 'taken' | 'unknown';
 
-/** Is `callsign` free here? UX only: the door lands a taken name on a free variant, and never blocks on it. */
-export async function checkCallsign(callsign: string): Promise<CallsignCheck> {
+/**
+ * Is `callsign` free here? UX only: the door lands a taken name on a free variant, and never blocks on it. `exclude`: a
+ * member's own key, whose own name is never taken for a rename (engine/members.ts isCallsignAvailable).
+ */
+export async function checkCallsign(callsign: string, exclude?: string): Promise<CallsignCheck> {
     const c = callsign.trim();
     if (c.length < 2) return 'unknown';
     try {
-        const res = await fetch(`${getNodeApiUrl()}/api/members/callsign-available/${encodeURIComponent(c)}`, { cache: 'no-store' });
+        const qs = exclude ? `?exclude=${encodeURIComponent(exclude)}` : '';
+        const res = await fetch(`${getNodeApiUrl()}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`, { cache: 'no-store' });
         if (!res.ok) return 'unknown';
         const data = await res.json();
         return data?.available === true ? 'available' : data?.available === false && !data?.tooShort ? 'taken' : 'unknown';
     } catch {
         return 'unknown';
     }
+}
+
+// The phone app's words for a taken name's suggestions (native utils/callsign-suggest.ts): "Sarah" → "Sarah Fox".
+const NAME_WORDS = [
+    'Fox', 'Wren', 'Maple', 'River', 'Willow', 'Otter', 'Clover', 'Finch', 'Reed',
+    'Sage', 'Robin', 'Heron', 'Aspen', 'Fern', 'Lark', 'Cedar', 'Moss', 'Kite',
+    'Bay', 'Wattle', 'Rosella', 'Pepper', 'Juniper', 'Hazel', 'Bramble', 'Coral',
+    'Pippin', 'Sparrow', 'Banjo', 'Poppy', 'Reef', 'Dingo', 'Galah', 'Jarrah',
+];
+
+/** "<base> <word>" within `maxLength`, the word kept whole and the base cut between its words (as the phone app does). */
+export function nameSuggestionFor(base: string, word: string, maxLength = 32): string {
+    const full = `${base} ${word}`;
+    if (full.length <= maxLength) return full;
+    let head = base.slice(0, Math.max(0, maxLength - word.length - 1));
+    if (base[head.length] !== ' ' && head.includes(' ')) head = head.slice(0, head.lastIndexOf(' '));
+    head = head.trim();
+    return head ? `${head} ${word}` : word.slice(0, maxLength);
+}
+
+/**
+ * Up to `count` names for a taken `base` that the node says are free, `exclude` as for checkCallsign. Asked three at a
+ * time, stopping once there are enough, so a burst doesn't meet the node's rate limit. [] when none could be checked:
+ * the name field is the way on either way, and the node has the last word when the name is sent.
+ */
+export async function suggestCallsigns(base: string, exclude?: string, count = 3, maxLength = 32): Promise<string[]> {
+    const clean = base.trim().replace(/\s+/g, ' ');
+    if (!clean) return [];
+    const words = [...NAME_WORDS];
+    for (let i = words.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [words[i], words[j]] = [words[j], words[i]];
+    }
+    const candidates = words.map((w) => nameSuggestionFor(clean, w, maxLength));
+    const free: string[] = [];
+    for (let i = 0; i < candidates.length && free.length < count; i += 3) {
+        const chunk = candidates.slice(i, i + 3);
+        const checks = await Promise.all(chunk.map((c) => checkCallsign(c, exclude)));
+        chunk.forEach((c, k) => { if (checks[k] === 'available') free.push(c); });
+    }
+    return free.slice(0, count);
 }
 
 // ===================== THE BROWSER =====================

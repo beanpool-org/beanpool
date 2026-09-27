@@ -8,6 +8,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
     appleAuthUrl,
     captureAuthReturn,
+    checkCallsign,
     checkMembershipWithKey,
     checkSentJoin,
     consumeCapturedAuthReturn,
@@ -20,6 +21,7 @@ import {
     joinVerdict,
     jwtClaims,
     matchAuthReturn,
+    nameSuggestionFor,
     offeredProviders,
     parseRetryAfter,
     probeMembership,
@@ -30,6 +32,7 @@ import {
     runGithubPoll,
     startGithubJoin,
     submitJoin,
+    suggestCallsigns,
     SENT_JOIN_CAN_LAND_MS,
     type DoorAnswer,
     type JoinNonce,
@@ -674,5 +677,54 @@ describe('asking the node (probeMembership) and waiting for it (DOOR_TIMEOUT_MS)
         const got = await answer;
         expect(got).toMatchObject({ status: 200, body: {} });
         expect(joinVerdict(got, { identity, sentAt: 1 }, 'google')).toEqual({ kind: 'unknown', outcome: null });
+    });
+});
+
+describe("a taken name's suggestions (the invite join's rename, card invite-back-step)", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it('the name check sends the member\'s own key as `exclude` when it has one, and nothing otherwise', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({ available: true }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+        expect(await checkCallsign(' Sam Fox ', 'ab12')).toBe('available');
+        expect(await checkCallsign('Sam Fox')).toBe('available');
+        expect(fetchMock.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual([
+            '/api/members/callsign-available/Sam%20Fox?exclude=ab12',
+            '/api/members/callsign-available/Sam%20Fox',
+        ]);
+    });
+
+    it('"<name> <word>" within the cap, the word kept whole and a long name cut between its words', () => {
+        expect(nameSuggestionFor('Sam', 'Fox')).toBe('Sam Fox');
+        expect(nameSuggestionFor('Sarah Jane Smith-Robertson', 'Juniper')).toBe('Sarah Jane Juniper');
+        expect(nameSuggestionFor('Bartholomewbartholomewbart', 'Juniper')).toBe('Bartholomewbartholomewba Juniper');
+        for (const s of [nameSuggestionFor('Sarah Jane Smith-Robertson', 'Juniper'), nameSuggestionFor('x'.repeat(40), 'Wren')]) {
+            expect(s.length).toBeLessThanOrEqual(32);
+        }
+    });
+
+    it('only names the node says are free, at most three, asked three at a time with the key excluded; none when it cannot be asked', async () => {
+        const asked: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+            const url = new URL(String(input), 'http://node.test');
+            asked.push(url.searchParams.get('exclude') ?? '');
+            const name = decodeURIComponent(url.pathname.split('/').pop()!);
+            // Every other candidate is taken.
+            const taken = asked.length % 2 === 1;
+            return new Response(JSON.stringify({ callsign: name, available: !taken }), { status: 200 });
+        }));
+        const offered = await suggestCallsigns('Sam', 'ab12');
+        expect(offered).toHaveLength(3);
+        for (const s of offered) expect(s).toMatch(/^Sam [A-Z][a-z]+$/);
+        expect(new Set(offered).size).toBe(3);
+        expect(asked.length % 3).toBe(0);
+        expect(asked.every((k) => k === 'ab12')).toBe(true);
+
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        expect(await suggestCallsigns('Sam', 'ab12')).toEqual([]);
+        expect(await suggestCallsigns('   ', 'ab12')).toEqual([]);
     });
 });

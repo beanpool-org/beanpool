@@ -62,6 +62,16 @@ describe('PhoneSignIn — the QR card', () => {
         expect(screen.getByRole('button', { name: 'Use the password' })).toBeInTheDocument();
     });
 
+    it("names the phone's row as the app shows it, a moderator's too, and the old name older apps still show", async () => {
+        fakeNode({ [ID1]: ['hang'] });
+        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        await screen.findByTestId('phone-signin-qr');
+        const text = screen.getByTestId('phone-signin').textContent!.replace(/\s+/g, ' ');
+        expect(text).toContain('open Settings → Manage this community from a computer and scan this code');
+        expect(text).toContain("A moderator's app says Moderate this community from a computer");
+        expect(text).toContain('older apps say Sign in on a computer');
+    });
+
     it('signs in when the phone approves: hands the key session and CSRF token up', async () => {
         fakeNode({ [ID1]: [{ body: { status: 'waiting' } }, { body: { status: 'signed-in', role: 'owner', memberPubkey: 'f'.repeat(64), csrfToken: 'csrf-1' } }] });
         const onSignedIn = vi.fn();

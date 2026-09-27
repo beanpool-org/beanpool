@@ -29,7 +29,7 @@ describe('NodeAdminLink', () => {
         render(<NodeAdminLink />);
         const link = await screen.findByRole('link', { name: /Manage Mullum/ });
         expect(link.textContent).toMatch(/Open Settings on this computer, then\s+scan its code with the BeanPool app/);
-        expect(link.textContent).toMatch(/Sign in on a computer/);
+        expect(link.textContent).toMatch(/Settings → Manage this community from a computer; older apps: Sign in\s+on a computer/);
         expect(link.textContent).toMatch(/admin password/);
     });
 

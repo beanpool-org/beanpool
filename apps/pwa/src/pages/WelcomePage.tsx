@@ -2164,7 +2164,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 <div style={{ fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>How to scan:</div>
                                 <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                                     <li>Open <strong>BeanPool</strong> on your mobile phone</li>
-                                    <li>Go to <strong>Settings → Link Another Device</strong></li>
+                                    <li>Go to <strong>Settings → Use your account on another device</strong> (older apps: <strong>Link Another Device</strong>)</li>
                                     <li>Point camera at this screen</li>
                                 </ol>
                             </div>

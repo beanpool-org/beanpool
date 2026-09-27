@@ -116,8 +116,10 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 - *Browser:* `POST /api/local/admin/auth/pairing` → 32-byte id, 6-character short code, 2-minute life, and a
   binding secret set as an httpOnly, SameSite=Strict cookie scoped to the pairing routes. The QR carries
   `beanpool-settings-signin:v1?node=<origin>&p=<id>&c=<code>` (`@beanpool/core`), never the secret.
-- *Phone:* Settings → "Sign in on a computer" (owners/admins, beside Manage). The code must name the app's own
-  node; the node's lookup must return the same short code and names the browser ("Firefox on Windows"); then
+- *Phone:* Settings → "Manage this community from a computer" ("Moderate this community from a computer" for a
+  moderator; "Sign in on a computer" before the 2026-09-27 rename; owners/admins, beside Manage). Not "Use your
+  account on another device" (was "Link Another Device"), which copies the member's own account to a browser.
+  The code must name the app's own node; the node's lookup must return the same short code and names the browser ("Firefox on Windows"); then
   the phone unlock (same gate as Manage), then the member key signs
   `beanpool-settings-signin:v1:approve:<id>:<code>`. The node runs the same signer checks as the Manage link
   (`authorizeKeySigner`: active member, owner/admin, signature, TOTP) and mints the same 60 s handshake token,

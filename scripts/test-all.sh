@@ -469,6 +469,7 @@ run_federation_suites() {
       test-decisions-voting-answers
       test-decisions-tick-route-gone
       test-decisions-funding-queue
+      test-decisions-grant-cap
       test-rip-out-legacy-voting
       test-escrow-disputes
       test-process-handlers

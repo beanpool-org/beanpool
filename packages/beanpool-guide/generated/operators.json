@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 50,
-  "hash": "69e23a9486f5976ad5cdfb5881a26ad9d33739108a46c17fe9ad6a186c5c6c51",
+  "version": 51,
+  "hash": "a1ecc81cfab082ae2686eb2052e9622c9788a295b94f509dd97432dd3a97b1f5",
   "sections": [
     {
       "id": "setup",
@@ -2177,7 +2177,7 @@
         },
         {
           "type": "p",
-          "text": "If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20). Once it has an address, it accepts only its listed ones, so if members' apps also reach it on your home network, confirm that address too."
+          "text": "If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20) and the server's own name for itself (localhost). Once it has an address, it accepts only its listed ones, localhost included. So if members' apps also reach it on your home network, confirm that address too. If you open its web app through an SSH tunnel at localhost, add BEANPOOL_ADDRESSES=localhost to the server's .env (an IPv6 address goes in brackets, as [::1]). Only this list shows localhost; apps and the directory never see it."
         },
         {
           "type": "p",

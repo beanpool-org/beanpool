@@ -15,6 +15,8 @@ The global community at global.beanpool.org is open to anyone, and you can join 
 
 Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
 
+While the global community has only a few listings, its **Market** also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened. They go once there are enough real listings.
+
 If you came from a link someone shared to a listing or an event, it opens first. Join from that page, and once you are in, it opens again, this time with who posted it.
 
 - Tap **Join**, then **I'm new to BeanPool**.

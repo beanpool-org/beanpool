@@ -16,6 +16,7 @@
  *     is left alone a minute, never longer; one that was never sent (no token to be had) is tried at the next chance;
  *   - it is tried only where the phone still keeps the community: Forget Community and Wipe Connection end it (#1267
  *     review 4117004415);
+ *   - a token fetch that never settles holds up the retries for no longer than its deadline (#1267 review 4117005129);
  *   - #1258's rules hold: a retry goes through the same registration (stamped, never for a key that is leaving or has
  *     left); what was due for a key is dropped as its leave starts; nothing is tried for any key but the one on the
  *     phone; a key signing back in takes back its statements, and its registration then lands, stamped after them.
@@ -56,6 +57,7 @@ import { addSavedNode, markGuestNode, removeSavedNode } from '../nodes';
 import { pendingLeaveStatements, presentLeaveStatements, type LeaveStatement } from '../push-leave';
 import {
     leaveState, registerAccountForPush, registerPushTokenWithCommunity, retryDueRegistrations, RETRY_FIRST_WAIT_MS, RETRY_LONGEST_WAIT_MS,
+    TOKEN_TIMEOUT_MS,
 } from '../push-registrations';
 import { saveRestoredAccount } from '../restore-account';
 import { Communities, PHONE_TOKEN } from './fake-communities';
@@ -571,5 +573,38 @@ describe('storage that fails', () => {
         await comeBack();
         expect(registrations()).toHaveLength(1);
         expect(mem.async.get(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe('{not json');
+    });
+});
+
+describe('a token fetch that never settles', () => {
+    it('holds up the retries no longer than its deadline: everything stays due, and a later return registers her', async () => {
+        offline();
+        await kimSignsIn();
+        expect(due()).toEqual([{ publicKey: kim.publicKey, community: MULLUM, refusals: 0, retryAt: 0 }]);
+        online();
+
+        // Back to the app: Expo's request for the token stalls, and never settles (no timeout of its own on Android).
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        let asked = false;
+        const hung = retryDueRegistrations(() => {
+            asked = true;
+            return new Promise<string>(() => {});
+        }, 'android');
+        let settled = false;
+        void hung.then(() => { settled = true; });
+        await vi.waitFor(() => expect(asked).toBe(true));
+        // A return meanwhile waits for the run under way: one at a time.
+        expect(retryDueRegistrations(phoneToken, 'android')).toBe(hung);
+
+        // Its deadline passes: the run ends, having sent nothing, and everything is still due.
+        await vi.advanceTimersByTimeAsync(TOKEN_TIMEOUT_MS);
+        await vi.waitFor(() => expect(settled).toBe(true));
+        expect(nodes.sent).toHaveLength(0);
+        expect(due()).toEqual([{ publicKey: kim.publicKey, community: MULLUM, refusals: 0, retryAt: 0 }]);
+
+        // The next return is a run of its own, and the token comes: Mullum registers her.
+        await comeBack();
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+        expect(mem.async.has(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe(false);
     });
 });

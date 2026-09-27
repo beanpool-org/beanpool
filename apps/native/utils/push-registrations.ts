@@ -47,6 +47,12 @@ const REGISTER_TIMEOUT_MS = 12000;
 export const RETRY_FIRST_WAIT_MS = 60 * 1000;
 /** The longest it is left alone: the wait doubles with each refusal in a row, up to this. */
 export const RETRY_LONGEST_WAIT_MS = 60 * 60 * 1000;
+/**
+ * How long a retry waits for the phone's push token (services/push-notifications.ts `phonePushToken`, which never asks
+ * for permission then). Expo's request for it has no timeout of its own on Android, and one that stalled would hold up
+ * every later retry until the app's next cold start (#1267 review 4117005129).
+ */
+export const TOKEN_TIMEOUT_MS = 30 * 1000;
 
 type RegisteringAccount = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
 
@@ -449,6 +455,15 @@ async function communitiesKept(storage: Pick<Storage, 'getItem'>): Promise<strin
     return [anchor, ...urls].map(communityAddress).filter((c): c is string => c !== null);
 }
 
+/** `promise`, or a rejection once `ms` pass without it settling. */
+function within<T>(ms: number, promise: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`No answer within ${ms / 1000} s`)), ms);
+    });
+    return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
 let retrying: Promise<void> | null = null;
 
 /**
@@ -458,8 +473,9 @@ let retrying: Promise<void> | null = null;
  * lands. Only the account on the phone's own, signed by its key: never one for a key that is leaving or has left, nor
  * for another key. Only where the phone still keeps the community ({@link communitiesKept}): what is due at one it has
  * forgotten is dropped, and it is never contacted again (#1267 review 4117004415). The token (`phoneToken`) is asked
- * for only when one is due; when it can't be had, all stay due. One run at a time: a call while one runs waits for it.
- * Never throws.
+ * for only when one is due; when it can't be had within {@link TOKEN_TIMEOUT_MS}, all stay due. One run at a time: a
+ * call while one runs waits for it, and a run ends within the token's deadline and the registrations' timeout. Never
+ * throws.
  */
 export function retryDueRegistrations(
     phoneToken: () => Promise<string | null>,
@@ -489,7 +505,7 @@ export function retryDueRegistrations(
 
             let token: string | null;
             try {
-                token = await phoneToken();
+                token = await within(TOKEN_TIMEOUT_MS, phoneToken());
             } catch (e) {
                 console.warn('[Push] Could not get this phone\'s push token; its registrations stay due', e instanceof Error ? e.message : e);
                 return;

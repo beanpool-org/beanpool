@@ -11,8 +11,8 @@
  * unblock everyone a member had blocked, without telling them, the moment they signed out and back in (Marty,
  * 2026-09-27: the list is the account's).
  *
- * Builds before this one kept one list for the whole phone. It moves under the account on the phone the first time this
- * build reads a list ({@link movePhoneWideList}).
+ * Builds before this one kept one list for the whole phone. It moves under the account on the phone when this build
+ * starts ({@link moveAtStart}), before anything can change that account.
  *
  * A block also reports the person to the community's moderators (Apple Guideline 1.2). A report the node didn't take is
  * queued under the account that made it and retried when the app comes back ({@link retryPendingReports}). A node files
@@ -54,6 +54,8 @@ let accountGeneration = 0;
 let phoneWideListMoved = false;
 /** The move of the phone-wide list under way, if any: one at a time, so it goes to one account only. */
 let movingPhoneWideList: Promise<void> | null = null;
+/** The account the phone held as this build started, read at that moment: the phone-wide list is its. */
+let ownerAtStart: string | null = null;
 
 onAccountOnPhone((publicKey) => {
     // The same account written again (a new name, its words added): nothing changes.
@@ -66,6 +68,9 @@ onAccountOnPhone((publicKey) => {
         if (generation === accountGeneration) DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, list);
     });
 });
+
+/** Begun as this module loads, which is at app start (`_layout.tsx` imports it); every other move waits for it. */
+const startedMove: Promise<void> = moveAtStart();
 
 /** The public key of the account the phone holds, or null when it holds none. */
 async function accountOnPhone(): Promise<string | null> {
@@ -90,19 +95,40 @@ function parseKeys(raw: string | null): string[] {
 }
 
 /**
- * The list the builds before this one kept for the whole phone goes to `owner`, the account on the phone the first time
- * this build reads a list, and the old keys go. Once: a marker says it is done, so a copy that could not be deleted is
- * never handed to a later account.
+ * The list the builds before this one kept for the whole phone goes to the account on the phone when this build starts,
+ * and the old keys go. Once: a marker says it is done, so a copy that could not be deleted is never handed to a later
+ * account.
  *
- * A phone with no account leaves it where it is until one appears. Such a list was left by an older build's Sign Out,
- * and the next account is likeliest the same member restoring theirs: dropping the list would silently unblock
- * everyone they blocked, the outcome Marty ranked worse. The other outcome, a new account getting it, is what the older
- * build did anyway; it happens at most once per phone, and that account sees the list in Settings and can clear it.
+ * At start, not at the first list read: a phone can start on a screen that reads no list (a half-finished join wizard
+ * opens Welcome) and Replace its account from there. Moved at the first read, the old list would go to the replacing
+ * account, and the member whose blocks they are would find them gone (confirmation review 4113557050). The account is
+ * read at the moment the app starts, and an account written while that read is out doesn't change the answer.
  */
-function movePhoneWideList(owner: string): Promise<void> {
-    if (phoneWideListMoved) return Promise.resolve();
+async function moveAtStart(): Promise<void> {
+    try {
+        ownerAtStart = (await loadIdentity())?.publicKey || null;
+        if (ownerAtStart) await moveOnce(ownerAtStart);
+    } catch (e) {
+        console.warn('[blocklist] Could not move the phone-wide list at start; the first list read tries again', e);
+    }
+}
+
+/**
+ * Every list read and "Unblock All" first waits for the move begun at start. If that didn't happen (the phone held no
+ * account then, or storage failed), it happens now, still for the account on the phone at start when there was one,
+ * and only once however many callers race.
+ *
+ * A phone with no account at start leaves the list where it is until one appears, and it goes to that account. Such a
+ * list was left by an older build's Sign Out, and the next account is likeliest the same member restoring theirs:
+ * dropping the list would silently unblock everyone they blocked, the outcome Marty ranked worse. The other outcome, a
+ * new account getting it, is what the older build did anyway; it happens at most once per phone, and that account sees
+ * the list in Settings and can clear it.
+ */
+async function movePhoneWideList(owner: string): Promise<void> {
+    await startedMove;
+    if (phoneWideListMoved) return;
     if (!movingPhoneWideList) {
-        movingPhoneWideList = moveOnce(owner).finally(() => {
+        movingPhoneWideList = moveOnce(ownerAtStart ?? owner).finally(() => {
             movingPhoneWideList = null;
         });
     }
@@ -142,13 +168,18 @@ async function listOf(owner: string): Promise<string[]> {
  */
 export async function getBlockedUsers(): Promise<string[]> {
     try {
-        const owner = await accountOnPhone();
-        if (!owner) return [];
-        if (cached?.owner === owner) return cached.list;
-        const generation = accountGeneration;
-        const list = await listOf(owner);
-        if (generation === accountGeneration) cached = { owner, list };
-        return list;
+        // A read the phone's account changed under answers for the account on the phone now, never the one before.
+        for (;;) {
+            const owner = await accountOnPhone();
+            if (!owner) return [];
+            if (cached?.owner === owner) return cached.list;
+            const generation = accountGeneration;
+            const list = await listOf(owner);
+            if (generation === accountGeneration) {
+                cached = { owner, list };
+                return list;
+            }
+        }
     } catch (e) {
         console.error('[blocklist] Failed to read blocked users from AsyncStorage', e);
     }

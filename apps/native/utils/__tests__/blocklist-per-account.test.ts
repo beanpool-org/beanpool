@@ -15,7 +15,15 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
+const mem = vi.hoisted(() => ({
+    async: new Map<string, string>(),
+    secure: new Map<string, string>(),
+    /** While set, a SecureStore read of `slowKey` answers late, with what the phone held when the read was made. */
+    slowSecureReads: null as Promise<void> | null,
+    slowKey: '',
+    /** How many reads have been made slow. */
+    slowReadsMade: 0,
+}));
 const rn = vi.hoisted(() => ({ emit: vi.fn() }));
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
@@ -31,7 +39,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
-    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
+    getItemAsync: vi.fn(async (key: string) => {
+        const value = mem.secure.get(key) ?? null;
+        const slow = mem.slowSecureReads;
+        if (slow && key === mem.slowKey) {
+            mem.slowReadsMade += 1;
+            await slow;
+        }
+        return value;
+    }),
     setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
@@ -113,6 +129,9 @@ let ben: BeanPoolIdentity;
 beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
+    mem.slowSecureReads = null;
+    mem.slowKey = '';
+    mem.slowReadsMade = 0;
     rn.emit.mockClear();
     net.up = true;
     net.hold = null;
@@ -221,6 +240,56 @@ describe('the phone-wide list of the builds before this one', () => {
         expect(mem.secure.has(PHONE_WIDE_LIST)).toBe(false);
     });
 
+    it('goes to the account on the phone when the app starts, even when that account is replaced before any list is read', async () => {
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(PHONE_WIDE_LIST, JSON.stringify([HARASSER]));
+
+        // The app starts on a screen that reads no list (a half-finished join wizard sends it to Welcome), and Recover
+        // with 12 Words replaces Ana with Ben.
+        const app = await startApp();
+        await app.replaceWith(ben);
+
+        expect(await app.getBlockedUsers()).toEqual([]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(false);
+        expect(JSON.parse(mem.async.get(listKey(ana.publicKey)) ?? 'null')).toEqual([HARASSER]);
+        expect(mem.async.has(PHONE_WIDE_LIST)).toBe(false);
+        expect(mem.secure.has(PHONE_WIDE_LIST)).toBe(false);
+        expect(rn.emit).not.toHaveBeenCalledWith(app.BLOCKLIST_UPDATED_EVENT, [HARASSER]);
+
+        // Ana, back on the phone, has her blocks.
+        await app.replaceWith(ana);
+        expect(await app.getBlockedUsers()).toEqual([HARASSER]);
+    });
+
+    it('goes to the account on the phone when the app starts, even when the first list read is still in flight as the next account\'s key is written', async () => {
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(PHONE_WIDE_LIST, JSON.stringify([HARASSER]));
+
+        // The phone is slow to say which account it holds: to the reads made as the app starts, and the first list read.
+        let answer!: () => void;
+        mem.slowKey = IDENTITY_KEY;
+        mem.slowSecureReads = new Promise<void>((resolve) => { answer = resolve; });
+        const app = await startApp();
+        const slowAtStart = mem.slowReadsMade;
+        const firstRead = app.getBlockedUsers();
+        await vi.waitFor(() => expect(mem.slowReadsMade).toBe(slowAtStart + 1));
+        mem.slowSecureReads = null;
+
+        // Ben's key is written while those reads are still out.
+        await app.replaceWith(ben);
+        answer();
+
+        expect(await firstRead).toEqual([]);
+        expect(await app.getBlockedUsers()).toEqual([]);
+        expect(JSON.parse(mem.async.get(listKey(ana.publicKey)) ?? 'null')).toEqual([HARASSER]);
+        expect(mem.async.has(PHONE_WIDE_LIST)).toBe(false);
+        expect(mem.secure.has(PHONE_WIDE_LIST)).toBe(false);
+        expect(rn.emit).not.toHaveBeenCalledWith(app.BLOCKLIST_UPDATED_EVENT, [HARASSER]);
+
+        await app.replaceWith(ana);
+        expect(await app.getBlockedUsers()).toEqual([HARASSER]);
+    });
+
     it('on a phone with no account, waits untouched for the next account (an older build\'s Sign Out left it there)', async () => {
         mem.async.set(PHONE_WIDE_LIST, JSON.stringify([HARASSER]));
 
@@ -309,6 +378,27 @@ describe('the report a block sends', () => {
 });
 
 describe('the list in memory', () => {
+    it('a read begun while one account is on the phone that ends after the next account\'s key is written answers with the next account\'s list', async () => {
+        // An old list, in the older SecureStore copy, which the phone is slow to read: its move waits.
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.secure.set(PHONE_WIDE_LIST, JSON.stringify([HARASSER]));
+        let answer!: () => void;
+        mem.slowKey = PHONE_WIDE_LIST;
+        mem.slowSecureReads = new Promise<void>((resolve) => { answer = resolve; });
+
+        // A screen asks for the list with Ana on the phone; the read waits for the move, and Ben's key is written.
+        const app = await startApp();
+        const read = app.getBlockedUsers();
+        await vi.waitFor(() => expect(mem.slowReadsMade).toBe(1));
+        mem.slowSecureReads = null;
+        await app.replaceWith(ben);
+        answer();
+
+        expect(await read).toEqual([]);
+        expect(JSON.parse(mem.async.get(listKey(ana.publicKey)) ?? 'null')).toEqual([HARASSER]);
+        expect(rn.emit).not.toHaveBeenCalledWith(app.BLOCKLIST_UPDATED_EVENT, [HARASSER]);
+    });
+
     it('follows an account change without a restart, and tells the screens with the new account\'s list', async () => {
         const app = await startApp();
         // Ben used this phone before, and blocked someone.

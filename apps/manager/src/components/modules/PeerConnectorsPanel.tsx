@@ -674,7 +674,7 @@ export function PeerConnectorsPanel({
                             <select
                                 id="new-connector-trust"
                                 value={newTrustLevel}
-                                onChange={(e) => setNewTrustLevel(e.target.value as any)}
+                                onChange={(e) => setNewTrustLevel(e.target.value as 'peer' | 'blocked' | 'mirror')}
                                 className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                             >
                                 <option value="peer">Peer (Federation)</option>
@@ -690,7 +690,7 @@ export function PeerConnectorsPanel({
                             <select
                                 id="new-connector-mode"
                                 value={newMode}
-                                onChange={(e) => setNewMode(e.target.value as any)}
+                                onChange={(e) => setNewMode(e.target.value as 'active' | 'passive')}
                                 className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                             >
                                 <option value="active">⚡ Active (Outbound Dial)</option>

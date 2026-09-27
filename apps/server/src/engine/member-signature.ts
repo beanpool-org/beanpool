@@ -26,6 +26,7 @@ import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { BAD_KEY_CODE, BAD_SIGNER_KEY_ERROR, provenKeySpelling } from './member-key.js';
+import { isNodeAdmin } from './node-roles.js';
 import { audienceStanding } from './own-addresses.js';
 
 // ─── The switch ─────────────────────────────────────────────────────────────────────────────
@@ -214,8 +215,9 @@ export function countAcceptedSignature(signer: string, audience: string | null):
     } catch {
         return; // a count never refuses a request
     }
-    if (audience === null) return countSignature('old_app', '', signer);
-    countSignature(audienceStanding(audience) === 'own' ? 'own' : 'unconfirmed', audience, signer);
+    if (audience === null) return void countSignature('old_app', '', signer);
+    if (audienceStanding(audience) === 'own') return void countSignature('own', audience, signer);
+    countUnconfirmed(audience, signer);
 }
 
 /** Verify a signed request (or `/ws` connect token) in either format, in the order above. */
@@ -293,30 +295,54 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
 
 /**
  * How many members' apps signed here, per day (UTC): for each of this community's addresses (`own`), for each address
- * a node with no configured names was reached at (`unconfirmed`, offered to the owner), and in the old format
- * (`old_app`, "N members are on an old app"). Members' keys only (countAcceptedSignature), so a stranger's keys move
- * none of them. Counts only, no key is stored: the day's distinct keys are held in memory as salted hashes. A request never writes to the database: the
- * counts are written when Settings reads them and every 15 minutes (flushSignatureCounts), each as the most this
- * process has seen that day. After a restart a day's count starts again, so it can read low for that day, never high.
+ * a node with no configured names was reached at (`unconfirmed`, offered to the owner: engine/address-offers.ts), and
+ * in the old format (`old_app`, "N members are on an old app"). Members' keys only (countAcceptedSignature), so a
+ * stranger's keys move none of them. Counts only, no key is stored: the day's distinct keys are held in memory as
+ * salted hashes. A request never writes to the database: the counts are written when Settings reads them and every 15
+ * minutes (flushSignatureCounts), each as the most this process has seen that day. After a restart a day's count
+ * starts again, so it can read low for that day, never high.
+ *
+ * For an `unconfirmed` address, two more things, so Settings can tell a host one member's app planted from this
+ * community's real one:
+ *   - one app puts at most MAX_UNCONFIRMED_HOSTS_PER_KEY addresses on the day's list. A real app reaches a community at
+ *     one address (a home-network one is this community's already, never on this list), so one member signing for
+ *     many hosts can't fill the day's MAX_ADDRESSES_PER_KIND and crowd out the real one. Held in memory, per day:
+ *     after a restart an app may add that many again, and the day's cap still holds;
+ *   - whether an owner's or admin's app signed for it (isNodeAdmin: a role that acts; a moderator's app is a member's):
+ *     the address and the last day, no key, in node_config row STAFF_SEEN_KEY, written with the counts, so a restart
+ *     keeps it. At most MAX_ADDRESSES_PER_KIND addresses, none older than 8 days. The role is the one the signer held
+ *     when it signed: an admin made later counts from then, and one removed still counts for the rest of the week.
  */
 export type SignatureKind = 'own' | 'unconfirmed' | 'old_app';
 
 /** Bounds on what one day can hold in memory: addresses per kind, and keys per address. */
 const MAX_ADDRESSES_PER_KIND = 50;
 const MAX_KEYS_PER_ADDRESS = 100_000;
+/** How many addresses one app can put on a day's `unconfirmed` list. */
+export const MAX_UNCONFIRMED_HOSTS_PER_KEY = 3;
+/** The node_config row of owner/admin sightings: { [address]: the last day (UTC) an owner's or admin's app signed for it }. */
+export const STAFF_SEEN_KEY = 'appAddressStaffSeen';
 
 const processSalt = crypto.randomBytes(16);
 /** day → kind → address → hashed keys */
 const seen = new Map<string, Map<SignatureKind, Map<string, Set<string>>>>();
+/** day → hashed key → the `unconfirmed` addresses it is counted for */
+const unconfirmedByKey = new Map<string, Map<string, Set<string>>>();
+/** day → the `unconfirmed` addresses an owner's or admin's app signed for */
+const staffSeen = new Map<string, Set<string>>();
 let dirty = false;
 
 function today(now = clock()): string {
     return new Date(now).toISOString().slice(0, 10);
 }
 
-function countSignature(kind: SignatureKind, address: string, signer: string): void {
+const daysAgo = (now: number, n: number) => new Date(now - n * 86_400_000).toISOString().slice(0, 10);
+
+const hashOf = (signer: string) => crypto.createHmac('sha256', processSalt).update(signer).digest('base64').slice(0, 16);
+
+/** Count `signer` for `address` on `day`: whether it is counted there (false when a bound leaves it out). */
+function countSignature(kind: SignatureKind, address: string, signer: string, day = today(Date.now())): boolean {
     try {
-        const day = today(Date.now());
         let byKind = seen.get(day);
         if (!byKind) {
             byKind = new Map();
@@ -329,20 +355,91 @@ function countSignature(kind: SignatureKind, address: string, signer: string): v
         }
         let keys = byAddress.get(address);
         if (!keys) {
-            if (byAddress.size >= MAX_ADDRESSES_PER_KIND) return;
+            if (byAddress.size >= MAX_ADDRESSES_PER_KIND) return false;
             keys = new Set();
             byAddress.set(address, keys);
         }
-        if (keys.size >= MAX_KEYS_PER_ADDRESS) return;
-        const h = crypto.createHmac('sha256', processSalt).update(signer).digest('base64').slice(0, 16);
+        const h = hashOf(signer);
         if (!keys.has(h)) {
+            if (keys.size >= MAX_KEYS_PER_ADDRESS) return false;
             keys.add(h);
             dirty = true;
         }
+        return true;
     } catch (e: any) {
         // A count is never allowed to refuse a request.
         logger.warn('AUTH', `could not count a signature: ${e?.message || e}`);
+        return false;
     }
+}
+
+/** An accepted signature for a host this node doesn't know as its own: counted within the bounds above. */
+function countUnconfirmed(address: string, signer: string): void {
+    try {
+        const day = today(Date.now());
+        let byKey = unconfirmedByKey.get(day);
+        if (!byKey) {
+            byKey = new Map();
+            unconfirmedByKey.set(day, byKey);
+        }
+        const h = hashOf(signer);
+        let mine = byKey.get(h);
+        if (!mine?.has(address)) {
+            if ((mine?.size ?? 0) >= MAX_UNCONFIRMED_HOSTS_PER_KEY) return;
+            if (!mine && byKey.size >= MAX_KEYS_PER_ADDRESS) return;
+        }
+        if (!countSignature('unconfirmed', address, signer, day)) return;
+        if (!mine) {
+            mine = new Set();
+            byKey.set(h, mine);
+        }
+        mine.add(address);
+        if (isNodeAdmin(signer)) {
+            let addresses = staffSeen.get(day);
+            if (!addresses) {
+                addresses = new Set();
+                staffSeen.set(day, addresses);
+            }
+            if (!addresses.has(address)) {
+                addresses.add(address);
+                dirty = true;
+            }
+        }
+    } catch (e: any) {
+        logger.warn('AUTH', `could not count a signature: ${e?.message || e}`);
+    }
+}
+
+/** The owner/admin sightings as stored: address → the last day. Anything malformed in the row is left out. */
+function storedStaffSeen(): Map<string, string> {
+    const out = new Map<string, string>();
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(STAFF_SEEN_KEY) as { value?: string } | undefined;
+    if (!row?.value) return out;
+    try {
+        const v = JSON.parse(row.value);
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+        for (const [address, day] of Object.entries(v)) {
+            if (typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) && address.length <= 253) out.set(address, day);
+        }
+    } catch { /* an unreadable row reads as none */ }
+    return out;
+}
+
+/** Memory's sightings merged into the stored ones: the latest day per address, the last 8 days, the newest kept. */
+function writeStaffSeen(now: number): void {
+    const merged = storedStaffSeen();
+    for (const [day, addresses] of staffSeen) {
+        for (const address of addresses) {
+            const was = merged.get(address);
+            if (!was || was < day) merged.set(address, day);
+        }
+    }
+    const oldest = daysAgo(now, 8);
+    const kept = [...merged].filter(([, day]) => day >= oldest)
+        .sort((a, b) => (a[1] !== b[1] ? (a[1] < b[1] ? 1 : -1) : a[0] < b[0] ? -1 : 1))
+        .slice(0, MAX_ADDRESSES_PER_KIND);
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run(STAFF_SEEN_KEY, JSON.stringify(Object.fromEntries(kept)));
 }
 
 /** Write the counts held in memory, drop the days before today from memory, and the rows older than 8 days. */
@@ -360,11 +457,14 @@ export function flushSignatureCounts(now = Date.now()): void {
                         for (const [address, keys] of byAddress) put.run(d, kind, address, keys.size);
                     }
                 }
-                db.prepare('DELETE FROM signature_audiences WHERE day < ?').run(new Date(now - 8 * 86_400_000).toISOString().slice(0, 10));
+                db.prepare('DELETE FROM signature_audiences WHERE day < ?').run(daysAgo(now, 8));
+                if (staffSeen.size > 0) writeStaffSeen(now);
             })();
             dirty = false;
         }
         for (const d of [...seen.keys()]) if (d < day) seen.delete(d);
+        for (const d of [...unconfirmedByKey.keys()]) if (d < day) unconfirmedByKey.delete(d);
+        for (const d of [...staffSeen.keys()]) if (d < day) staffSeen.delete(d);
     } catch (e: any) {
         logger.warn('AUTH', `could not write the signature counts: ${e?.message || e}`);
     }
@@ -405,9 +505,24 @@ export function signatureUsage(now = Date.now()): AudienceUsage[] {
     return rows.map((r) => ({ kind: r.kind, address: r.address, today: Number(r.today) || 0, busiestDay: Number(r.busiest) || 0 }));
 }
 
+/** The `unconfirmed` addresses an owner's or admin's app signed for in the last 7 days (what memory holds is written first). */
+export function staffSeenAddresses(now = Date.now()): Set<string> {
+    flushSignatureCounts(now);
+    const from = daysAgo(now, 6);
+    const out = new Set<string>();
+    try {
+        for (const [address, day] of storedStaffSeen()) if (day >= from) out.add(address);
+    } catch (e: any) {
+        logger.warn('AUTH', `could not read which addresses owners' and admins' apps used: ${e?.message || e}`);
+    }
+    return out;
+}
+
 /** Tests: forget the in-memory distinct keys (as a restart does). */
 export function resetSignatureCountsForTests(): void {
     seen.clear();
+    unconfirmedByKey.clear();
+    staffSeen.clear();
     dirty = false;
     loggedUnconfirmed.clear();
 }

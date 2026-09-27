@@ -33,8 +33,9 @@
  *     refused as a request after the switch and never accepted as a format-2 sign-in; the format-2 sign-in for this
  *     host opens a session, for another host 421; the old sign-in form works until the switch and 426 after.
  *  9. Pairing and offline tickets made for A are refused at B; the old forms until the switch only.
- * 10. The self-hoster: any host accepted (and offered in Settings) until an owner confirms one; then only that one;
- *     after the switch, an unconfirmed host is refused.
+ * 10. The self-hoster: any host accepted until an owner confirms one; then only that one; after the switch, an
+ *     unconfirmed host is refused. Settings offers a host once the owner's app reached the node there, not while only
+ *     one member's had (test-address-offers has the rest of that rule).
  * 11. Settings: the address list with its sources and counts, and the old-app count. No key is stored. Keys with no
  *     row here move neither count.
  * 12. "Delete my account" signed for A, replayed at B → 421, B's row unchanged; re-signed for b.test it works there.
@@ -661,10 +662,19 @@ async function main(): Promise<void> {
                 const odd = await call(U, 'GET', '/api/community/me', { 'X-Public-Key': mia.pk, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce, 'X-Signed-For': 'Community.Example.org' });
                 assert(odd.status === 421, `a host not in the form apps sign (capitals) is nobody's name, even here → 421 (${show(odd)})`);
             }
+            // One ordinary member's app is not enough to have a host offered (engine/address-offers.ts): until the
+            // owner's own app reaches U there, community.example.org is held back.
+            const heldBack = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
+            assert(heldBack.status === 200 && !heldBack.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org')
+                && heldBack.body?.heldBack?.some((u: any) => u.address === 'community.example.org' && u.reason === 'few-members'),
+                `with only Mia's app, Settings holds community.example.org back (${show(heldBack)})`);
+            const ownersApp = await sendTo(U, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
+            assert(ownersApp.status === 200, `the owner's app reaches U at community.example.org too (${show(ownersApp)})`);
             const listed = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && listed.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org' && u.today >= 1),
                 `Settings offers community.example.org to confirm (${show(listed)})`);
-            assert(!listed.body?.unconfirmed?.some((u: any) => u.address === 'spam.example'), "but not spam.example: only members' apps put an address on that list");
+            assert(![...(listed.body?.unconfirmed ?? []), ...(listed.body?.heldBack ?? [])].some((u: any) => u.address === 'spam.example'),
+                "but not spam.example: only members' apps put an address on either list");
             const noAuth = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', {}, JSON.stringify({ address: 'community.example.org' }));
             assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner or admin (${show(noAuth)})`);
             const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, JSON.stringify({ address: 'https://Community.Example.org/settings' }));

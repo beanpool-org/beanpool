@@ -23,14 +23,16 @@
  *     (R): loopback → 421 with the nonce unspent; its own name → accepted.
  *  4. U, a node with none of those (a developer's): loopback and the rest of 127.0.0.0/8 are accepted, also after the
  *     switch (while a host it doesn't know is refused then); a /ws token and a Manage sign-in for 127.0.0.1 work.
- *     Loopback is never listed: not in /api/community/info, not among the addresses Settings offers to confirm.
+ *     Loopback is never listed: not in /api/community/info, not among the addresses Settings offers to confirm or
+ *     holds back.
  *  5. L, named (optin.test) with BEANPOOL_ADDRESSES=localhost, 127.0.0.1, [::1], ::1: the explicit way in. Those three
  *     are accepted and 127.0.0.2 is not; Settings lists them as set on the server; /api/community/info still lists
  *     only optin.test; the log names the bare ::1 as left out and gives its bracketed form.
  *  6. Z, with ONLY BEANPOOL_ADDRESSES=localhost (an owner who followed the SSH-tunnel advice on a node with no other
  *     name): still a node that knows none of its names (4113741087). Before the switch it accepts its domain
  *     (community.example.org) and a home-network address as it did with nothing set, and localhost and 127.0.0.1;
- *     Settings says it has no name, offers the domain to confirm and lists localhost as set on the server;
+ *     Settings says it has no name, offers the domain to confirm (the owner's app reached it there) and lists
+ *     localhost as set on the server;
  *     /api/community/info lists nothing. After the switch the domain is refused, localhost and the home network not.
  *  7. T, named (tunnel.test) with BEANPOOL_ADDRESSES=localhost: localhost and tunnel.test are accepted; the domain,
  *     a home-network address and 127.0.0.1 (not listed) are refused with the nonce unspent. Settings says it has a
@@ -426,11 +428,16 @@ async function main(): Promise<void> {
 
             const info = await call(U, 'GET', '/api/community/info');
             assert(Array.isArray(info.body?.addresses) && info.body.addresses.length === 0, `/api/community/info lists no address (${JSON.stringify(info.body?.addresses)})`);
+            // One ordinary member's app doesn't get a host offered (engine/address-offers.ts); the owner's does.
+            const ownersApp = await sendTo(U, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
+            assert(ownersApp.status === 200, `the owner's app reaches U at community.example.org too (${show(ownersApp)})`);
             const listed = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && unconfirmed.includes('community.example.org')
                 && !unconfirmed.some((a) => a === '127.0.0.2' || LOOPBACK.includes(a)),
                 `Settings offers community.example.org to confirm, and no loopback name (${JSON.stringify(unconfirmed)})`);
+            const heldBack: string[] = (listed.body?.heldBack ?? []).map((a: any) => a.address);
+            assert(!heldBack.some((a) => a === '127.0.0.2' || LOOPBACK.includes(a)), `nor lists one as held back (${JSON.stringify(heldBack)})`);
         });
 
         // ── 5. The explicit way in ──
@@ -461,6 +468,9 @@ async function main(): Promise<void> {
                 const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
                 assert(r.status === 200 && r.body?.publicKey === mia.pk, `before the switch, a read signed for ${host} is accepted (${show(r)})`);
             }
+            // One ordinary member's app doesn't get a host offered (engine/address-offers.ts); the owner's does.
+            const ownersApp = await sendTo(Z, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
+            assert(ownersApp.status === 200, `the owner's app reaches Z at community.example.org too (${show(ownersApp)})`);
             const listed = await call(Z, 'GET', '/api/local/admin/app-addresses', adminPw);
             const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
@@ -468,6 +478,8 @@ async function main(): Promise<void> {
             assert(JSON.stringify(bySource) === JSON.stringify(['localhost:env']), `Settings lists localhost as set on the server (${JSON.stringify(bySource)})`);
             assert(JSON.stringify(unconfirmed) === JSON.stringify(['community.example.org']),
                 `Settings offers community.example.org to confirm, and neither the home-network address nor a loopback name (${JSON.stringify(unconfirmed)})`);
+            assert(Array.isArray(listed.body?.heldBack) && listed.body.heldBack.length === 0,
+                `and holds none back: the home-network and loopback names are this node's own, never on either list (${JSON.stringify(listed.body?.heldBack)})`);
             const info = await call(Z, 'GET', '/api/community/info');
             assert(Array.isArray(info.body?.addresses) && info.body.addresses.length === 0, `/api/community/info lists no address (${JSON.stringify(info.body?.addresses)})`);
 

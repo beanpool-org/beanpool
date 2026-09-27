@@ -7,8 +7,12 @@
  *                                                 people's apps signed for it today and on the busiest day of the last 7;
  *                                                 whether any of them names the community (`named`: a loopback name
  *                                                 listed for an SSH tunnel doesn't); the addresses apps reached a node
- *                                                 that knows none of its names at (to confirm); how many signed in the
- *                                                 old format (apps too old to name a community); and the switch date.
+ *                                                 that knows none of its names at, each with its count and whether an
+ *                                                 owner's or admin's app did: `unconfirmed`, offered to confirm, and
+ *                                                 `heldBack`, not offered, each with its reason (engine/address-offers.ts;
+ *                                                 a Settings from before that shows `unconfirmed` only, so it never
+ *                                                 offers a held-back one); how many signed in the old format (apps too
+ *                                                 old to name a community); and the switch date.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
@@ -22,7 +26,10 @@ import { updateNodeConfig } from '../state-engine.js';
 import {
     configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
-import { signatureUsage, unboundSignaturesAccepted, unboundSignaturesUntilDay } from '../engine/member-signature.js';
+import {
+    signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
+} from '../engine/member-signature.js';
+import { MEMBERS_TO_OFFER, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
@@ -36,17 +43,27 @@ export function appAddressesReport() {
         const u = count('own', a.address);
         return { address: a.address, source: a.source, today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0 };
     });
-    // Hosts apps signed for while this node knew none of its names (accepted until the switch, and offered to confirm);
-    // and any the owner has since confirmed drop off this list, as they are on the one above.
+    // Hosts apps signed for while this node knew none of its names (accepted until the switch): offered to confirm, or
+    // held back and why (engine/address-offers.ts). Any the owner has since confirmed drop off both, as they are on
+    // the list above.
     const known = new Set(addresses.map((a) => a.address));
-    const unconfirmed = usage
-        .filter((u) => u.kind === 'unconfirmed' && !known.has(u.address))
-        .map((u) => ({ address: u.address, today: u.today, busiestDay: u.busiestDay }));
+    const staff = staffSeenAddresses();
+    const unconfirmed: AddressSighting[] = [];
+    const heldBack: (AddressSighting & { reason: HeldBackReason; directory?: { name: string | null } })[] = [];
+    for (const u of usage) {
+        if (u.kind !== 'unconfirmed' || known.has(u.address)) continue;
+        const sighting: AddressSighting = { address: u.address, today: u.today, busiestDay: u.busiestDay, ownerOrAdmin: staff.has(u.address) };
+        const standing = offerStanding(sighting);
+        if (standing.offer) unconfirmed.push(sighting);
+        else heldBack.push({ ...sighting, reason: standing.reason, ...(standing.directory ? { directory: standing.directory } : {}) });
+    }
     const old = count('old_app', '');
     return {
         addresses,
         named: knowsItsNames(),
         unconfirmed,
+        heldBack,
+        membersToOffer: MEMBERS_TO_OFFER,
         oldApps: { today: old?.today ?? 0, busiestDay: old?.busiestDay ?? 0 },
         unboundSignaturesUntil: unboundSignaturesUntilDay(),
         unboundSignaturesAccepted: unboundSignaturesAccepted(),

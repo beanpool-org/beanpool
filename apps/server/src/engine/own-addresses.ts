@@ -32,8 +32,9 @@
  * could pass only the probe through.
  *
  * A node with none of 1–4 (a self-hoster behind a proxy with no config) doesn't know its names. It is `unconfigured`:
- * member-signature.ts accepts any host there until the switch, logs it and counts it, and Settings offers each one to
- * the owner to confirm with one tap (decision 3a, 2026-09-27).
+ * member-signature.ts accepts any host there until the switch, logs it and counts it, and Settings offers the owner
+ * to confirm one with one tap (decision 3a, 2026-09-27) only when an owner's or admin's app, or several members'
+ * apps, reached the node there, and never another community's name (engine/address-offers.ts).
  */
 
 import { domainToASCII } from 'node:url';
@@ -138,6 +139,17 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     add(registrarAddress(), 'registrar');
     cache = { at: now, list };
     return list;
+}
+
+/** The zone the BeanPool registrar names communities in: `<name>.beanpool.org` (registrarAddress, resolvePublicNodeUrl). */
+export const BEANPOOL_ZONE = 'beanpool.org';
+
+/**
+ * A name in the registrar's zone: beanpool.org itself or any name under it. One that isn't among this node's
+ * configured names (its own registrar name is item 1 or 4) is another community's, or free to be claimed by one.
+ */
+export function isBeanPoolName(host: string): boolean {
+    return host === BEANPOOL_ZONE || host.endsWith(`.${BEANPOOL_ZONE}`);
 }
 
 /** A host on this machine: localhost, 127.0.0.0/8, [::1]. */

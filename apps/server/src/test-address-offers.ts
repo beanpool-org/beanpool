@@ -387,7 +387,8 @@ async function main(): Promise<void> {
             const nameless = held(rep, 'nameless.example');
             assert(!offered(rep, 'nameless.example') && nameless?.reason === 'directory' && nameless.directory !== undefined && nameless.directory?.name === null,
                 `a listed community with no name: held back all the same (${j(nameless)})`);
-            assert(offered(rep, 'home.example.org') && !offered(rep, 'home.example.org')?.hasOwnProperty('directory'),
+            const home = offered(rep, 'home.example.org');
+            assert(home && !('directory' in home),
                 'a host the directory does not list is offered as before');
         });
 

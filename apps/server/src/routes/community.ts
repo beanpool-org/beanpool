@@ -1530,16 +1530,28 @@ router.post('/api/push-tokens', async (ctx) => {
 });
 
 router.delete('/api/push-tokens', async (ctx) => {
-    const { publicKey, token } = (ctx as any).requestBody || {};
+    const { publicKey, token, leftAt } = (ctx as any).requestBody || {};
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey' };
+        return;
+    }
+    // The leaving phone's stamp (apps/native utils/account-leaves-phone.ts): with it, this is the leave statement's
+    // online form, signed by the leaving key itself, and does exactly what the statement does (applyPushLeave).
+    if (leftAt !== undefined && leftAt !== null && (!isPushLeaveStamp(leftAt) || !isPushLeaveToken(token))) {
+        ctx.status = 400;
+        ctx.body = { error: 'leftAt must be a positive whole number, with the token it is for' };
         return;
     }
     const activeKey = ctx.state.actor as string | undefined;
     if (!activeKey) {
         ctx.status = 401;
         ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (leftAt !== undefined && leftAt !== null) {
+        applyPushLeave(activeKey, token, leftAt);
+        ctx.body = { success: true };
         return;
     }
     const success = removePushToken(activeKey, token);

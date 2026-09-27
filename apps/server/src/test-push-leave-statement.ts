@@ -12,7 +12,8 @@
  *   3. a registration of T by K the phone sent before the leave and delivered after it is refused (409), for a day;
  *   4. K registering T again after the leave (signing back in on the same phone) is never undone by that statement,
  *      presented late or replayed, and a late older registration never lowers the row's stamp back within its reach;
- *   5. a registration from an app before stamps (no `registeredAt`) is removed by any statement; a bad stamp is refused.
+ *   5. a registration from an app before stamps (no `registeredAt`) is removed by any statement; a bad stamp is refused;
+ *   6. the online form, K's own signed DELETE carrying the leave's stamp, does exactly what the statement does.
  *
  * The statements are signed here byte for byte (0xFF, then the text), not with @beanpool/core's builder, so this suite
  * also pins the format the phone signs.
@@ -219,6 +220,25 @@ async function main(): Promise<void> {
     for (const bad of ['1000', -3, 0, 1.25, { $gt: 0 }]) {
         const r = await register(kim, 'ExponentPushToken[bad-stamp]', bad);
         assert(r.status === 400 && !has(kim, 'ExponentPushToken[bad-stamp]'), `a registration stamped ${JSON.stringify(bad)} is refused 400 (${show(r)})`);
+    }
+
+    // ── The online form: Kim's own signed DELETE, carrying the leave's stamp ─────────────────
+    console.log('\n── The signed DELETE with the leave\'s stamp');
+    const NEW_PHONE = 'ExponentPushToken[kims-new-phone]';
+    assert((await register(kim, NEW_PHONE, 5000)).status === 200 && (await register(ben, NEW_PHONE, 5)).status === 200,
+        'Kim and Ben\'s key register a new phone token');
+    const earlierDelete = await send('DELETE', '/api/push-tokens', { publicKey: kim.pub, token: NEW_PHONE, leftAt: 4500 }, kim);
+    assert(earlierDelete.status === 200 && has(kim, NEW_PHONE), `Kim's DELETE stamped before her registration leaves it (${show(earlierDelete)})`);
+    const benDeletesKims = await send('DELETE', '/api/push-tokens', { publicKey: kim.pub, token: NEW_PHONE, leftAt: 9000 }, ben);
+    assert(benDeletesKims.status === 403 && has(kim, NEW_PHONE), `Ben's DELETE naming Kim, stamped, is still refused (${show(benDeletesKims)})`);
+    const kimDeletes = await send('DELETE', '/api/push-tokens', { publicKey: kim.pub, token: NEW_PHONE, leftAt: 6000 }, kim);
+    assert(kimDeletes.status === 200 && !has(kim, NEW_PHONE) && has(ben, NEW_PHONE),
+        `Kim's DELETE stamped after it removes her row and only hers (${show(kimDeletes)})`);
+    const lateAfterDelete = await register(kim, NEW_PHONE, 5500);
+    assert(lateAfterDelete.status === 409 && !has(kim, NEW_PHONE), `and a registration stamped before it, delivered after, is refused (${show(lateAfterDelete)})`);
+    for (const [label, b] of [['a stamp as text', { leftAt: '6000', token: NEW_PHONE }], ['a stamp with no token', { leftAt: 6000 }]] as const) {
+        const r = await send('DELETE', '/api/push-tokens', { publicKey: ben.pub, ...b }, ben);
+        assert(r.status === 400 && has(ben, NEW_PHONE), `a DELETE with ${label} is refused 400, and nothing goes (${show(r)})`);
     }
 
     // The signed DELETE is as it was: the signer's own row only, and never unsigned.

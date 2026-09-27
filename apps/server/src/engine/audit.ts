@@ -146,8 +146,16 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     const members = db.prepare("SELECT public_key as publicKey, callsign FROM members").all() as { publicKey: string; callsign: string }[];
     
     const projectsRow = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const allProjects = projectsRow ? JSON.parse(projectsRow.value) : [];
-    const projects = allProjects.filter((p: any) => p.status !== 'rejected');
+    let allProjects: any[] = [];
+    if (projectsRow?.value) {
+        try {
+            allProjects = JSON.parse(projectsRow.value);
+            if (!Array.isArray(allProjects)) allProjects = [];
+        } catch {
+            allProjects = [];
+        }
+    }
+    const projects = allProjects.filter((p: any) => p?.status !== 'rejected');
 
     const commonsBalance = Math.round(COMMONS_BALANCE * 100) / 100;
     const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));

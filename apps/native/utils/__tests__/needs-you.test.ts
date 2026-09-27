@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_PRIORITY,
+    adminItemInWords, adminLabel, buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_PRIORITY,
     type NeedsYouInputs, type NeedsYouEntry,
 } from '../needs-you';
 
@@ -304,5 +304,51 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
             .toBe('1 report to review, 1 stalled trade awaiting a ruling and 2 emergency suspensions the community is voting on');
         // A kind a newer node added still reads as words, with its count.
         expect(label(item('appeals', 4, 'moderation', 'Appeals to hear'))).toBe('Appeals to hear: 4');
+    });
+
+    // With formal Decisions off (the worldwide community) an emergency suspension opens no vote: it lifts by itself
+    // after 7 days unless an admin lifts it sooner. Only a profile that says off changes the words.
+    describe('an emergency suspension where the node has no community votes', () => {
+        const susp = (n: number, label = 'Emergency suspensions the community is voting on') => item('suspensions', n, 'decisions', label);
+
+        it('says no vote when the profile says Decisions are off', () => {
+            // susp() carries the label of a node whose own words still speak of a vote: the phone does not believe it.
+            expect(adminItemInWords(susp(1), { decisions: false })).toBe('1 emergency suspension in its 7 days');
+            expect(adminItemInWords(susp(2), { decisions: false })).toBe('2 emergency suspensions in their 7 days');
+            // A node that already says so gets the same words, with the count.
+            expect(adminItemInWords(susp(1, 'Emergency suspensions in their 7 days'), { decisions: false }))
+                .toBe('1 emergency suspension in its 7 days');
+            expect(adminLabel([item('reports', 1, 'moderation'), susp(2)], { decisions: false }))
+                .toBe('1 report to review and 2 emergency suspensions in their 7 days');
+        });
+
+        it('keeps the vote when the profile says Decisions are on', () => {
+            expect(adminItemInWords(susp(1), { decisions: true })).toBe('1 emergency suspension the community is voting on');
+            expect(adminLabel([susp(2)], { decisions: true })).toBe('2 emergency suspensions the community is voting on');
+        });
+
+        it('keeps the vote when the profile does not say (a node from before the switch)', () => {
+            expect(adminItemInWords(susp(1))).toBe('1 emergency suspension the community is voting on');
+            expect(adminItemInWords(susp(1), {})).toBe('1 emergency suspension the community is voting on');
+            expect(adminLabel([susp(2)])).toBe('2 emergency suspensions the community is voting on');
+        });
+
+        it('changes only the suspensions words, never another kind', () => {
+            for (const decisions of [false, true, undefined]) {
+                expect(adminItemInWords(item('reports', 2, 'moderation'), { decisions })).toBe('2 reports to review');
+                expect(adminItemInWords(item('removals', 1, 'decisions'), { decisions })).toBe('1 removal in its 7-day grace period');
+            }
+        });
+
+        it('reaches the 🛡️ entry from the admin input, with the same count and landing', () => {
+            const entry = (decisions?: boolean) =>
+                buildNeedsYou(quiet({ admin: { role: 'admin', queue: queue(susp(1)), decisions } }))[0];
+            expect(entry(false).label).toBe('1 emergency suspension in its 7 days');
+            expect(entry(true).label).toBe('1 emergency suspension the community is voting on');
+            expect(entry(undefined).label).toBe('1 emergency suspension the community is voting on');
+            for (const d of [false, true, undefined]) {
+                expect(entry(d)).toMatchObject({ kind: 'admin', count: 1, accent: true, target: { to: 'admin', section: 'decisions' } });
+            }
+        });
     });
 });

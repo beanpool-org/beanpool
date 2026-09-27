@@ -59,8 +59,8 @@ export interface Member {
     deletedByOwnerAt?: string | null;
     /**
      * When what decides whether the board shows this member's listings last changed (members.board_standing_changed_at):
-     * the Market delta reads it. Carried by the replication export only (a standby and a take-over keep it, so a promoted
-     * standby's deltas carry the same authors); never in the member directory.
+     * the Market delta reads it. Carried by the replication export only (a standby and a take-over keep it); never in the
+     * member directory.
      */
     boardStandingChangedAt?: string | null;
 }

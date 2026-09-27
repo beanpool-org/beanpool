@@ -591,8 +591,8 @@ export function exportSyncState(
 
     // The mute (G3), a person's coarse area (G4), whether the row is a visitor's, whether its owner deleted it and when
     // their board standing last changed travel with the member, so a promoted standby keeps them; rowToMember leaves
-    // them out because the member directory is built from it too. This payload goes only to a standby pulling with the replication token or the admin password
-    // (routes/backup.ts): the database's own trust.
+    // them out because the member directory is built from it too. This payload goes only to a standby pulling with the
+    // replication token or the admin password (routes/backup.ts): the database's own trust.
     const members = (delta
         ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
         : db.prepare("SELECT * FROM members").all() as any[]

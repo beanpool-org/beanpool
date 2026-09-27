@@ -99,8 +99,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- enterprise's `paused` or off-board `status` (members_touch_board_standing). A phone's Market delta carries a
     -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader nothing the board doesn't:
     -- unlike updated_at, a bio, contact or mute never moves it. NULL: never changed since this column came in.
-    -- NOT in members_touch_updated_at's list, and needn't be: every writer moves updated_at in the same statement, so
-    -- delta sync carries it to a standby; listed, the touch trigger would restamp a standby's copied row.
+    -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
+    -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
+    -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
     board_standing_changed_at TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );

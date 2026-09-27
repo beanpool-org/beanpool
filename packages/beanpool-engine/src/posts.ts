@@ -966,9 +966,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
     // A sync read gives the listings the board leaves out for their author's sake as paused (ON_HOLIDAY_SQL), so a
     // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's
-    // standing next changes (the delta above). Not to the author, whose own listings the node shows them as they are, nor to a
-    // keeper of the enterprise, whose phone counts its listings as their own (enterprisesKeptBy), nor to a member with
-    // an open deal on one, whose phone finds the deal by its listing.
+    // standing next changes (the delta above). Not to the author, whose own listings the node shows them as they are,
+    // nor to a keeper of the enterprise, whose phone counts its listings as their own (enterprisesKeptBy), nor to a
+    // member with an open deal on one, whose phone finds the deal by its listing.
     const offBoard = syncRead ? authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : new Set<string>();
     const viewerDeals = offBoard.size > 0 && viewer ? postsInOpenDealWith(db, viewer) : new Set<string>();
     const kept = offBoard.size > 0 ? viewerKeeps() : new Set<string>();

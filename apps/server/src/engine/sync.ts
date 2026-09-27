@@ -566,9 +566,9 @@ function deletedByOwnerAt(rm: any): string | null {
 
 /**
  * members.board_standing_changed_at: when what decides whether the board shows the member's listings last changed, which
- * the Market delta reads (engine posts.ts). The main server's, so a promoted standby's deltas carry the authors its
- * would. It never clears one, so an update keeps this copy's when a main server from before the column sends none; then
- * a `status` it sends that changes the member's standing stamps it here (members_touch_board_standing).
+ * the Market delta reads (engine posts.ts). The main server's, as it wrote it. It never clears one, so an update keeps
+ * this copy's when a main server from before the column sends none; then a `status` it sends that changes the member's
+ * standing stamps it here (members_touch_board_standing).
  */
 function boardStandingChangedAt(rm: any): string | null {
     return instantOrNull(rm.boardStandingChangedAt);

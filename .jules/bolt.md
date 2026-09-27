@@ -222,3 +222,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-07 - O(1) Transaction Lookups for System Messages in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering system messages and system message action buttons repeatedly scanned `userTransactions` via `.find(t => t.postId === ...)` inside message mapping loops, creating an $O(M \times T)$ linear array scan during message rendering in chat threads.
 **Action:** Pre-computed `userTransactionsByPostId` Map via `useMemo` and updated `formatSystemMessage` and system message action button rendering to use constant-time $O(1)$ Map retrievals.
+
+## 2026-10-08 - Single-Pass Event RSVP Counting in getPosts Engine
+**Learning:** In `packages/beanpool-engine/src/posts.ts`, `getPosts` calculated `goingCount` and `interestedCount` for event posts by calling `rsvps.filter(...)` twice. For feeds and searches containing $E$ events and $R$ RSVPs, this performed $2 \times R$ array operations and generated two temporary array allocations per event post on hot query paths.
+**Action:** Refactored RSVP status counting into a single `for...of` loop pass over `rsvps`, computing both `goingCount` and `interestedCount` in $R$ iterations with zero intermediate array allocations.

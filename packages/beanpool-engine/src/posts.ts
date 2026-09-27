@@ -1043,8 +1043,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
             }
-            post.goingCount = rsvps.filter(v => v.status === 'going').length;
-            post.interestedCount = rsvps.filter(v => v.status === 'interested').length;
+            // ⚡ Bolt: single-pass RSVP counting to avoid double .filter() scans and array allocations
+            let goingCount = 0;
+            let interestedCount = 0;
+            for (const v of rsvps) {
+                if (v.status === 'going') goingCount++;
+                else if (v.status === 'interested') interestedCount++;
+            }
+            post.goingCount = goingCount;
+            post.interestedCount = interestedCount;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
             if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
             if (host) {

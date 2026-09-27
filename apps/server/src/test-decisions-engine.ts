@@ -412,6 +412,9 @@ async function runDecisionsSuite() {
     const currentCommons = getCommonsBalance();
     const bigAmount = currentCommons + 500; // More than commons balance!
 
+    // A grant is capped when proposed (grant cap, 2026-09-27), so an underfunded one gets here only by the Commons paying
+    // out between proposal and close: it could pay the grant when proposed, and is short of it by the tick.
+    setCommonsBalance(bigAmount);
     const decBigGrant = createDecision({
         authorPubkey: admin,
         title: 'Grant for community solar',
@@ -421,6 +424,7 @@ async function runDecisionsSuite() {
         subject: bigGrantEnterprise,
         params: { amount: bigAmount },
     });
+    setCommonsBalance(currentCommons);
     castDecisionVote(decBigGrant.id, voterA, true, 5);
     castDecisionVote(decBigGrant.id, voterB, true, 5);
     castDecisionVote(decBigGrant.id, voterC, true, 5);
@@ -442,7 +446,7 @@ async function runDecisionsSuite() {
     // Test 90-day expiry of queued grants
     const staleGrantEnterprise = 'ent_stale_grant_' + Date.now();
     seedTestMember(staleGrantEnterprise, 'Stale Initiative', { isTreasury: true });
-    setCommonsBalance(10); // Low pool
+    setCommonsBalance(500); // Within the cap when proposed...
     const decStale = createDecision({
         authorPubkey: admin,
         title: 'Stale initiative grant',
@@ -452,6 +456,7 @@ async function runDecisionsSuite() {
         subject: staleGrantEnterprise,
         params: { amount: 500 },
     });
+    setCommonsBalance(10); // ...then a low pool by the time it closes
     castDecisionVote(decStale.id, voterA, true, 2);
     castDecisionVote(decStale.id, voterB, true, 2);
     castDecisionVote(decStale.id, voterC, true, 2);
@@ -895,7 +900,8 @@ async function runDecisionsSuite() {
     testAssert(getDecision(decQueuedWriteOff.id)!.status === 'executed', 'Queued write_off_deficit executes automatically once pool has funds');
     testAssert(ledger.getAccount(queuedInsolventEnt).balance === 0, 'Queued insolvent enterprise balance reset to 0');
     // 11i. Enforce 1-grant queue capacity per §3.7: trailing underfunded grants become execution_blocked
-    setCommonsBalance(10); // Pool underfunded
+    // Each grant is within the cap when proposed; the pool is underfunded by the time each one closes.
+    setCommonsBalance(100);
     const entQueue1 = 'ent_q1_' + Date.now();
     seedTestMember(entQueue1, 'Q1 Enterprise', { isTreasury: true });
     const decQ1 = createDecision({
@@ -907,6 +913,7 @@ async function runDecisionsSuite() {
         subject: entQueue1,
         params: { amount: 100 },
     });
+    setCommonsBalance(10); // Pool underfunded
     castDecisionVote(decQ1.id, voterA, true, 4);
     castDecisionVote(decQ1.id, voterB, true, 4);
     castDecisionVote(decQ1.id, voterC, true, 4);
@@ -916,6 +923,7 @@ async function runDecisionsSuite() {
 
     const entQueue2 = 'ent_q2_' + Date.now();
     seedTestMember(entQueue2, 'Q2 Enterprise', { isTreasury: true });
+    setCommonsBalance(150);
     const decQ2 = createDecision({
         authorPubkey: admin,
         title: 'Grant Q2',
@@ -925,6 +933,7 @@ async function runDecisionsSuite() {
         subject: entQueue2,
         params: { amount: 150 },
     });
+    setCommonsBalance(10); // Pool underfunded again
     castDecisionVote(decQ2.id, voterA, true, 4);
     castDecisionVote(decQ2.id, voterB, true, 4);
     castDecisionVote(decQ2.id, voterC, true, 4);

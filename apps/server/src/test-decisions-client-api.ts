@@ -269,7 +269,9 @@ async function runSuite() {
     });
     assert(resShortDesc.status === 400, 'Propose with description < 10 chars fails with 400');
     assert(resShortDesc.body.error.includes('description must be at least 10 characters'), 'Error cites description requirement');
-    // 1d. Successful propose with no bond charged
+    // 1d. Successful propose with no bond charged. The Commons can pay the 80 it asks for: a grant is capped when
+    // proposed (grant cap, 2026-09-27), and this fresh node's Commons would otherwise hold nothing.
+    setCommonsBalance(100);
     const aliceBalanceBefore = getBalance(alice).balance;
     const resAlice = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: alice,

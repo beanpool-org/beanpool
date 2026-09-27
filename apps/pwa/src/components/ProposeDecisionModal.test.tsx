@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProposeDecisionModal } from './ProposeDecisionModal';
+import { createDecision } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
     createDecision: vi.fn(),
@@ -111,5 +112,33 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
 
         const hiddenEmojis = container.querySelectorAll('span[aria-hidden="true"]');
         expect(hiddenEmojis.length).toBeGreaterThan(0);
+    });
+
+    it("shows the node's grant-cap sentence as it comes, and keeps the form open", async () => {
+        // The node refuses a grant bigger than the Commons could pay (decisions-engine.ts grantCapRefusal); request()
+        // throws its `error` field. The screen is not the rule, so it shows the node's words unchanged.
+        const sentence = 'This grant is bigger than the Commons could pay: it holds 100 Beans and took in 23.50 Beans over the last 30 days, so the most you can ask for now is 123.50 Beans.';
+        vi.mocked(createDecision).mockRejectedValueOnce(new Error(sentence));
+        const onCreated = vi.fn();
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={onCreated}
+                identity={mockIdentity}
+                commonsBalance={100}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
+        fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'Seed money' } });
+        fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'For the tool library roof' } });
+        fireEvent.change(screen.getByPlaceholderText('Enter enterprise pubkey...'), { target: { value: 'ab'.repeat(32) } });
+        fireEvent.change(screen.getByPlaceholderText('e.g. 250'), { target: { value: '124.5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Decision' }));
+
+        expect(await screen.findByText(sentence)).toBeInTheDocument();
+        expect(vi.mocked(createDecision)).toHaveBeenCalledWith(expect.objectContaining({ effect: 'grant_enterprise', params: { amount: 124.5 } }));
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 });

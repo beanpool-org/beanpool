@@ -18,8 +18,9 @@
  *  2. The cap moves with the balance, with a new inflow row, and with the clock (injected): two days on, a row 29 days
  *     old drops out and tomorrow's row comes in; sixty days on the inflow is 0 and the cap is what the Commons holds.
  *  3. A Commons in deficit is named plainly ("owes") and the cap never shows below 0; a grant with no usable amount is
- *     refused with its own sentence, writing nothing.
- *  4. Other Decision kinds are unaffected: with a cap of 0, a member Decision and a deficit write-off are still proposed.
+ *     refused with its own sentence, writing nothing. A cap of exactly 0 refuses even a sub-cent sliver.
+ *  4. With a cap of 0 (a new node), any grant is refused, however small. Other Decision kinds are unaffected: a member
+ *     Decision and a deficit write-off are still proposed.
  *  5. Day zero: a grant queued and a grant open before the rule, both far over today's cap, are untouched by all of the
  *     above (their rows are byte-identical), and the queued one still waits on the tick and pays when the Commons can.
  *
@@ -228,6 +229,9 @@ async function main(): Promise<void> {
     await expectAccepted('grant_hardship', 21, 'a Commons 5 Beans in deficit, a grant at 21');
     setCommonsBalance(-30);
     await expectRefused('grant_hardship', 1, refusal('owes 30 Beans', '26', '0'), 'a Commons deeper in deficit than its inflow: the most is 0, never below');
+    // A deficit its inflow exactly cancels: the cap is 0, and the float allowance does not let a sliver through.
+    setCommonsBalance(-26);
+    await expectRefused('grant_hardship', 1e-8, refusal('owes 26 Beans', '26', '0'), 'a cap of exactly 0 from a deficit, a hundred-millionth of a Bean');
     setCommonsBalance(100);
     for (const bad of ['ten', 0, -5, null, '1e999'] as unknown[]) {
         await expectRefused('grant_enterprise', bad, AMOUNT_ERROR, `amount ${JSON.stringify(bad)}`);
@@ -239,6 +243,9 @@ async function main(): Promise<void> {
     setCommonsBalance(0);
     setClock(() => now + 60 * DAY);
     await expectRefused('grant_enterprise', 1, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, any grant');
+    // A new node's cap (nothing held, nothing in): a sliver under the float allowance would otherwise be queued unpayable.
+    await expectRefused('grant_enterprise', 1e-8, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hundred-millionth of a Bean');
+    await expectRefused('grant_hardship', 1e-9, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hardship grant of a billionth of a Bean');
     const target = makeMember('Target');
     const freeze = await signedPost('/api/commons/decisions', {
         title: 'Freeze Target', description: 'Freeze their credit for a while', touches: 'member', effect: 'freeze_credit',

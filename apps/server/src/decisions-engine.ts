@@ -559,13 +559,15 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
 
 /**
  * A grant proposal's amount against the cap. Throws the member's sentence; writes nothing. A grant with no usable amount
- * could never be paid (preflightAssert blocks it), so it gets its plain answer here instead of a vote.
+ * could never be paid (preflightAssert blocks it), so it gets its plain answer here instead of a vote. A cap of 0 or
+ * less refuses every grant outright: the 1e-6 float allowance would otherwise let a sliver of a Bean through, to be
+ * queued unpayable on a new node's empty Commons.
  */
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
     const cap = commonsGrantCap();
-    if (amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+    if (cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────

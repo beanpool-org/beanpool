@@ -35,7 +35,8 @@
  *     that it is this community's address.
  *
  * Only what Settings OFFERS changes here. What a node accepts until the switch, the counts and their bounds, the
- * confirm route (an owner or admin may still send it any address: a renamed node keeps its old name that way, item 3),
+ * confirm route (an owner or admin may still send it any address; a renamed node keeps its old registrar name without
+ * it, as a former name, own-addresses.ts item 4),
  * and what a confirmed address does, are unchanged.
  */
 

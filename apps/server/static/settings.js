@@ -191,6 +191,12 @@
             } else if (d.status === 'pending') {
                 display.innerHTML = `⏳ <strong style="color:#fbbf24;">Awaiting approval</strong> for <strong>${esc(d.name || '')}.beanpool.org</strong>`;
                 offlineBtn.style.display = '';
+            } else if (d.status === 'none' && d.kept && d.kept.hostname) {
+                // The address service has no record of the name, and the node keeps it: members' apps that use it are
+                // still accepted (engine/registrar-names.ts).
+                display.innerHTML = `<span style="color:#fbbf24;">The address service has no record of this community's name.</span> `
+                    + `<span style="color:#94a3b8;">This server keeps <strong>${esc(d.kept.hostname)}</strong>, and members' apps that use it are still accepted.</span>`;
+                claimForm.style.display = '';
             } else if (d.status === 'none') {
                 display.innerHTML = `<span style="color:#94a3b8;">No public address yet. Set <code>PUBLIC_ADDRESS_NAME</code> on the node, or claim one below.</span>`;
                 claimForm.style.display = '';

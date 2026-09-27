@@ -16,6 +16,7 @@ import path from 'node:path';
 import { getNodeRole, updateNodeConfig, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
+import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TOKEN_FILE = path.join(DATA_DIR, 'tunnel-token'); // the cloudflared sidecar reads this
@@ -142,7 +143,14 @@ export function withKeptTunnelToken(next: any, prev: any): any {
     return kept && sameName ? { ...next, tunnelToken: kept } : next;
 }
 
-const persist = (pa: any) => updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
+/**
+ * Store an answer as the node's address. The record of names (engine/registrar-names.ts) is written first, so a name
+ * stored until now is kept as a former one when the answer names another. `claim`: the node's own claim answered.
+ */
+const persist = (pa: any, use: 'stored' | 'claim' = 'stored') => {
+    recordRegistrarAnswer(pa, use);
+    updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
+};
 
 async function reconcile(): Promise<void> {
     const name = desiredName();
@@ -156,13 +164,16 @@ async function reconcile(): Promise<void> {
     if (st.status === 'live') { persist(st); writeToken(st.tunnelToken); return; }
     if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || name}" awaiting approval`); persist(st); return; }
 
+    // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
+    recordRegistrarAnswer(st, 'status');
+
     // status 'none' → claim it
     const contact = process.env.PUBLIC_ADDRESS_CONTACT || undefined;
     const communityName = process.env.PUBLIC_ADDRESS_COMMUNITY_NAME || getLocalConfig().communityName || undefined;
 
     try {
         const res = await claimAddress(name, mode, origin, contact, communityName);
-        persist({ name, mode, communityName, contact, ...res });
+        persist({ name, mode, communityName, contact, ...res }, 'claim');
         if (res.status === 'live') { writeToken(res.tunnelToken); console.log(`[PublicAddr] 🟢 live at ${res.hostname}`); }
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
     } catch (e: any) { console.warn('[PublicAddr] claim failed:', e.message); }

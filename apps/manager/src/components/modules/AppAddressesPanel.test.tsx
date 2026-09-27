@@ -29,6 +29,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             addresses: [
                 { address: 'mullum.beanpool.org', source: 'public-address', today: 12, busiestDay: 30 },
                 { address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 },
+                { address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 2 },
             ],
             oldApps: { today: 3, busiestDay: 5 },
         }));
@@ -36,6 +37,8 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         const rows = await screen.findAllByTestId('app-address');
         expect(rows[0].textContent).toMatch(/^mullum\.beanpool\.org · this community's web addressused by 12 apps today · most in one day this week: 30$/);
         expect(rows[1].textContent).toMatch(/confirmed in Settings/);
+        expect(rows[2].textContent).toMatch(/^oldname\.beanpool\.org · a BeanPool name it had before, still acceptedused by 2 apps today/);
+        expect(rows[2].querySelector('button')).toBeNull();
         // Only an owner-confirmed address can be removed here; the others are changed where they are set.
         expect(rows[0].querySelector('button')).toBeNull();
         expect(rows[1].querySelector('button')!.textContent).toBe('Remove community.example.org');

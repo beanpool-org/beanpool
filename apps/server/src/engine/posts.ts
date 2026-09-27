@@ -310,6 +310,7 @@ export function createPost(
         eventPrivateNote?: unknown;
     },
 ): MarketplacePost | null {
+    const now = Date.now();
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
         return null;
@@ -411,7 +412,7 @@ export function createPost(
         if (![3, 7, 14].includes(durationDays)) {
             throw new Error('Poll duration must be 3, 7, or 14 days');
         }
-        pollClosesAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+        pollClosesAt = new Date(now + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
         // Enforce poll isolation defaults
         category = 'community';
@@ -447,7 +448,7 @@ export function createPost(
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 
     const finalId = id || crypto.randomUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date(now).toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos.

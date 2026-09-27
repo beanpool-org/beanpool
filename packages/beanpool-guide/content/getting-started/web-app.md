@@ -77,7 +77,7 @@ If you sign in with an account that isn't the one you joined with, the page says
 - **Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.
 - **Posting an Offer or a Need:** use **New Post** on the **Map** page.
 - **Appearance:** the choice is called **Same as device** instead of "Same as phone".
-- **Blocking:** Settings says **Manage Blocked Members**. Your blocks are kept in this browser. Signing out of the web app clears them, and so does the browser clearing its saved data. Block them again when you come back.
+- **Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.
 - **Chats:** the web chat has **Report** and **Block** buttons at the top.
 
 ## What the web app does not have

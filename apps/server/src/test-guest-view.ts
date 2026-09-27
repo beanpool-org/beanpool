@@ -1154,6 +1154,7 @@ async function main(): Promise<void> {
             'POST /api/admin/thresholds/get',
             'GET /api/attest',
             'GET /api/avatar/:pubkey',
+            'GET /api/blocks', 'POST /api/blocks', 'POST /api/blocks/clear', 'POST /api/blocks/remove',
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',

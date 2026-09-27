@@ -25,7 +25,7 @@ import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
 import { normaliseVersion, isVersionOlder } from './lib/app-version';
-import { retryPendingReports } from './lib/blocklist';
+import { retryPendingReports, startBlocklist } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
@@ -332,6 +332,13 @@ export function App() {
             window.removeEventListener('online', handleOnline);
         };
     }, []);
+
+    // The account's block list, which the community keeps for it (lib/blocklist): read from the node now, again when the
+    // node rings, and never kept in this browser. A list an older build kept here moves up to this account, once.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        return startBlocklist(identity.publicKey);
+    }, [identity?.publicKey]);
 
     // Connect to BeanPool Node once identity is loaded
     useEffect(() => {

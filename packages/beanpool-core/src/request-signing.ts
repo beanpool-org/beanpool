@@ -46,6 +46,7 @@ export const ADMIN_SIGNIN_TAG = 'beanpool-admin-signin/2';
 export const SETTINGS_SIGNIN_TAG = 'beanpool-settings-signin/2';
 export const INVITE_TICKET_TAG = 'beanpool-invite-ticket/2';
 export const RE_ENROLL_TAG = 'beanpool-re-enroll/2';
+export const PUSH_LEAVE_TAG = 'beanpool-push-leave/2';
 
 // ─── The host ───────────────────────────────────────────────────────────────────────────────
 
@@ -255,6 +256,26 @@ export function reEnrollText(host: string, code: string): string {
     return `${RE_ENROLL_TAG}\n${host}\n${code}`;
 }
 
+/**
+ * A leave statement: "key `publicKey` no longer wants this phone's push token `token` registered at `host`", made as
+ * the account leaves the phone (Sign Out, Replace, the node-mismatch delete) and presented until that community confirms
+ * it (`/api/push-tokens/leave/:publicKey`). `leftAt` is the phone's own ordering stamp, never compared with the node's
+ * clock: the node removes only a registration of the token whose stamp, from the same phone, is not later than it.
+ */
+export function pushLeaveText(host: string, publicKey: string, token: string, leftAt: number): string {
+    return `${PUSH_LEAVE_TAG}\n${host}\n${publicKey}\n${token}\n${leftAt}`;
+}
+
+/** A push token a leave statement can name: a non-empty single line, at most 512 characters. */
+export function isPushLeaveToken(token: unknown): token is string {
+    return typeof token === 'string' && token.length > 0 && token.length <= 512 && !/[\r\n]/.test(token);
+}
+
+/** A leave statement's stamp: a positive safe integer (milliseconds, from the phone's own monotonic counter). */
+export function isPushLeaveStamp(leftAt: unknown): leftAt is number {
+    return typeof leftAt === 'number' && Number.isSafeInteger(leftAt) && leftAt > 0;
+}
+
 // ─── Builders ───────────────────────────────────────────────────────────────────────────────
 
 /** Signs bytes with the member key. Given only to the builders below: the app never signs bytes a node chose. */
@@ -371,4 +392,16 @@ export async function signReEnroll(nodeUrl: string, code: string, sign: Signer):
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot re-enrol: the node address names no host');
     return toBase64(await sign(signedRequestBytes(reEnrollText(host, code.trim().toUpperCase()))));
+}
+
+/**
+ * The leave statement for the community at `nodeUrl` (base64), signed by the leaving key. Throws, having signed
+ * nothing, when the URL names no host or the token or stamp is not one {@link pushLeaveText} can carry.
+ */
+export async function signPushLeave(nodeUrl: string, publicKey: string, token: string, leftAt: number, sign: Signer): Promise<string> {
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot sign a leave statement: the node address names no host');
+    if (!/^[0-9a-f]{64}$/.test(publicKey)) throw new Error('Cannot sign a leave statement: that is not a public key');
+    if (!isPushLeaveToken(token) || !isPushLeaveStamp(leftAt)) throw new Error('Cannot sign a leave statement for that token');
+    return toBase64(await sign(signedRequestBytes(pushLeaveText(host, publicKey, token, leftAt))));
 }

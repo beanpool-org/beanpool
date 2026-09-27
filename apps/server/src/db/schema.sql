@@ -507,8 +507,24 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     token TEXT NOT NULL,
     platform TEXT DEFAULT 'ios',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
+    -- an app before leave statements. A leave statement removes the row only when this is not later than its own.
+    registered_at INTEGER,
     PRIMARY KEY (public_key, token)
 );
+
+-- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
+-- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused.
+CREATE TABLE IF NOT EXISTS push_token_leaves (
+    public_key TEXT NOT NULL,
+    token TEXT NOT NULL,
+    left_at INTEGER NOT NULL,
+    applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, token)
+);
+-- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
+-- leaves: a search on this, never a scan of the table per leave.
+CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

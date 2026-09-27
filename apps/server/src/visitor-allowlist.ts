@@ -14,7 +14,9 @@
  *
  * Not here, because the middleware never sees them (isSignatureBypassed): its own signed redeem of an invite or an
  * offline ticket (/api/invite/redeem, /api/invite/redeem-offline, whose routes check the signature themselves and make
- * its row a member's), and the admin surface, where a visitor's row holds no role (engine/node-roles.ts NODE_ROLE_ACTS).
+ * its row a member's), a phone's leave statement (/api/push-tokens/leave/:publicKey, which checks the leaving key's own
+ * statement and only ever removes that key's registration of that token), and the admin surface, where a visitor's row
+ * holds no role (engine/node-roles.ts NODE_ROLE_ACTS).
  *
  * Federation needs nothing here. Its paths reach a federation visitor's row through the peer protocol and engine calls,
  * never a request that row signs on this node: the relayed DM (federation-protocol.ts relay_message: registerVisitor,

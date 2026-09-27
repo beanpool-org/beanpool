@@ -420,6 +420,7 @@ run_federation_suites() {
       test-manager-backups
       test-push-preferences
       test-push-token-own-rows
+      test-push-leave-statement
       test-settings
       test-srv20-ledger-reset
       test-harvester

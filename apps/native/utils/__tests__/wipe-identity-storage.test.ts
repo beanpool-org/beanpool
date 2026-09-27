@@ -49,6 +49,10 @@ describe('wipeIdentityScopedStorage', () => {
             [`beanpool_blocked_users:${'ab'.repeat(32)}`]: JSON.stringify(['cd'.repeat(32)]),
             [`beanpool_pending_abuse_reports:${'ab'.repeat(32)}`]: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             beanpool_blocked_users_moved: '1',
+            // The leave statements not yet confirmed (push-leave.ts), and the phone's push stamp: they are how the
+            // leaving account's alerts stop where the phone had no connection as it left, so they outlive the wipe.
+            beanpool_push_leave_statements: JSON.stringify([{ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32) }]),
+            beanpool_push_stamp: '1759000000000',
         });
 
         await wipeIdentityScopedStorage(storage);
@@ -57,6 +61,8 @@ describe('wipeIdentityScopedStorage', () => {
             `beanpool_blocked_users:${'ab'.repeat(32)}`,
             'beanpool_blocked_users_moved',
             `beanpool_pending_abuse_reports:${'ab'.repeat(32)}`,
+            'beanpool_push_leave_statements',
+            'beanpool_push_stamp',
             'beanpool_saved_nodes',
             `bp_tier_${'cd'.repeat(32)}`,
             'some_ui_pref',

@@ -4,7 +4,9 @@
  *
  *   GET  /api/blocks                                → { blocked: [{ publicKey, blockedAt }], max }, oldest first
  *   POST /api/blocks        { targetPubkey }        → { success: true, added: [keys], blocked, max }
- *                           { targetPubkeys: [..] } (the web app's one-time move of a list it kept in the browser)
+ *                           { targetPubkeys: [..] } → { success: true, added: [keys], skipped: count, blocked, max }
+ *                           (the web app's one-time move of a list it kept in the browser: only keys this node has a
+ *                           row for go on the list, and the rest are counted in `skipped`)
  *   POST /api/blocks/remove { targetPubkey }        → { success: true, removed: boolean, blocked, max }
  *   POST /api/blocks/clear                          → { success: true, removed: count, blocked: [], max }
  *
@@ -30,7 +32,7 @@
 import Router from '@koa/router';
 import { passesReadGate, isNodeMember, getNodeRole, broadcast } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
-import { listBlocks, addBlocks, removeBlock, clearBlocks, BlockRefusal, MEMBER_BLOCKS_MAX } from '../engine/member-blocks.js';
+import { listBlocks, addBlocks, addKnownBlocks, removeBlock, clearBlocks, BlockRefusal, MEMBER_BLOCKS_MAX } from '../engine/member-blocks.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import type { RouteDeps } from './types.js';
 
@@ -103,15 +105,17 @@ export function createBlockRoutes(_deps: RouteDeps): Router {
             return refuse(ctx, 400, `Send targetPubkey, the key to block, or targetPubkeys, a list of 1 to ${MEMBER_BLOCKS_MAX} keys.`);
         }
         if (!keys.every(k => isMemberKeySpelling(k))) return refuse(ctx, 400, BAD_KEY_ERROR, BAD_KEY_CODE);
-        let added: string[];
+        // One key: any key, a member's here or not, since the web app shows another community's listings and their author
+        // can be blocked. A list, the one-time move: only the keys this node has a row for (engine/member-blocks.ts).
+        let result: { added: string[]; skipped?: number };
         try {
-            added = addBlocks(actor, keys);
+            result = many === undefined ? { added: addBlocks(actor, keys) } : addKnownBlocks(actor, keys);
         } catch (e) {
             if (e instanceof BlockRefusal) return refuse(ctx, e.status, e.message, e.code);
             throw e;
         }
-        if (added.length > 0) ring(actor);
-        answer(ctx, actor, { success: true, added });
+        if (result.added.length > 0) ring(actor);
+        answer(ctx, actor, { success: true, ...result });
     });
 
     router.post('/api/blocks/remove', async (ctx) => {

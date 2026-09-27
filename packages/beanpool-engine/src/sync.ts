@@ -378,9 +378,10 @@ export interface SyncModerationNotice {
 /**
  * One key a member blocked (apps/server engine/member-blocks.ts), kept by the community for their account so the web app
  * has it back on any browser. Replicated so a server that takes over still hides whom each member blocked. Watermarked on
- * `updatedAt`, which a block and a re-key's move stamp; a removal (an unblock, a clear, a prune, a self-deletion, a
- * re-key's old key) travels as a `member_blocks` tombstone keyed `<ownerPubkey>|<blockedPubkey>`, and a row stamped after
- * that tombstone is a block made again.
+ * `updatedAt`, which a block and a re-key's move stamp; a removal travels as a `member_blocks` tombstone, keyed
+ * `<ownerPubkey>|<blockedPubkey>` for one unblock and `<ownerPubkey>|*` for a whole list (a clear, a prune, a
+ * self-deletion, a re-key's old key: every row of that owner stamped no later), and a row stamped after its tombstone is
+ * a block made again.
  */
 export interface SyncMemberBlock {
     ownerPubkey: string;

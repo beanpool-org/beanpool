@@ -6943,7 +6943,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         dropKeptNoticesOf(publicKey);
-        // Their block list goes with the profile, each row tombstoned so a standby deletes it too (engine/member-blocks.ts).
+        // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }

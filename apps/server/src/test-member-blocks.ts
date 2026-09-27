@@ -6,8 +6,9 @@
  * Over REAL HTTPS through the real signature middleware, with signed member sockets:
  *
  *   1. the owner's own list: add, read, add again, remove, clear, block again; private, no-store; a change rings a bare
- *      doorbell on the owner's own sockets (every tab), on nobody else's; nothing goes in the activity feed; each
- *      removal leaves a tombstone no earlier than the row, and a block made again is stamped after it
+ *      doorbell on the owner's own sockets (every tab), on nobody else's; nothing goes in the activity feed; an unblock
+ *      leaves a tombstone no earlier than the row, Unblock All one for the whole list, and a block made again is stamped
+ *      after them
  *   2. nobody else reads or changes it: a query naming the owner, a body naming the owner (ownerPubkey, publicKey), the
  *      owner's key on another key's signature, no signature, a key with no row, a visitor's row (answered as the key with
  *      no row), a replayed request; another member's own clear touches only their own
@@ -27,6 +28,12 @@
  *      malformed one without failing the copy; the first copy asks for one whole copy; an unblock and a block again in
  *      one millisecond still order; the replica audit counts the table (only when the copy carries it) and a
  *      force-resync clears it
+ *   9. no member can flood the node (the deciding review of #1239: 500 tombstones every two requests, kept 30 days):
+ *      rounds of "block 500 keys + Unblock All" and of "block + unblock" leave at most one tombstone per request and never
+ *      more than the ceiling per owner, in the database and in a whole copy; past the ceiling an owner's tombstones fold
+ *      into one and the blocks they hold are stamped after it; the one-time move skips a key with no row here and counts
+ *      it, never refusing the rest; a block made again after Unblock All, in the same millisecond or after the clock
+ *      stepped back, is stamped after it, and a later Unblock All never stamps earlier than the one before
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks.ts
  */
@@ -124,6 +131,15 @@ const rowsOf = (id: Id | string): Row[] => attempt(() => db.prepare('SELECT * FR
 const keysOf = (id: Id | string) => rowsOf(id).map(r => r.blocked_pubkey);
 const rowOf = (o: string, b: string) => attempt(() => db.prepare('SELECT * FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(o, b) as Row | undefined);
 const tombOf = (o: string, b: string) => (db.prepare("SELECT deleted_at FROM tombstones WHERE table_name = 'member_blocks' AND row_key = ?").get(`${o}|${b}`) as { deleted_at: string } | undefined)?.deleted_at ?? null;
+/** The tombstone of an owner's whole list (Unblock All, a prune, a self-deletion, a re-key's old key): `<owner>|*`. */
+const listTombOf = (o: string) => tombOf(o, '*');
+/** The stamp a standby deletes this pair by: its own tombstone's, or its owner's whole list's, whichever is later. */
+const coverOf = (o: string, b: string): string | null => {
+    const [pair, list] = [tombOf(o, b), listTombOf(o)];
+    return pair === null ? list : list === null ? pair : pair > list ? pair : list;
+};
+/** Every `member_blocks` tombstone of this owner's, their whole list's included. */
+const tombsOf = (o: string) => (db.prepare("SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'member_blocks' AND substr(row_key, 1, 65) = ?").get(`${o}|`) as { n: number }).n;
 const everyRow = (): Row[] => attempt(() => db.prepare('SELECT * FROM member_blocks ORDER BY owner_pubkey, blocked_pubkey').all() as Row[]) ?? [];
 
 // ── signed member sockets ───────────────────────────────────────────────────────────────────────
@@ -212,7 +228,8 @@ async function main(): Promise<void> {
     const cyRow = rowOf(ann.pk, cy.pk);
     const cl = await call('POST', ann, '/api/blocks/clear', {});
     assert(cl.status === 200 && cl.body?.removed === 1 && listed(cl).length === 0 && rowsOf(ann).length === 0, `Unblock All empties her list (${show(cl)})`);
-    assert(!!tombOf(ann.pk, cy.pk) && !!cyRow && tombOf(ann.pk, cy.pk)! >= cyRow.updated_at, 'and leaves a tombstone for each');
+    assert(!!cyRow && !!coverOf(ann.pk, cy.pk) && coverOf(ann.pk, cy.pk)! >= cyRow.updated_at && !!listTombOf(ann.pk) && tombsOf(ann.pk) === 1,
+        `and leaves one tombstone for her whole list, no earlier than any row it removed, in place of one for each (${tombsOf(ann.pk)} for her)`);
     const back = await call('POST', ann, '/api/blocks', { targetPubkey: bo.pk });
     const backRow = rowOf(ann.pk, bo.pk);
     assert(back.status === 200 && !!backRow && !!boTomb && backRow.updated_at > boTomb,
@@ -322,7 +339,8 @@ async function main(): Promise<void> {
         `neither field, both, an empty list, 501 keys, a list that isn't one, one bad key or her own in a list: 400, none of it written (${shapes.map(r => r.status).join(', ')})`);
     const stranger = await call('POST', ann, '/api/blocks', { targetPubkey: nobody.pk });
     assert(stranger.status === 200 && same(keysOf(ann), [nobody.pk]), `a key with no row here may be blocked: someone from another community (${show(stranger)})`);
-    const bulk = Array.from({ length: 499 }, newKey);
+    // The one-time move takes only keys this node has a row for (section 9): these 499 are visitors here.
+    const bulk = Array.from({ length: 499 }, (_, i) => member(`Filler${i}`, { visitor: true }).pk);
     const fill = await call('POST', ann, '/api/blocks', { targetPubkeys: [...bulk, nobody.pk] });
     assert(fill.status === 200 && (fill.body?.added?.length ?? 0) === 499 && rowsOf(ann).length === 500 && listed(fill).length === 500,
         `a list of keys is blocked in one go, a key already blocked left as it is: 500 now (${fill.status}, ${fill.body?.added?.length} added, ${rowsOf(ann).length})`);
@@ -356,13 +374,15 @@ async function main(): Promise<void> {
     const cyRows = rowsOf(cy);
     const del = await call('POST', cy, '/api/member/purge', { action: 'purge_account' });
     assert(del.status === 200 && cyRows.length === 2 && rowsOf(cy).length === 0, `Cy deletes her account: her list goes (${show(del)}; ${cyRows.length} → ${rowsOf(cy).length})`);
-    assert(cyRows.every(r => { const t = tombOf(cy.pk, r.blocked_pubkey); return !!t && t >= r.updated_at; }), 'each with a tombstone, so a standby deletes it too');
+    assert(cyRows.every(r => { const t = coverOf(cy.pk, r.blocked_pubkey); return !!t && t >= r.updated_at; }) && !!listTombOf(cy.pk) && tombsOf(cy.pk) === 1,
+        `each under the one tombstone of her list, no earlier than it, so a standby deletes it too (${tombsOf(cy.pk)} for her)`);
     assert(same(keysOf(bo), [cy.pk]), "Bo's block of her is his and stays");
     await call('POST', dee, '/api/blocks', { targetPubkeys: [ann.pk, bo.pk] });
     const deeRows = rowsOf(dee);
     attempt(() => adminPruneUser(dee.pk, 'owner:password'));
-    assert(deeRows.length === 2 && rowsOf(dee).length === 0 && deeRows.every(r => !!tombOf(dee.pk, r.blocked_pubkey)),
-        `a removal takes Dee's list, tombstoned (${deeRows.length} → ${rowsOf(dee).length})`);
+    assert(deeRows.length === 2 && rowsOf(dee).length === 0 && deeRows.every(r => { const t = coverOf(dee.pk, r.blocked_pubkey); return !!t && t >= r.updated_at; })
+        && !!listTombOf(dee.pk) && tombsOf(dee.pk) === 1,
+        `a removal takes Dee's list, tombstoned with one for the list (${deeRows.length} → ${rowsOf(dee).length}, ${tombsOf(dee.pk)} tombstone)`);
     const deeReads = await call('GET', dee, '/api/blocks');
     assert(deeReads.status === 403 && deeReads.body?.code === 'account_closed', `her key reads nothing now (${show(deeReads)})`);
     const deeDeletes = await call('POST', dee, '/api/member/purge', { action: 'purge_account' });
@@ -383,9 +403,10 @@ async function main(): Promise<void> {
         && rowsOf(annNew).every(r => r.created_at === annBefore.find(b => b.blocked_pubkey === r.blocked_pubkey)?.created_at),
         `her list is hers on the new key, each with when she blocked them (${keysOf(annNew).length})`);
     assert(same(keysOf(bo), [annNew.pk]), "Bo's block of her names her new key: a re-key unblocks nobody");
-    assert([`${ann.pk}|${bo.pk}`, `${ann.pk}|${eve.pk}`, `${bo.pk}|${ann.pk}`].every(k => { const [o, b] = k.split('|'); return !!tombOf(o, b); })
-        && rowsOf(annNew).every(r => r.updated_at >= (tombOf(ann.pk, r.blocked_pubkey) ?? '')),
-        'the old pairs are tombstoned and the moved rows stamped, so a standby follows');
+    assert([`${ann.pk}|${bo.pk}`, `${ann.pk}|${eve.pk}`, `${bo.pk}|${ann.pk}`].every(k => { const [o, b] = k.split('|'); return !!coverOf(o, b); })
+        && annBefore.every(r => (coverOf(ann.pk, r.blocked_pubkey) ?? '') >= r.updated_at) && !!listTombOf(ann.pk) && tombsOf(ann.pk) === 1
+        && rowsOf(annNew).every(r => r.updated_at >= (coverOf(ann.pk, r.blocked_pubkey) ?? '')),
+        `the old pairs are tombstoned (her own list with one for it) and the moved rows stamped, so a standby follows (${tombsOf(ann.pk)} for her old key)`);
     await sleep(150);
     assert(doorbells(boSock).length === boBells + 1, `Bo's socket hears a bare doorbell, his list having changed (${doorbells(boSock).length - boBells})`);
     const newRead = await call('GET', annNew, '/api/blocks');
@@ -489,6 +510,111 @@ async function main(): Promise<void> {
     attempt(() => clearReplicatedTables());
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n);
     assert(cleared === 0, `a force-resync clears the table before the whole copy comes in (${cleared})`);
+
+    // ── 9. no member can flood the node ─────────────────────────────────────────────────────────
+    // The deciding review of #1239 (4114300128): 500 keys that needn't be anyone's, then Unblock All, wrote 500 tombstones
+    // every two requests, each kept 30 days, and a whole copy carried them all. The force-resync above emptied the tables.
+    console.log('\n── 9. no member can flood the node ──');
+    const CEILING = blocks?.MEMBER_BLOCK_TOMBSTONES_MAX ?? 500;
+    const fay = member('Fay');
+    const gus = member('Gus');
+    const hal = member('Hal');
+    const known = Array.from({ length: 500 }, (_, i) => member(`Known${i}`, { visitor: true }).pk);
+
+    // The one-time move takes only keys this node has a row for, and counts the rest: it never refuses them.
+    const strangers = [newKey(), newKey(), newKey()];
+    const mv = await call('POST', fay, '/api/blocks', { targetPubkeys: [gus.pk, ...strangers, hal.pk] });
+    assert(mv.status === 200 && sameSet(mv.body?.added ?? [], [gus.pk, hal.pk]) && mv.body?.skipped === 3 && sameSet(keysOf(fay), [gus.pk, hal.pk]),
+        `the one-time move takes the two keys this node has a row for, skips the three it has none for and counts them (${show(mv)})`);
+    const mvNone = await call('POST', fay, '/api/blocks', { targetPubkeys: [newKey(), newKey()] });
+    assert(mvNone.status === 200 && Array.isArray(mvNone.body?.added) && mvNone.body.added.length === 0 && mvNone.body?.skipped === 2
+        && sameSet(keysOf(fay), [gus.pk, hal.pk]), `a move of keys it has no row for at all is answered, both skipped, nothing written (${show(mvNone)})`);
+    const mvAgain = await call('POST', fay, '/api/blocks', { targetPubkeys: [gus.pk, strangers[0]] });
+    assert(mvAgain.status === 200 && same(mvAgain.body?.added ?? ['x'], []) && mvAgain.body?.skipped === 1 && sameSet(keysOf(fay), [gus.pk, hal.pk]),
+        `a key already on her list is left as it is, and a stranger still skipped (${show(mvAgain)})`);
+    const mvFull = await call('POST', fay, '/api/blocks', { targetPubkeys: [...known.slice(0, 498), newKey(), newKey()] });
+    assert(mvFull.status === 200 && mvFull.body?.added?.length === 498 && mvFull.body?.skipped === 2 && rowsOf(fay).length === 500,
+        `the limit counts only what goes on her list: 498 known keys and 2 strangers fill it to 500 (${mvFull.status}, ${mvFull.body?.added?.length} added, ${rowsOf(fay).length})`);
+    const mvOver = await call('POST', fay, '/api/blocks', { targetPubkeys: [known[498], newKey()] });
+    assert(mvOver.status === 409 && mvOver.body?.code === 'block_limit' && rowsOf(fay).length === 500, `and past it a move is refused as a block is (${show(mvOver)})`);
+    const single = await call('POST', gus, '/api/blocks', { targetPubkey: newKey() });
+    assert(single.status === 200 && rowsOf(gus).length === 1 && single.body?.skipped === undefined,
+        `one key at a time, a key with no row here is still blocked: the marketplace shows another community's listings (${show(single)})`);
+    await call('POST', fay, '/api/blocks/clear', {});
+    await call('POST', gus, '/api/blocks/clear', {});
+
+    // Rounds of "block 500 keys + Unblock All", with keys this node knows and with keys that are nobody's.
+    const rounds = 8;
+    let requests = 0, worstStep = 0;
+    const stepOf = async (who: Id, send: () => Promise<Res>) => {
+        const before = tombsOf(who.pk);
+        const r = await send();
+        requests++;
+        worstStep = Math.max(worstStep, tombsOf(who.pk) - before);
+        return r;
+    };
+    let lastKnown: Res | undefined, lastRandom: Res | undefined;
+    for (let i = 0; i < rounds; i++) {
+        lastKnown = await stepOf(gus, () => call('POST', gus, '/api/blocks', { targetPubkeys: known }));
+        await stepOf(gus, () => call('POST', gus, '/api/blocks/clear', {}));
+        lastRandom = await stepOf(gus, () => call('POST', gus, '/api/blocks', { targetPubkeys: Array.from({ length: 500 }, newKey) }));
+        await stepOf(gus, () => call('POST', gus, '/api/blocks/clear', {}));
+    }
+    assert(lastKnown?.status === 200 && lastKnown.body?.added?.length === 500 && lastRandom?.status === 200 && lastRandom.body?.skipped === 500,
+        `each round blocks the 500 keys this node knows, and skips the 500 that are nobody's (${lastKnown?.body?.added?.length} added, ${lastRandom?.body?.skipped} skipped)`);
+    assert(rowsOf(gus).length === 0 && tombsOf(gus.pk) <= 1 && worstStep <= 1,
+        `${rounds} rounds of each (${requests} requests) leave ${tombsOf(gus.pk)} tombstone for his list, and no request added more than one (at most ${worstStep})`);
+
+    // Rounds of "block + unblock", one key at a time, past the ceiling, while Hal keeps two blocks throughout.
+    await call('POST', hal, '/api/blocks', { targetPubkeys: [fay.pk, gus.pk] });
+    const halKept = rowsOf(hal);
+    const singles = CEILING + 100;
+    let halMost = 0, halStep = 0;
+    for (let i = 0; i < singles; i++) {
+        const k = newKey();
+        const before = tombsOf(hal.pk);
+        await call('POST', hal, '/api/blocks', { targetPubkey: k });
+        await call('POST', hal, '/api/blocks/remove', { targetPubkey: k });
+        const now9 = tombsOf(hal.pk);
+        halStep = Math.max(halStep, now9 - before);
+        halMost = Math.max(halMost, now9);
+    }
+    assert(halMost <= CEILING + 1 && halStep <= 1,
+        `${singles} rounds of "block + unblock": never more than ${CEILING + 1} tombstones for his list (at most ${halMost}), and never more than one more a round (${halStep})`);
+    const halList = listTombOf(hal.pk);
+    const halRead = await call('GET', hal, '/api/blocks');
+    assert(!!halList && same(listed(halRead), halKept.map(r => r.blocked_pubkey))
+        && rowsOf(hal).every(r => r.updated_at > halList && r.created_at === halKept.find(k => k.blocked_pubkey === r.blocked_pubkey)?.created_at),
+        `past ${CEILING}, his tombstones fold into one for his list; the two blocks he holds are stamped after it, so a standby keeps them, and read as before (${listed(halRead).length})`);
+
+    // A whole copy carries no more than that.
+    const copy9: any = await exportSyncState(nodeId);
+    const copied = (o: Id) => (copy9.tombstones ?? []).filter((t: any) => t.tableName === 'member_blocks' && String(t.rowKey).startsWith(`${o.pk}|`)).length;
+    const copiedAll = (copy9.tombstones ?? []).filter((t: any) => t.tableName === 'member_blocks').length;
+    assert(copied(hal) <= CEILING + 1 && copied(gus) <= 1 && copied(fay) <= 1 && copiedAll <= CEILING + 3,
+        `a whole copy carries at most ${CEILING + 1} of each owner's tombstones (Hal ${copied(hal)}, Gus ${copied(gus)}, Fay ${copied(fay)}; ${copiedAll} in all)`);
+
+    // Unblock All against the clock.
+    const T9 = Date.parse('2032-02-02T02:02:02.222Z');
+    attempt(() => blocks.addBlocks(fay.pk, [gus.pk], T9 - 5));
+    attempt(() => blocks.clearBlocks(fay.pk, T9));
+    attempt(() => blocks.addBlocks(fay.pk, [gus.pk], T9));
+    const w9 = listTombOf(fay.pk);
+    const r9 = rowOf(fay.pk, gus.pk);
+    assert(!!w9 && !!r9 && r9.updated_at > w9, `a block made again in the millisecond of Unblock All is stamped after it (${r9?.updated_at} > ${w9})`);
+    attempt(() => blocks.clearBlocks(fay.pk, T9));
+    attempt(() => blocks.addBlocks(fay.pk, [hal.pk], T9 - 60_000));
+    const w9b = listTombOf(fay.pk);
+    const r9b = rowOf(fay.pk, hal.pk);
+    assert(!!w9b && !!r9b && r9b.updated_at > w9b, `and one made with the clock stepped back a minute (${r9b?.updated_at} > ${w9b})`);
+    attempt(() => blocks.clearBlocks(fay.pk, T9 - 120_000));
+    const w9c = listTombOf(fay.pk);
+    assert(!!w9b && !!w9c && w9c >= w9b && !!r9b && w9c >= r9b.updated_at && rowsOf(fay).length === 0 && tombsOf(fay.pk) === 1,
+        `an Unblock All with the clock two minutes back stamps her list's tombstone no earlier than the last one, nor than the row it deletes (${w9c})`);
+    const emptyBefore = [tombsOf(fay.pk), listTombOf(fay.pk)];
+    const emptyClear = await call('POST', fay, '/api/blocks/clear', {});
+    assert(emptyClear.status === 200 && emptyClear.body?.removed === 0 && tombsOf(fay.pk) === emptyBefore[0] && listTombOf(fay.pk) === emptyBefore[1],
+        'Unblock All of an empty list writes nothing');
     await p2p.stop();
 
     for (const s of [annTab1, annTab2, boSock, cySock, anonSock]) s.ws.close();

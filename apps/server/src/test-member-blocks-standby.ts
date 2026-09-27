@@ -13,8 +13,15 @@
  *  6. A whole copy after all that brings back nothing she unblocked.
  *  7. Ann is re-keyed: the standby has her list under the new key only, and Eve's block of her names the new key.
  *  8. A standby that copied before it had block lists (it ignored the rows) takes one whole copy and has every list.
- *  9. Ann deletes her account on the main server: her list goes from the standby too; Eve's block of her stays.
- * 10. On the standby's own HTTPS server, Eve reads her list from its copy, and it refuses her a change; promoted, it takes one.
+ *  9. Bo's Unblock All travels as one tombstone for his list: his rows go, a block made again after it comes back, and
+ *     between two pulls a block, Unblock All and another block end as the main server did; a whole copy agrees.
+ * 10. Against the clock: a block made again in the millisecond of Unblock All stays; one made with the clock stepped back
+ *     after it stays; an Unblock All with the clock stepped back further still deletes it.
+ * 11. A member the standby has never seen, whose block, Unblock All and block again all come in one copy with her row.
+ * 12. Dee unblocks one key at a time past the ceiling: her tombstones fold into one for her list on the main server, the
+ *     standby keeps the two blocks she holds, and holds no more of her tombstones than the main server does.
+ * 13. Ann deletes her account on the main server: her list goes from the standby too; Eve's block of her stays.
+ * 14. On the standby's own HTTPS server, Eve reads her list from its copy, and it refuses her a change; promoted, it takes one.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks-standby.ts
@@ -78,8 +85,44 @@ async function child(): Promise<void> {
             const result = await pullNow();
             return { ...result, whole: getBackupStatus().lastFullReconcileAt !== before };
         },
-        block: async (a: { owner: string; keys: string[] }) => (await blocks())?.addBlocks(a.owner, a.keys) ?? null,
+        block: async (a: { owner: string; keys: string[]; now?: number }) => (await blocks())?.addBlocks(a.owner, a.keys, a.now) ?? null,
         unblock: async (a: { owner: string; key: string }) => (await blocks())?.removeBlock(a.owner, a.key) ?? null,
+        /** Unblock All, at `now` when given (a clock stepped back, or the millisecond of a block). */
+        clear: async (a: { owner: string; now?: number }) => (await blocks())?.clearBlocks(a.owner, a.now) ?? null,
+        /** `rounds` of: block a key that is nobody's, and unblock it. */
+        churn: async (a: { owner: string; rounds: number }) => {
+            const b = await blocks();
+            if (!b) return null;
+            for (let i = 0; i < a.rounds; i++) {
+                const k = crypto.randomBytes(32).toString('hex');
+                b.addBlocks(a.owner, [k]);
+                b.removeBlock(a.owner, k);
+            }
+            return a.rounds;
+        },
+        /** The owner's `member_blocks` tombstones here: the one for the whole list (its stamp), and how many for one key. */
+        tombstones: async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const list = db.prepare("SELECT deleted_at FROM tombstones WHERE table_name = 'member_blocks' AND row_key = ?").get(`${a.owner}|*`) as { deleted_at: string } | undefined;
+            const pairs = db.prepare("SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'member_blocks' AND substr(row_key, 1, 65) = ? AND row_key != ?")
+                .get(`${a.owner}|`, `${a.owner}|*`) as { n: number };
+            return { list: list?.deleted_at ?? null, pairs: pairs.n };
+        },
+        /** The stamps of the owner's rows here, by key. */
+        stamps: async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            try {
+                return Object.fromEntries((db.prepare('SELECT blocked_pubkey, updated_at FROM member_blocks WHERE owner_pubkey = ?').all(a.owner) as
+                    { blocked_pubkey: string; updated_at: string }[]).map(r => [r.blocked_pubkey, r.updated_at]));
+            } catch { return null; }
+        },
+        'add-member': async (a: { key: string; name: string; genesis: string }) => {
+            const { db } = await import('./db/db.js');
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
+                        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(a.key, a.name, a.genesis, `INV-${a.name}`);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.key);
+            return true;
+        },
         /** An unblock and a block again, or an unblock alone, in one and the same millisecond. */
         'same-ms': async (a: { owner: string; key: string; reblock: boolean }) => {
             const b = await blocks();
@@ -257,7 +300,98 @@ async function main(): Promise<void> {
         assert(p8b.ok && p8b.whole && sameSet(s8, [dee, cy]) && await standby.send('wants') === false,
             `the next pull is that whole copy, and every list is there: ${names(s8)} (${JSON.stringify(p8b)})`);
 
-        console.log('\n— 9. Ann deletes her account on the main server —');
+        console.log('\n— 9. Bo\'s Unblock All: one tombstone for his list —');
+        await main.send('block', { owner: bo.pk, keys: [cy.pk, dee.pk] });
+        await standby.send('pull');
+        const s9a = await standby.send('list', { owner: bo.pk });
+        require_(sameSet(s9a, [cy, dee]), `the standby has Bo's list: ${names(s9a)}`);
+        await main.send('clear', { owner: bo.pk });
+        await standby.send('pull');
+        const s9b = { list: await standby.send('list', { owner: bo.pk }), tombs: await standby.send('tombstones', { owner: bo.pk }) };
+        const m9b = await main.send('tombstones', { owner: bo.pk });
+        assert(s9b.list?.length === 0, `his Unblock All empties it there too: ${names(s9b.list)}`);
+        assert(!!m9b.list && m9b.pairs === 0 && s9b.tombs.list === m9b.list && s9b.tombs.pairs === 0,
+            `as one tombstone for his whole list, on both, and none for a key (main ${JSON.stringify(m9b)}, standby ${JSON.stringify(s9b.tombs)})`);
+        await main.send('block', { owner: bo.pk, keys: [cy.pk] });
+        await standby.send('pull');
+        const s9c = await standby.send('list', { owner: bo.pk });
+        assert(sameSet(s9c, [cy]), `a block made again after it comes back: ${names(s9c)}`);
+        await main.send('block', { owner: bo.pk, keys: [dee.pk] });
+        await main.send('clear', { owner: bo.pk });
+        await main.send('block', { owner: bo.pk, keys: [eve.pk] });
+        await standby.send('pull');
+        const s9d = await standby.send('list', { owner: bo.pk });
+        assert(sameSet(s9d, [eve]) && sameSet(await main.send('list', { owner: bo.pk }), [eve]),
+            `between two pulls, a block, Unblock All and another block end as on the main server: ${names(s9d)}`);
+        const whole9 = await standby.send('resync');
+        const s9e = await standby.send('list', { owner: bo.pk });
+        assert(whole9.ok && sameSet(s9e, [eve]) && (await standby.send('tombstones', { owner: bo.pk })).pairs === 0,
+            `and a whole copy brings back nothing his Unblock All removed: ${names(s9e)}`);
+
+        console.log('\n— 10. Unblock All against the clock —');
+        // A clock ahead of the standby's cursor and then stepped back: every stamp still lands after the last pull's cursor,
+        // so each change travels (a stamp from before the cursor never does, whatever the table).
+        const T = Date.now() + 10 * 60_000;
+        await main.send('block', { owner: cy.pk, keys: [dee.pk], now: T - 5 });
+        await standby.send('pull');
+        await main.send('clear', { owner: cy.pk, now: T });
+        await main.send('block', { owner: cy.pk, keys: [dee.pk], now: T });
+        await standby.send('pull');
+        const s10a = await standby.send('list', { owner: cy.pk });
+        assert(sameSet(s10a, [dee]), `Cy's Unblock All and her block of Dee again in the same millisecond: Dee stays blocked there: ${names(s10a)}`);
+        await main.send('clear', { owner: cy.pk, now: T });
+        await main.send('block', { owner: cy.pk, keys: [eve.pk], now: T - 60_000 });
+        await standby.send('pull');
+        const s10b = await standby.send('list', { owner: cy.pk });
+        assert(sameSet(s10b, [eve]), `Unblock All, then a block with the clock stepped back a minute: Dee gone, Eve blocked there: ${names(s10b)}`);
+        await main.send('clear', { owner: cy.pk, now: T - 120_000 });
+        await standby.send('pull');
+        const s10c = await standby.send('list', { owner: cy.pk });
+        assert(s10c?.length === 0 && (await main.send('list', { owner: cy.pk }))?.length === 0,
+            `and an Unblock All with the clock two minutes back still unblocks Eve there: ${names(s10c)}`);
+
+        console.log('\n— 11. a member the standby has never seen —');
+        const fay = newId('Fay');
+        name.set(fay.pk, 'Fay');
+        await main.send('add-member', { key: fay.pk, name: 'Fay', genesis: gwen.pk });
+        await main.send('block', { owner: fay.pk, keys: [bo.pk, cy.pk] });
+        await main.send('clear', { owner: fay.pk });
+        await main.send('block', { owner: fay.pk, keys: [dee.pk] });
+        await standby.send('pull');
+        const s11 = { list: await standby.send('list', { owner: fay.pk }), tombs: await standby.send('tombstones', { owner: fay.pk }) };
+        assert(sameSet(s11.list, [dee]) && !!s11.tombs.list && s11.tombs.pairs === 0,
+            `her row, her block of Dee made after her Unblock All, and its one tombstone come in one copy: ${names(s11.list)} (${JSON.stringify(s11.tombs)})`);
+
+        console.log('\n— 12. Dee unblocks one key at a time, past the ceiling —');
+        await main.send('block', { owner: dee.pk, keys: [bo.pk, eve.pk] });
+        await standby.send('pull');
+        const before12 = await main.send('stamps', { owner: dee.pk });
+        await main.send('churn', { owner: dee.pk, rounds: 300 });
+        await standby.send('pull');
+        const mid12 = await standby.send('tombstones', { owner: dee.pk });
+        assert(mid12.pairs === 300 && mid12.list === null, `300 unblocks: the standby holds a tombstone for each (${JSON.stringify(mid12)})`);
+        await main.send('churn', { owner: dee.pk, rounds: 300 });
+        const m12 = await main.send('tombstones', { owner: dee.pk });
+        assert(!!m12.list && m12.pairs + 1 <= 501, `300 more: on the main server they fold into one for her list, at most 501 in all (${JSON.stringify(m12)})`);
+        const after12 = await main.send('stamps', { owner: dee.pk });
+        assert(!!after12 && !!m12.list && [bo, eve].every(k => after12[k.pk] > m12.list! && after12[k.pk] > before12?.[k.pk]),
+            'and the blocks she holds are stamped after it');
+        await standby.send('pull');
+        const s12 = { list: await standby.send('list', { owner: dee.pk }), tombs: await standby.send('tombstones', { owner: dee.pk }) };
+        assert(sameSet(s12.list, [bo, eve]), `the standby keeps the two blocks she holds: ${names(s12.list)}`);
+        assert(s12.tombs.list === m12.list && s12.tombs.pairs === m12.pairs,
+            `and holds exactly the main server's tombstones of hers, its older 300 gone with the fold (main ${JSON.stringify(m12)}, standby ${JSON.stringify(s12.tombs)})`);
+        await main.send('unblock', { owner: dee.pk, key: bo.pk });
+        await standby.send('pull');
+        const s12b = await standby.send('list', { owner: dee.pk });
+        assert(sameSet(s12b, [eve]), `after the fold, her unblock of Bo still travels: ${names(s12b)}`);
+        const whole12 = await standby.send('resync');
+        const s12c = { list: await standby.send('list', { owner: dee.pk }), tombs: await standby.send('tombstones', { owner: dee.pk }) };
+        const m12c = await main.send('tombstones', { owner: dee.pk });
+        assert(whole12.ok && sameSet(s12c.list, [eve]) && s12c.tombs.pairs === m12c.pairs && s12c.tombs.pairs + 1 <= 501,
+            `a whole copy agrees, with no more of her tombstones than the main server holds: ${names(s12c.list)} (${JSON.stringify(s12c.tombs)})`);
+
+        console.log('\n— 13. Ann deletes her account on the main server —');
         const deleted = await main.send('delete-account', { key: annNew.pk });
         await standby.send('pull');
         const s9 = await standby.send('list', { owner: annNew.pk });
@@ -266,7 +400,7 @@ async function main(): Promise<void> {
         assert(deleted?.ok === true && m9?.length === 0 && s9?.length === 0, `her list is gone on both (main ${names(m9)}, standby ${names(s9)})`);
         assert(sameSet(eveKeeps, [annNew]), `Eve's block of her is Eve's, and stays: ${names(eveKeeps)}`);
 
-        console.log('\n— 10. on the standby\'s own server —');
+        console.log('\n— 14. on the standby\'s own server —');
         const port = await standby.send('serve');
         const sBase = `https://localhost:${port}`;
         const read = await signedCall(sBase, 'GET', '/api/blocks', eve);

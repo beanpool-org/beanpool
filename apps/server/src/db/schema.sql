@@ -813,10 +813,12 @@ CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notic
 -- counts it for anyone: not another member, a visitor, the activity feed or a broadcast. The community's operator can see
 -- it, as they see reports. `blocked_pubkey` is any key in the one spelling, a member's or not, never the owner's own. At
 -- most 500 per member (MEMBER_BLOCKS_MAX). Replicated to a standby (SyncPayload.memberBlocks, watermarked on
--- `updated_at`), with a `member_blocks` tombstone keyed `<owner>|<blocked>` for each removal (an unblock, a clear, a prune,
--- a self-deletion, a re-key's old key), stamped no earlier than the row, and a block made again stamped after that
--- tombstone, so an unblock never comes back and a block made again does. Carried in file and sealed backups. Goes with
--- the member on a prune or a self-deletion; a re-key moves both the owner's list and every block of the old key.
+-- `updated_at`), with a `member_blocks` tombstone for each removal, stamped no earlier than the rows it deletes: keyed
+-- `<owner>|<blocked>` for one unblock, and `<owner>|*` for a whole list (a clear, a prune, a self-deletion, a re-key's old
+-- key), which deletes every row of that owner stamped no later. A block made again is stamped after both, so an unblock
+-- never comes back and a block made again does. At most 500 single-unblock tombstones per owner: past that they fold into
+-- the `<owner>|*` one. Carried in file and sealed backups. Goes with the member on a prune or a self-deletion; a re-key
+-- moves both the owner's list and every block of the old key.
 CREATE TABLE IF NOT EXISTS member_blocks (
     owner_pubkey TEXT NOT NULL CHECK (length(owner_pubkey) = 64 AND owner_pubkey NOT GLOB '*[^0-9a-f]*'),
     blocked_pubkey TEXT NOT NULL CHECK (length(blocked_pubkey) = 64 AND blocked_pubkey NOT GLOB '*[^0-9a-f]*'),

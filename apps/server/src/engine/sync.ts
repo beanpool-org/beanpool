@@ -17,7 +17,7 @@ import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
-import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer } from './member-blocks.js';
+import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer, PAIR_TOMBSTONES_OF } from './member-blocks.js';
 import {
     mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
     type ReplicatedRekey,
@@ -402,12 +402,19 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
-        // A key a member unblocked, or a list gone with a clear, a prune, a self-deletion or a re-key's old key
-        // (engine/member-blocks.ts). A block made again is stamped after this tombstone, so the lookup below keeps it.
+        // A key a member unblocked (`<owner>|<blocked>`), or a whole list gone with a clear, a prune, a self-deletion or a
+        // re-key's old key (`<owner>|*`, engine/member-blocks.ts): every row of that owner stamped no later, and the owner's
+        // single-unblock tombstones it replaces, as on the main server. A block made again is stamped after either, so
+        // the lookup below keeps it, and so does the stamp test here.
         case 'member_blocks': {
             const cut = rowKey.indexOf('|');
             if (cut <= 0) return false;
-            const r = db.prepare(`DELETE FROM member_blocks WHERE owner_pubkey=? AND blocked_pubkey=?`).run(rowKey.slice(0, cut), rowKey.slice(cut + 1));
+            const owner = rowKey.slice(0, cut);
+            if (rowKey.slice(cut + 1) === '*') {
+                db.prepare(`DELETE FROM tombstones WHERE ${PAIR_TOMBSTONES_OF} AND deleted_at <= ?`).run(owner, owner, owner, deletedAt);
+                return db.prepare(`DELETE FROM member_blocks WHERE owner_pubkey=? AND updated_at <= ?`).run(owner, deletedAt).changes > 0;
+            }
+            const r = db.prepare(`DELETE FROM member_blocks WHERE owner_pubkey=? AND blocked_pubkey=?`).run(owner, rowKey.slice(cut + 1));
             return r.changes > 0;
         }
         // A member's recovery copies the main server deleted (engine/recovery-shares.ts deleteAllShares): of this
@@ -492,10 +499,15 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const r = db.prepare(`SELECT updated_at AS ts FROM members WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
-        // A block made again after an unblock is stamped after the unblock's tombstone, and must not be deleted by it.
+        // A block made again after an unblock is stamped after the unblock's tombstone, and must not be deleted by it. A
+        // whole list's `<owner>|*` judges each row by its stamp itself; the one here, if later, is kept over an older one.
         case 'member_blocks': {
             const cut = rowKey.indexOf('|');
             if (cut <= 0) return null;
+            if (rowKey.slice(cut + 1) === '*') {
+                const t = db.prepare(`SELECT deleted_at AS ts FROM tombstones WHERE table_name='member_blocks' AND row_key=?`).get(rowKey) as { ts: string } | undefined;
+                return t?.ts ?? null;
+            }
             const r = db.prepare(`SELECT updated_at AS ts FROM member_blocks WHERE owner_pubkey=? AND blocked_pubkey=?`)
                 .get(rowKey.slice(0, cut), rowKey.slice(cut + 1)) as { ts: string } | undefined;
             return r?.ts ?? null;

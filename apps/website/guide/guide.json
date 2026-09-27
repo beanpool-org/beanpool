@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 56,
-  "hash": "6c7f7d9a3e84d5e1c0d13a6034255272346db02698499115ead098d502ab8970",
+  "version": 57,
+  "hash": "deab6c12c8081a96a2c6eb7cb77abd9f015878d52cfeb03de29e7423fa2297b9",
   "sections": [
     {
       "id": "about",
@@ -462,6 +462,7 @@
           "items": [
             "If a removal passes, the member is suspended and their credit frozen at once.",
             "After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.",
+            "A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.",
             "When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.",
             "The community can vote to remove anyone except the only owner of your community's server."
           ]
@@ -4842,12 +4843,29 @@
             "If you hold beans, they go to the Commons.",
             "If you are below zero, the Commons covers the debt.",
             "Your profile becomes \"Deleted Member\", and your posts come down.",
-            "It deletes your account only in the community you are using. Your accounts in other communities stay."
+            "It deletes your account only in the community you are using. Your accounts in other communities stay.",
+            "Your community can never bring the account back. To come back, join again with a new invite."
           ]
         },
         {
           "type": "p",
           "text": "If you run your community's server and you are its only owner, you cannot delete your account until there is another owner."
+        },
+        {
+          "type": "h3",
+          "text": "If your community removed you"
+        },
+        {
+          "type": "p",
+          "text": "When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.",
+            "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
+            "If a deal of yours is still under way, the other member or an admin must close it first."
+          ]
         }
       ]
     },

@@ -80,6 +80,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 - If a removal passes, the member is suspended and their credit frozen at once.
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
+- A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
 - The community can vote to remove anyone except the only owner of your community's server.
 

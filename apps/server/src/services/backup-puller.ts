@@ -272,6 +272,10 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // clear, in its transaction, what the copy is held to: nothing for a seed, and the ledger's total now for the
             // resync after a copy that didn't match.
             heldToSum = clearForResync(seed, () => clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) }));
+            // The format re-seed is used up once a resync has cleared, and not before: one whose fetch failed is asked for
+            // again on the next tick. One whose import fails is used up all the same, so a failing import can't clear this
+            // standby on every tick; its next pull, a whole copy onto a standby with no copy it landed, is a seed anyway.
+            if (seed) replicaFormatAsked = true;
             lastGeneratedAtMs = 0;
             // Forget all cursors so a failed import can't leave the next pull 304-ing
             // ("unchanged") or delta-ing against a cleared replica — it re-seeds fully.
@@ -446,11 +450,11 @@ let replicaFormatAsked = false;
 function nextMode(): PullMode | ResyncKind {
     // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
     // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first
-    // pull is this one too, which also clears whatever its own boot seeded. Once a process, like the whole copies below:
-    // one whose fetch fails leaves the copy as it was, for the next boot; one whose import fails leaves it cleared, and the
-    // next pull, a whole copy with no cursor, makes it from nothing and records the format.
+    // pull is this one too, which also clears whatever its own boot seeded. Once a process, used up when it clears
+    // (pullOnce): one whose fetch fails is asked for again on the next tick, since the main server may be restarting
+    // with the same update; one whose import fails leaves it cleared, and the next pull, a whole copy onto a standby with
+    // no copy it landed, is a seed that makes it from nothing and records the format.
     if (!replicaFormatAsked && replicaFormatOfCopy() < REPLICA_FORMAT) {
-        replicaFormatAsked = true;
         logger.info('P2P', `[Backup] This standby's copy was made by an older importer (format ${replicaFormatOfCopy()}, now ${REPLICA_FORMAT}): taking one force-resync`);
         return 'format';
     }

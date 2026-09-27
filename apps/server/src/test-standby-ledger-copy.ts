@@ -38,6 +38,8 @@
  *     first emptied the ledger and the second went in as a seed).
  * 12. The force-resync a mismatch asks for is not a seed: a mint served to it is refused, and the next copies, across a
  *     restart, are held to the ledger's total before its clear until M's real copy lands.
+ * 13. The format re-seed is used up when it clears: one whose fetch the main server refuses is asked for again at the
+ *     next pull (before, not until the next boot); one whose import fails is not, and the next pull, a seed, lands.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -742,6 +744,38 @@ async function main(): Promise<void> {
             `M's real copy lands, the ledger is M's, and nothing is held any more (${JSON.stringify({ ok: heldReal.ok, mode: heldReal.mode, error: heldReal.error, held: h.held })}; differences ${first(ledgerDiff(m12b, h))})`);
         refused.push(...(await heldS.send('fetches')).blocked);
         await heldS.kill('SIGTERM');
+
+        // ── 13. The format re-seed is used up when it clears ──
+        console.log('\n— 13. the format re-seed: a refused fetch asks for it again; a failed import uses it up —');
+        const noFormat = (db: Database.Database) => { db.prepare("DELETE FROM node_config WHERE key = 'replica_format'").run(); };
+        copyDir(dir('audit'), dir('reseed'));
+        withDb(dir('reseed'), noFormat);
+        const reseed = await spawnNode(SCRIPT, dir('reseed'), env(PW_STANDBY, 'backup'));
+        nodes.push(reseed);
+        door.next({ status: 503 }); // the main server restarting with the same update
+        const busy = await reseed.send('pull', {});
+        require_(busy.ok === false && busy.mode === 'resync', `the first pull is the format re-seed, and the main server refuses it (${JSON.stringify({ ok: busy.ok, mode: busy.mode, error: busy.error })})`);
+        const again13 = await reseed.send('pull', {});
+        const r13: Ledger = await reseed.send('ledger');
+        const m13: Ledger = await main.send('ledger');
+        assert(again13.ok === true && again13.mode === 'resync' && Number(r13.format) >= 1 && ledgerDiff(m13, r13).length === 0,
+            `the next pull asks for it again, it lands, and the format is recorded (${JSON.stringify({ ok: again13.ok, mode: again13.mode, error: again13.error, format: r13.format })}; differences ${first(ledgerDiff(m13, r13))})`);
+        refused.push(...(await reseed.send('fetches')).blocked);
+        await reseed.kill('SIGTERM');
+        copyDir(dir('audit'), dir('reseed-throws'));
+        withDb(dir('reseed-throws'), noFormat);
+        const reseedT = await spawnNode(SCRIPT, dir('reseed-throws'), env(PW_STANDBY, 'backup'));
+        nodes.push(reseedT);
+        door.next({ status: 200, body: await main.send('forge', { kind: 'throws-later', publicKey: ann.pk }) });
+        const broke = await reseedT.send('pull', {});
+        require_(broke.ok === false && broke.mode === 'resync', `the format re-seed's import fails after its clear (${JSON.stringify({ ok: broke.ok, mode: broke.mode, error: broke.error })})`);
+        await reseedT.send('persist'); // its own flush, into the cleared rows
+        const after13 = await reseedT.send('pull', {});
+        const t13: Ledger = await reseedT.send('ledger');
+        assert(after13.ok === true && after13.mode === 'full' && Number(t13.format) >= 1 && ledgerDiff(m13, t13).length === 0,
+            `it is used up all the same: the next pull is a whole copy, not another clear, and, no copy having landed since the clear, a seed that lands (${JSON.stringify({ ok: after13.ok, mode: after13.mode, error: after13.error, format: t13.format })}; differences ${first(ledgerDiff(m13, t13))})`);
+        refused.push(...(await reseedT.send('fetches')).blocked);
+        await reseedT.kill('SIGTERM');
 
         assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');
 

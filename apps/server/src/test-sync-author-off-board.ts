@@ -11,19 +11,25 @@
  * the listing, so a delta read by `posts.updated_at` alone never carried a change of it. The phone, which has no filter
  * of its own, kept those listings on its Market; the web app, which reads the board, did not.
  *
- * Boots the real server and reads the sync route over HTTP, signed, as the phone does, into a model of the phone's
- * cache. After every step the listings on that model's Market are the listings on the board the same member reads.
+ * Boots the real server and reads the sync route over HTTP, signed, as the phone does, into a model of the 1.2.56
+ * phone's cache: its fingerprint gate (a posts or deals page the same as the last one applied is skipped) and its deal
+ * heal (applying a changed deals page writes the listings of cancelled deals, and of completed deals on repeatable
+ * listings, back as active, after the posts). After every step the listings on that model's Market are the listings
+ * on the board the same member reads.
  *   - a member goes on holiday (POST /api/members/holiday) → gone at the next delta; holiday off → back;
  *   - an enterprise is paused → gone; resumed → back;
  *   - an enterprise starts winding up → gone; the wind-up is cancelled → back;
  *   - a fresh install's first (full) sync while a member is on holiday leaves their listings off;
  *   - the delta after a holiday switch carries that member's listings and no one else's (it stays a delta);
  *   - reading a listing by id for the cache (utils/db.ts getPost, `?id=…&sync=true`) doesn't put it back;
+ *   - an idle delta is the same page as the one before, and the phone's gate skips it;
  *   - the event page's own read (fetchEventDetail, by id with no `sync`), which changes nothing on the node, writes the
  *     event as the node has it over the held row; the next delta takes it off again (a member Going, and one who came
- *     from a shared link with no RSVP). A poll vote does the same with the vote's answer, and the next delta too;
+ *     from a shared link with no RSVP), and the one after an idle one; the read counts until the phone's cursor passes
+ *     it, then the deltas are idle again. A poll vote does the same with the vote's answer, and the next delta too;
  *   - the author's own phone, a keeper's of the enterprise, and a member with an open deal on the listing keep it as it
- *     is; the member withdraws the request, and the next delta takes it off their phone;
+ *     is; the member withdraws the request: the next delta carries the listing as paused, but the heal in the same sync
+ *     puts it back, and the delta after that takes it off their phone; the same after a cold start;
  *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
  *   - on 2,000 members and 20,000 posts, no statement of the delta read walks every post (EXPLAIN QUERY PLAN).
  *
@@ -60,10 +66,14 @@ function signedHeaders(method: string, path: string, body: string, id: Id): Reco
     };
 }
 
-async function getJson(path: string, id: Id): Promise<any[]> {
+async function getText(path: string, id: Id): Promise<string> {
     const res = await fetch(`${BASE}${path}`, { headers: signedHeaders('GET', path, '', id) });
     if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
-    return res.json() as Promise<any[]>;
+    return res.text();
+}
+
+async function getJson(path: string, id: Id): Promise<any[]> {
+    return JSON.parse(await getText(path, id));
 }
 
 async function postJson(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
@@ -82,23 +92,75 @@ async function postJson(path: string, payload: unknown, id: Id): Promise<{ statu
 /** The phone's feed query (apps/native utils/events.ts EVENT_TYPES_QUERY). */
 const TYPES = 'types=offer,need,poll,event';
 
+/** The phone's payload fingerprint (apps/native services/pillar-sync.ts _fingerprint, djb2). */
+function fingerprint(s: string): number {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return h;
+}
+
 /**
- * The phone's posts cache and its Market, as apps/native has them: every synced row replaces the one held
- * (writeSyncedPost), nothing is ever deleted, and the Market shows a row by its status (feedPostVisible: a poll while
- * active or completed; an event while active, not cancelled and not ended; anything else while active).
+ * The phone's posts cache and its Market, as the apps in the stores (1.2.56, at 5805f367) have them. A sync (services/pillar-sync.ts
+ * performSync) reads the posts and the member's last 50 deals, and applies each only when its raw body differs from the
+ * last one applied (parseIfChanged: a fingerprint per node and table, in memory, so a cold start forgets them). Applying
+ * writes every synced row over the one held (utils/db.ts writeSyncedPost) and deletes none; then, after the posts, the
+ * deal heal: each deal cancelled, or completed on a repeatable listing, writes its listing back as active, and each
+ * completed on a one-off listing as completed (applyDelta), unless the phone holds the deal as ended and the node sends
+ * it as open. The Market shows a row by its status (feedPostVisible: a poll while active or completed; an event while
+ * active, not cancelled and not ended; anything else while active).
  */
 class Phone {
     rows = new Map<string, any>();
+    private deals = new Map<string, string>();
+    private fingerprints = new Map<string, number>();
     private lastSyncMs: number | null = null;
+    /** What the last sync applied: its posts page, its deals page. */
+    applied = { posts: false, deals: false };
+    /** How far this phone's clock runs ahead of the node's. */
+    clockAheadMs = 0;
     constructor(readonly id: Id) {}
 
-    /** One sync as performSync does it: full the first time, then since the last one less five minutes' drift. */
+    /** The body, parsed, if it differs from the last one applied for this table; undefined if the gate skips it. */
+    private gate(table: string, raw: string): any[] | undefined {
+        const fp = fingerprint(raw);
+        if (this.fingerprints.get(table) === fp) return undefined;
+        this.fingerprints.set(table, fp);
+        return JSON.parse(raw);
+    }
+
+    /** The app is killed and opened again: the gate's fingerprints are gone, the cache and the cursor stay. */
+    coldStart(): void {
+        this.fingerprints.clear();
+    }
+
+    /**
+     * One sync as performSync does it: full the first time (or with an empty cache), then since the last one less five
+     * minutes' drift. Returns the posts page as the node sent it, whether or not the gate let the phone apply it.
+     */
     async sync(): Promise<any[]> {
-        const since = this.lastSyncMs === null ? '' : `&updatedAfter=${encodeURIComponent(new Date(this.lastSyncMs - 300_000).toISOString())}`;
-        const page = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}${since}`, this.id);
-        for (const p of page) this.rows.set(p.id, p);
-        this.lastSyncMs = Date.now();
-        return page;
+        const since = this.lastSyncMs === null || this.rows.size === 0 ? ''
+            : `&updatedAfter=${encodeURIComponent(new Date(this.lastSyncMs - 300_000).toISOString())}`;
+        const rawPosts = await getText(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}${since}`, this.id);
+        const rawDeals = await getText(`/api/marketplace/transactions?publicKey=${this.id.pubKeyHex}&limit=50`, this.id);
+        const posts = this.gate('posts', rawPosts);
+        const deals = this.gate('marketplaceTransactions', rawDeals);
+        this.applied = { posts: posts !== undefined, deals: deals !== undefined };
+        for (const p of posts ?? []) this.rows.set(p.id, p);
+        for (const tx of deals ?? []) {
+            const status = tx.status ?? 'pending';
+            const held = this.deals.get(tx.id);
+            if (held && ['completed', 'cancelled'].includes(held) && ['pending', 'requested'].includes(status)) continue;
+            this.deals.set(tx.id, status);
+            const row = this.rows.get(tx.postId);
+            if (!row) continue;
+            if (status === 'completed' && !row.repeatable) {
+                this.rows.set(tx.postId, { ...row, status: 'completed', active: false });
+            } else if (status === 'completed' || status === 'cancelled') {
+                this.rows.set(tx.postId, { ...row, status: 'active', acceptedBy: null, pendingTransactionId: null });
+            }
+        }
+        this.lastSyncMs = Date.now() + this.clockAheadMs;
+        return JSON.parse(rawPosts);
     }
 
     /** The by-id refresh a listing's page runs (utils/db.ts getPost). */
@@ -289,14 +351,39 @@ async function main() {
     // five minutes), so no delta below carries her listings for her own row's sake.
     db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), hana.pubKeyHex);
     for (const [who, p] of [['Carol, from a shared link', phone], ['Olly, Going, from "Your events"', ollyPhone]] as const) {
+        // Nothing changes for a while: the first idle delta differs from the holiday one, the next is the same page,
+        // and the phone's gate skips it. A member with nothing to send again gets the same page every time.
+        await p.sync();
+        const idle = await p.sync();
+        assert(!p.applied.posts && idle.length === 0, `${who}: an idle delta is the page before, and the phone's gate skips it`);
         const detail = await p.openEventDetail(seedSwap);
         assert(detail?.status === 'active' && p.rows.get(seedSwap)?.status === 'active',
             `${who}: the event page's read writes the event as the node has it (status ${p.rows.get(seedSwap)?.status})`);
         const delta = await p.sync();
-        assert(delta.some(r => r.id === seedSwap && r.status === 'paused'), `${who}: the next delta carries the event again, as paused`);
+        assert(delta.some(r => r.id === seedSwap && r.status === 'paused' && typeof r.resentAt === 'string'),
+            `${who}: the next delta carries the event again, as paused, with the read's resentAt`);
+        assert(p.applied.posts, `${who}: that page is not the one before, so the phone's gate applies it`);
         const after = await matchesBoard(p, `${who}, opened the event page, next delta`);
         assert(!after.has(seedSwap), `${who}: Hana's event is off the phone's Market again`);
     }
+
+    // The read counts until the phone has synced a quarter of an hour past it (the node keeps it in memory for that
+    // member alone); after that its deltas are idle again, and the gate skips them.
+    const laterPhone = new Phone(carol);
+    await laterPhone.sync();
+    await laterPhone.openEventDetail(seedSwap);
+    const soon = await laterPhone.sync();
+    assert(soon.some(r => r.id === seedSwap && r.status === 'paused') && laterPhone.applied.posts,
+        'Carol on another phone opens the event page: her next delta carries it again, and the gate applies it');
+    laterPhone.clockAheadMs = 16 * 60_000;
+    const stillSoon = await laterPhone.sync();
+    assert(stillSoon.some(r => r.id === seedSwap && r.status === 'paused') && laterPhone.applied.posts,
+        'every delta until her cursor passes the read carries it, each applied (a new resentAt)');
+    const past = await laterPhone.sync();
+    assert(!past.some(r => r.id === seedSwap), 'once her cursor is past the read, her delta no longer carries the event');
+    await laterPhone.sync();
+    assert(!laterPhone.applied.posts, 'and the delta after that is the page before: the gate skips it again');
+    await matchesBoard(laterPhone, 'Carol\'s other phone, a quarter of an hour of syncs after the event page');
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
     // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.
@@ -348,14 +435,34 @@ async function main() {
     assert(patOpened?.status === 'active', `and opening the eggs by id gives them to him as they are (status ${patOpened?.status})`);
 
     // Bob withdraws his request. That writes no listing row, and the farm's own row hasn't changed since before his
-    // cursor: his phone still holds the eggs as they were while his deal was open. His next delta takes them off.
+    // cursor: his phone still holds the eggs as they were while his deal was open. The sync after it applies his
+    // deals too (the withdrawn one changed them), and the phone's heal writes the eggs back as active after the posts.
+    // The delta after that takes them off: its page differs (a new resentAt) and his deals don't, so no heal.
     db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), farm);
     const withdrawn = se.cancelPostRequest(bobDeal.id, bob.pubKeyHex);
     assert(withdrawn?.status === 'cancelled', `Bob withdraws his request for the eggs (status ${withdrawn?.status})`);
-    await bobPhone.sync();
-    const bobAfter = await matchesBoard(bobPhone, 'Bob withdrew his request, next delta');
+    const firstAfter = await bobPhone.sync();
+    assert(bobPhone.applied.posts && bobPhone.applied.deals
+        && firstAfter.some(r => r.id === farmOffer && r.status === 'paused' && typeof r.resentAt === 'string'),
+        'Bob\'s next delta carries the eggs again, as paused, and the phone applies it and his changed deals');
+    assert(bobPhone.rows.get(farmOffer)?.status === 'active',
+        `in that same sync the 1.2.56 phone's deal heal writes the eggs back as active (status ${bobPhone.rows.get(farmOffer)?.status})`);
+    const secondAfter = await bobPhone.sync();
+    assert(bobPhone.applied.posts && !bobPhone.applied.deals && secondAfter.some(r => r.id === farmOffer && r.status === 'paused'),
+        'the delta after that carries them again with a new resentAt: the gate applies it, and his deals are the same, so no heal');
+    const bobAfter = await matchesBoard(bobPhone, 'Bob withdrew his request, the second delta');
     assert(!bobAfter.has(farmOffer) && bobPhone.rows.get(farmOffer)?.status === 'paused',
         `the farm's eggs are off Bob's Market (status ${bobPhone.rows.get(farmOffer)?.status})`);
+
+    // A cold start forgets the gate's fingerprints: the first sync after it applies Bob's deals again, and the heal
+    // with them. The delta after that takes the eggs off again.
+    bobPhone.coldStart();
+    await bobPhone.sync();
+    assert(bobPhone.applied.deals && bobPhone.rows.get(farmOffer)?.status === 'active',
+        'Bob\'s phone is opened again: its first sync applies his deals again, and the heal puts the eggs back');
+    await bobPhone.sync();
+    const bobCold = await matchesBoard(bobPhone, 'Bob\'s phone after a cold start, the second delta');
+    assert(!bobCold.has(farmOffer), 'the delta after that takes them off his Market again');
 
     se.resumeEnterprise(farm, 'admin');
     await phone.sync();
@@ -410,6 +517,9 @@ async function main() {
             post.run(crypto.randomUUID(), 'event', 'Holiday event', k, aYearAgo, aYearAgo, nextWeek, nextWeek);
         }
     })();
+    // Carol opens each of the twenty events' pages (the event page's read, by id with no `sync`).
+    const holidayEvents = (db.prepare(`SELECT id FROM posts WHERE title = 'Holiday event'`).all() as Array<{ id: string }>).map(r => r.id);
+    for (const id of holidayEvents) await getJson(`/api/marketplace/posts?id=${encodeURIComponent(id)}`, carol);
     // Every statement the phone's delta read prepares, with what it ran it with.
     const ran: Array<{ sql: string; params: any[] }> = [];
     const prepare = db.prepare;
@@ -428,7 +538,7 @@ async function main() {
     assert(bulkDelta.length < 100 && !bulkDelta.some(r => /^Bulk \d/.test(r.title)),
         `it is still a delta: none of the 20,000 unchanged offers and needs is in it (${bulkDelta.length} rows)`);
     assert(!!deltaRead?.sql.includes('json_each') && bulkDelta.filter(r => r.title === 'Holiday event' && r.status === 'paused').length === 20,
-        'it sends again, as paused, the twenty upcoming events of hosts on holiday (the widest form of its condition)');
+        'it sends again, as paused, the twenty upcoming events of hosts on holiday, whose pages Carol opened (the most it keeps for her)');
     const plans = ran.filter(r => /\bFROM posts p\b/.test(r.sql)).map(r => ({
         sql: r.sql.replace(/\s+/g, ' ').trim().slice(0, 70),
         plan: (db.prepare(`EXPLAIN QUERY PLAN ${r.sql}`).all(...r.params) as Array<{ detail: string }>).map(p => p.detail),

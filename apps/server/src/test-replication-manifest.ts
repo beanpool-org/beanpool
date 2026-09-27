@@ -7,6 +7,9 @@
  *  2. Every column (PRAGMA table_info) of a copied table is named once: copied, or not copied with the reason. Every
  *     column the manifest names exists.
  *  3. Every copied table has a watermark column, or is declared a whole set; its payload key is in the sync payload.
+ *     Every write to it moves the watermark: a touch trigger stamps it, or each UPDATE and upsert in the source sets
+ *     it, or writes only columns the table doesn't copy (a write that moves nothing reaches a standby only in a whole
+ *     copy).
  *  4. Every members column except the declared ones is in `members_touch_updated_at`'s column list (read from
  *     sqlite_master), and each declared one is really missing from it, so the fix that adds one deletes its line.
  *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified.
@@ -19,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -33,6 +37,49 @@ function assert(cond: unknown, msg: string): void {
 }
 
 const list = (xs: Iterable<string>) => [...xs].join(', ') || 'none';
+
+/** A table an UPDATE or an upsert writes, and the columns it sets. */
+interface Write { table: string; set: string[]; at: string }
+
+/**
+ * Every UPDATE … SET and INSERT … ON CONFLICT DO UPDATE SET in the .ts files under `root`, outside tests. SQL is read
+ * from each string and template literal on its own (a template's substitutions as `?`), so a table named at run time
+ * is not seen.
+ */
+function writesIn(root: string, skip: (file: string) => boolean): Write[] {
+    const out: Write[] = [];
+    const setColumns = (clause: string) => [...clause.matchAll(/(?:^|,)\s*(\w+)\s*=/g)].map((m) => m[1]);
+    const walk = (dir: string) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            const file = path.join(dir, e.name);
+            if (e.isDirectory()) {
+                if (!['node_modules', 'dist', '__tests__'].includes(e.name)) walk(file);
+                continue;
+            }
+            if (!e.name.endsWith('.ts') || e.name.endsWith('.d.ts') || /^(test-|bench-)|-test-harness\.ts$|\.test\.ts$/.test(e.name) || skip(file)) continue;
+            const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf-8'), ts.ScriptTarget.Latest, false);
+            const visit = (n: ts.Node) => {
+                const sql = ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) ? n.text
+                    : ts.isTemplateExpression(n) ? n.head.text + n.templateSpans.map((span) => `?${span.literal.text}`).join('') : null;
+                if (sql && /\bUPDATE\b/i.test(sql)) {
+                    const at = `${path.relative(root, file)}:${source.getLineAndCharacterOfPosition(n.getStart(source)).line + 1}`;
+                    for (const statement of sql.split(';')) {
+                        for (const m of statement.matchAll(/\bUPDATE\s+(?:OR\s+\w+\s+)?(\w+)\s+SET\s+([\s\S]*?)(?=\bWHERE\b|\bRETURNING\b|$)/gi)) {
+                            if (/\bDO\s*$/i.test(statement.slice(0, m.index))) continue; // an upsert's, below
+                            out.push({ table: m[1], set: setColumns(m[2]), at });
+                        }
+                        const upsert = /\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+(\w+)\b[\s\S]*?\bON\s+CONFLICT\b[\s\S]*?\bDO\s+UPDATE\s+SET\s+([\s\S]*?)(?=\bWHERE\b|\bRETURNING\b|$)/i.exec(statement);
+                        if (upsert) out.push({ table: upsert[1], set: setColumns(upsert[2]), at });
+                    }
+                }
+                ts.forEachChild(n, visit);
+            };
+            visit(source);
+        }
+    };
+    walk(root);
+    return out;
+}
 
 /** The field names of `export interface <name> { … }` in a source file, one level deep. */
 function interfaceFields(file: string, name: string): string[] {
@@ -93,6 +140,32 @@ async function main(): Promise<void> {
         assert(ok, `${t}: a delta finds a change by ${entry.watermark === WHOLE_SET ? 'carrying the whole set' : `\`${entry.watermark}\``}`);
         assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
     }
+
+    // A delta finds a change only if the write moved the watermark. A touch trigger that stamps it moves it on every
+    // update (members' trigger names its columns: §4). Every other copied table's writes must set it, or write only
+    // columns it doesn't copy. The importer (engine/sync.ts) is left out: it writes the main server's rows, stamps and all.
+    const triggers = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger'").all() as { sql: string }[]).map((r) => r.sql);
+    const stamps = (t: string, watermark: string) => triggers.some((sql) =>
+        new RegExp(`AFTER\\s+UPDATE\\b[\\s\\S]*?\\bON\\s+${t}\\b[\\s\\S]*\\bUPDATE\\s+${t}\\s+SET\\s+${watermark}\\b`, 'i').test(sql));
+    const engineSrc = path.resolve(here, '../../../packages/beanpool-engine/src');
+    const importer = path.join(here, 'engine/sync.ts');
+    const serverWrites = writesIn(here, (f) => f === importer);
+    const engineWrites = fs.existsSync(engineSrc) ? writesIn(engineSrc, () => false) : [];
+    assert(serverWrites.length > 0 && engineWrites.length > 0,
+        `the server's and the engine's source are read (${serverWrites.length} and ${engineWrites.length} writes)`);
+    const still: string[] = [];
+    const notCopiedOnly: string[] = [];
+    for (const w of [...serverWrites, ...engineWrites]) {
+        const entry = TABLES[w.table];
+        if (!entry || (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || entry.watermark === WHOLE_SET) continue;
+        if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark)) continue;
+        const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
+        if (w.set.length > 0 && w.set.every((c) => notCopied[c])) notCopiedOnly.push(`${w.table}.${w.set.join('+')} (${w.at})`);
+        else still.push(`${w.table} SET ${w.set.join(', ') || '?'} (${w.at})`);
+    }
+    assert(still.length === 0,
+        `every write to a copied table moves its watermark, or writes only columns it doesn't copy (moves nothing: ${list(still)})`);
+    console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
 
     console.log('\n— 4. the members touch trigger —');
     const trigger = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'members_touch_updated_at'").get() as { sql: string } | undefined)?.sql ?? '';

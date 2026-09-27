@@ -23,6 +23,11 @@ export interface ColumnException {
     gap?: GapId;
 }
 
+/**
+ * A copied table's `watermark` is how a delta finds a changed row, so every write must move it: a touch trigger that
+ * stamps it, or each write setting it. A write that moves nothing reaches a standby only in a whole copy, so the column
+ * it writes can't be listed as copied (test-replication-manifest.ts §3 checks the source's writes).
+ */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
     | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[] }
@@ -148,8 +153,11 @@ export const TABLES: Record<string, TableEntry> = {
         except: { updated_at: { reason: STAMPED_BY_STANDBY + ' (not in the design; found by this manifest)', gap: 'G1b' } },
     },
     conversations: {
-        kind: 'replicated', payload: 'conversations', watermark: 'created_at',
-        columns: cols('id type post_id name created_by created_at'),
+        kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
+        columns: cols('id type post_id created_by created_at'),
+        except: {
+            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net)", gap: 'G1b' },
+        },
     },
     conversation_participants: {
         kind: 'replicated', payload: 'conversationParticipants', watermark: 'updated_at',

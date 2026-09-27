@@ -16,7 +16,7 @@
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request, a
- *     rating with no comment, an empty bio and archetype) and a last delta.
+ *     rating with no comment, an empty bio and archetype, a group renamed) and a last delta.
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
@@ -95,6 +95,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:projects.migrated_at', gap: 'G1b', why: "each copy wipes it, so the standby's boot migrates the project again" },
     { key: 'db:projects.updated_at', gap: 'G1b', why: "restamped with the standby's clock" },
     { key: 'db:groups.lead_pubkey', gap: 'G1b', why: "a group whose last convenor left keeps its old lead on the standby (the import keeps a lead over the main server's null)" },
+    { key: 'db:conversations.name', gap: 'G1b', why: "a renamed group's chat keeps its old name until a whole copy (a rename moves no stamp; a delta picks conversations by created_at)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
     // G2a: the members row's other columns.
@@ -357,7 +358,7 @@ interface Answer { status: number; body: any }
  * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
-async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -578,6 +579,7 @@ async function main(): Promise<void> {
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
         built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
+        built('Ann renames Gardeners, which the whole copy copied', await api(m, 'PATCH', `/api/groups/${groupId}`, { as: ann, body: { name: 'Growers' } }));
         await pull('the last delta');
 
         // ── 6. M dies; its twin T starts from its data directory ──

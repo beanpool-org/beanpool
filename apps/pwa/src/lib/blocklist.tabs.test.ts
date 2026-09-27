@@ -372,4 +372,63 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(A.getBlockedUsers()).toEqual([K1]);
         expect(C.getBlockedUsers()).toEqual([K1]);
     });
+
+    it.each([
+        ['same tab', true],
+        ['another tab via a storage event', false],
+    ])('an unblock made while the bulk add is held (%s) is never re-blocked, and the node ends without that key', async (_, sameTab) => {
+        node.there = { read: 1, move: 30, remove: 1 };
+        node.back = { read: 1, remove: 1 };
+        node.backQueue = { move: [200] };
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        const A = await openTab();
+        vi.useFakeTimers();
+        stops.push(browserTellsTabs());
+        stops.push(A.startBlocklist(ME));
+
+        let unblocking: Promise<boolean> | null = null;
+        let unblockedDone = false;
+        if (sameTab) {
+            unblocking = A.unblockUser(K1);
+            void unblocking.then(() => { unblockedDone = true; });
+        } else {
+            // Wait until move acts on node (at 32ms) and is held in backQueue, then unblock K1 via storage event
+            await vi.advanceTimersByTimeAsync(40);
+            localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K2]));
+            tellTabs(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]), JSON.stringify([K2]));
+            unblockedDone = true;
+        }
+
+        const reblocked: number[] = [];
+        const check = () => { if (unblockedDone && A.isUserBlocked(K1) && reblocked.length < 3) reblocked.push(Date.now()); };
+        window.addEventListener(BLOCKLIST_UPDATED_EVENT, check);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        window.removeEventListener(BLOCKLIST_UPDATED_EVENT, check);
+        if (unblocking) await unblocking;
+
+        expect(reblocked).toEqual([]);
+        expect(node.list).toEqual([K2]);
+        expect(A.getBlockedUsers()).toEqual([K2]);
+        expect(A.isUserBlocked(K1)).toBe(false);
+    });
+
+    it('Unblock All while the add is held ends with an empty list on the node', async () => {
+        node.there = { read: 1, move: 30, clear: 1 };
+        node.back = { read: 1, clear: 1 };
+        node.backQueue = { move: [200] };
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        const A = await openTab();
+        vi.useFakeTimers();
+        stops.push(browserTellsTabs());
+        stops.push(A.startBlocklist(ME));
+
+        const clearing = A.clearBlocklist();
+        await vi.advanceTimersByTimeAsync(1000);
+        await clearing;
+
+        expect(node.list).toEqual([]);
+        expect(A.getBlockedUsers()).toEqual([]);
+    });
 });
+

@@ -7820,9 +7820,12 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
     const was = isOnHoliday(publicKey);
     db.transaction(() => {
         db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
-        // Holiday is on no listing and no column of the member's row, so the switch moves the row's updated_at itself:
-        // a phone's delta sync takes their listings off its Market by it, and puts them back (engine posts.ts getPosts).
-        if (was !== enabled) db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
+        // Holiday is on no listing and no column of the member's row, so a real switch stamps the row's
+        // board_standing_changed_at itself: a phone's delta sync takes their listings off its Market by it, and puts
+        // them back (engine posts.ts getPosts). And updated_at with it, so delta sync takes the stamp to a standby.
+        if (was !== enabled) {
+            db.prepare(`UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
+        }
     })();
     broadcast({ type: 'profile_updated', publicKey });
     // Their listings leave the board, or come back.

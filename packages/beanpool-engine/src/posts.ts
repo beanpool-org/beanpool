@@ -383,9 +383,10 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
  * The board leaves out every listing of an author on holiday, and of an enterprise that is paused, winding up or wound
  * up (the list read in getPostsRankedBy, with `m` the author's row). A sync read keeps those rows, so that a phone
  * holding one can take it off: each goes as paused (see the output loop), which every app leaves off its Market and map.
+ * A change of either moves the author's members.board_standing_changed_at (apps/server schema.sql), which the delta reads.
  */
-const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
-const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+export const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
+export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
 
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
@@ -860,17 +861,20 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     if (filter?.updatedAfter) {
-        // Changed since then, or its author did. Whether the board shows an author's listings (holiday, a paused or
-        // winding-up enterprise) is on the author's row, not the listing's, so a delta by the listing alone never told
-        // a phone to take them off or put them back. Every writer of that moves members.updated_at: the
-        // members_touch_updated_at trigger for `paused` and `status`, setHolidayMode for holiday. Local authors only
-        // (origin_node IS NULL), which is every author whose standing is kept here, and keeps this half on
-        // idx_posts_author_created_local: with DELTA_ORDER both halves are then an index search (MULTI-INDEX OR).
-        // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
+        // Changed since then, or its author's standing did. Whether the board shows an author's listings (holiday, a
+        // paused or winding-up enterprise) is on the author's row, not the listing's, so a delta by the listing alone
+        // never told a phone to take them off or put them back. members.board_standing_changed_at moves for exactly
+        // that: the members_touch_board_standing trigger for `paused` and `status`, setHolidayMode for holiday. Not
+        // members.updated_at, which about forty columns move (a bio, a contact, a moderator's mute…): any delta reader,
+        // unsigned included, could learn when one of those changed for any author with listings. Searched on
+        // idx_members_board_standing_changed_at. Local authors only (origin_node IS NULL), which is every author whose
+        // standing is kept here, and keeps this half on idx_posts_author_created_local: with DELTA_ORDER both halves are
+        // then an index search (MULTI-INDEX OR). Without it the planner reads every post (measured on 20,000 posts:
+        // 3 ms a read, against 0.02 ms).
         // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
         // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
         // MULTI-INDEX OR.
-        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?))";
+        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))";
         params.push(filter.updatedAfter, filter.updatedAfter);
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
         if (resend.size > 0) {
@@ -961,8 +965,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     // A sync read gives the listings the board leaves out for their author's sake as paused (ON_HOLIDAY_SQL), so a
-    // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's row
-    // next changes (the delta above). Not to the author, whose own listings the node shows them as they are, nor to a
+    // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's
+    // standing next changes (the delta above). Not to the author, whose own listings the node shows them as they are, nor to a
     // keeper of the enterprise, whose phone counts its listings as their own (enterprisesKeptBy), nor to a member with
     // an open deal on one, whose phone finds the deal by its listing.
     const offBoard = syncRead ? authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : new Set<string>();

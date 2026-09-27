@@ -1429,6 +1429,35 @@ export async function reportAbuse(reporterPubkey: string, targetPubkey: string, 
     return request('POST', '/api/reports', { reporterPubkey, targetPubkey, reason, targetPostId, targetPulseItemId });
 }
 
+// ===================== BLOCKS =====================
+
+/**
+ * The signed member's own block list, kept by the community for their account (GET /api/blocks): the keys they blocked,
+ * oldest first, and the most they may block. The node reads and changes only the signer's own; nobody else's is ever
+ * read or named.
+ */
+export interface BlockList {
+    blocked: { publicKey: string; blockedAt: string }[];
+    max: number;
+}
+
+export async function getBlockList(): Promise<BlockList> {
+    return request('GET', '/api/blocks');
+}
+
+/** Blocks one key, or several (the one-time move of a list this browser kept); all of them or, refused, none. */
+export async function addToBlockList(keys: string | string[]): Promise<BlockList & { added: string[] }> {
+    return request('POST', '/api/blocks', Array.isArray(keys) ? { targetPubkeys: keys } : { targetPubkey: keys });
+}
+
+export async function removeFromBlockList(key: string): Promise<BlockList & { removed: boolean }> {
+    return request('POST', '/api/blocks/remove', { targetPubkey: key });
+}
+
+export async function clearBlockList(): Promise<BlockList & { removed: number }> {
+    return request('POST', '/api/blocks/clear', {});
+}
+
 // ===================== FRIENDS =====================
 
 export interface FriendEntry {

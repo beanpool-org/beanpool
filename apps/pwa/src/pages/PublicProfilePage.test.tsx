@@ -6,6 +6,7 @@ import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getMemberProfile, type MemberProfile, type BalanceInfo } from '../lib/api';
 import { ARCHETYPES } from '@beanpool/core';
+import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -257,5 +258,39 @@ describe('PublicProfilePage Collaboration Chemistry names no archetype', () => {
             expect(prefill.text).not.toContain(name);
         }
         vi.mocked(getMemberProfile).mockImplementation(async () => mockProfile);
+    });
+});
+
+describe('PublicProfilePage: a block or an unblock the community did not take is not shown as done', () => {
+    const renderProfile = () => render(
+        <PublicProfilePage identity={mockIdentity} pubkey="peer-pubkey-123" onBack={vi.fn()} onMessage={vi.fn()} onNavigatePost={vi.fn()} />
+    );
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    });
+
+    it('a block that failed says so in the community\'s words, and the button still offers Block', async () => {
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.mocked(blockUser).mockRejectedValueOnce(new Error('Couldn’t reach your community, so they are not blocked. Check your connection and try again.'));
+        renderProfile();
+        fireEvent.click(await screen.findByRole('button', { name: 'Block user Bob' }));
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('Couldn’t reach your community, so they are not blocked. Check your connection and try again.'));
+        expect(alert).not.toHaveBeenCalledWith(expect.stringContaining('has been blocked'));
+        expect(screen.getByRole('button', { name: 'Block user Bob' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Unblock user Bob' })).toBeNull();
+    });
+
+    it('an unblock that failed says so, and they stay blocked', async () => {
+        vi.mocked(isUserBlocked).mockReturnValue(true);
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.mocked(unblockUser).mockRejectedValueOnce(new Error('Couldn’t reach your community, so they are still blocked. Check your connection and try again.'));
+        renderProfile();
+        fireEvent.click(await screen.findByRole('button', { name: 'Unblock user Bob' }));
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('Couldn’t reach your community, so they are still blocked. Check your connection and try again.'));
+        expect(alert).not.toHaveBeenCalledWith(expect.stringContaining('has been unblocked'));
+        expect(screen.getByRole('button', { name: 'Unblock user Bob' })).toBeInTheDocument();
+        vi.mocked(isUserBlocked).mockReturnValue(false);
     });
 });

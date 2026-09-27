@@ -101,12 +101,20 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         }
     };
 
-    const handleUnblock = () => {
+    const handleUnblock = async () => {
+        if (isBlocking) return;
         const targetName = profile?.callsign || 'this user';
         if (!window.confirm(`Unblock ${targetName}?`)) return;
-        unblockUser(pubkey);
-        setIsBlocked(false);
-        alert(`${targetName} has been unblocked.`);
+        try {
+            setIsBlocking(true);
+            await unblockUser(pubkey);
+            setIsBlocked(false);
+            alert(`${targetName} has been unblocked.`);
+        } catch (e: any) {
+            alert(e?.message || 'Failed to unblock. Please try again.');
+        } finally {
+            setIsBlocking(false);
+        }
     };
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
@@ -258,7 +266,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             }`}
                         >
                             <span aria-hidden="true">{isBlocked ? '🛡️' : '🚫'}</span>
-                            <span className="hidden sm:inline">{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock' : 'Block'}</span>
+                            <span className="hidden sm:inline">{isBlocking ? (isBlocked ? 'Unblocking…' : 'Blocking…') : isBlocked ? 'Unblock' : 'Block'}</span>
                         </button>
                     </div>
                 )}
@@ -950,7 +958,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 }`}
                             >
                                 <span>{isBlocked ? '🛡️' : '🚫'}</span>
-                                <span>{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock Member' : `Block ${profile?.callsign || 'Member'}`}</span>
+                                <span>{isBlocking ? (isBlocked ? 'Unblocking…' : 'Blocking…') : isBlocked ? 'Unblock Member' : `Block ${profile?.callsign || 'Member'}`}</span>
                             </button>
                         </div>
                         <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">

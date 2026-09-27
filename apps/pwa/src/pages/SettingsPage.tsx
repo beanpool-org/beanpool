@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
@@ -31,7 +31,7 @@ import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
-import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
+import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 
 interface Props {
@@ -229,25 +229,40 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    // Blocked Members
+    // Blocked Members: the list the community keeps for this account (lib/blocklist), read from it when this opens.
+    // A read that failed says so (never "no blocked members"), and so does an unblock the community didn't take.
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
+    const [blockedListError, setBlockedListError] = useState<string | null>(null);
+    const [blockedActionError, setBlockedActionError] = useState<string | null>(null);
+    /** The key being unblocked, or 'all' for Unblock All, while the community answers. */
+    const [blockedBusy, setBlockedBusy] = useState<string | null>(null);
+    const blockedNames = useRef(new Map<string, string>());
+
+    const showBlockedList = async (pubkeys: string[]) => {
+        const items = await Promise.all(pubkeys.map(async (pk) => {
+            let callsign = blockedNames.current.get(pk) ?? (pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk);
+            if (!blockedNames.current.has(pk)) {
+                try {
+                    const profile = await getMemberProfile(pk);
+                    if (profile?.callsign) {
+                        callsign = profile.callsign;
+                        blockedNames.current.set(pk, callsign);
+                    }
+                } catch {}
+            }
+            return { pubkey: pk, callsign };
+        }));
+        setBlockedUsersList(items);
+    };
 
     const loadBlockedList = async () => {
         setLoadingBlockedList(true);
+        setBlockedListError(null);
         try {
-            const pubkeys = getBlockedUsers();
-            const items = await Promise.all(pubkeys.map(async (pk) => {
-                let callsign = pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk;
-                try {
-                    const profile = await getMemberProfile(pk);
-                    if (profile?.callsign) callsign = profile.callsign;
-                } catch {}
-                return { pubkey: pk, callsign };
-            }));
-            setBlockedUsersList(items);
-        } catch (e) {
-            console.warn('[Settings] Failed to load blocked members list:', e);
+            await showBlockedList(await loadBlocklist());
+        } catch (e: any) {
+            setBlockedListError(e?.message || 'Couldn’t load your blocked members from your community. Try again.');
         } finally {
             setLoadingBlockedList(false);
         }
@@ -255,13 +270,39 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
     useEffect(() => {
         if (mode === 'blocked-users') {
+            setBlockedActionError(null);
             loadBlockedList();
-            const unsub = onBlocklistUpdated(() => {
-                loadBlockedList();
+            const unsub = onBlocklistUpdated((pubkeys) => {
+                showBlockedList(pubkeys).catch(() => {});
             });
             return unsub;
         }
     }, [mode]);
+
+    const unblockFromList = async (pubkey: string) => {
+        setBlockedActionError(null);
+        setBlockedBusy(pubkey);
+        try {
+            await unblockUser(pubkey);
+        } catch (e: any) {
+            setBlockedActionError(e?.message || 'That did not go through. Please try again.');
+        } finally {
+            setBlockedBusy(null);
+        }
+    };
+
+    const unblockEveryone = async () => {
+        if (!window.confirm('Are you sure you want to unblock all members?')) return;
+        setBlockedActionError(null);
+        setBlockedBusy('all');
+        try {
+            await clearBlocklist();
+        } catch (e: any) {
+            setBlockedActionError(e?.message || 'That did not go through. Please try again.');
+        } finally {
+            setBlockedBusy(null);
+        }
+    };
 
 
 
@@ -852,7 +893,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
                                 <button
                                     type="button"
-                                    onClick={() => { setMode('blocked-users'); loadBlockedList(); }}
+                                    onClick={() => setMode('blocked-users')}
                                     className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
                                 >
                                     <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
@@ -1357,11 +1398,28 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🚫 Blocked Members</h3>
                         <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
                             Members you have blocked cannot message you, and their posts and profiles are hidden from your feed.
+                            Your community keeps this list with your account, so it comes back when you sign in on any browser. Its operator can see it.
                         </p>
+
+                        {blockedListError && (
+                            <div role="alert" className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs leading-relaxed">
+                                <p className="mb-2">{blockedListError}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => loadBlockedList()}
+                                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 font-bold cursor-pointer"
+                                >
+                                    Try again
+                                </button>
+                            </div>
+                        )}
+                        {blockedActionError && (
+                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-400 leading-relaxed">{blockedActionError}</p>
+                        )}
 
                         {loadingBlockedList ? (
                             <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading blocked members...</div>
-                        ) : blockedUsersList.length === 0 ? (
+                        ) : blockedUsersList.length === 0 && blockedListError ? null : blockedUsersList.length === 0 ? (
                             <div className="text-center py-10 text-nature-500 dark:text-nature-400">
                                 <p className="text-3xl mb-2">🕊️</p>
                                 <p className="text-sm font-semibold text-nature-800 dark:text-white">No blocked members</p>
@@ -1382,13 +1440,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    unblockUser(item.pubkey);
-                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
-                                                }}
-                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0"
+                                                onClick={() => unblockFromList(item.pubkey)}
+                                                disabled={blockedBusy !== null}
+                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
                                             >
-                                                Unblock
+                                                {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
                                             </button>
                                         </div>
                                     ))}
@@ -1396,15 +1452,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        if (window.confirm('Are you sure you want to unblock all members?')) {
-                                            clearBlocklist();
-                                            setBlockedUsersList([]);
-                                        }
-                                    }}
-                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
+                                    onClick={unblockEveryone}
+                                    disabled={blockedBusy !== null}
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                 >
-                                    Unblock All
+                                    {blockedBusy === 'all' ? 'Unblocking…' : 'Unblock All'}
                                 </button>
                             </div>
                         )}

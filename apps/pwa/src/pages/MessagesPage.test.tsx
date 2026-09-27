@@ -1,9 +1,10 @@
-import { render, screen, act, waitFor, fireEvent, createEvent, cleanup } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent, createEvent, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, type Conversation, type ApiMessage } from '../lib/api';
+import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -937,5 +938,51 @@ describe('MessagesPage: links in a message stay plain text (G11-e: a new account
         expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
         expect(container.querySelectorAll('a[href*="phish.example"]')).toHaveLength(0);
         expect(Array.from(container.querySelectorAll('a')).filter(a => /phish/.test(a.textContent ?? ''))).toHaveLength(0);
+    });
+});
+
+describe('MessagesPage: a block or an unblock the community did not take is said, never shown as done', () => {
+    const OFFLINE_BLOCK = 'Couldn’t reach your community, so they are not blocked. Check your connection and try again.';
+    const OFFLINE_UNBLOCK = 'Couldn’t reach your community, so they are still blocked. Check your connection and try again.';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        window.alert = vi.fn();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        mockConversations = [{
+            id: 'conv-1', type: 'dm', name: null, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+            peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+        } as Conversation];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        mockMessagesByConv = { 'conv-1': [] };
+        vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
+            conversation: mockConversationDetails[convId],
+            messages: mockMessagesByConv[convId] || [],
+        }));
+    });
+    afterEach(() => {
+        vi.mocked(isUserBlocked).mockReturnValue(false);
+        vi.restoreAllMocks();
+    });
+
+    it('Block in the chat header that failed: the community\'s words, and the chat is not shown as blocked', async () => {
+        vi.mocked(blockUser).mockRejectedValueOnce(new Error(OFFLINE_BLOCK));
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Block user' }));
+        await waitFor(() => expect(window.alert).toHaveBeenCalledWith(OFFLINE_BLOCK));
+        expect(blockUser).toHaveBeenCalledWith('peer-pubkey', 'my-pubkey', 'Abusive user reported via Chat');
+        expect(screen.queryByText(/You have blocked this user/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Block user' })).toBeInTheDocument();
+    });
+
+    it('Unblock under a blocked chat that failed: the community\'s words, and it stays blocked', async () => {
+        vi.mocked(isUserBlocked).mockReturnValue(true);
+        vi.mocked(unblockUser).mockRejectedValueOnce(new Error(OFFLINE_UNBLOCK));
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        const banner = await screen.findByText(/You have blocked this user/);
+        fireEvent.click(within(banner.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Unblock' }));
+        await waitFor(() => expect(window.alert).toHaveBeenCalledWith(OFFLINE_UNBLOCK));
+        expect(unblockUser).toHaveBeenCalledWith('peer-pubkey');
+        expect(screen.getByText(/You have blocked this user/)).toBeInTheDocument();
     });
 });

@@ -39,6 +39,14 @@ describe('NodeAdminLink', () => {
         expect(await screen.findByRole('link', { name: /Manage this community/ })).toBeTruthy();
     });
 
+    it('has accessible focus ring styling for keyboard navigation', async () => {
+        vi.mocked(request).mockResolvedValue({ role: 'owner', communityName: 'Mullum' });
+        render(<NodeAdminLink />);
+        const link = await screen.findByRole('link', { name: /Manage Mullum/ });
+        expect(link.className).toContain('focus-visible:ring-2');
+        expect(link.className).toContain('focus-visible:ring-emerald-500');
+    });
+
     it.each([
         ['a plain member', { role: null }],
         ['a moderator', { role: 'moderator' }],

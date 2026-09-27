@@ -116,6 +116,12 @@ export interface MarketplacePost {
      * Absent when no point was given (G4).
      */
     distanceKm?: number | null;
+    /**
+     * On a delta read (`updatedAfter`), the time of the read, on each listing it sends again whatever changed
+     * (offBoardPostsToResend). It makes each such page differ from the one before, so a phone's fingerprint gate
+     * (apps/native services/pillar-sync.ts parseIfChanged) applies it. No app stores or reads it.
+     */
+    resentAt?: string;
 }
 
 export interface PostFilter {
@@ -373,6 +379,145 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
     };
 }
 
+/**
+ * The board leaves out every listing of an author on holiday, and of an enterprise that is paused, winding up or wound
+ * up (the list read in getPostsRankedBy, with `m` the author's row). A sync read keeps those rows, so that a phone
+ * holding one can take it off: each goes as paused (see the output loop), which every app leaves off its Market and map.
+ */
+const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
+const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+
+/** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
+function authorsOffBoard(db: Db, authors: string[]): Set<string> {
+    const off = new Set<string>();
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph => `${ON_HOLIDAY_SQL} AND public_key IN (${ph})`)) off.add(r.public_key);
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph =>
+        `SELECT m.public_key FROM members m WHERE m.public_key IN (${ph}) AND NOT (${ENTERPRISE_ON_BOARD_SQL})`)) off.add(r.public_key);
+    return off;
+}
+
+/** The posts this member has an open deal on, as buyer or seller: asked for, or accepted and not yet completed. */
+function postsInOpenDealWith(db: Db, member: string): Set<string> {
+    const rows = db.prepare(`
+        SELECT post_id FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('requested', 'pending')
+        UNION
+        SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = ? AND status IN ('requested', 'pending')`)
+        .all(member, member) as Array<{ post_id: string | null }>;
+    return new Set(rows.flatMap(r => r.post_id ? [r.post_id] : []));
+}
+
+/** Whether the list read's own status conditions keep this post: live, and open or taken, or a closed poll. */
+function onBoardByStatus(post: MarketplacePost): boolean {
+    return post.active && (post.status === 'active' || post.status === 'pending' || (post.type === 'poll' && post.status === 'completed'));
+}
+
+/**
+ * The enterprises this member keeps, by the keeper rule isEventHost uses: a treasury_operators row, the member active
+ * and not a visitor. A keeper's phone counts the enterprise's listings as its own (apps/native post/[id].tsx
+ * isOperatorOfAuthor, from the node's keeperOf), so it gets them as they are, as the author would.
+ */
+function enterprisesKeptBy(db: Db, member: string): Set<string> {
+    const rows = db.prepare(`
+        SELECT o.treasury_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0`).all(member) as Array<{ treasury_pubkey: string }>;
+    return new Set(rows.map(r => r.treasury_pubkey));
+}
+
+/**
+ * The off-board events each member read by id outside a sync, with how long that read counts (noteEventReadOutsideSync).
+ * The phone's event page reads the event that way (apps/native utils/db.ts fetchEventDetail), however the member got
+ * there (a shared link, a reminder, "Your events", the event's chat), and writes its real status into the cached row
+ * (persistEventView). The read writes nothing on the node, so no delta would carry the event again: for that member's
+ * own deltas, the read counts as a change of the event (offBoardPostsToResend).
+ * In memory, per database, so a restart forgets them: the event then stays on that phone's Market until it or its host
+ * next changes. At most EVENT_READS_PER_MEMBER events for each of EVENT_READ_MEMBERS members, and only for a key with a
+ * member row; the least recently read goes first.
+ */
+const eventReadsOutsideSync = new WeakMap<Db, Map<string, Map<string, number>>>();
+const EVENT_READS_PER_MEMBER = 20;
+const EVENT_READ_MEMBERS = 2000;
+/**
+ * How far past the read a delta's cursor goes before the read stops counting. The phone's cursor is its last completed
+ * sync less five minutes, so a read counts until the phone has completed a sync 15 minutes after it. Every delta it
+ * read in between carried the event, and the last of those was written after the event page's own write, unless that
+ * sync took longer than 15 minutes.
+ */
+const EVENT_READ_MARGIN_MS = 10 * 60_000;
+
+function noteEventReadOutsideSync(db: Db, member: string, postId: string, nowMs: number): void {
+    let byMember = eventReadsOutsideSync.get(db);
+    if (!byMember) eventReadsOutsideSync.set(db, byMember = new Map());
+    const reads = byMember.get(member) ?? new Map<string, number>();
+    // Delete and set again: a Map keeps insertion order, so the first key is the least recently read.
+    byMember.delete(member);
+    byMember.set(member, reads);
+    reads.delete(postId);
+    reads.set(postId, nowMs + EVENT_READ_MARGIN_MS);
+    if (reads.size > EVENT_READS_PER_MEMBER) reads.delete(reads.keys().next().value!);
+    if (byMember.size > EVENT_READ_MEMBERS) byMember.delete(byMember.keys().next().value!);
+}
+
+/** The events this member read outside a sync that still count at this cursor; the ones it has passed are forgotten. */
+function eventReadsCountingAt(db: Db, member: string, cursor: string): string[] {
+    const byMember = eventReadsOutsideSync.get(db);
+    const reads = byMember?.get(member);
+    if (!byMember || !reads) return [];
+    const cursorMs = Date.parse(cursor);
+    for (const [id, untilMs] of reads) if (cursorMs > untilMs) reads.delete(id);
+    if (reads.size === 0) byMember.delete(member);
+    return [...reads.keys()];
+}
+
+/** The deals the phone's heal reads: the member's last 50, newest first, as GET /api/marketplace/transactions gives them. */
+const HEALED_DEALS = 50;
+
+/**
+ * The listings a delta read sends this member again whatever changed since the cursor (`resentAt` on each, so the page
+ * differs from the last one: see the output loop). Each is an off-board author's listing that the phone may hold as it
+ * is, from a write of its own outside a sync, with no row on the node moving to carry it again. Each goes as paused, so
+ * the phone takes it off its Market again.
+ * - An upcoming event of an off-board host that the member read by id outside a sync, until the cursor passes the read
+ *   (eventReadsCountingAt).
+ * - An open listing of an off-board author on which one of the member's last 50 deals is cancelled, or completed on a
+ *   repeatable listing. Each time the phone applies a changed list of those deals it writes those listings back as
+ *   active (apps/native utils/db.ts applyDelta, after the posts: the deal heal). A new deal, a rating or a cold start
+ *   changes or re-applies that list with no listing row moving, so these go in every delta.
+ * Every other way the phone writes a listing's status outside a sync moves posts.updated_at on the node, so the delta
+ * carries it anyway: a vote, an RSVP, an event edit, a deal accepted, completed or cancelled. Nothing of the member's
+ * own, of an enterprise they keep, nor a listing they have an open deal on or have taken: those go as they are.
+ * A member with nothing here gets the same page from one delta to the next, so a phone's fingerprint gate
+ * (apps/native services/pillar-sync.ts parseIfChanged) still skips it.
+ */
+function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor: string, nowIso: string): string[] {
+    const reads = new Set(eventReadsCountingAt(db, viewer, cursor));
+    // The heal's list, ties at the 50th included: the route's order among deals made in the same millisecond is the
+    // planner's. MATERIALIZED, so the member's deals are found by their buyer and seller indexes once: folded into the
+    // outer query, the planner picks idx_marketplace_transactions_status_completed and reads every ended deal on the node.
+    const deals = db.prepare(`
+        WITH mine AS MATERIALIZED (SELECT post_id, status, created_at FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer),
+             edge AS (SELECT created_at FROM mine ORDER BY created_at DESC LIMIT 1 OFFSET ${HEALED_DEALS - 1})
+        SELECT post_id, status FROM mine
+        WHERE post_id IS NOT NULL AND status IN ('cancelled', 'completed')
+          AND (NOT EXISTS (SELECT 1 FROM edge) OR created_at >= (SELECT created_at FROM edge))`)
+        .all({ viewer }) as Array<{ post_id: string; status: string }>;
+    const cancelled = new Set(deals.filter(d => d.status === 'cancelled').map(d => d.post_id));
+    const completed = new Set(deals.filter(d => d.status === 'completed').map(d => d.post_id));
+    const candidates = [...new Set([...reads, ...cancelled, ...completed])];
+    if (candidates.length === 0) return [];
+    const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
+        db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
+    const off = authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey))]);
+    const open = postsInOpenDealWith(db, viewer);
+    return rows.filter(r => {
+        if (!off.has(r.author_pubkey) || r.author_pubkey === viewer || kept.has(r.author_pubkey)) return false;
+        if (r.accepted_by === viewer || open.has(r.id) || r.active !== 1) return false;
+        if (!(r.status === 'active' || r.status === 'pending' || (r.type === 'poll' && r.status === 'completed'))) return false;
+        const readEvent = reads.has(r.id) && r.type === 'event' && (!r.event_end_at || r.event_end_at > nowIso);
+        return readEvent || cancelled.has(r.id) || (completed.has(r.id) && r.repeatable === 1);
+    }).map(r => r.id);
+}
+
 export function hasListedOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1").get(publicKey);
     return !!row;
@@ -409,6 +554,18 @@ const POST_ROW_SELECT = `
         LEFT JOIN groups g ON p.target_group_id = g.id`;
 
 const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
+/**
+ * RECENT_ORDER for a delta read (`updatedAfter`). The unary plus stops the ORDER BY from choosing idx_posts_updated_at:
+ * a node has no sqlite_stat1 (nothing runs ANALYZE), and without it the planner walks that index in order across every
+ * post and tests the delta's OR on each. With the plus, each half of the OR is an index search (MULTI-INDEX OR) and the
+ * few rows found are sorted. Measured on 20,000 posts: 5.1 ms a delta walking the index, 0.13 ms with the plus.
+ */
+const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
+
+/** The newest-first order: DELTA_ORDER for a delta read, RECENT_ORDER for every other. */
+function recentOrder(filter: PostFilter | undefined): string {
+    return filter?.updatedAfter ? DELTA_ORDER : RECENT_ORDER;
+}
 // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
 const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
 
@@ -539,7 +696,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         }
         sql += where;
         params.push(...whereParams);
-        sql += byDistance ? NEAREST_ORDER : RECENT_ORDER;
+        sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
@@ -596,10 +753,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += ` AND p.author_pubkey NOT IN (${ON_HOLIDAY_SQL})`;
+            where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         } else if (!selfView && !filter?.includeInactive) {
-            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
@@ -628,6 +785,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
     const viewer = filter?.viewerPubkey;
     const viewerIsVisitor = isVisitorKey(db, viewer);
+    // The enterprises the reader keeps (enterprisesKeptBy), read once and only if a sync read needs them.
+    let keeps: Set<string> | undefined;
+    const viewerKeeps = () => keeps ??= viewer ? enterprisesKeptBy(db, viewer) : new Set<string>();
+    // What a delta read sends this reader again whatever changed (offBoardPostsToResend).
+    let resend = new Set<string>();
     if (filter?.includeAllScopes) {
         // Internal engine lookup bypasses feed scoping
     } else if (filter?.audienceScope === 'public') {
@@ -698,8 +860,24 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     if (filter?.updatedAfter) {
-        where += " AND p.updated_at >= ?";
-        params.push(filter.updatedAfter);
+        // Changed since then, or its author did. Whether the board shows an author's listings (holiday, a paused or
+        // winding-up enterprise) is on the author's row, not the listing's, so a delta by the listing alone never told
+        // a phone to take them off or put them back. Every writer of that moves members.updated_at: the
+        // members_touch_updated_at trigger for `paused` and `status`, setHolidayMode for holiday. Local authors only
+        // (origin_node IS NULL), which is every author whose standing is kept here, and keeps this half on
+        // idx_posts_author_created_local: with DELTA_ORDER both halves are then an index search (MULTI-INDEX OR).
+        // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
+        // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
+        // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
+        // MULTI-INDEX OR.
+        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?))";
+        params.push(filter.updatedAfter, filter.updatedAfter);
+        resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
+        if (resend.size > 0) {
+            where += " OR p.id IN (SELECT value FROM json_each(?))";
+            params.push(JSON.stringify([...resend]));
+        }
+        where += ")";
     }
 
     let rows: any[];
@@ -707,7 +885,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         rows = rowsNear(db, near, where, params, filter!);
     } else {
         let query = `${POST_ROW_SELECT}
-        WHERE 1=1${where}${RECENT_ORDER}`;
+        WHERE 1=1${where}${recentOrder(filter)}`;
         if (filter?.limit) {
             query += " LIMIT ? OFFSET ?";
             params.push(filter.limit, filter.offset || 0);
@@ -782,6 +960,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         }
     }
 
+    // A sync read gives the listings the board leaves out for their author's sake as paused (ON_HOLIDAY_SQL), so a
+    // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's row
+    // next changes (the delta above). Not to the author, whose own listings the node shows them as they are, nor to a
+    // keeper of the enterprise, whose phone counts its listings as their own (enterprisesKeptBy), nor to a member with
+    // an open deal on one, whose phone finds the deal by its listing.
+    const offBoard = syncRead ? authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : new Set<string>();
+    const viewerDeals = offBoard.size > 0 && viewer ? postsInOpenDealWith(db, viewer) : new Set<string>();
+    const kept = offBoard.size > 0 ? viewerKeeps() : new Set<string>();
+
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
     const out: MarketplacePost[] = [];
@@ -790,7 +977,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
             // A removal says nothing of where the post was, so it carries no distance either.
-            out.push(hiddenAsRemoved(post));
+            const removal = hiddenAsRemoved(post);
+            if (resend.has(r.id)) removal.resentAt = nowIso;
+            out.push(removal);
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
@@ -820,6 +1009,14 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 if ((!host && !going) || nowMs - endMs > EVENT_READABLE_AFTER_END_MS) continue;
             }
             if (readerView && !r.active && !host && !going) continue;
+            // An off-board host's event, read for this reader as it is: their phone writes it into its cache as it is,
+            // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync). Only for a key with a
+            // member row here, so a key that merely signs can't fill what the node keeps.
+            if (readerView && viewer && r.author_pubkey !== viewer && onBoardByStatus(post)
+                && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
+                && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
+                noteEventReadOutsideSync(db, viewer, post.id, nowMs);
+            }
             post.goingCount = rsvps.filter(v => v.status === 'going').length;
             post.interestedCount = rsvps.filter(v => v.status === 'interested').length;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
@@ -867,6 +1064,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 }));
             }
         }
+
+        if (offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
+            && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
+            post.status = 'paused';
+        }
+        if (resend.has(r.id)) post.resentAt = nowIso;
 
         out.push(post);
     }
@@ -926,6 +1129,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
+    // A member's own delta only: a visitor's read is for nobody in particular and never has it.
+    resentAt: 'drop',
 };
 
 /**

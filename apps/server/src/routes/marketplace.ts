@@ -272,8 +272,13 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // never be storable by one, because two members asking for the same URL get different bodies.
     ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
+    // A signed read of one listing by id that isn't a sync is the phone's event page (apps/native utils/db.ts
+    // fetchEventDetail), and getPosts notes it for that member's deltas (the engine's noteEventReadOutsideSync). So it is
+    // never answered 304: the phone's platform HTTP cache sends the last ETag of that URL by itself, and a 304 would skip
+    // the note while the app writes the stored body. It is one row. Every other read keeps its 304.
+    const notesTheRead = !!viewerPubkey && !guestView && !!id && !sync && !updatedAfter;
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
+    if (ifNoneMatch && !notesTheRead) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
         if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {

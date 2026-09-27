@@ -429,6 +429,7 @@ run_federation_suites() {
       test-cancel-post-request
       test-non-members-cant-act
       test-marketplace-auth
+      test-sync-author-off-board
       test-escrow-fail-closed
       test-escrow-floor
       test-escrow-write-off

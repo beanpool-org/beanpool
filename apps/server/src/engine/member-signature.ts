@@ -312,7 +312,8 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  *     can't crowd out the address the owner's own app reaches the community at;
  *   - whether an owner's or admin's app signed for it (isNodeAdmin: a role that acts; a moderator's app is a member's):
  *     the address and the last day, no key, in node_config row STAFF_SEEN_KEY, written with the counts, so a restart
- *     keeps it. At most MAX_ADDRESSES_PER_KIND addresses, none older than 8 days. The role is the one the signer held
+ *     keeps it. At most MAX_ADDRESSES_PER_KIND addresses; rows older than 8 days are dropped whenever the row is written
+ *     or read (staffSeenAddresses), so none older is kept past the next Settings read. The role is the one the signer held
  *     when its app first signed for the address that day: an admin made later counts from the next day it signs for
  *     it, and one removed still counts for the rest of the week.
  */
@@ -521,7 +522,18 @@ export function staffSeenAddresses(now = Date.now()): Set<string> {
     const from = daysAgo(now, 6);
     const out = new Set<string>();
     try {
-        for (const [address, day] of storedStaffSeen()) if (day >= from) out.add(address);
+        const stored = storedStaffSeen();
+        const oldest = daysAgo(now, 8);
+        // Nothing new may come for weeks, and only a write prunes: drop what's past 8 days now (writeStaffSeen keeps the
+        // rest). A failed prune never hides the sightings: they are read from `stored` either way.
+        if ([...stored.values()].some((day) => day < oldest)) {
+            try {
+                writeStaffSeen(now);
+            } catch (e: any) {
+                logger.warn('AUTH', `could not prune the addresses owners' and admins' apps used: ${e?.message || e}`);
+            }
+        }
+        for (const [address, day] of stored) if (day >= from) out.add(address);
     } catch (e: any) {
         logger.warn('AUTH', `could not read which addresses owners' and admins' apps used: ${e?.message || e}`);
     }

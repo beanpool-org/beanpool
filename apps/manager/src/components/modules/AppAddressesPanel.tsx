@@ -127,8 +127,10 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     // sent as ?host=, node-client.ts), or holds it back when the directory it holds lists it. A server from before the
     // guard can't say: this page suggests it itself, as it always did.
     const pageHost = audienceOf(activeNode.url);
-    const pageOffered = !named && offerable(pageHost) && !isBeanPoolName(pageHost) && !known.has(pageHost)
-        && (!Array.isArray(report.heldBack) || report.unconfirmed.some((u) => u.address === pageHost));
+    // A node with the guard decides which page hosts count as this community's (a public IPv6 address, a name such as
+    // 10.example.org): take its word. Only for an older server does this page judge by itself (offerable).
+    const pageOffered = !named && !!pageHost && !isBeanPoolName(pageHost) && !known.has(pageHost)
+        && (Array.isArray(report.heldBack) ? report.unconfirmed.some((u) => u.address === pageHost) : offerable(pageHost));
     const pageSighting = pageOffered ? listed.find((h) => h.address === pageHost) : undefined;
     const others = listed.filter((h) => !(pageOffered && h.address === pageHost));
     // The ones an owner's or admin's app reached first, then the busiest.

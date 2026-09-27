@@ -2,8 +2,10 @@
  * The communities directory as this node last fetched it (global node G5, design §3.2): `directory_cache`, written by
  * the hourly mirror (services/directory-mirror.ts) and read by GET /api/global/communities and /api/global/home, and by
  * Settings, to warn before an owner confirms another community's address as this one's (engine/address-offers.ts).
- * Only a node whose `directoryMirror` switch is on (the global profile's default; off by default in the local one), or
- * a standby copying one, holds any rows: on the others the table is empty and that warning never appears.
+ * Rows come only from the mirror: a node whose `directoryMirror` switch is on (the global profile's default; off by
+ * default in the local one), or a standby copying one. A node that has never run the mirror (the local profile's
+ * default) holds no rows, so that warning never appears there. A node whose switch was turned off keeps the rows it last
+ * fetched and still warns from them (harmless: the name may be stale, and the owner can still tick).
  *
  * ## Every registry row is untrusted
  *

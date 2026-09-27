@@ -95,6 +95,13 @@ describe('the tab strip follows the phone\'s community, not the node status alon
         expect(src).toMatch(/if \(url === undefined \|\| url === stripReadFor\.current\) return;\s*stripReadFor\.current = url;/);
     });
 
+    it('reads the community again at the next screen change when nothing was known of it', async () => {
+        // Offline with no copy: without this the strip never asks again, and keeps Commons and Ledger on a
+        // community with Beans off for the rest of the session.
+        const src = await strip();
+        expect(src).toMatch(/const fresh = await fetchNodeProfile\(url\);\s*setStrip\(s => profileArrived\(s, url, fresh\)\);[\s\S]*if \(!cached && !fresh && stripReadFor\.current === url\) stripReadFor\.current = undefined;/);
+    });
+
     it('hides tabs from that state alone', async () => {
         const src = await strip();
         expect(src).toMatch(/const hiddenTabs: HideableTab\[\] = hiddenTabsFor\(strip\.profile\?\.features\);/);

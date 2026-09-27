@@ -134,6 +134,9 @@ export default function TabLayout() {
             setStrip(s => profileArrived(s, url, cached));
             const fresh = await fetchNodeProfile(url);
             setStrip(s => profileArrived(s, url, fresh));
+            // Nothing known of it (offline, and no copy yet): read it again at the next screen change rather than
+            // show Commons and Ledger for the rest of the session. Only while the phone is still on it.
+            if (!cached && !fresh && stripReadFor.current === url) stripReadFor.current = undefined;
         })().catch(() => {});
     }, [nodeUrl, pathname]);
 

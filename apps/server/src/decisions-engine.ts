@@ -478,6 +478,96 @@ export function getDecisionVoiceCredits(decisionId: string, voterPubkey: string)
     };
 }
 
+// ── Grant cap (Marty, card grant-cap, 2026-09-27: "Cap it when proposed") ──
+
+/** The two effects that pay a stated amount out of the Commons. A write-off's size is the enterprise's debt, not asked for. */
+const GRANT_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['grant_enterprise', 'grant_hardship']);
+
+export const GRANT_CAP_WINDOW_DAYS = 30;
+
+export const GRANT_AMOUNT_ERROR = 'A grant needs an amount in Beans above 0.';
+
+let grantCapClock: () => number = () => Date.now();
+
+/** Tests: the clock the 30-day inflow window is measured by. A Decision's own open and close times keep the real clock. */
+export function setGrantCapClockForTests(now: (() => number) | null): void {
+    grantCapClock = now ?? (() => Date.now());
+}
+
+export interface CommonsGrantCap {
+    /** What the Commons holds now, in whole cents (negative when it is in deficit). */
+    heldCents: number;
+    /** What flowed into the Commons over the last 30 days, in whole cents. */
+    inflowCents: number;
+    /** The biggest grant that can be proposed now: held + inflow, in whole cents. */
+    capCents: number;
+}
+
+/** Whole cents, rounded down, so the cap a member is shown is always one the rule accepts. The 1e-6 absorbs float noise. */
+function floorCents(beans: number): number {
+    return Math.floor(beans * 100 + 1e-6);
+}
+
+function beansText(cents: number): string {
+    const s = (Math.abs(cents) / 100).toFixed(2);
+    return s.endsWith('.00') ? s.slice(0, -3) : s;
+}
+
+/**
+ * What the Commons could plausibly pay a grant proposed now: what it holds plus what flowed into it over the last 30
+ * days. A bigger grant is refused before anyone votes, because if it passed it would sit in the one-slot funding queue
+ * for up to 90 days and every other grant that passed short of funds would be refused ("Funding queue is full").
+ *
+ * The inflow is measured from the ledger, over `transactions` rows timestamped in (asOf − 30 days, asOf]:
+ *   - `amount` of every row whose to_pubkey is COMMONS_POOL: the circulation fee (engine/audit.ts persistDecayEvents,
+ *     ids demurrage_*) and every moveToCommons (an enterprise's surplus over its ceiling, a treasury's sweep, the
+ *     cross-node fee, a pruned member's balance);
+ *   - plus `tax_fee` on every row: the 1.5% market fee on a completed trade, which ledger.transfer credits straight to
+ *     the pot while the row itself is written to the seller.
+ * Nothing paid OUT of the Commons is subtracted: the figure is what came in, as decided. Float dust an escrow gives up
+ * (under a millionth of a Bean, ledger.ts #160) writes no row and is not counted.
+ */
+export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantCap {
+    const asOf = new Date(asOfMs);
+    const cutoff = new Date(asOfMs - GRANT_CAP_WINDOW_DAYS * DAY_MS);
+    // The date-only prefix lets SQLite use idx_transactions_timestamp; julianday() then reads both stored forms exactly
+    // (the code's ISO-8601, and SQLite datetime()'s 'YYYY-MM-DD HH:MM:SS', see parseDbTime).
+    const row = db.prepare(`
+        SELECT
+            COALESCE(SUM(CASE WHEN to_pubkey = 'COMMONS_POOL' THEN amount ELSE 0 END), 0) AS into_pool,
+            COALESCE(SUM(COALESCE(tax_fee, 0)), 0) AS fees
+        FROM transactions
+        WHERE timestamp >= @cutoffDay
+          AND julianday(timestamp) > julianday(@cutoff)
+          AND julianday(timestamp) <= julianday(@asOf)
+    `).get({
+        cutoffDay: cutoff.toISOString().slice(0, 10),
+        cutoff: cutoff.toISOString(),
+        asOf: asOf.toISOString(),
+    }) as { into_pool: number; fees: number };
+    const heldCents = floorCents(getCommonsBalanceExact());
+    const inflowCents = floorCents(Number(row.into_pool) + Number(row.fees));
+    return { heldCents, inflowCents, capCents: heldCents + inflowCents };
+}
+
+/** The sentence a member sees when their grant is over the cap. */
+export function grantCapRefusal(cap: CommonsGrantCap): string {
+    const holds = cap.heldCents < 0 ? `owes ${beansText(cap.heldCents)} Beans` : `holds ${beansText(cap.heldCents)} Beans`;
+    return `This grant is bigger than the Commons could pay: it ${holds} and took in ${beansText(cap.inflowCents)} Beans `
+        + `over the last ${GRANT_CAP_WINDOW_DAYS} days, so the most you can ask for now is ${beansText(Math.max(0, cap.capCents))} Beans.`;
+}
+
+/**
+ * A grant proposal's amount against the cap. Throws the member's sentence; writes nothing. A grant with no usable amount
+ * could never be paid (preflightAssert blocks it), so it gets its plain answer here instead of a vote.
+ */
+function assertGrantWithinCap(params: any): void {
+    const amount = Number(params?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
+    const cap = commonsGrantCap();
+    if (amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+}
+
 // ── Decision Lifecycle ──────────────────────────────────────────────────
 
 export interface CreateDecisionOptions {
@@ -517,6 +607,9 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
     }
+
+    // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
+    if (GRANT_EFFECTS.has(opts.effect)) assertGrantWithinCap(opts.params);
 
     const id = crypto.randomUUID();
     const franchise = franchiseForTouch(opts.touches);

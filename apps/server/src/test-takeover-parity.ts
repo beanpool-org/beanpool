@@ -547,7 +547,7 @@ async function main(): Promise<void> {
             closesAt: new Date(Date.now() + 2500).toISOString(),
         })).decision;
         for (const v of [gwen, ann, bo, cy, dee]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${removal.id}/vote`, { support: true }));
-        await pull('the whole copy', true);
+        const wholeCopy = await pull('the whole copy', true);
 
         // ── 5. The last writes, then a last delta ──
         console.log('\n— 5. the last writes, then a last delta —');
@@ -666,7 +666,10 @@ async function main(): Promise<void> {
         // ── 10. Known gaps, strict ──
         console.log('\n— 10. every difference, against KNOWN_GAPS —');
         const pullsLanded = pulls.every((p) => p.ok);
-        assert(pullsLanded && pulls.some((p) => p.whole), `every pull landed, one of them a whole copy (${JSON.stringify(pulls)})`);
+        const deltas = pulls.filter((p) => p.phase !== 'the whole copy' && !p.phase.startsWith('first copy'));
+        // What the step-4 pull itself did, not what the first copy is assumed to be: a whole copy runs another import.
+        assert(pullsLanded && wholeCopy.whole === true && deltas.length === 3 && deltas.every((p) => !p.whole),
+            `every pull landed; step 4's was a whole copy and the other three deltas (${JSON.stringify(pulls)})`);
         for (const [key, examples] of [...differences.entries()].sort()) {
             const known = KNOWN_GAPS.find((g) => g.key === key);
             console.log(`  ${known ? `[${known.gap}]` : '[NEW]'} ${key}`);

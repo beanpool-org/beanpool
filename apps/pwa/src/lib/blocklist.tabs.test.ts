@@ -495,6 +495,44 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(unblocksSent()).toEqual(unblocks);
     });
 
+    it.each([
+        ['unblock', 'K1', K1, [K1, K2], [`remove ${K1}`]],
+        ['Unblock All', 'K2', K2, [K2], ['clear', `remove ${K1}`]],
+    ] as const)('the member\'s last word here stands when their %s answers after the move\'s list: blocking %s again in between keeps them blocked', async (how, _name, again, ends, unblocks) => {
+        const T = await oneTabMoving();
+        // The list answers at 82 ms; the member's remove (or Unblock All) reaches the node at 11 ms, before the list, but
+        // its answer comes back only at 211 ms. At 90 ms, between the two answers, the member blocks `again` here (review
+        // of #1269, 4117304623).
+        node.back = { ...node.back, move: 50, remove: 200, clear: 200 };
+        const unblocking = how === 'unblock' ? T.unblockUser(K1) : T.clearBlocklist();
+        await vi.advanceTimersByTimeAsync(80);
+        expect([...node.list].sort()).toEqual([K1, K2].sort());
+        const blocking = T.blockUser(again);
+        await vi.advanceTimersByTimeAsync(5);
+        await expect(blocking).resolves.toBe(true);
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(unblocking).resolves.toBe(how === 'unblock' ? true : undefined);
+        expect([...node.list].sort()).toEqual([...ends].sort());
+        expect([...T.getBlockedUsers()].sort()).toEqual([...ends].sort());
+        expect(unblocksSent()).toEqual(unblocks);
+    });
+
+    it('an unblock made here again after the move\'s list answered is the member\'s own remove: none other is sent for it', async () => {
+        const T = await oneTabMoving();
+        // As above, but at 90 ms the member unblocks K1 here again, which reaches the node after the list and takes K1 off.
+        node.back = { ...node.back, move: 50, remove: 200 };
+        const first = T.unblockUser(K1);
+        await vi.advanceTimersByTimeAsync(80);
+        expect([...node.list].sort()).toEqual([K1, K2].sort());
+        const again = T.unblockUser(K1);
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(first).resolves.toBe(true);
+        await expect(again).resolves.toBe(true);
+        expect(node.list).toEqual([K2]);
+        expect(T.getBlockedUsers()).toEqual([K2]);
+        expect(unblocksSent()).toEqual([`remove ${K1}`, `remove ${K1}`]);
+    });
+
     it('a key the move\'s list found blocked already is not taken off again: a block made on another device after the member\'s unblock here stands', async () => {
         const T = await oneTabMoving();
         const blockElsewhere = (at: string) => { node.list = [...node.list.filter(k => k !== K1), K1]; node.stamps[K1] = at; };

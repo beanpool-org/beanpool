@@ -133,9 +133,9 @@ interface Asked {
  */
 const unblocksOnTheirWay = new Set<ReadonlySet<string>>();
 /**
- * What the member asked for in this page, in order, while one of the move's adds is on its way; null while none is (one
- * read at a time, so one add at most). That add may reach the node after an unblock sent later, and block again whom the
- * member just unblocked here.
+ * What the member asked for in this page, in order, while one of the move's adds is on its way, and after it answers until
+ * all they asked meanwhile has answered too; null otherwise (one read at a time, so one add at most). That add may reach
+ * the node after an unblock sent later, and block again whom the member just unblocked here.
  */
 let askedDuringAdd: Asked[] | null = null;
 /**
@@ -364,10 +364,11 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
 /**
  * Sends one of the move's adds (a list of keys, or one key), and answers the node's list after it. Once it has answered,
  * each key it blocked that the member unblocked in this page while it was on its way (their last word on that key here,
- * as the node took it: a block made here after the unblock stands) is owed, and taken off again (sendOwed): the member's
- * remove may have reached the node before this add did. Only a key this add itself blocked (its `added`): one it found
- * blocked already was blocked by someone else, or the member's remove is yet to land. Nothing is owed once another
- * account has signed in here, whose list any request now changes.
+ * as the node took it: a block made here after the unblock stands, even one made once the add has answered and before the
+ * unblock has) is owed, and taken off again (sendOwed): the member's remove may have reached the node before this add did.
+ * An unblock made here after the add answered needs nothing more: it lands after it. Only a key this add itself blocked
+ * (its `added`): one it found blocked already was blocked by someone else, or the member's remove is yet to land. Nothing
+ * is owed once another account has signed in here, whose list any request now changes.
  *
  * Rejects as the add did, owing nothing: without its answer this page can't tell a block the add made from one made since
  * elsewhere, so the add, if it did reach the node, may have blocked again whom the member unblocked here. That errs toward
@@ -378,23 +379,29 @@ async function sendMoveAdd(keys: string | string[], forOwner: string | null): Pr
     const asked: Asked[] = [];
     askedDuringAdd = asked;
     let res: BlockList & { added?: string[] };
+    let about = false;
+    const unblocked = new Set<string>();
     try {
         res = await addToBlockList(keys);
-    } finally {
-        askedDuringAdd = null;
-    }
-    const about = asked.filter(a => [...a.keys].some(k => sent.has(k)));
-    if (about.length === 0) return res;
-    const unblocked = new Set<string>();
-    for (const a of about) {
-        if (!(await a.taken)) continue;
-        for (const k of a.keys) {
-            if (!sent.has(k)) continue;
-            if (a.unblock) unblocked.add(k);
-            else unblocked.delete(k);
+        // What the member asks for here from now on reaches the node after this add: their later word, noted until all
+        // they asked before has answered, so a block they make meanwhile is never taken off below (#1269's 4117304623).
+        const answered = asked.length;
+        for (let i = 0; i < asked.length; i++) {
+            const a = asked[i];
+            if (![...a.keys].some(k => sent.has(k))) continue;
+            about = true;
+            if (!(await a.taken)) continue;
+            for (const k of a.keys) {
+                if (!sent.has(k)) continue;
+                // An unblock sent after this add answered lands after it, and takes them off itself.
+                if (a.unblock && i < answered) unblocked.add(k);
+                else unblocked.delete(k);
+            }
         }
+    } finally {
+        if (askedDuringAdd === asked) askedDuringAdd = null;
     }
-    if (owner !== forOwner) return res;
+    if (!about || owner !== forOwner) return res;
     const added = Array.isArray(res.added) ? new Set(res.added) : sent;
     const stamps = new Map(Array.isArray(res.blocked) ? res.blocked.map(b => [b.publicKey, b.blockedAt] as const) : []);
     for (const k of unblocked) if (added.has(k)) owed.set(k, stamps.get(k));

@@ -114,12 +114,14 @@ function inviteHash(code: string): string {
 
 /**
  * What the photo step says when an invite join landed on another name than the one sent: the node keeps 20 characters
- * (routes/community.ts), and numbers a name another member holds (engine/members.ts uniquifyCallsign). Null when it
- * kept the one sent.
+ * (routes/community.ts), and numbers a name another member holds (engine/members.ts uniquifyCallsign). `earlier`: the
+ * node answered that the key was a member already (an earlier try landed while its answer was lost), so its name is
+ * the one that try joined with. Null when it kept the one sent.
  */
-function keptAnotherName(asked: string, kept: string): string | null {
+function keptAnotherName(asked: string, kept: string, earlier = false): string | null {
     const sent = asked.trim();
     if (!sent || kept === sent) return null;
+    if (earlier) return `You joined as ${kept} on an earlier try. Tap ← Back to change it.`;
     return sent.length > MAX_JOIN_CALLSIGN
         ? `You're ${kept} here: a name here keeps ${MAX_JOIN_CALLSIGN} characters. Tap ← Back to change it.`
         : `You're ${kept} here: ${sent} was taken. Tap ← Back to change it.`;
@@ -512,9 +514,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
     /**
      * An invite's key the node has as a member, now saved here: on to the photo, then its 12 words. `asked`: the name the
-     * join sent. When the node kept another (member.callsign is the node's), the photo step says so, as the door's does.
+     * join sent. When the node kept another (member.callsign is the node's), the photo step says so, as the door's does
+     * (keptAnotherName, with `earlier`).
      */
-    function enterAsInvited(member: BeanPoolIdentity, asked: string) {
+    function enterAsInvited(member: BeanPoolIdentity, asked: string, earlier = false) {
         inviteKey.current = null;
         setPendingIdentity(member);
         // Redeemed already, so the final step has nothing left to redeem.
@@ -522,7 +525,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         setShowAvatarSetup(true);
         setRenaming(false);
         setRenameUnsaved(null);
-        setJoinedAsNote(keptAnotherName(asked, member.callsign));
+        setJoinedAsNote(keptAnotherName(asked, member.callsign, earlier));
         setError(null);
     }
 
@@ -776,12 +779,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // is not this browser's identity yet. The node may keep another name than the one sent (cut to 20, or
             // numbered past another member's): its answer is this key's card, and that name is the one kept here.
             let joined = identity;
+            let joinedEarlier = false;
             try {
                 const { redeemInvite, redeemOfflineTicket } = await import('../lib/api');
                 const answer = trimmedCode.length > 20 && trimmedCode.startsWith('BP-')
                     ? await redeemOfflineTicket(trimmedCode.slice(3), identity.publicKey, identity.callsign, identity)
                     : await redeemInvite(trimmedCode, identity.publicKey, identity.callsign, identity);
                 joined = { ...identity, callsign: nodeNameFor(identity, answer?.member) ?? identity.callsign };
+                joinedEarlier = answer?.alreadyMember === true;
             } catch (redeemErr: any) {
                 // Only a node saying this key is a member already goes on (an older node says it this way; today's
                 // answers that with a success). "Already been used" does not: the node answers a key that is a member
@@ -819,7 +824,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             await completeInviteSent(joined, sentJoinGuard());
             setSentInvite('none');
             setPendingInviteCode(trimmedCode);
-            enterAsInvited(joined, trimmedCallsign);
+            enterAsInvited(joined, trimmedCallsign, joinedEarlier);
             setLoading(false);
         } catch (err) {
             setLoading(false);

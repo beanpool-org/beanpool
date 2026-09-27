@@ -627,6 +627,25 @@ describe('← Back on the photo step changes the name on the same account (card 
             expect(screen.queryByRole('alert')).toBeNull();
         });
 
+        it("an earlier try landed (as Sam2) while its answer was lost, and the retry sent another name: the node's answer, the name that try joined with, is kept and said", async () => {
+            const node = renameNode();
+            node.state.loseRedeem = true;
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite('Sam');
+            expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+            const key = node.redeems()[0].body.publicKey;
+            expect(node.state.members.get(key)).toBe('Sam2');
+
+            fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Samuel' } });
+            tryAgain();
+            await screen.findByText(/Choose your look/);
+            expect(node.redeems().map((r) => [r.body.publicKey, r.body.callsign])).toEqual([[key, 'Sam'], [key, 'Samuel']]);
+            expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Sam2' });
+            expect(screen.getByText('Sam2')).toBeInTheDocument();
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent('You joined as Sam2 on an earlier try. Tap ← Back to change it.');
+        });
+
         it('an answer naming another key changes nothing here: this browser keeps the name it sent, with no note', async () => {
             const node = renameNode();
             node.state.answerAbout = 'a-neighbour';

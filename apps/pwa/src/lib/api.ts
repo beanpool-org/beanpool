@@ -416,11 +416,17 @@ async function redeemRequest<T>(path: string, body: Record<string, string>, sign
     return res.json();
 }
 
-export async function redeemInvite(code: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<{ success: boolean; member: Member }> {
+/**
+ * A redeem's answer: the member's card (routes/community.ts redeemedCard), with the name the node kept, which may not be
+ * the one sent (cut to 20, or numbered past another member's). `alreadyMember`: the key was a member before this redeem.
+ */
+export type RedeemAnswer = { success: boolean; member: Member; alreadyMember?: boolean };
+
+export async function redeemInvite(code: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<RedeemAnswer> {
     return redeemRequest('/api/invite/redeem', { code, publicKey, callsign }, signWith);
 }
 
-export async function redeemOfflineTicket(ticketB64: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<{ success: boolean; member: Member }> {
+export async function redeemOfflineTicket(ticketB64: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<RedeemAnswer> {
     return redeemRequest('/api/invite/redeem-offline', { ticketB64, publicKey, callsign }, signWith);
 }
 

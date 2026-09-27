@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 58,
-  "hash": "bad14eba341d88cabe94cfffa3a304bacd40edaa88899f8f0409110ec9d80bdc",
+  "version": 59,
+  "hash": "07557da48ec350f037d62ce3823054459376ae0ace0d27159054119f49e0c12c",
   "sections": [
     {
       "id": "about",
@@ -884,6 +884,7 @@
           "type": "ul",
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
+            "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community, this step also shows your sign-in protecting your account.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
@@ -1822,6 +1823,7 @@
         {
           "type": "ul",
           "items": [
+            "**Joining with an invite:** the first step's button says **Create Identity & Join →**. If someone here already has the name you chose, you get it with a number added. **← Back** on **Your Photo** shows your name alone, with **Next →**: change it or keep it, on the same account. If someone already has the new name, the page says so and suggests others.",
             "**Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.",
             "**Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.",
             "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",

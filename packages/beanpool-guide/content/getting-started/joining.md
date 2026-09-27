@@ -44,6 +44,7 @@ The community keeps only a scrambled reference to your sign-in account, never yo
 The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.
 
 - **Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.
+- **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.
 - **Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read "Your 12 words" soon. If you joined the global community, this step also shows your sign-in protecting your account.
 - **How it Works:** a short tour. Tap **Let's Begin!** to start.
 

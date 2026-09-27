@@ -19,7 +19,8 @@
  *   - a fresh install's first (full) sync while a member is on holiday leaves their listings off;
  *   - the delta after a holiday switch carries that member's listings and no one else's (it stays a delta);
  *   - reading a listing by id for the cache (utils/db.ts getPost, `?id=…&sync=true`) doesn't put it back;
- *   - the author's own phone, and a member with an open deal on the listing, keep it as it is;
+ *   - the author's own phone, a keeper's of the enterprise, and a member with an open deal on the listing keep it as it
+ *     is;
  *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
  *   - on 2,000 members and 20,000 posts, no statement of the delta read walks every post (EXPLAIN QUERY PLAN).
  *
@@ -274,6 +275,15 @@ async function main() {
     const bobsCopy = bobPhone.rows.get(farmOffer);
     assert(bobsCopy?.status === 'active' && bobsCopy?.title === 'Eggs',
         `Bob, who has an open deal on the eggs, keeps the listing as it is (status ${bobsCopy?.status})`);
+
+    // Pat keeps the farm. His phone counts its listings as his own (post/[id].tsx isOperatorOfAuthor, from the node's
+    // keeperOf) and offers Activate on one that reads paused, which the node refuses for a listing that is live.
+    const patPhone = new Phone(pat);
+    await patPhone.sync();
+    assert([farmOffer, farmNeed].every(id => patPhone.rows.get(id)?.status === 'active'),
+        `Pat, who keeps the paused farm, holds its listings as they are (status ${patPhone.rows.get(farmOffer)?.status}, ${patPhone.rows.get(farmNeed)?.status})`);
+    const patOpened = await patPhone.openListing(farmOffer);
+    assert(patOpened?.status === 'active', `and opening the eggs by id gives them to him as they are (status ${patOpened?.status})`);
 
     se.resumeEnterprise(farm, 'admin');
     await phone.sync();

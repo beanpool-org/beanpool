@@ -43,7 +43,7 @@ export function NodeAdminLink() {
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden">
                 <a
                     href={`${getNodeApiUrl()}/settings#from=pwa`}
-                    className="min-h-[48px] p-4 text-nature-900 dark:text-white flex items-center justify-between gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline"
+                    className="min-h-[48px] p-4 text-nature-900 dark:text-white flex items-center justify-between gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl"
                 >
                     <span className="flex items-start gap-3 min-w-0">
                         <span aria-hidden="true">🛡️</span>

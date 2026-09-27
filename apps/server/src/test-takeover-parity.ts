@@ -88,7 +88,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:posts.category', gap: 'G1b', why: 'a listing recategorised after its first copy keeps its old category' },
     { key: 'db:posts.cash_also_needed', gap: 'G1b', why: 'every listing reads "no cash needed"' },
     { key: 'db:posts.search_keywords', gap: 'G1b', why: "not exported; the standby's boot backfill writes its own" },
-    { key: 'db:posts.updated_at', gap: 'G1b', why: "that boot backfill restamps every listing with the standby's clock" },
     { key: 'db:transactions.tax_fee', gap: 'G1b', why: 'the Commons fee is 0 on every copied trade (a ledger column: PR 1 with G0)' },
     { key: 'db:transactions.project_id', gap: 'G1b', why: 'not copied (a ledger column: PR 1 with G0)' },
     { key: 'db:marketplace_transactions.dispute_resolution', gap: 'G1b', why: 'a resolved dispute leaves the admin Disputes list' },
@@ -180,11 +179,11 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:the community, as the directory and apps see it', gap: 'G5, G2a', why: "the standby's name and no contacts (G5); one more member, its own BeanPool (G2a)" },
 
     // Reads that several gaps change at once.
-    { key: 'http:the board, as a guest', gap: 'G1, G1b, G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, every listing marked as another community's, another order" },
+    { key: 'http:the board, as a guest', gap: 'G1, G1b, G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, every listing marked as another community's, a listing's cash note lost" },
     { key: 'http:the board, as a member', gap: 'G1, G1b, G2a, G2b', why: 'as the guest board' },
     { key: 'http:the board, as a keeper', gap: 'G1, G1b, G2a, G2b', why: 'as the guest board' },
-    { key: "http:a phone's full sync", gap: 'G1, G1b, G2a, G2b', why: "originNode on every listing, paused listings active, another order, authors' standing" },
-    { key: "http:a phone's delta from before the take-over", gap: 'G1, G1b, G2a, G2b', why: "the boot's restamp puts every listing in the delta, each marked as another community's" },
+    { key: "http:a phone's full sync", gap: 'G1, G1b, G2a, G2b', why: "originNode on every listing, paused listings active, a recategorised listing's old category and a lost cash note, authors' standing" },
+    { key: "http:a phone's delta from before the take-over", gap: 'G1, G2a', why: "each listing changed since is marked as another community's (G1), with its author's standing lost (G2a)" },
     { key: "http:each member's own view (probation, standing)", gap: 'G1, G2a', why: 'no listing counts toward probation (G1); standing lost (G2a)' },
 ];
 

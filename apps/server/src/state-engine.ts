@@ -791,13 +791,21 @@ function backfillSearchKeywords(): void {
         console.warn('[FTS] Cleanup failed:', e);
     }
 
-    // Step 2: Update keywords on all posts
-    const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
+    // Step 2: Update keywords on all posts, leaving every listing's updated_at as it was. The keywords are this server's
+    // own search index: no read sends them and no copy carries them. So posts_touch_updated_at is set aside for these
+    // writes, inside the transaction, and put back exactly as the database held it. Once it stamped each listing
+    // with this boot's time. That lifted every one to the top of the board (ordered by updated_at). On a standby, whose
+    // import writes no keywords, it hit every listing copied since its last boot, and the import then skipped the main
+    // server's older changes to them. After a take-over, phones kept what the old server wrote in its last minute.
     db.transaction(() => {
+        const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string } | undefined)?.sql;
+        if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
+        const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
         for (const p of posts) {
             const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general');
             update.run(keywords, p.id);
         }
+        if (touch) db.exec(touch);
     })();
 
     // Step 3: Recreate FTS5 table and triggers (now all data has keywords)

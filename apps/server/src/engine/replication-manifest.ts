@@ -91,7 +91,7 @@ export const TABLES: Record<string, TableEntry> = {
             origin_node: { reason: "a local listing's NULL is written as the main server's PeerId (`rp.originNode || remote.nodeId`)", gap: 'G1' },
             category: { reason: 'only the INSERT writes it; a recategorised listing keeps its old category', gap: 'G1b' },
             cash_also_needed: { reason: 'neither exported nor imported', gap: 'G1b' },
-            search_keywords: { reason: "not exported: the standby's boot backfill (state-engine.ts backfillSearchKeywords) writes its own, restamping the listing", gap: 'G1b' },
+            search_keywords: { reason: "not exported: the standby's boot backfill (state-engine.ts backfillSearchKeywords) writes its own, leaving updated_at as it was, and keeps it when the main server's edit changes the words", gap: 'G1b' },
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
         },

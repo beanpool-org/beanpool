@@ -35,6 +35,7 @@ import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
+import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { guestPost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
@@ -271,6 +272,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // shared cache that revalidates would be corrected, but a response keyed only on URL must
     // never be storable by one, because two members asking for the same URL get different bodies.
     ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+    // A phone's sync read says which identity epoch answered it, so a phone that synced from the main server before a
+    // take-over replaces what it holds (services/identity-epoch.ts). Before the 304 below: a platform cache that
+    // revalidates takes the 304's headers over the ones it stored.
+    if (sync || updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
 
     // A signed read of one listing by id that isn't a sync is the phone's event page (apps/native utils/db.ts
     // fetchEventDetail), and getPosts notes it for that member's deltas (the engine's noteEventReadOutsideSync). So it is

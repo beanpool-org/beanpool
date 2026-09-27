@@ -27,6 +27,7 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -242,7 +243,10 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
 // ==========================================
 
 router.get('/api/crowdfund/projects', async (ctx) => {
-    ctx.body = { 
+    // A phone's delta read says which identity epoch answered it, as the posts sync read does (services/identity-epoch.ts).
+    // The list itself is whole either way.
+    if (ctx.query.updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
+    ctx.body = {
         projects: getCrowdfundProjects(),
         maxProjectExpiryDays: getThresholds().maxProjectExpiryDays 
     };

@@ -59,6 +59,27 @@ export function ownIdentityEpoch(): { epoch: number; since: string | null } {
     return { epoch: Number.isSafeInteger(epoch) && epoch > 0 ? epoch : 0, since: c.identityEpochSince ?? null };
 }
 
+// ── The epoch on the phone's sync reads ───────────────────────────────────────────────────
+//
+// A promoted standby never had what the old main server wrote after its last copy (up to a minute at the default
+// pull). A phone syncs by cursor, so a listing made in that tail would stay on its Market for good: no tombstone will
+// ever come. The reads a phone syncs by carry the epoch, and a phone that sees it change drops its cursors and
+// replaces its cache with a full sync (apps/native services/pillar-sync.ts). Not in the CORS exposed headers: the
+// web app is served from the node's own origin, and the phone is not a browser.
+
+export const EPOCH_HEADER = 'X-BeanPool-Epoch';
+
+let epochHeaderMemo: string | null = null;
+
+/** The epoch as the sync reads send it. Read from local-config.json once; the take-over's "role" step forgets it. */
+export function syncEpochHeaderValue(): string {
+    return epochHeaderMemo ??= String(ownIdentityEpoch().epoch);
+}
+
+export function forgetSyncEpochHeaderValue(): void {
+    epochHeaderMemo = null;
+}
+
 /** Fixed field order, so signer and checker hash the same bytes whatever order the JSON arrived in. */
 function canonical(s: EpochStatement): Uint8Array {
     return new TextEncoder().encode(DOMAIN + JSON.stringify({

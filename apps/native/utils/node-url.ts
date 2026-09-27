@@ -93,12 +93,14 @@ export function looksLikeNodeAddress(url: string): boolean {
  * 127.0.0.1 and sent to evil.test.
  *
  * So the authority must be exactly `host[:port]`: a host name or IPv4 address made of letters, digits, hyphens and
- * dots, or a bracketed IPv6 address, then at most a 5-digit port. No login (`@`), no `\`, no whitespace, no control
- * or percent-encoded character. Then comes a `/` or the end. A `?` or `#` straight after the host isn't allowed:
- * older parsers (RFC 1808) read the authority up to the first `/`, so `https://a.test?x@evil.test/` could name
- * evil.test to one of them. After that first `/`, every parser reads path, so an `@` in the path is fine.
+ * dots, or a bracketed IPv6 address with at least two colons inside (iOS drops the brackets and connects to what's
+ * inside, so `[deadbeef.de]` would be signed for one host and reach another), then at most a 5-digit port. No login
+ * (`@`), no `\`, no whitespace, no control or percent-encoded character. Then comes a `/` or the end. A `?` or `#`
+ * straight after the host isn't allowed: older parsers (RFC 1808) read the authority up to the first `/`, so
+ * `https://a.test?x@evil.test/` could name evil.test to one of them. After that first `/`, every parser reads path,
+ * so an `@` in the path is fine.
  */
-const PLAIN_ADDRESS = /^(?:https?|wss?):\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])(?::\d{1,5})?(?:\/|$)/i;
+const PLAIN_ADDRESS = /^(?:https?|wss?):\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[(?=(?:[0-9a-f.]*:){2})[0-9a-f:.]+\])(?::\d{1,5})?(?:\/|$)/i;
 
 export function isPlainNodeAddress(url: unknown): url is string {
     return typeof url === 'string' && PLAIN_ADDRESS.test(url);

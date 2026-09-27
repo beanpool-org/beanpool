@@ -396,8 +396,9 @@ const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /**
  * Whether the app may sign an RSVP for `postId` (utils/db.ts rsvpEvent). The signature is over plain UTF-8,
  * `postId:status`, and the id comes from the node. So the id must be a UUID and the status going, interested or
- * none (null). That leaves one line with one colon, which can't be a request in the old format or any other
- * statement a node checks. Anything else is refused before anything is signed.
+ * none (null). That leaves one line with one colon, so never a request in the old format. It can match a poll vote's
+ * `postId:optionId`, but both routes take the member from the request signature, never from this one. Anything else
+ * is refused before anything is signed.
  */
 export function isSignableRsvp(postId: unknown, status: unknown): boolean {
     return typeof postId === 'string' && POST_ID_RE.test(postId)

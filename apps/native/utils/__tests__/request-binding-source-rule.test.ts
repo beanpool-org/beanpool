@@ -109,8 +109,10 @@ describe('the member key signs only through core\'s builders and the listed old-
             // signature. But the id is the node's, and until the switch every community still accepts old-format member
             // signatures. So it is safe only because rsvpEvent first refuses an id that isn't a UUID, the shape the node
             // issues, and a status outside going/interested/none (events.ts isSignableRsvp; pinned below). That leaves
-            // one line with one colon, which can't be a request in the old format or any other statement a node checks
-            // (#1224 review 4113495332). It moves to a tagged format-2 statement the next time it's touched (design §6).
+            // one line with one colon, so never a request in the old format (#1224 review 4113495332). It can match a poll
+            // vote's `postId:optionId` (engine/posts.ts votePoll), but both routes take the member from the request
+            // signature, never from this one (#1224 review 4113638143). It moves to a tagged format-2 statement the next
+            // time it's touched (design §6).
             'utils/db.ts rsvpEvent',
         ]);
         expect(sites.filter(s => s.callee === 'signData' && !allowed.has(key(s))).map(key)).toEqual([]);

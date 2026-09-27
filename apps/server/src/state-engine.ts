@@ -2812,9 +2812,12 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
+        const had = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(treasuryPubkey, memberPubkey);
         db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
                     VALUES (?, ?, 'keeper', ?, ?)
                     ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing`).run(treasuryPubkey, memberPubkey, grantedBy, backing);
+        // Only a new binding changes who reads its listings as they are; a new pledge alone changes nobody's.
+        if (!had) engine.keepersChanged(db, treasuryPubkey);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
@@ -2878,8 +2881,9 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
  * Otherwise: the part of the pledge the deficit still needs stays locked, the rest is released (Rule 3).
  */
 function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
-    db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+    const unbound = db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .run(treasuryPubkey, memberPubkey);
+    if (unbound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
     const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
         .get(memberPubkey) as any;
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
@@ -3417,6 +3421,7 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
         INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
         VALUES (?, ?, 'keeper', ?, ?)
     `).run(enterprisePubkey, memberPubkey, grantedBy, pledged);
+    engine.keepersChanged(db, enterprisePubkey);
     if (!hadBinding) {
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     }
@@ -4877,6 +4882,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
 
         const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
         db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
+        if (ops.length > 0) engine.keepersChanged(db, enterprisePubkey);
 
         for (const op of ops) {
             const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;
@@ -6589,8 +6595,9 @@ export function createTreasury(
             .run(pubKeyHex, trimmed, now, avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.leadKeeperPubkey) {
-            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
+            const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
+            if (bound.changes > 0) engine.keepersChanged(db, pubKeyHex);
             raiseCreatorOperatorSwitch(opts.leadKeeperPubkey, pubKeyHex);
         }
         db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
@@ -6999,7 +7006,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             leftEnterprises.push({ enterprise: treasury_pubkey, promoted });
         }
         // An enterprise's own key deleting it: its keepers' bindings go with it.
-        try { db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey); } catch { }
+        try {
+            if (db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey).changes > 0) engine.keepersChanged(db, publicKey);
+        } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
@@ -7275,11 +7284,12 @@ export function createProject(proposerPubkey: string, title: string, description
             ledger.initializeGenesisAccount(project.id);
             ledger.setDecayExempt(project.id);
             if (proposerPubkey) {
-                db.prepare(`
+                const bound = db.prepare(`
                     INSERT OR IGNORE INTO treasury_operators (
                         treasury_pubkey, member_pubkey, role, granted_at, granted_by
                     ) VALUES (?, ?, 'lead', ?, 'creator')
                 `).run(project.id, proposerPubkey, now);
+                if (bound.changes > 0) engine.keepersChanged(db, project.id);
                 raiseCreatorOperatorSwitch(proposerPubkey, project.id);
             }
         }
@@ -7342,7 +7352,7 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     projects.splice(index, 1);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-        db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
+        if (db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId).changes > 0) engine.keepersChanged(db, projectId);
         db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);

@@ -26,6 +26,7 @@
  * Same db-as-param shape the @beanpool/engine extraction already uses.
  */
 
+import { keepersChanged } from '@beanpool/engine';
 import { db, raiseCreatorOperatorSwitch } from './db/db.js';
 import { bridgeAccountId, ensureBridgeAccount, getEnergyBalance } from './federation-bridge.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap } from './connector-manager.js';
@@ -93,8 +94,9 @@ export function ensureFederationLink(
             const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(existing.treasuryPubkey, operatorPubkey);
             if (!bound) {
                 db.transaction(() => {
-                    db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                    const added = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
                                 VALUES (?, ?, 'keeper', 'admin')`).run(existing.treasuryPubkey, operatorPubkey);
+                    if (added.changes > 0) keepersChanged(db, existing.treasuryPubkey);
                     raiseCreatorOperatorSwitch(operatorPubkey, existing.treasuryPubkey);
                 })();
             }
@@ -137,8 +139,9 @@ export function ensureFederationLink(
             .run(peerId, created.publicKey);
 
         if (op) {
-            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+            const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
                         VALUES (?, ?, 'keeper', 'system')`).run(created.publicKey, op);
+            if (bound.changes > 0) keepersChanged(db, created.publicKey);
             // First binding only: a link created at boot or on peer connect must never switch back on a
             // member whose operator access an admin turned off (#845).
             raiseCreatorOperatorSwitch(op, created.publicKey);

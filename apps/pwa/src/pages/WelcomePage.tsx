@@ -562,6 +562,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A new name the node took on that step whose copy here could not be written (RENAME_NOT_KEPT): the node's name
     // until this browser keeps it too, or another name goes to the node.
     const [renameUnsaved, setRenameUnsaved] = useState<string | null>(null);
+    // A name sent from that step with no answer, or a 5xx: the node may have it, so its name for this member is not known
+    // here until a later send is answered with it (deciding pass 4114130860).
+    const renameMayHaveLanded = useRef(false);
 
     // QR Device Pairing states (#89)
     const [showQrPairing, setShowQrPairing] = useState(false);
@@ -885,6 +888,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      * retry, and the step stays (#1231's confirmation, 4113964223): carrying on showed a success while this browser kept
      * the old name. Then the node's name is `renameUnsaved`: Next with it writes it here again and sends nothing, and any
      * other name, the old one too, goes to the node first, so the two agree whichever the member picks.
+     *
+     * A send with no answer, or a 5xx, may have landed (renameMayHaveLanded): until a later send is answered, the node's
+     * name is not known here, so every name goes to the node, this browser's own and `renameUnsaved` too. The node answers
+     * 200 and changes nothing for the name it has already. Skipping it let the app, opening, take the name the member
+     * had just turned down (deciding pass 4114130860).
      */
     async function handleRename() {
         const member = pendingIdentity;
@@ -900,7 +908,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         }
         setError(null);
         setNameSuggestions([]);
-        if (renameUnsaved !== null && name === renameUnsaved) {
+        const nodeNameKnown = !renameMayHaveLanded.current;
+        if (nodeNameKnown && renameUnsaved !== null && name === renameUnsaved) {
             // The node has this name already: only this browser's copy is left to write.
             setLoading(true);
             try {
@@ -910,7 +919,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             }
             return;
         }
-        if (name === member.callsign && renameUnsaved === null) {
+        if (nodeNameKnown && name === member.callsign && renameUnsaved === null) {
             setRenaming(false);
             return;
         }
@@ -920,6 +929,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             try {
                 res = await signedFetchWithKey('POST', '/api/profile/update', { publicKey: member.publicKey, callsign: name }, member.privateKey, member.publicKey);
             } catch {
+                renameMayHaveLanded.current = true;
                 setError("Can't reach the community right now. Try again in a minute.");
                 return;
             }
@@ -933,10 +943,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 return;
             }
             if (!res.ok) {
+                if (res.status >= 500) renameMayHaveLanded.current = true;
                 const said = typeof body?.message === 'string' && body.message ? body.message : typeof body?.error === 'string' ? body.error : null;
                 setError(res.status < 500 && said ? said : "Can't reach the community right now. Try again in a minute.");
                 return;
             }
+            renameMayHaveLanded.current = false;
             // The node's name for this key, as its answer gives it (the member's own profile), else the one sent.
             await keepRename(member, nodeNameFor(member, body?.profile) ?? name);
         } finally {

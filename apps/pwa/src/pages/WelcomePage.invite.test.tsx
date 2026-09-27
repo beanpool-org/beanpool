@@ -11,6 +11,7 @@ import {
 } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { registerMember } from '../lib/api';
+import { openWithNodeName } from '../lib/member-name';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
@@ -230,12 +231,13 @@ describe('← Back on the photo step changes the name on the same account (card 
      * with its `exclude` (isCallsignAvailable). Sam is another member's name. A redeem lands the name as the node does:
      * cut to 20 (routes/community.ts) and numbered past another member's (uniquifyCallsign), and answers with the new
      * member's card, or the card of `answerAbout` when that is set. `loseUpdate`: the next profile update lands and its
-     * answer is lost. `onUpdate`: called as a profile update lands, before its answer.
+     * answer is lost. `failUpdateWith`: the next profile update lands and is answered with this status instead (a proxy's
+     * 502). `onUpdate`: called as a profile update lands, before its answer.
      */
     function renameNode() {
         const state = {
             members: new Map<string, string>([['a-neighbour', 'Sam']]), usedBy: null as string | null, loseUpdate: false, loseRedeem: false,
-            answerAbout: null as string | null, onUpdate: null as null | (() => void),
+            failUpdateWith: null as number | null, answerAbout: null as string | null, onUpdate: null as null | (() => void),
         };
         const takenBy = (name: string, exclude: string | null) =>
             [...state.members].some(([key, held]) => key !== exclude && held.toLowerCase() === name.trim().toLowerCase());
@@ -268,6 +270,11 @@ describe('← Back on the photo step changes the name on the same account (card 
                 if (state.loseUpdate) {
                     state.loseUpdate = false;
                     throw new TypeError('Failed to fetch');
+                }
+                if (state.failUpdateWith !== null) {
+                    const status = state.failUpdateWith;
+                    state.failUpdateWith = null;
+                    return json(status, { error: 'Bad gateway' });
                 }
                 return json(200, { success: true, profile: { publicKey: signer, callsign: state.members.get(signer) } });
             },
@@ -507,6 +514,46 @@ describe('← Back on the photo step changes the name on the same account (card 
         await expectWordsOf(saved);
     });
 
+    /** The next profile update lands on the node, and its answer is lost, or is a proxy's 502. */
+    const noAnswerKnown = [
+        ['lost', (node: ReturnType<typeof renameNode>) => { node.state.loseUpdate = true; }],
+        ['a 502', (node: ReturnType<typeof renameNode>) => { node.state.failUpdateWith = 502; }],
+    ] as const;
+
+    it.each(noAnswerKnown)("the rename's answer %s, and the old name typed back: that goes to the node too (which may have the new one), so the node, this browser and the app agree (deciding pass 4114130860)", async (_what, landsUnanswered) => {
+        const node = renameNode();
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+        await submitInvite();
+        await screen.findByText(/Choose your look/);
+        const saved = (await loadIdentity())!;
+
+        landsUnanswered(node);
+        await backAndRename('Robin');
+        expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach the community right now.");
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next →' })).not.toBeDisabled());
+        expect(node.state.members.get(saved.publicKey)).toBe('Robin');
+
+        fireEvent.change(nameField(), { target: { value: 'Rowan' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Choose your look/);
+        expect(node.updates().map((u) => u.body.callsign)).toEqual(['Robin', 'Rowan']);
+        expect(node.state.members.get(saved.publicKey)).toBe('Rowan');
+        expect(await loadIdentity()).toEqual(saved);
+
+        await expectWordsOf(saved);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+        const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
+        expect(opened).toEqual(saved);
+
+        // What App.tsx does with the account it is handed, as soon as it opens: the node's name is this browser's already.
+        expect(await openWithNodeName(opened)).toEqual({ isMember: true, identity: null });
+        expect(node.state.members.get(saved.publicKey)).toBe('Rowan');
+        expect(await loadIdentity()).toEqual(saved);
+    });
+
     it("a reload after the invite's answer was lost: the photo step comes from the kept key, and Back changes the name on that same key", async () => {
         const node = renameNode();
         node.state.loseRedeem = true;
@@ -698,6 +745,31 @@ describe('← Back on the photo step changes the name on the same account (card 
             expect(node.updates().map((u) => u.body.callsign)).toEqual(['Robin', 'Rowan']);
             expect(node.state.members.get(saved.publicKey)).toBe('Rowan');
             expect(await loadIdentity()).toEqual(saved);
+        });
+
+        it("the new name not kept here, then another sent whose answer is lost, then the first typed back: it goes to the node again, which may have the other (deciding pass 4114130860)", async () => {
+            const node = renameNode();
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite();
+            await screen.findByText(/Choose your look/);
+            const saved = (await loadIdentity())!;
+            failTheSaveAfterTheUpdate(node);
+            await backAndRename('Robin');
+            expect(await screen.findByRole('alert')).toHaveTextContent("couldn't keep it");
+
+            node.state.loseUpdate = true;
+            fireEvent.change(nameField(), { target: { value: 'Robyn' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+            expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach the community right now.");
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Next →' })).not.toBeDisabled());
+            expect(node.state.members.get(saved.publicKey)).toBe('Robyn');
+
+            fireEvent.change(nameField(), { target: { value: 'Robin' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+            await screen.findByText(/Choose your look/);
+            expect(node.updates().map((u) => u.body.callsign)).toEqual(['Robin', 'Robyn', 'Robin']);
+            expect(node.state.members.get(saved.publicKey)).toBe('Robin');
+            expect(await loadIdentity()).toEqual({ ...saved, callsign: 'Robin' });
         });
 
         it("the new name not kept here, and the tab closed instead: this browser opens its old name beside the node's new one, which the app then takes (App.name.test)", async () => {

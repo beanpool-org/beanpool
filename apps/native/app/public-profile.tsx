@@ -20,6 +20,8 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { beansOn } from '../utils/node-profile';
 
 
 
@@ -384,6 +386,10 @@ export default function PublicProfileScreen() {
     const [givenLoading, setGivenLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'listings' | 'reviews' | 'given'>('listings');
     const [balanceInfo, setBalanceInfo] = useState<any>(null);
+    // On a community with Beans off (the worldwide one) there is no balance to sum up and no Ledger tab to open, and
+    // a listing has no price: the card and the figures are not drawn.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
@@ -1024,7 +1030,7 @@ export default function PublicProfileScreen() {
                 )}
 
                 {/* Trust summary (self only) — links to the full Ledger */}
-                {isSelf && balanceInfo && (
+                {isSelf && balanceInfo && showsBeans && (
                     <Pressable accessibilityRole="button" style={styles.trustCard} onPress={() => router.push('/(tabs)/ledger')}>
                         <View style={styles.trustLeft}>
                             <Text style={styles.trustEmoji} allowFontScaling={false}>{balanceInfo.tier?.emoji || '🌱'}</Text>
@@ -1247,10 +1253,12 @@ export default function PublicProfileScreen() {
                                                                 <View style={[styles.typeBadge, p.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
                                                                     <Text style={styles.typeBadgeText}>{p.type?.toUpperCase()}</Text>
                                                                 </View>
+                                                                {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                                     <Text style={styles.creditAmount}>{p.credits ?? '?'}</Text>
                                                                     <Image accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                                                                 </View>
+                                                                )}
                                                             </View>
                                                             <Text style={styles.dealTitle} numberOfLines={1}>{p.title}</Text>
                                                             <Text style={styles.dealDateText}>Active</Text>

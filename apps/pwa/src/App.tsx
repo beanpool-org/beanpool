@@ -8,10 +8,11 @@
  */
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
+import { loadIdentity, type BeanPoolIdentity } from './lib/identity';
+import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -345,24 +346,20 @@ export function App() {
 
         // The node's alerts, live and kept for this member, are SystemAlerts' (below).
         connectToAnchor();
-        // Ensure existing users are registered with the node
-        import('./lib/api').then(({ registerMember }) =>
-            registerMember(identity.publicKey, identity.callsign).catch(() => {})
-        );
-        // Check membership status for guest/member UI. The node holds the
-        // callsign that travels with your key, so if this device restored the
-        // identity without a name yet (e.g. recovered while briefly offline),
-        // adopt the node's — never overwrite a name the user already has.
-        checkMembership(identity.publicKey)
-            .then(async r => {
+        // Membership for the guest/member UI, and the name: the node's name for this key is the member's, so this browser
+        // takes it whenever the two differ (a join the node numbered or cut, a rename saved on the node and not here, a
+        // restore while offline). A key that is no member is registered as before; a member never is, because that
+        // register could only rename them back to this browser's copy (lib/member-name.ts).
+        let cancelled = false;
+        openWithNodeName(identity)
+            .then(r => {
+                if (cancelled) return;
                 setIsGuest(!r.isMember);
-                if (r.callsign && !identity.callsign?.trim()) {
-                    const updated = await updateCallsign(r.callsign);
-                    if (updated) setIdentity(updated);
-                }
+                if (r.identity) setIdentity(r.identity);
             })
             // Unknown after a failed check: treat as a member so the pages waiting on it still load.
-            .catch(() => setIsGuest(prev => prev ?? false));
+            .catch(() => { if (!cancelled) setIsGuest(prev => prev ?? false); });
+        return () => { cancelled = true; };
     }, [identity]);
 
     // The identity in flight, read at await-resolution time rather than captured. The previous

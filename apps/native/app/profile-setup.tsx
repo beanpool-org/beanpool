@@ -6,6 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { OnboardingGuide } from '../components/OnboardingGuide';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { beansOn } from '../utils/node-profile';
+import { howItWorksSubtitle } from '../utils/beans-off';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
@@ -38,6 +41,8 @@ export default function ProfileSetupScreen() {
     };
 
     const [step, setStep] = useState<Step>('name');
+    // The guide step: on a community with Beans off (the worldwide one) it says so, in place of the cards about Beans.
+    const nodeProfile = useNodeProfile();
     const [callsign, setCallsign] = useState(identity?.callsign ?? '');
     // Three separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
@@ -326,8 +331,8 @@ export default function ProfileSetupScreen() {
                     {step === 'guide' && (
                         <>
                             <Text style={styles.title}>🫘 How BeanPool works</Text>
-                            <Text style={styles.subtitle}>A quick look at this community economy.</Text>
-                            <OnboardingGuide />
+                            <Text style={styles.subtitle}>{howItWorksSubtitle(nodeProfile?.features)}</Text>
+                            <OnboardingGuide beansOn={beansOn(nodeProfile?.features)} />
                             {error && <Text style={styles.error}>{error}</Text>}
                             <Pressable
                                 style={[styles.primaryBtn, loading && styles.disabledBtn]}

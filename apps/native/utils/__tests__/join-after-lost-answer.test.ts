@@ -556,9 +556,16 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
         inOrder(s, [
             'const nameCheckTimer = setTimeout(() => nameCheck.abort(), NEXT_REQUEST_TIMEOUT_MS);',
             'await checkCallsignAvailable(callsign.trim(), storedIdentity?.publicKey, nodeUrl, { signal: nameCheck.signal });',
-            'await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, 32, { signal: nameCheck.signal });',
+            'await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal });',
             'clearTimeout(nameCheckTimer);',
         ]);
+    });
+
+    it('a tapped suggestion is no longer than the redeem keeps (MAX_JOIN_NAME, 20), as the typed name is (deciding pass 4114130898)', () => {
+        // A 21-character "Sarah Johnson Rosella" was checked free at its full length, and the node kept "Sarah Johnson Rosell".
+        const calls = welcome().match(/suggestCallsigns\([^;]*\)/g) ?? [];
+        expect(calls.length).toBeGreaterThan(0);
+        for (const call of calls) expect(call).toMatch(/, MAX_JOIN_NAME, \{ signal: /);
     });
 });
 

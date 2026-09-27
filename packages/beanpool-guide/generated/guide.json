@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 63,
-  "hash": "96c19c10c547d97a6d3a7793e548ece52078e73de071bee2bdbf8df867303c8c",
+  "version": 64,
+  "hash": "8f6a47b9643c7299a2cb717b24e680dceebbfe1933bdaa5ea281797a539e916a",
   "sections": [
     {
       "id": "about",
@@ -2053,6 +2053,10 @@
         {
           "type": "h2",
           "text": "On the global community"
+        },
+        {
+          "type": "p",
+          "text": "There are no Beans on the global community, so a post there has no price. In the phone app the form has no **Price**: say in the description what you would like in return, or that it is free."
         },
         {
           "type": "p",

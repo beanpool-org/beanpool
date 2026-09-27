@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import {
     marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance,
     NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, NEAREST_FIRST_HEADING,
+    postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, type PostFormState,
 } from '../market-global';
 import { readNodeProfile, nodeProfileIsFresh, NODE_PROFILE_FRESH_MS, type NodeProfile } from '../node-profile';
 import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails } from '../start-community';
@@ -56,6 +57,76 @@ describe('Beans on the Market', () => {
         for (const t of texts) expect(t).not.toMatch(/\bbeans?\b|🫘|credit/i);
         // Seen by members of a LOCAL community, where Beans are fine, but it has no reason to mention them either.
         expect(WANTS_TO_JOIN_HELP).not.toMatch(/bean/i);
+    });
+});
+
+describe('the map’s Offer/Need form where there are no Beans (map.tsx)', () => {
+    // Today's rules, as map.tsx wrote them inline before a node could have Beans off. Every local community, and a
+    // node that says nothing about Beans, must get exactly these.
+    const today = {
+        credits: (f: string) => Number(f) || 0,
+        missing: (f: string) => f === '',
+        invalid: (f: string) => f.trim() === '' || isNaN(Number(f)),
+        label: (s: PostFormState) => s.posting ? 'Posting...'
+            : s.needBlocked ? '🟢 List an Offer first to post Needs'
+            : (!s.category) ? '📂 Select a category'
+            : (!s.hasLocation) ? '📍 Set a location'
+            : (s.photoCount < 1) ? '📷 Add a photo'
+            : (s.credits === '') ? '💰 Set a price'
+            : (!s.title.trim() || !s.description.trim()) ? '✏️ Fill required fields'
+            : `Post ${s.postType === 'offer' ? 'Offer' : 'Need'}`,
+    };
+    const fields = ['', '0', '12', '12.5', ' 7 ', ' ', 'abc', '-3', '1e3'];
+    const priceTypes = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
+    const ready: PostFormState = {
+        posting: false, needBlocked: false, postType: 'offer', category: 'food', hasLocation: true, photoCount: 1,
+        credits: '', title: 'Sourdough loaf', description: 'Baked Saturday',
+    };
+    // Every state the button can be in.
+    const states: PostFormState[] = [];
+    for (const posting of [false, true]) for (const needBlocked of [false, true]) for (const postType of ['offer', 'need'] as const)
+        for (const category of ['', 'food']) for (const hasLocation of [false, true]) for (const photoCount of [0, 1, 5])
+            for (const credits of ['', '0', '12']) for (const title of ['', ' ', 'Bread']) for (const description of ['', 'Fresh'])
+                states.push({ posting, needBlocked, postType, category, hasLocation, photoCount, credits, title, description });
+
+    it('Beans off: the post goes up at 0 Beans and a total price, whatever the field held', () => {
+        const pickedOffer = String(40);        // onSelectOfferItem: setPostCredits(String(effectivePrice))
+        const draft = { postCredits: '25' };   // a draft saved with a price, restored by setPostCredits(d.postCredits || '')
+        for (const f of ['', '12', pickedOffer, draft.postCredits || '', ...fields]) {
+            expect(postFormCredits(f, GLOBAL.features)).toBe(0);
+        }
+        for (const t of priceTypes) expect(postFormPriceType(t, GLOBAL.features)).toBe('fixed');
+    });
+
+    it('Beans off: the price is never missing or wrong, and the button never asks for one', () => {
+        for (const f of ['', '12', ...fields]) {
+            expect(postFormPriceMissing(f, GLOBAL.features)).toBe(false);
+            expect(postFormPriceInvalid(f, GLOBAL.features)).toBe(false);
+        }
+        expect(postFormSubmitLabel(ready, GLOBAL.features)).toBe('Post Offer');
+        expect(postFormSubmitLabel({ ...ready, postType: 'need' }, GLOBAL.features)).toBe('Post Need');
+        for (const s of states) {
+            const label = postFormSubmitLabel(s, GLOBAL.features);
+            expect(label).not.toMatch(/price|bean/i);
+            // The same button as today with the price step skipped.
+            expect(label).toBe(today.label({ ...s, credits: '12' }));
+        }
+    });
+
+    it('Beans on, or a node that says nothing: exactly today’s form', () => {
+        for (const features of [LOCAL.features, OLD.features, null, undefined]) {
+            expect(postFormPriceMissing('', features)).toBe(true);
+            expect(postFormPriceInvalid('', features)).toBe(true);
+            expect(postFormCredits('12', features)).toBe(12);
+            expect(postFormSubmitLabel(ready, features)).toBe('💰 Set a price');
+            for (const f of fields) {
+                expect(postFormCredits(f, features)).toBe(today.credits(f));
+                expect(postFormPriceMissing(f, features)).toBe(today.missing(f));
+                expect(postFormPriceInvalid(f, features)).toBe(today.invalid(f));
+            }
+            for (const t of priceTypes) expect(postFormPriceType(t, features)).toBe(t);
+            for (const s of states) expect(postFormSubmitLabel(s, features)).toBe(today.label(s));
+        }
     });
 });
 
@@ -147,5 +218,35 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(src).toContain('{!showsBeans ? (');
         expect(src).toContain("credits: showsBeans ? Number(editCredits) || 0 : 0,");
         expect(src).toContain('!isOwnPost && post.status === \'active\' && !isAcceptedByMe && escrowOn && (');
+    });
+
+    it('the map: the Offer/Need form’s price section and the preview’s amount are gated, and the post goes up at 0', () => {
+        const src = read('../../app/(tabs)/map.tsx');
+        const lines = src.split('\n');
+        const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
+        expect(currency.length).toBe(1);
+        for (const i of currency) expect(lines.slice(Math.max(0, i - 3), i).join('\n')).toContain('{showsBeans && (');
+        // The price section, from its gate to its end: the field, the unit button, FREE, the pricing guide, the fee.
+        const open = lines.findIndex(l => l.trim() === '{showsBeans && (<>');
+        const close = lines.findIndex((l, i) => i > open && l.trim() === '</>)}');
+        expect(open).toBeGreaterThan(0);
+        expect(close).toBeGreaterThan(open);
+        const section = lines.slice(open, close).join('\n');
+        for (const part of ['accessibilityLabel="Price"', "{ fixed: 'Total', hourly: '/ Hr'", '>FREE</Text>', 'onPress={showPricingGuide}', '1.5% fee']) {
+            expect(section).toContain(part);
+            expect(src.split(part).length).toBe(2);
+        }
+        // Where the section was, the note the edit form shows (post/[id].tsx).
+        expect(lines.slice(open - 4, open).join('\n')).toContain('{!showsBeans && (');
+        expect(lines.slice(open - 4, open).join('\n')).toContain('{NO_BEANS_EDIT_NOTE}');
+        // What the form submits and when it lets a member post: the helpers above, not the field.
+        expect(src).toContain("if (postFormPriceInvalid(postCredits, nodeFeatures)) errors.add('credits');");
+        expect(src).toContain('credits: postFormCredits(postCredits, nodeFeatures),');
+        expect(src).toContain('price_type: postFormPriceType(postPriceType, nodeFeatures),');
+        expect(src).toContain('const submitLabel = postFormSubmitLabel(');
+        expect(src).toContain('postFormPriceMissing(postCredits, nodeFeatures)');
+        expect(src).not.toContain("postCredits === ''");
+        expect(src).not.toContain('Set a price');
+        expect(src).not.toContain('Number(postCredits)');
     });
 });

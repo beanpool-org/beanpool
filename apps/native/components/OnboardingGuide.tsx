@@ -1,15 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, palette } from '../constants/colors';
+import { NO_BEANS_GUIDE_CARD } from '../utils/beans-off';
 
 /**
  * The "how BeanPool works" guide cards. Shared so the first-run onboarding
  * wizard (welcome.tsx) and the re-runnable profile setup (profile-setup.tsx)
  * show identical content — edit the explanation once, in here.
+ *
+ * `beansOn` false (a community with Beans off, the worldwide one): cards 1-3 are about Beans, so one card that says
+ * there are none takes their place, and the Ledger tip goes, as in the join wizard (utils/beans-off.ts).
  */
-export function OnboardingGuide() {
+export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
     return (
         <View>
+            {beansOn ? (
+            <>
             {/* Card 1: Energy Exchange */}
             <View style={guideStyles.card}>
                 <Text style={guideStyles.cardTitle}>⚡ Energy Exchange Marketplace</Text>
@@ -70,6 +76,13 @@ export function OnboardingGuide() {
                     To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
                 </Text>
             </View>
+            </>
+            ) : (
+            <View style={guideStyles.card}>
+                <Text style={guideStyles.cardTitle}>{NO_BEANS_GUIDE_CARD.title}</Text>
+                <Text style={guideStyles.cardText}>{NO_BEANS_GUIDE_CARD.text}</Text>
+            </View>
+            )}
 
             {/* Card 4: Where to Start */}
             <View style={guideStyles.card}>
@@ -77,7 +90,9 @@ export function OnboardingGuide() {
                 <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (blue) and needs (orange) near you.</Text>
                 <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
                 <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
-                <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                {beansOn && (
+                    <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                )}
             </View>
         </View>
     );

@@ -49,6 +49,8 @@ import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../..
 import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 
@@ -340,6 +342,9 @@ export default function SettingsScreen() {
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
+    // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
 
     /**
      * Account Protection's words, put away: Hide, a second tap, or the member leaving the section or the tab (the tab
@@ -1602,6 +1607,8 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* ─── Community Pricing Guide ─── */}
+                {showsBeans && (
+                <>
                 <Text style={styles.sectionHeader}>COMMUNITY PRICING GUIDE</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setShowPricingGuide(true)} accessibilityRole="button" accessibilityLabel="Open Community Pricing Guide">
@@ -1613,6 +1620,8 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                 </View>
+                </>
+                )}
 
                 {/* ─── App Settings ─── */}
                 <Text style={styles.sectionHeader}>APP SETTINGS</Text>

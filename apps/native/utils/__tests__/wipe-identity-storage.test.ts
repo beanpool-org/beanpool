@@ -41,6 +41,8 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_pending_abuse_reports: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             // Where the phone sent its push token for this key (push-registrations.ts). The next account starts its own.
             beanpool_push_registered_at: JSON.stringify(['https://test.beanpool.org']),
+            // A registration of this key still due there (push-registrations.ts): never tried for another key.
+            beanpool_push_registrations_due: JSON.stringify([{ publicKey: 'ab'.repeat(32), community: 'https://test.beanpool.org', refusals: 0, retryAt: 0 }]),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',

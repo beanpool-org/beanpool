@@ -289,4 +289,20 @@ describe('the block list the community keeps for the account', () => {
         expect(getPendingReports()).toEqual([]);
         expect(storedAboutBlocks()).toEqual([]);
     });
+
+    it('once the account is known, only its own reports go: one queued here for another account is never sent from it', async () => {
+        const OTHER = 'f6'.repeat(32);
+        localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([
+            { reporterPubkey: OTHER, targetPubkey: K1, reason: 'Theirs', timestamp: Date.now() },
+            { reporterPubkey: ME, targetPubkey: K2, reason: 'Mine', timestamp: Date.now() },
+        ]));
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));
+        await retryPendingReports();
+        await retryPendingReports();
+        expect(api.reportAbuse).toHaveBeenCalledTimes(1);
+        expect(api.reportAbuse).toHaveBeenCalledWith(ME, K2, 'Mine', undefined);
+        expect(api.reportAbuse).not.toHaveBeenCalledWith(OTHER, expect.anything(), expect.anything(), expect.anything());
+        expect(storedAboutBlocks()).toEqual([]);
+    });
 });

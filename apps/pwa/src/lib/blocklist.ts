@@ -14,7 +14,8 @@
  * the next read tries again. Past the node's limit, the newest it has room for go up.
  *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
- * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted.
+ * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
+ * the account is known, only its own reports are sent.
  */
 import { reportAbuse, getBlockList, addToBlockList, removeFromBlockList, clearBlockList, type BlockList } from './api';
 import { BLOCKLIST_DOORBELL_EVENT } from './blocklist-doorbell';
@@ -339,12 +340,17 @@ export function getPendingReports(): PendingReport[] {
     return [...pendingReports];
 }
 
-/** Retries sending queued reports to the server. */
+/**
+ * Retries sending queued reports to the server. Once the signed-in account is known (startBlocklist), only its own go: the
+ * node refuses a report that names anyone else as its reporter, so one an older build queued here for another account
+ * stays in this page's memory, unsent, and goes with the page.
+ */
 export async function retryPendingReports(): Promise<void> {
     takeStoredReports();
     const now = Date.now();
-    const due = pendingReports.filter(p => now - p.timestamp < REPORT_TTL_MS);
-    pendingReports = [];
+    const live = pendingReports.filter(p => now - p.timestamp < REPORT_TTL_MS);
+    const due = owner ? live.filter(p => p.reporterPubkey === owner) : live;
+    pendingReports = owner ? live.filter(p => p.reporterPubkey !== owner) : [];
     for (const item of due) {
         try {
             await reportAbuse(item.reporterPubkey, item.targetPubkey, item.reason, item.postId);

@@ -49,7 +49,7 @@ import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
-import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch } from '../engine/sync.js';
+import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, clearForResync } from '../engine/sync.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -190,9 +190,12 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
     // Delta only when explicitly asked AND we already have a cursor to delta-from;
     // otherwise this is a full pull (seed / reconcile / resync).
     const isDelta = mode === 'delta' && !!lastImportedCursor;
-    // A whole copy onto a standby that holds none yet (no cursor: never copied, or cleared by a resync whose import failed).
-    const firstCopy = !isDelta && !lastImportedCursor;
     lastPullMode = fresh ? 'resync' : isDelta ? 'delta' : 'full';
+    // A seed, which the conservation guard lets in whatever it sums to (engine/sync.ts ImportOptions), decided here from
+    // this standby's own records before anything is fetched, and never from its ledger, which a copy can change: its
+    // first copy (it holds none it landed, replicaFormatOfCopy: never, or not since a force-resync cleared it), and a
+    // force-resync. Any other copy is held to the ledger here.
+    const seed = fresh || replicaFormatOfCopy() === 0;
 
     inFlight = true;
     const url = primaryUrl.replace(/\/$/, '') + (isDelta ? DELTA_PATH : SNAPSHOT_PATH);
@@ -257,8 +260,9 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
                     + 'they may be the only readable ones left.');
             }
             // The replaced keys too, when this copy carries the main server's (it sends every one it has: it never
-            // deletes a row). One from a main server older than that sends none, and this standby keeps its own.
-            clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) });
+            // deletes a row). One from a main server older than that sends none, and this standby keeps its own. With the
+            // clear, in its transaction, the record of this standby's copy goes: until one lands, the next is a seed.
+            clearForResync(() => clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) }));
             lastGeneratedAtMs = 0;
             // Forget all cursors so a failed import can't leave the next pull 304-ing
             // ("unchanged") or delta-ing against a cleared replica — it re-seeds fully.
@@ -273,7 +277,7 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         // unconditionally, A2-8). A forged/tampered payload is rejected there. It
         // applies partial (delta) or full payloads identically, LWW per row; only
         // the recovery seal's clean-up needs to know which this was.
-        const result = await importRemoteState(payload, { full: !isDelta });
+        const result = await importRemoteState(payload, { full: !isDelta, seed });
         // The main server's node profile and switch overrides, signed with the payload the import just verified:
         // kept as this database's record, so a take-over or a hand promotion from here meets the main server's
         // profile, not this standby's (config/node-profile.ts). A primary too old to send it leaves the record alone.
@@ -298,8 +302,9 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
-        // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode).
-        if (fresh || firstCopy) noteReplicaFormat();
+        // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode), and the
+        // record that this standby holds a copy it landed, so no later one is a seed of that kind.
+        if (fresh || seed) noteReplicaFormat();
 
         if (isDelta) {
             // Deltas carry only changed rows, so a row-count compare is meaningless.

@@ -396,6 +396,7 @@ import {
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
     writeSyncAuditLog,
+    type ImportOptions,
     type ImportResult,
     type SyncAuditEntry,
 } from './engine/sync.js';
@@ -5634,11 +5635,12 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies the main server no longer holds.
+ * which recovery copies the main server no longer holds. `seed`: what the puller decided about the copy's conservation
+ * guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
  */
-export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } = {}): Promise<ImportResult> {
+export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote)
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new

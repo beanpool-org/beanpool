@@ -45,7 +45,7 @@ export interface ReplicaConsistency {
      * Every account against the copy's, not only their sum: a ledger with every balance at 0, or two balances swapped,
      * sums the same. `compared` accounts in either; `differing`, those whose balance differs or that only one side holds
      * (the first few in `examples`, by key); `unreadable`, the copy's entries with no key or no number for a balance.
-     * Null when the copy carries no account set.
+     * Null when the copy carries no account set, or names no account.
      */
     ledger: { compared: number; differing: number; unreadable: number; examples: string[]; match: boolean } | null;
     ok: boolean;
@@ -277,8 +277,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
     // Every account (G0). The importer writes the copy's rows as they are and deletes the ones it doesn't carry, so after
     // a whole copy the two are equal, balance for balance; any difference is this standby's ledger not being its main
     // server's. Exact: both are the same doubles, the import writes the one it was sent.
+    // A copy that names no account carries no ledger, as the importer reads it (apps/server engine/sync.ts).
     let ledger: ReplicaConsistency['ledger'] = null;
-    if (Array.isArray(payload.accounts)) {
+    if (Array.isArray(payload.accounts) && payload.accounts.length > 0) {
         const theirs = new Map<string, number | null>();
         let unreadable = 0;
         for (const a of payload.accounts) {

@@ -4,8 +4,9 @@
  *
  * Every node is its own process with its own data dir (takeover-test-harness.ts) serving its real HTTPS server; members
  * act through it with signed requests, the admin with the password. The standby pulls through its real puller
- * (services/backup-puller.ts `pullNow`, the loop's own step) from the main server's real backup routes. Nothing leaves
- * this machine.
+ * (services/backup-puller.ts `pullNow`, the loop's own step) from the main server's real backup routes, through a door
+ * here that can serve the next copy it asks for from a payload the main server signed, or refuse it. Nothing leaves this
+ * machine.
  *
  *  1. The main server M: members, a trade that paid the Commons its fee, a transfer, Beans held in escrow, a project pot
  *     (a crowdfund pledge, whose trades name the project), and a non-zero accepted audit baseline (the test node's -9.82
@@ -20,7 +21,8 @@
  *  6. The whole-copy check fails on a copy whose sum is right and whose accounts are not; it records the mismatch and
  *     asks for one force-resync, and no second one within the hour after.
  *  7. The conservation guard still refuses a payload signed by M that makes Beans, drops an account holding them, or
- *     names one account twice to hide a shift.
+ *     names one account twice to hide a shift. A copy that names only the Commons, holding the ledger's total, doesn't
+ *     make the next copy a seed: one minting 1000 for a new key after it is refused, and the next real copy lands.
  *  8. A copy that throws after its accounts section is written (a forged later row here; a disk error there would do the
  *     same) leaves the standby's rows AND the ledger it holds in memory at its last good copy, so its own Commons flush
  *     writes nothing that isn't that copy's, and the next real pull lands (before, memory kept the refused copy's pot, the
@@ -29,6 +31,9 @@
  *     record of the importer's format) heals in one pull.
  * 10. The take-over's promotion audit, on a copy of S: its ledger is M's as last copied; and on the same copy with every
  *     balance 0, or with no accounts at all, it says the ledger is not M's (before, both said "ok").
+ * 11. On a second pair whose ledger sums to 0: a copy M0 signs naming no account carries no ledger, and the copy after it,
+ *     minting 1000 for a new key, is refused; the standby keeps M0's ledger and the next real copy lands (before, the
+ *     first emptied the ledger and the second went in as a seed).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -36,7 +41,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import crypto from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { spawnNode, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
@@ -123,9 +130,11 @@ async function child(): Promise<void> {
         },
         /**
          * A payload M signs that does not conserve: one account given Beans from nowhere, or one holding Beans left out of
-         * the account set. Signed with M's own key, so only the conservation guard stands between it and a standby.
+         * the account set. Signed with M's own key, so only the conservation guard stands between it and a standby. And
+         * the copies that went before one in a review's probes: an account set that names nothing, or only the Commons
+         * holding the ledger's total (each moves no Beans).
          */
-        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later'; publicKey: string }) => {
+        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint'; publicKey?: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
@@ -134,7 +143,17 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             else if (a.kind === 'drop') payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
-            else if (a.kind === 'throws-later') {
+            else if (a.kind === 'empty') payload.accounts = [];
+            else if (a.kind === 'commons-only' || a.kind === 'commons-mint') {
+                // The Commons holding what every account holds between them, and no other account; then, for the mint, a
+                // new key holding 1000 beside it.
+                const total = payload.accounts.reduce((t: number, x: any) => t + x.balance, 0);
+                const commons = payload.accounts.find((x: any) => x.publicKey === 'COMMONS_POOL');
+                payload.accounts = [{ ...commons, balance: total }];
+                if (a.kind === 'commons-mint') {
+                    payload.accounts.push({ publicKey: crypto.randomBytes(32).toString('hex'), balance: 1000, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
+                }
+            } else if (a.kind === 'throws-later') {
                 // The real ledger, and one trade for no listing: the import throws in the marketplace section, after the
                 // accounts section has written the ledger and before the copy commits (as a disk error there would).
                 payload.marketplaceTransactions = [...(payload.marketplaceTransactions ?? []), {
@@ -303,11 +322,54 @@ function setLocalConfig(dir: string, patch: Record<string, unknown>): void {
     fs.writeFileSync(file, JSON.stringify({ ...cur, ...patch }, null, 2));
 }
 
+/**
+ * The main server as its standbys reach it: every request passed to its real backup routes, on this machine, except that
+ * a step can have the next copy a standby asks for (a delta or a whole one) answered with a payload M signed, or refused
+ * with a status, as a main server can send them. The standby's own puller fetches, checks and imports it.
+ */
+interface MainServerDoor { url: string; next: (answer: { status: number; body?: unknown }) => void; waiting: () => number; close: () => Promise<void> }
+async function mainServerDoor(target: string): Promise<MainServerDoor> {
+    const queued: { status: number; body?: unknown }[] = [];
+    const server = http.createServer((req, res) => {
+        void (async () => {
+            try {
+                const answer = req.url?.startsWith('/api/local/admin/sync-') ? queued.shift() : undefined;
+                if (answer) {
+                    res.writeHead(answer.status, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' });
+                    res.end(answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body));
+                    return;
+                }
+                const chunks: Buffer[] = [];
+                for await (const c of req) chunks.push(c as Buffer);
+                const headers: Record<string, string> = {};
+                for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string' && (k.startsWith('x-') || k === 'content-type')) headers[k] = v;
+                const r = await fetch(target + req.url, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+                const out: Record<string, string> = { 'Content-Type': r.headers.get('content-type') ?? 'application/json' };
+                const role = r.headers.get('x-node-role');
+                if (role) out['X-Node-Role'] = role;
+                res.writeHead(r.status, out);
+                res.end(Buffer.from(await r.arrayBuffer()));
+            } catch (e: any) {
+                res.writeHead(502);
+                res.end(String(e?.message || e));
+            }
+        })();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    return {
+        url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+        next: (answer) => { queued.push(answer); },
+        waiting: () => queued.length,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+    };
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dir = (n: string) => path.join(root, n);
     const nodes: NodeProc[] = [];
+    const doors: MainServerDoor[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
@@ -364,7 +426,10 @@ async function main(): Promise<void> {
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
         let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
         nodes.push(standby);
-        await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        // Every standby here reaches M through this door, so a step can serve it a copy M signed (a pass-through otherwise).
+        const door = await mainServerDoor(main.base);
+        doors.push(door);
+        await standby.send('setup-standby', { primaryUrl: door.url, replicationToken, primaryPeerId: main.ready.peerId });
         const s0: Ledger = await standby.send('ledger');
         assert(s0.beanpool.length === 0, `a standby's boot makes no BeanPool of its own: it will hold the main server's (${JSON.stringify(s0.beanpool)})`);
         const firstPull = await standby.send('pull', {});
@@ -463,6 +528,27 @@ async function main(): Promise<void> {
         const after7: Ledger = await standby.send('ledger');
         assert(ledgerDiff(before7, after7).length === 0, `none of them changed the standby's ledger (differences ${first(ledgerDiff(before7, after7))})`);
 
+        // A copy M signs that names only the Commons, holding the ledger's total, on this ledger that doesn't sum to 0: it
+        // moves no Beans, so the guard lets it in. It left the ledger one account, and a ledger of one account was a seed:
+        // the next copy, minting 1000 for a new key, went in unchecked, and every real copy after it was refused. The
+        // puller now says what a seed is, from this standby's own records.
+        console.log('\n— 7. a copy that names only the Commons, then one that mints —');
+        door.next({ status: 200, body: await main.send('forge', { kind: 'commons-only' }) });
+        const only = await standby.send('pull', {});
+        const afterOnly: Ledger = await standby.send('ledger');
+        console.log(`  (the Commons-only copy: ${only.ok ? 'imported' : only.error}; S now holds ${afterOnly.accounts.length} account(s), summing to ${afterOnly.sum})`);
+        door.next({ status: 200, body: await main.send('forge', { kind: 'commons-mint' }) });
+        const mint7 = await standby.send('pull', {});
+        const m7: Ledger = await main.send('ledger');
+        s = await standby.send('ledger');
+        assert(mint7.ok === false && /Conservation violation/.test(mint7.error ?? ''), `the copy after it, minting 1000 for a new key, is refused (${mint7.ok ? 'imported' : mint7.error})`);
+        assert(Math.abs(s.sum - m7.sum) < 1e-6 && !s.accounts.some((a) => Math.abs(a.balance - 1000) < 1e-9),
+            `S's ledger still sums to M's, and holds no minted account (S ${s.sum}, M ${m7.sum})`);
+        const real7 = await standby.send('pull', {});
+        s = await standby.send('ledger');
+        assert(real7.ok === true && ledgerDiff(m7, s).length === 0,
+            `the next real copy lands, and S's ledger is M's (${JSON.stringify({ ok: real7.ok, mode: real7.mode, error: real7.error })}; differences ${first(ledgerDiff(m7, s))})`);
+
         // ── 8. A copy that throws after its accounts are written ──
         console.log('\n— 8. a copy that throws after the accounts section, the standby\'s own flush, then a real pull —');
         built('the Commons grants Gwen 5 Beans', { status: (await main.send('grant', { publicKey: gwen.pk, amount: 5 })) ? 200 : 500, body: {} });
@@ -538,10 +624,65 @@ async function main(): Promise<void> {
         assert(empty9.ran && empty9.rec?.ok === false && empty9.rec?.copy?.match === false,
             `with no accounts at all it does not say ok either (${JSON.stringify(empty9.rec)})`);
 
+        // ── 11. A copy that names no account, on a ledger that sums to 0 ──
+        console.log('\n— 11. on a ledger that sums to 0: a copy that names no account, then one that mints —');
+        const main0 = await spawnNode(SCRIPT, dir('main0'), env(PW_MAIN, 'primary'));
+        nodes.push(main0);
+        const token0 = crypto.randomBytes(32).toString('hex');
+        const [gwen0, yan] = ['Gwen', 'Yan'].map(newId);
+        await main0.send('setup-primary', { replicationToken: token0, genesis: gwen0.pk });
+        const z = `https://localhost:${await main0.send('serve')}`;
+        const Z_ = (who: Id, route: string, body: unknown = {}) => api(z, 'POST', route, { as: who, body });
+        built('M0: Gwen sets a profile photo', await Z_(gwen0, '/api/profile/update', { avatar: TINY_PNG }));
+        const inv0 = built('M0: Gwen makes an invite for Yan', await Z_(gwen0, '/api/invite/generate', { publicKey: gwen0.pk }));
+        built('M0: Yan joins with it', await api(z, 'POST', '/api/invite/redeem', { body: { code: inv0.invite?.code ?? inv0.code, publicKey: yan.pk, callsign: 'Yan' } }));
+        built('M0: Yan sets a profile photo', await Z_(yan, '/api/profile/update', { avatar: TINY_PNG }));
+        built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: PW_MAIN, body: { grant: true } }));
+        const offer0 = async (who: Id, title: string, credits: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        })).post;
+        await offer0(gwen0, 'Jam', 3);
+        const eggs = await offer0(yan, 'Eggs', 12);
+        const tx0 = built('M0: Gwen asks for the eggs', await Z_(gwen0, '/api/marketplace/posts/request', { postId: eggs.id, buyerPublicKey: gwen0.pk })).transaction;
+        built('M0: Yan approves', await Z_(yan, '/api/marketplace/transactions/approve', { transactionId: tx0.id, authorPublicKey: yan.pk }));
+        built('M0: Gwen confirms: Yan is paid, the Commons takes its fee', await Z_(gwen0, '/api/marketplace/transactions/complete', { transactionId: tx0.id, confirmerPublicKey: gwen0.pk }));
+        built('M0: Yan gives Gwen 2 Beans back', await Z_(yan, '/api/ledger/transfer', { to: gwen0.pk, amount: 2, memo: 'for the jar' }));
+        const z1: Ledger = await main0.send('ledger');
+        require_(Math.abs(z1.sum) < 1e-9 && z1.accounts.some((a) => a.balance > 1), `M0: a ledger that sums to 0, with Beans held (${JSON.stringify(z1.accounts.map((a) => a.balance))})`);
+        fs.mkdirSync(dir('standby0'), { recursive: true });
+        fs.copyFileSync(path.join(dir('main0'), 'genesis.json'), path.join(dir('standby0'), 'genesis.json'));
+        const standby0 = await spawnNode(SCRIPT, dir('standby0'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby0);
+        const door0 = await mainServerDoor(main0.base);
+        doors.push(door0);
+        await standby0.send('setup-standby', { primaryUrl: door0.url, replicationToken: token0, primaryPeerId: main0.ready.peerId });
+        const first0 = await standby0.send('pull', {});
+        let s0l: Ledger = await standby0.send('ledger');
+        require_(first0.ok === true && ledgerDiff(z1, s0l).length === 0, `S0's first copy is M0's ledger (${first0.ok ? 'imported' : first0.error}; differences ${first(ledgerDiff(z1, s0l))})`);
+        door0.next({ status: 200, body: await main0.send('forge', { kind: 'empty' }) });
+        const empty11 = await standby0.send('pull', {});
+        s0l = await standby0.send('ledger');
+        assert(ledgerDiff(z1, s0l).length === 0,
+            `a copy M0 signs that names no account carries no ledger: S0's ledger stays M0's (${empty11.ok ? 'imported' : empty11.error}; differences ${first(ledgerDiff(z1, s0l))})`);
+        door0.next({ status: 200, body: await main0.send('forge', { kind: 'commons-mint' }) });
+        const mint11 = await standby0.send('pull', {});
+        s0l = await standby0.send('ledger');
+        assert(mint11.ok === false && /Conservation violation/.test(mint11.error ?? ''), `the copy after it, minting 1000 for a new key, is refused (${mint11.ok ? 'imported' : mint11.error})`);
+        assert(ledgerDiff(z1, s0l).length === 0, `S0 keeps M0's real ledger (differences ${first(ledgerDiff(z1, s0l))})`);
+        const real11 = await standby0.send('pull', {});
+        s0l = await standby0.send('ledger');
+        const z2: Ledger = await main0.send('ledger');
+        assert(real11.ok === true && ledgerDiff(z2, s0l).length === 0,
+            `the next real copy lands, and S0's ledger is M0's (${JSON.stringify({ ok: real11.ok, mode: real11.mode, error: real11.error })}; differences ${first(ledgerDiff(z2, s0l))})`);
+        refused.push(...(await standby0.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
+
+        assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');
+
         refused.push(...(await main.send('fetches')).blocked);
         assert(refused.length === 0, `nothing reached off this machine (refused: ${refused.join(', ') || 'none'})`);
     } finally {
         for (const n of nodes) await n.kill();
+        for (const d of doors) await d.close();
     }
 
     console.log(`\n${testsPassed}/${testsRun} checks passed in ${Math.round((Date.now() - started) / 1000)} s.`);

@@ -45,7 +45,12 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  */
 export const REPLICA_FORMAT = 1;
 
-/** The format this standby's copy was made with, 0 when it has no record of one (a copy made before the record). */
+/**
+ * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
+ * copies made before the record, or it cleared its copy for a seed of its own and none has landed since (clearForResync).
+ * The next copy it lands is then its first, a seed (ImportOptions.seed). Only this standby writes the record: a copy can
+ * neither set it nor take it away.
+ */
 export function replicaFormatOfCopy(): number {
     const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined;
     const n = Number(row?.value);
@@ -55,6 +60,18 @@ export function replicaFormatOfCopy(): number {
 /** This standby's copy is now one this importer made: a force-resync, or a first copy, landed. */
 export function noteReplicaFormat(): void {
     db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', ?)`).run(String(REPLICA_FORMAT));
+}
+
+/**
+ * A force-resync's clear (services/backup-puller.ts), in one transaction with the copy's format record going: until a
+ * copy lands, the next one is this standby's first (replicaFormatOfCopy), so a pull after an import that failed is a seed
+ * too. `clear` is the clear itself (state-engine.ts clearReplicatedTables); a throw from it undoes that too.
+ */
+export function clearForResync(clear: () => void): void {
+    db.transaction(() => {
+        db.prepare(`DELETE FROM node_config WHERE key = 'replica_format'`).run();
+        clear();
+    })();
 }
 
 /**
@@ -673,7 +690,22 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
     }
 }
 
-export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload): Promise<ImportResult> {
+/**
+ * What the puller decided about a copy before it asked for it (services/backup-puller.ts pullOnce), from this standby's
+ * own records and never from anything a copy carries or changes.
+ */
+export interface ImportOptions {
+    /**
+     * A seed, which the conservation guard lets in whatever it sums to: this standby's first copy (it holds none it
+     * landed: no `replica_format` record, replicaFormatOfCopy), and a force-resync (the format re-seed, REPLICA_FORMAT,
+     * this standby's own constant; an operator's; the one a whole copy that didn't match asks for). Every other copy is
+     * held to the ledger here.
+     */
+    seed?: boolean;
+}
+
+export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, opts: ImportOptions = {}): Promise<ImportResult> {
+    const seed = opts.seed === true;
     const role = getNodeRole();
     if (role !== 'backup') {
         throw new Error(`[Sync] This node runs as '${role}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
@@ -754,9 +786,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
     try {
         db.transaction(() => {
-            // Before anything in this copy is written: an empty ledger (a new standby, or a force-resync after its clear) is
-            // a seed, which the conservation guard below lets in whatever it sums to.
-            const accountCountBefore = (db.prepare("SELECT COUNT(*) AS c FROM accounts").get() as { c: number }).c;
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -1062,7 +1091,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            if (Array.isArray(remote.accounts)) {
+            // A copy that names no account carries no ledger, and changes no account here: a main server always holds its
+            // Commons account (state-engine.ts seeds it at every boot), so no main server's ledger is empty. Read as a
+            // ledger, it emptied this standby's, and a ledger that sums to 0 lets that past the guard.
+            if (Array.isArray(remote.accounts) && remote.accounts.length > 0) {
                 // The main server's account set, exactly (design §4.1, G0). It is this standby's only writer, every copy,
                 // delta or whole, carries every account it holds as of `generatedAt`, and the puller refuses an older copy,
                 // so there is nothing for a stamp to decide. Each account is written as the main server holds it whenever
@@ -1112,9 +1144,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
 
                 // The guard's meaning is unchanged: a copy may not move this standby's total by more than the tolerance,
-                // unless it held no ledger before (a seed). With every account now the main server's, what it measures is
-                // the shift between the two ledgers, which is 0 whenever the main server conserves.
-                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && accountCountBefore > 1
+                // unless the puller took it as a seed (ImportOptions.seed), which it decides from this standby's own
+                // records and never from the ledger here: a count of accounts let one copy that named none bring the
+                // ledger back to "empty", and the next went unchecked. With every account now the main server's, what
+                // it measures is the shift between the two ledgers, which is 0 whenever the main server conserves.
+                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed
                     && Math.abs(importedBalanceDelta) > LEDGER_CONSERVATION_TOLERANCE) {
                     throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
                 }
@@ -1136,7 +1170,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     const record: MainLedgerRecord = { ...summary, generatedAt: remote.generatedAt ?? null };
                     db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_main_ledger', ?)`).run(JSON.stringify(record));
                 }
-            } else {
+            } else if (!Array.isArray(remote.accounts)) {
                 // A copy with no account set at all (none a main server sends: its export always carries every account).
                 // Each member it named without an account gets an empty one, as the members import used to give them, stamped
                 // with nothing, so nothing here claims to be newer than a main server's row.

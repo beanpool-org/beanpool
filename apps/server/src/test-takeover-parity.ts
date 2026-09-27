@@ -10,10 +10,10 @@
  *     and a place, a group, an event and an RSVP, a block, an accepted non-zero audit baseline.
  *  2. Its standby S takes its first copy: the loop's own first pull, refused on main today (G9), then the force-resync
  *     an operator runs.
- *  3. More of the community, over two deltas: new members, granted credit, a voucher and a vouched member at 50, a
+ *  3. More of the community, over two deltas: new members, granted credit, a voucher and vouched members at 50 and 25, a
  *     trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
- *  4. More, then a whole copy: a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
+ *  4. More, then a whole copy: the vouch at 25 withdrawn, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request) and a
  *     last delta.
@@ -116,6 +116,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:members.earned_credit', gap: 'G2a', why: 'granted credit (an Elder) is lost' },
     { key: 'db:members.can_operate', gap: 'G2a', why: 'not copied' },
     { key: 'db:members.profile_updated_at', gap: 'G2a', why: 'not copied' },
+    { key: 'db:members.elder_vouched_by', gap: 'G2a', why: 'a withdrawn vouch stays on the standby (the import keeps the first voucher it copied), and with it the vouch floor' },
     { key: 'db:members.avatar_url', gap: 'G2a', why: "an enterprise's empty avatar is copied as null (the row is not copied verbatim)" },
     { key: 'db:members.updated_at', gap: 'G2a', why: "members rows restamped with the standby's clock (its own writes for the standing it lacks)" },
     { key: 'db:members.callsign', gap: 'G2a', why: "the copied BeanPool is no enterprise there, so the standby's boot renames it and makes its own" },
@@ -127,7 +128,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:a vouch by the voucher', gap: 'G2a', why: '"Only appointed vouchers can vouch for members"' },
     { key: "http:a frozen member's poll", gap: 'G2a', why: 'a frozen member can post a poll' },
     { key: 'http:a keeper posts for the enterprise', gap: 'G2a, G2c', why: '404 "Not a treasury" where the main server says the enterprise is paused' },
-    { key: 'http:every balance', gap: 'G0, G2a', why: 'balances 0 (G0); floors and tiers from granted credit and vouches lost (G2a)' },
+    { key: 'http:every balance', gap: 'G0, G2a', why: "balances 0 (G0); floors and tiers from granted credit and vouches lost, and a withdrawn vouch's floor back (G2a)" },
     { key: 'http:the ledger audit a take-over runs', gap: 'G0, G5', why: "a sum of balances that isn't the main server's (G0), against the standby's own baseline (G5)" },
 
     // G2b: member_preferences.
@@ -487,6 +488,7 @@ async function main(): Promise<void> {
         for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         built('the admin makes Bo a voucher', await A(`/api/local/admin/users/${bo.pk}/voucher`, { grant: true }));
         built('Bo vouches for Eve', await S_(bo, '/api/profile/vouch', { targetPubkey: eve.pk, level: 2 }));
+        built('and for Lou', await S_(bo, '/api/profile/vouch', { targetPubkey: lou.pk, level: 1 }));
         await offer(eve, 'Mending', 2);
         const deeCash = await offer(dee, 'Kindling', 3, { cashAlsoNeeded: true });
         await deal(cy, dee, deeCash.id, false); // held in escrow, and still there at the take-over
@@ -518,6 +520,7 @@ async function main(): Promise<void> {
 
         // ── 4. More, then a whole copy ──
         console.log('\n— 4. more, then a whole copy —');
+        built('Bo withdraws his vouch for Lou, which the last pull copied', await S_(bo, '/api/profile/unvouch', { targetPubkey: lou.pk }));
         built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 2 }));
         const wind = built('Dee starts an enterprise, Wind Co', await S_(dee, '/api/treasury', { name: 'Wind Co', purpose: 'Closing down soon' }));
         built('Dee starts winding it up', await S_(dee, `/api/treasury/${wind.publicKey}/wind-up/initiate`));

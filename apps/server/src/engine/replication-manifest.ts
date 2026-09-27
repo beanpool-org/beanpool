@@ -58,7 +58,7 @@ export const TABLES: Record<string, TableEntry> = {
     // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status elder_vouched_by archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
+        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
             ...Object.fromEntries(MEMBERS_STANDING_NOT_COPIED.map((c) => [c, { reason: 'not in the import (a member\'s and an enterprise\'s standing)', gap: 'G2a' as const }])),
@@ -66,6 +66,7 @@ export const TABLES: Record<string, TableEntry> = {
             invited_by: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
             invite_code: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
             home_node_url: { reason: 'written on the first copy only', gap: 'G2a' },
+            elder_vouched_by: { reason: 'the import keeps the first voucher it copied (COALESCE): a withdrawn vouch, a prune or a new voucher never reaches the standby', gap: 'G2a' },
         },
     },
     posts: {

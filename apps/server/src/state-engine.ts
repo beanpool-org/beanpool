@@ -7720,6 +7720,12 @@ export type PushRegistration = 'registered' | 'left' | 'failed';
 const PUSH_LEAVE_REMEMBERED = '-1 day';
 
 /**
+ * Clears the leaves applied more than a day ago, on every leave applied. Keys with no row here can add leaves too, so
+ * this reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
+ */
+export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+
+/**
  * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
  * key's row for `token` goes when its stamp is not later than `leftAt`, or it has none (an app from before leave
  * statements). A row stamped later is a registration made after the leave, on purpose (the same account back on the
@@ -7728,7 +7734,7 @@ const PUSH_LEAVE_REMEMBERED = '-1 day';
  */
 export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
     return db.transaction((): number => {
-        db.prepare(`DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).run(PUSH_LEAVE_REMEMBERED);
+        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED);
         const removed = db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)`)
             .run(publicKey, token, leftAt).changes;
         db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)

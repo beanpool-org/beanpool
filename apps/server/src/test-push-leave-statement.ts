@@ -14,7 +14,8 @@
  *      presented late or replayed, and a late older registration, or one with no stamp, never lowers the row's stamp
  *      back within its reach;
  *   5. a registration from an app before stamps (no `registeredAt`) is removed by any statement; a bad stamp is refused;
- *   6. the online form, K's own signed DELETE carrying the leave's stamp, does exactly what the statement does.
+ *   6. the online form, K's own signed DELETE carrying the leave's stamp, does exactly what the statement does;
+ *   7. clearing the day-old leaves, on every leave applied, reads an index, never a scan (keys with no row add leaves too).
  *
  * The statements are signed here byte for byte (0xFF, then the text), not with @beanpool/core's builder, so this suite
  * also pins the format the phone signs.
@@ -30,7 +31,7 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine } from './state-engine.js';
+import { initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
@@ -215,6 +216,11 @@ async function main(): Promise<void> {
     assert((await present(statement(kim, PHONE, 4000))).status === 200 && !has(kim, PHONE), '...and the statement still removes it when presented');
     const kept = (db.prepare('SELECT COUNT(*) AS n FROM push_token_leaves').get() as { n: number }).n;
     assert(kept === 1, `the leaves recorded more than a day ago are cleared as the next one is applied (${kept} left)`);
+    // That clearing runs on every leave applied, and keys with no row here can add leaves: it must read an index on
+    // applied_at, never scan the table (#1258 review 4116631125: a full scan per leave let one address stall the node).
+    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN ${PUSH_LEAVE_PRUNE_SQL}`).all('-1 day') as Array<{ detail: string }>).map((r) => r.detail).join('; ');
+    assert(/SEARCH push_token_leaves USING (COVERING )?INDEX idx_push_token_leaves_applied_at/.test(prunePlan) && !/SCAN push_token_leaves/.test(prunePlan),
+        `clearing old leaves searches idx_push_token_leaves_applied_at, never scans the table (${prunePlan})`);
 
     // ── 5. An app from before stamps; a bad stamp ─────────────────────────────────────────────
     console.log('\n── Registrations without a stamp');

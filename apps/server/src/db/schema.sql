@@ -522,6 +522,9 @@ CREATE TABLE IF NOT EXISTS push_token_leaves (
     applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, token)
 );
+-- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
+-- leaves: a search on this, never a scan of the table per leave.
+CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

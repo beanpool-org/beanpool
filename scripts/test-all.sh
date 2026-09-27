@@ -446,6 +446,7 @@ run_federation_suites() {
       test-ws-pong-watchdog
       test-ws-http-port
       test-ws-auth-default
+      test-visitor-doorbells
       test-ws-feed-parties
       test-live-post-payloads
       test-moderation-notifications

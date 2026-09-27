@@ -39,6 +39,7 @@ async function main() {
         directoryMirror: true,
         publishToDirectory: false,
         guestListingsOnly: true,
+        exampleListings: true,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',

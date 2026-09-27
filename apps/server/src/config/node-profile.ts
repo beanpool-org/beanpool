@@ -100,6 +100,11 @@ export interface ProfileSwitches {
      *  server refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false, either of which would undo it
      *  (GuestViewAuthOffError). */
     guestListingsOnly: boolean;
+    /** The apps draw a few cards marked "Example" on a Market with fewer than a handful of real listings, so a
+     *  newcomer sees what people post there. Drawn by the apps from their own fixed words: nothing is stored or sent,
+     *  and none can be opened, messaged or traded (apps/pwa/src/lib/example-listings.ts, apps/native/utils/
+     *  example-listings.ts). Off: none. */
+    exampleListings: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -125,6 +130,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         autoHideReports: false,
         autoMute: false,
         guestListingsOnly: false,
+        exampleListings: false,
     },
     global: {
         openJoin: true,
@@ -145,6 +151,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         autoMute: true,
         // The listings, not the people (Marty, 2026-09-25): a stranger sees what is on offer and roughly where.
         guestListingsOnly: true,
+        // The lobby starts empty, and a stranger arriving then should see what it is for (Marty, 2026-09-27).
+        exampleListings: true,
     },
 };
 
@@ -181,6 +189,8 @@ export interface NodeFeatures {
     /** A visitor gets the listings and their rough area, not the people (the posts answer says which in
      *  `X-BeanPool-View`), so the web app can draw its lobby. */
     guestListingsOnly: boolean;
+    /** The apps show a few example cards on a Market with fewer than a handful of real listings. */
+    exampleListings: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -287,6 +297,7 @@ export function getNodeFeatures(): NodeFeatures {
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,
         guestListingsOnly: s.guestListingsOnly,
+        exampleListings: s.exampleListings,
     };
 }
 

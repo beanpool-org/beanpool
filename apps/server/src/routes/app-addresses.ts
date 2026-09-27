@@ -6,14 +6,15 @@
  *   GET  /api/local/admin/app-addresses          this community's addresses, where each comes from, and how many
  *                                                 people's apps signed for it today and on the busiest day of the last 7;
  *                                                 whether any of them names the community (`named`: a loopback name
- *                                                 listed for an SSH tunnel doesn't); the addresses apps reached a node
- *                                                 that knows none of its names at, each with its count and whether an
- *                                                 owner's or admin's app did: `unconfirmed`, offered to confirm, and
- *                                                 `heldBack`, not offered, each with its reason (engine/address-offers.ts;
- *                                                 a Settings from before that shows `unconfirmed` only, so it never
- *                                                 offers a held-back one); how many signed in the old format (apps too
- *                                                 old to name a community); and the switch date. `?host=` (on all three)
- *                                                 is the host Settings reached the node at: see appAddressesReport.
+ *                                                 listed for an SSH tunnel doesn't); on a node that knows none of its
+ *                                                 names, the addresses apps reached it at, each with its count and
+ *                                                 whether an owner's or admin's app did: `unconfirmed`, offered to
+ *                                                 confirm with one tap, which is only ever the host Settings is open at
+ *                                                 (`?host=`, on all three), and `heldBack`, every other one, each with
+ *                                                 its reason (engine/address-offers.ts; a Settings from before that
+ *                                                 shows `unconfirmed` only, so it never offers a held-back one); how
+ *                                                 many signed in the old format (apps too old to name a community); and
+ *                                                 the switch date.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
@@ -25,13 +26,12 @@
 import Router from '@koa/router';
 import { updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, isBeanPoolName, isLocalNetworkHost, knowsItsNames, normalizeAddress,
-    ownerConfirmedAddresses,
+    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
 import {
     signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
 } from '../engine/member-signature.js';
-import { MEMBERS_TO_OFFER, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
+import { offerablePageHost, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
@@ -39,11 +39,10 @@ import type { RouteDeps } from './types.js';
 export const MAX_OWNER_ADDRESSES = 20;
 
 /**
- * `pageHost` is the host Settings reached the node at (`?host=`). Settings suggests that host with one tap, as the
- * owner's own doing, on a node that knows none of its names; only the node holds the directory. So when the directory
- * lists it and no app's count has put it on either list, it is held back here with no count, and Settings warns and
- * asks for the tick as it does for an app's (4114569450). A beanpool.org name Settings never suggests, and a host on
- * this machine or its network is already this node's own.
+ * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),
+ * with its counts, or none when no app reached the node there yet. Every other host apps reached is held back with its
+ * counts and reason. The page's host is held back too when the directory this node holds lists it (4114569450), and is
+ * on neither list when it is a beanpool.org name, this machine or its network, or already one of this node's names.
  */
 export function appAddressesReport(pageHost?: unknown) {
     const usage = signatureUsage();
@@ -52,26 +51,25 @@ export function appAddressesReport(pageHost?: unknown) {
         const u = count('own', a.address);
         return { address: a.address, source: a.source, today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0 };
     });
-    // Hosts apps signed for while this node knew none of its names (accepted until the switch): offered to confirm, or
-    // held back and why (engine/address-offers.ts). Any the owner has since confirmed drop off both, as they are on
-    // the list above.
+    // Hosts apps signed for while this node knew none of its names (accepted until the switch). Any the owner has since
+    // confirmed drop off both lists, as they are on the one above.
     const known = new Set(addresses.map((a) => a.address));
     const staff = staffSeenAddresses();
+    const page = offerablePageHost(pageHost);
     const unconfirmed: AddressSighting[] = [];
     const heldBack: (AddressSighting & { reason: HeldBackReason; directory?: { name: string | null } })[] = [];
-    for (const u of usage) {
-        if (u.kind !== 'unconfirmed' || known.has(u.address)) continue;
-        const sighting: AddressSighting = { address: u.address, today: u.today, busiestDay: u.busiestDay, ownerOrAdmin: staff.has(u.address) };
-        const standing = offerStanding(sighting);
+    const place = (sighting: AddressSighting) => {
+        const standing = offerStanding(sighting.address, page);
         if (standing.offer) unconfirmed.push(sighting);
         else heldBack.push({ ...sighting, reason: standing.reason, ...(standing.directory ? { directory: standing.directory } : {}) });
+    };
+    for (const u of usage) {
+        if (u.kind !== 'unconfirmed' || known.has(u.address)) continue;
+        place({ address: u.address, today: u.today, busiestDay: u.busiestDay, ownerOrAdmin: staff.has(u.address) });
     }
-    const page = normalizeAddress(pageHost);
-    if (page && !knowsItsNames() && !known.has(page) && !isBeanPoolName(page) && !isLocalNetworkHost(page)
-        && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
-        const sighting: AddressSighting = { address: page, today: 0, busiestDay: 0, ownerOrAdmin: false };
-        const standing = offerStanding(sighting);
-        if (!standing.offer && standing.directory) heldBack.push({ ...sighting, reason: standing.reason, directory: standing.directory });
+    // The page's host when no app has reached the node there yet this week.
+    if (page && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
+        place({ address: page, today: 0, busiestDay: 0, ownerOrAdmin: staff.has(page) });
     }
     const old = count('old_app', '');
     return {
@@ -79,7 +77,6 @@ export function appAddressesReport(pageHost?: unknown) {
         named: knowsItsNames(),
         unconfirmed,
         heldBack,
-        membersToOffer: MEMBERS_TO_OFFER,
         oldApps: { today: old?.today ?? 0, busiestDay: old?.busiestDay ?? 0 },
         unboundSignaturesUntil: unboundSignaturesUntilDay(),
         unboundSignaturesAccepted: unboundSignaturesAccepted(),

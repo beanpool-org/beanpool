@@ -302,8 +302,8 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  * minutes (flushSignatureCounts), each as the most this process has seen that day. After a restart a day's count
  * starts again, so it can read low for that day, never high.
  *
- * For an `unconfirmed` address, two more things, so Settings can tell a host one member's app planted from this
- * community's real one:
+ * For an `unconfirmed` address, two more things, so Settings can show the owner who reached the node at each host
+ * before they confirm one (it offers only the host Settings is open at with one tap: engine/address-offers.ts):
  *   - one app puts at most MAX_UNCONFIRMED_HOSTS_PER_KEY addresses on the day's list. A real app reaches a community at
  *     one address (a home-network one is this community's already, never on this list), so one member signing for
  *     many hosts can't fill the day's MAX_ADDRESSES_PER_KIND and crowd out the real one. Held in memory, per day:

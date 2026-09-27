@@ -32,9 +32,10 @@
  * could pass only the probe through.
  *
  * A node with none of 1–4 (a self-hoster behind a proxy with no config) doesn't know its names. It is `unconfigured`:
- * member-signature.ts accepts any host there until the switch, logs it and counts it, and Settings offers the owner
- * to confirm one with one tap (decision 3a, 2026-09-27) only when an owner's or admin's app, or several members'
- * apps, reached the node there, and never another community's name (engine/address-offers.ts).
+ * member-signature.ts accepts any host there until the switch, logs it and counts it, and Settings lets the owner
+ * confirm one (decision 3a, 2026-09-27): with one tap only the host Settings itself is open at; every other host is
+ * shown with its counts and confirmed only once ticked; another community's beanpool.org name never. A node that
+ * holds the BeanPool directory also warns when it lists a host as a community's (engine/address-offers.ts).
  */
 
 import { domainToASCII } from 'node:url';

@@ -9,37 +9,40 @@
  * anyone who sees them (its operator) can replay them. Before this, one member's app signing for a host was enough to
  * have it offered with one tap, mullum.beanpool.org included (#1219's deciding pass; the director's queue, 2026-09-27).
  *
- * A host is OFFERED (one tap, as before) only when all of these hold:
- *   - it is not a name in the registrar's zone (isBeanPoolName). This node's own registrar name is one of its
+ * Who signed can't make a host safe to confirm with one tap. Members' keys can all be one person's: any member can make
+ * invites for herself and redeem them with fresh keys, in seconds (4114742184). And another community's operator can
+ * relay here the requests members of both communities, or our owner (a knock is enough), signed for its own host. So:
+ *
+ * ONE TAP only for the page's own host: the host the owner's or admin's browser reaches the node at for Settings right
+ * now (`?host=`, sent by Settings). It must be a host a member's app can sign for here and that isn't this community's
+ * yet (audienceStanding `unconfigured`: well formed, not this machine or its network, on a node with none of its names),
+ * with or without a count; it is offered the same after the switch, when apps are refused there until it is confirmed.
+ * A one-person node confirms its real name that way, from the page it is using.
+ *
+ * Every other host is HELD BACK, with its counts (members' apps today and on the busiest day, and whether an owner's or
+ * admin's app reached the node there), and a reason, checked in this order:
+ *   - `another-community`: a name in the registrar's zone (isBeanPoolName). This node's own registrar name is one of its
  *     configured names (item 1 or 4) and never on this list, so any other beanpool.org name is another community's, or
- *     free for one to claim. Held back, reason `another-community`, whoever's app signed for it: a hostile community's
- *     operator can relay our owner's own request, signed for that community, here;
- *   - an owner's or admin's own app signed for it this week, or at least MEMBERS_TO_OFFER members' apps did on one day.
- *     Otherwise held back, reason `few-members`. A one-person community (its only member is the owner) is offered its
- *     real name as soon as the owner's app reaches it there;
- *   - the public directory this node already holds (directory_cache, engine/directory-cache.ts: the global node's
- *     mirror, or a standby's copy of it; no fetch for this) does not list it as a community's address. Otherwise held
- *     back, reason `directory`, with the name the directory gives. Anyone can list any address there, so the directory
- *     can't prove a host is someone else's: Settings warns, names that community, and lets the owner confirm on
- *     purpose, where the two reasons above offer no confirm at all.
- * The reasons are checked in that order, so a host both listed and reached by one member's app is `few-members`, with
- * the directory's name as well.
+ *     free for one to claim. Never offered, the page's own host included: Settings shows no confirm for it;
+ *   - `directory`: the public directory this node holds lists it as a community's address, with the name it gives.
+ *     Settings warns, names that community, and confirms it only once the owner ticks that it is this community. Only a
+ *     node that holds the directory can say so: directory_cache (engine/directory-cache.ts) is written only by the
+ *     directory mirror, which runs where the `directoryMirror` switch is on (the global profile's default; off by
+ *     default in the local one), and is copied by a standby of such a node. No fetch is made for this. Elsewhere this reason never appears,
+ *     and such a host is `not-this-page` like any other. Anyone can list any address, so a match proves only that
+ *     someone listed it: it is a reason to warn, never to refuse the owner;
+ *   - `not-this-page`: any other host. Settings shows it with its counts and confirms it only once the owner ticks
+ *     that it is this community's address.
  *
- * MEMBERS_TO_OFFER is 3: more than one person and a second key of their own (an invite they gave themselves), and small
- * enough that a real address is offered on its first day in a community of a handful of people. The owner's own app
- * makes it one tap anyway. It only decides what is offered: the rule above for another community's name doesn't count.
- *
- * Only what Settings OFFERS changes here. What a node accepts until the switch, the confirm route (an owner or admin
- * may still send it any address), and what a confirmed address does, are unchanged.
+ * Only what Settings OFFERS changes here. What a node accepts until the switch, the counts and their bounds, the
+ * confirm route (an owner or admin may still send it any address: a renamed node keeps its old name that way, item 3),
+ * and what a confirmed address does, are unchanged.
  */
 
 import { listedCommunityAt } from './directory-cache.js';
-import { isBeanPoolName } from './own-addresses.js';
+import { audienceStanding, isBeanPoolName, normalizeAddress } from './own-addresses.js';
 
-/** How many members' apps, on one day, get a host offered when no owner's or admin's app reached the node there. */
-export const MEMBERS_TO_OFFER = 3;
-
-export type HeldBackReason = 'another-community' | 'few-members' | 'directory';
+export type HeldBackReason = 'another-community' | 'directory' | 'not-this-page';
 
 export interface AddressSighting {
     address: string;
@@ -55,12 +58,24 @@ export type AddressOfferStanding =
     | { offer: true }
     | { offer: false; reason: HeldBackReason; directory: { name: string | null } | null };
 
-/** Whether Settings offers `s.address` to confirm with one tap, or holds it back and why (the rule above). */
-export function offerStanding(s: AddressSighting): AddressOfferStanding {
-    const listed = listedCommunityAt(s.address);
+/**
+ * The host Settings is open at (`?host=`), in the form apps sign it, when it can be offered with one tap: one a
+ * member's app can sign for here that isn't this community's yet, and not a beanpool.org name. Null otherwise.
+ */
+export function offerablePageHost(pageHost: unknown): string | null {
+    const page = normalizeAddress(pageHost);
+    return page && audienceStanding(page) === 'unconfigured' && !isBeanPoolName(page) ? page : null;
+}
+
+/**
+ * Whether Settings offers `address` to confirm with one tap, or holds it back and why (the rule above). `page` is
+ * offerablePageHost's answer for the host Settings is open at, or null.
+ */
+export function offerStanding(address: string, page: string | null): AddressOfferStanding {
+    const listed = listedCommunityAt(address);
     const directory = listed ? { name: listed.name } : null;
-    if (isBeanPoolName(s.address)) return { offer: false, reason: 'another-community', directory };
-    if (!s.ownerOrAdmin && s.busiestDay < MEMBERS_TO_OFFER) return { offer: false, reason: 'few-members', directory };
+    if (isBeanPoolName(address)) return { offer: false, reason: 'another-community', directory };
     if (directory) return { offer: false, reason: 'directory', directory };
+    if (address !== page) return { offer: false, reason: 'not-this-page', directory: null };
     return { offer: true };
 }

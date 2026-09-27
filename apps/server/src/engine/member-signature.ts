@@ -307,7 +307,9 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  *   - one app puts at most MAX_UNCONFIRMED_HOSTS_PER_KEY addresses on the day's list. A real app reaches a community at
  *     one address (a home-network one is this community's already, never on this list), so one member signing for
  *     many hosts can't fill the day's MAX_ADDRESSES_PER_KIND and crowd out the real one. Held in memory, per day:
- *     after a restart an app may add that many again, and the day's cap still holds;
+ *     after a restart an app may add that many again, and the day's cap still holds. Many members' apps can fill it
+ *     between them, so an owner's or admin's app is counted past it (each still at most that many addresses): members
+ *     can't crowd out the address the owner's own app reaches the community at;
  *   - whether an owner's or admin's app signed for it (isNodeAdmin: a role that acts; a moderator's app is a member's):
  *     the address and the last day, no key, in node_config row STAFF_SEEN_KEY, written with the counts, so a restart
  *     keeps it. At most MAX_ADDRESSES_PER_KIND addresses, none older than 8 days. The role is the one the signer held
@@ -316,7 +318,10 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  */
 export type SignatureKind = 'own' | 'unconfirmed' | 'old_app';
 
-/** Bounds on what one day can hold in memory: addresses per kind, and keys per address. */
+/**
+ * Bounds on what one day can hold in memory: addresses per kind (past which only an owner's or admin's app adds an
+ * `unconfirmed` one, at most MAX_UNCONFIRMED_HOSTS_PER_KEY each), and keys per address.
+ */
 const MAX_ADDRESSES_PER_KIND = 50;
 const MAX_KEYS_PER_ADDRESS = 100_000;
 /** How many addresses one app can put on a day's `unconfirmed` list. */
@@ -341,8 +346,11 @@ const daysAgo = (now: number, n: number) => new Date(now - n * 86_400_000).toISO
 
 const hashOf = (signer: string) => crypto.createHmac('sha256', processSalt).update(signer).digest('base64').slice(0, 16);
 
-/** Count `signer` for `address` on `day`: whether it is counted there (false when a bound leaves it out). */
-function countSignature(kind: SignatureKind, address: string, signer: string, day = today(Date.now())): boolean {
+/**
+ * Count `signer` for `address` on `day`: whether it is counted there (false when a bound leaves it out). `pastCap`: an
+ * owner's or admin's app, counted for a new address even when the day's MAX_ADDRESSES_PER_KIND is reached.
+ */
+function countSignature(kind: SignatureKind, address: string, signer: string, day = today(Date.now()), pastCap = false): boolean {
     try {
         let byKind = seen.get(day);
         if (!byKind) {
@@ -356,7 +364,7 @@ function countSignature(kind: SignatureKind, address: string, signer: string, da
         }
         let keys = byAddress.get(address);
         if (!keys) {
-            if (byAddress.size >= MAX_ADDRESSES_PER_KIND) return false;
+            if (byAddress.size >= MAX_ADDRESSES_PER_KIND && !pastCap) return false;
             keys = new Set();
             byAddress.set(address, keys);
         }
@@ -385,17 +393,18 @@ function countUnconfirmed(address: string, signer: string): void {
         }
         const h = hashOf(signer);
         let mine = byKey.get(h);
-        // Counted for this address today already, and its role looked at then: nothing more to do.
+        // Looked at for this address today already, its role too (counted, or left off a full list): nothing more to do.
         if (mine?.has(address)) return;
         if ((mine?.size ?? 0) >= MAX_UNCONFIRMED_HOSTS_PER_KEY) return;
         if (!mine && byKey.size >= MAX_KEYS_PER_ADDRESS) return;
-        if (!countSignature('unconfirmed', address, signer, day)) return;
         if (!mine) {
             mine = new Set();
             byKey.set(h, mine);
         }
         mine.add(address);
-        if (isNodeAdmin(signer)) {
+        const staff = isNodeAdmin(signer);
+        if (!countSignature('unconfirmed', address, signer, day, staff)) return;
+        if (staff) {
             let addresses = staffSeen.get(day);
             if (!addresses) {
                 addresses = new Set();

@@ -23,7 +23,9 @@
  *  5. Keys with no member row here count for nothing: not listed, and they move no other host's count.
  *  6. Bounded: one member signing for many hosts puts at most 3 of them on the list, and a real host signed for after
  *     that is still offered; many members' hosts stop at the day's cap (50), in the report, in the counts table and in
- *     the stored owner/admin sightings; a flood of non-member keys adds nothing.
+ *     the stored owner/admin sightings; a flood of non-member keys adds nothing. Once members' apps have filled the
+ *     day's list, another member's host is left off it, but an admin's app reaching the real address is still counted
+ *     and offered: members can't crowd it out.
  *  7. A restart: the counts and whether an owner's or admin's app reached a host are still there.
  *  8. Confirming works as before: one tap on an offered host makes it this community's name; requests for it are
  *     accepted and for any other host refused. An owner-confirmed address stays one whatever it is (a beanpool.org
@@ -254,7 +256,7 @@ async function main(): Promise<void> {
         return { pk: Buffer.from(ed25519.getPublicKey(seed)).toString('hex'), sign: core.ed25519Signer(seed), callsign };
     };
     // One app puts at most 3 hosts a day on the list, so each step uses keys that haven't reached that.
-    const owner = id('Olive'), ada = id('Ada'), ben = id('Ben'), mo = id('Mo'), mia = id('Mia');
+    const owner = id('Olive'), ada = id('Ada'), ben = id('Ben'), cy = id('Cy'), mo = id('Mo'), mia = id('Mia');
     const members = Array.from({ length: 20 }, (_, i) => id(`M${i + 1}`));
     const [m1, m2, m3, m4, m5, m6, m7] = members;
 
@@ -290,6 +292,7 @@ async function main(): Promise<void> {
             members: [
                 { pk: ada.pk, callsign: ada.callsign, role: 'admin' },
                 { pk: ben.pk, callsign: ben.callsign, role: 'admin' },
+                { pk: cy.pk, callsign: cy.callsign, role: 'admin' },
                 { pk: mo.pk, callsign: mo.callsign, role: 'moderator' },
                 { pk: mia.pk, callsign: mia.callsign },
                 ...members.map((m) => ({ pk: m.pk, callsign: m.callsign })),
@@ -450,6 +453,21 @@ async function main(): Promise<void> {
             const afterKeys = await report();
             assert(keyFlood.every((s) => s === 200) && !listedAnywhere(afterKeys).includes('keys.example') && (await U.send('unconfirmedRows')) === rows,
                 `60 throwaway keys signing for keys.example: answered, listed nowhere, nothing stored (${j([...new Set(keyFlood)])})`);
+
+            // The day's list is full of members' hosts. Another member's host is left off it; an admin's app reaching the
+            // real address is still counted, so members' apps can't crowd the real one out.
+            await U.send('resetLimits');
+            const late = await readAs(U, mia, 'late-member.example');
+            const real = await readAs(U, cy, 'real-home.example');
+            const crowded = await report();
+            assert(rows === 50 && late.status === 200 && !listedAnywhere(crowded).includes('late-member.example'),
+                `with the day's list full (${rows} hosts), a member's app reaching late-member.example is answered and left off the list (${late.status})`);
+            const realOffer = offered(crowded, 'real-home.example');
+            assert(real.status === 200 && realOffer?.ownerOrAdmin === true && realOffer.busiestDay === 1,
+                `an admin's app reaching real-home.example then: still offered, saying an owner's or admin's app reached it (${real.status}, ${j(realOffer)})`);
+            const staffNow = await U.send('staffRow');
+            assert(staffNow !== null && Object.keys(JSON.parse(staffNow)).includes('real-home.example'),
+                `and stored as an owner/admin sighting (${staffNow})`);
         });
 
         // ── 7. A restart ──

@@ -472,7 +472,11 @@ async function main(): Promise<void> {
         // The loop's own first pull (a whole copy, nothing cleared), then, when it is refused, the force-resync an operator
         // runs from Settings: what main needs today before a new standby holds anything (G9).
         const seedPull = await standby.send('pull', {});
-        if (!seedPull.ok) differences.set("pull:a new standby's first pull", [String(seedPull.error)]);
+        // G9 is the refusal on the callsign index; one with any other cause is a difference of its own, not hidden behind it.
+        if (!seedPull.ok) {
+            const g9 = /idx_members_callsign_unique/.test(String(seedPull.error));
+            differences.set(`pull:a new standby's first pull${g9 ? '' : ', refused for another cause'}`, [String(seedPull.error)]);
+        }
         console.log(`  pull (the loop's first): ${seedPull.ok ? 'imported' : `REFUSED ${seedPull.error}`}`);
         if (!seedPull.ok) {
             const resync = await standby.send('resync');

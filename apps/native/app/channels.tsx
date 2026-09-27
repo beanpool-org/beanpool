@@ -31,7 +31,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // The house keyboard pattern: RN's own KeyboardAvoidingView is broken under Android edge-to-edge.
 // KeyboardProvider already wraps the app in _layout.tsx, so a pushed screen needs no provider.
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { router } from 'expo-router';
+import { router, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as Haptics from 'expo-haptics';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';

@@ -334,6 +334,33 @@ describe('#1258\'s rules hold for a retry', () => {
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
     });
 
+    it('her sign-in\'s registration, still waiting for its token as her Sign Out starts, writes nothing due for her when the token can\'t be had', async () => {
+        await importIdentity(kim);
+        mem.async.set(ANCHOR, MULLUM);
+        // Registered at Mullum at an earlier start.
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
+        let noToken: (() => void) | undefined;
+        const slowToken = () => new Promise<string>((_resolve, reject) => { noToken = () => reject(new TypeError('Network request failed')); });
+        const registering = registerAccountForPush(kim.publicKey, slowToken, 'android');
+        await vi.waitFor(() => expect(noToken).toBeDefined());
+
+        // Sign Out starts, and waits on its DELETE with her key still on the phone; then the token fetch fails.
+        nodes.answer = (s) => (s.method === 'DELETE' ? 'hold' : 'up');
+        const signingOut = signOutOfThisPhone(kim);
+        await vi.waitFor(() => expect(nodes.held).toHaveLength(1));
+        expect((await loadIdentity())?.publicKey).toBe(kim.publicKey);
+        noToken!();
+        await registering;
+
+        expect(due()).toEqual([]);
+        nodes.releaseHeld();
+        await signingOut;
+        await comeBack();
+        expect(registrations()).toHaveLength(1);
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
+    });
+
     it('Replace (Kim → Ben): Kim\'s are dropped and none goes for her; Ben\'s registration is his own, signed by his key, where he is', async () => {
         nodes.answer = () => 'down';
         await kimSignsIn();

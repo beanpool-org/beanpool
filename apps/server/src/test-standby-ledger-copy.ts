@@ -49,7 +49,8 @@
  *     with no debit, and every later copy was refused). An account list whose every entry is unreadable names no account:
  *     it changes none, the whole-copy check reads no ledger in it, and a held force-resync refuses it.
  * 16. A standby's own demurrage flush writes nothing: its trades are its main server's after a copy (before, a decay it
- *     flushed over another window than the main server's stayed in its history through every copy).
+ *     flushed over another window than the main server's stayed in its history through every copy). A standby holding
+ *     such a trade under the last importer format re-seeds at its first pull, and its trades are its main server's.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -985,7 +986,27 @@ async function main(): Promise<void> {
         assert(p16.ok === true && ledgerDiff(z16, r16).length === 0,
             `the next copy lands, and S0's trades are M0's, with no demurrage trade of its own (${JSON.stringify({ ok: p16.ok, error: p16.error })}; differences ${first(ledgerDiff(z16, r16))})`);
         assert(memoryVsRows(await standby0.send('memory-ledger'), r16).length === 0, 'and its memory is its rows');
-        refused.push(...(await standby0.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
+
+        // A standby updated from the last format holds such trades already, and no copy removes them: the format goes up
+        // (engine/sync.ts REPLICA_FORMAT), and its first pull after the update is the re-seed that clears them.
+        console.log('\n— 16. a standby that flushed demurrage of its own under the last format heals at its first pull —');
+        await standby0.send('checkpoint');
+        refused.push(...(await standby0.send('fetches')).blocked);
+        await standby0.kill('SIGTERM');
+        copyDir(dir('standby0'), dir('format1'));
+        withDb(dir('format1'), (db) => {
+            db.prepare("UPDATE node_config SET value = '1' WHERE key = 'replica_format'").run();
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1.5, 0, 'Circulation fee (demurrage, 40d)', ?)`)
+                .run(`demurrage_${yan2.pk.slice(0, 16)}_1_41`, yan2.pk, new Date().toISOString());
+        });
+        const format1 = await spawnNode(SCRIPT, dir('format1'), env(PW_STANDBY, 'backup'));
+        nodes.push(format1);
+        const healed16 = await format1.send('pull', {});
+        const f16: Ledger = await format1.send('ledger');
+        const z16b: Ledger = await main0.send('ledger');
+        assert(healed16.ok === true && healed16.mode === 'resync' && Number(f16.format) > 1 && ledgerDiff(z16b, f16).length === 0,
+            `its first pull is the format re-seed, and its trades are M0's (${JSON.stringify({ ok: healed16.ok, mode: healed16.mode, error: healed16.error, format: f16.format })}; differences ${first(ledgerDiff(z16b, f16))})`);
+        refused.push(...(await format1.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
 
         assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');
 

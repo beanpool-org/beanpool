@@ -44,8 +44,10 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *
  *  1. The ledger is the main server's exactly: every account as it holds it and no other, each trade's fee and project;
  *     and a standby seeds no BeanPool enterprise of its own (G0, G9). A standby with no record of a format is older.
+ *  2. No trade the standby made itself: its own demurrage flush wrote a trade the main server never made, which no copy
+ *     removes (engine/audit.ts persistDecayAndCommons). The force-resync clears the ones a standby already holds.
  */
-export const REPLICA_FORMAT = 1;
+export const REPLICA_FORMAT = 2;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only

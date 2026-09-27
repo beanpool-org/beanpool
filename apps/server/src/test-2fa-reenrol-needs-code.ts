@@ -149,7 +149,11 @@ async function main() {
         for (const [who, headers] of [['owner key session', asOwner], ['password + 2FA session', pwWith2fa]] as const) {
             resetAdminAuthTarpit();
             set2fa(true);
-            const s = await setup(headers);
+            let s = await setup(headers);
+            // Two random secrets can show the same code: the current authenticator's ±1-step window then also accepts the new
+            // one's code, and "the NEW authenticator's code as the current one" below passes for the wrong reason (~3 in a
+            // million; it happened in a CI run, 27 Sep). Set up again until the new code (now or next step) isn't one.
+            for (let tries = 0; tries < 5 && [0, 1].some(w => verifyTotpCode(generateTotpCode(s.secret, w), SECRET)); tries++) s = await setup(headers);
             const noCurrent = await call('/api/local/admin/2fa/verify', headers, { code: generateTotpCode(s.secret) });
             assert(noCurrent.status === 401 && noCurrent.body.totpRequired === true && activeSecret() === SECRET,
                 `${who}: verify of a new authenticator with no current code → 401, secret unchanged (got ${noCurrent.status})`);

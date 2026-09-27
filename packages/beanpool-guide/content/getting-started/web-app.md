@@ -85,12 +85,12 @@ If you sign in with an account that isn't the one you joined with, the page says
 - Getting your account back with a sign-in on a community other than the global one. There, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
 - The Pulse's **Learn** lane.
 - The phone's app lock.
-- Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**).
+- Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Manage this community from a computer**; older apps: **Sign in on a computer**).
 
 ## Using your phone account on a computer
 
 - In the web app on the computer, choose to link with the mobile app. It shows a QR code.
-- On the phone, open **Settings** and tap **Link Another Device**.
+- On the phone, open **Settings** and tap **Use your account on another device** (older apps: **Link Another Device**).
 - Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that.
 
 ## Installing it

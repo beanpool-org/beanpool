@@ -8,7 +8,8 @@
  * (Custom Tabs / SFSafariViewController). /settings is not an app link, so the tab keeps it. The press itself
  * is useManageNode, shared with the header's 🛡️ icon.
  *
- * Beside it, "Sign in on a computer" (app/settings-signin.tsx): scan the QR on /settings in a computer's browser.
+ * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
+ * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
@@ -16,7 +17,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSubtitle, type ManageRole } from '../utils/node-admin';
+import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSubtitle, computerSigninLabel, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
@@ -53,6 +54,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
     if (!canManageNode(role) || !identity) return null;
     const name = communityName || fallbackCommunityName || 'this community';
     const label = manageLabel(role, name);
+    const computerLabel = computerSigninLabel(role);
 
     return (
         <>
@@ -81,13 +83,13 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                     onPress={() => router.push({ pathname: '/settings-signin', params: { community: name } })}
                     disabled={busy}
                     accessibilityRole="button"
-                    accessibilityLabel="Sign in on a computer"
-                    accessibilityHint={`Scan the code on ${name}'s Settings page in a computer's browser to sign it in as you`}
+                    accessibilityLabel={computerLabel}
+                    accessibilityHint={`Scan the code on ${name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone`}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>Sign in on a computer</Text>
-                        <Text style={styles.menuSub}>Scan the code on the Settings page in a browser · no password</Text>
+                        <Text style={styles.menuText}>{computerLabel}</Text>
+                        <Text style={styles.menuSub}>Scan the code on its Settings page · your key stays on this phone</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

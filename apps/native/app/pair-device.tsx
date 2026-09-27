@@ -1,5 +1,6 @@
 /**
- * Pair Device Screen — QR-based Device Linking (#89).
+ * Pair Device Screen — QR-based Device Linking (#89). Settings → "Use your account on another device" (older apps:
+ * "Link Another Device"): the member's own account goes to that browser, unlike "Manage this community from a computer".
  *
  * Scans an ephemeral QR code displayed on a desktop PWA or another client,
  * derives an E2E shared secret via X25519 ECDH + HKDF, encrypts the sovereign identity,
@@ -91,6 +92,10 @@ export default function PairDeviceScreen() {
                 fontWeight: '700',
             },
             headerTitle: {
+                // Between the ✕ and its spacer: at 320dp with large text it wraps instead of pushing past the screen edge.
+                flexShrink: 1,
+                marginHorizontal: 8,
+                textAlign: 'center',
                 color: '#ffffff',
                 fontSize: 17,
                 fontWeight: '700',
@@ -462,7 +467,7 @@ export default function PairDeviceScreen() {
                 >
                     <Text style={styles.closeBtnText}>✕</Text>
                 </Pressable>
-                <Text style={styles.headerTitle}>Link Another Device</Text>
+                <Text style={styles.headerTitle}>Your account on another device</Text>
                 <View style={{ width: 40 }} />
             </View>
 

@@ -1,7 +1,7 @@
 /**
- * Settings → "Sign in on a computer": scan the QR on the node's /settings page in a browser, check the short code,
- * pass the phone's unlock, and that browser is signed in with your key. Owners and admins only (the entry is shown
- * only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
+ * Settings → "Manage this community from a computer": scan the QR on the node's /settings page in a browser, check the short code,
+ * pass the phone's unlock, and that browser is signed in with your key. Owners, admins and moderators only (the entry is
+ * shown only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView, Keyboard } from 'react-native';
@@ -152,7 +152,7 @@ export default function SettingsSigninScreen() {
                 {close}
                 <Text style={[styles.title, { color: colors.text.heading }]}>📷 Camera needed</Text>
                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                    To sign in on a computer, BeanPool scans the code on the computer's screen.
+                    To sign a computer in to the community's Settings, BeanPool scans the code on its screen.
                 </Text>
                 <Pressable
                     style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]}

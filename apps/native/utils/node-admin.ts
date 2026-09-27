@@ -23,9 +23,9 @@ import type { BeanPoolIdentity } from './identity';
 import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from './node-url';
 
-import { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
+import { canManageNode, manageLabel, manageSubtitle, computerSigninLabel, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
 
-export { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem };
+export { canManageNode, manageLabel, manageSubtitle, computerSigninLabel, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem };
 
 function base(nodeUrl: string): string {
     return nodeUrl.replace(/\/+$/, '');

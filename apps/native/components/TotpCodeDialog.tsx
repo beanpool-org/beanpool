@@ -1,6 +1,6 @@
 /**
  * The node's own 2FA code, asked for after the phone's unlock when the owner turned 2FA on. Shared by Manage
- * (useManageNode) and "Sign in on a computer" (app/settings-signin.tsx).
+ * (useManageNode) and "Manage this community from a computer" (app/settings-signin.tsx).
  */
 import React from 'react';
 import { View, Text, Pressable, Modal, TextInput, ActivityIndicator, Keyboard, ScrollView } from 'react-native';

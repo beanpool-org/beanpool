@@ -28,7 +28,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { adminSigninText, signedRequestBytes } from '@beanpool/core';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
-    canManageNode, manageLabel, manageSubtitle, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
+    canManageNode, manageLabel, manageSubtitle, computerSigninLabel, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
     buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
@@ -77,6 +77,12 @@ describe('role gating — owners and admins see Manage, moderators see Moderate'
         expect(manageSubtitle('owner')).toMatch(/^You're an owner · /);
         expect(manageSubtitle('admin')).toMatch(/^You're an admin · /);
         expect(manageSubtitle('moderator')).toMatch(/^You're a moderator · opens the reports/);
+    });
+
+    it('names the row beside it for what it does: this community, from a computer (Moderate for a moderator)', () => {
+        expect(computerSigninLabel('owner')).toBe('Manage this community from a computer');
+        expect(computerSigninLabel('admin')).toBe('Manage this community from a computer');
+        expect(computerSigninLabel('moderator')).toBe('Moderate this community from a computer');
     });
 
     it('passes a moderator through, so the button shows for them', async () => {

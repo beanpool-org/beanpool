@@ -35,7 +35,7 @@ When you are done, **← App** at the top right (in full, **← Back to the Bean
 To use Settings on a computer's bigger screen without the password:
 
 - First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.
-- Then, in the phone app, open **Settings** and tap **Sign in on a computer** (next to Manage or Moderate; owners, admins and moderators only). Point the camera at the QR code.
+- Then, in the phone app, open **Settings** and tap **Manage this community from a computer**, next to Manage. A moderator's says **Moderate this community from a computer**, next to Moderate. Older apps say **Sign in on a computer**. Owners, admins and moderators only. Point the camera at the QR code.
 - The phone shows the 6-character code, your community and which browser asked (for example "Firefox on Windows"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.
 - Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you.
 
@@ -46,6 +46,7 @@ Good to know:
 - The app only accepts a code from its own community. A code from another server is refused, and the phone says which one it was.
 - Five refused tries on one code (wrong key, no role in this community, wrong 6-digit code) use it up.
 - Each approval is written to the server's log, with who approved it and which browser signed in.
+- Your key stays on the phone. This is not **Use your account on another device** (older apps: **Link Another Device**), which copies your own account to a browser to use BeanPool there as you.
 
 ## Whose sign-in it is
 

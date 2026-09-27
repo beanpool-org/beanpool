@@ -26,7 +26,9 @@
  *   - the event page's own read (fetchEventDetail, by id with no `sync`), which changes nothing on the node, writes the
  *     event as the node has it over the held row; the next delta takes it off again (a member Going, and one who came
  *     from a shared link with no RSVP), and the one after an idle one; the read counts until the phone's cursor passes
- *     it, then the deltas are idle again. A poll vote does the same with the vote's answer, and the next delta too;
+ *     it, then the deltas are idle again; opened again after that, with nothing written on the node in between (the
+ *     platform's HTTP cache sends the first read's ETag), the next delta takes it off again. A poll vote does the same
+ *     with the vote's answer, and the next delta too;
  *   - the author's own phone, a keeper's of the enterprise, and a member with an open deal on the listing keep it as it
  *     is; the member withdraws the request: the next delta carries the listing as paused, but the heal in the same sync
  *     puts it back, and the delta after that takes it off their phone; the same after a cold start;
@@ -172,11 +174,33 @@ class Phone {
     }
 
     /**
-     * The event page's own read (utils/db.ts fetchEventDetail): by id with no `sync`, written over the held row by
-     * persistEventView (`status = COALESCE(?, status)`, `updated_at` likewise, and the event's columns).
+     * The platform's HTTP cache under the app's fetch (RN 0.83.6: OkHttp's disk cache on Android, NSURLCache on iOS), for
+     * the event page's URL, which never changes: it keeps the last 200 with its ETag, sends that ETag as `If-None-Match`
+     * on the next GET of the URL by itself, and hands the app the stored body on a 304. A delta's URL carries a new
+     * cursor each sync, so the cache never revalidates one.
+     */
+    private httpCache = new Map<string, { etag: string; body: string }>();
+    /** The last event page's read: the ETag this phone's cache sent, and the one the node answered with. */
+    eventPageEtags: { sent?: string; answered?: string } = {};
+
+    /**
+     * The event page's own read (utils/db.ts fetchEventDetail): by id with no `sync`, through the platform's cache, written
+     * over the held row by persistEventView (`status = COALESCE(?, status)`, `updated_at` likewise, and the event's columns).
      */
     async openEventDetail(postId: string): Promise<any> {
-        const post = (await getJson(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`, this.id))[0];
+        const path = `/api/marketplace/posts?id=${encodeURIComponent(postId)}`;
+        const stored = this.httpCache.get(path);
+        const res = await fetch(`${BASE}${path}`, {
+            headers: { ...signedHeaders('GET', path, '', this.id), ...(stored ? { 'If-None-Match': stored.etag } : {}) },
+        });
+        let raw: string;
+        if (res.status === 304 && stored) raw = stored.body;
+        else if (res.status === 200) raw = await res.text();
+        else throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
+        const etag = res.headers.get('etag') ?? undefined;
+        if (res.status === 200 && etag) this.httpCache.set(path, { etag, body: raw });
+        this.eventPageEtags = { sent: stored?.etag, answered: etag };
+        const post = JSON.parse(raw)[0];
         const held = this.rows.get(postId);
         if (post?.type === 'event' && held) {
             this.rows.set(postId, {
@@ -385,6 +409,43 @@ async function main() {
     await laterPhone.sync();
     assert(!laterPhone.applied.posts, 'and the delta after that is the page before: the gate skips it again');
     await matchesBoard(laterPhone, 'Carol\'s other phone, a quarter of an hour of syncs after the event page');
+
+    // The next day she opens the event page again, with nothing written on the node since. Her phone's platform cache
+    // sends the first read's ETag by itself and, on a 304, hands the app its stored body, with the event `active`. The
+    // node answers a signed by-id read that isn't a sync in full, so the read is noted like the first. (Her phone's clock
+    // ran ahead only to age the first read; it is right again from here, and one sync moves her cursor back to now.)
+    laterPhone.clockAheadMs = 0;
+    await laterPhone.sync();
+    await laterPhone.openEventDetail(seedSwap);
+    const { sent, answered } = laterPhone.eventPageEtags;
+    assert(!!sent && sent === answered,
+        `Carol opens the event page again: her phone sends the first read's ETag, and nothing on the node has changed since (sent ${sent}, node's ${answered})`);
+    assert(laterPhone.rows.get(seedSwap)?.status === 'active',
+        `the event page writes the event over the held row as active (status ${laterPhone.rows.get(seedSwap)?.status})`);
+    const reopenedDelta = await laterPhone.sync();
+    assert(reopenedDelta.some(r => r.id === seedSwap && r.status === 'paused' && typeof r.resentAt === 'string') && laterPhone.applied.posts,
+        'the next delta carries the event again, as paused, and the gate applies it');
+    const reopened = await matchesBoard(laterPhone, 'Carol opened the event page again the next day, next delta');
+    assert(!reopened.has(seedSwap), 'Hana\'s event is off her phone\'s Market again');
+    // Only that read skips the 304: asked twice with nothing written in between, every other read is confirmed.
+    const revalidated = async (path: string, id: Id | null): Promise<number> => {
+        const first = await fetch(`${BASE}${path}`, { headers: id ? signedHeaders('GET', path, '', id) : {} });
+        await first.text();
+        const again = await fetch(`${BASE}${path}`, {
+            headers: { ...(id ? signedHeaders('GET', path, '', id) : {}), 'If-None-Match': first.headers.get('etag') ?? '' },
+        });
+        return again.status;
+    };
+    const stillConfirmed: [string, string, Id | null][] = [
+        ['the board', `/api/marketplace/posts?limit=200&${TYPES}`, carol],
+        ['a delta', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, carol],
+        ['the by-id refresh of a sync (getPost)', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}&sync=true`, carol],
+        ['an unsigned read of the event by id', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, null],
+    ];
+    for (const [what, path, id] of stillConfirmed) {
+        const status = await revalidated(path, id);
+        assert(status === 304, `${what}, asked again with its ETag and nothing changed, is still a 304 (got ${status})`);
+    }
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
     // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.

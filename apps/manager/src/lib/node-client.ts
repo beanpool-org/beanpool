@@ -2239,7 +2239,7 @@ export async function emergencySuspendMember(
     reason: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<{ success: boolean; decision?: { id: string; closesAt: string } }> {
+): Promise<{ success: boolean; decision?: { id: string; closesAt: string; params?: { noVote?: boolean } } }> {
     return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason }, adminPassword, tfaToken);
 }
 

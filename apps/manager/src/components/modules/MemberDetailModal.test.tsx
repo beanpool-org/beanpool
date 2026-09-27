@@ -282,6 +282,31 @@ describe('MemberDetailModal', () => {
         expect(onChanged).toHaveBeenCalled();
     });
 
+    it('on a node with no formal votes (global), the suspension says when it lifts and mentions no vote', async () => {
+        vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
+            success: true,
+            decision: { id: 'dec-2', closesAt: '2026-09-26T00:00:00.000Z', params: { noVote: true } },
+        });
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, status: 'active' }}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
+                adminPassword="pw"
+                onSuspensionChanged={vi.fn()}
+            />
+        );
+
+        await userEvent.click(screen.getByText('⏸️ Suspend'));
+        await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'a reason members can read');
+        await userEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
+
+        expect(await screen.findByText(/^Suspended until .+\. It lifts by itself then, or sooner if you lift it\.$/)).toBeInTheDocument();
+        expect(screen.queryByText(/vote/i)).toBeNull();
+    });
+
     it('a suspended member can have the suspension lifted', async () => {
         const lift = vi.spyOn(nodeClient, 'liftMemberSuspension').mockResolvedValue({ success: true });
         render(

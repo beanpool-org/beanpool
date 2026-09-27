@@ -69,7 +69,7 @@ import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { restartSidecar } from './public-address-agent.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
-import { getReplacedInfo, type ReplacedInfo } from './identity-epoch.js';
+import { getReplacedInfo, forgetSyncEpochHeaderValue, type ReplacedInfo } from './identity-epoch.js';
 import {
     getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
 } from '../config/node-profile.js';
@@ -743,6 +743,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 nodeRole: 'primary', promotionAuditPending: true,
                 identityEpoch: epoch, identityEpochSince: j.startedAt, identityReplaced: null,
             });
+            forgetSyncEpochHeaderValue();
             return `nodeRole = primary (local-config.json, over NODE_ROLE in .env); identity epoch ${epoch}`;
         }
         case 'pull-config': {

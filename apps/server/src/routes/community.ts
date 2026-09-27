@@ -58,6 +58,7 @@ import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { probationSummary } from '../engine/probation.js';
+import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
 import { respondIfMuted, isNote } from './profile-feature-gate.js';
 import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
@@ -1811,6 +1812,8 @@ router.get('/api/members', async (ctx) => {
     // With faces behind a member-only key (G9a-2, engine/avatar-keys.ts) the body holds those keys, so no shared cache
     // may keep it either.
     ctx.set('Cache-Control', point || avatarKeysRequired() ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
+    // A phone's delta read says which identity epoch answered it, as the posts sync read does (services/identity-epoch.ts).
+    if (ctx.query.updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {

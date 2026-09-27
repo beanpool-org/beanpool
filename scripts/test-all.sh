@@ -362,6 +362,8 @@ run_federation_suites() {
       test-takeover-by-phone
       test-takeover-keeps-app-addresses
       test-takeover-split-brain
+      test-sync-reads-carry-epoch
+      test-takeover-keeps-listing-times
       test-profile-takeover
       test-open-join-failover
       test-standby-visitor-marks

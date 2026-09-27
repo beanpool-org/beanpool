@@ -68,9 +68,11 @@ function warnDroppedEnvEntry(entry: string): void {
     warnedEnvEntries.add(entry);
     const ascii = domainToASCII(entry);
     const punycode = ascii && ascii !== entry.toLowerCase() && normalizeAddress(ascii) ? ` (here, ${ascii})` : '';
+    const bracketed = `[${entry}]`;
+    const ipv6 = !entry.startsWith('[') && entry.split(':').length > 2 && normalizeAddress(bracketed) ? ` An IPv6 address is written in brackets: ${bracketed}.` : '';
     logger.warn('AUTH', `BEANPOOL_ADDRESSES: ${JSON.stringify(entry)} is not an address, so it is left out, and members' apps `
         + `that reach this community by it are refused. A name with letters outside a-z must be written in its punycode `
-        + `form, xn--…${punycode}; a port is digits only.`);
+        + `form, xn--…${punycode}; a port is digits only.${ipv6}`);
 }
 
 function envAddresses(): string[] {

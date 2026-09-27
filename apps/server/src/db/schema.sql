@@ -805,6 +805,29 @@ CREATE INDEX IF NOT EXISTS idx_moderation_notices_recipient ON moderation_notice
 CREATE INDEX IF NOT EXISTS idx_moderation_notices_created_at ON moderation_notices(created_at);
 CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notices(updated_at);
 
+-- 14h. A member's block list (engine/member-blocks.ts), kept by the community for the account (Marty's card
+-- web-blocklist-where, 2026-09-27), so the web app has it back on any browser after signing in and leaves nothing about it
+-- on a shared computer.
+--
+-- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own); nothing else here reads it, sends it or
+-- counts it for anyone: not another member, a visitor, the activity feed or a broadcast. The community's operator can see
+-- it, as they see reports. `blocked_pubkey` is any key in the one spelling, a member's or not, never the owner's own. At
+-- most 500 per member (MEMBER_BLOCKS_MAX). Replicated to a standby (SyncPayload.memberBlocks, watermarked on
+-- `updated_at`), with a `member_blocks` tombstone keyed `<owner>|<blocked>` for each removal (an unblock, a clear, a prune,
+-- a self-deletion, a re-key's old key), stamped no earlier than the row, and a block made again stamped after that
+-- tombstone, so an unblock never comes back and a block made again does. Carried in file and sealed backups. Goes with
+-- the member on a prune or a self-deletion; a re-key moves both the owner's list and every block of the old key.
+CREATE TABLE IF NOT EXISTS member_blocks (
+    owner_pubkey TEXT NOT NULL CHECK (length(owner_pubkey) = 64 AND owner_pubkey NOT GLOB '*[^0-9a-f]*'),
+    blocked_pubkey TEXT NOT NULL CHECK (length(blocked_pubkey) = 64 AND blocked_pubkey NOT GLOB '*[^0-9a-f]*'),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (owner_pubkey, blocked_pubkey),
+    CHECK (owner_pubkey != blocked_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_member_blocks_blocked ON member_blocks(blocked_pubkey);
+CREATE INDEX IF NOT EXISTS idx_member_blocks_updated_at ON member_blocks(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

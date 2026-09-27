@@ -17,6 +17,7 @@ import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
+import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer } from './member-blocks.js';
 import {
     mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
     type ReplicatedRekey,
@@ -401,6 +402,14 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
+        // A key a member unblocked, or a list gone with a clear, a prune, a self-deletion or a re-key's old key
+        // (engine/member-blocks.ts). A block made again is stamped after this tombstone, so the lookup below keeps it.
+        case 'member_blocks': {
+            const cut = rowKey.indexOf('|');
+            if (cut <= 0) return false;
+            const r = db.prepare(`DELETE FROM member_blocks WHERE owner_pubkey=? AND blocked_pubkey=?`).run(rowKey.slice(0, cut), rowKey.slice(cut + 1));
+            return r.changes > 0;
+        }
         // A member's recovery copies the main server deleted (engine/recovery-shares.ts deleteAllShares): of this
         // generation or an older one, and stamped no later than the deletion, so a copy it holds now stays. No lookup
         // below: a later copy must not keep the older ones, so each row is judged by itself.
@@ -481,6 +490,14 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
         }
         case 'members': {
             const r = db.prepare(`SELECT updated_at AS ts FROM members WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        // A block made again after an unblock is stamped after the unblock's tombstone, and must not be deleted by it.
+        case 'member_blocks': {
+            const cut = rowKey.indexOf('|');
+            if (cut <= 0) return null;
+            const r = db.prepare(`SELECT updated_at AS ts FROM member_blocks WHERE owner_pubkey=? AND blocked_pubkey=?`)
+                .get(rowKey.slice(0, cut), rowKey.slice(cut + 1)) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         default:
@@ -636,7 +653,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'invalidatedKeys', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'memberBlocks', 'invalidatedKeys', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1496,6 +1513,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // past the bounds whatever this copy says of them. A bad row is left out, never the copy. A main server
             // older than this sends none and changes nothing here.
             if (remote.moderationNotices) mergeReplicatedNotices(remote.moderationNotices);
+
+            // Each member's block list (engine/member-blocks.ts), so a server that takes over still hides whom each member
+            // blocked. After the members, because a list is kept only for a member this database has; before the
+            // tombstones, which delete an unblocked row whatever this copy says of it, and keep a block made again after
+            // them. A bad row is left out, never the copy. The first copy that carries lists asks this standby's puller for
+            // one whole copy, for the blocks made while it ran a version without them. A main server older than this sends
+            // none and changes nothing here.
+            if (Array.isArray(remote.memberBlocks)) {
+                mergeReplicatedBlocks(remote.memberBlocks);
+                noteMemberBlocksFromMainServer();
+            }
 
             // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
             // has them. After the members, because an approved row's invite is made again here only by a member this

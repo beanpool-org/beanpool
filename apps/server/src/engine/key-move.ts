@@ -21,7 +21,7 @@ function hasStamp(table: string): boolean {
 /**
  * Every row that names the old key names the new one: the whole re-key but the old key's own `invalidated_keys` row,
  * the re-key's bookkeeping, and what the main server moves by rules of its own (the recovery copies, which it wraps
- * again; place watches, knocks and kept notices), each stamped there so a standby's copy carries the move.
+ * again; place watches, knocks, kept notices and block lists), each stamped there so a standby's copy carries the move.
  *
  * On the main server (`keepStamps: false`), inside completeRekey's conservingTransaction: each row is stamped as any
  * change is (the touch triggers, db/schema.sql), so a standby's next copy carries the move. `at` stamps the member's own

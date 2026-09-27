@@ -35,6 +35,7 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { dropBlocksOf } from './engine/member-blocks.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
@@ -6699,6 +6700,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
         scrubKnocksOf(publicKey);
         // The moderation notices kept for them: nobody can read them now (engine/kept-notices.ts).
         dropKeptNoticesOf(publicKey);
+        // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
+        // their owners' and stay.
+        dropBlocksOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -6847,6 +6851,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         dropKeptNoticesOf(publicKey);
+        // Their block list goes with the profile, each row tombstoned so a standby deletes it too (engine/member-blocks.ts).
+        dropBlocksOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
@@ -7485,7 +7491,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'tombstones',
+        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'member_blocks', 'tombstones',
         // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
         // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
         ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),

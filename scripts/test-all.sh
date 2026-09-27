@@ -365,6 +365,7 @@ run_federation_suites() {
       test-profile-takeover
       test-open-join-failover
       test-standby-visitor-marks
+      test-standby-owner-deleted
       test-place-watch-failover
       test-standby-rekey
       test-recovery-tombstones

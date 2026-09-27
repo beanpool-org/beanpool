@@ -759,7 +759,8 @@ export default function WelcomeScreen() {
                 try {
                     const availability = await checkCallsignAvailable(callsign.trim(), storedIdentity?.publicKey, nodeUrl, { signal: nameCheck.signal });
                     if (availability === 'taken') {
-                        const sugg = await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, 32, { signal: nameCheck.signal });
+                        // No longer than the redeem keeps, as the field is: a tapped suggestion is sent as it was checked and shown.
+                        const sugg = await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal });
                         setCallsignSuggestions(sugg);
                         setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
                         return;
@@ -2031,7 +2032,7 @@ export default function WelcomeScreen() {
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
                             onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
-                            maxLength={32}
+                            maxLength={MAX_JOIN_NAME}
                             autoFocus={true}
                             autoCapitalize="words"
                             accessibilityLabel="Your name or nickname"

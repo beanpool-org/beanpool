@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 63,
-  "hash": "e173b1ec24b744481b50aa93dea21a25ad46805753a03d06ba77524be1fa6cbf",
+  "version": 64,
+  "hash": "1fbc72a2b8f2f13114a65c48bcca9b82f5e0bc94564074cabb761c76525497c5",
   "sections": [
     {
       "id": "about",
@@ -1572,7 +1572,7 @@
             "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
             "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.",
             "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.",
-            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Sign in on a computer** and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**."
+            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**."
           ]
         },
         {
@@ -1843,7 +1843,7 @@
             "Getting your account back with a sign-in on a community other than the global one. There, your 12 words bring it back, or linking from the phone app if your account is on your phone too.",
             "The Pulse's **Learn** lane.",
             "The phone's app lock.",
-            "Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**)."
+            "Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Manage this community from a computer**; older apps: **Sign in on a computer**)."
           ]
         },
         {
@@ -1854,7 +1854,7 @@
           "type": "ul",
           "items": [
             "In the web app on the computer, choose to link with the mobile app. It shows a QR code.",
-            "On the phone, open **Settings** and tap **Link Another Device**.",
+            "On the phone, open **Settings** and tap **Use your account on another device** (older apps: **Link Another Device**).",
             "Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that."
           ]
         },

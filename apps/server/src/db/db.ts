@@ -364,6 +364,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN bytes INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN mime TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
+    // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
+    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
     try {
         const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
         if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {

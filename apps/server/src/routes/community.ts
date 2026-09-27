@@ -22,7 +22,7 @@ import {
     recordActivity,
     markConversationRead, getUnreadCounts,
     exportLedgerAudit,
-    registerPushToken, removePushToken,
+    registerPushToken, removePushToken, applyPushLeave,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
     dispatchPushNotification,
@@ -38,7 +38,7 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { publishedAddresses } from '../engine/own-addresses.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
@@ -1491,10 +1491,16 @@ router.get('/api/ledger/export', async (ctx) => {
 // ===================== PUSH NOTIFICATION TOKENS =====================
 
 router.post('/api/push-tokens', async (ctx) => {
-    const { publicKey, token, platform } = (ctx as any).requestBody || {};
+    const { publicKey, token, platform, registeredAt } = (ctx as any).requestBody || {};
     if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
+        return;
+    }
+    // The phone's stamp for this registration (state-engine.ts registerPushToken); none from an app before it.
+    if (registeredAt !== undefined && registeredAt !== null && !isPushLeaveStamp(registeredAt)) {
+        ctx.status = 400;
+        ctx.body = { error: 'registeredAt must be a positive whole number' };
         return;
     }
     const activeKey = ctx.state.actor as string | undefined;
@@ -1503,7 +1509,14 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const success = registerPushToken(activeKey, token, platform || 'ios');
+    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null);
+    if (registration === 'left') {
+        // Sent before this key's leave statement for the token and delivered after it: the phone no longer wants it.
+        ctx.status = 409;
+        ctx.body = { error: 'This phone left this account after sending this registration', code: 'push_token_left' };
+        return;
+    }
+    const success = registration === 'registered';
     // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
     // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
     if (success) {
@@ -1531,6 +1544,45 @@ router.delete('/api/push-tokens', async (ctx) => {
     }
     const success = removePushToken(activeKey, token);
     ctx.body = { success };
+});
+
+/** A leave statement this route will never act on, whoever presents it again: the phone stops presenting it. */
+const PUSH_LEAVE_REFUSED = 'push_leave_refused';
+
+/**
+ * A phone's leave statement for the account that left it (apps/native utils/push-leave.ts): "key K no longer wants push
+ * token T here", signed by K as it left (@beanpool/core `pushLeaveText`), and presented, unsigned, until this community
+ * confirms it. The phone may have no key by then, or another account's, which must not be linked to K here.
+ *
+ * Anyone who holds a statement can present it, and it only ever does what K asked: K's row for T goes, here only, and
+ * only when that registration is not later than the statement (state-engine.ts applyPushLeave), so K signing back in on
+ * the same phone is never undone by an older statement. K is in the path; the request's own signature, if any, is never
+ * read (https-server.ts isSignatureBypassed). The answer says only whether the statement was taken.
+ */
+router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
+    const { token, leftAt, signature, signedFor } = (ctx as any).requestBody || {};
+    const key = provenKeySpelling(ctx.params.publicKey);
+    if (!key || key !== ctx.params.publicKey || !isPushLeaveToken(token) || !isPushLeaveStamp(leftAt)
+        || typeof signature !== 'string' || typeof signedFor !== 'string' || !signedFor) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a leave statement', code: PUSH_LEAVE_REFUSED };
+        return;
+    }
+    const proof = verifyStatementSignature({
+        signature,
+        pubKeyHex: key,
+        boundText: (host) => pushLeaveText(host, key, token, leftAt),
+        signedFor,
+        oldTexts: [],
+    });
+    if (!proof.ok) {
+        // Another community's statement (421) may still be this one's under a name it doesn't know yet: kept by the phone.
+        ctx.status = proof.status;
+        ctx.body = proof.status === 421 ? { error: proof.error, code: proof.code } : { error: proof.error, code: PUSH_LEAVE_REFUSED };
+        return;
+    }
+    applyPushLeave(key, token, leftAt);
+    ctx.body = { left: true };
 });
 
 // ===================== MEMBER NOTIFICATION PREFERENCES =====================

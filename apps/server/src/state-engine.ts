@@ -7676,17 +7676,65 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
  * Adds this key's row for the device token and touches no other key's row. Every community a phone registered with
  * holds its token, so a take-over by token would let any of them remove a member's rows and silence their recovery
  * alerts (#1184 review 4110460184). The phone removes a leaving account's rows itself, signed by that account's key
- * (apps/native utils/account-leaves-phone.ts). The key is the request's signer (routes/community.ts).
+ * (apps/native utils/account-leaves-phone.ts), with a DELETE or a leave statement ({@link applyPushLeave}). The key is
+ * the request's signer (routes/community.ts).
+ *
+ * `registeredAt` is the phone's own stamp for this registration (null from an app before leave statements), ordered
+ * only against the same phone's leave statements, never against this node's clock. A registration stamped no later than
+ * a leave statement for the same key and token applied here in the last day is refused ('left'): the phone sent it
+ * before the account left and it arrived after the statement. A registration never replaces the row's stamp with an
+ * earlier one, so one delivered late can't bring the row back within reach of a statement made after a later one.
  */
-export function registerPushToken(publicKey: string, token: string, platform: string = 'ios'): boolean {
+export function registerPushToken(
+    publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null,
+): PushRegistration {
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)`).run(publicKey, token, platform);
-        console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
-        return true;
+        return db.transaction((): PushRegistration => {
+            if (registeredAt !== null) {
+                const left = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ? AND left_at >= ?
+                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, token, registeredAt, PUSH_LEAVE_REMEMBERED);
+                if (left) {
+                    console.log(`[Push] A registration for ${publicKey.slice(0, 8)} from before its leave statement arrived late; not registered`);
+                    return 'left';
+                }
+            }
+            db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (public_key, token) DO UPDATE SET
+                    platform = excluded.platform, created_at = excluded.created_at, registered_at = excluded.registered_at
+                WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
+                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
+            console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
+            return 'registered';
+        })();
     } catch (e) {
         console.error('[Push] Failed to register token:', e);
-        return false;
+        return 'failed';
     }
+}
+
+export type PushRegistration = 'registered' | 'left' | 'failed';
+
+/** How long a leave statement applied here refuses a registration the phone sent before it (SQLite date modifier). */
+const PUSH_LEAVE_REMEMBERED = '-1 day';
+
+/**
+ * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
+ * key's row for `token` goes when its stamp is not later than `leftAt`, or it has none (an app from before leave
+ * statements). A row stamped later is a registration made after the leave, on purpose (the same account back on the
+ * same phone), and stays. No other key's row and no other token's is touched. For a day, a registration of the same key
+ * and token stamped no later than `leftAt` is refused ({@link registerPushToken}). Returns how many rows went (0 or 1).
+ */
+export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
+    return db.transaction((): number => {
+        db.prepare(`DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).run(PUSH_LEAVE_REMEMBERED);
+        const removed = db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)`)
+            .run(publicKey, token, leftAt).changes;
+        db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)
+            ON CONFLICT (public_key, token) DO UPDATE SET
+                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, token, leftAt);
+        console.log(`[Push] Leave statement for ${publicKey.slice(0, 8)}: ${removed} registration(s) removed`);
+        return removed;
+    })();
 }
 
 export function removePushToken(publicKey: string, token?: string): boolean {

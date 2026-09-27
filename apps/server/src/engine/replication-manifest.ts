@@ -287,6 +287,10 @@ export const TABLES: Record<string, TableEntry> = {
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
+    push_token_leaves: {
+        kind: 'local',
+        reason: "a day's record of leave statements applied here, only for a registration delivered late; the fix for G4 carries it with push_tokens",
+    },
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },

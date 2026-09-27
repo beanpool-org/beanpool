@@ -92,14 +92,15 @@ interface Sent {
 /**
  * The phone's communities: each keeps push rows by (key, token) with the phone's stamp, and the leaves it applied, as
  * the server does. `answer` decides what a request meets on the way: 'up', 'down' (a network error), a status the
- * community answers without acting (e.g. 421, 500), or 'hold' (it waits until released, then acts).
+ * community answers without acting (e.g. 421, 500), 'hold' (it waits until released, then acts), or 'portal' (a captive
+ * portal answers 200 with its sign-in page, and the community never sees it).
  */
 class Communities {
     rows = new Map<string, Map<string, number | null>>();
     leaves = new Map<string, Map<string, number>>();
     sent: Sent[] = [];
     log: string[] = [];
-    answer: (s: Sent) => 'up' | 'down' | 'hold' | number = () => 'up';
+    answer: (s: Sent) => 'up' | 'down' | 'hold' | 'portal' | number = () => 'up';
     held: Array<() => void> = [];
 
     constructor() {
@@ -113,6 +114,7 @@ class Communities {
             this.sent.push(s);
             const a = this.answer(s);
             if (a === 'down') throw new TypeError('Network request failed');
+            if (a === 'portal') return new Response('<html><body>Sign in to the Wi-Fi</body></html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
             if (typeof a === 'number') return new Response(JSON.stringify({ error: 'not now' }), { status: a });
             if (a === 'hold') await new Promise<void>((resolve) => this.held.push(resolve));
             return this.act(s, `${url.origin}${url.pathname}`);
@@ -316,6 +318,27 @@ describe('Sign Out with no connection', () => {
         await presentLeaveStatements();
 
         expect(stored().map((s) => s.community)).toEqual([first.community === MULLUM ? BYRON : MULLUM]);
+    });
+
+    it('a 2xx that isn\'t the community\'s own answer (a captive portal\'s sign-in page, or any other body) crosses nothing off', async () => {
+        await kimRegisteredAtMullumAndByron();
+        // Behind a captive portal: every request, the DELETEs too, is answered 200 with its page and reaches no community.
+        nodes.answer = () => 'portal';
+        await signOutOfThisPhone(kim);
+        expect(stored().map((s) => s.community).sort()).toEqual([BYRON, MULLUM]);
+        await presentLeaveStatements();
+        expect(stored().map((s) => s.community).sort()).toEqual([BYRON, MULLUM]);
+        // A 200 that says anything else is no confirmation either.
+        nodes.answer = () => 200;
+        await presentLeaveStatements();
+        expect(stored().map((s) => s.community).sort()).toEqual([BYRON, MULLUM]);
+        expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(BYRON, kim.publicKey)).toBe(true);
+
+        // Through to the communities themselves: confirmed, and her rows go.
+        nodes.answer = () => 'up';
+        await presentLeaveStatements();
+        expect(nodes.has(MULLUM, kim.publicKey) || nodes.has(BYRON, kim.publicKey)).toBe(false);
+        expect(await pendingLeaveStatements()).toEqual([]);
     });
 
     it('online, the signed DELETE carries the leave\'s stamp and each community that takes it has its statement crossed off', async () => {

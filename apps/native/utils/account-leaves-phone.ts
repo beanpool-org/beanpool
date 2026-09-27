@@ -85,7 +85,8 @@ export async function communitiesOnThisPhone(storage: Storage = AsyncStorage): P
 
 /**
  * One community's DELETE /api/push-tokens, signed by the leaving key. Never throws; gives up at the deadline. True when
- * the community answered that it took it.
+ * the community answered that it took it, in the route's own words (`{ success: true }`): any other 2xx, a captive
+ * portal's sign-in page on a plain-http address say, never reached it.
  */
 async function unregisterAt(community: string, body: string, account: LeavingAccount, timeoutMs: number): Promise<boolean> {
     const controller = new AbortController();
@@ -101,8 +102,10 @@ async function unregisterAt(community: string, body: string, account: LeavingAcc
             const url = `${community}${PUSH_TOKENS_PATH}`;
             const headers = await buildSignedHeaders('DELETE', url, body, account.privateKey, account.publicKey);
             const res = await fetch(url, { method: 'DELETE', headers, body, signal: controller.signal });
-            if (!res.ok) console.warn(`[Push] ${community} did not unregister this phone (${res.status})`);
-            return res.ok;
+            const answer: { success?: unknown } | undefined = await res.json().catch(() => undefined);
+            const took = res.ok && answer?.success === true;
+            if (!took) console.warn(`[Push] ${community} did not unregister this phone (${res.status})`);
+            return took;
         } catch (e) {
             console.warn(`[Push] Could not reach ${community} to unregister this phone:`, e instanceof Error ? e.message : e);
             return false;

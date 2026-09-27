@@ -192,7 +192,11 @@ export async function confirmLeave(statement: LeaveStatement, storage: Storage =
 
 type Presented = 'confirmed' | 'refused' | 'kept';
 
-/** One statement, unsigned, to its own community. Never throws; gives up at `timeoutMs`. */
+/**
+ * One statement, unsigned, to its own community. Confirmed only by the route's own answer (`{ left: true }`): any other
+ * 2xx, a captive portal's sign-in page on a plain-http address say, never reached it. Never throws; gives up at
+ * `timeoutMs`.
+ */
 async function presentOne(s: LeaveStatement, timeoutMs: number): Promise<Presented> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -201,14 +205,14 @@ async function presentOne(s: LeaveStatement, timeoutMs: number): Promise<Present
         const res = await fetch(`${s.community}${LEAVE_PATH}/${s.publicKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal,
         });
-        if (res.ok) return 'confirmed';
-        let code: unknown;
+        let answer: { left?: unknown; code?: unknown } | undefined;
         try {
-            code = (await res.json())?.code;
+            answer = await res.json();
         } catch {
-            code = undefined;
+            answer = undefined;
         }
-        if (code === REFUSED_FOR_GOOD) {
+        if (res.ok && answer?.left === true) return 'confirmed';
+        if (!res.ok && answer?.code === REFUSED_FOR_GOOD) {
             console.warn(`[Push] ${s.community} will never take this leave statement (${res.status}); dropped`);
             return 'refused';
         }

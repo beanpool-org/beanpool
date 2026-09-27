@@ -28,7 +28,26 @@ const StorageKeysConfig = {
     ACCOUNTS: 'accounts',
     TRANSACTIONS: 'transactions',
     SYNC_CHECKPOINT: 'checkpoint',
+    IDENTITY_EPOCH: 'identity-epoch',
 };
+
+/**
+ * The node's identity epoch, which its sync reads carry (apps/server services/identity-epoch.ts). A take-over raises
+ * it, and the promoted server never had what the old main server wrote after its standby's last copy (up to a minute):
+ * a listing made then would stay on this phone's Market for good, since no tombstone will ever come, and an edit made
+ * then would stay until the listing next changed. So when the epoch changes, this node's cursors and fingerprints go
+ * and the cycle is a whole sync: the posts pulled whole replace the cache (utils/db.ts `dropPostsTheNodeNoLongerHas`),
+ * and the directory is fetched whole, which already drops anyone the node no longer has. No header (a node from
+ * before this) changes nothing.
+ */
+export const EPOCH_HEADER = 'X-BeanPool-Epoch';
+
+/** The epoch a response says answered it, or null when it says none. */
+export function epochOf(res: { headers?: { get?(name: string): string | null } } | null | undefined): string | null {
+    const raw = res?.headers?.get?.(EPOCH_HEADER);
+    const epoch = typeof raw === 'string' ? raw.trim() : '';
+    return /^\d+$/.test(epoch) ? epoch : null;
+}
 
 export async function getSyncCursorKey(keyId: string): Promise<string> {
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -279,10 +298,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         onProgress?.(2, 5, 'Synchronizing Members & Profiles...');
+        const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
+        const kEpoch = await getSyncCursorKey(StorageKeysConfig.IDENTITY_EPOCH);
         let lastSyncParam = '';
         let incrementalSinceIso = '';
         try {
-            const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
             const lastSync = await AsyncStorage.getItem(kLastSync);
             if (lastSync) {
                 // Incorporate a 5-minute time buffer to account for clock drift between client and server
@@ -305,7 +325,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             console.error('[Pillar Sync] Failed to query local members count', e);
         }
 
-        const shouldFetchMembers = !lastMembersSync ||
+        let shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0;
 
@@ -324,7 +344,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 localPostsCount = postsRow?.count || 0;
             } catch (e) {}
         }
-        const postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
+        let postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
         const postsSyncParam = postsIsIncremental ? lastSyncParam : '';
 
         // Each request gets its own 30s budget (extended for heavy initial payloads), started when
@@ -339,14 +359,37 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const rawGated = new Set<string>();
 
         let postsData: any;
+        // The node's identity epoch as this pull found it, and as this phone last stored it (EPOCH_HEADER).
+        let epochNow: string | null = null;
+        let epochHeld: string | null = null;
+        let takenOver = false;
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true&${EVENT_TYPES_QUERY}${postsSyncParam}`, {
+            const pullPosts = (cursor: string) => fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true&${EVENT_TYPES_QUERY}${cursor}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: timeouts.signal(30000)
             });
+            let postsRes = await pullPosts(postsSyncParam);
+            epochNow = epochOf(postsRes);
+            epochHeld = epochNow === null ? null : await AsyncStorage.getItem(kEpoch);
+            takenOver = epochNow !== null && epochHeld !== null && epochHeld !== epochNow;
+            if (takenOver) {
+                // Another server took over this node. Its cursors and fingerprints describe the old one: they go,
+                // and the rest of this cycle is a whole sync. The new epoch is stored only once that has landed.
+                console.warn(`[Pillar Sync] ${anchorUrl} answers identity epoch ${epochNow}, not ${epochHeld}: another server took over. Syncing it whole.`);
+                await AsyncStorage.removeItem(kLastSync);
+                await AsyncStorage.removeItem(kLastMembersSync);
+                forgetFingerprintsOf(anchorUrl);
+                lastSyncParam = '';
+                incrementalSinceIso = '';
+                shouldFetchMembers = true;
+                if (postsIsIncremental) {
+                    postsIsIncremental = false;
+                    postsRes = await pullPosts('');
+                }
+            }
             if (!postsRes.ok) {
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
@@ -395,9 +438,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // (e.g. applyDelta's node-switch contamination guard returned early) would be
         // treated as applied and skipped forever.
         const earlyApplied = new Set<string>();
-        if (!postsIsIncremental && Array.isArray(postsData) && postsData.length > 0) {
+        // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
+        let postsReplaced = false;
+        if (!postsIsIncremental && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
             try {
-                await applyDelta({ posts: postsData, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                await applyDelta({ posts: postsData, ...(takenOver ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                postsReplaced = takenOver;
                 earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
@@ -625,6 +671,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
         // The full-directory GC flag must travel with the members table it describes.
         if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
+        // So must the take-over's replace, when the early write above did not land and the posts come in the batch.
+        if (gatedDelta.posts && takenOver) gatedDelta.postsReplace = true;
         // Listings the node pushed while this cycle was in flight. Its posts pull may have left before them, and
         // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
         // Not a table: never fingerprinted, never a reason to tell the screens something changed.
@@ -635,6 +683,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         if (Object.keys(gatedDelta).length > 0) {
             try {
                 await applyDelta(gatedDelta, expectedDbName);
+                if (gatedDelta.postsReplace) postsReplaced = true;
             } catch (applyErr) {
                 // parseIfChanged / the stringify gate already recorded these payloads'
                 // fingerprints as "applied". If the write actually failed (e.g. a DB
@@ -662,10 +711,14 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Step 3: Success — save timestamp
-        const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
         await AsyncStorage.setItem(kLastSync, String(Date.now()));
         await AsyncStorage.removeItem(kCheckpoint);
+        // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
+        // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.
+        if (epochNow !== null && epochNow !== epochHeld && (!takenOver || postsReplaced)) {
+            await AsyncStorage.setItem(kEpoch, epochNow);
+        }
 
         // A completed pillar cycle means the marketplace posts have actually been fetched
         // and written — the true "the market has loaded" signal, as opposed to a fast
@@ -735,6 +788,13 @@ const _lastAppliedFingerprints: Record<string, number> = {};
 export function resetSyncFingerprints() {
     for (const key of Object.keys(_lastAppliedFingerprints)) {
         delete _lastAppliedFingerprints[key];
+    }
+}
+
+/** Forget one node's fingerprints, so its next payloads apply whatever they hold (a take-over, EPOCH_HEADER). */
+function forgetFingerprintsOf(anchorUrl: string): void {
+    for (const key of Object.keys(_lastAppliedFingerprints)) {
+        if (key.startsWith(`${anchorUrl}:`) || key.startsWith(`raw:${anchorUrl}:`)) delete _lastAppliedFingerprints[key];
     }
 }
 

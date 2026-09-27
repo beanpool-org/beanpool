@@ -2752,6 +2752,38 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
 }
 
 /**
+ * The listings this phone holds that a whole posts pull (`sync=true`, no cursor) shows the node no longer has: after a
+ * take-over, what the old main server wrote after its standby's last copy (services/pillar-sync.ts). No tombstone
+ * will ever come for them, so they go here.
+ *
+ * The node sends its most recently changed listings first, capped at a page (200 today), so its answer speaks for
+ * every listing changed after the oldest one it carries, and for all of them when it carries none. A cached row
+ * changed after that and missing from the answer goes. An older row may just be past the page, so it stays, as it
+ * would on a fresh install that never had it. A row the phone wrote itself has no `updated_at` until a sync brings
+ * one, so its `created_at` stands in.
+ */
+async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
+    const sent = new Set<string>();
+    let oldest: string | null = null;
+    for (const p of posts) {
+        if (p?.id) sent.add(String(p.id));
+        const at = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at;
+        if (typeof at === 'string' && (oldest === null || at < oldest)) oldest = at;
+    }
+    // An answer with listings and no times speaks for nothing it left out.
+    if (posts.length > 0 && oldest === null) return;
+    const held = await txn.getAllAsync<{ id: string; at: string | null }>('SELECT id, COALESCE(updated_at, created_at) AS at FROM posts');
+    const gone = held
+        .filter(r => !sent.has(r.id) && (oldest === null || (r.at !== null && r.at > oldest)))
+        .map(r => r.id);
+    for (let i = 0; i < gone.length; i += 500) {
+        const batch = gone.slice(i, i + 500);
+        await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
+    }
+    if (gone.length > 0) console.log(`[DB] applyDelta: ${gone.length} listing(s) the node no longer has left this phone`);
+}
+
+/**
  * A pushed listing change, inside applyDelta's lock and transaction. An upsert goes through the same row writer as
  * the delta sync, unless the cached copy is strictly newer (a late push must not move a listing backwards). A
  * removal cancels the row exactly as the node's own removal does (status 'cancelled', active 0, and an event's
@@ -2907,6 +2939,9 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             for (const p of delta.posts) {
                 await writeSyncedPost(txn, p);
             }
+            // After a take-over, the whole pull replaces what the phone holds (services/pillar-sync.ts). Before the
+            // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
+            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
         }
 
         // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they

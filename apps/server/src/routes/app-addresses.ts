@@ -3,7 +3,8 @@
  * engine/member-signature.ts). Owners and admins; a moderator's session never reaches an admin route that is not on its
  * list (admin-auth.ts).
  *
- *   GET  /api/local/admin/app-addresses          this community's addresses, where each comes from, and how many
+ *   GET  /api/local/admin/app-addresses          this community's addresses, where each comes from (`former`: a
+ *                                                 registrar name this key held before, accepted but not published), how many
  *                                                 people's apps signed for it today and on the busiest day of the last 7;
  *                                                 whether any of them names the community (`named`: a loopback name
  *                                                 listed for an SSH tunnel doesn't); on a node that knows none of its
@@ -49,7 +50,7 @@ export function appAddressesReport(pageHost?: unknown) {
     const count = (kind: string, address: string) => usage.find((u) => u.kind === kind && u.address === address);
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
-        return { address: a.address, source: a.source, today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0 };
+        return { address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0 };
     });
     // Hosts apps signed for while this node knew none of its names (accepted until the switch). Any the owner has since
     // confirmed drop off both lists, as they are on the one above.

@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     const payload = exportSyncState(db as any, 'manifest-test', null, 0) as unknown as Record<string, unknown>;
     // A whole-set table is carried whole by a delta too: a row stamped long ago, planted here, in a delta from now. A
     // whole-set table with no row to plant fails, so the next one gets its check.
-    const WHOLE_SET_ROW: Record<string, () => (x: any) => boolean> = {
+    const WHOLE_SET_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
         accounts: () => {
             db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('manifest-whole-set', 1, '2000-01-01T00:00:00.000Z', 0)`).run();
             return (x) => x?.publicKey === 'manifest-whole-set';

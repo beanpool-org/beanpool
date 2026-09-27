@@ -19,7 +19,8 @@
  *  5. S restarts as a standby: it makes no BeanPool of its own and leaves M's as it is; the next pull lands.
  *  6. The whole-copy check fails on a copy whose sum is right and whose accounts are not; it records the mismatch and
  *     asks for one force-resync, and no second one within the hour after.
- *  7. The conservation guard still refuses a payload signed by M that makes Beans, or that drops an account holding them.
+ *  7. The conservation guard still refuses a payload signed by M that makes Beans, drops an account holding them, or
+ *     names one account twice to hide a shift.
  *  8. A standby left as today's importer left it (every balance 0, stamped with its own clock, an account for SYSTEM, no
  *     record of the importer's format) heals in one pull.
  *  9. The take-over's promotion audit, on a copy of S: its ledger is M's as last copied; and on the same copy with every
@@ -120,7 +121,7 @@ async function child(): Promise<void> {
          * A payload M signs that does not conserve: one account given Beans from nowhere, or one holding Beans left out of
          * the account set. Signed with M's own key, so only the conservation guard stands between it and a standby.
          */
-        forge: async (a: { kind: 'mint' | 'drop'; publicKey: string }) => {
+        forge: async (a: { kind: 'mint' | 'drop' | 'twice'; publicKey: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
@@ -128,7 +129,14 @@ async function child(): Promise<void> {
             delete payload.signature;
             delete payload.publicKey;
             if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
-            else payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
+            else if (a.kind === 'drop') payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
+            else {
+                // The account named twice: 50 more, then 50 less than it holds. Each one against what the row held before
+                // the copy, the two cancel out, and 50 Beans would go.
+                const x = payload.accounts.find((y: any) => y.publicKey === a.publicKey);
+                payload.accounts = payload.accounts.map((y: any) => (y === x ? { ...x, balance: x.balance + 50 } : y));
+                payload.accounts.push({ ...x, balance: x.balance - 50 });
+            }
             payload.generatedAt = new Date().toISOString();
             return signSyncPayload(payload);
         },
@@ -423,8 +431,10 @@ async function main(): Promise<void> {
         assert(minted.ok === false && /Conservation violation/.test(minted.error), `a payload M signed that gives Kip 50 Beans from nowhere is refused (${minted.error})`);
         const dropped = await standby.send('import', { payload: await main.send('forge', { kind: 'drop', publicKey: ann.pk }) });
         assert(dropped.ok === false && /Conservation violation/.test(dropped.error), `one that leaves out Ann's account, which holds Beans, is refused (${dropped.error ?? 'imported'})`);
+        const twice = await standby.send('import', { payload: await main.send('forge', { kind: 'twice', publicKey: cy.pk }) });
+        assert(twice.ok === false && /Conservation violation/.test(twice.error), `one that names Cy twice, 50 up then 50 down, is refused (${twice.error ?? 'imported'})`);
         const after7: Ledger = await standby.send('ledger');
-        assert(ledgerDiff(before7, after7).length === 0, `neither changed the standby's ledger (differences ${first(ledgerDiff(before7, after7))})`);
+        assert(ledgerDiff(before7, after7).length === 0, `none of them changed the standby's ledger (differences ${first(ledgerDiff(before7, after7))})`);
 
         // ── 8. A standby as today's importer left it ──
         console.log('\n— 8. a standby left all-zero by the old importer heals in one pull —');

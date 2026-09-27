@@ -1099,10 +1099,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     writeAccount.run(acc.publicKey, acc.balance, stamp, epoch);
                     accountChanges++;
                     importedBalanceDelta += acc.balance - (mine?.balance ?? 0);
+                    // What the row holds now, so an account the copy names twice is measured from its first write, as the
+                    // row is: never a shift the guard doesn't see.
+                    local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance, last_updated_at: stamp, last_demurrage_epoch: epoch });
                 }
                 const dropAccount = db.prepare('DELETE FROM accounts WHERE public_key = ?');
                 for (const [pk, mine] of local) {
-                    if (named.has(pk)) continue;
+                    if (named.has(pk)) continue; // every row the loop wrote is named: what is left here, it held before
                     dropAccount.run(pk);
                     accountChanges++;
                     importedBalanceDelta -= mine.balance ?? 0;

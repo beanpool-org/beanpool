@@ -726,6 +726,8 @@ export async function pullTakeoverEnvelopeNow(): ReturnType<typeof pullTakeoverE
 
 /** One pull, of the kind the loop makes next (nextMode): the loop's own step, which a test drives too. Never throws. */
 export function pullNow(): Promise<{ ok: boolean; error?: string }> {
+    // Before nextMode, which spends the once-a-process asks: a pull already running (an operator's resync) must not use one up.
+    if (inFlight) return Promise.resolve({ ok: false, error: 'A pull is already in progress.' });
     return pullOnce(nextMode());
 }
 

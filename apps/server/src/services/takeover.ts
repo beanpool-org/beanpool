@@ -917,8 +917,10 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
     const config = getLocalConfig();
     let ran = false;
     if (config.promotionAuditPending) {
-        const r = promotionSanityCheck();
+        // The copy first: the conservation check writes the demurrage any read has applied since boot, and the rows are
+        // held to the main server's as they were copied.
         const copy = ledgerAgainstLastCopy();
+        const r = promotionSanityCheck();
         const record = {
             at: new Date().toISOString(), ok: r.ok && copy.match, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows,
             copy: {

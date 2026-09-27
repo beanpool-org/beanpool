@@ -13,7 +13,9 @@
  *   - a registration on its way at Sign Out finishes before the leave goes out, one not yet sent never is, and nothing
  *     registers for the leaving key after that;
  *   - the same account signing back in on this phone is never undone by its old statement, even with the clock set back
- *     and after a restart.
+ *     and after a restart: its statements are taken back as its key is written to the phone again, never presented,
+ *     even when its registration then can't land (offline), and their communities go back on the record for its next
+ *     Sign Out; one already on its way as it signs back in is outranked by its new registration.
  *
  * Nothing contacts a node: fetch is a fake community per address, which keeps push rows as the server does
  * (apps/server state-engine.ts registerPushToken / applyPushLeave, pinned over HTTP by test-push-leave-statement.ts) and
@@ -50,7 +52,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { audienceOf } from '@beanpool/core';
 import { signOutOfThisPhone } from '../account-leaves-phone';
 import { announceAccountOnPhone } from '../account-on-phone';
-import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
+import { draftIdentity, importIdentity, loadIdentity, updateCallsign, type BeanPoolIdentity } from '../identity';
 import { pendingLeaveStatements, presentLeaveStatements, type LeaveStatement } from '../push-leave';
 import { registerPushTokenWithCommunity, stopRegistering } from '../push-registrations';
 import { boundSignatureValid } from './server-signature-check';
@@ -220,6 +222,9 @@ async function afterRestart(): Promise<typeof import('../push-leave')> {
 }
 
 const stored = () => JSON.parse(mem.async.get(PUSH_LEAVE_STATEMENTS_STORE_KEY) ?? '[]') as LeaveStatement[];
+/** Where the phone's record says its token went, for the account on it. */
+const recorded = () => (JSON.parse(mem.async.get(PUSH_REGISTERED_AT_STORE_KEY) ?? '[]') as string[]).sort();
+const leavesSent = (from = 0) => nodes.sent.slice(from).filter((s) => s.path.startsWith('/api/push-tokens/leave/'));
 
 describe('Sign Out with no connection', () => {
     it('writes down, before the key goes, a statement for each community the token went to, signed by Kim\'s key for that community only', async () => {
@@ -407,29 +412,105 @@ describe('a registration and Sign Out at the same time', () => {
 });
 
 describe('Kim signs back in on the same phone', () => {
-    it('her new registration outranks her old statement, with the clock set back a day and after a restart, and the statement leaves it', async () => {
+    it('signing straight back in, still offline, her old statements are taken back and never presented: her rows stay, and her next Sign Out takes them', async () => {
+        await kimRegisteredAtMullumAndByron();
+        nodes.answer = () => 'down';
+        await signOutOfThisPhone(kim);
+        expect(stored()).toHaveLength(2);
+
+        // She signs straight back in on the same phone while set to Mullum, still offline: her registration can't land.
+        await importIdentity(kim);
+        // Taken back as her key is written to the phone, before anything is presented.
+        expect(await pendingLeaveStatements()).toEqual([]);
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        mem.async.set(ANCHOR, MULLUM);
+        await expect(registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).rejects.toThrow();
+
+        // Back online, the 5-minute sync (or a return to the app) presents what is waiting.
+        nodes.answer = () => 'up';
+        const before = nodes.sent.length;
+        await presentLeaveStatements();
+
+        expect((await loadIdentity())?.publicKey).toBe(kim.publicKey);
+        // #1258 review 4116631769: her old statement removed her only row at Mullum, and nothing registered her again.
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
+        expect(leavesSent(before)).toHaveLength(0);
+        expect(await pendingLeaveStatements()).toEqual([]);
+        // Both are back on the record, where her registrations from before still are, so her next Sign Out takes both.
+        expect(recorded()).toEqual([BYRON, MULLUM]);
+        await signOutOfThisPhone(kim);
+        expect(nodes.has(MULLUM, kim.publicKey) || nodes.has(BYRON, kim.publicKey)).toBe(false);
+        expect(await pendingLeaveStatements()).toEqual([]);
+    });
+
+    it('the app starting with her key back on the phone and her statements still written down (killed as she signed in): taken back, never presented', async () => {
+        await kimRegisteredAtMullumAndByron();
+        nodes.answer = () => 'down';
+        await signOutOfThisPhone(kim);
+        // Her key is written back, and the app is killed before anything else is.
+        mem.secure.set('sovereign-identity', JSON.stringify(kim));
+
+        const leave = await afterRestart();
+        nodes.answer = () => 'up';
+        const before = nodes.sent.length;
+        await leave.presentLeaveStatements();
+
+        expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(BYRON, kim.publicKey)).toBe(true);
+        expect(leavesSent(before)).toHaveLength(0);
+        expect(await leave.pendingLeaveStatements()).toEqual([]);
+        expect(recorded()).toEqual([BYRON, MULLUM]);
+    });
+
+    it('during her own Sign Out, a name change or a sync takes nothing back: the statements it has just written down go out', async () => {
+        await kimRegisteredAtMullumAndByron();
+        // The DELETEs are slow: Sign Out waits for them with her key still on the phone.
+        nodes.answer = (s) => (s.method === 'DELETE' ? 'hold' : 'down');
+        const signingOut = signOutOfThisPhone(kim);
+        await vi.waitFor(() => expect(nodes.held).toHaveLength(2));
+        expect(stored()).toHaveLength(2);
+
+        // Meanwhile her name changes (her key written again) and the 5-minute sync runs.
+        expect((await updateCallsign('Kimberley'))?.publicKey).toBe(kim.publicKey);
+        const before = nodes.sent.length;
+        await presentLeaveStatements();
+
+        expect(leavesSent(before).map((s) => s.community).sort()).toEqual([BYRON, MULLUM]);
+        expect(stored().map((s) => s.community).sort()).toEqual([BYRON, MULLUM]);
+        nodes.releaseHeld();
+        await signingOut;
+        expect(nodes.has(MULLUM, kim.publicKey) || nodes.has(BYRON, kim.publicKey)).toBe(false);
+        expect(await pendingLeaveStatements()).toEqual([]);
+    });
+
+    it('her new registration outranks her old statement already on its way as she signs back in, with the clock set back a day and after a restart', async () => {
         await kimRegisteredAtMullumAndByron();
         nodes.answer = () => 'down';
         await signOutOfThisPhone(kim);
         const leftAt = stored()[0].leftAt;
 
-        // The phone's clock goes back a day, the app restarts, and Kim signs back in while set to Mullum.
+        // The phone's clock goes back a day and the app restarts. Back online, the old statements go out, slowly...
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(Date.now() - DAY);
         vi.resetModules();
+        const leave = await import('../push-leave');
         const registrations = await import('../push-registrations');
         const identity = await import('../identity');
+        nodes.answer = (s) => (s.path.startsWith('/api/push-tokens/leave/') ? 'hold' : 'up');
+        const presenting = leave.presentLeaveStatements();
+        await vi.waitFor(() => expect(nodes.held).toHaveLength(2));
+
+        // ...and while they are on their way, Kim signs back in while set to Mullum.
         await identity.importIdentity(kim);
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
         mem.async.set(ANCHOR, MULLUM);
-        nodes.answer = () => 'up';
         expect(await registrations.registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
         const back = nodes.sent.filter((s) => s.method === 'POST' && s.path === '/api/push-tokens').at(-1)!;
         expect(back.body.registeredAt).toBeGreaterThan(leftAt);
 
-        // Then the old statements are presented.
-        const leave = await import('../push-leave');
-        await leave.presentLeaveStatements();
+        // Then the old statements land.
+        nodes.releaseHeld();
+        await presenting;
 
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true); // her registration since stays
         expect(nodes.has(BYRON, kim.publicKey)).toBe(false); // the one from before, where she hasn't registered since, goes

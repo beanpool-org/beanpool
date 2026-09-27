@@ -10,16 +10,23 @@
  * starts or comes back and every few minutes while it is open (app/_layout.tsx). None ever expires: a phone can be
  * offline for weeks.
  *
+ * When K is written to this phone again (a sign-in, a restore with 12 words, Replace: identity.ts announces it), its
+ * statements not yet confirmed are taken back, never presented: K wants its alerts here again, and its next leave signs
+ * new ones. Their communities go back on the push record (push-registrations.ts `putBackOnRecord`), where K's
+ * registration from before may still be, so that next leave reaches them too ({@link takeBack}; #1258 review 4116631769).
+ *
  * A statement only ever does what K asked. Whoever presents it, the community removes K's registration of T there, and
  * only one the phone made no later than the statement, so K signing back in on this phone (a later stamp) is never undone
- * by it (apps/server state-engine.ts `applyPushLeave`). It goes unsigned so that the account on the phone by then, if
- * any, is never linked to K. A community that says it will never act on one (`push_leave_refused`: a signature or a shape
- * it can't use) has it dropped; any other answer, or none, keeps it for the next time. The statement holds the token,
- * which every community it was sent to holds already, and nothing else about the phone.
+ * by one already on its way (apps/server state-engine.ts `applyPushLeave`). It goes unsigned so that the account on the
+ * phone by then, if any, is never linked to K. A community that says it will never act on one (`push_leave_refused`: a
+ * signature or a shape it can't use) has it dropped; any other answer, or none, keeps it for the next time. The
+ * statement holds the token, which every community it was sent to holds already, and nothing else about the phone.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAccountOnPhone } from './account-on-phone';
+import { loadIdentity } from './identity';
 import { signPushLeaveStatement } from './member-statements';
-import { communityAddress, nextPushStamp } from './push-registrations';
+import { communityAddress, leaveState, nextPushStamp, putBackOnRecord } from './push-registrations';
 import { PUSH_LEAVE_STATEMENTS_STORE_KEY } from './storage-keys';
 
 /** How long one presentation may wait for its community, as a registration does (push-registrations.ts). */
@@ -76,24 +83,69 @@ async function readPending(storage: Storage): Promise<LeaveStatement[]> {
 
 let writes: Promise<unknown> = Promise.resolve();
 
-/** Change the written-down statements, one change at a time. None left, none kept. */
-function updatePending(storage: Storage, change: (pending: LeaveStatement[]) => LeaveStatement[]): Promise<void> {
-    const next = writes.then(async () => {
-        const changed = change(await readPending(storage));
-        if (changed.length === 0) await storage.removeItem(PUSH_LEAVE_STATEMENTS_STORE_KEY);
-        else await storage.setItem(PUSH_LEAVE_STATEMENTS_STORE_KEY, JSON.stringify(changed));
-    });
+/** One change to the written-down statements at a time. */
+function queued(job: () => Promise<void>): Promise<void> {
+    const next = writes.then(job);
     writes = next.catch(() => {});
     return next;
 }
 
-/** The statements this phone has not had confirmed yet. Reads only; never throws. */
+async function writePending(storage: Storage, statements: LeaveStatement[]): Promise<void> {
+    if (statements.length === 0) await storage.removeItem(PUSH_LEAVE_STATEMENTS_STORE_KEY);
+    else await storage.setItem(PUSH_LEAVE_STATEMENTS_STORE_KEY, JSON.stringify(statements));
+}
+
+/** Change the written-down statements, one change at a time. None left, none kept. */
+function updatePending(storage: Storage, change: (pending: LeaveStatement[]) => LeaveStatement[]): Promise<void> {
+    return queued(async () => writePending(storage, change(await readPending(storage))));
+}
+
+/** The statements this phone has not had confirmed yet, after any change under way. Reads only; never throws. */
 export async function pendingLeaveStatements(storage: Storage = AsyncStorage): Promise<LeaveStatement[]> {
     try {
+        await writes;
         return await readPending(storage);
     } catch {
         return [];
     }
+}
+
+/** Resolves once every change to the statements already under way (a sign-in's {@link takeBack} too) is done. */
+export async function leaveStatementsSettled(): Promise<void> {
+    await writes;
+}
+
+/**
+ * `publicKey` is on this phone again, on purpose: its statements not yet confirmed are discarded, never presented, and
+ * each of their communities goes back on the push record first, where its registration from before may still be, so
+ * its next leave reaches it. Presented, an old statement removed the account's only registration at a community whenever
+ * its registration on signing back in hadn't landed there (offline, or its 12 s up), and nothing registered it again
+ * until the app was next started (#1258 review 4116631769). Never throws: a statement that can't be taken back is kept,
+ * and is not presented while its key is on the phone ({@link presentLeaveStatements}).
+ */
+function takeBack(publicKey: string, storage: Storage = AsyncStorage): Promise<void> {
+    const key = publicKey.toLowerCase();
+    return queued(async () => {
+        const pending = await readPending(storage);
+        const own = pending.filter((s) => s.publicKey === key);
+        if (own.length === 0) return;
+        await putBackOnRecord(own.map((s) => s.community), storage);
+        await writePending(storage, pending.filter((s) => s.publicKey !== key));
+        console.log(`[Push] This account is on the phone again: ${own.length} leave statement(s) of its own taken back`);
+    }).catch((e) => {
+        console.warn('[Push] Could not take back this account\'s leave statements; they wait while it is on the phone', e);
+    });
+}
+
+// A key written to the phone takes back its own statements, unless it is in the middle of leaving: a name change
+// during its own Sign Out announces the same key (account-on-phone.ts).
+onAccountOnPhone((publicKey) => {
+    if (publicKey && leaveState(publicKey) !== 'leaving') void takeBack(publicKey);
+});
+
+/** The key on the phone now, lower-case, or null. */
+async function keyOnPhone(): Promise<string | null> {
+    return (await loadIdentity())?.publicKey?.toLowerCase() ?? null;
 }
 
 /**
@@ -173,13 +225,22 @@ let presenting: Promise<void> | null = null;
 
 /**
  * Present every statement not yet confirmed, each to its own community, all together, and cross off each one confirmed
- * or refused for good. One run at a time: a call while one runs waits for it. Never throws.
+ * or refused for good. Never one of the account on the phone now, unless it is leaving: those it takes back
+ * ({@link takeBack}), as the phone does when that account is written to it, which no one announced for the key the app
+ * started with. One run at a time: a call while one runs waits for it. Never throws.
  */
-export function presentLeaveStatements(storage: Storage = AsyncStorage, timeoutMs: number = PRESENT_TIMEOUT_MS): Promise<void> {
+export function presentLeaveStatements(
+    storage: Storage = AsyncStorage,
+    timeoutMs: number = PRESENT_TIMEOUT_MS,
+    onPhone: () => Promise<string | null> = keyOnPhone,
+): Promise<void> {
     if (presenting) return presenting;
     presenting = (async () => {
         try {
-            const pending = await pendingLeaveStatements(storage);
+            const key = await onPhone();
+            const keeps = key !== null && leaveState(key) === 'none' ? key : null;
+            if (keeps) await takeBack(keeps, storage);
+            const pending = (await pendingLeaveStatements(storage)).filter((s) => s.publicKey !== keeps);
             await Promise.all(pending.map(async (s) => {
                 if (await presentOne(s, timeoutMs) !== 'kept') await confirmLeave(s, storage);
             }));

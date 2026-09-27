@@ -32,7 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
-import { confirmLeave, recordLeave } from './push-leave';
+import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
 import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 
@@ -162,6 +162,8 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
     if (!account) return;
     // Before the record is read, so that no registration can put another community on it afterwards.
     if (account.publicKey) await stopRegistering(account.publicKey);
+    // And after the account's sign-in has taken back its old statements, whose communities that puts back on it.
+    await leaveStatementsSettled();
     await unregisterPushToken(account, await pushRegisteredCommunities(storage));
     await forgetPushRegistrations(storage);
 }

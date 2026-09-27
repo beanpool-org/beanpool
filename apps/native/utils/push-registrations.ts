@@ -12,7 +12,9 @@
  * community removes a leaving account's registration only when it is not later than the leave, so the same account
  * signing back in on this phone is never undone by an older leave. And once an account starts leaving this phone
  * ({@link stopRegistering}), nothing registers for its key until that key is written to the phone again, and a
- * registration already on its way is waited for, so it can't land after the leave.
+ * registration already on its way is waited for, so it can't land after the leave. When it is written to the phone
+ * again, the leave statements it made here are taken back and their communities come back on the record
+ * ({@link putBackOnRecord}, push-leave.ts).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAccountOnPhone } from './account-on-phone';
@@ -50,9 +52,22 @@ function parseRecord(raw: string | null): string[] {
     return [...new Set(parsed.map(communityAddress).filter((c): c is string => c !== null))];
 }
 
-/** The communities this phone sent its push token to for the account on it, each once. Reads only; never throws. */
+let recordWrites: Promise<unknown> = Promise.resolve();
+
+/** Change the record after any change already under way: a registration and a sign-in's take-back write it together. */
+function changeRecord(change: () => Promise<void>): Promise<void> {
+    const next = recordWrites.then(change);
+    recordWrites = next.catch(() => {});
+    return next;
+}
+
+/**
+ * The communities this phone sent its push token to for the account on it, each once, after any change under way.
+ * Reads only; never throws.
+ */
 export async function pushRegisteredCommunities(storage: Pick<Storage, 'getItem'> = AsyncStorage): Promise<string[]> {
     try {
+        await recordWrites;
         return parseRecord(await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY));
     } catch {
         return [];
@@ -65,10 +80,19 @@ export async function pushRegisteredCommunities(storage: Pick<Storage, 'getItem'
  */
 export async function forgetPushRegistrations(storage: Pick<Storage, 'removeItem'> = AsyncStorage): Promise<void> {
     try {
-        await storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY);
+        await changeRecord(() => storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY));
     } catch (e) {
         console.warn('[Push] Could not forget where this phone sent its token', e);
     }
+}
+
+/**
+ * Put `communities` back on the record: the account on the phone took back its leave statements for them
+ * (push-leave.ts), and its registration from before may still be at each. Its next leave goes there too. Throws when the
+ * record can't be read or written, and then it is left as it was.
+ */
+export function putBackOnRecord(communities: readonly string[], storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<void> {
+    return changeRecord(() => addToRecord(communities, storage));
 }
 
 // ── The push stamp ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -122,6 +146,15 @@ onAccountOnPhone((publicKey) => {
 });
 
 /**
+ * Where `publicKey` stands in leaving this phone: 'leaving' from the start of its leave ({@link stopRegistering}) until
+ * the phone holds another key or none, then 'left' until the key is written to the phone again, then 'none' again.
+ */
+export function leaveState(publicKey: string): 'none' | 'leaving' | 'left' {
+    const state = leaving.get(publicKey.toLowerCase());
+    return !state ? 'none' : state.gone ? 'left' : 'leaving';
+}
+
+/**
  * An account starts leaving this phone (account-leaves-phone.ts): from now on no registration goes out for
  * `publicKey`, until that key is written to the phone again after another or none. Resolves once each registration for
  * it that had already gone out has finished (answered, refused or given up, within its own timeout), so the leave that
@@ -133,11 +166,16 @@ export async function stopRegistering(publicKey: string): Promise<void> {
     await Promise.allSettled([...inFlight].filter(([, k]) => k === key).map(([request]) => request));
 }
 
-async function recordPushRegistration(community: string, storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<void> {
-    // A read that fails throws here, so the record is never overwritten with this community alone.
+async function addToRecord(communities: readonly string[], storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<void> {
+    // A read that fails throws here, so the record is never overwritten with these communities alone.
     const recorded = parseRecord(await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY));
-    if (recorded.includes(community)) return;
-    await storage.setItem(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([...recorded, community]));
+    const added = [...new Set(communities.map(communityAddress).filter((c): c is string => c !== null && !recorded.includes(c)))];
+    if (added.length === 0) return;
+    await storage.setItem(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([...recorded, ...added]));
+}
+
+function recordPushRegistration(community: string, storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<void> {
+    return changeRecord(() => addToRecord([community], storage));
 }
 
 /**

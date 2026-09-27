@@ -36,6 +36,11 @@ import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePos
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import {
+    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel,
+    NO_BEANS_EDIT_NOTE,
+} from '../../utils/market-global';
 
 const CATEGORIES = POST_CATEGORIES;
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
@@ -559,6 +564,9 @@ export default function MapScreen() {
     const [postDescription, setPostDescription] = useState('');
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState<string>('fixed');
+    // Where the community has Beans off (the global one), the form has no price and the preview no amount.
+    const nodeFeatures = useNodeProfile()?.features;
+    const showsBeans = marketShowsBeans(nodeFeatures);
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
@@ -1026,7 +1034,7 @@ export default function MapScreen() {
         
         const errors = new Set<string>();
         if (!postTitle.trim()) errors.add('title');
-        if (postCredits.trim() === '' || isNaN(Number(postCredits))) errors.add('credits');
+        if (postFormPriceInvalid(postCredits, nodeFeatures)) errors.add('credits');
         if (!postDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (!postCategory) errors.add('category');
@@ -1048,8 +1056,8 @@ export default function MapScreen() {
                 category: postCategory,
                 title: postTitle.trim(),
                 description: postDescription.trim(),
-                credits: Number(postCredits) || 0,
-                price_type: postPriceType,
+                credits: postFormCredits(postCredits, nodeFeatures),
+                price_type: postFormPriceType(postPriceType, nodeFeatures),
                 repeatable: postRepeatable ? 1 : 0,
                 cash_also_needed: postCashAlsoNeeded ? 1 : 0,
                 author_pubkey: identity.publicKey,
@@ -1081,15 +1089,11 @@ export default function MapScreen() {
     const needBlocked = blockedFromTrading && postType === 'need';
 
     // Smart button label
-    const submitLabel = posting ? 'Posting...'
-        : needBlocked ? '🟢 List an Offer first to post Needs'
-        : (!postCategory) ? '📂 Select a category'
-        : (postLat == null) ? '📍 Set a location'
-        : (postPhotos.length < 1) ? '📷 Add a photo'
-        : (postCredits === '') ? '💰 Set a price'
-        : (!postTitle.trim() || !postDescription.trim()) ? '✏️ Fill required fields'
-        : `Post ${postType === 'offer' ? 'Offer' : 'Need'}`;
-    const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postCredits === '' || !postCategory || postPhotos.length < 1;
+    const submitLabel = postFormSubmitLabel({
+        posting, needBlocked, postType, category: postCategory, hasLocation: postLat != null, photoCount: postPhotos.length,
+        credits: postCredits, title: postTitle, description: postDescription,
+    }, nodeFeatures);
+    const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || postPhotos.length < 1;
 
     const renderCluster = (cluster: any) => {
         return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={cluster} clustersReady={clustersReady} />;
@@ -1342,11 +1346,13 @@ export default function MapScreen() {
                                 <Text style={styles.previewCategory} numberOfLines={1}>
                                     {categoryLabel(selectedPostPreview.category)}
                                 </Text>
+                                {showsBeans && (
                                 <CurrencyDisplay
                                     asView={true}
                                     style={styles.previewCredits}
                                     amount={selectedPostPreview.credits}
                                 />
+                                )}
                             </View>
                             <Text style={styles.previewTitle} numberOfLines={1}>
                                 {selectedPostPreview.title}
@@ -1598,6 +1604,11 @@ export default function MapScreen() {
                                 )}
                             </View>
 
+                            {/* Where there are no Beans, a note instead of the price section below. */}
+                            {!showsBeans && (
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 2, marginBottom: 10 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                            )}
+                            {showsBeans && (<>
                             {/* Price */}
                             <Text style={styles.sectionLabel}>Price <Text style={styles.requiredStar}>*</Text></Text>
                             <View style={styles.priceInputRow}>
@@ -1651,6 +1662,7 @@ export default function MapScreen() {
                                     <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text>
                                 </Text>
                             </Pressable>
+                            </>)}
 
                             {/* Repeatable Toggle */}
                             <Pressable accessibilityRole="button" accessibilityState={{ selected: postRepeatable }} style={styles.repeatableRow} onPress={() => setPostRepeatable(!postRepeatable)}>

@@ -90,6 +90,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- A node that already has data marks its visitors once, as it gains the column (db.ts markExistingVisitors). In
     -- members_touch_updated_at's list, so delta sync carries a promotion.
     is_visitor INTEGER NOT NULL DEFAULT 0,
+    -- When the key's owner deleted this account (purgeMemberSelf): a member's own Delete account, a removed member's
+    -- (which erases the profile the removal kept), or a visitor's for its own row. NULL: never. Set once and never
+    -- cleared: the row stays 'pruned', and nothing brings such an account back (no reinstate vote, no admin path;
+    -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
+    deleted_by_owner_at TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -855,7 +860,7 @@ AFTER UPDATE OF
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
-    is_visitor
+    is_visitor, deleted_by_owner_at
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

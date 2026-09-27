@@ -61,6 +61,8 @@ import {
     promoteOrPauseAfterLeadLeft,
     closePendingKeeperChangesFor,
     clearEnterpriseFloorCache,
+    isDeletedByOwner,
+    OWNER_DELETED_REFUSAL,
 } from './state-engine.js';
 
 export type DecisionTouch = 'member' | 'pool';
@@ -517,6 +519,11 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
     }
+    // An account its owner deleted can't be brought back (Marty's card removed-member-delete, 2026-09-27): they rejoin with
+    // a new invite. A vote already open when they deleted it closes without doing anything (preflightAssert).
+    if (opts.effect === 'reinstate_member' && opts.subject && isDeletedByOwner(opts.subject)) {
+        throw new Error(OWNER_DELETED_REFUSAL);
+    }
 
     const id = crypto.randomUUID();
     const franchise = franchiseForTouch(opts.touches);
@@ -776,6 +783,10 @@ export function preflightAssert(decision: Decision): {
         }
         if (decision.effect === 'reinstate_member' && !member) {
             return { status: 'void', reason: 'Subject member does not exist' };
+        }
+        // Its owner deleted the account while the vote was open: nothing brings it back (createDecision refuses a new one).
+        if (decision.effect === 'reinstate_member' && isDeletedByOwner(decision.subject)) {
+            return { status: 'void', reason: OWNER_DELETED_REFUSAL };
         }
     }
 
@@ -1177,8 +1188,10 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
             WHERE id = ?
         `).run(now, adminPubkey, reason.trim(), now, decisionId);
 
-        // If member was suspended in grace window, restore them
-        if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
+        // If member was suspended in grace window, restore them. Only while they are: one who deleted their account in it
+        // ('pruned', isDeletedByOwner) stays closed, and the halt still stops the removal.
+        if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject
+            && getMember(decision.subject)?.status === 'disabled') {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
             restoreSuspendedNodeRole(decision.id);

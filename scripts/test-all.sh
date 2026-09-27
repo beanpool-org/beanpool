@@ -278,6 +278,7 @@ run_federation_suites() {
       test-pricing-aggregator-lifecycle
       test-activity-feed
       test-member-purge
+      test-removed-member-delete
       test-keeper-deposit
       test-keeper-routes
       test-keeper-release

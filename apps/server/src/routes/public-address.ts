@@ -250,8 +250,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const hostname = prevConfig?.hostname;
             const result = await releaseAddress();
             addProbeLog('1/4', `✅ Domain released on registrar`, 'success');
-            // The name stays this community's through the registrar's hold (its answer's held_until, else 30 days): it
-            // routes nowhere then, and no other key can have it. Recorded before the stored address goes.
+            // The name stays accepted here (decision D-B, pending Marty). The record keeps the registrar's hold as its
+            // answer gives it (held_until), and none when it gives none: then the registrar freed the name at once.
+            // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
             addProbeLog('2/4', `🔒 Overwriting tunnel token with empty state...`, 'info');

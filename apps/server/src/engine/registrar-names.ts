@@ -15,9 +15,14 @@
  *  - No answer ever deletes an entry. `none`, `released`, `revoked`, `blocked` and `paused` are written on the entry
  *    and the name stays. The name the node stores as its `publicAddress` is `current`; one it stored before is
  *    `former`. A live answer naming another name makes that one current and the old one former.
- *  - Take offline (this node's own release) records when, and until when the registrar holds the name for this key
- *    (its answer's `held_until`, else 30 days). The name is still this community's through the hold: it routes nowhere
- *    then, and the registrar gives it to no other key (decision D-B, pending Marty; stopping after the hold needs L3).
+ *  - Take offline (this node's own release) records when, and until when the registrar holds the name for this key:
+ *    its answer's `held_until`, and nothing when the answer gives none. A release answer without one means the registrar
+ *    freed the name at once (a withdrawn gated claim, an older Worker's `revoked`), so no hold is invented here (#1247's
+ *    review, 4115220670). The name stays accepted either way (decision D-B, pending Marty; stopping it needs L3).
+ *  - Only real registrar names are recorded: one label of 3-32 characters under beanpool.org, as the registrar's own
+ *    NAME_RE allows (apps/registrar/src/index.js). A host any answer, stored address or take-over envelope names outside
+ *    that is never recorded, so a misbehaving or mis-pointed registrar can't make one permanent (4115220781); such a host
+ *    is still accepted while it is the stored `publicAddress` (item 1 of own-addresses.ts), as before.
  *
  * engine/own-addresses.ts accepts every entry, current and former, whatever its status (item 4), and publishes only
  * the current one. The record travels in the take-over envelope beside `ownerAddresses`, so a promoted standby
@@ -69,7 +74,6 @@ export type RegistrarAnswerUse = 'stored' | 'claim' | 'status' | 'released';
 
 export const MAX_REGISTRAR_NAMES = 50;
 /** The registrar's hold on a name its owner released (RELEASE_COOLOFF_S), when its answer doesn't say. */
-export const DEFAULT_RELEASE_HOLD_MS = 30 * 86_400_000;
 const REGISTRAR_ZONE = 'beanpool.org';
 
 let version = 0;
@@ -84,16 +88,24 @@ const hostOf = (input: unknown): string | null => {
     return host && host.length <= 253 ? host : null;
 };
 
-/** The host a registrar answer (or a stored `publicAddress`) names: `<name>.beanpool.org`, else its hostname. */
+/** A host the registrar can give: one label of 3-32 characters (its NAME_RE) under beanpool.org. */
+const REGISTRAR_NAME_HOST = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])\.beanpool\.org$/;
+export const isRegistrarNameHost = (host: string | null): host is string => !!host && REGISTRAR_NAME_HOST.test(host);
+
+/**
+ * The registrar name a registrar answer (or a stored `publicAddress`) names: `<name>.beanpool.org`, else its hostname,
+ * and only when that is a host the registrar can give (isRegistrarNameHost); otherwise null.
+ */
 export function registrarHostOf(answer: unknown): string | null {
     if (!answer || typeof answer !== 'object') return null;
     const a = answer as Record<string, unknown>;
     if (typeof a.name === 'string' && a.name.trim()) {
         const n = a.name.trim();
         const host = hostOf(n.includes('.') ? n : `${n}.${REGISTRAR_ZONE}`);
-        if (host) return host;
+        if (host) return isRegistrarNameHost(host) ? host : null;
     }
-    return hostOf(a.hostname);
+    const host = hostOf(a.hostname);
+    return isRegistrarNameHost(host) ? host : null;
 }
 
 const word = (v: unknown, fallback: string): string =>
@@ -117,7 +129,7 @@ function entryOf(raw: unknown): RegistrarName | null {
     if (!raw || typeof raw !== 'object') return null;
     const r = raw as Record<string, unknown>;
     const address = hostOf(r.address);
-    if (!address) return null;
+    if (!isRegistrarNameHost(address)) return null;
     return {
         address,
         role: r.role === 'current' ? 'current' : 'former',
@@ -210,6 +222,7 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
                 // Stored again, it is this community's in use: a hold from an earlier release is over (taken back).
                 entry.releasedByUsAt = null;
                 entry.heldUntil = null;
+                entry.renamedByUsAt = null;
             }
         }
     } else if (use === 'status') {
@@ -228,7 +241,7 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
             entry.status = status;
             entry.reason = reason;
             entry.releasedByUsAt = at;
-            entry.heldUntil = heldUntilOf(a.held_until, now) ?? new Date(now + DEFAULT_RELEASE_HOLD_MS).toISOString();
+            entry.heldUntil = heldUntilOf(a.held_until, now);
         }
     }
 

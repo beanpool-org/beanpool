@@ -47,7 +47,6 @@ const PW_U = 'Never-Forget-U-Pw-6083!';
 const PW_STANDBY = 'Never-Forget-Standby-Pw-7194!';
 /** The Cloudflare edge Settings' probe asks (routes/public-address.ts verifyEdgeStatus). */
 const CF_EDGE_IP = '104.21.93.179';
-const DAY_MS = 86_400_000;
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -367,7 +366,8 @@ async function main(): Promise<void> {
                 && Date.parse(nn?.heldUntil) === heldUntilS * 1000, `the record: newname former, released by this node, held until the registrar's held_until (${JSON.stringify(nn ?? null)})`);
             assert(s.named === true && !s.published.includes('newname.beanpool.org'), `N still knows its names; newname is no longer published (${JSON.stringify(s.published)})`);
 
-            // Another name, claimed in Settings, then released with an answer that gives no held_until: 30 days.
+            // Another name, claimed in Settings, then released with an answer that gives no held_until: the registrar freed
+            // it at once, so no hold is recorded (#1247's review 4115220670; this assertion said 30 days before).
             const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'third', mode: 'tunnel' });
             assert(claimed.status === 200 && claimed.body?.hostname === 'third.beanpool.org', `Settings claims third (${show(claimed)})`);
             reg.release = { status: 'released', name: 'third' };
@@ -376,9 +376,9 @@ async function main(): Promise<void> {
             assert(off2.status === 200, `and takes it offline (${show(off2)})`);
             const s2 = await N.send('inspect');
             const third = entry(s2.registrarNames, 'third.beanpool.org');
-            const held = Date.parse(third?.heldUntil);
-            assert(third?.role === 'former' && held >= before + 30 * DAY_MS - 1000 && held <= Date.now() + 30 * DAY_MS + 1000,
-                `with no held_until in the answer, held 30 days (${JSON.stringify(third ?? null)})`);
+            assert(third?.role === 'former' && third?.heldUntil === null && typeof third?.releasedByUsAt === 'string'
+                && Date.parse(third.releasedByUsAt) >= before - 1000,
+                `with no held_until in the answer, released by this node and no hold recorded (${JSON.stringify(third ?? null)})`);
             const r2 = await bound(N, ['third.beanpool.org']);
             assert(r2['third.beanpool.org'] === 200, `third is still accepted (${r2['third.beanpool.org']}; main: 421)`);
 

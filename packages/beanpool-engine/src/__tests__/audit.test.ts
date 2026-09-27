@@ -22,6 +22,15 @@ describe('Ledger sums', () => {
         expect(compensatedSum([12.5, -9.82, 0.075, -2.755])).toBeCloseTo(0, 12);
     });
 
+    it('overflows to Infinity as SQLite SUM does, not NaN (4117256520)', () => {
+        // SQLite 3.51.3 (better-sqlite3 12.8.0), measured: SUM of 1e308, 1e308 is Infinity, and with -1e308 after it too.
+        expect(compensatedSum([1e308, 1e308])).toBe(Infinity);
+        expect(compensatedSum([1e308, 1e308, -1e308])).toBe(Infinity);
+        expect(compensatedSum([-1e308, -1e308])).toBe(-Infinity);
+        expect(compensatedSum([Infinity])).toBe(Infinity);
+        expect(compensatedSum([-Infinity, 5])).toBe(-Infinity);
+    });
+
     it('summarises a ledger with its sum as the accounts hold it', () => {
         const s = summariseLedger([
             { publicKey: 'a', balance: 1e20 },

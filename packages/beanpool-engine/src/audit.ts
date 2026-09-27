@@ -64,6 +64,8 @@ export function isWellFormedKey(key: string): boolean {
 /**
  * The sum of some balances, with each addition's rounding carried (Kahan-Babuska-Neumaier, as SQLite's SUM since 3.43). A
  * running sum of doubles loses any value smaller than half a step of the running total: +1e20, 1000, -1e20 sums to 0.
+ * A sum that overflows is ±Infinity, as SQLite's is: the carried rounding is then Infinity - Infinity, NaN, and SQLite
+ * leaves out a carry that isn't finite (sumFinalize).
  */
 export function compensatedSum(values: Iterable<number>): number {
     let sum = 0;
@@ -73,7 +75,7 @@ export function compensatedSum(values: Iterable<number>): number {
         carried += Math.abs(sum) >= Math.abs(v) ? (sum - t) + v : (v - t) + sum;
         sum = t;
     }
-    return sum + carried;
+    return Number.isFinite(carried) ? sum + carried : sum;
 }
 
 /** A ledger as a few figures and a fingerprint, to tell whether two servers hold the same one (summariseLedger). */

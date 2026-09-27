@@ -152,4 +152,10 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src.split('getDecisions(').length - 1).toBe(1);
         expect(src).toContain('return decisionsOn(profile?.features);');
     });
+
+    it("the header's 🛡️ words are told whether the node has Decisions, so an emergency suspension isn't called a vote where there is none", () => {
+        const src = read('components/NeedsYouIcons.tsx');
+        expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,');
+        expect(read('utils/needs-you.ts')).toContain('label: adminLabel(adminItems, { decisions: i.admin?.decisions }),');
+    });
 });

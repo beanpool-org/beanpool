@@ -81,20 +81,32 @@ export interface NeedsYouInputs {
     groupChats: NeedsYouGroupChat[] | null;
     /**
      * The member's node role (GET /api/node-admin/me) and, only when that is owner/admin/moderator, the node's admin
-     * queue (GET /api/node-admin/queue). null when either is unknown: no 🛡️ rather than a guess.
+     * queue (GET /api/node-admin/queue). null when either is unknown: no 🛡️ rather than a guess. `decisions` words it.
      */
-    admin: { role: unknown; queue: { total: number; items: AdminQueueItem[] } | null } | null;
+    admin: ({ role: unknown; queue: { total: number; items: AdminQueueItem[] } | null } & AdminWordsNode) | null;
+}
+
+/** What the admin words need to know about the node, from its cached profile. */
+export interface AdminWordsNode {
+    /**
+     * The node's `decisions` switch as its profile last said. Only `false` changes the words: an emergency suspension
+     * there opens no vote and lifts by itself after 7 days. On, or not said (a node from before the switch): as today.
+     */
+    decisions?: boolean;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** One admin-queue item in words: "2 reports to review". Kinds from apps/server/src/engine/admin-queue.ts. */
-export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>): string {
+export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, node: AdminWordsNode = {}): string {
     const n = i.count;
     switch (i.kind) {
         case 'reports': return `${plural(n, 'report', 'reports')} to review`;
         case 'disputes': return `${plural(n, 'stalled trade', 'stalled trades')} awaiting a ruling`;
-        case 'suspensions': return `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
+        // The phone's own words rather than the node's label, so a node whose label still speaks of a vote is not believed.
+        case 'suspensions': return node.decisions === false
+            ? (n === 1 ? '1 emergency suspension in its 7 days' : `${n} emergency suspensions in their 7 days`)
+            : `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
         case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
         case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
         // A kind a newer node added: its own label, with the count.
@@ -105,8 +117,8 @@ export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'lab
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "2 reports to review", "2 reports to review and 1 stalled trade awaiting a ruling", "A, B and C". */
-export function adminLabel(items: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>[]): string {
-    const parts = items.map(adminItemInWords);
+export function adminLabel(items: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>[], node: AdminWordsNode = {}): string {
+    const parts = items.map(i => adminItemInWords(i, node));
     const joined = parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
     return capitalise(joined);
 }
@@ -142,7 +154,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     if (queue && queue.total > 0 && adminItems.length) {
         out.push({
             kind: 'admin', count: queue.total, accent: true,
-            label: adminLabel(adminItems),
+            label: adminLabel(adminItems, { decisions: i.admin?.decisions }),
             // The node lists the most pressing kind first (reports); the tap opens /settings at its section.
             target: { to: 'admin', section: adminItems[0].section },
         });

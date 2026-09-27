@@ -2,7 +2,7 @@
  * Unit/integration tests for getAdminQueue utility (apps/server/src/engine/admin-queue.ts).
  *
  * Asserts proper calculation of queue items for node admin and moderator roles across reports,
- * disputes, suspensions, removals, and unclean shutdowns.
+ * disputes, suspensions, removals, and unclean shutdowns, and the suspensions label with formal Decisions on and off.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-admin-queue.ts
  */
@@ -11,6 +11,7 @@ import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { getAdminQueue, DISPUTE_MIN_DAYS } from './engine/admin-queue.js';
 import { setShutdownStatusForTesting } from './engine/shutdown-recovery.js';
+import { NODE_PROFILE_KEY } from './config/node-profile.js';
 
 let run = 0;
 let passed = 0;
@@ -114,6 +115,28 @@ function main() {
     const remItem = q.items.find(i => i.kind === 'removals');
     assert(remItem !== undefined && remItem.count === 1, 'removals item counts execution_pending_grace decisions');
     assert(q.total === 5, 'admin queue total reflects reports + disputes + suspensions + removals (2+1+1+1=5)');
+    assert(suspItem?.label === 'Emergency suspensions the community is voting on',
+        `with Decisions on, the suspensions label says the community is voting (got ${JSON.stringify(suspItem?.label)})`);
+
+    // 4b. Formal Decisions switched off (the global profile, or the operator's override): an emergency suspension opens
+    // no vote and lifts by itself after 7 days. The label says so; what is counted, and where it lands, do not change.
+    const setDecisions = (value: 'true' | 'false') =>
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+            .run(`${NODE_PROFILE_KEY}.decisions`, value);
+    setDecisions('false');
+    q = getAdminQueue();
+    const offItem = q.items.find(i => i.kind === 'suspensions');
+    assert(offItem?.label === 'Emergency suspensions in their 7 days',
+        `with Decisions off, the suspensions label says no vote, only their 7 days (got ${JSON.stringify(offItem?.label)})`);
+    assert(!/vot/i.test(offItem?.label ?? 'vote'), 'with Decisions off, the suspensions label mentions no vote');
+    assert(offItem?.count === 1 && offItem.section === 'decisions' && offItem.settingsPath === '/settings#section=decisions',
+        'with Decisions off, the suspensions count, section and settingsPath are unchanged');
+    assert(q.total === 5, 'with Decisions off, the admin queue total is unchanged (5)');
+    setDecisions('true');
+    q = getAdminQueue();
+    assert(q.items.find(i => i.kind === 'suspensions')?.label === 'Emergency suspensions the community is voting on',
+        'with Decisions switched back on, the suspensions label says the community is voting again');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
     // 5. Unclean shutdown item
     setShutdownStatusForTesting({ uncleanShutdown: true, acknowledged: false });

@@ -182,8 +182,9 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //   - default (unset, empty or any other value): a member-signed socket gets the full feed, as
 //     before. An unsigned socket, or one signed by a key that is not (yet) a member, is accepted
 //     but gets only a bare doorbell for public changes (PUBLIC_WS_EVENTS in state-engine.ts) — the
-//     same things anyone can already read without signing. A signature that is forged, stale or
-//     replayed is refused with 401.
+//     same things anyone can already read without signing, so on a node that shows visitors only
+//     the listings (`guestListingsOnly`), only the listings' (state-engine keylessSocketMayUse).
+//     A signature that is forged, stale or replayed is refused with 401.
 //   - ENFORCE_WS_AUTH=true: only member-signed sockets are accepted; everything else gets 401.
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
 //     An escape hatch, not a recommendation.

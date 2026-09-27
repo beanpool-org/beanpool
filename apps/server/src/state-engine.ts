@@ -1064,13 +1064,39 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
     'state_synced',
 ]);
 
+// Of PUBLIC_WS_EVENTS, the ones a socket with no member's key may still use on a node that shows visitors the
+// listings and not the people (`guestListingsOnly`). There an unsigned read, or one signed by a key that is no member
+// here, gets the listings' guest view, and the Commons decisions, projects, crowdfunds and enterprises are members-only
+// (https-server.ts MEMBERS_ONLY_ON_GUEST_LISTINGS_*) or switched off, so a doorbell for one of them changes nothing
+// such a socket can read and has every visitor's tab read the listings again for nothing. `state_synced` stays: an
+// import's counts don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so
+// one that counted only groups may still have changed a listing. Only a standby imports, so the node visitors reach
+// never sends it anyway.
+const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed', 'state_synced']);
+
+// As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
+const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
+
+/**
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
+ * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
+ * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
+ * still is.
+ */
+function keylessSocketMayUse(type: string): boolean {
+    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
+    return !getProfileSwitches().guestListingsOnly;
+}
+
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),
 // pass `recipients` so the event is delivered ONLY to sockets whose verified member
 // is a party. General community events (new_post, member_joined, profile_updated)
 // pass no recipients and reach every member socket; sockets with no verified member
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
-// feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
+// feed (ENFORCE_WS_AUTH=false), where they get every event without recipients. A socket
+// with no member's key at all (unsigned, or signed by a key that is no member here) gets
+// only those of them it may use on this node (keylessSocketMayUse).
 //
 // Three things a socket's verified key decides, as for an HTTP read:
 //   - `_memberPubkey`, a key that passes the act test (isNodeMember), or a visitor's (isLiveVisitor): what is sent TO
@@ -1201,6 +1227,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
     let forVisitor: boolean | undefined;
+    // Whether a socket with no member's key may use this public doorbell (keylessSocketMayUse), asked once.
+    let forKeyless: boolean | undefined;
     let sent = 0;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
@@ -1224,6 +1252,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             if (!(forVisitor ??= visitorMayReceive(event))) continue;
         } else if (!recipients && !ws._memberFeed && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            // A visitor's or a suspended member's socket holds a key, and keeps every public doorbell.
+            if (!ws._memberPubkey && !(forKeyless ??= keylessSocketMayUse(event.type))) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });

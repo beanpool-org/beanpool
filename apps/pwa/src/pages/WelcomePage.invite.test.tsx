@@ -227,22 +227,33 @@ describe('← Back on the photo step changes the name on the same account (card 
      * The node as it is for these steps: the invite taken once (engine/invites.ts), a member's name changed only by a
      * request signed with that member's key (routes/community.ts /api/profile/update, engine/members.ts updateProfile),
      * which refuses a name another member has with a 409 and never counts the member's own as taken, and the name check
-     * with its `exclude` (isCallsignAvailable). Sam is another member's name. `loseUpdate`: the next profile update
-     * lands and its answer is lost.
+     * with its `exclude` (isCallsignAvailable). Sam is another member's name. A redeem lands the name as the node does:
+     * cut to 20 (routes/community.ts) and numbered past another member's (uniquifyCallsign), and answers with the new
+     * member's card, or the card of `answerAbout` when that is set. `loseUpdate`: the next profile update lands and its
+     * answer is lost. `onUpdate`: called as a profile update lands, before its answer.
      */
     function renameNode() {
-        const state = { members: new Map<string, string>([['a-neighbour', 'Sam']]), usedBy: null as string | null, loseUpdate: false, loseRedeem: false };
+        const state = {
+            members: new Map<string, string>([['a-neighbour', 'Sam']]), usedBy: null as string | null, loseUpdate: false, loseRedeem: false,
+            answerAbout: null as string | null, onUpdate: null as null | (() => void),
+        };
         const takenBy = (name: string, exclude: string | null) =>
             [...state.members].some(([key, held]) => key !== exclude && held.toLowerCase() === name.trim().toLowerCase());
+        const numbered = (name: string, exclude: string) => {
+            let free = name;
+            for (let n = 2; takenBy(free, exclude); n++) free = `${name.slice(0, 32 - String(n).length).trim()}${n}`;
+            return free;
+        };
+        const cardOf = (key: string) => ({ publicKey: key, callsign: state.members.get(key), joinedAt: '2026-09-27T00:00:00.000Z', avatarUrl: null });
         const node = stubNode(LOCAL, {
             '/api/invite/check': () => json(200, state.usedBy ? { valid: false, reason: 'used' } : { valid: true }),
             '/api/invite/redeem': (body) => {
-                if (state.members.has(body.publicKey)) return json(200, { success: true, alreadyMember: true });
+                if (state.members.has(body.publicKey)) return json(200, { success: true, alreadyMember: true, member: cardOf(body.publicKey) });
                 if (state.usedBy) return json(400, { error: 'This invite has already been used' });
                 state.usedBy = body.publicKey;
-                state.members.set(body.publicKey, body.callsign);
+                state.members.set(body.publicKey, numbered(String(body.callsign).slice(0, 20).trim(), body.publicKey));
                 if (state.loseRedeem) throw new TypeError('Failed to fetch');
-                return json(200, { success: true, member: {} });
+                return json(200, { success: true, member: cardOf(state.answerAbout ?? body.publicKey) });
             },
             '/api/profile/update': (body, call) => {
                 const signer = call.headers['X-Public-Key'];
@@ -253,6 +264,7 @@ describe('← Back on the photo step changes the name on the same account (card 
                     }
                     state.members.set(signer, body.callsign.trim());
                 }
+                state.onUpdate?.();
                 if (state.loseUpdate) {
                     state.loseUpdate = false;
                     throw new TypeError('Failed to fetch');
@@ -275,11 +287,7 @@ describe('← Back on the photo step changes the name on the same account (card 
             '/api/community/register': (body) => {
                 const held = state.members.get(body.publicKey);
                 const cut = String(body.callsign).slice(0, 20).trim();
-                if (held !== undefined && cut.toLowerCase() !== held.toLowerCase()) {
-                    let name = cut;
-                    for (let n = 2; takenBy(name, body.publicKey); n++) name = `${cut.slice(0, 32 - String(n).length).trim()}${n}`;
-                    state.members.set(body.publicKey, name);
-                }
+                if (held !== undefined && cut.toLowerCase() !== held.toLowerCase()) state.members.set(body.publicKey, numbered(cut, body.publicKey));
                 return json(200, { success: true, member: { publicKey: body.publicKey, callsign: state.members.get(body.publicKey) } });
             },
         });
@@ -536,7 +544,7 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach the community right now.");
 
         // The app opens the saved account on the next load (App.tsx): the same key, and no second one anywhere. The node
-        // has the new name; this browser's copy keeps the one it had, as Settings' rename leaves it when its answer is lost.
+        // has the new name; this browser's copy keeps the one it had until the app, opening, takes the node's (App.name.test).
         cleanup();
         expect(await loadIdentity()).toEqual(saved);
         expect(peekInviteSent()).toBeUndefined();
@@ -544,6 +552,148 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(node.redeems()).toHaveLength(1);
         expect(node.updates().map((u) => u.headers['X-Public-Key'])).toEqual([saved.publicKey]);
         expect(node.state.members.get(saved.publicKey)).toBe('Robin');
+    });
+
+    /*
+     * The web app's name for the member is the community's (#1231's confirmation, NON-BLOCKING 4113964261 and
+     * 4113964223). The node may number the name typed (another member holds it) or cut it to 20, and the redeem answers
+     * with the name it kept: this browser keeps that one, so the photo step, ← Back's "the name people here see" and the
+     * app all say what everyone else sees. A rename the node took is never left unsaved here without a word.
+     */
+    describe("this browser keeps the community's name for the member", () => {
+        const registers = (node: ReturnType<typeof renameNode>) => node.calls.filter((c) => c.path === '/api/community/register');
+        /** The write after the node's answer to the next profile update (this browser's copy of the new name) fails as a full disk's does, once. */
+        const failTheSaveAfterTheUpdate = (node: ReturnType<typeof renameNode>) => {
+            node.state.onUpdate = () => {
+                node.state.onUpdate = null;
+                idb.failNextCommit();
+            };
+        };
+
+        it('the node numbers a name another member has (Sam → Sam2): this browser keeps Sam2 and shows it, ← Back shows it as the name people here see, and a register sends it', async () => {
+            const node = renameNode();
+            const onComplete = vi.fn();
+            render(<WelcomePage onComplete={onComplete} />);
+            await submitInvite('Sam');
+            await screen.findByText(/Choose your look/);
+            const [redeem] = node.redeems();
+            expect(redeem.body.callsign).toBe('Sam');
+            expect(node.state.members.get(redeem.body.publicKey)).toBe('Sam2');
+            const saved = (await loadIdentity())!;
+            expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Sam2', mnemonic: expect.any(Array) });
+            expect(screen.getByText('Sam2')).toBeInTheDocument();
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Sam2 here: Sam was taken. Tap ← Back to change it.");
+
+            fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+            await waitFor(() => expect(nameField()).toHaveValue('Sam2'));
+            expect(screen.getByText(/This is the name people here see/)).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+            await screen.findByText(/Choose your look/);
+            expect(node.updates()).toHaveLength(0);
+
+            await expectWordsOf(saved);
+            fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+            fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
+            await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+            const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
+            expect(opened).toEqual(saved);
+
+            // Whatever register goes with the account it is handed carries the node's name, so it renames nobody.
+            await registerMember(opened.publicKey, opened.callsign);
+            expect(registers(node).map((r) => r.body.callsign)).toEqual(['Sam2']);
+            expect(node.state.members.get(saved.publicKey)).toBe('Sam2');
+        });
+
+        it('the node cuts a name longer than a join keeps (20 characters): this browser keeps the cut name, shows it and says why', async () => {
+            const node = renameNode();
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite('Rowan of the Valley Farm Wren');
+            await screen.findByText(/Choose your look/);
+            const key = node.redeems()[0].body.publicKey;
+            expect(node.state.members.get(key)).toBe('Rowan of the Valley');
+            expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Rowan of the Valley' });
+            expect(screen.getByText('Rowan of the Valley')).toBeInTheDocument();
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Rowan of the Valley here: a name here keeps 20 characters. Tap ← Back to change it.");
+
+            fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+            await waitFor(() => expect(nameField()).toHaveValue('Rowan of the Valley'));
+            fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+            await screen.findByText(/Choose your look/);
+            expect(node.updates()).toHaveLength(0);
+            expect(screen.queryByRole('alert')).toBeNull();
+        });
+
+        it('an answer naming another key changes nothing here: this browser keeps the name it sent, with no note', async () => {
+            const node = renameNode();
+            node.state.answerAbout = 'a-neighbour';
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite('Rowan');
+            await screen.findByText(/Choose your look/);
+            const key = node.redeems()[0].body.publicKey;
+            expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Rowan' });
+            expect(screen.getByText('Rowan')).toBeInTheDocument();
+            expect(screen.queryByText('Sam')).toBeNull();
+            expect(screen.queryByTestId('joined-as-note')).toBeNull();
+        });
+
+        it("the new name lands on the node but this browser can't keep it: said so with Try again, which keeps it here and carries on, sending nothing again", async () => {
+            const node = renameNode();
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite();
+            await screen.findByText(/Choose your look/);
+            const saved = (await loadIdentity())!;
+
+            failTheSaveAfterTheUpdate(node);
+            await backAndRename('Robin');
+            expect(await screen.findByRole('alert')).toHaveTextContent("Your new name is saved on the community, but this browser couldn't keep it. Try again.");
+            expect(screen.queryByText(/Choose your look/)).toBeNull();
+            expect(node.state.members.get(saved.publicKey)).toBe('Robin');
+            expect(await loadIdentity()).toEqual(saved);
+
+            fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+            await screen.findByText(/Choose your look/);
+            expect(screen.getByText('Robin')).toBeInTheDocument();
+            expect(await loadIdentity()).toEqual({ ...saved, callsign: 'Robin' });
+            expect(node.updates()).toHaveLength(1);
+            expect(node.redeems()).toHaveLength(1);
+            await expectWordsOf(saved);
+        });
+
+        it('the new name not kept here, and the old one typed back: that goes to the node too, so the node and this browser agree', async () => {
+            const node = renameNode();
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite();
+            await screen.findByText(/Choose your look/);
+            const saved = (await loadIdentity())!;
+            failTheSaveAfterTheUpdate(node);
+            await backAndRename('Robin');
+            expect(await screen.findByRole('alert')).toHaveTextContent("couldn't keep it");
+
+            fireEvent.change(nameField(), { target: { value: 'Rowan' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+            await screen.findByText(/Choose your look/);
+            expect(node.updates().map((u) => u.body.callsign)).toEqual(['Robin', 'Rowan']);
+            expect(node.state.members.get(saved.publicKey)).toBe('Rowan');
+            expect(await loadIdentity()).toEqual(saved);
+        });
+
+        it("the new name not kept here, and the tab closed instead: this browser opens its old name beside the node's new one, which the app then takes (App.name.test)", async () => {
+            const node = renameNode();
+            render(<WelcomePage onComplete={vi.fn()} />);
+            await submitInvite();
+            await screen.findByText(/Choose your look/);
+            const saved = (await loadIdentity())!;
+            failTheSaveAfterTheUpdate(node);
+            await backAndRename('Robin');
+            expect(await screen.findByRole('alert')).toHaveTextContent("couldn't keep it");
+
+            // What the app opens with on the next load: this key with its old name here, and Robin on the node. App.tsx
+            // takes the node's name then, and sends no register that would rename the member back (App.name.test).
+            cleanup();
+            expect(await loadIdentity()).toEqual(saved);
+            expect(node.state.members.get(saved.publicKey)).toBe('Robin');
+            expect(registers(node)).toHaveLength(0);
+        });
     });
 });
 

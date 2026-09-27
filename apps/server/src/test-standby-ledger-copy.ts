@@ -40,6 +40,16 @@
  *     restart, are held to the ledger's total before its clear until M's real copy lands.
  * 13. The format re-seed is used up when it clears: one whose fetch the main server refuses is asked for again at the
  *     next pull (before, not until the next boot); one whose import fails is not, and the next pull, a seed, lands.
+ * 14. On M0's ledger: the guard measures the ledger's total after a copy's writes against before, as SQLite sums it (with
+ *     compensation), not a running sum of doubles in the copy's order. The review's pair (+1e20, Eve 1000, −1e20, then
+ *     Eve alone) and 1000 Beans hidden in 2,500 accounts between 20,000 of ±9e11 that cancel are refused (before, each
+ *     measured 0 and landed). A balance that parses to Infinity, or ±1e15, is refused before anything is written.
+ * 15. A copy naming no account that re-keys a member: memory follows the rows, so a read of the old key and the standby's
+ *     own flush move nothing, and the next copy lands (before, memory kept the old key: the flush wrote a Commons credit
+ *     with no debit, and every later copy was refused). An account list whose every entry is unreadable names no account:
+ *     it changes none, the whole-copy check reads no ledger in it, and a held force-resync refuses it.
+ * 16. A standby's own demurrage flush writes nothing: its trades are its main server's after a copy (before, a decay it
+ *     flushed over another window than the main server's stayed in its history through every copy).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -122,6 +132,7 @@ async function child(): Promise<void> {
                 transactions: db.prepare('SELECT id, from_pubkey, to_pubkey, amount, tax_fee, project_id, memo, timestamp FROM transactions ORDER BY id').all(),
                 beanpool: db.prepare("SELECT public_key, callsign FROM members WHERE callsign LIKE 'BeanPool%' ORDER BY public_key").all(),
                 members: (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c,
+                posts: (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c,
                 format: cfg('replica_format'),
                 mismatch: cfg('replica_ledger_mismatch'),
                 held: cfg('replica_held_sum'),
@@ -141,7 +152,12 @@ async function child(): Promise<void> {
          * the copies that went before one in a review's probes: an account set that names nothing, or only the Commons
          * holding the ledger's total (each moves no Beans), and a key SQLite stores as another string.
          */
-        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint' | 'surrogate'; publicKey?: string }) => {
+        forge: async (a: {
+            kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint' | 'surrogate' | 'add' | 'unreadable-only';
+            publicKey?: string;
+            /** For `add`: accounts put in after the real ones, in this order. A balance of null here is sent as Infinity. */
+            add?: { publicKey: string; balance: number | null }[];
+        }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
@@ -151,6 +167,19 @@ async function child(): Promise<void> {
             if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             else if (a.kind === 'drop') payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
             else if (a.kind === 'empty') payload.accounts = [];
+            else if (a.kind === 'add') {
+                // Signed as JSON.stringify writes Infinity (null), which is what the standby checks the signature against:
+                // a body carrying 1e400 there parses to Infinity and still verifies (the orchestrator's door sends it).
+                for (const x of a.add ?? []) {
+                    payload.accounts.push({ publicKey: x.publicKey, balance: x.balance === null ? Infinity : x.balance, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
+                }
+            } else if (a.kind === 'unreadable-only') {
+                // An account list whose every entry has no key this server can store: none, and half a surrogate pair.
+                payload.accounts = [
+                    { publicKey: '', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+                    { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+                ];
+            }
             else if (a.kind === 'commons-only' || a.kind === 'commons-mint') {
                 // The Commons holding what every account holds between them, and no other account; then, for the mint, a
                 // new key holding 1000 beside it.
@@ -206,6 +235,44 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.add, a.publicKey);
             return true;
+        },
+        /**
+         * The main server's ledger as it can be: Beans moved between two accounts (the sum kept), and an account last read
+         * `epochsAgo` days ago, so demurrage is due on it. Memory follows, as at a boot.
+         */
+        'plant-ledger': async (a: { moves: { publicKey: string; add: number; epochsAgo?: number }[] }) => {
+            const { db } = await import('./db/db.js');
+            const { reconcileLedgerFromDb } = await import('./state-engine.js');
+            const today = Math.floor(Date.now() / 86_400_000);
+            for (const m of a.moves) {
+                db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(m.add, m.publicKey);
+                if (typeof m.epochsAgo === 'number') db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?').run(today - m.epochsAgo, m.publicKey);
+            }
+            reconcileLedgerFromDb();
+            return today;
+        },
+        /** A read of a balance, as a route makes it (demurrage due is applied in memory); `daysAgo` reads on an earlier day. */
+        'read-balance': async (a: { publicKey: string; daysAgo?: number }) => {
+            const { getBalance } = await import('./state-engine.js');
+            const realNow = Date.now;
+            if (a.daysAgo) Date.now = () => realNow() - a.daysAgo! * 86_400_000;
+            try { return getBalance(a.publicKey).balance; } finally { Date.now = realNow; }
+        },
+        /** The ledger this server holds in memory: every account (no demurrage applied by the read) and the Commons pot. */
+        'memory-ledger': async () => {
+            const { ledger } = await import('./engine/ledger.js');
+            const { getCommonsBalanceExact } = await import('./state-engine.js');
+            return {
+                accounts: ledger.getAllAccounts().map((x) => ({ public_key: x.id, balance: x.balance, last_demurrage_epoch: x.lastDemurrageEpoch }))
+                    .sort((p, q) => (p.public_key < q.public_key ? -1 : 1)),
+                pot: getCommonsBalanceExact(),
+            };
+        },
+        /** The main server replaces a member's key (an operator's re-enrolment, engine/member-wizards.ts). */
+        rekey: async (a: { oldPk: string; newPk: string }) => {
+            const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+            const { code } = issueRekeyCode(a.oldPk, 'owner:password');
+            return completeRekey(a.oldPk, a.newPk, code, 'owner:password').success;
         },
         /**
          * The whole-copy check, on M's current whole copy fetched with the replication token and not imported: what the
@@ -291,7 +358,7 @@ function built(what: string, a: Answer): any {
 }
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
-type Ledger = { accounts: any[]; sum: number; transactions: any[]; beanpool: any[]; members: number; format: string | null; mismatch: string | null; held: string | null };
+type Ledger = { accounts: any[]; sum: number; transactions: any[]; beanpool: any[]; members: number; posts: number; format: string | null; mismatch: string | null; held: string | null };
 
 /** Where two ledgers differ: accounts row for row and column for column, and the trades' ledger columns. */
 function ledgerDiff(m: Ledger, s: Ledger): string[] {
@@ -321,6 +388,24 @@ function ledgerDiff(m: Ledger, s: Ledger): string[] {
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 4).join(' | ')}`);
 
+type Memory = { accounts: { public_key: string; balance: number; last_demurrage_epoch: number }[]; pot: number };
+/** Where the ledger a server holds in memory differs from its rows: every account, and the Commons pot. */
+function memoryVsRows(mem: Memory, rows: Ledger): string[] {
+    const out: string[] = [];
+    const inMemory = new Map(mem.accounts.map((a) => [a.public_key, a]));
+    const inRows = new Set(rows.accounts.map((r) => r.public_key));
+    for (const r of rows.accounts) {
+        const m = inMemory.get(r.public_key);
+        if (!m) { out.push(`${r.public_key.slice(0, 12)} not in memory`); continue; }
+        if (m.balance !== r.balance) out.push(`${r.public_key.slice(0, 12)}.balance: memory ${m.balance}, row ${r.balance}`);
+        if (m.last_demurrage_epoch !== r.last_demurrage_epoch) out.push(`${r.public_key.slice(0, 12)}.epoch: memory ${m.last_demurrage_epoch}, row ${r.last_demurrage_epoch}`);
+    }
+    for (const k of inMemory.keys()) if (!inRows.has(k)) out.push(`${k.slice(0, 12)} only in memory (${inMemory.get(k)!.balance})`);
+    const potRow = rows.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance;
+    if (mem.pot !== potRow) out.push(`pot: memory ${mem.pot}, row ${potRow}`);
+    return out;
+}
+
 /** A stopped node's database, written as a bug or an old importer left it. */
 function withDb(dir: string, fn: (db: Database.Database) => void): void {
     const db = new Database(path.join(dir, 'state.db'));
@@ -337,16 +422,18 @@ function setLocalConfig(dir: string, patch: Record<string, unknown>): void {
  * a step can have the next copy a standby asks for (a delta or a whole one) answered with a payload M signed, or refused
  * with a status, as a main server can send them. The standby's own puller fetches, checks and imports it.
  */
-interface MainServerDoor { url: string; next: (answer: { status: number; body?: unknown }) => void; waiting: () => number; close: () => Promise<void> }
+/** A copy the door answers with: a payload M signed as JSON, or its text as sent (`raw`), or a status alone. */
+type DoorAnswer = { status: number; body?: unknown; raw?: string };
+interface MainServerDoor { url: string; next: (answer: DoorAnswer) => void; waiting: () => number; close: () => Promise<void> }
 async function mainServerDoor(target: string): Promise<MainServerDoor> {
-    const queued: { status: number; body?: unknown }[] = [];
+    const queued: DoorAnswer[] = [];
     const server = http.createServer((req, res) => {
         void (async () => {
             try {
                 const answer = req.url?.startsWith('/api/local/admin/sync-') ? queued.shift() : undefined;
                 if (answer) {
                     res.writeHead(answer.status, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' });
-                    res.end(answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body));
+                    res.end(answer.raw ?? (answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body)));
                     return;
                 }
                 const chunks: Buffer[] = [];
@@ -776,6 +863,129 @@ async function main(): Promise<void> {
             `it is used up all the same: the next pull is a whole copy, not another clear, and, no copy having landed since the clear, a seed that lands (${JSON.stringify({ ok: after13.ok, mode: after13.mode, error: after13.error, format: t13.format })}; differences ${first(ledgerDiff(m13, t13))})`);
         refused.push(...(await reseedT.send('fetches')).blocked);
         await reseedT.kill('SIGTERM');
+
+        // ── 14. The guard measures the ledger's real total; a balance no ledger holds is refused ──
+        console.log('\n— 14. on M0\'s ledger, which sums to 0: copies that hide a mint from a running sum, and balances no ledger holds —');
+        const hexKey = () => crypto.randomBytes(32).toString('hex');
+        const pull0 = async (answer: DoorAnswer, whole = false) => { door0.next(answer); return standby0.send('pull', { whole }); };
+        const eve = hexKey();
+        // The review's pair (4116975493): +1e20, Eve 1000 and −1e20 measured 0 in the guard's running sum of doubles, and the
+        // copy after it, dropping the two big accounts, measured 0 too. The standby held 1000 Beans M0's ledger doesn't have.
+        const bigPair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance: 1e20 }, { publicKey: eve, balance: 1000 }, { publicKey: hexKey(), balance: -1e20 }] }) });
+        const evePair = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: eve, balance: 1000 }] }) });
+        let z14: Ledger = await main0.send('ledger');
+        s0l = await standby0.send('ledger');
+        assert(bigPair.ok === false && evePair.ok === false, `the review's pair of copies is refused, both (${JSON.stringify([bigPair.error ?? 'imported', evePair.error ?? 'imported'])})`);
+        assert(ledgerDiff(z14, s0l).length === 0 && Math.abs(s0l.sum) < 1e-9,
+            `S0's ledger stays M0's, summing to 0, with no Beans for Eve (S0 sums to ${s0l.sum}; differences ${first(ledgerDiff(z14, s0l))})`);
+        // The same trick inside any bound on a balance: 10,000 accounts holding 9e11 take a running sum to 9e15, where a
+        // double's step is 1, so 2,500 accounts holding 0.4 each add nothing to it, and 10,000 at −9e11 bring it back to 0.
+        const many = (n: number, balance: number) => Array.from({ length: n }, () => ({ publicKey: hexKey(), balance }));
+        const hidden = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [...many(10_000, 9e11), ...many(2_500, 0.4), ...many(10_000, -9e11)] }) });
+        z14 = await main0.send('ledger');
+        s0l = await standby0.send('ledger');
+        assert(hidden.ok === false && /Conservation violation: import shifted total balance by 1000\.0000/.test(hidden.error ?? ''),
+            `a copy that hides 1000 Beans in 2,500 accounts between 20,000 that cancel is refused, measured at 1000 (${hidden.ok ? 'imported' : hidden.error})`);
+        assert(ledgerDiff(z14, s0l).length === 0, `S0's ledger stays M0's (S0 sums to ${s0l.sum}; differences ${first(ledgerDiff(z14, s0l))})`);
+        // A balance no ledger holds, before anything is written: one that parses to Infinity (1e400, which the signature
+        // doesn't see: it is checked against JSON.stringify's text, where Infinity is null), and a pair of ±1e15 that cancel.
+        built('M0: Gwen lists plums (a change the next copy carries)', await Z_(gwen0, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title: 'Plums', description: 'Plums, from Gwen', credits: 2, priceType: 'fixed', authorPublicKey: gwen0.pk,
+        }));
+        const inf = hexKey();
+        const infRaw = JSON.stringify(await main0.send('forge', { kind: 'add', add: [{ publicKey: inf, balance: null }] }))
+            .replace(`"publicKey":"${inf}","balance":null`, `"publicKey":"${inf}","balance":1e400`);
+        require_(infRaw.includes('1e400'), 'a copy M0 signed that carries a balance of 1e400');
+        const infinite = await pull0({ status: 200, raw: infRaw });
+        const absurd = await pull0({ status: 200, body: await main0.send('forge', { kind: 'add', add: [{ publicKey: hexKey(), balance: 1e15 }, { publicKey: hexKey(), balance: -1e15 }] }) });
+        const after14: Ledger = await standby0.send('ledger');
+        assert(infinite.ok === false && /beyond what any ledger holds/.test(infinite.error ?? ''), `a balance that parses to Infinity is refused (${infinite.ok ? 'imported' : infinite.error})`);
+        assert(absurd.ok === false && /beyond what any ledger holds/.test(absurd.error ?? ''), `so are two of ±1e15 that cancel (${absurd.ok ? 'imported' : absurd.error})`);
+        assert(ledgerDiff(s0l, after14).length === 0 && after14.posts === s0l.posts,
+            `neither wrote anything: S0's ledger is as it was, and it doesn't hold Gwen's plums (differences ${first(ledgerDiff(s0l, after14))}; listings ${s0l.posts} → ${after14.posts})`);
+        const real14 = await standby0.send('pull', {});
+        z14 = await main0.send('ledger');
+        s0l = await standby0.send('ledger');
+        assert(real14.ok === true && ledgerDiff(z14, s0l).length === 0 && s0l.posts === after14.posts + 1,
+            `the next real copy lands: S0's ledger is M0's, and the plums are there (${JSON.stringify({ ok: real14.ok, mode: real14.mode, error: real14.error })}; differences ${first(ledgerDiff(z14, s0l))})`);
+
+        // ── 15. A copy naming no account that re-keys a member ──
+        console.log('\n— 15. a copy naming no account that re-keys a member: the standby\'s memory follows its rows —');
+        const yan2 = newId('Yan');
+        // Yan holds 500 more, not read since long ago (the review's probe: demurrage due on a read).
+        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: -500 }, { publicKey: yan.pk, add: 500, epochsAgo: 20_000 }] });
+        const p15 = await standby0.send('pull', {});
+        let r15: Ledger = await standby0.send('ledger');
+        require_(p15.ok === true && ledgerDiff(await main0.send('ledger'), r15).length === 0, `S0 copies it (${p15.ok ? 'imported' : p15.error})`);
+        require_(await main0.send('rekey', { oldPk: yan.pk, newPk: yan2.pk }), 'M0 replaces Yan\'s key');
+        const rekeyed = await pull0({ status: 200, body: await main0.send('forge', { kind: 'empty' }) });
+        r15 = await standby0.send('ledger');
+        const yanRow = r15.accounts.find((a) => a.public_key === yan2.pk);
+        assert(rekeyed.ok === true && !!yanRow && yanRow.balance > 500 && !r15.accounts.some((a) => a.public_key === yan.pk),
+            `the copy lands, and S0's rows hold Yan's account under the new key (${rekeyed.ok ? 'imported' : rekeyed.error}; ${JSON.stringify(yanRow ?? null)})`);
+        assert(memoryVsRows(await standby0.send('memory-ledger'), r15).length === 0,
+            `S0's memory is its rows: Yan's account under the new key and none under the old (differences ${first(memoryVsRows(await standby0.send('memory-ledger'), r15))})`);
+        await standby0.send('read-balance', { publicKey: yan.pk });
+        await standby0.send('persist');
+        const flushed15: Ledger = await standby0.send('ledger');
+        assert(Math.abs(flushed15.sum) < 1e-9 && ledgerDiff(r15, flushed15).length === 0,
+            `a read of the old key and S0's own flush move nothing: its rows still sum to M0's 0 (${flushed15.sum}; differences ${first(ledgerDiff(r15, flushed15))})`);
+        const next15 = await standby0.send('pull', {});
+        let z15: Ledger = await main0.send('ledger');
+        r15 = await standby0.send('ledger');
+        assert(next15.ok === true && ledgerDiff(z15, r15).length === 0,
+            `the next real copy lands, and S0's ledger is M0's (${JSON.stringify({ ok: next15.ok, mode: next15.mode, error: next15.error })}; differences ${first(ledgerDiff(z15, r15))})`);
+        assert(memoryVsRows(await standby0.send('memory-ledger'), r15).length === 0, 'and its memory is its rows');
+
+        console.log('\n— 15. an account list whose every entry is unreadable names no account —');
+        // Every entry without a key this server can store (none, half a surrogate pair): a copy naming no account, which
+        // carries no ledger. Read as a ledger naming nobody, it emptied S0's, a ledger that sums to 0 let that past the
+        // guard, and it released a hold whose total was 0 (4116975147's round, "Not a finding").
+        const unreadable = await pull0({ status: 200, body: await main0.send('forge', { kind: 'unreadable-only' }) }, true);
+        r15 = await standby0.send('ledger');
+        z15 = await main0.send('ledger');
+        assert(unreadable.ok === true && ledgerDiff(z15, r15).length === 0,
+            `a whole copy carrying only such entries lands and changes no account: S0's ledger stays M0's (${unreadable.ok ? 'imported' : unreadable.error}; differences ${first(ledgerDiff(z15, r15))})`);
+        const note15 = JSON.parse(r15.mismatch ?? 'null');
+        const after15 = await standby0.send('pull', {});
+        assert(unreadable.consistency?.ledger === null && note15?.resync !== 'scheduled' && after15.mode === 'delta',
+            `the whole-copy check reads no ledger in it either, and asks for no force-resync (${JSON.stringify({ ledger: unreadable.consistency?.ledger, note: note15, next: after15.mode })})`);
+        await standby0.send('plant-balance', { publicKey: gwen0.pk, add: 4 });
+        await standby0.send('plant-balance', { publicKey: yan2.pk, add: -4 });
+        const c15 = await standby0.send('check-copy');
+        const n15 = JSON.parse((await standby0.send('ledger') as Ledger).mismatch ?? 'null');
+        require_(c15.consistency?.ledger?.differing === 2 && n15?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n15)})`);
+        const heldUnreadable = await pull0({ status: 200, body: await main0.send('forge', { kind: 'unreadable-only' }) });
+        r15 = await standby0.send('ledger');
+        assert(heldUnreadable.mode === 'resync' && heldUnreadable.ok === false && r15.held !== null,
+            `that force-resync, served such a copy, refuses it: it carries no ledger to put back the one the clear took, whose total was 0 (${JSON.stringify({ mode: heldUnreadable.mode, ok: heldUnreadable.ok, error: heldUnreadable.error, held: r15.held })})`);
+        const heldReal15 = await standby0.send('pull', {});
+        r15 = await standby0.send('ledger');
+        z15 = await main0.send('ledger');
+        assert(heldReal15.ok === true && ledgerDiff(z15, r15).length === 0 && r15.held === null,
+            `M0's real copy lands, and nothing is held any more (${JSON.stringify({ ok: heldReal15.ok, mode: heldReal15.mode, error: heldReal15.error, held: r15.held })}; differences ${first(ledgerDiff(z15, r15))})`);
+
+        // ── 16. The standby's own demurrage ──
+        console.log('\n— 16. a standby\'s own demurrage flush: no trade of its own stays through a copy —');
+        // Yan holds Beans last read 40 days ago. M0 reads her balance on a day 20 days ago and again today (two decays, two
+        // rows); S0 reads it today, between them, over the whole 40 days, and flushes (a row M0 never made).
+        await main0.send('plant-ledger', { moves: [{ publicKey: gwen0.pk, add: -400 }, { publicKey: yan2.pk, add: 400, epochsAgo: 40 }] });
+        require_((await standby0.send('pull', {})).ok === true, 'S0 copies it');
+        await main0.send('read-balance', { publicKey: yan2.pk, daysAgo: 20 });
+        await main0.send('persist');
+        await standby0.send('read-balance', { publicKey: yan2.pk });
+        await standby0.send('persist');
+        await main0.send('read-balance', { publicKey: yan2.pk });
+        await main0.send('persist');
+        const z16: Ledger = await main0.send('ledger');
+        const decays = z16.transactions.filter((t) => t.id.startsWith(`demurrage_${yan2.pk.slice(0, 16)}_`));
+        require_(decays.length === 2, `M0 holds two demurrage trades for Yan, one per read (${decays.map((t) => t.id.slice(27)).join(', ')})`);
+        const p16 = await standby0.send('pull', {});
+        const r16: Ledger = await standby0.send('ledger');
+        assert(p16.ok === true && ledgerDiff(z16, r16).length === 0,
+            `the next copy lands, and S0's trades are M0's, with no demurrage trade of its own (${JSON.stringify({ ok: p16.ok, error: p16.error })}; differences ${first(ledgerDiff(z16, r16))})`);
+        assert(memoryVsRows(await standby0.send('memory-ledger'), r16).length === 0, 'and its memory is its rows');
+        refused.push(...(await standby0.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
 
         assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');
 

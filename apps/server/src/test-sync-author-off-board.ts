@@ -20,7 +20,8 @@
  *   - the delta after a holiday switch carries that member's listings and no one else's (it stays a delta);
  *   - reading a listing by id for the cache (utils/db.ts getPost, `?id=…&sync=true`) doesn't put it back;
  *   - the author's own phone, and a member with an open deal on the listing, keep it as it is;
- *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone.
+ *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
+ *   - on 2,000 members and 20,000 posts, no statement of the delta read walks every post (EXPLAIN QUERY PLAN).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-author-off-board.ts
  */
@@ -273,6 +274,7 @@ async function main() {
     const bobsCopy = bobPhone.rows.get(farmOffer);
     assert(bobsCopy?.status === 'active' && bobsCopy?.title === 'Eggs',
         `Bob, who has an open deal on the eggs, keeps the listing as it is (status ${bobsCopy?.status})`);
+
     se.resumeEnterprise(farm, 'admin');
     await phone.sync();
     const resumed = await matchesBoard(phone, 'the farm resumed, next delta');
@@ -300,6 +302,53 @@ async function main() {
     const afterClaim = await matchesBoard(phone, 'the claim paid, next delta');
     assert(!afterClaim.has(shift), 'the completed Bake shift is off the phone\'s Market');
     assert(phone.rows.get(shift)?.status === 'completed', 'the delta carried it as completed');
+
+    console.log('\n── the delta read searches its indexes, on a node\'s worth of posts ──');
+    // 2,000 members and 20,000 posts that nothing has changed in a year, and twenty members on holiday with an upcoming
+    // event each. Like a node, no sqlite_stat1: nothing runs ANALYZE.
+    // Walking idx_posts_updated_at for the ORDER BY read every post and tested the OR on each (5 ms a delta here).
+    const aYearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString();
+    const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    db.transaction(() => {
+        const member = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, updated_at)
+                                   VALUES (?, ?, 'active', ?, 'seed', ?, ?)`);
+        const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+                                 created_at, updated_at, event_start_at, event_end_at) VALUES (?, ?, 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
+        const keys = Array.from({ length: 2000 }, (_, i) => {
+            const k = crypto.randomBytes(32).toString('hex');
+            member.run(k, `Bulk${i}`, aYearAgo, `INV-BULK${i}`, aYearAgo);
+            return k;
+        });
+        for (let i = 0; i < 20_000; i++) post.run(crypto.randomUUID(), i % 2 ? 'offer' : 'need', `Bulk ${i}`, keys[i % keys.length], aYearAgo, aYearAgo, null, null);
+        for (const k of keys.slice(0, 20)) {
+            db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', 'true')`).run(k);
+            post.run(crypto.randomUUID(), 'event', 'Holiday event', k, aYearAgo, aYearAgo, nextWeek, nextWeek);
+        }
+    })();
+    // Every statement the phone's delta read prepares, with what it ran it with.
+    const ran: Array<{ sql: string; params: any[] }> = [];
+    const prepare = db.prepare;
+    (db as any).prepare = (sql: string) => new Proxy(prepare.call(db, sql), {
+        get(stmt, prop) {
+            const value = Reflect.get(stmt, prop, stmt);
+            if (typeof value !== 'function') return value;
+            if (prop !== 'all' && prop !== 'get') return value.bind(stmt);
+            return (...params: any[]) => { ran.push({ sql, params }); return value.apply(stmt, params); };
+        },
+    });
+    let bulkDelta: any[];
+    try { bulkDelta = await phone.sync(); } finally { (db as any).prepare = prepare; }
+    const deltaRead = ran.find(r => /\bFROM posts p\b/.test(r.sql) && r.sql.includes('p.updated_at >= ?'));
+    assert(!!deltaRead, 'the phone\'s delta read ran');
+    assert(bulkDelta.length < 100 && !bulkDelta.some(r => /^Bulk \d/.test(r.title)),
+        `it is still a delta: none of the 20,000 unchanged offers and needs is in it (${bulkDelta.length} rows)`);
+    const plans = ran.filter(r => /\bFROM posts p\b/.test(r.sql)).map(r => ({
+        sql: r.sql.replace(/\s+/g, ' ').trim().slice(0, 70),
+        plan: (db.prepare(`EXPLAIN QUERY PLAN ${r.sql}`).all(...r.params) as Array<{ detail: string }>).map(p => p.detail),
+    }));
+    const walks = plans.filter(p => p.plan.some(d => /^SCAN p\b/.test(d)));
+    assert(plans.length >= 1 && walks.length === 0,
+        `no statement of the delta read walks every post (${walks.map(w => `${w.sql}…: ${w.plan.join('; ')}`).join(' | ') || `${plans.length} statements, none has SCAN p`})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

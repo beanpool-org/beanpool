@@ -441,6 +441,18 @@ const POST_ROW_SELECT = `
         LEFT JOIN groups g ON p.target_group_id = g.id`;
 
 const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
+/**
+ * RECENT_ORDER for a delta read (`updatedAfter`). The unary plus stops the ORDER BY from choosing idx_posts_updated_at:
+ * a node has no sqlite_stat1 (nothing runs ANALYZE), and without it the planner walks that index in order across every
+ * post and tests the delta's OR on each. With the plus, each half of the OR is an index search (MULTI-INDEX OR) and the
+ * few rows found are sorted. Measured on 20,000 posts: 5.1 ms a delta walking the index, 0.13 ms with the plus.
+ */
+const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
+
+/** The newest-first order: DELTA_ORDER for a delta read, RECENT_ORDER for every other. */
+function recentOrder(filter: PostFilter | undefined): string {
+    return filter?.updatedAfter ? DELTA_ORDER : RECENT_ORDER;
+}
 // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
 const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
 
@@ -571,7 +583,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         }
         sql += where;
         params.push(...whereParams);
-        sql += byDistance ? NEAREST_ORDER : RECENT_ORDER;
+        sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
@@ -735,8 +747,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // a phone to take them off or put them back. Every writer of that moves members.updated_at: the
         // members_touch_updated_at trigger for `paused` and `status`, setHolidayMode for holiday. Local authors only
         // (origin_node IS NULL), which is every author whose standing is kept here, and keeps this half on
-        // idx_posts_author_created_local: both halves are then an index search (MULTI-INDEX OR). Without it the
-        // planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
+        // idx_posts_author_created_local: with DELTA_ORDER both halves are then an index search (MULTI-INDEX OR).
+        // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
         where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?)))";
         params.push(filter.updatedAfter, filter.updatedAfter);
     }
@@ -746,7 +758,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         rows = rowsNear(db, near, where, params, filter!);
     } else {
         let query = `${POST_ROW_SELECT}
-        WHERE 1=1${where}${RECENT_ORDER}`;
+        WHERE 1=1${where}${recentOrder(filter)}`;
         if (filter?.limit) {
             query += " LIMIT ? OFFSET ?";
             params.push(filter.limit, filter.offset || 0);

@@ -607,6 +607,10 @@ describe('← Back on the photo step changes the name on the same account (card 
         it('the node cuts a name longer than a join keeps (20 characters): this browser keeps the cut name, shows it and says why', async () => {
             const node = renameNode();
             render(<WelcomePage onComplete={vi.fn()} />);
+            // The form takes no more than the node keeps. A longer name can still reach the node (a key kept from before
+            // this, or a script), set here past the field's cut: the node's answer is what counts.
+            await screen.findByText(/Join with Invite Code/);
+            expect(screen.getByLabelText('Your Callsign (Name)')).toHaveAttribute('maxlength', '20');
             await submitInvite('Rowan of the Valley Farm Wren');
             await screen.findByText(/Choose your look/);
             const key = node.redeems()[0].body.publicKey;

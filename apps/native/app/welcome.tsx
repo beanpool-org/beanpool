@@ -2031,7 +2031,7 @@ export default function WelcomeScreen() {
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
                             onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
-                            maxLength={32}
+                            maxLength={MAX_JOIN_NAME}
                             autoFocus={true}
                             autoCapitalize="words"
                             accessibilityLabel="Your name or nickname"

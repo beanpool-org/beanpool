@@ -2390,7 +2390,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 value={callsign}
                                 onChange={(e) => setCallsign(e.target.value)}
                                 placeholder="e.g. Alice"
-                                maxLength={32}
+                                maxLength={MAX_JOIN_CALLSIGN}
                                 disabled={loading}
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                                 style={inputStyle}

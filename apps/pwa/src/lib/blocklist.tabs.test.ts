@@ -495,6 +495,23 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(unblocksSent()).toEqual(unblocks);
     });
 
+    it('a key the move\'s list found blocked already is not taken off again: a block made on another device after the member\'s unblock here stands', async () => {
+        const T = await oneTabMoving();
+        const blockElsewhere = (at: string) => { node.list = [...node.list.filter(k => k !== K1), K1]; node.stamps[K1] = at; };
+        // At 20 ms the member blocks K1 on another device, so the move's list finds it there at 32 ms and adds only K2.
+        // At 100 ms they unblock K1 here, and at 150 ms block K1 on the other device again: that block is their last word.
+        setTimeout(() => blockElsewhere('2026-09-28T09:00:00.020Z'), 10);
+        let unblocking: Promise<boolean> | null = null;
+        setTimeout(() => { unblocking = T.unblockUser(K1); }, 90);
+        setTimeout(() => blockElsewhere('2026-09-28T09:00:00.150Z'), 140);
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(unblocking).resolves.toBe(true);
+        expect(node.list).toEqual([K2, K1]);
+        expect(node.stamps[K1]).toBe('2026-09-28T09:00:00.150Z');
+        expect(T.getBlockedUsers()).toEqual([K2, K1]);
+        expect(unblocksSent()).toEqual([`remove ${K1}`]);
+    });
+
     it('an unblock made here before the move\'s list goes, still unanswered when it does: that list doesn\'t send them', async () => {
         localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
         // The member's remove reaches the node at 2 ms, as the read answers, and its own answer takes 100 ms: the move's

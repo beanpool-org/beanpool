@@ -129,7 +129,7 @@ async function main(): Promise<void> {
             assert(false, `${t}: the manifest names columns it does not have (${list(notAColumn)})`);
         }
     }
-    assert(true, `(${tables.length} tables looked at)`);
+    console.log(`  ${tables.length} tables looked at`);
 
     console.log('\n— 3. watermarks and payload keys —');
     const { exportSyncState } = await import('@beanpool/engine');

@@ -311,7 +311,8 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  *   - whether an owner's or admin's app signed for it (isNodeAdmin: a role that acts; a moderator's app is a member's):
  *     the address and the last day, no key, in node_config row STAFF_SEEN_KEY, written with the counts, so a restart
  *     keeps it. At most MAX_ADDRESSES_PER_KIND addresses, none older than 8 days. The role is the one the signer held
- *     when it signed: an admin made later counts from then, and one removed still counts for the rest of the week.
+ *     when its app first signed for the address that day: an admin made later counts from the next day it signs for
+ *     it, and one removed still counts for the rest of the week.
  */
 export type SignatureKind = 'own' | 'unconfirmed' | 'old_app';
 
@@ -384,10 +385,10 @@ function countUnconfirmed(address: string, signer: string): void {
         }
         const h = hashOf(signer);
         let mine = byKey.get(h);
-        if (!mine?.has(address)) {
-            if ((mine?.size ?? 0) >= MAX_UNCONFIRMED_HOSTS_PER_KEY) return;
-            if (!mine && byKey.size >= MAX_KEYS_PER_ADDRESS) return;
-        }
+        // Counted for this address today already, and its role looked at then: nothing more to do.
+        if (mine?.has(address)) return;
+        if ((mine?.size ?? 0) >= MAX_UNCONFIRMED_HOSTS_PER_KEY) return;
+        if (!mine && byKey.size >= MAX_KEYS_PER_ADDRESS) return;
         if (!countSignature('unconfirmed', address, signer, day)) return;
         if (!mine) {
             mine = new Set();

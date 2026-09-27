@@ -84,7 +84,7 @@ async function send(method: 'POST' | 'DELETE', path: string, body: unknown, sign
     }
     const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyString });
     const text = await res.text();
-    let parsed: any = null;
+    let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { parsed = text; }
     return { status: res.status, body: parsed };
 }

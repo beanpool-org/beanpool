@@ -2,6 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+import { audienceOf } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 
 export interface ShutdownStatus {
@@ -2413,6 +2414,28 @@ export interface AppAddress {
     busiestDay: number;
 }
 
+export interface AddressSighting {
+    address: string;
+    /** Members' apps that reached the node at it today. */
+    today: number;
+    /** Members' apps that reached it there on the busiest day of the last 7. */
+    busiestDay: number;
+    /** Whether an owner's or admin's app reached it there this week. Absent from a server before 2026-09-27's guard. */
+    ownerOrAdmin?: boolean;
+}
+
+export interface HeldBackAddress extends AddressSighting {
+    /**
+     * another-community: a beanpool.org name that isn't this community's (never confirmed here); directory: the
+     * BeanPool directory the node holds lists it as a community's address (confirmed only once ticked, after a warning
+     * naming that community; only a node that holds the directory says so); not-this-page: any other address but the
+     * one Settings is open at (confirmed only once ticked, whoever's apps reached it).
+     */
+    reason: 'another-community' | 'directory' | 'not-this-page';
+    /** The directory's entry for it, when it lists it: that community's name, or null when it gives none. */
+    directory?: { name: string | null };
+}
+
 export interface AppAddressesReport {
     addresses: AppAddress[];
     /**
@@ -2420,8 +2443,14 @@ export interface AppAddressesReport {
      * none, so a node with only that still accepts any address until the switch. Absent from a server before 2026-09-27.
      */
     named?: boolean;
-    /** Addresses apps reached this node at while it knew none of its own: offered to confirm. */
-    unconfirmed: { address: string; today: number; busiestDay: number }[];
+    /**
+     * Addresses offered to confirm with one tap. From a server with the guard, only ever the one Settings is open at
+     * (sent as `host`), with the count of apps that reached the node there (apps/server engine/address-offers.ts). A
+     * server from before it lists every address apps reached this node at while it knew none of its own.
+     */
+    unconfirmed: AddressSighting[];
+    /** Addresses apps reached it at that are not offered with one tap, and why. Absent from a server before the guard. */
+    heldBack?: HeldBackAddress[];
     /** Apps that signed in the old format, bound to no community. */
     oldApps: { today: number; busiestDay: number };
     /** The day (UTC) old apps stop working here, or null when they already don't. */
@@ -2429,8 +2458,13 @@ export interface AppAddressesReport {
     unboundSignaturesAccepted: boolean;
 }
 
+/**
+ * Each call sends the host Settings reaches the node at (`host`): the only address the node offers with one tap, unless
+ * the directory it holds lists it as a community's, which only the node knows (apps/server routes/app-addresses.ts).
+ */
 async function appAddressesCall(nodeUrl: string, path: string, init: RequestInit): Promise<AppAddressesReport> {
-    const res = await fetch(resolveNodeApiUrl(nodeUrl, path), init);
+    const host = audienceOf(nodeUrl);
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, path, host ? { host } : undefined), init);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}: ${res.statusText}`);
     return body as AppAddressesReport;

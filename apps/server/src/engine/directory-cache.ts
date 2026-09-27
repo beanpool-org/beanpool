@@ -1,6 +1,9 @@
 /**
  * The communities directory as this node last fetched it (global node G5, design §3.2): `directory_cache`, written by
- * the hourly mirror (services/directory-mirror.ts) and read by GET /api/global/communities and /api/global/home.
+ * the hourly mirror (services/directory-mirror.ts) and read by GET /api/global/communities and /api/global/home, and by
+ * Settings, to warn before an owner confirms another community's address as this one's (engine/address-offers.ts).
+ * Only a node whose `directoryMirror` switch is on (the global profile's default; off by default in the local one), or
+ * a standby copying one, holds any rows: on the others the table is empty and that warning never appears.
  *
  * ## Every registry row is untrusted
  *
@@ -32,6 +35,7 @@
  * standby never fetches; a copy is its only writer until it takes over.
  */
 import { db } from '../db/db.js';
+import { audienceOf } from '@beanpool/core';
 import { haversineKm, type SyncDirectoryCommunity } from '@beanpool/engine';
 
 /** What a registry row holds once checked. */
@@ -408,6 +412,27 @@ export function listCommunities(query: CommunityQuery): { communities: Community
 /** How many communities are listed. */
 export function listedCommunityCount(): number {
     return listed().length;
+}
+
+// The listed communities by their address's host, built from the rows `listed()` holds and again when they change.
+let byHost: { rows: ReturnType<typeof listed>; map: Map<string, { key: string; name: string | null }> } | null = null;
+
+/**
+ * The listed community whose address is `host`, in the form a member's app signs a host (audienceOf: lower case, no
+ * port), or null. What the table holds and nothing else: no fetch. The rows are untrusted (see the header): anyone can
+ * list any address, so a match is a reason to warn, never proof whose address it is.
+ */
+export function listedCommunityAt(host: string): { key: string; name: string | null } | null {
+    const rows = listed();
+    if (!byHost || byHost.rows !== rows) {
+        const map = new Map<string, { key: string; name: string | null }>();
+        for (const { row } of rows) {
+            const at = row.url ? audienceOf(row.url) : null;
+            if (at && !map.has(at)) map.set(at, { key: row.key, name: row.name });
+        }
+        byHost = { rows, map };
+    }
+    return byHost.map.get(host) ?? null;
 }
 
 /** A listed community with a place, and when this node first saw it. */

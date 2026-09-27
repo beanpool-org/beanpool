@@ -12,6 +12,8 @@
  *     community that can't be reached or doesn't know the statement yet keeps it for next time;
  *   - a registration on its way at Sign Out finishes before the leave goes out, one not yet sent never is, and nothing
  *     registers for the leaving key after that;
+ *   - a stamp that ran ahead of the clock is kept beside the key too, so after an iOS reinstall (app storage gone, the
+ *     keychain kept) the account's Sign Out is still stamped after its registrations, and takes them;
  *   - the same account signing back in on this phone is never undone by its old statement, even with the clock set back
  *     and after a restart: its statements are taken back as its key is written to the phone again, never presented,
  *     even when its registration then can't land (offline), and their communities go back on the record for its next
@@ -559,5 +561,42 @@ describe('Kim signs back in on the same phone', () => {
 
         expect(nodes.has(MULLUM, kim.publicKey) || nodes.has(BYRON, kim.publicKey)).toBe(false);
         expect(await pendingLeaveStatements()).toEqual([]);
+    });
+});
+
+describe('a stamp that ran ahead of the phone\'s clock', () => {
+    it('is kept beside the key: after an iOS reinstall her Sign Out is still stamped after her registration a day ahead, and takes it', async () => {
+        await importIdentity(kim);
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        mem.async.set(ANCHOR, MULLUM);
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const now = Date.now();
+        // Her clock is a day ahead as the app registers: Mullum refuses it as stale (401), but the stamp is written down.
+        vi.setSystemTime(now + DAY);
+        nodes.answer = () => 401;
+        await expect(registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).rejects.toThrow();
+        // Her clock is put right. The next registration lands, stamped after that one: a day ahead of every clock.
+        vi.setSystemTime(now);
+        nodes.answer = () => 'up';
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
+        const ahead = nodes.sent.at(-1)!.body.registeredAt as number;
+        expect(ahead).toBeGreaterThan(now + DAY);
+
+        // The app is deleted and installed again: its app storage goes, the keychain keeps her key and the token (iOS).
+        mem.async.clear();
+        vi.resetModules();
+        const registrations = await import('../push-registrations');
+        const leaving = await import('../account-leaves-phone');
+        const leave = await import('../push-leave');
+        // She sets the phone to Mullum again, and the app registers her there.
+        mem.async.set(ANCHOR, MULLUM);
+        expect(await registrations.registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
+        expect(nodes.sent.at(-1)!.body.registeredAt).toBeGreaterThan(ahead);
+
+        // Her Sign Out, online, takes her row: its stamp is later than the row's.
+        await leaving.signOutOfThisPhone(kim);
+        expect(nodes.sent.at(-1)!.body.leftAt).toBeGreaterThan(ahead);
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
+        expect(await leave.pendingLeaveStatements()).toEqual([]);
     });
 });

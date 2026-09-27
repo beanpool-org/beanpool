@@ -57,7 +57,8 @@ export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
 /**
  * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
  * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
- * account made can never outrank the registration of an account that signs in after it.
+ * account made can never outrank the registration of an account that signs in after it. Kept under this name twice, in
+ * AsyncStorage and in SecureStore beside the key, which an iOS reinstall keeps.
  */
 export const PUSH_STAMP_STORE_KEY = 'beanpool_push_stamp';
 

@@ -17,6 +17,7 @@
  * ({@link putBackOnRecord}, push-leave.ts).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
@@ -97,30 +98,49 @@ export function putBackOnRecord(communities: readonly string[], storage: Pick<St
 
 // ── The push stamp ──────────────────────────────────────────────────────────────────────────────────────────────
 
+type StampCopy = Pick<Storage, 'getItem' | 'setItem'>;
+
+/**
+ * The stamp's second copy, in SecureStore beside the phone's key and its push token. A stamp handed out while the clock
+ * ran ahead keeps every later one ahead, and a community takes them (it never compares a stamp with its own clock). An
+ * iOS reinstall keeps the keychain and clears app storage: with the stamp in app storage alone, the same key's next
+ * leave could be stamped earlier than a registration it made before, and remove nothing (#1258, deciding pass).
+ */
+const besideTheKey: StampCopy = {
+    getItem: (key) => SecureStore.getItemAsync(key),
+    setItem: (key, value) => SecureStore.setItemAsync(key, value),
+};
+
 let lastStamp = 0;
 let stampQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * The next push stamp: later than every one this phone gave before, whatever its clock does since (the clock, else
  * one past the last), and written down before it is returned, so no request carries a stamp the phone could hand out
- * again after a restart. One at a time. Compared by a community only with this phone's other stamps, never with its
- * own clock. A stamp that can't be written is logged and still used: this run keeps counting up from it.
+ * again after a restart. Kept twice, in `storage` and beside the key ({@link besideTheKey}), and the later copy
+ * counts: it is lost only with the key, and then the key signs nothing here anyway. One at a time. Compared by a
+ * community only with this phone's other stamps, never with its own clock. A copy that can't be read or written is
+ * logged and the stamp still used: this run keeps counting up from it.
  */
-export function nextPushStamp(storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<number> {
+export function nextPushStamp(storage: StampCopy = AsyncStorage, keyStore: StampCopy = besideTheKey): Promise<number> {
     const next = stampQueue.then(async () => {
         let stored = 0;
-        try {
-            const n = Number(await storage.getItem(PUSH_STAMP_STORE_KEY));
-            if (Number.isSafeInteger(n) && n > 0) stored = n;
-        } catch (e) {
-            console.warn('[Push] Could not read the last push stamp', e);
+        for (const copy of [storage, keyStore]) {
+            try {
+                const n = Number(await copy.getItem(PUSH_STAMP_STORE_KEY));
+                if (Number.isSafeInteger(n) && n > stored) stored = n;
+            } catch (e) {
+                console.warn('[Push] Could not read a copy of the last push stamp', e);
+            }
         }
         const stamp = Math.max(Date.now(), lastStamp + 1, stored + 1);
         lastStamp = stamp;
-        try {
-            await storage.setItem(PUSH_STAMP_STORE_KEY, String(stamp));
-        } catch (e) {
-            console.warn('[Push] Could not write the push stamp down', e);
+        for (const copy of [keyStore, storage]) {
+            try {
+                await copy.setItem(PUSH_STAMP_STORE_KEY, String(stamp));
+            } catch (e) {
+                console.warn('[Push] Could not write a copy of the push stamp down', e);
+            }
         }
         return stamp;
     });

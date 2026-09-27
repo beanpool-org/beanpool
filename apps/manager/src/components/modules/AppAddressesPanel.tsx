@@ -7,14 +7,18 @@
  * many apps used it; offers, with one tap, to confirm an address the node doesn't know (a self-hoster's custom domain
  * behind a proxy); and says how many apps too old to name a community still reach it before the switch date.
  *
- * An owner or admin confirms; nothing here is ever learned from a request by itself.
+ * An owner or admin confirms; nothing here is ever learned from a request by itself. The node offers an address only
+ * when an owner's or admin's app, or several members' apps, reached it there, and never another community's name
+ * (apps/server engine/address-offers.ts). The ones it holds back are shown with why: another community's
+ * beanpool.org name and one only one or two members' apps used can't be confirmed here at all; one the BeanPool
+ * directory lists as a community's address only after the owner ticks that it is this community.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { audienceOf } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import {
     confirmAppAddress, getAppAddresses, getTfaSessionToken, removeAppAddress,
-    type AppAddress, type AppAddressesReport,
+    type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
 
 const SOURCE_TEXT: Record<AppAddress['source'], string> = {
@@ -25,6 +29,24 @@ const SOURCE_TEXT: Record<AppAddress['source'], string> = {
 };
 
 const apps = (n: number) => `${n} app${n === 1 ? '' : 's'}`;
+const membersApps = (n: number) => (n === 1 ? "1 member's app" : `${n} members' apps`);
+
+/**
+ * A name in the BeanPool registrar's zone. A node with none of its names has no such name of its own (its registrar
+ * name would be one of them), so any it is offered is another community's: never offered here, even by an older
+ * server that still lists one.
+ */
+export function isBeanPoolName(host: string): boolean {
+    return host === 'beanpool.org' || host.endsWith('.beanpool.org');
+}
+
+/** Who reached the community at an address, in words. */
+function reachedText(s: AddressSighting): string {
+    return `${membersApps(s.busiestDay)} reached this community at ${s.address} on the busiest day this week${s.ownerOrAdmin ? ", an owner's or admin's among them" : ''}.`;
+}
+
+/** The directory's name for the community at an address, or words for one it gives no name. */
+const listedName = (h: HeldBackAddress) => h.directory?.name || 'another community';
 
 /** The node's answer, or null for anything else (an older server's page, a proxy's error page). */
 function asReport(r: unknown): AppAddressesReport | null {
@@ -50,6 +72,8 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const [loadFailed, setLoadFailed] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    // The directory-listed addresses the owner ticked as this community's: only then can they be confirmed.
+    const [sure, setSure] = useState<Record<string, boolean>>({});
 
     const load = useCallback(async () => {
         try {
@@ -83,10 +107,24 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const known = new Set(report.addresses.map((a) => a.address));
     // A node whose only listed name is localhost (BEANPOOL_ADDRESSES, for an SSH tunnel) still knows none of its own.
     const named = report.named ?? report.addresses.length > 0;
+    const offered = report.unconfirmed.filter((u) => !known.has(u.address) && !isBeanPoolName(u.address));
+    const heldBack: HeldBackAddress[] = [
+        ...(report.heldBack ?? []),
+        // An older server offers every address apps used: its beanpool.org ones are held back here all the same.
+        ...report.unconfirmed.filter((u) => isBeanPoolName(u.address)).map((u) => ({ ...u, reason: 'another-community' as const })),
+    ].filter((h) => !known.has(h.address));
     const pageHost = audienceOf(activeNode.url);
-    const suggestPage = !named && offerable(pageHost) && !report.unconfirmed.some((u) => u.address === pageHost);
+    // This page reaching the community at an address is the owner's own doing, as an owner's app is: offered, unless
+    // it is another community's name or one the directory lists.
+    const pageHeld = heldBack.find((h) => h.address === pageHost);
+    const suggestPage = !named && offerable(pageHost) && !isBeanPoolName(pageHost) && !offered.some((u) => u.address === pageHost)
+        && (!pageHeld || pageHeld.reason === 'few-members');
+    const shownHeld = suggestPage ? heldBack.filter((h) => h.address !== pageHost) : heldBack;
+    const fewMembers = shownHeld.filter((h) => h.reason === 'few-members');
+    const membersToOffer = report.membersToOffer ?? 3;
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);
-    const button = 'min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
+    const button = 'min-h-[44px] max-w-full break-words text-left px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
+    const confirmButton = `${button} bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600`;
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="app-addresses">
@@ -127,24 +165,72 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
             )}
 
             {[
-                ...report.unconfirmed.filter((u) => !known.has(u.address)).map((u) => ({
-                    address: u.address,
-                    text: `BeanPool apps reached this community at ${u.address} (${apps(u.busiestDay)} on the busiest day this week). Is that its address?`,
-                })),
-                ...(suggestPage && pageHost ? [{ address: pageHost, text: `This page reached the community at ${pageHost}. Is that the address members' apps use?` }] : []),
+                ...offered.map((u) => ({ address: u.address, text: `${reachedText(u)} Is that its address?` })),
+                ...(suggestPage && pageHost ? [{
+                    address: pageHost,
+                    text: `This page reached the community at ${pageHost}${pageHeld ? `, and so did ${membersApps(pageHeld.busiestDay)} this week` : ''}. Is that the address members' apps use?`,
+                }] : []),
             ].map((offer) => (
                 <div key={offer.address} className="p-3 rounded-xl bg-nature-950/60 border border-amber-700/60 space-y-2" data-testid="app-address-offer">
                     <p className="text-sm text-nature-200 m-0 break-words">{offer.text}</p>
-                    <button
-                        type="button"
-                        className={`${button} bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600`}
-                        disabled={busy !== null}
-                        onClick={() => act(offer.address, 'confirm')}
-                    >
+                    <button type="button" className={confirmButton} disabled={busy !== null} onClick={() => act(offer.address, 'confirm')}>
                         Yes, {offer.address} is its address
                     </button>
                 </div>
             ))}
+
+            {shownHeld.filter((h) => h.reason === 'another-community').map((h) => (
+                <div key={h.address} className="p-3 rounded-xl bg-nature-950/60 border border-red-700/60 space-y-2" data-testid="app-address-held" data-reason={h.reason}>
+                    <p className="text-sm text-nature-200 m-0 break-words">{reachedText(h)}</p>
+                    <p className="text-sm text-red-300 m-0 break-words">
+                        {h.address} is the name of another BeanPool community, so it isn&apos;t offered. Confirming it would let
+                        what members&apos; apps send that community be copied and used here. If someone asked you to confirm it, don&apos;t.
+                    </p>
+                </div>
+            ))}
+
+            {shownHeld.filter((h) => h.reason === 'directory').map((h) => (
+                <div key={h.address} className="p-3 rounded-xl bg-nature-950/60 border border-red-700/60 space-y-2" data-testid="app-address-held" data-reason={h.reason}>
+                    <p className="text-sm text-nature-200 m-0 break-words">{reachedText(h)}</p>
+                    <p className="text-sm text-red-300 m-0 break-words">
+                        The BeanPool directory lists {h.address} as the address of {listedName(h)}. Confirm it only if that is
+                        this community: if it isn&apos;t, what members&apos; apps send {h.directory?.name || 'that community'} could be
+                        copied and used here.
+                    </p>
+                    <label className="flex items-start gap-3 min-h-[44px] text-sm text-nature-200 break-words cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="mt-0.5 h-5 w-5 shrink-0"
+                            checked={!!sure[h.address]}
+                            onChange={(e) => setSure((s) => ({ ...s, [h.address]: e.target.checked }))}
+                        />
+                        <span>{h.directory?.name ? `${h.directory.name} is this community` : 'That community is this one'}</span>
+                    </label>
+                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => act(h.address, 'confirm')}>
+                        Yes, {h.address} is its address
+                    </button>
+                </div>
+            ))}
+
+            {fewMembers.length > 0 && (
+                <div className="p-3 rounded-xl bg-nature-950/60 border border-nature-700 space-y-2" data-testid="app-address-few">
+                    <p className="text-sm text-nature-300 m-0 leading-relaxed">
+                        Not offered yet: a member&apos;s app can be made to use any address. An address is offered once an
+                        owner&apos;s or admin&apos;s app, or {membersToOffer} members&apos; apps in one day, reach this community there.
+                    </p>
+                    <ul className="m-0 p-0 list-none space-y-2">
+                        {fewMembers.map((h) => (
+                            <li key={h.address} className="text-sm text-nature-200 break-words" data-testid="app-address-held" data-reason={h.reason}>
+                                <strong className="text-white break-all">{h.address}</strong>
+                                <span className="block text-xs text-nature-400">
+                                    {membersApps(h.busiestDay)} on the busiest day this week
+                                    {h.directory ? `. The BeanPool directory lists it as the address of ${listedName(h)}.` : ''}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {actionError && <p className="text-sm text-red-300 m-0 break-words" role="alert">{actionError}</p>}
 

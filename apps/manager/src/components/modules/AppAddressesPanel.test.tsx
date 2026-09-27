@@ -52,7 +52,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         render(<AppAddressesPanel activeNode={node} />);
         expect((await screen.findByTestId('app-addresses-none')).textContent).toMatch(/accepts any address\. After that it refuses addresses it doesn't know/);
         const offers = screen.getAllByTestId('app-address-offer').map((o) => o.textContent);
-        expect(offers[0]).toMatch(/^BeanPool apps reached this community at bp\.example\.net \(4 apps on the busiest day this week\)\. Is that its address\?Yes, bp\.example\.net is its address$/);
+        expect(offers[0]).toMatch(/^4 members' apps reached this community at bp\.example\.net on the busiest day this week\. Is that its address\?Yes, bp\.example\.net is its address$/);
         expect(offers[1]).toMatch(/^This page reached the community at community\.example\.org\./);
         fireEvent.click(screen.getByText('Yes, bp.example.net is its address'));
         await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'bp.example.net', 'pw', undefined));
@@ -71,7 +71,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(screen.getByTestId('app-address').textContent).toMatch(/^localhost · set on the server \(BEANPOOL_ADDRESSES\)/);
         const offers = screen.getAllByTestId('app-address-offer').map((o) => o.textContent);
         expect(offers).toHaveLength(2);
-        expect(offers[0]).toMatch(/^BeanPool apps reached this community at bp\.example\.net /);
+        expect(offers[0]).toMatch(/^4 members' apps reached this community at bp\.example\.net /);
         expect(offers[1]).toMatch(/^This page reached the community at community\.example\.org\./);
     });
 
@@ -86,6 +86,120 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         render(<AppAddressesPanel activeNode={{ ...node, url: 'https://elsewhere.example.org' }} />);
         expect(await screen.findAllByTestId('app-address')).toHaveLength(2);
         expect(screen.queryByTestId('app-addresses-none')).toBeNull();
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+    });
+
+    it("says how many members' apps reached each offered address, and whether an owner's or admin's app did", async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            unconfirmed: [
+                { address: 'home.example.org', today: 1, busiestDay: 1, ownerOrAdmin: true },
+                { address: 'crowd.example.org', today: 2, busiestDay: 3, ownerOrAdmin: false },
+            ],
+            heldBack: [],
+            membersToOffer: 3,
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const offers = (await screen.findAllByTestId('app-address-offer')).map((o) => o.textContent);
+        expect(offers).toEqual([
+            "1 member's app reached this community at home.example.org on the busiest day this week, an owner's or admin's among them. Is that its address?Yes, home.example.org is its address",
+            "3 members' apps reached this community at crowd.example.org on the busiest day this week. Is that its address?Yes, crowd.example.org is its address",
+        ]);
+        expect(screen.queryByTestId('app-address-held')).toBeNull();
+    });
+
+    it('never offers another community\'s beanpool.org name: says whose it is and not to confirm it, with no button', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [{ address: 'mullum.beanpool.org', today: 1, busiestDay: 2, ownerOrAdmin: true, reason: 'another-community' }],
+            membersToOffer: 3,
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const held = await screen.findByTestId('app-address-held');
+        expect(held.getAttribute('data-reason')).toBe('another-community');
+        expect(held.textContent).toBe("2 members' apps reached this community at mullum.beanpool.org on the busiest day this week, an owner's or admin's among them."
+            + "mullum.beanpool.org is the name of another BeanPool community, so it isn't offered. Confirming it would let what members' apps send "
+            + "that community be copied and used here. If someone asked you to confirm it, don't.");
+        expect(held.querySelector('button')).toBeNull();
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+        expect(screen.queryByText(/Yes, mullum\.beanpool\.org/)).toBeNull();
+    });
+
+    it('an older server that still offers a beanpool.org name: held back here all the same', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            unconfirmed: [{ address: 'mullum.beanpool.org', today: 1, busiestDay: 1 }, { address: 'bp.example.net', today: 1, busiestDay: 1 }],
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const held = await screen.findByTestId('app-address-held');
+        expect(held.getAttribute('data-reason')).toBe('another-community');
+        expect(held.textContent).toMatch(/^1 member's app reached this community at mullum\.beanpool\.org on the busiest day this week\.mullum\.beanpool\.org is the name of another BeanPool community/);
+        expect(screen.getAllByTestId('app-address-offer').map((o) => o.textContent)).toEqual([
+            "1 member's app reached this community at bp.example.net on the busiest day this week. Is that its address?Yes, bp.example.net is its address",
+        ]);
+    });
+
+    it("one or two members' apps only: listed with the count and what it takes, and nothing to confirm", async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [
+                { address: 'random-host.example', today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'few-members' },
+                { address: 'pair.example.org', today: 0, busiestDay: 2, ownerOrAdmin: false, reason: 'few-members', directory: { name: 'Riverbend Commons' } },
+            ],
+            membersToOffer: 3,
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const box = await screen.findByTestId('app-address-few');
+        expect(box.querySelector('p')!.textContent).toBe("Not offered yet: a member's app can be made to use any address. An address is offered once an owner's or admin's app, or 3 members' apps in one day, reach this community there.");
+        expect(screen.getAllByTestId('app-address-held').map((h) => h.textContent)).toEqual([
+            "random-host.example1 member's app on the busiest day this week",
+            "pair.example.org2 members' apps on the busiest day this week. The BeanPool directory lists it as the address of Riverbend Commons.",
+        ]);
+        expect(box.querySelector('button')).toBeNull();
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+    });
+
+    it('a host the directory lists as a community\'s: names it, warns what confirming does, and confirms only once ticked', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [
+                { address: 'riverbend.example', today: 4, busiestDay: 4, ownerOrAdmin: true, reason: 'directory', directory: { name: 'Riverbend Commons' } },
+                { address: 'nameless.example', today: 3, busiestDay: 3, ownerOrAdmin: false, reason: 'directory', directory: { name: null } },
+            ],
+        }));
+        vi.mocked(nodeClient.confirmAppAddress).mockResolvedValue(report({
+            addresses: [{ address: 'riverbend.example', source: 'owner', today: 4, busiestDay: 4 }], named: true,
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const [river, nameless] = await screen.findAllByTestId('app-address-held');
+        expect(river.textContent).toBe("4 members' apps reached this community at riverbend.example on the busiest day this week, an owner's or admin's among them."
+            + 'The BeanPool directory lists riverbend.example as the address of Riverbend Commons. Confirm it only if that is this community: '
+            + "if it isn't, what members' apps send Riverbend Commons could be copied and used here."
+            + 'Riverbend Commons is this community'
+            + 'Yes, riverbend.example is its address');
+        expect(nameless.textContent).toMatch(/as the address of another community\. Confirm it only if that is this community: if it isn't, what members' apps send that community could be copied and used here\.That community is this one/);
+        const confirm = screen.getByText('Yes, riverbend.example is its address') as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        fireEvent.click(confirm);
+        expect(nodeClient.confirmAppAddress).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByLabelText('Riverbend Commons is this community'));
+        expect(confirm.disabled).toBe(false);
+        expect((screen.getByText('Yes, nameless.example is its address') as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(confirm);
+        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://192.168.1.20:8443', 'riverbend.example', 'pw', undefined));
+        expect((await screen.findByTestId('app-address')).textContent).toMatch(/^riverbend\.example · confirmed in Settings/);
+    });
+
+    it("this page's own address: offered with the members' count when only one member's app used it, never when it is a beanpool.org name", async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            heldBack: [{ address: 'community.example.org', today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'few-members' }],
+        }));
+        const { unmount } = render(<AppAddressesPanel activeNode={node} />);
+        const offers = (await screen.findAllByTestId('app-address-offer')).map((o) => o.textContent);
+        expect(offers).toEqual([
+            "This page reached the community at community.example.org, and so did 1 member's app this week. Is that the address members' apps use?Yes, community.example.org is its address",
+        ]);
+        expect(screen.queryByTestId('app-address-held')).toBeNull();
+        unmount();
+
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report());
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://mullum.beanpool.org' }} />);
+        await screen.findByTestId('app-addresses-none');
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
 
@@ -120,13 +234,29 @@ describe('AppAddressesPanel (Settings → Network)', () => {
     });
 
     it('holds at phone width: long addresses break, buttons are touch-sized, nothing fixed-width', async () => {
+        const long = `${'a'.repeat(60)}.example.org`;
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
-            addresses: [{ address: `${'a'.repeat(60)}.example.org`, source: 'owner', today: 0, busiestDay: 0 }],
+            addresses: [{ address: long, source: 'owner', today: 0, busiestDay: 0 }],
+            unconfirmed: [{ address: `b${long}`, today: 1, busiestDay: 1, ownerOrAdmin: true }],
+            heldBack: [
+                { address: `${'m'.repeat(60)}.beanpool.org`, today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'another-community' },
+                { address: `d${long}`, today: 3, busiestDay: 3, ownerOrAdmin: false, reason: 'directory', directory: { name: 'N'.repeat(80) } },
+                { address: `f${long}`, today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'few-members' },
+            ],
         }));
         render(<div style={{ width: 320 }}><AppAddressesPanel activeNode={node} /></div>);
         const row = await screen.findByTestId('app-address');
         expect(row.querySelector('strong')!.className).toMatch(/break-all/);
         expect(row.querySelector('button')!.className).toMatch(/min-h-\[44px\]/);
-        expect(screen.getByTestId('app-addresses').innerHTML).not.toMatch(/whitespace-nowrap|\bw-\[\d/);
+        const panel = screen.getByTestId('app-addresses');
+        // Every paragraph and button that can hold an address or a directory name breaks inside it.
+        const holders = panel.querySelectorAll('[data-testid="app-address-offer"] p, li[data-testid="app-address-held"], [data-testid="app-address-held"] p, button, label');
+        // One offer's text; two held cards' two texts each; the few-members line; Remove, Yes and the directory's Yes; the tick box.
+        expect(holders.length).toBe(10);
+        for (const el of holders) expect(el.className).toMatch(/break-(words|all)/);
+        for (const el of panel.querySelectorAll('button, label')) expect(el.className).toMatch(/min-h-\[44px\]/);
+        for (const el of panel.querySelectorAll('button')) expect(el.className).toMatch(/max-w-full/);
+        expect(screen.getAllByTestId('app-address-held').find((h) => h.getAttribute('data-reason') === 'few-members')!.querySelector('strong')!.className).toMatch(/break-all/);
+        expect(panel.innerHTML).not.toMatch(/whitespace-nowrap|\bw-\[\d/);
     });
 });

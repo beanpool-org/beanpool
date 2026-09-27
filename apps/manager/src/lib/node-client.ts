@@ -2413,6 +2413,27 @@ export interface AppAddress {
     busiestDay: number;
 }
 
+export interface AddressSighting {
+    address: string;
+    /** Members' apps that reached the node at it today. */
+    today: number;
+    /** Members' apps that reached it there on the busiest day of the last 7. */
+    busiestDay: number;
+    /** Whether an owner's or admin's app reached it there this week. Absent from a server before 2026-09-27's guard. */
+    ownerOrAdmin?: boolean;
+}
+
+export interface HeldBackAddress extends AddressSighting {
+    /**
+     * another-community: a beanpool.org name that isn't this community's (never confirmed here); few-members: only one
+     * or two members' apps, none an owner's or admin's (not confirmed here until more do); directory: the BeanPool
+     * directory lists it as a community's address (confirmed here only on purpose, after a warning).
+     */
+    reason: 'another-community' | 'few-members' | 'directory';
+    /** The directory's entry for it, when it lists it: that community's name, or null when it gives none. */
+    directory?: { name: string | null };
+}
+
 export interface AppAddressesReport {
     addresses: AppAddress[];
     /**
@@ -2420,8 +2441,15 @@ export interface AppAddressesReport {
      * none, so a node with only that still accepts any address until the switch. Absent from a server before 2026-09-27.
      */
     named?: boolean;
-    /** Addresses apps reached this node at while it knew none of its own: offered to confirm. */
-    unconfirmed: { address: string; today: number; busiestDay: number }[];
+    /**
+     * Addresses apps reached this node at while it knew none of its own, offered to confirm: an owner's or admin's app
+     * reached it there, or several members' apps did (apps/server engine/address-offers.ts).
+     */
+    unconfirmed: AddressSighting[];
+    /** Addresses apps reached it at that are not offered, and why. Absent from a server before 2026-09-27's guard. */
+    heldBack?: HeldBackAddress[];
+    /** How many members' apps in one day get an address offered without an owner's or admin's. */
+    membersToOffer?: number;
     /** Apps that signed in the old format, bound to no community. */
     oldApps: { today: number; busiestDay: number };
     /** The day (UTC) old apps stop working here, or null when they already don't. */

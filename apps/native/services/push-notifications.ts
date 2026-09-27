@@ -135,7 +135,6 @@ async function phonePushToken(ask: boolean): Promise<string | null> {
                 description: 'Urgent alerts when someone tries to recover your account',
             });
         }
-
     } catch (e) {
         // The token is had: the registration goes all the same.
         console.warn('[Push] Could not set up the notification channels', e);

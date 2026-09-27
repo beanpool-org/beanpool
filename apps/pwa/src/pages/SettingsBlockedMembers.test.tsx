@@ -8,7 +8,7 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
-import { resetBlocklistForTests, blockUser } from '../lib/blocklist';
+import { resetBlocklistForTests, blockUser, BLOCKLIST_STORAGE_KEY } from '../lib/blocklist';
 
 const BO = 'b2'.repeat(32);
 const CY = 'c3'.repeat(32);
@@ -103,6 +103,27 @@ describe('Settings → Manage Blocked Members, kept by the community', () => {
         vi.mocked(api.clearBlockList).mockResolvedValueOnce({ ...listOf([]), removed: 2 });
         fireEvent.click(screen.getByRole('button', { name: 'Unblock All' }));
         expect(await screen.findByText('No blocked members')).toBeInTheDocument();
+    });
+
+    it('a block from before that doesn\'t fit on the full list is listed, still blocked, and the full list is said', async () => {
+        // An older build blocked Dx in this browser; the list on the community has room for two, and holds Bo and Cy.
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([DX]));
+        vi.mocked(api.getBlockList).mockResolvedValue({ ...listOf([BO, CY]), max: 2 });
+        await openBlocked();
+        await screen.findByText('Bo');
+        expect(screen.getByText('Cy')).toBeInTheDocument();
+        expect(await screen.findByText('d4d4d4d4...d4d4d4')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Your block list is full, so 1 block is kept in this browser only. Unblock someone to make room for it.');
+        expect(api.addToBlockList).not.toHaveBeenCalled();
+        expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([DX]);
+
+        // Unblocking Bo makes room: the note goes, and Dx stays blocked (it goes up with the read the community's doorbell brings).
+        vi.mocked(api.removeFromBlockList).mockResolvedValueOnce({ ...listOf([CY]), max: 2, removed: true });
+        fireEvent.click(within(rowOf('Bo')).getByRole('button', { name: 'Unblock' }));
+        await waitFor(() => expect(screen.queryByText('Bo')).toBeNull());
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.getByText('d4d4d4d4...d4d4d4')).toBeInTheDocument();
+        expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([DX]);
     });
 
     it('an older list whose names come in last never replaces a newer one: an unblocked member stays off', async () => {

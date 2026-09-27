@@ -10,7 +10,7 @@ import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
-import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
+import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 
@@ -56,6 +56,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     const isSelf = pubkey === identity.publicKey;
     const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
+    /** Said where they block while blocks wait in this browser because their list on the community is full (lib/blocklist). */
+    const [blocklistFullNote, setBlocklistFullNote] = useState(() => getBlocklistFullNote());
     const [isBlocking, setIsBlocking] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
 
@@ -75,8 +77,10 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     useEffect(() => {
         setIsBlocked(isUserBlocked(pubkey));
+        setBlocklistFullNote(getBlocklistFullNote());
         const unsub = onBlocklistUpdated(() => {
             setIsBlocked(isUserBlocked(pubkey));
+            setBlocklistFullNote(getBlocklistFullNote());
         });
         return unsub;
     }, [pubkey]);
@@ -964,6 +968,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">
                             Blocking will instantly hide their content from your feed and notify moderation.
                         </p>
+                        {blocklistFullNote && (
+                            <p role="status" className="text-center text-xs font-semibold text-nature-700 dark:text-nature-300 max-w-xs leading-relaxed">
+                                {blocklistFullNote}
+                            </p>
+                        )}
                     </div>
                 )}
             </div>

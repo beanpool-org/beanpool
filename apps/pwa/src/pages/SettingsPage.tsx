@@ -31,7 +31,7 @@ import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
-import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
+import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 
 interface Props {
@@ -237,12 +237,15 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [blockedActionError, setBlockedActionError] = useState<string | null>(null);
     /** The key being unblocked, or 'all' for Unblock All, while the community answers. */
     const [blockedBusy, setBlockedBusy] = useState<string | null>(null);
+    /** Said while blocks wait in this browser because the list on the community is full (lib/blocklist). */
+    const [blockedFullNote, setBlockedFullNote] = useState<string | null>(null);
     const blockedNames = useRef(new Map<string, string>());
     /** The latest list asked to show: an older one whose names come in after it never replaces it. */
     const blockedShown = useRef(0);
 
     const showBlockedList = async (pubkeys: string[]) => {
         const shown = ++blockedShown.current;
+        setBlockedFullNote(getBlocklistFullNote());
         const items = await Promise.all(pubkeys.map(async (pk) => {
             let callsign = blockedNames.current.get(pk) ?? (pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk);
             if (!blockedNames.current.has(pk)) {
@@ -1418,6 +1421,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         )}
                         {blockedActionError && (
                             <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-400 leading-relaxed">{blockedActionError}</p>
+                        )}
+                        {blockedFullNote && (
+                            <p role="status" className="mb-4 text-xs font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">{blockedFullNote}</p>
                         )}
 
                         {loadingBlockedList ? (

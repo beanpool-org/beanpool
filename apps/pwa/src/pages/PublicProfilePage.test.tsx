@@ -6,7 +6,7 @@ import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getMemberProfile, type MemberProfile, type BalanceInfo } from '../lib/api';
 import { ARCHETYPES } from '@beanpool/core';
-import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
+import { blockUser, unblockUser, isUserBlocked, getBlocklistFullNote } from '../lib/blocklist';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -33,6 +33,7 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(),
     unblockUser: vi.fn(),
     onBlocklistUpdated: vi.fn(() => () => {}),
+    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 const mockIdentity: BeanPoolIdentity = {
@@ -292,5 +293,20 @@ describe('PublicProfilePage: a block or an unblock the community did not take is
         expect(alert).not.toHaveBeenCalledWith(expect.stringContaining('has been unblocked'));
         expect(screen.getByRole('button', { name: 'Unblock user Bob' })).toBeInTheDocument();
         vi.mocked(isUserBlocked).mockReturnValue(false);
+    });
+
+    it('while blocks wait in this browser because the list is full, it says so where they block', async () => {
+        const FULL = 'Your block list is full, so 2 blocks are kept in this browser only. Unblock someone to make room for them.';
+        vi.mocked(getBlocklistFullNote).mockReturnValue(FULL);
+        renderProfile();
+        await screen.findByRole('button', { name: 'Block user Bob' });
+        expect(screen.getByRole('status')).toHaveTextContent(FULL);
+        vi.mocked(getBlocklistFullNote).mockReturnValue(null);
+    });
+
+    it('with room on the list, nothing is said about it', async () => {
+        renderProfile();
+        await screen.findByRole('button', { name: 'Block user Bob' });
+        expect(screen.queryByText(/Your block list is full/)).toBeNull();
     });
 });

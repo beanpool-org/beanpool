@@ -18,7 +18,7 @@ import type { Libp2p } from 'libp2p';
 import { db } from './db/db.js';
 import { reachAdmitsPeer, parseReachPeers, isSyntheticAccount } from '@beanpool/core';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
-import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion } from './state-engine.js';
+import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion, ringListingDoorbell } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
 
@@ -143,7 +143,13 @@ export function cacheRemoteListings(
     let cached = 0, dropped = 0;
 
     let deletedCount = 0;
+    // The columns written below from this peer's answer, before the round and after, so an answer that changed nothing
+    // rings nobody: every round replaces them all.
+    const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
+        updated_at, active, status, reach FROM posts WHERE origin_node = ? ORDER BY id`);
+    let changed = false;
     db.transaction(() => {
+        const before = JSON.stringify(heldForPeer.all(originNode));
         // Everything we currently hold FOR THIS PEER. Deleted below unless the answer re-states it, so a
         // withdrawn listing disappears without a retraction message.
         const delRes = db.prepare('DELETE FROM posts WHERE origin_node = ?').run(originNode);
@@ -210,11 +216,14 @@ export function cacheRemoteListings(
                 dropped++;
             }
         }
+        changed = JSON.stringify(heldForPeer.all(originNode)) !== before;
     })();
 
     if (deletedCount > 0 || cached > 0) {
         bumpPostsVersion();
     }
+    // They are on this node's board, and no post event says so: a socket off the member feed is told.
+    if (changed) ringListingDoorbell('post_updated');
     if (cached > 0) {
         bumpMembersVersion();
     }

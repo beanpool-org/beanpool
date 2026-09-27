@@ -2756,10 +2756,7 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
     let promoted: string | null = null;
     db.transaction(() => {
-        const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
-            .get(treasuryPubkey, memberPubkey) as any)?.role === 'lead';
-        unbindKeeper(treasuryPubkey, memberPubkey);
-        if (wasLead) promoted = promoteOrPauseAfterLeadLeft(treasuryPubkey, 'admin').promoted;
+        promoted = keeperLeaves(treasuryPubkey, memberPubkey, 'admin').promoted;
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
@@ -2838,7 +2835,23 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
 }
 
 /**
- * The lead has gone (removed by a community Decision, stepped down, or unbound by an admin) — answer G,
+ * A keeper leaves one enterprise: they step down, an admin unbinds them, or they delete their account (purgeMemberSelf).
+ * unbindKeeper; if they were the lead, their place is handed on by answer G's rule (promoteOrPauseAfterLeadLeft); and a
+ * succession proposal naming them as the candidate is moot. `by` is who paused the enterprise if nobody is left. Runs
+ * inside the caller's transaction; the caller clears the floor cache and broadcasts.
+ */
+function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as any)?.role === 'lead';
+    unbindKeeper(enterprisePubkey, memberPubkey);
+    const result = wasLead ? promoteOrPauseAfterLeadLeft(enterprisePubkey, by) : { promoted: null, paused: false };
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone'
+                WHERE enterprise_pubkey = ? AND candidate_pubkey = ? AND status = 'active'`).run(enterprisePubkey, memberPubkey);
+    return result;
+}
+
+/**
+ * The lead has gone (removed by a community Decision, stepped down, unbound by an admin, or deleted their account) — answer G,
  * 2026-09-19. The longest-serving remaining ACTIVE keeper becomes lead at once, marked auto-promoted so the
  * other keepers may run succession immediately to choose someone else. No active keeper left: the enterprise
  * pauses (its next step is wind-up). Runs inside the caller's transaction; the caller broadcasts.
@@ -3733,11 +3746,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
 
     let result = { promoted: null as string | null, paused: false };
     db.transaction(() => {
-        unbindKeeper(enterprisePubkey, memberPubkey);
-        if (op.role === 'lead') result = promoteOrPauseAfterLeadLeft(enterprisePubkey, memberPubkey);
-        // A proposal naming them as the candidate is moot.
-        db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone'
-                    WHERE enterprise_pubkey = ? AND candidate_pubkey = ? AND status = 'active'`).run(enterprisePubkey, memberPubkey);
+        result = keeperLeaves(enterprisePubkey, memberPubkey, memberPubkey);
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
@@ -6720,6 +6729,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
+ * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
+ *    longest-serving active keeper, or the enterprise pauses with nobody left. Closes the keeper changes naming them.
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
@@ -6771,6 +6782,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             : 'Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
     }
 
+    // The enterprises they leave (step 7), announced once the transaction has committed.
+    const leftEnterprises: { enterprise: string; promoted: string | null }[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
@@ -6865,7 +6878,24 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             }
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        // Every keeper change still waiting that names them, as the keeper added or removed or as the lead who made it, in
+        // any enterprise: it closes now rather than landing on a deleted account or failing days later.
+        const pendingIn = db.prepare(`SELECT DISTINCT enterprise_pubkey FROM enterprise_keeper_changes
+                                      WHERE status = 'pending' AND (member_pubkey = ? OR proposed_by = ?)`).all(publicKey, publicKey) as { enterprise_pubkey: string }[];
+        for (const { enterprise_pubkey } of pendingIn) closePendingKeeperChangesFor(enterprise_pubkey, publicKey, 'They deleted their account');
+        // Each enterprise they keep, left the way a keeper leaves one (keeperLeaves: step down, an admin's unbind), never by
+        // a bare DELETE of their bindings (4113694084). That left a lead's enterprise with no lead and no way to choose one:
+        // succession needs a lead to replace, a remove_lead_keeper Decision a lead to remove, and an admin binds only
+        // keepers. Now the longest-serving active keeper takes the lead, or the enterprise pauses with nobody left; their
+        // pledge is settled as when they step down. No Beans move: an enterprise's stay the enterprise's. Not in a try, as
+        // deleteAllShares above.
+        const kept = db.prepare("SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?").all(publicKey) as { treasury_pubkey: string }[];
+        for (const { treasury_pubkey } of kept) {
+            const { promoted } = keeperLeaves(treasury_pubkey, publicKey, publicKey);
+            leftEnterprises.push({ enterprise: treasury_pubkey, promoted });
+        }
+        // An enterprise's own key deleting it: its keepers' bindings go with it.
+        try { db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
@@ -6881,6 +6911,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
+    // What adminRevokeTreasuryOperator announces for a keeper it unbinds: the keeper promoted to lead, and the enterprise.
+    for (const { enterprise, promoted } of leftEnterprises) {
+        clearEnterpriseFloorCache(enterprise);
+        if (promoted) broadcast({ type: 'profile_updated', publicKey: promoted });
+        broadcast({ type: 'profile_updated', publicKey: enterprise });
+    }
 
     return { ok: true, message: 'Account successfully purged from node.' };
 }

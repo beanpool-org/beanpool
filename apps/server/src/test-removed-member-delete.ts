@@ -23,6 +23,12 @@
  *     door. It can't be reinstated either.
  *  5. Nobody deletes another key's row: a body naming the other key, another key's header on a signature, no signature,
  *     a key with no row, a replayed request. Each leaves the other key's row as it was.
+ *  6. A keeper's Delete account leaves each enterprise they keep the way a keeper leaves one (step down, an admin's unbind,
+ *     4113694084), never with a bare delete of their bindings. A removed lead's place goes to the longest-serving active
+ *     keeper, marked auto-promoted, so succession works again; a removed sole keeper's enterprise pauses. The same for an
+ *     active lead's own Delete account, which left the enterprise with no lead before this too. A plain keeper is unbound
+ *     and their pledge released, the lead untouched. Every pending keeper change naming them closes. No enterprise's
+ *     Beans move, and the ledger audit is unchanged.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-removed-member-delete.ts
  */
@@ -39,6 +45,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost,
+    createTreasury, adminAssignTreasuryOperator, proposeKeeperRemoval, requestToJoinEnterprise, approveKeeperRequest, getLeadInactivity,
 } from './state-engine.js';
 import { createDecision, executeDecision, getDecision } from './decisions-engine.js';
 import { openJoinTaken } from './engine/open-join.js';
@@ -160,6 +167,30 @@ const wholeRow = (pk: string) => JSON.stringify(db.prepare('SELECT * FROM member
 
 /** Every Bean on the node: the ledger audit's figures, which Delete account must leave as they are. */
 const audit = () => { const a = runLedgerAudit(); return { ok: a.ok, drift: Math.round(a.drift * 1e6) / 1e6 }; };
+
+/** An enterprise holding 20 Beans of its own: its lead, then its other keepers, bound in order of seniority. */
+let enterprises = 0;
+function makeEnterprise(lead: Id, others: Id[]): string {
+    const { publicKey: ent } = createTreasury(`EnterpriseRD${++enterprises}`, 'avatar', 0);
+    [lead, ...others].forEach((k, i) => {
+        adminAssignTreasuryOperator(ent, k.pk, 'admin', 0);
+        db.prepare('UPDATE treasury_operators SET granted_at = ? WHERE treasury_pubkey = ? AND member_pubkey = ?')
+            .run(new Date(Date.now() - (100 - i) * 86400000).toISOString(), ent, k.pk);
+    });
+    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(ent, lead.pk);
+    transfer('genesis', ent, 20, 'seed enterprise', 'direct', true);
+    return ent;
+}
+const roleIn = (ent: string, pk: string) =>
+    (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(ent, pk) as { role: string } | undefined)?.role ?? null;
+const keepersOf = (ent: string) => db.prepare('SELECT member_pubkey AS pk, role, auto_promoted_at FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY granted_at')
+    .all(ent) as { pk: string; role: string; auto_promoted_at: string | null }[];
+const pausedOf = (ent: string) => db.prepare('SELECT paused, paused_by FROM members WHERE public_key = ?').get(ent) as { paused: number; paused_by: string | null };
+const changeOf = (id: string) => db.prepare('SELECT status, reason FROM enterprise_keeper_changes WHERE id = ?').get(id) as { status: string; reason: string | null };
+const requestStatus = (id: string) => (db.prepare('SELECT status FROM enterprise_keeper_requests WHERE id = ?').get(id) as { status: string }).status;
+const pledgeOf = (ent: string, pk: string) => (db.prepare(
+    'SELECT COALESCE(SUM(amount), 0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(ent, pk) as { t: number }).t;
+const beansOf = (...ents: string[]) => ents.map(e => getBalance(e).balance);
 
 async function main(): Promise<void> {
     console.log('Delete account from an account the community closed, and from a visitor’s row\n');
@@ -362,6 +393,91 @@ async function main(): Promise<void> {
         const replay = await send(own);
         assert(first.status === 200 && erased(ray.pk) && replay.status === 403 && /Replay detected/.test(replay.body?.error ?? ''),
             `Ray's own request erases his row once; sent again it is refused as a replay (${show(first)} | ${show(replay)})`);
+    }
+
+    // ── 6. A keeper deletes their account ──────────────────────────────────────────────────────────
+    console.log('\n── 6. A keeper deletes their account: each enterprise they keep carries on, as when a keeper leaves');
+    {
+        // Lena leads an enterprise with Kit (longer serving) and Kai. Before she is removed she proposes removing Kai, and
+        // asks to keep Mo's enterprise, whose lead approves her: both changes wait out their objection window.
+        const lena = makeMember('LenaRD', 0), kit = makeMember('KitRD', 0), kai = makeMember('KaiRD', 0);
+        const ent = makeEnterprise(lena, [kit, kai]);
+        const removeKai = proposeKeeperRemoval(ent, lena.pk, kai.pk).change!;
+        const mo = makeMember('MoRD', 0), max = makeMember('MaxRD', 0);
+        const mos = makeEnterprise(mo, [max]);
+        const ask = requestToJoinEnterprise(mos, lena.pk, 0);
+        const addLena = approveKeeperRequest(ask.id, mo.pk).change!;
+        adminPruneUser(lena.pk, 'owner:password');
+        assert(roleIn(ent, lena.pk) === 'lead' && getLeadInactivity(ent).leadPubkey === lena.pk && changeOf(removeKai.id).status === 'pending'
+            && changeOf(addLena.id).status === 'pending',
+            'setup: the removal leaves Lena lead, whom the keepers could replace by succession, and her two keeper changes pending');
+        const beansBefore = beansOf(ent, mos);
+        const auditBefore6 = audit();
+
+        const lenaDeletes = await call('POST', '/api/member/purge', lena, {});
+        assert(lenaDeletes.status === 200 && erased(lena.pk), `Lena, removed, signs Delete account and her profile is erased (${show(lenaDeletes)})`);
+        const lead = getLeadInactivity(ent);
+        assert(roleIn(ent, lena.pk) === null && roleIn(ent, kit.pk) === 'lead' && lead.leadPubkey === kit.pk && lead.autoPromoted
+            && roleIn(ent, kai.pk) === 'keeper' && pausedOf(ent).paused === 0,
+            `Kit, the longest-serving keeper, becomes lead at once, marked auto-promoted, and the enterprise carries on (${JSON.stringify(keepersOf(ent))})`);
+        const succession = await call('POST', `/api/enterprise/${ent}/succession/propose`, kai, { candidatePubkey: kai.pk });
+        assert(succession.status === 200 && succession.body?.success === true,
+            `so succession works again: Kai proposes himself as lead at once (${show(succession)})`);
+        assert(changeOf(removeKai.id).status === 'failed' && changeOf(addLena.id).status === 'failed' && requestStatus(ask.id) === 'cancelled'
+            && roleIn(mos, lena.pk) === null,
+            `the keeper change she made, and the one that would have added her to Mo's enterprise, close now (${JSON.stringify([changeOf(removeKai.id), changeOf(addLena.id)])})`);
+        const auditAfter6 = audit();
+        assert(JSON.stringify(beansOf(ent, mos)) === JSON.stringify(beansBefore) && auditAfter6.ok && auditAfter6.drift === auditBefore6.drift,
+            `no enterprise's Beans move, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(beansOf(ent, mos))})`);
+    }
+    {
+        // Sol is the only keeper of an enterprise, and is removed.
+        const sol = makeMember('SolRD', 0);
+        const solo = makeEnterprise(sol, []);
+        adminPruneUser(sol.pk, 'owner:password');
+        const beansBefore = beansOf(solo);
+        const solDeletes = await call('POST', '/api/member/purge', sol, {});
+        const p = pausedOf(solo);
+        assert(solDeletes.status === 200 && keepersOf(solo).length === 0 && p.paused === 1 && p.paused_by === sol.pk
+            && JSON.stringify(beansOf(solo)) === JSON.stringify(beansBefore),
+            `a removed sole keeper's Delete account pauses the enterprise, as when its last keeper leaves, its Beans kept (${show(solDeletes)}; ${JSON.stringify(p)})`);
+    }
+    {
+        // Ada, a member in good standing, leads one enterprise with Ivy and Ian, and another alone. Before this change her own
+        // Delete account left both with no lead too.
+        const ada = makeMember('AdaRD', 15), ivy = makeMember('IvyRD', 0), ian = makeMember('IanRD', 0);
+        const shared = makeEnterprise(ada, [ivy, ian]);
+        const alone = makeEnterprise(ada, []);
+        const beansBefore = beansOf(shared, alone);
+        const commonsBeforeA = getCommonsBalance();
+        const auditBeforeA = audit();
+        const adaDeletes = await call('POST', '/api/member/purge', ada, {});
+        assert(adaDeletes.status === 200 && erased(ada.pk), `Ada signs Delete account (${show(adaDeletes)})`);
+        assert(roleIn(shared, ada.pk) === null && roleIn(shared, ivy.pk) === 'lead' && getLeadInactivity(shared).autoPromoted && pausedOf(shared).paused === 0,
+            `her first enterprise goes to Ivy, the longest-serving keeper (${JSON.stringify(keepersOf(shared))})`);
+        const p = pausedOf(alone);
+        assert(keepersOf(alone).length === 0 && p.paused === 1 && p.paused_by === ada.pk, `the one she kept alone pauses (${JSON.stringify(p)})`);
+        const succession = await call('POST', `/api/enterprise/${shared}/succession/propose`, ian, { candidatePubkey: ian.pk });
+        assert(succession.status === 200, `and Ian can propose a new lead there (${show(succession)})`);
+        const auditAfterA = audit();
+        assert(JSON.stringify(beansOf(shared, alone)) === JSON.stringify(beansBefore) && Math.abs(getCommonsBalance() - (commonsBeforeA + 15)) < 1e-6
+            && auditAfterA.ok && auditAfterA.drift === auditBeforeA.drift,
+            `her own 15 Beans go to the Commons as before, the enterprises keep theirs, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(beansOf(shared, alone))})`);
+    }
+    {
+        // Pia is an ordinary keeper under Gus, with a 10-Bean pledge, and Gus has proposed removing her.
+        const gus = makeMember('GusRD', 0), pia = makeMember('PiaRD', 0), quin = makeMember('QuinRD', 0);
+        const ent = makeEnterprise(gus, [pia, quin]);
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES (?, ?, ?, 10)').run(crypto.randomUUID(), pia.pk, ent);
+        const removePia = proposeKeeperRemoval(ent, gus.pk, pia.pk).change!;
+        const beansBefore = beansOf(ent);
+        const piaDeletes = await call('POST', '/api/member/purge', pia, {});
+        const keepers = keepersOf(ent);
+        assert(piaDeletes.status === 200 && roleIn(ent, pia.pk) === null && roleIn(ent, gus.pk) === 'lead' && roleIn(ent, quin.pk) === 'keeper'
+            && keepers.every(k => k.auto_promoted_at === null) && pausedOf(ent).paused === 0,
+            `a plain keeper's Delete account unbinds her and leaves Gus lead, nothing else changed (${JSON.stringify(keepers)})`);
+        assert(pledgeOf(ent, pia.pk) === 0 && changeOf(removePia.id).status === 'failed' && JSON.stringify(beansOf(ent)) === JSON.stringify(beansBefore),
+            `her pledge is released as when a keeper steps down, the change naming her closes, and the enterprise keeps its Beans (pledge ${pledgeOf(ent, pia.pk)}; ${JSON.stringify(changeOf(removePia.id))})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

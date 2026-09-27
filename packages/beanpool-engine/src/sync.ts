@@ -376,6 +376,21 @@ export interface SyncModerationNotice {
 }
 
 /**
+ * One key a member blocked (apps/server engine/member-blocks.ts), kept by the community for their account so the web app
+ * has it back on any browser. Replicated so a server that takes over still hides whom each member blocked. Watermarked on
+ * `updatedAt`, which a block and a re-key's move stamp; a removal travels as a `member_blocks` tombstone, keyed
+ * `<ownerPubkey>|<blockedPubkey>` for one unblock and `<ownerPubkey>|*` for a whole list (a clear, a prune, a
+ * self-deletion, a re-key's old key: every row of that owner stamped no later), and a row stamped after its tombstone is
+ * a block made again.
+ */
+export interface SyncMemberBlock {
+    ownerPubkey: string;
+    blockedPubkey: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
  * A key the main server no longer accepts (apps/server engine/member-wizards.ts): 'rekey_pending' from the moment an
  * operator starts a re-key, 'rekeyed' with the key that replaced it once the re-key completes. Replicated so a server that
  * takes over refuses a lost or stolen phone's key at every door and in the middleware at once, and so a standby follows a
@@ -449,6 +464,8 @@ export interface SyncPayload {
     joinRequests?: SyncJoinRequest[];
     /** Watermarked on `updated_at`, which a new notice, a seen mark and a re-key all stamp. */
     moderationNotices?: SyncModerationNotice[];
+    /** Watermarked on `updated_at`, which a block and a re-key's move stamp. Absent from a main server that predates it. */
+    memberBlocks?: SyncMemberBlock[];
     /**
      * Watermarked on `invalidated_at`, which a re-key's start and its completion both stamp. Absent from a main server
      * that predates it: a standby then keeps the rows it has.
@@ -1009,6 +1026,19 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // Each member's block list (apps/server engine/member-blocks.ts): whom they blocked, and when.
+    let memberBlocks: SyncMemberBlock[] = [];
+    try {
+        memberBlocks = sel('member_blocks', 'updated_at').map((r: any) => ({
+            ownerPubkey: r.owner_pubkey,
+            blockedPubkey: r.blocked_pubkey,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     // The keys a re-key replaced, or is replacing (apps/server engine/member-wizards.ts). A key is lower case wherever
     // this server writes one.
     let invalidatedKeys: SyncInvalidatedKey[] = [];
@@ -1065,6 +1095,7 @@ export function exportSyncState(
         directoryCache,
         joinRequests,
         moderationNotices,
+        memberBlocks,
         invalidatedKeys,
         tombstones,
     };

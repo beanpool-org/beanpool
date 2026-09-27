@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 54,
-  "hash": "9f153c54ec0337f81690bf84584ca037770eed6856dc380bf3e772b9a3ef871d",
+  "version": 56,
+  "hash": "75065c6d94257e4c8c633552053c127c9bdd737e69e487e98952023039f87cec",
   "sections": [
     {
       "id": "setup",
@@ -2178,7 +2178,7 @@
         },
         {
           "type": "p",
-          "text": "If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20) and the server's own name for itself (localhost). So you can open its web app through an SSH tunnel at localhost without setting anything."
+          "text": "If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used, with how many members' apps used each and whether yours or an admin's did. Open Settings at your community's own address (for example https://example.org/settings) and tap **Yes, … is its address**: only the address Settings is open at is offered with one tap. Any other address on the list needs you to tick **This is this community's address** first, because a member's app can be made to use any address, and one person can join more than once. A name ending in .beanpool.org is never offered: that is another community's. A server that keeps the BeanPool directory (the global community's does) also says when the directory lists an address as another community's, names that community, and asks you to tick that it is this one. Other servers don't keep the directory, so they can't warn you about that. Confirming another community's address would let what members' apps send that community be copied and used here, so never confirm one just because someone asked you to. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20) and the server's own name for itself (localhost). So you can open its web app through an SSH tunnel at localhost without setting anything."
         },
         {
           "type": "p",

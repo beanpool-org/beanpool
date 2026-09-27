@@ -388,6 +388,7 @@ run_federation_suites() {
       test-api-path-auth
       test-request-binding
       test-loopback-audience
+      test-address-offers
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
@@ -453,6 +454,8 @@ run_federation_suites() {
       test-live-post-payloads
       test-moderation-notifications
       test-moderation-notices-kept
+      test-member-blocks
+      test-member-blocks-standby
       test-polls
       test-poll-voters-members-only
       test-suspended-and-visitor-reads

@@ -10,6 +10,7 @@ import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
 import { createVisitorDoorbells } from './visitor-doorbells';
+import { ringBlocklistDoorbell } from './blocklist-doorbell';
 import {
     requestSync,
     registerSyncActivityListener,
@@ -219,6 +220,8 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         notify();
         // What was kept while the socket was down (the moderation notices the web app reads, SystemAlerts).
         socketOpenListeners.forEach(cb => { try { cb(); } catch { /* a listener's failure is its own */ } });
+        // And the member's block list, which may have changed on another device meanwhile (lib/blocklist).
+        ringBlocklistDoorbell();
 
         // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a random
         // 0–3 s on top of the retry's own spread: a node or edge restart drops every tab at once, and their syncs
@@ -255,6 +258,13 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             
             if (data.type === 'system_announcement') {
                 announcementListeners.forEach(cb => cb(data));
+                return;
+            }
+
+            // This member's own block list changed (another tab, another device, a re-key): a bare doorbell the node
+            // sends to their sockets only. lib/blocklist reads the list again; nothing else needs a sync for it.
+            if (data.type === 'blocklist_updated') {
+                ringBlocklistDoorbell();
                 return;
             }
 

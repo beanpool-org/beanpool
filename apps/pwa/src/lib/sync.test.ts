@@ -26,6 +26,7 @@ import {
 import { resetCoordinatorForTest, SYNC_CURSOR_KEY } from './sync-coordinator';
 import { onLivePostChange, registerLivePostTie, resetLivePostsForTest } from './live-posts';
 import { loadIdentity } from './identity';
+import { BLOCKLIST_DOORBELL_EVENT } from './blocklist-doorbell';
 
 describe('PWA WebSocket Pong Watchdog', () => {
     let wsInstance: any = null;
@@ -137,6 +138,29 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(() => socket.onopen()).not.toThrow();
         expect(after).toHaveBeenCalledTimes(1);
         expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ping', wantPong: true }));
+    });
+
+    it('the block list is read again when the node rings blocklist_updated and whenever the socket opens, and the ring runs no sync', async () => {
+        // The community keeps the member's block list (lib/blocklist); it may change in another tab, on another device, or
+        // while the socket was down.
+        asMember();
+        const rings = vi.fn();
+        window.addEventListener(BLOCKLIST_DOORBELL_EVENT, rings);
+        const activityListener = vi.fn();
+        onSyncActivity(activityListener);
+        connectToAnchor('ws://localhost:9000/ws');
+        const socket = await waitForWs();
+        socket.readyState = 1;
+        socket.onopen();
+        expect(rings).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(200);
+        activityListener.mockClear();
+
+        socket.onmessage({ data: JSON.stringify({ type: 'blocklist_updated' }) });
+        await vi.advanceTimersByTimeAsync(200);
+        expect(rings).toHaveBeenCalledTimes(2);
+        expect(activityListener).not.toHaveBeenCalled();
+        window.removeEventListener(BLOCKLIST_DOORBELL_EVENT, rings);
     });
 
     it('a server that never pongs never arms the watchdog', async () => {

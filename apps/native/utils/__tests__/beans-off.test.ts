@@ -16,7 +16,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import {
-    groupPostPrice, groupPostPriceInvalid, groupPostMissingFields, howItWorksSubtitle, NO_BEANS_GUIDE_CARD,
+    groupPostPrice, groupPostPriceInvalid, groupPostMissingFields, howItWorksSubtitle, NO_BEANS_GUIDE_CARD, talkSort,
 } from '../beans-off';
 import { beansOn, readNodeProfile, type NodeFeatures } from '../node-profile';
 
@@ -67,6 +67,23 @@ describe('a group’s post form (app/group-post.tsx)', () => {
                 expect(groupPostPriceInvalid(field, f)).toBe(before.invalid(field));
             }
             expect(groupPostMissingFields(f)).toBe(before.missing);
+        });
+    }
+});
+
+describe('Talk’s sort (app/(tabs)/chats.tsx)', () => {
+    const SORTS = ['recent', 'unread', 'credits_desc', 'credits_asc'] as const;
+
+    it('Beans off: a Beans sort left over goes back to Recent, and the others stand', () => {
+        expect(talkSort('credits_desc', GLOBAL)).toBe('recent');
+        expect(talkSort('credits_asc', GLOBAL)).toBe('recent');
+        expect(talkSort('recent', GLOBAL)).toBe('recent');
+        expect(talkSort('unread', GLOBAL)).toBe('unread');
+    });
+
+    for (const [name, f] of BEANS_ON) {
+        it(`Beans on (${name}): every sort stands`, () => {
+            for (const s of SORTS) expect(talkSort(s, f)).toBe(s);
         });
     }
 });
@@ -131,6 +148,9 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(gated).toContain('Credits: Low');
         expect(src.split('bean.png').length - 1).toBe(2);
         expect(gated.split('bean.png').length - 1).toBe(2);
+        // A Beans sort picked before the chips went is dropped, not left sorting and badging unseen.
+        expect(src).toContain('const allowed = talkSort(sortBy, nodeProfile?.features);');
+        expect(src).toContain('if (allowed !== sortBy) setSortBy(allowed);');
     });
 
     it('a profile: no Beans balance card (nor its way into the hidden Ledger), and no figure on a listing', () => {

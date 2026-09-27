@@ -1,7 +1,7 @@
 /**
  * The rest of the phone on a node with Beans off (the worldwide community). G8 (market-global.ts) took Beans off the
  * Market and a post's page; this covers everywhere else a Beans figure or a price was drawn: My Deals, a chat's post
- * header, the Talk sort, profiles, Settings' pricing guide, the Commons header, the create-group form, profile setup's
+ * header, the Talk sort (and a Beans sort left over from before), profiles, Settings' pricing guide, the Commons header, the create-group form, profile setup's
  * "how it works", and a group's post form. There, a Beans figure is always 0 and means nothing to a newcomer.
  *
  * The rule is `beansOn`'s (node-profile.ts): only a node that says outright `features.beans === false` has no Beans,
@@ -35,6 +35,17 @@ export function groupPostPriceInvalid(field: string, features: NodeFeatures | nu
 /** What the alert says when a required field is missing. */
 export function groupPostMissingFields(features: NodeFeatures | null | undefined): string {
     return beansShown(features) ? 'Please provide a title, category, and price/credits.' : 'Please provide a title and category.';
+}
+
+/*
+ * Talk's sort (app/(tabs)/chats.tsx). With Beans off there is no "Credits: High / Low" chip, so a Beans sort picked
+ * earlier (before the node's profile arrived, or on another community) would sort by a chip nobody can see and light
+ * the options badge with nothing selected to explain it. It goes back to Recent. With Beans on, the pick stands.
+ */
+
+/** The sort Talk keeps. */
+export function talkSort<S extends string>(sortBy: S, features: NodeFeatures | null | undefined): S | 'recent' {
+    return !beansShown(features) && (sortBy === 'credits_desc' || sortBy === 'credits_asc') ? 'recent' : sortBy;
 }
 
 /*

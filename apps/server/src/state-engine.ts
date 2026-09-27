@@ -580,7 +580,11 @@ export function initStateEngine(): void {
     applyRecordedRecoveryTombstones();
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
-    seedPulseCurated();
+    // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
+    // (G9): one of its own, made under its own key at every boot, met the main server's on the callsign index and refused
+    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. The Daily
+    // Pulse skips a standby the same way (daily-pulse.ts scheduleDailyPulse). A take-over's restart runs as a main server.
+    if (getNodeRole() !== 'backup') seedPulseCurated();
     
     // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');

@@ -49,6 +49,7 @@ import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
+import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch } from '../engine/sync.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -113,6 +114,14 @@ let lastImportedCursor: string | null = null;
 let lastFullReconcileAt = 0;
 let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
+// The kind of the last pull tried: 'delta', 'full' or 'resync'.
+let lastPullMode: PullMode | null = null;
+// A whole copy found this standby's ledger isn't its main server's (checkWholeCopy): the next pull is a force-resync.
+let ledgerResyncDue = false;
+let lastLedgerResyncAt = 0;
+// At most one force-resync for a ledger that doesn't match in this long: one a resync doesn't cure must not clear this
+// standby over and over.
+const LEDGER_RESYNC_EVERY_MS = 6 * 60 * 60_000;
 
 /**
  * A2-9: only allow an HTTPS primary URL (loopback http permitted for dev). The
@@ -181,6 +190,9 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
     // Delta only when explicitly asked AND we already have a cursor to delta-from;
     // otherwise this is a full pull (seed / reconcile / resync).
     const isDelta = mode === 'delta' && !!lastImportedCursor;
+    // A whole copy onto a standby that holds none yet (no cursor: never copied, or cleared by a resync whose import failed).
+    const firstCopy = !isDelta && !lastImportedCursor;
+    lastPullMode = fresh ? 'resync' : isDelta ? 'delta' : 'full';
 
     inFlight = true;
     const url = primaryUrl.replace(/\/$/, '') + (isDelta ? DELTA_PATH : SNAPSHOT_PATH);
@@ -286,6 +298,8 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
+        // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode).
+        if (fresh || firstCopy) noteReplicaFormat();
 
         if (isDelta) {
             // Deltas carry only changed rows, so a row-count compare is meaningless.
@@ -317,11 +331,7 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
             // Verify the replica matches what the primary sent. Never let a
             // consistency-check error mask an otherwise-successful pull.
             try {
-                lastConsistency = getReplicaConsistency(payload);
-                if (!lastConsistency.ok) {
-                    const bad = lastConsistency.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
-                    logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
-                }
+                checkWholeCopy(payload);
             } catch (e: any) {
                 logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
             }
@@ -342,6 +352,45 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         clearTimeout(timeout);
         inFlight = false;
     }
+}
+
+/**
+ * The whole-copy check, after a full pull: this standby against the copy it just imported, every account included
+ * (engine audit.ts getReplicaConsistency). A ledger that isn't the copy's is recorded (node_config
+ * `replica_ledger_mismatch`, which the owners' notice will read, design G8) and asks for one force-resync, at most one
+ * every six hours. An entry of the copy with no number for a balance is recorded and asks for none: a force-resync would
+ * read the same entry. Exported so a suite can run it on a copy it fetched.
+ */
+export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
+    const c = getReplicaConsistency(payload);
+    lastConsistency = c;
+    if (!c.ok) {
+        const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
+        if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
+        logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
+    }
+    if (c.ledger && !c.ledger.match) {
+        const now = Date.now();
+        const resync = c.ledger.differing > 0 && now - lastLedgerResyncAt >= LEDGER_RESYNC_EVERY_MS;
+        if (resync) {
+            ledgerResyncDue = true;
+            lastLedgerResyncAt = now;
+        }
+        noteLedgerMismatch({
+            at: new Date(now).toISOString(),
+            snapshotGeneratedAt: c.snapshotGeneratedAt,
+            differing: c.ledger.differing,
+            unreadable: c.ledger.unreadable,
+            examples: c.ledger.examples,
+            resync: resync ? 'scheduled'
+                : c.ledger.differing > 0 ? `not before ${new Date(lastLedgerResyncAt + LEDGER_RESYNC_EVERY_MS).toISOString()}`
+                    : 'none: the copy has entries this server cannot read',
+        });
+        logger.security('P2P', `[Backup] ❌ This standby's ledger is not its main server's after a whole copy: ${c.ledger.differing} `
+            + `account(s) differ${c.ledger.unreadable ? `, ${c.ledger.unreadable} unreadable in the copy` : ''} (${c.ledger.examples.join(', ')}). `
+            + (resync ? 'Taking a force-resync next.' : 'No force-resync now.'));
+    }
+    return c;
 }
 
 /**
@@ -376,8 +425,24 @@ function getReconcileMs(): number {
 let visitorMarksAsked = false;
 let replacedKeysAsked = false;
 let memberBlocksAsked = false;
+let replicaFormatAsked = false;
 
 function nextMode(): PullMode {
+    // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
+    // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first
+    // pull is this one too, which also clears whatever its own boot seeded. Once a process, like the whole copies below:
+    // one whose fetch fails leaves the copy as it was, for the next boot; one whose import fails leaves it cleared, and the
+    // next pull, a whole copy with no cursor, makes it from nothing and records the format.
+    if (!replicaFormatAsked && replicaFormatOfCopy() < REPLICA_FORMAT) {
+        replicaFormatAsked = true;
+        logger.info('P2P', `[Backup] This standby's copy was made by an older importer (format ${replicaFormatOfCopy()}, now ${REPLICA_FORMAT}): taking one force-resync`);
+        return 'resync';
+    }
+    // The last whole copy found a ledger that isn't the main server's (checkWholeCopy).
+    if (ledgerResyncDue) {
+        ledgerResyncDue = false;
+        return 'resync';
+    }
     if (!lastImportedCursor) return 'full'; // seed
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats
     // bandwidth when the stateHash canary says the copy has actually diverged, and it
@@ -718,10 +783,11 @@ export function stopBackupPuller(): void {
 
 /** Observability: when the last successful pull landed, failure streak, and the
  * replica-fidelity result of the most recent successful pull. */
-export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null; lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number } {
+export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null; lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number; lastPullMode: PullMode | null } {
     return {
         lastSuccessAt,
         consecutiveFailures,
+        lastPullMode,
         running: pullTimer !== null,
         consistency: lastConsistency,
         cursor: lastImportedCursor,

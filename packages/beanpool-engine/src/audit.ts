@@ -7,13 +7,14 @@
 // with self-contained SQLite configuration storage.
 
 import type Database from 'better-sqlite3';
+import crypto from 'node:crypto';
 import { getMemberTrustProfile } from './trust.js';
 
 type Db = Database.Database;
 
 export interface AuditSyncPayload {
     members?: any[];
-    accounts?: { balance: number | string }[];
+    accounts?: { publicKey?: string; balance: number | string | null }[];
     transactions?: any[];
     posts?: any[];
     marketplaceTransactions?: any[];
@@ -40,7 +41,52 @@ export interface ReplicaConsistency {
     tables: { name: string; primary: number; backup: number; match: boolean }[];
     sumBalances: { primary: number; backup: number; match: boolean };
     commons: { primary: number; backup: number; match: boolean } | null;
+    /**
+     * Every account against the copy's, not only their sum: a ledger with every balance at 0, or two balances swapped,
+     * sums the same. `compared` accounts in either; `differing`, those whose balance differs or that only one side holds
+     * (the first few in `examples`, by key); `unreadable`, the copy's entries with no key or no number for a balance.
+     * Null when the copy carries no account set.
+     */
+    ledger: { compared: number; differing: number; unreadable: number; examples: string[]; match: boolean } | null;
     ok: boolean;
+}
+
+/** A ledger as a few figures and a fingerprint, to tell whether two servers hold the same one (summariseLedger). */
+export interface LedgerSummary {
+    /** Accounts holding Beans, to the cent. */
+    accounts: number;
+    /** What they hold between them, to the cent: the size of the ledger whatever its sum. */
+    holdings: number;
+    /** Their sum. */
+    sum: number;
+    /** A hash of each of those accounts' key and balance to the cent. */
+    digest: string;
+}
+
+/**
+ * A ledger's figures and fingerprint. Two ledgers with the same digest hold the same Beans in the same accounts, to the
+ * cent. An account holding under half a cent counts as holding none, so an empty escrow account a server deletes, or dust
+ * its sweep moves to the Commons, changes nothing here. A balance that isn't a number counts as none.
+ */
+export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unknown }>): LedgerSummary {
+    const held: string[] = [];
+    let holdings = 0;
+    let sum = 0;
+    for (const r of rows) {
+        const b = typeof r.balance === 'number' && Number.isFinite(r.balance) ? r.balance : 0;
+        sum += b;
+        const cents = Math.round(b * 100);
+        if (cents === 0) continue;
+        holdings += Math.abs(cents);
+        held.push(`${r.publicKey}:${cents}`);
+    }
+    held.sort();
+    return {
+        accounts: held.length,
+        holdings: holdings / 100,
+        sum: Math.round(sum * 10000) / 10000,
+        digest: crypto.createHash('sha256').update(held.join('\n')).digest('hex'),
+    };
 }
 
 /**
@@ -228,10 +274,42 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         commons = { primary: primaryC, backup: backupC, match: Math.abs(primaryC - backupC) < 0.01 };
     }
 
-    const ok = tables.every(t => t.match) && sumBalances.match && (commons ? commons.match : true);
+    // Every account (G0). The importer writes the copy's rows as they are and deletes the ones it doesn't carry, so after
+    // a whole copy the two are equal, balance for balance; any difference is this standby's ledger not being its main
+    // server's. Exact: both are the same doubles, the import writes the one it was sent.
+    let ledger: ReplicaConsistency['ledger'] = null;
+    if (Array.isArray(payload.accounts)) {
+        const theirs = new Map<string, number | null>();
+        let unreadable = 0;
+        for (const a of payload.accounts) {
+            if (typeof a?.publicKey !== 'string' || !a.publicKey) { unreadable++; continue; }
+            const b = typeof a.balance === 'number' && Number.isFinite(a.balance) ? a.balance : null;
+            if (b === null) unreadable++;
+            theirs.set(a.publicKey, b);
+        }
+        const ours = new Map((db.prepare('SELECT public_key, balance FROM accounts').all() as { public_key: string; balance: number | null }[])
+            .map((r) => [r.public_key, r.balance]));
+        const differ: string[] = [];
+        for (const [pk, b] of theirs) {
+            if (b === null) continue; // counted as unreadable: there is no balance of theirs to hold
+            const mine = ours.get(pk);
+            if (mine === undefined || mine === null || mine !== b) differ.push(pk);
+        }
+        for (const pk of ours.keys()) if (!theirs.has(pk)) differ.push(pk);
+        differ.sort();
+        ledger = {
+            compared: new Set([...theirs.keys(), ...ours.keys()]).size,
+            differing: differ.length,
+            unreadable,
+            examples: differ.slice(0, 5).map((pk) => pk.slice(0, 16)),
+            match: differ.length === 0 && unreadable === 0,
+        };
+    }
+
+    const ok = tables.every(t => t.match) && sumBalances.match && (commons ? commons.match : true) && (ledger ? ledger.match : true);
     return {
         checkedAt: new Date().toISOString(),
         snapshotGeneratedAt: payload.generatedAt ?? null,
-        tables, sumBalances, commons, ok,
+        tables, sumBalances, commons, ledger, ok,
     };
 }

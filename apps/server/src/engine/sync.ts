@@ -24,6 +24,8 @@ import {
 } from './key-move.js';
 import {
     exportSyncState as exportSyncStateEngine,
+    summariseLedger,
+    type LedgerSummary,
     type SyncPayload,
     type Transaction
 } from '@beanpool/engine';
@@ -31,6 +33,56 @@ import {
 // The node's role lives in config/node-role.ts, a leaf module the database's boot can ask too (db.ts
 // markExistingVisitors); re-exported here, where the rest of the server imports it from.
 export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js';
+
+/**
+ * What this importer keeps, as a number (design scratch/global-node/DESIGN-standby-takeover-gaps-opus.md §4.3). A standby
+ * records the format its copy was made with (`replica_format` in node_config, noteReplicaFormat); while that is older than
+ * this, its puller asks for one force-resync (services/backup-puller.ts). A whole copy can't repair what an older importer
+ * got wrong: it skips every row whose stamp hasn't moved. Raise it in the PR that changes what the importer keeps.
+ *
+ *  1. The ledger is the main server's exactly: every account as it holds it and no other, each trade's fee and project;
+ *     and a standby seeds no BeanPool enterprise of its own (G0, G9). A standby with no record of a format is older.
+ */
+export const REPLICA_FORMAT = 1;
+
+/** The format this standby's copy was made with, 0 when it has no record of one (a copy made before the record). */
+export function replicaFormatOfCopy(): number {
+    const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined;
+    const n = Number(row?.value);
+    return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+/** This standby's copy is now one this importer made: a force-resync, or a first copy, landed. */
+export function noteReplicaFormat(): void {
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', ?)`).run(String(REPLICA_FORMAT));
+}
+
+/**
+ * A whole copy found this standby's ledger isn't its main server's (services/backup-puller.ts checkWholeCopy): kept as
+ * node_config `replica_ledger_mismatch`, the last one, for the owners' notice (design G8) to read.
+ */
+export function noteLedgerMismatch(record: {
+    at: string; snapshotGeneratedAt: string | null; differing: number; unreadable: number; examples: string[]; resync: string;
+}): void {
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_ledger_mismatch', ?)`).run(JSON.stringify(record));
+}
+
+/** The main server's ledger as this standby last copied it (node_config `replica_main_ledger`), for a take-over's audit. */
+export interface MainLedgerRecord extends LedgerSummary {
+    /** The copy's `generatedAt`: when the main server's ledger was this. */
+    generatedAt: string | null;
+}
+
+export function mainLedgerAtLastCopy(): MainLedgerRecord | null {
+    const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_main_ledger'`).get() as { value: string } | undefined;
+    if (!row) return null;
+    try {
+        const r = JSON.parse(row.value);
+        return r && typeof r.digest === 'string' ? r as MainLedgerRecord : null;
+    } catch {
+        return null;
+    }
+}
 
 export function getSyncCursor(peerId: string): string | null {
     const row = db.prepare(`SELECT last_synced_at FROM sync_cursors WHERE peer_id=?`).get(peerId) as { last_synced_at: string } | undefined;
@@ -325,6 +377,9 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             return r.changes > 0;
         }
         case 'projects': {
+            // As the main server's delete does (db.ts deleteCrowdfundProject): the project's trades stay, no longer naming
+            // it. That write moves no trade's watermark, so it reaches a standby with the project's tombstone, here.
+            db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(rowKey);
             const r = db.prepare(`DELETE FROM projects WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
@@ -517,13 +572,6 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
     }
 }
 
-function parseLedgerTs(value: string | null | undefined): number {
-    if (!value) return NaN;
-    let s = String(value);
-    if (s.length === 19 && s[10] === ' ') s = `${s.replace(' ', 'T')}Z`;
-    return Date.parse(s);
-}
-
 const GROUP_ROLES = new Set(['convenor', 'member', 'observer']);
 const GROUP_MEMBER_STATUSES = new Set(['active', 'pending_approval', 'invited', 'removed']);
 
@@ -706,6 +754,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
     try {
         db.transaction(() => {
+            // Before anything in this copy is written: an empty ledger (a new standby, or a force-resync after its clear) is
+            // a seed, which the conservation guard below lets in whatever it sums to.
+            const accountCountBefore = (db.prepare("SELECT COUNT(*) AS c FROM accounts").get() as { c: number }).c;
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -769,7 +820,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         deletedByOwnerAt(rm),
                         boardStandingChangedAt(rm)
                     );
-                    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
+                    // No account row here: the copy's own account set brings the member's (below). One made here was
+                    // stamped with this standby's clock and then kept over the main server's older row (G0).
                     newMembers++;
                 } else {
                     if (rm.updatedAt && existing.updated_at && existing.updated_at >= rm.updatedAt) {
@@ -1010,42 +1062,55 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            if (remote.accounts) {
-                const accountCountBefore = (db.prepare("SELECT COUNT(*) AS c FROM accounts").get() as { c: number }).c;
+            if (Array.isArray(remote.accounts)) {
+                // The main server's account set, exactly (design §4.1, G0). It is this standby's only writer, every copy,
+                // delta or whole, carries every account it holds as of `generatedAt`, and the puller refuses an older copy,
+                // so there is nothing for a stamp to decide. Each account is written as the main server holds it whenever
+                // it differs here, stamps included, and one it no longer holds (an empty escrow its sweep deleted, a deleted
+                // project's) goes. A comparison of stamps let this standby's own rows win: the members import made a zero
+                // row for each new member stamped with this clock, and every balance made before the first copy stayed 0.
+                const local = new Map((db.prepare('SELECT public_key, balance, last_updated_at, last_demurrage_epoch FROM accounts').all() as
+                    { public_key: string; balance: number | null; last_updated_at: string | null; last_demurrage_epoch: number | null }[])
+                    .map((r) => [r.public_key, r]));
+                const named = new Set<string>();
+                const writeAccount = db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT(public_key) DO UPDATE SET
+                                balance = excluded.balance,
+                                last_updated_at = excluded.last_updated_at,
+                                last_demurrage_epoch = excluded.last_demurrage_epoch`);
+                // What this copy moves the standby's total by, the conservation guard's measure.
                 let importedBalanceDelta = 0;
-
                 for (const acc of remote.accounts) {
+                    if (typeof acc?.publicKey !== 'string' || !acc.publicKey) {
+                        conflictsSkipped++;
+                        continue;
+                    }
+                    named.add(acc.publicKey);
+                    // No number to copy: the row here stays as it is, and the whole-copy check counts the entry.
                     if (typeof acc.balance !== 'number' || !Number.isFinite(acc.balance)) {
                         conflictsSkipped++;
                         continue;
                     }
-                    const existing = db.prepare("SELECT balance, last_updated_at FROM accounts WHERE public_key=?")
-                        .get(acc.publicKey) as { balance: number; last_updated_at: string | null } | undefined;
-                    if (existing) {
-                        const localEpoch = parseLedgerTs(existing.last_updated_at);
-                        const remoteEpoch = parseLedgerTs(acc.lastUpdatedAt);
-                        if (Number.isFinite(localEpoch) && Number.isFinite(remoteEpoch) && localEpoch >= remoteEpoch) {
-                            conflictsSkipped++;
-                            continue;
-                        }
-                    }
-                    const res = db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch)
-                                VALUES (?, ?, ?, ?)
-                                ON CONFLICT(public_key) DO UPDATE SET
-                                    balance = excluded.balance,
-                                    last_updated_at = excluded.last_updated_at,
-                                    last_demurrage_epoch = excluded.last_demurrage_epoch`).run(
-                        acc.publicKey,
-                        acc.balance,
-                        acc.lastUpdatedAt,
-                        acc.lastDemurrageEpoch
-                    );
-                    if (res.changes > 0) {
-                        accountChanges++;
-                        importedBalanceDelta += acc.balance - (existing?.balance ?? 0);
-                    }
+                    const stamp = acc.lastUpdatedAt ?? null;
+                    const epoch = acc.lastDemurrageEpoch ?? null;
+                    const mine = local.get(acc.publicKey);
+                    if (mine && mine.balance === acc.balance && mine.last_updated_at === stamp && mine.last_demurrage_epoch === epoch) continue;
+                    writeAccount.run(acc.publicKey, acc.balance, stamp, epoch);
+                    accountChanges++;
+                    importedBalanceDelta += acc.balance - (mine?.balance ?? 0);
+                }
+                const dropAccount = db.prepare('DELETE FROM accounts WHERE public_key = ?');
+                for (const [pk, mine] of local) {
+                    if (named.has(pk)) continue;
+                    dropAccount.run(pk);
+                    accountChanges++;
+                    importedBalanceDelta -= mine.balance ?? 0;
                 }
 
+                // The guard's meaning is unchanged: a copy may not move this standby's total by more than the tolerance,
+                // unless it held no ledger before (a seed). With every account now the main server's, what it measures is
+                // the shift between the two ledgers, which is 0 whenever the main server conserves.
                 if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && accountCountBefore > 1
                     && Math.abs(importedBalanceDelta) > LEDGER_CONSERVATION_TOLERANCE) {
                     throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
@@ -1054,16 +1119,59 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 const updatedAccs = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
                 cb.loadLedgerState(updatedAccs);
 
-                if (remote.accounts.some(a => a.publicKey === 'COMMONS_POOL')) {
+                if (named.has('COMMONS_POOL')) {
                     const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'")
                         .get() as { balance: number } | undefined;
                     if (commonsRow) {
                         cb.setCommonsBalance(commonsRow.balance);
                     }
                 }
+
+                // The main server's ledger as this copy carries it, which a take-over's audit holds the promoted ledger to
+                // (services/takeover.ts). In this transaction, so it is the ledger of the last copy that landed; written
+                // when it changes, so `generatedAt` is the first copy that carried it.
+                const summary = summariseLedger(remote.accounts.filter((a) => typeof a?.publicKey === 'string')
+                    .map((a) => ({ publicKey: a.publicKey, balance: a.balance })));
+                const last = mainLedgerAtLastCopy();
+                if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
+                    const record: MainLedgerRecord = { ...summary, generatedAt: remote.generatedAt ?? null };
+                    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_main_ledger', ?)`).run(JSON.stringify(record));
+                }
+            } else {
+                // A copy with no account set at all (none a main server sends: its export always carries every account).
+                // Each member it named without an account gets an empty one, as the members import used to give them, stamped
+                // with nothing, so nothing here claims to be newer than a main server's row.
+                const openAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, NULL, 0)`);
+                for (const rm of remote.members ?? []) {
+                    if (typeof rm?.publicKey === 'string' && rm.publicKey) openAccount.run(rm.publicKey);
+                }
             }
 
             if (remote.transactions) {
+                // Each trade as the main server holds it, its Commons fee and its project included (G0). A trade never
+                // changes there but for its project (cleared when the project is deleted, which reaches this standby with
+                // the project's tombstone) and a re-key (which this standby follows before the copy goes in), so a row
+                // here that isn't the main server's is one this standby wrote itself: the main server's is written over
+                // it. A main server from before the fee and the project were sent sends neither: 0 and none, as its copy
+                // always had them.
+                const writeTransaction = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload, project_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                from_pubkey = excluded.from_pubkey,
+                                to_pubkey = excluded.to_pubkey,
+                                amount = excluded.amount,
+                                tax_fee = excluded.tax_fee,
+                                memo = excluded.memo,
+                                timestamp = excluded.timestamp,
+                                auth_signer = excluded.auth_signer,
+                                auth_signature = excluded.auth_signature,
+                                auth_payload = excluded.auth_payload,
+                                project_id = excluded.project_id
+                            WHERE transactions.from_pubkey IS NOT excluded.from_pubkey OR transactions.to_pubkey IS NOT excluded.to_pubkey
+                               OR transactions.amount IS NOT excluded.amount OR transactions.tax_fee IS NOT excluded.tax_fee
+                               OR transactions.memo IS NOT excluded.memo OR transactions.timestamp IS NOT excluded.timestamp
+                               OR transactions.auth_signer IS NOT excluded.auth_signer OR transactions.auth_signature IS NOT excluded.auth_signature
+                               OR transactions.auth_payload IS NOT excluded.auth_payload OR transactions.project_id IS NOT excluded.project_id`);
                 for (const tx of remote.transactions) {
                     if (ENFORCE_LEDGER_AUTH && !verifyTransactionAuthorship(tx)) {
                         conflictsSkipped++;
@@ -1073,17 +1181,18 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         conflictsSkipped++;
                         continue;
                     }
-                    const res = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer, auth_signature, auth_payload)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    const res = writeTransaction.run(
                         tx.id,
                         tx.from,
                         tx.to,
                         tx.amount,
+                        typeof tx.taxFee === 'number' && Number.isFinite(tx.taxFee) ? tx.taxFee : 0,
                         tx.memo,
                         tx.timestamp,
                         tx.authSigner ?? null,
                         tx.authSignature ?? null,
                         tx.authPayload ?? null,
+                        typeof tx.projectId === 'string' && tx.projectId ? tx.projectId : null,
                     );
                     if (res.changes > 0) newTransactions++;
                 }

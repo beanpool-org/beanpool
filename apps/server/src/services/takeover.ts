@@ -65,6 +65,7 @@ import {
     BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, ensureTakeoverEnvelope, type TakeoverBundle,
 } from './takeover-envelope.js';
 import { checkBundle } from './sealed-backup.js';
+import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { restartSidecar } from './public-address-agent.js';
@@ -906,24 +907,51 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
     return { resumed, auditRan };
 }
 
-/** The ledger conservation audit, once per take-over: it clears its own flag in the same write that records it. */
+/**
+ * The ledger audit, once per take-over: it clears its own flag in the same write that records it. Two questions: does the
+ * ledger add up (the conservation check), and is it the main server's as this server last copied it (G0: a ledger with
+ * every balance at 0, or with no accounts, adds up, and a standby's copy used to be one of those). It says "ok" only when
+ * both hold. Never blocks the take-over: it says what it found.
+ */
 function runPendingPromotionAudit(j: Journal | null): boolean {
     const config = getLocalConfig();
     let ran = false;
     if (config.promotionAuditPending) {
         const r = promotionSanityCheck();
-        const record = { at: new Date().toISOString(), ok: r.ok, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows };
+        const copy = ledgerAgainstLastCopy();
+        const record = {
+            at: new Date().toISOString(), ok: r.ok && copy.match, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows,
+            copy: {
+                match: copy.match,
+                here: { accounts: copy.here.accounts, holdings: copy.here.holdings },
+                lastCopy: copy.lastCopy ? { accounts: copy.lastCopy.accounts, holdings: copy.lastCopy.holdings, generatedAt: copy.lastCopy.generatedAt } : null,
+            },
+        };
+        if (!copy.match) logger.error('SYS', `[Takeover] ${ledgerCopyTrouble(record.copy)}`);
         updateLocalConfig({ promotionAuditPending: false, lastPromotionAudit: record });
         ran = true;
     }
     const recorded = getLocalConfig().lastPromotionAudit;
     if (j && j.steps.restart && !j.steps.audit && recorded) {
         j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows };
+        const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0;
+        const troubles = [
+            ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s))`]),
+            ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),
+        ];
         mark(j, 'audit', recorded.ok
             ? 'the ledger adds up'
-            : `the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s)): check before members trade`);
+            : `${troubles.join('; ') || 'the ledger does NOT add up'}: check before members trade`);
     }
     return ran;
+}
+
+/** What a take-over's audit says when the ledger isn't the main server's as this server last copied it. */
+function ledgerCopyTrouble(copy: NonNullable<NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy']>): string {
+    if (!copy.lastCopy) return "this server has no record of the main server's ledger, so it can't say the ledger is the main server's";
+    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${s.holdings.toFixed(2)} Beans`;
+    return `the ledger is NOT the main server's as this server last copied it (here ${held(copy.here)}; `
+        + `the main server's ${held(copy.lastCopy)}${copy.lastCopy.generatedAt ? `, as of ${copy.lastCopy.generatedAt}` : ''})`;
 }
 
 /**

@@ -12,9 +12,12 @@ import {
     runConservationCheck,
     computeWashSybilMetrics,
     getReplicaConsistency as engineGetReplicaConsistency,
+    summariseLedger,
+    type LedgerSummary,
     type ReplicaConsistency,
     type AuditSyncPayload
 } from '@beanpool/engine';
+import { mainLedgerAtLastCopy, type MainLedgerRecord } from './sync.js';
 
 export type { ReplicaConsistency, AuditSyncPayload };
 
@@ -137,6 +140,19 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
         console.error('   Investigate before this node accepts transactions — the last snapshot may be incomplete/corrupt.');
     }
     return result;
+}
+
+/**
+ * This server's ledger against its main server's as it last copied it, while it was a standby (engine/sync.ts
+ * `replica_main_ledger`): the same Beans in the same accounts, to the cent. A take-over's audit asks it as well as
+ * the conservation check, which says "ok" on any ledger that sums to its baseline, one with every balance at 0 or with
+ * no accounts at all among them. `lastCopy` null: this server has no record of copying one (it never copied, or not
+ * since this check existed), and then it can't say the ledger is the main server's.
+ */
+export function ledgerAgainstLastCopy(): { match: boolean; here: LedgerSummary; lastCopy: MainLedgerRecord | null } {
+    const here = summariseLedger(db.prepare('SELECT public_key AS publicKey, balance FROM accounts').all() as { publicKey: string; balance: number }[]);
+    const lastCopy = mainLedgerAtLastCopy();
+    return { match: !!lastCopy && lastCopy.digest === here.digest, here, lastCopy };
 }
 
 /**

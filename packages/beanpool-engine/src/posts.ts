@@ -887,13 +887,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // never told a phone to take them off or put them back. members.board_standing_changed_at moves for exactly
         // that: the members_touch_board_standing trigger for `paused` and `status`, setHolidayMode for holiday, and
         // keepersChanged for a keeper who comes or goes while an enterprise is off the board (whose phone then reads its
-        // listings differently). Not
-        // members.updated_at, which about forty columns move (a bio, a contact, a moderator's mute…): any delta reader,
-        // unsigned included, could learn when one of those changed for any author with listings. Searched on
-        // idx_members_board_standing_changed_at. Local authors only (origin_node IS NULL), which is every author whose
-        // standing is kept here, and keeps this half on idx_posts_author_created_local: with DELTA_ORDER both halves are
-        // then an index search (MULTI-INDEX OR). Without it the planner reads every post (measured on 20,000 posts:
-        // 3 ms a read, against 0.02 ms).
+        // listings differently). Not members.updated_at, which about forty columns move (a bio, a contact, a
+        // moderator's mute…): any delta reader, unsigned included, could learn when one of those changed for any
+        // author with listings. Searched on idx_members_board_standing_changed_at. Local authors only (origin_node IS
+        // NULL), which is every author whose standing is kept here, and keeps this half on
+        // idx_posts_author_created_local: with DELTA_ORDER both halves are then an index search (MULTI-INDEX OR).
+        // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
         // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
         // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
         // MULTI-INDEX OR.

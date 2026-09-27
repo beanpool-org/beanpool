@@ -94,9 +94,9 @@ export function ensureFederationLink(
             const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(existing.treasuryPubkey, operatorPubkey);
             if (!bound) {
                 db.transaction(() => {
-                    const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                    const added = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
                                 VALUES (?, ?, 'keeper', 'admin')`).run(existing.treasuryPubkey, operatorPubkey);
-                    if (bound.changes > 0) keepersChanged(db, existing.treasuryPubkey);
+                    if (added.changes > 0) keepersChanged(db, existing.treasuryPubkey);
                     raiseCreatorOperatorSwitch(operatorPubkey, existing.treasuryPubkey);
                 })();
             }

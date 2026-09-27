@@ -1065,13 +1065,75 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
     'state_synced',
 ]);
 
+// Of PUBLIC_WS_EVENTS, the ones a socket with no member's key may still use on a node that shows visitors the
+// listings and not the people (`guestListingsOnly`). There an unsigned read, or one signed by a key that is no member
+// here, gets the listings' guest view, and the Commons decisions, projects, crowdfunds and enterprises are members-only
+// (https-server.ts MEMBERS_ONLY_ON_GUEST_LISTINGS_*) or switched off, so a doorbell for one of them changes nothing
+// such a socket can read and has every visitor's tab read the listings again for nothing. `state_synced` stays: an
+// import's counts don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so
+// one that counted only groups may still have changed a listing. Only a standby imports, so the node visitors reach
+// never sends it anyway.
+const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed', 'state_synced']);
+
+// As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
+const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
+
+/**
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
+ * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
+ * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
+ * still is.
+ */
+function keylessSocketMayUse(type: string): boolean {
+    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
+    return !getProfileSwitches().guestListingsOnly;
+}
+
+export type ListingDoorbell = 'post_removed' | 'post_updated';
+// The listing doorbells asked for since the last one went out, sent together once the work in hand (and any transaction
+// it runs in) is done.
+let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
+
+/**
+ * The listings changed with no post event to say so, and every socket that gets public doorbells must hear it: a member
+ * removed (their posts cancelled), an enterprise paused or winding up (the board leaves its posts out) or back, a member
+ * on holiday or back, a report's suspension (their posts paused), a trade that took a listing or put it back, the
+ * Daily Pulse listing, a peer's listings. Its member-feed sockets get that change's own events (profile_updated,
+ * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
+ * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
+ * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
+ * post for no listing). Every node, whatever it lets such a socket read: it may read the listings everywhere.
+ *
+ * One per change, never one per post, and those asked for in the same turn go as one (each type once). Sent after the
+ * work in hand, so it may be asked for inside a transaction: one that then unwinds costs a read of what is there. The
+ * posts version is bumped now, so that read is never answered 304 from the copy it already holds.
+ */
+export function ringListingDoorbell(type: ListingDoorbell): void {
+    bumpPostsVersion();
+    if (listingDoorbellsDue) { listingDoorbellsDue.add(type); return; }
+    listingDoorbellsDue = new Set([type]);
+    setImmediate(() => {
+        const due = listingDoorbellsDue ?? new Set<ListingDoorbell>();
+        listingDoorbellsDue = null;
+        for (const t of due) {
+            const out = JSON.stringify({ type: t });
+            for (const ws of wsClients) {
+                if (ws._memberFeed || ws._openFeed) continue;
+                try { ws.send(out); } catch { wsClients.delete(ws); }
+            }
+        }
+    });
+}
+
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),
 // pass `recipients` so the event is delivered ONLY to sockets whose verified member
 // is a party. General community events (new_post, member_joined, profile_updated)
 // pass no recipients and reach every member socket; sockets with no verified member
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
-// feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
+// feed (ENFORCE_WS_AUTH=false), where they get every event without recipients. A socket
+// with no member's key at all (unsigned, or signed by a key that is no member here) gets
+// only those of them it may use on this node (keylessSocketMayUse).
 //
 // Three things a socket's verified key decides, as for an HTTP read:
 //   - `_memberPubkey`, a key that passes the act test (isNodeMember), or a visitor's (isLiveVisitor): what is sent TO
@@ -1087,7 +1149,9 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // `othersGetDoorbell`: a private event whose side effect everyone may see (a listing going pending, a
 // completed trade on the activity feed). The recipients get the full event; every other member socket
 // (and an open-feed socket) gets only `{ type }`, so its client re-fetches what it may see. Clients use
-// nothing but the type of these events, so the doorbell refreshes them exactly as the payload did.
+// nothing but the type of these events, so the doorbell refreshes them exactly as the payload did. Each
+// is a trade's step, which changes its listing on the board (spoken for, back up, or done and gone), so
+// every other socket gets the listings' doorbell for it instead (ringListingDoorbell).
 //
 // Returns how many open sockets it was written to.
 export interface BroadcastOptions { othersGetDoorbell?: boolean }
@@ -1184,6 +1248,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 break;
         }
     }
+    // A trade's step: the sockets below that are neither its parties nor on the member feed or the open feed get the
+    // listings' doorbell for it (BroadcastOptions above).
+    if (recipients && opts?.othersGetDoorbell) ringListingDoorbell('post_updated');
     const msg = JSON.stringify(event);
     // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
     // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a
@@ -1202,6 +1269,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
     let forVisitor: boolean | undefined;
+    // Whether a socket with no member's key may use this public doorbell (keylessSocketMayUse), asked once.
+    let forKeyless: boolean | undefined;
     let sent = 0;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
@@ -1225,6 +1294,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             if (!(forVisitor ??= visitorMayReceive(event))) continue;
         } else if (!recipients && !ws._memberFeed && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            // A visitor's or a suspended member's socket holds a key, and keeps every public doorbell.
+            if (!ws._memberPubkey && !(forKeyless ??= keylessSocketMayUse(event.type))) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
@@ -2887,6 +2958,9 @@ export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string
     const snapshot = currentUsable !== 0 ? currentUsable : underlyingFloor;
     db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ? WHERE public_key = ?")
         .run(nowIso, by, snapshot, enterprisePubkey);
+    // Its listings leave the board (engine posts.ts leaves a paused author's out). Its callers announce the pause on the
+    // member feed only (profile_updated, enterprise_keeper_stepped_down), which a socket off it never gets.
+    ringListingDoorbell('post_removed');
     return { promoted: null, paused: true };
 }
 
@@ -4331,6 +4405,8 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
         // Condition: positive balance AND sufficient earned surplus (Rule 5 & Rule 6)
         if (balance >= claim.amount && earnedSurplus >= claim.amount && balance - claim.amount >= 0) {
             let success = false;
+            // Whether paying it closed its listing (a one-off one comes off the board).
+            let listingDone = false;
             try {
                 success = conservingTransaction(() => {
                     const memo = `Deferred wage claim payout for ${claim.post_id || 'keeper work'}`;
@@ -4354,8 +4430,8 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         }
                     }
                     if (claim.post_id) {
-                        db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
-                            .run(claim.post_id);
+                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
+                            .run(claim.post_id).changes > 0;
                     }
                     return true;
                 });
@@ -4375,6 +4451,8 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         amount: claim.amount,
                     });
                 } catch { }
+                // deferred_wage_paid goes to the member feed only.
+                if (listingDone) ringListingDoorbell('post_removed');
             }
         }
     }
@@ -4476,6 +4554,8 @@ export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): 
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     broadcast({ type: 'enterprise_paused', enterprisePubkey, pausedBy: actorPubkey, pausedAt: now, snapshot });
+    // Its listings leave the board while it is paused (engine posts.ts).
+    ringListingDoorbell('post_removed');
 
     return {
         ok: true,
@@ -4518,6 +4598,8 @@ export function resumeEnterprise(enterprisePubkey: string, actorPubkey: string):
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     broadcast({ type: 'enterprise_resumed', enterprisePubkey, resumedBy: actorPubkey });
+    // Its listings are back on the board.
+    ringListingDoorbell('post_updated');
 
     return {
         ok: true,
@@ -4670,6 +4752,8 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     broadcast({ type: 'enterprise_winding_up', enterprisePubkey, initiatedBy: actorPubkey, initiatedAt: now, graceEndsAt });
+    // Its listings leave the board while it winds up (engine posts.ts).
+    ringListingDoorbell('post_removed');
 
     return {
         ok: true,
@@ -4705,6 +4789,8 @@ export function cancelWindUp(enterprisePubkey: string, actorPubkey: string): {
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     broadcast({ type: 'enterprise_wind_up_cancelled', enterprisePubkey, cancelledBy: actorPubkey });
+    // Its listings are back on the board.
+    ringListingDoorbell('post_updated');
 
     return {
         ok: true,
@@ -5843,7 +5929,11 @@ export function actionReport(
         return true;
     })();
     const suspendedKey = suspended as string | null;
-    if (ok && suspendedKey) broadcast({ type: 'profile_updated', publicKey: suspendedKey });
+    if (ok && suspendedKey) {
+        broadcast({ type: 'profile_updated', publicKey: suspendedKey });
+        // Their listings, paused above, leave the board.
+        ringListingDoorbell('post_removed');
+    }
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
     if (ok && done) {
         notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
@@ -6707,6 +6797,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
+    // Their listings, cancelled above, leave the board. A community removal (decisions-engine tickDecisions) comes here.
+    ringListingDoorbell('post_removed');
 }
 
 /**
@@ -6923,6 +7015,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         if (promoted) broadcast({ type: 'profile_updated', publicKey: promoted });
         broadcast({ type: 'profile_updated', publicKey: enterprise });
     }
+    // Their listings, cancelled above, leave the board (and an enterprise they led alone, paused, rings its own).
+    ringListingDoorbell('post_removed');
 
     return { ok: true, message: 'Account successfully purged from node.' };
 }
@@ -7723,8 +7817,11 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
         err.openTrades = open;
         throw err;
     }
+    const was = isOnHoliday(publicKey);
     db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
     broadcast({ type: 'profile_updated', publicKey });
+    // Their listings leave the board, or come back.
+    if (was !== enabled) ringListingDoorbell(enabled ? 'post_removed' : 'post_updated');
     return { ok: true, openTrades: open };
 }
 

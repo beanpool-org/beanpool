@@ -13,6 +13,7 @@ import { useTheme } from '../ThemeContext';
 import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
+import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
@@ -113,23 +114,31 @@ export default function TabLayout() {
     const lastNetSyncAtRef = useRef(0);
     const { nodeUrl } = useNodeStatus();
     // Commons and Ledger are money: a node with Beans off (the global community) hides them. What this phone
-    // last heard from the node first, so the strip doesn't jump, then the node's own answer.
-    const [hiddenTabs, setHiddenTabs] = useState<HideableTab[]>([]);
+    // last heard from the node first, so the strip doesn't jump, then the node's own answer. Read from the phone's
+    // community itself at each screen change, not from `nodeUrl` alone: switching in Settings, from the community
+    // list or by joining another one doesn't recheck the node status, and the strip must never keep the community
+    // before (utils/node-profile-anchor.ts). The node is asked only when the community changed.
+    const [strip, setStrip] = useState<AnchoredNodeProfile>(UNKNOWN_NODE_PROFILE);
+    const stripReadFor = useRef<string | null | undefined>(undefined);
+    const hiddenTabs: HideableTab[] = hiddenTabsFor(strip.profile?.features);
     useEffect(() => {
-        let cancelled = false;
+        // No `cancelled`: an answer is kept only while the phone is still on the community it is for, so one still
+        // out when the screen changes lands as it should, and one for the community before never does.
         (async () => {
-            const url = nodeUrl ?? await AsyncStorage.getItem('beanpool_anchor_url');
-            if (!url) {
-                if (!cancelled) setHiddenTabs([]);
-                return;
-            }
+            const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => undefined);
+            if (url === undefined || url === stripReadFor.current) return;
+            stripReadFor.current = url;
+            setStrip(s => anchorRead(s, url));
+            if (!url) return;
             const cached = await getCachedNodeProfile(url);
-            if (!cancelled) setHiddenTabs(hiddenTabsFor(cached?.features));
+            setStrip(s => profileArrived(s, url, cached));
             const fresh = await fetchNodeProfile(url);
-            if (fresh && !cancelled) setHiddenTabs(hiddenTabsFor(fresh.features));
+            setStrip(s => profileArrived(s, url, fresh));
+            // Nothing known of it (offline, and no copy yet): read it again at the next screen change rather than
+            // show Commons and Ledger for the rest of the session. Only while the phone is still on it.
+            if (!cached && !fresh && stripReadFor.current === url) stripReadFor.current = undefined;
         })().catch(() => {});
-        return () => { cancelled = true; };
-    }, [nodeUrl]);
+    }, [nodeUrl, pathname]);
 
     useEffect(() => {
         if (!identity?.publicKey) return;

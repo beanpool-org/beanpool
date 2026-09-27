@@ -34,11 +34,13 @@ export interface NodeFeatures {
     guestListingsOnly?: boolean;
     /** A nearly empty Market shows a few example cards (utils/example-listings.ts). */
     exampleListings?: boolean;
+    /** Members propose and vote on formal Decisions here. Off on the worldwide community (Marty, 2026-09-27). */
+    decisions?: boolean;
 }
 
 const FEATURE_KEYS: ReadonlyArray<keyof NodeFeatures> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
-    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings',
+    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions',
 ];
 
 export interface NodeProfile {
@@ -197,4 +199,14 @@ export function hiddenTabsFor(features: NodeFeatures | null | undefined): Hideab
 /** Whether this node's members trade in Beans. Unknown counts as yes: that is every node today. */
 export function beansOn(features: NodeFeatures | null | undefined): boolean {
     return features?.beans !== false;
+}
+
+/**
+ * Whether this node's members propose and vote on formal Decisions (Decide). Only a node that says outright it
+ * doesn't has none: the worldwide community, where anyone may join with one sign-in, so one person with several
+ * accounts could swing a vote. Unknown counts as yes, as every node before the switch allowed them. Polls are posts,
+ * not Decisions, and are not this.
+ */
+export function decisionsOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.decisions !== false;
 }

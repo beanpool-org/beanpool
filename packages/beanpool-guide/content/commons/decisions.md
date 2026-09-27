@@ -11,6 +11,8 @@ Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**.
 
 A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in "Rules and how decisions work".
 
+The global community has no Decisions. Anyone can join it with one sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see "Reporting a problem". Decisions belong to local communities. Polls still work everywhere.
+
 ## Reading a Decision
 
 Each Decision shows:

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 66,
-  "hash": "71df4548e6b4dd620ffb97b8f4f1434b2195a89529a1874b8e24932257823b7d",
+  "version": 67,
+  "hash": "ae1095a38867fb9101404ee2f338b769f2dc4d6b5063033559f8ebd7b279a2c5",
   "sections": [
     {
       "id": "about",
@@ -328,6 +328,10 @@
           ]
         },
         {
+          "type": "p",
+          "text": "The global community has Polls but no Decisions: anyone can join it with one sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities."
+        },
+        {
           "type": "h2",
           "text": "What a Decision can do"
         },
@@ -483,6 +487,10 @@
             "If it does not pass, or too few people vote, the suspension lifts by itself.",
             "An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner."
           ]
+        },
+        {
+          "type": "p",
+          "text": "On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account."
         },
         {
           "type": "h2",
@@ -813,7 +821,7 @@
           "type": "ul",
           "items": [
             "**With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.",
-            "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities."
+            "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities."
           ]
         },
         {
@@ -2757,7 +2765,7 @@
         },
         {
           "type": "p",
-          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED**. When they join, the chat says so."
+          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the global community, under **Find groups** in **Talk**). When they join, the chat says so."
         },
         {
           "type": "h2",
@@ -2836,6 +2844,10 @@
         },
         {
           "type": "p",
+          "text": "The global community has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**."
+        },
+        {
+          "type": "p",
           "text": "If a convenor removed you from a group, you cannot join it again by yourself."
         },
         {
@@ -2844,7 +2856,7 @@
         },
         {
           "type": "p",
-          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private."
+          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private."
         },
         {
           "type": "ul",
@@ -3393,6 +3405,10 @@
           "text": "A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in \"Rules and how decisions work\"."
         },
         {
+          "type": "p",
+          "text": "The global community has no Decisions. Anyone can join it with one sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see \"Reporting a problem\". Decisions belong to local communities. Polls still work everywhere."
+        },
+        {
           "type": "h2",
           "text": "Reading a Decision"
         },
@@ -3477,7 +3493,8 @@
           "items": [
             "A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
             "You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.",
-            "You can have one open Decision at a time."
+            "You can have one open Decision at a time.",
+            "The global community has no Decisions, so there is nothing to propose there. See \"Voting on a Decision\"."
           ]
         },
         {
@@ -4647,7 +4664,8 @@
           "items": [
             "**A post reported by three members** who have been there at least a week is hidden at once, until a moderator looks at it. Its author can still see it, and gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.",
             "**New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.",
-            "**If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave."
+            "**If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.",
+            "**There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner."
           ]
         },
         {

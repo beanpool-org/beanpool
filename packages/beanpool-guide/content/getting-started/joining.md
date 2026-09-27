@@ -8,7 +8,7 @@ related: finding-a-community, your-12-words, your-profile, communities, how-it-w
 ## Two ways in
 
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
-- **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities.
+- **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities.
 
 No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See "Finding a community near you".
 

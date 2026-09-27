@@ -18,7 +18,8 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
 import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils/your-groups';
-import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
 
 export default function ChatsScreen() {
@@ -53,6 +54,9 @@ export default function ChatsScreen() {
     // Sorting by Beans is not offered on a community with Beans off (the worldwide one): every figure there is 0.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Where the Commons tab is hidden (Beans off: the worldwide community), Groups offers "Find groups", which opens the
+    // groups there are to join. Elsewhere the Commons tab has them, and Talk is as it was (utils/commons-sections.ts).
+    const findGroups = findGroupsInTalk(nodeProfile?.features);
     // A Beans sort picked before the profile said Beans are off goes back to Recent (utils/beans-off.ts talkSort).
     React.useEffect(() => {
         const allowed = talkSort(sortBy, nodeProfile?.features);
@@ -120,7 +124,8 @@ export default function ChatsScreen() {
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
         newChatBtn: { padding: 8, backgroundColor: colors.accent.tint, borderRadius: 12 },
         list: { paddingTop: 4, paddingBottom: 100 },
-        groupsActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+        // Wraps: "Find groups" and "New group" side by side need ~300dp, more than a 320dp screen has at 1.3x text.
+        groupsActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
         chatRow: {
             flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12,
             marginHorizontal: 16, marginVertical: 4, borderRadius: 14,
@@ -732,15 +737,17 @@ export default function ChatsScreen() {
                 >
                     <PageTitle title="Talk" />
                     {talkSwitch}
-                    {hasAny && (
+                    {/* The empty state has its own "Find a group to join". */}
+                    {(hasAny || (findGroups && paneState !== 'empty')) && (
                         <View style={styles.groupsActions}>
-                            <NewGroupButton onPress={createGroup.open} compact />
+                            {findGroups && <FindGroupsButton onPress={() => router.push(FIND_GROUPS_HREF)} />}
+                            {hasAny && <NewGroupButton onPress={createGroup.open} compact />}
                         </View>
                     )}
                     {paneState === 'loading' && <YourGroupsLoading />}
                     {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />}
                     {paneState === 'list' && <YourGroupsRows items={yourGroups || []} myPubkey={identity?.publicKey} showUnread />}
-                    {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'groups' } })} />}
+                    {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push(FIND_GROUPS_HREF)} />}
                 </Animated.ScrollView>
                 {createGroup.modal}
             </View>

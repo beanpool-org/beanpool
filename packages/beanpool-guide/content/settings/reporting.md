@@ -46,6 +46,7 @@ The global community at global.beanpool.org is open to anyone who signs in, so i
 - **A post reported by three members** who have been there at least a week is hidden at once, until a moderator looks at it. Its author can still see it, and gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.
 - **New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.
 - **If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.
+- **There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.
 
 None of this happens in your own local community: there, every report waits for the moderators.
 

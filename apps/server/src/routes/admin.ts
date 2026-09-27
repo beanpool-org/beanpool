@@ -32,6 +32,7 @@ import {
     restoreHiddenPost, liftModerationMute,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { decisionsOn } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
     getGatewayConfig, updateGatewayConfig,
@@ -1054,7 +1055,8 @@ function resolveAdminActor(ctx: any): string | null {
 }
 
 // Emergency suspension (§3.8, answer L): suspends at once and opens a 7-day "Keep this suspension?"
-// Decision in the same transaction. The reason is shown to members on that Decision.
+// Decision in the same transaction. The reason is shown to members on that Decision. With formal Decisions off (the
+// global node) it opens no vote: it lasts the 7 days and lifts itself (decisions-engine adminEmergencySuspend).
 router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
@@ -1077,7 +1079,9 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     const { status } = (ctx as any).requestBody || {};
     if (status === 'disabled') {
         ctx.status = 400;
-        ctx.body = { error: 'Suspend with POST /api/local/admin/users/:pubkey/suspend and a reason; it opens a community vote' };
+        ctx.body = { error: decisionsOn()
+            ? 'Suspend with POST /api/local/admin/users/:pubkey/suspend and a reason; it opens a community vote'
+            : 'Suspend with POST /api/local/admin/users/:pubkey/suspend and a reason; it lasts 7 days' };
         return;
     }
     if (status !== 'active') {

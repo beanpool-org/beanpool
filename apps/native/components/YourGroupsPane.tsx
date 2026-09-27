@@ -33,6 +33,28 @@ export function NewGroupButton({ onPress, compact }: { onPress: () => void; comp
     );
 }
 
+/**
+ * "Find groups", beside "New group" in Talk where the Commons tab is hidden (utils/commons-sections.ts
+ * findGroupsInTalk): it opens the groups there are to join. Outlined, so "New group" stays the main action.
+ */
+export function FindGroupsButton({ onPress }: { onPress: () => void }) {
+    const { colors } = useTheme();
+    const styles = useStyles(({ colors }) => StyleSheet.create({
+        btn: {
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
+            borderRadius: 14, paddingHorizontal: 16, borderWidth: 2, borderColor: colors.brand.primary,
+        },
+        text: { color: colors.brand.primary, fontSize: 15, fontWeight: '800' },
+    }));
+    return (
+        <Pressable style={styles.btn} onPress={onPress} accessibilityRole="button" accessibilityLabel="Find groups"
+            accessibilityHint="Opens the groups you could join" testID="talk-find-groups">
+            <MaterialCommunityIcons name="account-search" size={20} color={colors.brand.primary} />
+            <Text style={styles.text} numberOfLines={1}>Find groups</Text>
+        </Pressable>
+    );
+}
+
 /** Rows only (no scroll container), for embedding in a parent list's header. */
 export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: YourChat[]; myPubkey?: string | null; showUnread?: boolean; flush?: boolean }) {
     return (

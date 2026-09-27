@@ -180,6 +180,9 @@ async function main(): Promise<void> {
     // The operator's override, written before boot as an operator's would be.
     initSchema();
     if (COMBO === 'local+guest') db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.guestListingsOnly', 'true')").run();
+    // Formal Decisions are off on the global profile (test-decisions-off), and sections 3 and 6 make some: on a global
+    // node whose operator has switched them back on, whose readers still see the listings only.
+    if (COMBO === 'global') db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.decisions', 'true')").run();
 
     await initTls();
     se.initStateEngine();
@@ -189,6 +192,7 @@ async function main(): Promise<void> {
     const switches = getProfileSwitches();
     assert(switches.guestListingsOnly === LISTINGS_ONLY || STANDBY, `setup: guestListingsOnly is ${switches.guestListingsOnly}`);
     assert(switches.beans === MONEY_ON || STANDBY, `setup: Beans are ${switches.beans ? 'on' : 'off'}`);
+    assert(switches.decisions || STANDBY, `setup: formal Decisions are ${switches.decisions ? 'on' : 'off'}`);
     assert(getNodeRole() === (STANDBY ? 'backup' : 'primary'), `setup: this node runs as ${getNodeRole()}`);
 
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number } = {}): Id => {

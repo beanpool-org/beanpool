@@ -36,7 +36,7 @@ A new group's chat asks **Who do you want to invite?**
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED**. When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the global community, under **Find groups** in **Talk**). When they join, the chat says so.
 
 ## The group's chat
 
@@ -77,11 +77,13 @@ In **Commons**, under **Groups**, **Groups you could join** lists the groups you
 
 An **Invite Only** group is hidden from everyone who is not in it or invited to it.
 
+The global community has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**.
+
 If a convenor removed you from a group, you cannot join it again by yourself.
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private.
+A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private.
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.

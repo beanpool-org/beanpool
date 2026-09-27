@@ -105,6 +105,13 @@ export interface ProfileSwitches {
      *  and none can be opened, messaged or traded (apps/pwa/src/lib/example-listings.ts, apps/native/utils/
      *  example-listings.ts). Off: none. */
     exampleListings: boolean;
+    /** Formal community Decisions: proposals the members vote on and the node then carries out (decisions-engine.ts).
+     *  Off: nothing here can open, vote on or carry out a Decision (the write routes are 404 `feature_off`, and the
+     *  engine refuses underneath), while reads of existing ones still answer; an admin's emergency suspension opens
+     *  no vote and lifts by itself after its 7 days unless a moderator lifts it sooner. Off on the global node
+     *  (Marty, 2026-09-27): anyone may join it with one sign-in and no invite, so one person with several accounts
+     *  could swing a vote, and it is moderated without votes. Polls are posts, not Decisions, and are not this. */
+    decisions: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -131,6 +138,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         autoMute: false,
         guestListingsOnly: false,
         exampleListings: false,
+        decisions: true,
     },
     global: {
         openJoin: true,
@@ -153,6 +161,9 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         guestListingsOnly: true,
         // The lobby starts empty, and a stranger arriving then should see what it is for (Marty, 2026-09-27).
         exampleListings: true,
+        // Groups findable, no formal votes (Marty, 2026-09-27): one sign-in each, so no vote is safe from one person
+        // with several accounts. Reported posts are hidden, repeat offenders muted, and the team moderates.
+        decisions: false,
     },
 };
 
@@ -191,6 +202,9 @@ export interface NodeFeatures {
     guestListingsOnly: boolean;
     /** The apps show a few example cards on a Market with fewer than a handful of real listings. */
     exampleListings: boolean;
+    /** Members can propose and vote on formal Decisions here. Off, the apps show no way into Decide. An app that
+     *  finds no `decisions` (a server from before it) treats it as on: every such server allows them. */
+    decisions: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -298,6 +312,7 @@ export function getNodeFeatures(): NodeFeatures {
         autoMute: s.autoMute,
         guestListingsOnly: s.guestListingsOnly,
         exampleListings: s.exampleListings,
+        decisions: s.decisions,
     };
 }
 
@@ -414,6 +429,7 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     crowdfund: 'Crowdfunding is switched off on this node.',
     directoryMirror: 'This node does not keep the communities directory. Find communities near you on the global community.',
     knocks: 'This community isn’t taking requests to join. Ask one of its members for an invite.',
+    decisions: 'Community votes are switched off on this node, so nothing here can be proposed or voted on. Its moderators look after it instead.',
 };
 
 export function featureOffMessage(feature: ProfileSwitch): string {

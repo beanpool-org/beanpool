@@ -388,6 +388,8 @@ run_federation_suites() {
       test-api-path-auth
       test-request-binding
       test-loopback-audience
+      test-address-offers
+      test-staff-seen-prune
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
@@ -477,6 +479,7 @@ run_federation_suites() {
       test-decisions-tick-route-gone
       test-decisions-funding-queue
       test-decisions-grant-cap
+      test-decisions-off
       test-rip-out-legacy-voting
       test-escrow-disputes
       test-process-handlers

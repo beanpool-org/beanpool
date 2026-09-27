@@ -14,6 +14,8 @@ import {
     checkProposalStanding, isNodeMember,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
+import { FEATURE_OFF } from '../config/node-profile.js';
+import { decisionsOn, madeWithoutVote } from '../decisions-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
@@ -125,7 +127,12 @@ function myPoolVoting(actor: string | undefined): { voiceCredits: number; hasCom
 
 router.get('/api/commons/decisions', async (ctx) => {
     const status = ctx.query.status as any;
-    const decisions = getAllDecisions(status);
+    // With formal Decisions switched off (the global node) nothing is open to a vote, so no open Decision is listed and
+    // no app, however old, offers one (the header's vote icon reads ?status=open). Nor is an emergency suspension made
+    // while they were off, once they are back on: nobody votes on it (madeWithoutVote). The history, and a Decision by
+    // its id, still answer.
+    const votes = decisionsOn();
+    const decisions = getAllDecisions(status).filter(d => d.status !== 'open' || (votes && !madeWithoutVote(d)));
     // Each card carries the signer's own vote (null if they haven't voted) — taken from authentication
     // only, never from a parameter, so the list never reveals how anyone else voted.
     const actor = (ctx.state as any)?.actor as string | undefined;
@@ -139,7 +146,7 @@ router.get('/api/commons/decisions', async (ctx) => {
         myPoolVoting: myPoolVoting(actor),
         // Whether the signer may propose (earned standing, or a node admin). The one-open-Decision limit is
         // left to the apps, which already know the signer's open Decisions.
-        canPropose: actor ? checkProposalStanding(actor).ok : false,
+        canPropose: actor && votes ? checkProposalStanding(actor).ok : false,
     };
 });
 
@@ -188,7 +195,8 @@ router.post('/api/commons/decisions', async (ctx) => {
         });
         ctx.body = { success: true, decision: publicDecision(decision) };
     } catch (err: any) {
-        // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor).
+        // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor). Formal Decisions
+        // switched off: 404 feature_off, as the feature gate in front of this route answers.
         if (respondProfileRefusal(ctx, err)) return;
         ctx.status = 400;
         ctx.body = { error: err.message };
@@ -210,6 +218,12 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
     }
     const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);
     if (!result.success) {
+        // Formal Decisions switched off here: the same answer the feature gate gives in front of this route.
+        if (result.code === FEATURE_OFF) {
+            ctx.status = 404;
+            ctx.body = { error: result.error, code: result.code, feature: 'decisions' };
+            return;
+        }
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;

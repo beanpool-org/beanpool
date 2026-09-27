@@ -25,7 +25,7 @@ import {
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { WebRestore } from '../components/WebRestore';
-import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -846,6 +846,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      * saved here (the same one, unless another tab has changed that since): the node refuses a name another member has
      * (409), and never counts the member's own as taken (engine/members.ts updateProfile, isCallsignAvailable with this
      * key excluded). The suggestions for a taken name are asked with this key excluded the same way.
+     *
+     * A name here is held to what a join keeps (MAX_JOIN_CALLSIGN), and so are its suggestions: the app registers the
+     * member as soon as it opens (App.tsx registerMember), /api/community/register cuts the name to 20, and the node
+     * renames the member to the cut name, one they never saw, or a numbered variant of it (deciding pass 4113903999).
      */
     async function handleRename() {
         const member = pendingIdentity;
@@ -853,6 +857,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         const name = callsign.trim();
         if (name.length < 2) {
             setError('Callsign must be at least 2 characters.');
+            return;
+        }
+        if (name.length > MAX_JOIN_CALLSIGN) {
+            setError(`Callsign must be at most ${MAX_JOIN_CALLSIGN} characters.`);
             return;
         }
         setError(null);
@@ -872,7 +880,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             }
             const body = await res.json().catch(() => ({}));
             if (res.status === 409) {
-                const suggestions = await suggestCallsigns(name, member.publicKey);
+                const suggestions = await suggestCallsigns(name, member.publicKey, 3, MAX_JOIN_CALLSIGN);
                 setNameSuggestions(suggestions);
                 setError(suggestions.length
                     ? `"${name}" is already taken in this community. Pick one of the suggestions below, or choose another name.`
@@ -1340,7 +1348,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     setCallsign(e.target.value);
                                     if (nameSuggestions.length) setNameSuggestions([]);
                                 }}
-                                maxLength={32}
+                                maxLength={MAX_JOIN_CALLSIGN}
                                 disabled={loading}
                                 onKeyDown={(e) => e.key === 'Enter' && handleRename()}
                                 style={inputStyle}

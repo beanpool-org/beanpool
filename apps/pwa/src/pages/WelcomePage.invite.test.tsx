@@ -10,6 +10,7 @@ import {
     generateIdentity, importIdentity, loadIdentity, markInviteSent, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity, type PendingJoin,
 } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
+import { registerMember } from '../lib/api';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
@@ -268,6 +269,19 @@ describe('← Back on the photo step changes the name on the same account (card 
                 const key = decodeURIComponent(call.path.split('/').pop()!);
                 return json(200, { isMember: state.members.has(key), callsign: state.members.get(key) ?? null });
             },
+            // The app's register as soon as the account opens (App.tsx registerMember), answered for a member as
+            // routes/community.ts does (the name cut to 20) and engine/members.ts registerMemberInternal (renamed to that
+            // when it differs other than in capitals, uniquified against the others).
+            '/api/community/register': (body) => {
+                const held = state.members.get(body.publicKey);
+                const cut = String(body.callsign).slice(0, 20).trim();
+                if (held !== undefined && cut.toLowerCase() !== held.toLowerCase()) {
+                    let name = cut;
+                    for (let n = 2; takenBy(name, body.publicKey); n++) name = `${cut.slice(0, 32 - String(n).length).trim()}${n}`;
+                    state.members.set(body.publicKey, name);
+                }
+                return json(200, { success: true, member: { publicKey: body.publicKey, callsign: state.members.get(body.publicKey) } });
+            },
         });
         const updates = () => node.calls.filter((c) => c.path === '/api/profile/update');
         const nameChecks = () => node.calls.filter((c) => c.path.startsWith('/api/members/callsign-available/')).map((c) => new URL(c.path, 'http://node.test'));
@@ -388,6 +402,79 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(screen.queryByRole('alert')).toBeNull();
         expect(node.state.members.get(saved.publicKey)).toBe('ROWAN');
         expect(await loadIdentity()).toEqual({ ...saved, callsign: 'ROWAN' });
+    });
+
+    /*
+     * A join keeps 20 characters of a name (MAX_JOIN_CALLSIGN): the app's register, as soon as the account opens, sends
+     * the name to /api/community/register, which cuts it to 20, and the node renames the member to the cut name
+     * (deciding pass 4113903999). The rename step holds the same 20, and so do its suggestions.
+     */
+    it('a name longer than a join keeps (20 characters): refused on the step with a sentence and nothing sent; 20 goes through as typed', async () => {
+        const node = renameNode();
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+        await screen.findByText(/Choose your look/);
+        const saved = (await loadIdentity())!;
+
+        await backAndRename('Rowan of the Valley Farm Wren');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Callsign must be at most 20 characters.');
+        expect(nameField()).toHaveAttribute('maxlength', '20');
+        expect(screen.queryByText(/Choose your look/)).toBeNull();
+        expect(node.updates()).toHaveLength(0);
+        expect(node.nameChecks()).toHaveLength(0);
+        expect(node.state.members.get(saved.publicKey)).toBe('Rowan');
+        expect(await loadIdentity()).toEqual(saved);
+
+        fireEvent.change(nameField(), { target: { value: 'Rowan of the Valleys' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Choose your look/);
+        expect(node.state.members.get(saved.publicKey)).toBe('Rowan of the Valleys');
+        expect(await loadIdentity()).toEqual({ ...saved, callsign: 'Rowan of the Valleys' });
+    });
+
+    it('a taken name whose suggestions would run past 20 characters: only names of 20 or fewer are checked and offered', async () => {
+        const node = renameNode();
+        node.state.members.set('another-neighbour', 'Samantha Greenwood');
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+        await screen.findByText(/Choose your look/);
+
+        await backAndRename('Samantha Greenwood');
+        expect(await screen.findByRole('alert')).toHaveTextContent('"Samantha Greenwood" is already taken in this community.');
+        const offered = await screen.findAllByRole('button', { name: /^Use the name / });
+        expect(offered).toHaveLength(3);
+        for (const chip of offered) expect(chip.textContent!.length).toBeLessThanOrEqual(20);
+        expect(node.nameChecks().length).toBeGreaterThanOrEqual(3);
+        for (const check of node.nameChecks()) expect(decodeURIComponent(check.pathname.split('/').pop()!).length).toBeLessThanOrEqual(20);
+    });
+
+    it('redeem, then a rename to a suggestion, then the app registers the member as it opens: the node keeps exactly the name they chose', async () => {
+        const node = renameNode();
+        node.state.members.set('another-neighbour', 'Samantha Greenwood');
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+        await submitInvite();
+        await screen.findByText(/Choose your look/);
+        const saved = (await loadIdentity())!;
+
+        await backAndRename('Samantha Greenwood');
+        const [first] = await screen.findAllByRole('button', { name: /^Use the name / });
+        const picked = first.textContent!;
+        fireEvent.click(first);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Choose your look/);
+        expect(node.state.members.get(saved.publicKey)).toBe(picked);
+        await expectWordsOf(saved);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+        const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
+        expect(opened).toMatchObject({ publicKey: saved.publicKey, callsign: picked });
+
+        // What App.tsx does with the account it is handed, as soon as it opens.
+        await registerMember(opened.publicKey, opened.callsign);
+        expect(node.state.members.get(saved.publicKey)).toBe(picked);
+        expect((await loadIdentity())!.callsign).toBe(picked);
     });
 
     it("the rename's answer lost: said so, the step stays on the same key, and Next again carries on", async () => {

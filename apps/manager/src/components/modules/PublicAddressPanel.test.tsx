@@ -133,6 +133,35 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.getByText('https://cairns.beanpool.org')).toBeInTheDocument();
     });
 
+    it('says the address service has no record, and names the address this server keeps', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: true, status: 'none', kept: { hostname: 'cairns.beanpool.org', mode: 'tunnel' } }),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ logs: [] }),
+            } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/The address service has no record of this community's name/i)).toBeInTheDocument();
+        });
+        expect(screen.getByTestId('public-address-kept')).toHaveTextContent(/This server keeps cairns\.beanpool\.org, and members' apps that use it are still accepted/);
+        expect(screen.queryByText(/No public address currently assigned/i)).not.toBeInTheDocument();
+        // Nothing to release at the address service, and the claim form stays.
+        expect(screen.queryByRole('button', { name: /Take offline/i })).not.toBeInTheDocument();
+        expect(screen.getByLabelText(/Subdomain Prefix/i)).toBeInTheDocument();
+    });
+
     it('renders safely with wrong-typed fields without crashing', async () => {
         const malformedPayload = {
             status: 9999, // Should be string

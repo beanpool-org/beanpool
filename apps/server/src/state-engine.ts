@@ -546,6 +546,11 @@ export interface NodeConfig {
      * in the take-over envelope, so a promoted standby accepts the same names.
      */
     ownerAddresses?: string[];
+    /**
+     * Every BeanPool registrar name this key has held, current and former (engine/registrar-names.ts). No registrar
+     * answer deletes an entry. Carried in the take-over envelope beside `ownerAddresses`.
+     */
+    registrarNames?: RegistrarName[];
 }
 
 const wsClients: Set<any> = new Set();
@@ -1048,6 +1053,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
@@ -7115,6 +7121,7 @@ export function getNodeConfig(): NodeConfig {
         lastDirectoryPush: config.lastDirectoryPush,
         publicAddress: config.publicAddress ?? null,
         ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
+        ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
     };
 
     if (migrated) {
@@ -7131,6 +7138,7 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');
+    if ('registrarNames' in update) noteTakeoverInputsChanged('registrar names changed');
     return next;
 }
 

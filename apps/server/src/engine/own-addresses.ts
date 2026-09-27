@@ -9,9 +9,15 @@
  *   2. env BEANPOOL_ADDRESSES, a comma list (custom domains, a reverse proxy's names);
  *   3. the addresses an owner or admin confirmed in Settings (node_config `ownerAddresses`, carried in the take-over
  *      envelope beside `publicAddress`, so a promoted standby keeps them);
- *   4. the registrar's name for this key while the stored registrar status still gives it (`publicAddress.name` as a
- *      beanpool.org host, when the status is live or pending). The registrar keeps no record of a former name today,
- *      so a renamed node keeps its old name only if an owner confirms it (3);
+ *   4. every BeanPool registrar name this key has held, current and former, whatever the registrar last said of it
+ *      (node_config `registrarNames`, engine/registrar-names.ts; carried in the take-over envelope too). No registrar
+ *      answer takes one away: not `none` (a registrar that lost its data answers that to every key), not `released`,
+ *      `revoked`, `blocked` or `paused`, not a live answer naming another name (the old one is kept as former), and not
+ *      this node's own Take offline (the registrar holds the name for this key 30 days, and it routes nowhere; whether
+ *      it stops counting after that is decision D-B, and needs a timer this node doesn't have yet). A community never
+ *      loses its own name through a check, a bug or a stale registrar (Marty, 2026-09-24). A former name counts as one
+ *      of 1–4, so a node whose only name went former is never `unconfigured`. Only the current one is published: a
+ *      former name is accepted, never advertised;
  *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
  *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node). A loopback name the
  *      operator listed in 2 doesn't count as one of 1–4 here: it names no community, only whichever machine an app
@@ -41,6 +47,7 @@
 import { domainToASCII } from 'node:url';
 import { audienceOf } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl } from '../state-engine.js';
+import { registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { logger } from '../logger.js';
 
 export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar';
@@ -48,6 +55,8 @@ export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar';
 export interface OwnAddress {
     address: string;
     source: AddressSource;
+    /** A registrar name this key held before (4): accepted, never published. */
+    former?: true;
 }
 
 /** How a host a request was signed for stands here. */
@@ -110,15 +119,7 @@ export function ownerConfirmedAddresses(): string[] {
     return out;
 }
 
-function registrarAddress(): string | null {
-    const pa: any = (getNodeConfig() as any).publicAddress;
-    if (!pa || typeof pa !== 'object' || typeof pa.name !== 'string' || !pa.name.trim()) return null;
-    if (pa.status !== 'live' && pa.status !== 'pending') return null;
-    const n = pa.name.trim();
-    return normalizeAddress(n.includes('.') ? n : `${n}.beanpool.org`);
-}
-
-let cache: { at: number; list: OwnAddress[] } | null = null;
+let cache: { at: number; version: number; list: OwnAddress[] } | null = null;
 const CACHE_MS = 1_000;
 
 /** Forget the cached list, after a change a later request must see at once (an owner confirming an address). */
@@ -128,21 +129,24 @@ export function forgetOwnAddresses(): void {
 
 /** The configured names (1–4), each once, with where it came from. Loopback is here only when the operator listed it. */
 export function configuredAddresses(now = Date.now()): OwnAddress[] {
-    if (cache && now - cache.at < CACHE_MS) return cache.list;
+    // A registrar answer the node recorded (registrar-names.ts) is seen by the next request, not a second later.
+    const version = registrarNamesVersion();
+    if (cache && cache.version === version && now - cache.at < CACHE_MS) return cache.list;
     const list: OwnAddress[] = [];
-    const add = (address: string | null, source: AddressSource) => {
-        if (address && !list.some((a) => a.address === address)) list.push({ address, source });
+    const add = (address: string | null, source: AddressSource, former = false) => {
+        if (address && !list.some((a) => a.address === address)) list.push({ address, source, ...(former ? { former: true as const } : {}) });
     };
-    const url = resolvePublicNodeUrl();
+    const config = getNodeConfig();
+    const url = resolvePublicNodeUrl(config);
     add(url ? normalizeAddress(url) : null, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
-    add(registrarAddress(), 'registrar');
-    cache = { at: now, list };
+    for (const r of registrarNames(config)) add(r.address, 'registrar', r.role === 'former');
+    cache = { at: now, version, list };
     return list;
 }
 
-/** The zone the BeanPool registrar names communities in: `<name>.beanpool.org` (registrarAddress, resolvePublicNodeUrl). */
+/** The zone the BeanPool registrar names communities in: `<name>.beanpool.org` (registrar-names.ts, resolvePublicNodeUrl). */
 export const BEANPOOL_ZONE = 'beanpool.org';
 
 /**
@@ -198,10 +202,11 @@ export function audienceStanding(host: string): AudienceStanding {
 }
 
 /**
- * Every name a member's app may sign for here, for `/api/community/info`. Public by nature. A loopback name the operator
- * listed (BEANPOOL_ADDRESSES=localhost, for an SSH tunnel) is accepted here but left out: it names no community, only
- * whichever machine an app runs on. Settings' list shows it, with its source.
+ * The names this community goes by, for `/api/community/info`. Public by nature. A loopback name the operator listed
+ * (BEANPOOL_ADDRESSES=localhost, for an SSH tunnel) is accepted here but left out: it names no community, only
+ * whichever machine an app runs on. So is a former registrar name (4): members' apps that still use it are accepted,
+ * but no app is sent to it. Settings' list shows both, with their source.
  */
 export function publishedAddresses(): string[] {
-    return configuredAddresses().filter(namesThisCommunity).map((a) => a.address);
+    return configuredAddresses().filter((a) => namesThisCommunity(a) && !a.former).map((a) => a.address);
 }

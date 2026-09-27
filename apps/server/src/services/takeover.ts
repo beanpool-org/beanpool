@@ -68,6 +68,7 @@ import { checkBundle } from './sealed-backup.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { restartSidecar } from './public-address-agent.js';
+import { parseRegistrarNames } from '../engine/registrar-names.js';
 import { getReplacedInfo, type ReplacedInfo } from './identity-epoch.js';
 import {
     getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
@@ -697,10 +698,15 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             // reach the community at one of them keep working. A bundle sealed before they travelled keeps this
             // standby's own.
             const owned = Array.isArray(bundle.ownerAddresses) ? bundle.ownerAddresses.filter((a) => typeof a === 'string') : null;
-            updateNodeConfig({ publicAddress: pa ?? null, ...(owned ? { ownerAddresses: owned } : {}) } as any);
+            // So do the registrar names the main server's key held (engine/registrar-names.ts), former ones included:
+            // members' apps that still use one are accepted here as they were there. Read (and bounded) as any stored
+            // record is. A bundle sealed before they travelled keeps this standby's own, and the stored address's name.
+            const names = Array.isArray(bundle.registrarNames) ? parseRegistrarNames(bundle.registrarNames) : null;
+            updateNodeConfig({ publicAddress: pa ?? null, ...(owned ? { ownerAddresses: owned } : {}), ...(names ? { registrarNames: names } : {}) } as any);
             j.result.publicAddress = pa ? (pa.hostname || pa.name || null) : null;
             j.result.tunnel = plan.tunnel;
-            const extra = owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '';
+            const extra = (owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '')
+                + (names && names.length ? `; registrar name(s) ${names.map((n) => n.role === 'former' ? `${n.address} (former)` : n.address).join(', ')}` : '');
             return (pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar') + extra;
         }
         case 'profile': {

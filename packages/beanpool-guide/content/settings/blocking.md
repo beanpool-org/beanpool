@@ -24,8 +24,9 @@ Confirm with **Block User**.
 
 - They are not told.
 - They can still see your posts.
-- The block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
-- If you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.
+- In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
+- In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.
+- In the web app, signing out clears your blocks. Block them again when you come back. See "Using BeanPool in a web browser".
 - If you reinstall the app or use another device, block them again.
 
 ## Unblocking

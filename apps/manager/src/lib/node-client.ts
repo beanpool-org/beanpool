@@ -2410,6 +2410,8 @@ export interface AppAddress {
     address: string;
     /** public-address: the registrar's (or CF_RECORD_NAME); env: BEANPOOL_ADDRESSES; owner: confirmed here; registrar: the registrar's name for this key. */
     source: 'public-address' | 'env' | 'owner' | 'registrar';
+    /** A BeanPool name this community's key held before: still accepted, no longer published. */
+    former?: boolean;
     today: number;
     busiestDay: number;
 }

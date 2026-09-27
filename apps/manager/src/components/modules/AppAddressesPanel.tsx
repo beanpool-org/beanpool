@@ -159,7 +159,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                     {report.addresses.map((a) => (
                         <li key={a.address} className="text-sm text-nature-200 break-words" data-testid="app-address">
                             <strong className="text-white break-all">{a.address}</strong>
-                            <span className="text-nature-400"> · {SOURCE_TEXT[a.source] ?? a.source}</span>
+                            <span className="text-nature-400"> · {a.former ? 'a BeanPool name it had before, still accepted' : SOURCE_TEXT[a.source] ?? a.source}</span>
                             <span className="block text-xs text-nature-400">
                                 used by {apps(a.today)} today · most in one day this week: {a.busiestDay}
                             </span>

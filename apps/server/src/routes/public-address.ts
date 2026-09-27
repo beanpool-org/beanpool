@@ -11,6 +11,7 @@ import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, nodePubkeyHex } from '../services/registrar-client.js';
 import { writeToken, removeToken, restartSidecar } from '../services/public-address-agent.js';
 import { getNodeConfig, updateNodeConfig } from '../state-engine.js';
+import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import type { RouteDeps } from './types.js';
 
 export interface ProbeLogEntry {
@@ -136,6 +137,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const result = await claimAddress(name, mode, origin, b.contact, communityName);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
+            // Recorded before the stored address changes: a name held until now is kept, as former.
+            recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
             updateNodeConfig({ publicAddress: { name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact } } as any);
             if (result.tunnelToken) {
                 addProbeLog('2/4', `🔒 Writing tunnel token...`, 'info');
@@ -189,16 +192,25 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         try {
             const result = await addressStatus();
             if (result.status === 'live') {
+                recordRegistrarAnswer(result, 'stored');
                 const prev = (getNodeConfig() as any).publicAddress || {};
                 updateNodeConfig({ publicAddress: { ...prev, ...result } } as any);
                 if (result.tunnelToken) {
                     await writeToken(result.tunnelToken);
                 }
-            } else if (result.status === 'none') {
-                updateNodeConfig({ publicAddress: null } as any);
-                await removeToken();
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result };
+                return;
             }
-            ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result };
+            // Any other answer is written on the name it concerns, and the name stays this community's. `none` above
+            // all: a registrar that lost its data, or runs with the wrong database, answers it to every key. Wiping the
+            // saved address and the tunnel token on it made every node whose admin opened Settings forget its name
+            // (design §1.3). Settings says what the address service said instead.
+            const names = recordRegistrarAnswer(result, 'status');
+            const kept = result.status === 'none' ? names.find((n) => n.role === 'current') : undefined;
+            ctx.body = {
+                success: true, pubkey: nodePubkeyHex(), ...result,
+                ...(kept ? { kept: { hostname: kept.address, mode: localPa?.mode ?? null } } : {}),
+            };
         } catch (e: any) {
             if (localPa && (localPa.hostname || localPa.name)) {
                 ctx.body = {
@@ -238,6 +250,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const hostname = prevConfig?.hostname;
             const result = await releaseAddress();
             addProbeLog('1/4', `✅ Domain released on registrar`, 'success');
+            // The name stays this community's through the registrar's hold (its answer's held_until, else 30 days): it
+            // routes nowhere then, and no other key can have it. Recorded before the stored address goes.
+            recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
             addProbeLog('2/4', `🔒 Overwriting tunnel token with empty state...`, 'info');
             await removeToken();

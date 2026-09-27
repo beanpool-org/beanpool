@@ -11,7 +11,7 @@
  * test-takeover-parity.ts (what it compares between a promoted standby and a copy of its main server).
  */
 
-/** A gap in the design's §2; G9 is one the twin suite found (a new standby's first pull, see its KNOWN_GAPS). */
+/** A gap in the design's §2; G9 is one the twin suite found (a new standby's first pull, closed with G0). */
 export type GapId = 'G0' | 'G1' | 'G1b' | 'G2a' | 'G2b' | 'G2c' | 'G3' | 'G4' | 'G5' | 'G6' | 'G7' | 'G8' | 'G9';
 
 /**
@@ -30,14 +30,25 @@ export interface ColumnException {
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[] }
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear> }
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException> }
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear> }
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
      *  key-value table whose keys are classified one by one (NODE_CONFIG_KEYS), not compared as rows. */
     | { kind: 'takeover-bundle'; reason: string; bySetting?: true };
+
+/**
+ * A copied column the main server sets to NULL, in a write that moves no watermark, when a row it names is deleted; the
+ * deletion's tombstone carries the clear, and the standby makes it when it applies that tombstone (engine/sync.ts
+ * applyTombstoneLocally). test-replication-manifest.ts accepts that one write, and checks the importer makes the clear.
+ */
+export interface TombstoneClear {
+    /** The tombstones' table_name. */
+    tombstone: string;
+    reason: string;
+}
 
 /** Every payload carries the whole table, so a delta needs no watermark. */
 export const WHOLE_SET = 'whole set';
@@ -124,16 +135,17 @@ export const TABLES: Record<string, TableEntry> = {
             comment: { reason: "a rating with no comment is '' on the main server (the route stores `comment || ''`, the export sends `|| ''`) and null on the standby (the import writes `rt.comment || null`) (not in the design; found by this net)", gap: 'G1b' },
         },
     },
+    // The main server's account set exactly, in every payload: each row as it holds it, and no other (engine/sync.ts
+    // importRemoteState, G0). The Commons row's stamp is every server's own boot (BOOT_STAMPED).
     accounts: {
         kind: 'replicated', payload: 'accounts', watermark: WHOLE_SET,
         columns: cols('public_key balance last_updated_at last_demurrage_epoch'),
     },
     transactions: {
-        kind: 'replicated-except', payload: 'transactions', watermark: 'timestamp',
-        columns: cols('id from_pubkey to_pubkey amount memo timestamp auth_signer auth_signature auth_payload'),
-        except: {
-            tax_fee: { reason: 'neither exported nor imported (the ledger columns go with G0, PR 1)', gap: 'G1b' },
-            project_id: { reason: 'neither exported nor imported (the ledger columns go with G0, PR 1)', gap: 'G1b' },
+        kind: 'replicated', payload: 'transactions', watermark: 'timestamp',
+        columns: cols('id from_pubkey to_pubkey amount tax_fee memo timestamp auth_signer auth_signature auth_payload project_id'),
+        clearedByTombstone: {
+            project_id: { tombstone: 'projects', reason: "a crowdfund project's delete stops its trades naming it (db.ts deleteCrowdfundProject)" },
         },
     },
     marketplace_transactions: {
@@ -309,6 +321,10 @@ export const TABLES: Record<string, TableEntry> = {
 export const BOOT_STAMPED: { table: string; column: string; where: string; reason: string }[] = [
     { table: 'creator_channels', column: 'updated_at', where: "id = 'chan_beanpool_learn'", reason: "the BeanPool learn channel, re-seeded at every boot" },
     { table: 'pulse_items', column: 'updated_at', where: 'curated = 1', reason: 'the curated learn items, re-seeded at every boot' },
+    {
+        table: 'accounts', column: 'last_updated_at', where: "public_key = 'COMMONS_POOL'",
+        reason: "the Commons row, which every server writes again from the pot it holds, at each boot's ledger audit and every five minutes (engine/audit.ts persistCommonsBalance)",
+    },
 ];
 
 /** SQLite's own tables and a virtual table's shadow tables belong to no decision here. */
@@ -407,6 +423,9 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
     replication_access: { kind: 'per-server', reason: "this server's replication access log" },
     replicated_member_blocks_v1: { kind: 'per-server', reason: "a standby's own marker" },
+    replica_format: { kind: 'per-server', reason: "the importer format a standby's copy was made with (engine/sync.ts REPLICA_FORMAT)" },
+    replica_main_ledger: { kind: 'per-server', reason: "a standby's record of its main server's ledger at its last copy, which a take-over's audit holds it to" },
+    replica_ledger_mismatch: { kind: 'per-server', reason: "a standby's last whole copy whose ledger wasn't its main server's (services/backup-puller.ts)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },

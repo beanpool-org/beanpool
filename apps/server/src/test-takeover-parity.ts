@@ -8,9 +8,10 @@
  *
  *  1. The main server M builds a community through its routes: trades, a Commons balance, an enterprise with a purpose
  *     and a place, a group, an event and an RSVP, a block, an accepted non-zero audit baseline.
- *  2. Its standby S takes its first copy: the loop's own first pull, refused on main today (G9), then the force-resync
- *     an operator runs.
- *  3. More of the community, over two deltas: new members, granted credit, a voucher and vouched members at 50 and 25, a
+ *  2. Its standby S takes its first copy with the loop's own first pull (before G9's fix only an operator's force-resync
+ *     got a new standby one).
+ *  3. More of the community, over two deltas: new members, a transfer from an account that held Beans at the first copy,
+ *     granted credit, a voucher and vouched members at 50 and 25, a
  *     group of one, a trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
@@ -33,8 +34,8 @@
  *  9. KNOWN_GAPS, strict: every difference is listed with its gap id, and every listed one still differs. A fix PR
  *     deletes its lines.
  *
- * Money moves so that main's pulls land: after S's first copy, only accounts that held nothing then move again (on main
- * today every later copy is refused once one that held Beans moves, G0, which would hide every other gap).
+ * Money moves in every copy, accounts that held Beans at the first copy included: before G0's fix, every copy after one of
+ * those moved was refused, so this net moved only accounts that held nothing then.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-parity.ts
@@ -65,20 +66,9 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * its lines. Where a difference has more than one cause (a behaviour read), `gap` names each: a fix PR takes its id out,
  * and the last one deletes the line, which the suite then requires.
  *
- * G9 is not in the design; this suite found it (see its entry).
+ * G0 (the ledger) and G9 (a new standby's first pull, which this suite found) are closed: a difference in either is new.
  */
 const KNOWN_GAPS: KnownGap[] = [
-    // G9 (new): the standby's own boot makes a BeanPool enterprise under its own key (engine/pulse-seed.ts
-    // ensureBeanPoolIdentity), so the loop's first pull, a whole copy that clears nothing, meets the main server's BeanPool
-    // on the callsign index and is refused, on every retry. Only an operator's force-resync gets a new standby a copy.
-    { key: "pull:a new standby's first pull", gap: 'G9', why: "refused on the callsign index (the standby's own BeanPool); only a force-resync copies" },
-
-    // G0: the ledger copy.
-    { key: 'db:accounts.balance', gap: 'G0', why: 'every balance held at the first copy is 0 on the standby (the members import makes zero rows that win last-write-wins)' },
-    { key: 'db:accounts.last_updated_at', gap: 'G0', why: "the zero rows, and the Commons row at the standby's boot, carry the standby's clock" },
-    { key: 'db:accounts.last_demurrage_epoch', gap: 'G0', why: 'the zero rows start their demurrage epoch at 0' },
-    { key: 'db:accounts rows extra', gap: 'G0, G2a', why: "the members import makes an account for SYSTEM (G0), and the standby's second BeanPool has one (G2a)" },
-
     // G1: listings become another community's.
     { key: 'db:posts.origin_node', gap: 'G1', why: "every local listing names the main server's PeerId as its origin" },
     { key: 'http:accept a listing from before the take-over', gap: 'G1', why: '"This listing belongs to another community" on the promoted server' },
@@ -89,8 +79,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:posts.cash_also_needed', gap: 'G1b', why: 'every listing reads "no cash needed"' },
     { key: 'db:posts.search_keywords', gap: 'G1b', why: "not exported; the standby's boot backfill writes its own" },
     { key: 'db:posts.updated_at', gap: 'G1b', why: "that boot backfill restamps every listing with the standby's clock" },
-    { key: 'db:transactions.tax_fee', gap: 'G1b', why: 'the Commons fee is 0 on every copied trade (a ledger column: PR 1 with G0)' },
-    { key: 'db:transactions.project_id', gap: 'G1b', why: 'not copied (a ledger column: PR 1 with G0)' },
     { key: 'db:marketplace_transactions.dispute_resolution', gap: 'G1b', why: 'a resolved dispute leaves the admin Disputes list' },
     { key: 'db:marketplace_transactions.dispute_resolved_at', gap: 'G1b', why: 'not copied' },
     { key: 'db:marketplace_transactions.dispute_resolved_by', gap: 'G1b', why: 'not copied' },
@@ -130,6 +118,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:members.updated_at', gap: 'G2a', why: "members rows restamped with the standby's clock (its own writes for the standing it lacks)" },
     { key: 'db:members.callsign', gap: 'G2a', why: "the copied BeanPool is no enterprise there, so the standby's boot renames it and makes its own" },
     { key: 'db:members rows extra', gap: 'G2a', why: "the standby's own BeanPool enterprise" },
+    { key: 'db:accounts rows extra', gap: 'G2a', why: "that BeanPool's account" },
     { key: 'db:conversations rows extra', gap: 'G2a', why: "its enterprise thread" },
     { key: 'db:creator_channels.owner_pubkey', gap: 'G2a', why: "the curated learn channel moves to the standby's own BeanPool" },
     { key: 'db:pulse_items.owner_pubkey', gap: 'G2a', why: 'and its items' },
@@ -137,8 +126,8 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:a vouch by the voucher', gap: 'G2a', why: '"Only appointed vouchers can vouch for members"' },
     { key: "http:a frozen member's poll", gap: 'G2a', why: 'a frozen member can post a poll' },
     { key: 'http:a keeper posts for the enterprise', gap: 'G2a, G2c', why: '404 "Not a treasury" where the main server says the enterprise is paused' },
-    { key: 'http:every balance', gap: 'G0, G2a', why: "balances 0 (G0); floors and tiers from granted credit and vouches lost, and a withdrawn vouch's floor back (G2a)" },
-    { key: 'http:the ledger audit a take-over runs', gap: 'G0, G5', why: "a sum of balances that isn't the main server's (G0), against the standby's own baseline (G5)" },
+    { key: 'http:every balance', gap: 'G2a', why: "floors and tiers from granted credit and vouches lost (an Elder in debt is frozen below a floor of 0), and a withdrawn vouch's floor back" },
+    { key: 'http:the ledger audit a take-over runs', gap: 'G5', why: "the main server's sum, measured against the standby's own baseline (0, not the accepted 0.1)" },
 
     // G2b: member_preferences.
     { key: 'db:member_preferences (not copied)', gap: 'G2b', why: 'holiday and notification opt-outs are forgotten' },
@@ -493,14 +482,11 @@ async function main(): Promise<void> {
             console.log(`  pull (${phase}): ${p.ok ? 'imported' : `REFUSED ${p.error}`}${p.whole ? ', a whole copy' : ''}; envelope ${p.envelope}`);
             return p;
         };
-        // The loop's own first pull (a whole copy, nothing cleared), then, when it is refused, the force-resync an operator
-        // runs from Settings: what main needs today before a new standby holds anything (G9).
+        // The loop's own first pull, then, only if it is refused, the force-resync an operator runs from Settings, so the rest
+        // has a copy to compare. A refusal is a difference, never a known gap: G9 (on the callsign index, the standby's own
+        // BeanPool) is closed.
         const seedPull = await standby.send('pull', {});
-        // G9 is the refusal on the callsign index; one with any other cause is a difference of its own, not hidden behind it.
-        if (!seedPull.ok) {
-            const g9 = /idx_members_callsign_unique/.test(String(seedPull.error));
-            differences.set(`pull:a new standby's first pull${g9 ? '' : ', refused for another cause'}`, [String(seedPull.error)]);
-        }
+        if (!seedPull.ok) differences.set("pull:a new standby's first pull", [String(seedPull.error)]);
         console.log(`  pull (the loop's first): ${seedPull.ok ? 'imported' : `REFUSED ${seedPull.error}`}`);
         if (!seedPull.ok) {
             const resync = await standby.send('resync');
@@ -513,6 +499,7 @@ async function main(): Promise<void> {
         // ── 3. More of the community, then a delta ──
         console.log('\n— 3. more of the community, then a delta —');
         for (const who of [eve, fay, hal, lou]) await join(who);
+        built('Ann, who held Beans at the first copy, gives Bo 2', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount: 2, memo: 'for the compost' }));
         await pull('the new members');
         for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));

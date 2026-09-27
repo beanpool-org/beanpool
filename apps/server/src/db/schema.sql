@@ -99,8 +99,12 @@ CREATE TABLE IF NOT EXISTS members (
     -- enterprise's `paused` or off-board `status` (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
     -- engine and not a trigger, so a standby's import never stamps it). A phone's Market delta carries a
-    -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader nothing the board doesn't:
-    -- unlike updated_at, a bio, contact or mute never moves it. NULL: never changed since this column came in.
+    -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader little the board doesn't:
+    -- unlike updated_at, a bio, contact or mute never moves it. The one thing beyond the board: when an off-board
+    -- enterprise's keepers changed (not who). That is public where /api/treasuries is (it lists keepers with grantedAt);
+    -- on a node with the visitors' view and enterprises on, /api/treasuries is members-only and an unsigned delta still
+    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). NULL: never changed since
+    -- this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
     -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
     -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.

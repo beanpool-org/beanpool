@@ -6,24 +6,28 @@
  * (https-server.ts, `serve`); members act through it with signed requests, the admin with the password. The standby
  * pulls through its real puller from the main server's real backup routes, and takes over through the real path.
  *
- *  1. The main server M builds a community through its routes: trades, a Commons balance, an enterprise with a keeper,
- *     a pledge and a place, then paused; groups, events, blocks, a chat photo.
- *  2. Its standby S takes its first copy (the seed), then a delta after more of the community: a trade in escrow, a
- *     resolved dispute, a project pot, a winding-up enterprise, holiday, notification settings, a voucher, a vouched
- *     and a frozen member, Decisions open and in their grace period, an unused invite and re-key code, a cached peer
- *     listing, a recategorised listing and one that needs cash, a push token, the community's name, place, contacts,
- *     directory switches, thresholds and an accepted audit baseline.
- *  3. Then a whole copy after more, then a last delta after the last writes.
- *  4. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
- *  5. S takes over with the recovery code (the preview, the confirm, the restart).
- *  6. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
+ *  1. The main server M builds a community through its routes: trades, a Commons balance, an enterprise with a purpose
+ *     and a place, a group, an event and an RSVP, a block, an accepted non-zero audit baseline.
+ *  2. Its standby S takes its first copy: the loop's own first pull, refused on main today (G9), then the force-resync
+ *     an operator runs.
+ *  3. More of the community, over two deltas: new members, granted credit, a voucher and a vouched member at 50, a
+ *     trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
+ *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
+ *  4. More, then a whole copy: a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
+ *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
+ *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request) and a
+ *     last delta.
+ *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
+ *  6. S takes over with the recovery code (the preview, the confirm, the restart).
+ *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
  *     (a known gap), row by row in the columns it compares; and every community setting it names.
- *  7. Behaviour parity: the same signed calls against T and S, the answers compared after normalising times, new ids and
+ *  8. Behaviour parity: the same signed calls against T and S, the answers compared after normalising times, new ids and
  *     ports: reads (the board as a guest, a member and a keeper; a phone's full sync and a delta; balances; the
  *     enterprise; each member's own view; the pricing guide; the directory; notices) and writes (accept a listing from
  *     before; a keeper posts for the enterprise; request a holiday member's listing; a vouch; a frozen member's poll;
- *     approve a pending request; redeem the unused invite; the Decision sweep; a push of each category).
- *  8. KNOWN_GAPS, strict: every difference is listed with its gap id, and every listed one still differs. A fix PR
+ *     approve a pending request; redeem the unused invite; the Decision sweep eight days on; a push of each category;
+ *     the ledger audit a take-over runs).
+ *  9. KNOWN_GAPS, strict: every difference is listed with its gap id, and every listed one still differs. A fix PR
  *     deletes its lines.
  *
  * Money moves so that main's pulls land: after S's first copy, only accounts that held nothing then move again (on main

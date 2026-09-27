@@ -11,8 +11,8 @@
  * test-takeover-parity.ts (what it compares between a promoted standby and a copy of its main server).
  */
 
-/** A gap in the design's §2. */
-export type GapId = 'G0' | 'G1' | 'G1b' | 'G2a' | 'G2b' | 'G2c' | 'G3' | 'G4' | 'G5' | 'G6' | 'G7' | 'G8';
+/** A gap in the design's §2; G9 is one the twin suite found (a new standby's first pull, see its KNOWN_GAPS). */
+export type GapId = 'G0' | 'G1' | 'G1b' | 'G2a' | 'G2b' | 'G2c' | 'G3' | 'G4' | 'G5' | 'G6' | 'G7' | 'G8' | 'G9';
 
 /**
  * A column a replicated table does not carry to its standby. Without `gap` it is local by design and never compared;
@@ -75,9 +75,9 @@ export const TABLES: Record<string, TableEntry> = {
             origin_node: { reason: "a local listing's NULL is written as the main server's PeerId (`rp.originNode || remote.nodeId`)", gap: 'G1' },
             category: { reason: 'only the INSERT writes it; a recategorised listing keeps its old category', gap: 'G1b' },
             cash_also_needed: { reason: 'neither exported nor imported', gap: 'G1b' },
-            search_keywords: { reason: 'not exported; the boot backfill restores only the category', gap: 'G1b' },
-            target_archetypes: { reason: 'neither exported nor imported (not in the design\'s G1b table; found by this manifest)', gap: 'G1b' },
-            event_conversation_id: { reason: "neither exported nor imported: an event's chat link (not in the design's G1b table; found by this manifest)", gap: 'G1b' },
+            search_keywords: { reason: "not exported: the standby's boot backfill (state-engine.ts backfillSearchKeywords) writes its own, restamping the listing", gap: 'G1b' },
+            target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
+            event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
         },
     },
     post_photos: {

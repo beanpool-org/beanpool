@@ -13,7 +13,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const node = vi.hoisted(() => ({
     list: [] as string[],
     max: 500,
-    /** ms a request takes to reach the node, and its answer to come back, unless `there`/`back` say otherwise for its kind. */
+    /**
+     * ms a request takes to reach the node, and its answer to come back, unless `there`/`back` say otherwise for its kind:
+     * read, move (a list of keys, the one-time move), add, remove, clear.
+     */
     hop: 50,
     there: {} as Record<string, number>,
     back: {} as Record<string, number>,
@@ -39,7 +42,7 @@ vi.mock('./api', async () => {
     return {
         reportAbuse: vi.fn(async () => ({ success: true })),
         getBlockList: vi.fn(() => request('read', answer)),
-        addToBlockList: vi.fn((keys: string | string[]) => request('add', () => {
+        addToBlockList: vi.fn((keys: string | string[]) => request(Array.isArray(keys) ? 'move' : 'add', () => {
             if (Array.isArray(keys) && node.dropListAdds > 0) {
                 node.dropListAdds--;
                 throw new TypeError('Failed to fetch');
@@ -84,25 +87,30 @@ function tellTabs(key: string, was: string | null, now: string | null): void {
     if (was === now) return;
     setTimeout(() => window.dispatchEvent(new StorageEvent('storage', { key, oldValue: was, newValue: now })), storageAfter);
 }
-/** From now on each change to localStorage (setupTests' stand-in for it) reaches the tabs as the browser's `storage` event. */
-function browserTellsTabs(): void {
+/**
+ * From now on each change to localStorage (setupTests' stand-in for it) reaches the tabs as the browser's `storage` event.
+ * Returns the stop.
+ */
+function browserTellsTabs(): () => void {
     const setItem = localStorage.setItem;
     const removeItem = localStorage.removeItem;
-    vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+    const set = vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
         const was = localStorage.getItem(key);
         setItem(key, value);
         tellTabs(key, was, localStorage.getItem(key));
     });
-    vi.spyOn(localStorage, 'removeItem').mockImplementation((key: string) => {
+    const remove = vi.spyOn(localStorage, 'removeItem').mockImplementation((key: string) => {
         const was = localStorage.getItem(key);
         removeItem(key);
         tellTabs(key, was, null);
     });
+    return () => { set.mockRestore(); remove.mockRestore(); };
 }
 
 /**
- * Watches what tabs show: after every ms the clock moves, and each time any tab tells its screens. `keys` must be shown by
- * every tab watched; each time one isn't, it is written down.
+ * Watches what tabs show: after everything that happens (each timer: a request reaching the node, an answer coming back, a
+ * ring, the browser's word of a change), and each time any tab tells its screens. `keys` must be shown by every tab
+ * watched; each time one isn't, it is written down.
  */
 function watch(keys: () => string[]) {
     const start = Date.now();
@@ -120,11 +128,11 @@ function watch(keys: () => string[]) {
     return {
         gaps,
         add: (label: string, tab: Tab) => { tabs.push([label, tab]); check(); },
-        /** Moves the clock `ms` on, a ms at a time, running `at(t)` at each. */
-        async run(ms: number, at?: (t: number) => void) {
-            for (let t = 0; t < ms; t++) {
-                at?.(t);
-                await vi.advanceTimersByTimeAsync(1);
+        /** Moves the clock on until nothing is left to happen, or `ms` have passed. */
+        async run(ms: number) {
+            const end = Date.now() + ms;
+            while (vi.getTimerCount() > 0 && Date.now() < end) {
+                await vi.advanceTimersToNextTimerAsync();
                 check();
             }
         },
@@ -145,6 +153,8 @@ describe('two tabs, and a node that takes time to answer', () => {
         node.ringAfter = 10;
         node.dropListAdds = 0;
         storageAfter = 0;
+        // The module says each lost move and refused change on the console; the sweep below makes hundreds.
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -153,35 +163,41 @@ describe('two tabs, and a node that takes time to answer', () => {
         vi.useRealTimers();
     });
 
-    it('a tab holding blocks from before never shows them unblocked while another tab moves them up', async () => {
-        // Tab B loaded with K1 and K2 waiting in the browser (its move was lost on the way once). Tab A then loads and
-        // moves them. Tab B's own read is put at every point of that, and the browser's word of A's change comes at once,
-        // a little later, or later still.
+    /** Tab B loads with K1 and K2 waiting in the browser (its move was lost on the way once); tab A then loads. */
+    async function twoTabsWithBlocksWaiting(after: number) {
+        localStorage.clear();
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        node.list = [];
+        node.dropListAdds = 1;
+        storageAfter = after;
+        const B = await openTab();
+        const A = await openTab();
+        vi.useFakeTimers();
+        stops.push(browserTellsTabs());
+        stops.push(B.startBlocklist(ME));
+        await vi.advanceTimersByTimeAsync(300);
+        expect(B.getBlocklistStatus()).toEqual({ loaded: true, error: null });
+        expect(B.getBlockedUsers()).toEqual([K1, K2]);
+        expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([K1, K2]);
+        expect(node.list).toEqual([]);
+        return { A, B };
+    }
+
+    it.each([50, 120])('a tab holding blocks from before never shows them unblocked while another tab moves them up (reads answered in %i ms)', async readBack => {
+        // Tab A moves K1 and K2 up. Tab B's own read is put at every point of that, and the browser's word of A's change
+        // comes at once, a little later, or later still. With reads slower than the move, B's read can be answered by the
+        // node before A's move reaches it and land after A has taken the list off the browser.
         const runs: string[] = [];
-        for (const after of [0, 7, 30]) {
-            for (let bReadsAt = 0; bReadsAt <= 260; bReadsAt += 20) {
-                localStorage.clear();
-                localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
-                node.list = [];
-                node.dropListAdds = 1;
-                storageAfter = after;
-                const B = await openTab();
-                const A = await openTab();
-                vi.useFakeTimers();
-                browserTellsTabs();
+        for (const after of [0, 7, 30, 60]) {
+            for (let bReadsAt = 0; bReadsAt <= 300; bReadsAt += 5) {
+                node.back = { read: readBack };
+                const { A, B } = await twoTabsWithBlocksWaiting(after);
                 const w = watch(() => [K1, K2]);
-
-                stops.push(B.startBlocklist(ME));
                 w.add('B', B);
-                await w.run(200);
-                expect(B.getBlocklistStatus()).toEqual({ loaded: true, error: null });
-                expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([K1, K2]);
-                expect(node.list).toEqual([]);
-
                 stops.push(A.startBlocklist(ME));
                 w.add('A', A);
-                await w.run(700, t => { if (t === bReadsAt) B.loadBlocklist().catch(() => { /* said through getBlocklistStatus */ }); });
-                await w.run(1000);
+                setTimeout(() => { B.loadBlocklist().catch(() => { /* said through getBlocklistStatus */ }); }, bReadsAt);
+                await w.run(5000);
 
                 const where = `word of the change after ${after} ms, B reading at ${bReadsAt} ms`;
                 runs.push(...w.gaps.map(g => `${where}: ${g}`));
@@ -191,11 +207,36 @@ describe('two tabs, and a node that takes time to answer', () => {
                 expect([...A.getBlockedUsers()].sort(), where).toEqual([K1, K2].sort());
                 w.stop();
                 stops.splice(0).forEach(stop => stop());
-                vi.restoreAllMocks();
                 vi.useRealTimers();
             }
         }
         expect(runs).toEqual([]);
+    });
+
+    it.each(['unblock', 'Unblock All'])('the member\'s %s in one tab, of a block another tab is moving up, shows at once', async how => {
+        // A's move reaches the node; B's member unblocks K1 before A takes the list off the browser, and the browser's
+        // word that A did reaches B while B's unblock is on its way. The node takes the unblock after the move.
+        const { A, B } = await twoTabsWithBlocksWaiting(0);
+        stops.push(A.startBlocklist(ME));
+        await vi.advanceTimersByTimeAsync(170);
+        expect(node.list).toEqual([K1, K2]);
+        expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).not.toBeNull();
+        const unblocking = how === 'unblock' ? B.unblockUser(K1) : B.clearBlocklist();
+        let done = false;
+        void unblocking.then(() => { done = true; });
+        const start = Date.now();
+        const shownAgain: number[] = [];
+        const check = () => { if (done && B.isUserBlocked(K1) && shownAgain.length < 3) shownAgain.push(Date.now() - start); };
+        window.addEventListener(BLOCKLIST_UPDATED_EVENT, check);
+        for (let t = 0; t < 600; t++) {
+            await vi.advanceTimersByTimeAsync(1);
+            check();
+        }
+        window.removeEventListener(BLOCKLIST_UPDATED_EVENT, check);
+        await unblocking;
+        expect(shownAgain).toEqual([]);
+        expect(node.list).toEqual(how === 'unblock' ? [K2] : []);
+        expect(B.getBlockedUsers()).toEqual(how === 'unblock' ? [K2] : []);
     });
 
     describe.each([
@@ -228,6 +269,29 @@ describe('two tabs, and a node that takes time to answer', () => {
             expect(w.gaps).toEqual([]);
             expect(node.list).toEqual([K7]);
             expect(T.getBlockedUsers()).toEqual([K7]);
+        });
+
+        it('a block made while the one-time move is on its way: the blocks the move took up stay shown when the read drops its answer', async () => {
+            node.ringAfter = ringAfter;
+            localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+            const T = await openTab();
+            vi.useFakeTimers();
+            // The move's list reaches the node after the block does, and the block's answer (without K1 and K2) comes
+            // back first; the read then drops the move's answer, so K1 and K2 are on neither list this page holds.
+            node.there = { read: 1, move: 30, add: 1 };
+            node.back = { read: 1, move: 1, add: 1 };
+            const w = watch(() => [K1, K2]);
+            stops.push(T.startBlocklist(ME));
+            w.add('T', T);
+            let blocking: Promise<boolean> | null = null;
+            setTimeout(() => { blocking = T.blockUser(K7); }, 5);
+            await w.run(1000);
+            w.stop();
+            await expect(blocking).resolves.toBe(true);
+            expect(w.gaps).toEqual([]);
+            expect([...node.list].sort()).toEqual([K1, K2, K7].sort());
+            expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2, K7].sort());
+            expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull();
         });
 
         it('an unblock made while a slow read is on its way stays done after that read lands', async () => {

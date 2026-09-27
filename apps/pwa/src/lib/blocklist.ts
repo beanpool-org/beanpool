@@ -22,6 +22,11 @@
  * every change made to it, and a change removes only the keys it is about; this page's copy is for showing, never for
  * writing back. The browser tells this page when another tab changed it, and the page reads the node's list again then.
  *
+ * Nothing leaves the screens before the node says so. A block another tab added to that list shows at once; one it took
+ * off stays shown until the node answers a request this page made after seeing it go (that tab may have moved it up, and
+ * the node's list this page holds is older). And a read that was on its way when the member blocked, unblocked or cleared
+ * here drops its answer, which may be older than the node's answer to that change, and reads again.
+ *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
  * the account is known, only its own reports are sent.
@@ -86,7 +91,22 @@ let readError: BlocklistError | null = null;
  * once another tab changed it), null when there is none. Never written back: see readStoredList and keepStoredList.
  */
 let localList: string[] | null | undefined;
-/** What the screens see: the node's list and anything still waiting to move up. */
+/**
+ * Blocks this page showed that left the list kept in this browser through another tab (it moved them up, or the member
+ * unblocked them there), or that a read's move took off it with an answer this page then did not take; each with the tick
+ * it left at. The node's list this page holds may be older than that tab's move, so each stays shown until this page takes
+ * an answer from the node asked for after that tick. A change seen in the browser may show a block at once, but only the
+ * node's answer takes one off the screens, so a block the node holds is never shown gone, even for a moment.
+ */
+const leaving = new Map<string, number>();
+/** This page's clock: it ticks as a request to the node is made, and as blocks join `leaving`. */
+let ticks = 0;
+/**
+ * How many answers from the node this page has taken: a read, a block, an unblock, Unblock All. A read during which this
+ * moved may be older than what was taken meanwhile: it drops its answer, and one more read follows.
+ */
+let answers = 0;
+/** What the screens see: the node's list, anything still waiting to move up, and anything `leaving`. */
 let current: string[] = [];
 
 let reading: Promise<string[]> | null = null;
@@ -97,9 +117,24 @@ function readLocalList(): string[] | null {
     return localList !== undefined ? localList : readStoredList();
 }
 
-/** The list from before as the browser holds it now (another tab may have changed it since this page last looked). */
+/**
+ * The list from before as the browser holds it now (another tab may have changed it since this page last looked). A block
+ * gone from it since this page's copy, and not on the node's list here, went through another tab (this page's own changes
+ * set its copy themselves): it joins `leaving`.
+ */
 function readStoredList(): string[] | null {
-    localList = null;
+    const before = localList;
+    localList = storedList();
+    if (before) {
+        const still = new Set(localList ?? []);
+        const onNode = new Set(nodeList);
+        const tick = ++ticks;
+        for (const k of before) if (isWaiting(k) && !still.has(k) && !onNode.has(k)) leaving.set(k, tick);
+    }
+    return localList;
+}
+
+function storedList(): string[] | null {
     try {
         if (typeof localStorage === 'undefined') return null;
         const found: string[] = [];
@@ -113,11 +148,11 @@ function readStoredList(): string[] | null {
                 if (Array.isArray(parsed)) for (const k of parsed) if (typeof k === 'string' && !found.includes(k)) found.push(k);
             } catch { /* not a list: nothing in it to keep */ }
         }
-        localList = any ? found : null;
+        return any ? found : null;
     } catch (e) {
         console.warn('[blocklist] Could not read the list this browser kept before', e);
+        return null;
     }
-    return localList;
 }
 
 /** A key in the list from before that is still a block to keep: well spelled, and not the member themself. */
@@ -129,26 +164,27 @@ function isWaiting(k: string): boolean {
  * Takes keys off the list from before, as the browser holds it NOW: only those `gone` names (the node's list holds them,
  * or the member unblocked them). Every other block stays, whoever wrote it: a tab on the build from before may have added
  * one since this page last looked, and another tab may have taken one off, which stays off. Read and written with nothing
- * awaited in between. Deleted, both keys, once nothing is left.
+ * awaited in between. Deleted, both keys, once nothing is left. Answers the blocks it took off.
  */
-function keepStoredList(gone: (k: string) => boolean): void {
+function keepStoredList(gone: (k: string) => boolean): string[] {
     const stored = readStoredList();
-    if (stored === null) return;
+    if (stored === null) return [];
     const keys = stored.filter(k => isWaiting(k) && !gone(k));
     localList = keys.length > 0 ? keys : null;
     try {
-        if (typeof localStorage === 'undefined') return;
+        if (typeof localStorage === 'undefined') return [];
         if (keys.length === 0) {
             localStorage.removeItem(BLOCKLIST_STORAGE_KEY);
             localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
-            return;
+        } else {
+            const json = JSON.stringify(keys);
+            if (localStorage.getItem(BLOCKLIST_STORAGE_KEY) !== json) localStorage.setItem(BLOCKLIST_STORAGE_KEY, json);
+            localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
         }
-        const json = JSON.stringify(keys);
-        if (localStorage.getItem(BLOCKLIST_STORAGE_KEY) !== json) localStorage.setItem(BLOCKLIST_STORAGE_KEY, json);
-        localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
     } catch (e) {
         console.warn('[blocklist] Could not keep what is left of the list this browser kept before; this page still hides them', e);
     }
+    return stored.filter(k => isWaiting(k) && gone(k));
 }
 
 /** The keys a node's answer holds. */
@@ -158,7 +194,7 @@ function heldBy(res: BlockList): Set<string> {
 
 function recompute(): void {
     const local = readLocalList() ?? [];
-    current = [...new Set([...nodeList, ...local])];
+    current = [...new Set([...nodeList, ...local, ...leaving.keys()])];
 }
 
 function emit(): void {
@@ -168,11 +204,14 @@ function emit(): void {
     }
 }
 
-function takeNodeAnswer(res: BlockList): void {
+/** The node's answer to a request made at tick `asked`: it settles every block that joined `leaving` before then. */
+function takeNodeAnswer(res: BlockList, asked: number): void {
     nodeList = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
     nodeMax = typeof res?.max === 'number' ? res.max : 0;
     loaded = true;
     readError = null;
+    answers++;
+    for (const [k, left] of leaving) if (left < asked) leaving.delete(k);
 }
 
 /** The keys this member has blocked, for the screens that hide them. */
@@ -219,10 +258,10 @@ export function getBlocklistFullNote(): string | null {
  * and again at the end: what another tab added meanwhile (a tab still on the build from before, blocking there) goes up
  * too, once. At the end only the keys the node's last answer holds leave the browser's list (keepStoredList). What is left
  * (no room, the node unreachable) stays there, still hiding whom it names, and the next read (the node's doorbell, the
- * socket back, the next page) sends it the same way.
+ * socket back, the next page) sends it the same way. `moved` is what left the browser's list, the node holding it.
  */
-async function moveLocalListUp(res: BlockList): Promise<BlockList> {
-    if (readStoredList() === null) return res;
+async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved: string[] }> {
+    if (readStoredList() === null) return { res, moved: [] };
     let now = res;
     /** The keys this move has sent, or found no room for: what another tab adds meanwhile is new to it. */
     const seen = new Set<string>();
@@ -255,14 +294,18 @@ async function moveLocalListUp(res: BlockList): Promise<BlockList> {
         }
     }
     const held = heldBy(now);
-    keepStoredList(k => held.has(k));
-    return now;
+    const moved = keepStoredList(k => held.has(k));
+    return { res: now, moved };
 }
 
 /**
  * Reads the node's list for the signed-in account (moving up a list this browser kept before, once), and tells the
  * screens. One read at a time: a call during a read is answered by it, and one more read follows, so a change rung in the
  * meantime is not missed. Rejects with a BlocklistError when the node can't be read; the list then stays as it was.
+ *
+ * A block, an unblock or Unblock All this page made while the read was on its way stands: the node's answer to it may be
+ * newer than the read's, so the read drops its own and one more follows. So does a block another tab took off the
+ * browser's list meanwhile (`leaving`): the read's answer may be older than that tab's move.
  */
 export function loadBlocklist(): Promise<string[]> {
     if (reading) {
@@ -270,12 +313,24 @@ export function loadBlocklist(): Promise<string[]> {
         return reading;
     }
     const forOwner = owner;
+    // What another tab took off the browser's list before this read asks, this read's answer settles.
+    readStoredList();
+    const asked = ++ticks;
+    const answersBefore = answers;
     reading = (async () => {
         try {
-            const res = await moveLocalListUp(await getBlockList());
+            const { res, moved } = await moveLocalListUp(await getBlockList());
             if (owner !== forOwner) return current;
             const shown = { list: current.join(), loaded, error: readError };
-            takeNodeAnswer(res);
+            if (answers === answersBefore) {
+                takeNodeAnswer(res, asked);
+            } else {
+                // What this read moved up stays shown until the read that follows.
+                const tick = ++ticks;
+                for (const k of moved) if (!nodeList.includes(k)) leaving.set(k, tick);
+                readAgain = true;
+            }
+            for (const left of leaving.values()) if (left > asked) readAgain = true;
             recompute();
             // Only a read that changed something tells the screens: each time they are told, the open Messages page reads
             // the member list and its conversations again.
@@ -309,15 +364,17 @@ export function startBlocklist(ownerPubkey: string): () => void {
         nodeMax = 0;
         loaded = false;
         readError = null;
+        leaving.clear();
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
     // Another tab changed the list from before kept in this browser (a block or an unblock in a tab still on the build
-    // from before, or this build's move there): show it now, and read again, which sends up what is new.
+    // from before, or this build's move there): show what it added now, and read again, which sends up what is new. What
+    // it took off stays shown (`leaving`) until the node answers that read: that tab may have moved it up.
     const changedElsewhere = (e: StorageEvent) => {
         if (e.key !== null && e.key !== BLOCKLIST_STORAGE_KEY && e.key !== LEGACY_BLOCKLIST_KEY) return;
         const before = current.join();
-        localList = undefined;
+        readStoredList();
         recompute();
         if (current.join() !== before) emit();
         read();
@@ -346,13 +403,14 @@ export async function blockUser(
     postId?: string
 ): Promise<boolean> {
     if (!targetPubkey) return false;
+    const asked = ++ticks;
     let res: BlockList & { added: string[] };
     try {
         res = await addToBlockList(targetPubkey);
     } catch (e) {
         throw toBlocklistError(e, 'block');
     }
-    takeNodeAnswer(res);
+    takeNodeAnswer(res, asked);
     emit();
     if (reporterPubkey && Array.isArray(res.added) && res.added.includes(targetPubkey)) {
         try {
@@ -368,6 +426,7 @@ export async function blockUser(
 /** Unblocks a member. Resolves once the node has; throws a BlocklistError, with nothing changed here, when it didn't. */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
+    const asked = ++ticks;
     let res: BlockList & { removed: boolean };
     try {
         res = await removeFromBlockList(targetPubkey);
@@ -378,7 +437,8 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     // holds. Whatever else is there stays, whoever wrote it.
     const held = heldBy(res);
     keepStoredList(k => k === targetPubkey || held.has(k));
-    takeNodeAnswer(res);
+    takeNodeAnswer(res, asked);
+    leaving.delete(targetPubkey);
     emit();
     return true;
 }
@@ -388,6 +448,7 @@ export async function clearBlocklist(): Promise<void> {
     // Everyone the member saw blocked goes, those still waiting in this browser too. A block another tab makes while this
     // is on its way stays, and goes up with the next read.
     const shown = new Set(getBlockedUsers());
+    const asked = ++ticks;
     let res: BlockList;
     try {
         res = await clearBlockList();
@@ -396,7 +457,8 @@ export async function clearBlocklist(): Promise<void> {
     }
     const held = heldBy(res);
     keepStoredList(k => shown.has(k) || held.has(k));
-    takeNodeAnswer(res);
+    takeNodeAnswer(res, asked);
+    for (const k of shown) leaving.delete(k);
     emit();
 }
 
@@ -479,6 +541,9 @@ export function resetBlocklistForTests(): void {
     loaded = false;
     readError = null;
     localList = undefined;
+    leaving.clear();
+    ticks = 0;
+    answers = 0;
     current = [];
     reading = null;
     readAgain = false;

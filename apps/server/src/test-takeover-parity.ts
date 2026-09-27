@@ -566,6 +566,7 @@ async function main(): Promise<void> {
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');
+        const fetchesM = await main.send('fetches'); // what it refused while it built the community
         await main.send('checkpoint');
         await main.kill('SIGKILL');
         copyDir(dirs.main, dirs.twin);
@@ -576,6 +577,7 @@ async function main(): Promise<void> {
         console.log('\n— 7. the standby takes over with the recovery code —');
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
+        const fetchesS0 = await standby.send('fetches'); // what it refused while it copied, before it restarts itself
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
@@ -674,8 +676,8 @@ async function main(): Promise<void> {
         assert(check.listedTwice.length === 0, `each known gap is listed once (${check.listedTwice.join(', ') || 'ok'})`);
         const fetchesT = await twin.send('fetches');
         const fetchesS = await standby.send('fetches');
-        assert(fetchesT.blocked.length === 0 && fetchesS.blocked.length === 0,
-            `nothing reached off this machine (refused: ${[...fetchesT.blocked, ...fetchesS.blocked].join(', ') || 'none'})`);
+        const refused = [fetchesM, fetchesS0, fetchesT, fetchesS].flatMap((f) => f.blocked);
+        assert(refused.length === 0, `nothing reached off this machine, from any of its processes (refused: ${refused.join(', ') || 'none'})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

@@ -31,7 +31,8 @@
  *     is; the member withdraws the request: the next delta carries the listing as paused, but the heal in the same sync
  *     puts it back, and the delta after that takes it off their phone; the same after a cold start;
  *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
- *   - on 2,000 members and 20,000 posts, no statement of the delta read walks every post (EXPLAIN QUERY PLAN).
+ *   - on 2,000 members, 20,000 posts and 5,000 ended deals, no statement of the delta read walks every post, and the
+ *     heal's deals are looked up by the reader's own indexes (EXPLAIN QUERY PLAN).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-author-off-board.ts
  */
@@ -496,8 +497,8 @@ async function main() {
     assert(phone.rows.get(shift)?.status === 'completed', 'the delta carried it as completed');
 
     console.log('\n── the delta read searches its indexes, on a node\'s worth of posts ──');
-    // 2,000 members and 20,000 posts that nothing has changed in a year, and twenty members on holiday with an upcoming
-    // event each. Like a node, no sqlite_stat1: nothing runs ANALYZE.
+    // 2,000 members, 20,000 posts and 5,000 ended deals that nothing has changed in a year, and twenty members on holiday
+    // with an upcoming event each. Like a node, no sqlite_stat1: nothing runs ANALYZE.
     // Walking idx_posts_updated_at for the ORDER BY read every post and tested the OR on each (5 ms a delta here).
     const aYearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString();
     const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
@@ -515,6 +516,14 @@ async function main() {
         for (const k of keys.slice(0, 20)) {
             db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', 'true')`).run(k);
             post.run(crypto.randomUUID(), 'event', 'Holiday event', k, aYearAgo, aYearAgo, nextWeek, nextWeek);
+        }
+        // 5,000 ended deals between other members: what the node holds that the heal's lookup must not read.
+        const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                                 VALUES (?, ?, ?, ?, 5, ?, ?)`);
+        const bulkPosts = (db.prepare(`SELECT id, author_pubkey FROM posts WHERE title LIKE 'Bulk %' LIMIT 500`).all() as Array<{ id: string; author_pubkey: string }>);
+        for (let i = 0; i < 5000; i++) {
+            const p = bulkPosts[i % bulkPosts.length];
+            deal.run(crypto.randomUUID(), p.id, keys[(i * 7) % keys.length], p.author_pubkey, i % 3 ? 'completed' : 'cancelled', aYearAgo);
         }
     })();
     // Carol opens each of the twenty events' pages (the event page's read, by id with no `sync`).
@@ -546,6 +555,14 @@ async function main() {
     const walks = plans.filter(p => p.plan.some(d => /^SCAN p\b/.test(d)));
     assert(plans.length >= 2 && walks.length === 0,
         `no statement of the delta read walks every post (${walks.map(w => `${w.sql}…: ${w.plan.join('; ')}`).join(' | ') || `${plans.length} statements, none has SCAN p`})`);
+    // The heal's deals are the reader's own, found by the buyer and seller indexes: never every ended deal on the node
+    // (folded into one query, the planner picks idx_marketplace_transactions_status_completed).
+    const dealsRead = ran.find(r => /FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer/.test(r.sql));
+    const dealsPlan = dealsRead ? (db.prepare(`EXPLAIN QUERY PLAN ${dealsRead.sql}`).all(...dealsRead.params) as Array<{ detail: string }>).map(p => p.detail) : [];
+    assert(dealsPlan.some(d => /idx_marketplace_transactions_buyer_status_created \(buyer_pubkey=\?\)/.test(d))
+        && dealsPlan.some(d => /idx_marketplace_transactions_seller_status_created \(seller_pubkey=\?\)/.test(d))
+        && !dealsPlan.some(d => /status_completed|^SCAN marketplace_transactions/.test(d)),
+        `the lookup of the heal's deals searches the reader's own deals by their indexes (${dealsPlan.join('; ') || 'it did not run'})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

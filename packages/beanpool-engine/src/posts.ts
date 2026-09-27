@@ -492,9 +492,10 @@ const HEALED_DEALS = 50;
 function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor: string, nowIso: string): string[] {
     const reads = new Set(eventReadsCountingAt(db, viewer, cursor));
     // The heal's list, ties at the 50th included: the route's order among deals made in the same millisecond is the
-    // planner's.
+    // planner's. MATERIALIZED, so the member's deals are found by their buyer and seller indexes once: folded into the
+    // outer query, the planner picks idx_marketplace_transactions_status_completed and reads every ended deal on the node.
     const deals = db.prepare(`
-        WITH mine AS (SELECT post_id, status, created_at FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer),
+        WITH mine AS MATERIALIZED (SELECT post_id, status, created_at FROM marketplace_transactions WHERE buyer_pubkey = @viewer OR seller_pubkey = @viewer),
              edge AS (SELECT created_at FROM mine ORDER BY created_at DESC LIMIT 1 OFFSET ${HEALED_DEALS - 1})
         SELECT post_id, status FROM mine
         WHERE post_id IS NOT NULL AND status IN ('cancelled', 'completed')

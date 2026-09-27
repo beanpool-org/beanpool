@@ -1216,6 +1216,19 @@ function visitorMayReceive(event: any): boolean {
     return conv?.type === 'dm';
 }
 
+/**
+ * Whether a trade's listing is visible to visitors on the board (audience_scope is NULL or 'public',
+ * matching the board query in beanpool-engine posts.ts). Sockets off the member feed are rung for
+ * a trade's step only when its listing is on their board.
+ */
+function tradeListingVisibleToVisitors(event: any): boolean {
+    const postId = event?.postId ?? event?.transaction?.postId ?? event?.transaction?.post_id ?? event?.post?.id ?? event?.id;
+    if (!postId || typeof postId !== 'string') return false;
+    const row = db.prepare('SELECT audience_scope FROM posts WHERE id = ?').get(postId) as { audience_scope: string | null } | undefined;
+    if (!row) return false;
+    return row.audience_scope === null || row.audience_scope === 'public';
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1263,8 +1276,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
     }
     // A trade's step: the sockets below that are neither its parties nor on the member feed or the open feed get the
-    // listings' doorbell for it (BroadcastOptions above).
-    if (recipients && opts?.othersGetDoorbell) ringListingDoorbell('post_updated');
+    // listings' doorbell for it (BroadcastOptions above), only when that trade's listing is visible to visitors.
+    const tradeListingPublic = (recipients && opts?.othersGetDoorbell) ? tradeListingVisibleToVisitors(event) : false;
+    if (recipients && opts?.othersGetDoorbell && tradeListingPublic) ringListingDoorbell('post_updated');
     const msg = JSON.stringify(event);
     // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
     // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a
@@ -1302,7 +1316,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
-            if (!ws._memberFeed && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            if (!ws._memberFeed && !ws._openFeed && (!tradeListingPublic || !PUBLIC_WS_EVENTS.has(event?.type))) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (recipients && ws._visitor) {
             if (!(forVisitor ??= visitorMayReceive(event))) continue;

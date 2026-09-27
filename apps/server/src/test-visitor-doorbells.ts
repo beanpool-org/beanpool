@@ -452,8 +452,23 @@ async function main(): Promise<void> {
         await rings('a Delete account', 'post_removed', ['profile_updated', 'user_pruned']);
         assert(!(await board()).includes(halOffer), 'a Delete account: an unsigned reader no longer reads his offer');
 
-        // A trade's step, sent to its parties with a bare doorbell for the other members (othersGetDoorbell): the listing
-        // went pending, came back or went, so every socket off the member feed gets the listings' doorbell.
+        // A trade's step on a members-only listing: the member socket gets the bare doorbell as before,
+        // and no socket off the member feed is rung.
+        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade-group', 'offer', 'other', 'Group trade', 'desc', 1, ?, 'group')").run(alice.pk);
+        await sleep(100);
+        clear();
+        se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade-group', transaction: { id: 'doorbell-trade-group-tx' } }, [alice.pk], { othersGetDoorbell: true });
+        await until(S.member, 'post_accepted');
+        await sleep(50);
+        for (const [who, s] of [...keyless, ...keyed]) {
+            assert(!typesOf(s).has('post_updated') && !typesOf(s).has('post_accepted'), `a trade's step on a members-only listing: ${who} socket gets no doorbell (${show(s)})`);
+        }
+        assert(typesOf(S.member).has('post_accepted') && bare(S.member) && listingDoorbells(S.member).length === 0,
+            `a trade's step on a members-only listing: the member's socket gets the bare post_accepted (${show(S.member)})`);
+
+        // A trade's step on a public listing, sent to its parties with a bare doorbell for the other members (othersGetDoorbell):
+        // the listing went pending, came back or went, so every socket off the member feed gets the listings' doorbell.
+        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade', 'offer', 'other', 'Public trade', 'desc', 1, ?, 'public')").run(alice.pk);
         await sleep(100);
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade', transaction: { id: 'doorbell-trade-tx' } }, [alice.pk], { othersGetDoorbell: true });

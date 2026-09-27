@@ -78,8 +78,51 @@ export function normalizeNodeUrl(raw: string): string {
  * on a flaky connection.
  */
 export function looksLikeNodeAddress(url: string): boolean {
-    return /^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/|$)/i.test(url)
-        || /^https?:\/\/localhost(:\d+)?(\/|$)/i.test(url);
+    return (/^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/|$)/i.test(url)
+        || /^https?:\/\/localhost(:\d+)?(\/|$)/i.test(url))
+        && isPlainNodeAddress(url);
+}
+
+/**
+ * Request binding: an address the app will connect to, sign for, or keep as a community's, names exactly one host.
+ *
+ * Every signature the app makes is bound to the host @beanpool/core's `audienceOf` reads from the URL, and that has
+ * to be the host the phone then connects to. Parsers agree on that only for a plain authority. Core, browsers and
+ * Android's OkHttp end the host at `\`; iOS's NSURL (React Native's fetch and WebSocket) percent-encodes the `\`
+ * and reads everything before the last `@` as a login. So `https://127.0.0.1\@evil.test/` would be signed for
+ * 127.0.0.1 and sent to evil.test.
+ *
+ * So the authority must be exactly `host[:port]`: a host name or IPv4 address made of letters, digits, hyphens and
+ * dots, or a bracketed IPv6 address, then at most a 5-digit port. No login (`@`), no `\`, no whitespace, no control
+ * or percent-encoded character. Then comes a `/` or the end. A `?` or `#` straight after the host isn't allowed:
+ * older parsers (RFC 1808) read the authority up to the first `/`, so `https://a.test?x@evil.test/` could name
+ * evil.test to one of them. After that first `/`, every parser reads path, so an `@` in the path is fine.
+ */
+const PLAIN_ADDRESS = /^(?:https?|wss?):\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])(?::\d{1,5})?(?:\/|$)/i;
+
+export function isPlainNodeAddress(url: unknown): url is string {
+    return typeof url === 'string' && PLAIN_ADDRESS.test(url);
+}
+
+/** Why an address was refused. Shown as is. */
+export const UNSAFE_NODE_ADDRESS_MESSAGE =
+    "That community address isn't a plain web address (it has something like @ or \\ in it), so BeanPool won't " +
+    'connect to it or sign anything for it. Check the address with whoever gave it to you.';
+
+export class UnsafeNodeAddressError extends Error {
+    constructor() {
+        super(UNSAFE_NODE_ADDRESS_MESSAGE);
+        this.name = 'UnsafeNodeAddressError';
+    }
+}
+
+/**
+ * Throws {@link UnsafeNodeAddressError} unless {@link isPlainNodeAddress}. Every builder that signs for a host calls
+ * this first, before core reads the URL or anything is signed. So does every path that stores a community's
+ * address.
+ */
+export function assertPlainNodeAddress(url: unknown): asserts url is string {
+    if (!isPlainNodeAddress(url)) throw new UnsafeNodeAddressError();
 }
 
 /**

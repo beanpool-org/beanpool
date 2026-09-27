@@ -10,9 +10,19 @@
  * Kept per host (the name signed for, `audienceOf`), in memory for this run and on each SavedNode for the next
  * (utils/nodes.ts recordRequestSigning / loadSavedRequestSigning). No React Native import here: utils/crypto.ts reads
  * it on every signed request.
+ *
+ * Only a plain address (node-url.ts `isPlainNodeAddress`) is read or recorded. From any other, iOS reaches a
+ * different host than the one `audienceOf` names, and that other node's answer must not change the format used
+ * for the named host.
  */
 
 import { audienceOf, REQUEST_SIGNING_VERSION } from '@beanpool/core';
+import { isPlainNodeAddress } from './node-url';
+
+/** The host a request to `url` is kept under: null for an address that isn't plain. */
+function hostOf(url: string): string | null {
+    return isPlainNodeAddress(url) ? audienceOf(url) : null;
+}
 
 /** 2: bound to the host. 1: the old, unbound format, for a server that predates format 2. */
 export type RequestSigningFormat = 1 | 2;
@@ -34,7 +44,7 @@ export function requestSigningOf(infoBody: unknown): number | null {
 
 /** Remember what the node at `url` said, for this run. Returns the host it was kept under, or null for none. */
 export function rememberRequestSigning(url: string, version: number): string | null {
-    const host = audienceOf(url);
+    const host = hostOf(url);
     if (!host) return null;
     known.set(host, version);
     return host;
@@ -42,7 +52,7 @@ export function rememberRequestSigning(url: string, version: number): string | n
 
 /** What this phone knows the node at `url` said, or undefined when it hasn't asked yet. No network. */
 export function knownRequestSigning(url: string): number | undefined {
-    const host = audienceOf(url);
+    const host = hostOf(url);
     return host ? known.get(host) : undefined;
 }
 
@@ -61,7 +71,7 @@ export function hydrateRequestSigning(load: () => Promise<Array<{ url: string; r
     const run = (async () => {
         try {
             for (const node of await load()) {
-                const host = audienceOf(node.url);
+                const host = typeof node.url === 'string' ? hostOf(node.url) : null;
                 const v = node.requestSigning;
                 if (host && !known.has(host) && typeof v === 'number' && Number.isSafeInteger(v) && v > 0) known.set(host, v);
             }

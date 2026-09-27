@@ -140,3 +140,93 @@ describe('the member key signs only through core\'s builders and the listed old-
         expect(rawImports).toEqual(['utils/crypto.ts: @noble/ed25519']);
     });
 });
+
+// ── Where the phone's community address is written ─────────────────────────────────────────────────────────────
+//
+// Every signature is bound to the host of the phone's community address (`beanpool_anchor_url`). An address whose
+// authority isn't plain host[:port] names one host to core and reaches another on iOS (#1224 review 4113495290,
+// utils/node-url.ts). So every write of it is listed here with the check it passes first, and a new one fails
+// until it is added with its own. addSavedNode refuses by itself (utils/nodes.ts).
+
+interface AnchorWrite { file: string; fn: string; fnText: string; value: string }
+
+const ANCHOR_KEY_ARG = /^(?:'beanpool_anchor_url'|"beanpool_anchor_url"|ANCHOR_STORE_KEY|ANCHOR_KEY)$/;
+
+function anchorWrites(): AnchorWrite[] {
+    const out: AnchorWrite[] = [];
+    for (const file of sourceFiles()) {
+        const text = fs.readFileSync(file, 'utf8');
+        if (!text.includes('setItem')) continue;
+        const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+        const rel = path.relative(ROOT, file);
+        const visit = (node: ts.Node) => {
+            if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'setItem'
+                && node.arguments.length >= 2 && ANCHOR_KEY_ARG.test(node.arguments[0].getText(sf))) {
+                // The nearest named function: declared, a method, or held by a const, directly or through a hook
+                // (`const switchTo = useCallback(async (url) => …)`).
+                let fn = '<top level>';
+                let fnNode: ts.Node | undefined = node.parent;
+                for (; fnNode; fnNode = fnNode.parent) {
+                    if ((ts.isFunctionDeclaration(fnNode) || ts.isMethodDeclaration(fnNode)) && fnNode.name) { fn = fnNode.name.getText(sf); break; }
+                    if (ts.isArrowFunction(fnNode) || ts.isFunctionExpression(fnNode)) {
+                        const holder = ts.isCallExpression(fnNode.parent) ? fnNode.parent.parent : fnNode.parent;
+                        if (ts.isVariableDeclaration(holder)) { fn = holder.name.getText(sf); break; }
+                    }
+                }
+                out.push({ file: rel, fn, fnText: fnNode?.getText(sf) ?? '', value: node.arguments[1].getText(sf) });
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sf);
+    }
+    return out;
+}
+
+describe('the phone\'s community address is written only after the plain-address check', () => {
+    const writes = anchorWrites();
+
+    /** Each writer, and what its function must contain: the check it makes before the write. */
+    const CHECKED: Record<string, RegExp> = {
+        // The deep link's "Switch Nodes?": the address comes from deepLinkNodeOrigin, which refuses one that isn't plain.
+        'app/_layout.tsx RootLayoutNav': /deepLinkNodeOrigin\(/,
+        // A typed address, or one from a saved-node pick.
+        'app/node-mismatch.tsx switchToNode': /assertPlainNodeAddress\(url\)/,
+        // The invite join: looksLikeNodeAddress, which requires isPlainNodeAddress (utils/node-url.ts).
+        'app/welcome.tsx handleCreate': /looksLikeNodeAddress\(nodeUrl\)/,
+        'app/(tabs)/settings.tsx handleSwitchNode': /isPlainNodeAddress\(targetUrl\)/,
+        'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
+        // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
+        'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
+        // The header's community switcher.
+        'utils/use-communities.ts switchTo': /assertPlainNodeAddress\(url\)/,
+        // Both restores (12 words, sign-in).
+        'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
+        // Development discovery: only plain candidates are probed.
+        'services/pillar-sync.ts discoverAnchor': /isPlainNodeAddress\(url\)/,
+    };
+    /** Writers of a fixed address. */
+    const CONSTANT: Record<string, string> = {
+        'app/welcome.tsx finishGlobalJoin': 'GLOBAL_NODE_URL',
+    };
+
+    it('finds the writes it is meant to police', () => {
+        expect(writes.length).toBeGreaterThanOrEqual(Object.keys(CHECKED).length);
+        expect(writes.some(w => `${w.file} ${w.fn}` === 'utils/join-another-community.ts joinAnotherCommunity')).toBe(true);
+    });
+
+    it('every write is a listed one', () => {
+        const listed = new Set([...Object.keys(CHECKED), ...Object.keys(CONSTANT)]);
+        expect(writes.map(w => `${w.file} ${w.fn}`).filter(k => !listed.has(k))).toEqual([]);
+    });
+
+    it('and each makes its check (or writes its constant)', () => {
+        for (const w of writes) {
+            const k = `${w.file} ${w.fn}`;
+            if (CONSTANT[k]) expect(w.value, k).toBe(CONSTANT[k]);
+            else expect(w.fnText, k).toMatch(CHECKED[k]);
+        }
+        // And every listed writer still writes: a stale entry would hide a moved one.
+        const seen = new Set(writes.map(w => `${w.file} ${w.fn}`));
+        expect([...Object.keys(CHECKED), ...Object.keys(CONSTANT)].filter(k => !seen.has(k))).toEqual([]);
+    });
+});

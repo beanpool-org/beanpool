@@ -7,6 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { sortMyEvents, type MyEvent } from './event-extras';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
@@ -119,7 +120,9 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
                 }
             }
 
-            if (url) await addSavedNode(url); // Auto-track nodes we jump into correctly inside the UI Matrix.
+            // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
+            // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
+            if (url && isPlainNodeAddress(url)) await addSavedNode(url);
             
             db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
             

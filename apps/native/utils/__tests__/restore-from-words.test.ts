@@ -36,7 +36,8 @@ vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => 
 
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { restoreFromWords, ReplaceNotSaved } from '../restore-account';
+import { restoreFromWords, ReplaceNotSaved, saveRestoredAccount } from '../restore-account';
+import { UnsafeNodeAddressError } from '../node-url';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
@@ -394,5 +395,32 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(fetch).not.toHaveBeenCalled();
         expect(mem.async.get(SAVED_NODES_STORE_KEY)).toBe(JSON.stringify([{ url: MULLUM }]));
         expect(removeCommunityCaches).not.toHaveBeenCalled();
+    });
+});
+
+describe('a restore to an address that names one host and reaches another (#1224 review 4113495290)', () => {
+    // On iOS `https://mullum.beanpool.org\@evil.test` reaches evil.test while every signature names mullum
+    // (utils/node-url.ts). A restore never makes one the phone's community.
+    const UNPLAIN = ['https://mullum.beanpool.org\\@evil.test', 'https://127.0.0.1\\@evil.test', 'https://kim@mullum.beanpool.org'];
+
+    it('is refused before anything is asked, fetched or removed', async () => {
+        await phoneWithInviteJoin();
+        for (const anchor of UNPLAIN) {
+            const confirmReplace = vi.fn(async () => true);
+            const nameOnNode = vi.fn(async () => 'Marty');
+            await expect(restoreFromWords(WORDS, anchor, { confirmReplace, nameOnNode }), anchor).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+            expect(confirmReplace).not.toHaveBeenCalled();
+            expect(nameOnNode).not.toHaveBeenCalled();
+        }
+        await expectPhoneKept();
+    });
+
+    it('and saving one after the gate (a sign-in restore) removes nothing either', async () => {
+        await phoneWithInviteJoin();
+        const incoming = { ...(await draftIdentity('Marty')) };
+        for (const anchor of UNPLAIN) {
+            await expect(saveRestoredAccount({ identity: incoming, replacesAnother: true }, anchor), anchor).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+        }
+        await expectPhoneKept();
     });
 });

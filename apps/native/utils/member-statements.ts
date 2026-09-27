@@ -13,6 +13,9 @@
  *     fields. The Manage button signs the old challenge only when it is exactly the shape main's server makes
  *     (`beanpool-admin-auth:<the same 64-hex id>:<13-digit ms, near now>`), which can never be a request; anything
  *     else is refused and nothing is signed.
+ *
+ * Each one first refuses, signing nothing, a node address whose authority isn't exactly `host[:port]`
+ * (node-url.ts `assertPlainNodeAddress`): on iOS such an address reaches a different host than the one signed for.
  */
 
 import {
@@ -20,6 +23,7 @@ import {
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { requestSigningFormatFor } from './request-signing-version';
+import { assertPlainNodeAddress } from './node-url';
 
 const CHALLENGE_ID_RE = /^[0-9a-f]{64}$/;
 
@@ -65,6 +69,7 @@ export interface SignedStatement {
 export async function signAdminChallenge(
     nodeUrl: string, chal: { challengeId?: unknown; challenge?: unknown }, privateKeyHex: string, now: number = Date.now(),
 ): Promise<SignedStatement> {
+    assertPlainNodeAddress(nodeUrl);
     const { challengeId, challenge } = chal;
     if (await requestSigningFormatFor(nodeUrl) === 2) {
         const host = audienceOf(nodeUrl);
@@ -84,6 +89,7 @@ export function oldPairingText(action: 'approve' | 'decline', pairingId: string,
 export async function signPairing(
     nodeUrl: string, action: 'approve' | 'decline', pairingId: string, shortCode: string, privateKeyHex: string,
 ): Promise<SignedStatement> {
+    assertPlainNodeAddress(nodeUrl);
     if (await requestSigningFormatFor(nodeUrl) === 2) {
         const host = audienceOf(nodeUrl);
         if (!host) throw new Error('Cannot sign in: the node address names no host');
@@ -100,6 +106,7 @@ export async function signPairing(
 export async function makeOfflineTicket(
     nodeUrl: string, inviter: string, privateKeyHex: string, opts: { intendedFor?: string | null; timestamp?: number } = {},
 ): Promise<string> {
+    assertPlainNodeAddress(nodeUrl);
     const timestamp = opts.timestamp ?? Date.now();
     const sign = memberSigner(privateKeyHex);
     if (await requestSigningFormatFor(nodeUrl) === 2) {

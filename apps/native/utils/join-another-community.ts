@@ -16,6 +16,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
+import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 
 export interface JoinDeps {
     closeDB(): Promise<void>;
@@ -69,13 +70,17 @@ async function communityDetails(url: string): Promise<{ name: string | null; cur
 /**
  * Redeem `code` on `targetUrl` and make it this phone's community. `returnUrl` is where the phone goes back to
  * if the redeem fails. Throws the redeem's own error (the node's words) after putting the phone back.
+ *
+ * A `targetUrl` that isn't plain `host[:port]` (node-url.ts: on iOS it reaches another host than it names) is
+ * refused with UnsafeNodeAddressError before anything moves. Nor is the phone put back on a `returnUrl` like that.
  */
 export async function joinAnotherCommunity(
     opts: { targetUrl: string; code: string; identity: BeanPoolIdentity; returnUrl: string | null; knownName?: string | null },
     injected?: JoinDeps,
 ): Promise<JoinedCommunity> {
-    const deps = injected ?? await defaultDeps();
     const targetUrl = opts.targetUrl.replace(/\/+$/, '');
+    assertPlainNodeAddress(targetUrl);
+    const deps = injected ?? await defaultDeps();
     await deps.closeDB();
     await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
     await deps.initDB();
@@ -84,7 +89,7 @@ export async function joinAnotherCommunity(
         ({ alreadyMember } = await deps.redeemInvite(opts.code, opts.identity.callsign || 'Unknown', opts.identity));
     } catch (err) {
         await deps.closeDB();
-        if (opts.returnUrl) await AsyncStorage.setItem('beanpool_anchor_url', opts.returnUrl);
+        if (opts.returnUrl && isPlainNodeAddress(opts.returnUrl)) await AsyncStorage.setItem('beanpool_anchor_url', opts.returnUrl);
         else await AsyncStorage.removeItem('beanpool_anchor_url');
         await deps.initDB();
         throw err;

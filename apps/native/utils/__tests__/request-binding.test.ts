@@ -43,7 +43,8 @@ vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => who.identity) })
 import { sign as memberKeySign } from '@noble/ed25519';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    adminSigninText, inviteTicketText, settingsSigninText, signedRequestBytes, signedRequestText, unboundRequestText, utf8Bytes,
+    adminSigninText, audienceOf, inviteTicketText, settingsSigninText, signedPathOf, signedRequestBytes, signedRequestText,
+    unboundRequestText, utf8Bytes,
 } from '@beanpool/core';
 import { buildSignedHeaders, buildSignedWsParams, encodeUtf8 } from '../crypto';
 import { signedGet, signedPost } from '../node-post';
@@ -52,7 +53,10 @@ import { fetchNodeProfile } from '../node-profile';
 import { requestSettingsLink } from '../node-admin';
 import { buildSigninRequest } from '../settings-signin';
 import { installNodeRequestSigning } from '../node-request-signing';
-import { addSavedNode, getSavedNodes } from '../nodes';
+import { addSavedNode, getSavedNodes, recordRequestSigning } from '../nodes';
+import { knownRequestSigning, rememberRequestSigning } from '../request-signing-version';
+import { signAdminChallenge, signPairing, makeOfflineTicket } from '../member-statements';
+import { UnsafeNodeAddressError, UNSAFE_NODE_ADDRESS_MESSAGE } from '../node-url';
 import type { BeanPoolIdentity } from '../identity';
 
 const SEED = new Uint8Array(32).fill(3);
@@ -303,6 +307,119 @@ describe('pairing approval and offline tickets, by node version', () => {
         const payload = Buffer.from(old.p, 'base64').toString('utf8');
         expect(JSON.parse(payload)).toEqual({ i: PUB, t: T, f: 'Robin' });
         expect(signedByMia(old.s, utf8Bytes(payload))).toBe(true);
+    });
+});
+
+describe('an address that names one host and reaches another is refused, and nothing is signed (#1224 review 4113495290)', () => {
+    // Core's audienceOf ends the host at `\` (as browsers and OkHttp do). iOS's NSURL percent-encodes the `\` and
+    // reads everything before the last `@` as a login, so it connects to evil.test while the signature names the
+    // host in front. Only an authority that is exactly host[:port] is signed for, by every builder.
+    const REFUSED = [
+        'https://127.0.0.1\\@evil.test/api/x', // the reviewer's table: loopback, which every node counts as its own
+        'https://mullum.beanpool.org\\@evil.test/api/x', // the reviewer's table: a real community's name
+        'https://user@a.test/api/x',
+        'https://a.test@evil.test/api/x',
+        'https://a.test\\@x/api/x',
+        'https://a.test\\evil.test/api/x',
+        'https://127.0.0.1%5C@evil.test/api/x',
+        'https://a.test%5C.evil.test/api/x',
+        'https://a.test%40evil.test/api/x',
+        'https://a.test\t@evil.test/api/x',
+        'https://a.test @evil.test/api/x',
+        'https://a.te\tst/api/x',
+        'https://a.test\n/api/x',
+        ' https://a.test/api/x',
+        'https://a.test:8443\\@evil.test/api/x',
+        'https://[::1]@evil.test/api/x',
+        // A `?` or `#` straight after the host: an RFC 1808 parser reads the authority up to the first `/`.
+        'https://a.test?x@evil.test/api/x',
+        'https://a.test#@evil.test/api/x',
+        'https://a.test./api/x',
+    ];
+    const wsOf = (url: string) => url.replace(/^http/, 'ws').replace('/api/x', '/ws');
+
+    it('buildSignedHeaders and buildSignedWsParams throw for each, before signing', async () => {
+        for (const url of REFUSED) {
+            await expect(buildSignedHeaders('POST', url, '{}', identity.privateKey, PUB), url).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+            await expect(buildSignedWsParams(wsOf(url), identity.privateKey, PUB), wsOf(url)).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+        }
+        expect(memberKeySign).not.toHaveBeenCalled();
+    });
+
+    it('so do the Manage sign-in, pairing and the offline ticket, whichever format the node speaks', async () => {
+        const ID = '9f'.repeat(32);
+        for (const url of REFUSED) {
+            const nodeUrl = url.replace('/api/x', '');
+            const challenge = { challengeId: ID, challenge: `beanpool-admin-auth:${ID}:${Date.now()}` };
+            await expect(signAdminChallenge(nodeUrl, challenge, identity.privateKey), nodeUrl).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+            await expect(signPairing(nodeUrl, 'approve', '0123456789abcdef'.repeat(4), 'K7F3QX', identity.privateKey), nodeUrl)
+                .rejects.toBeInstanceOf(UnsafeNodeAddressError);
+            await expect(makeOfflineTicket(nodeUrl, PUB, identity.privateKey), nodeUrl).rejects.toBeInstanceOf(UnsafeNodeAddressError);
+        }
+        // Not even for a "node" that answered as an old one: the old forms name no host, but the address is still refused.
+        await nodeSays('https://old.refuse.test');
+        await expect(signAdminChallenge('https://old.refuse.test\\@evil.test', { challengeId: ID, challenge: `beanpool-admin-auth:${ID}:${Date.now()}` }, identity.privateKey))
+            .rejects.toBeInstanceOf(UnsafeNodeAddressError);
+        expect(memberKeySign).not.toHaveBeenCalled();
+    });
+
+    it('the Manage button says so plainly and contacts nothing', async () => {
+        for (const nodeUrl of ['https://127.0.0.1\\@evil.test', 'https://mullum.beanpool.org\\@evil.test']) {
+            expect(await requestSettingsLink(nodeUrl, identity)).toEqual({ kind: 'error', message: UNSAFE_NODE_ADDRESS_MESSAGE });
+        }
+        expect(calls).toHaveLength(0);
+        expect(memberKeySign).not.toHaveBeenCalled();
+    });
+
+    it('what an unplain address answers teaches the phone nothing about the host it names', async () => {
+        // Its info answer "says" it is old. Kept under mullum.neg2.test, that would move mullum to the old format.
+        await addSavedNode('https://mullum.neg2.test');
+        await recordRequestSigning('https://mullum.neg2.test\\@evil.test', { name: 'Not Mullum' });
+        expect(rememberRequestSigning('https://mullum.neg2.test\\@evil.test', 1)).toBeNull();
+        expect(knownRequestSigning('https://mullum.neg2.test/api/x')).toBeUndefined();
+        expect((await getSavedNodes()).find(n => n.url === 'https://mullum.neg2.test')?.requestSigning).toBeUndefined();
+        const h = await buildSignedHeaders('GET', 'https://mullum.neg2.test/api/x', '', identity.privateKey, PUB);
+        expect(h['X-Signed-For']).toBe('mullum.neg2.test');
+    });
+
+    it('an @ in the path only is path, and is signed as before', async () => {
+        const url = 'https://a.test/api/profile/x@y';
+        const h = await buildSignedHeaders('GET', url, '', identity.privateKey, PUB);
+        expect(h['X-Signed-For']).toBe('a.test');
+        expect(boundFor('a.test', { url, method: 'GET', headers: h, body: '' }, '/api/profile/x@y')).toBe(true);
+    });
+
+    it('every address form the app uses still signs exactly as before: for audienceOf(url), over signedPathOf(url)', async () => {
+        const REAL = [
+            ['https://mullum.beanpool.org/api/x', 'mullum.beanpool.org'],
+            ['https://global.beanpool.org/api/global/home?lat=1', 'global.beanpool.org'],
+            ['https://Mullum.BeanPool.org/api/x', 'mullum.beanpool.org'],
+            ['https://beans.mycommunity.nz:8443/api/x', 'beans.mycommunity.nz'],
+            ['http://127.0.0.1:8080/api/x', '127.0.0.1'],
+            ['https://127.0.0.1:8443/api/x', '127.0.0.1'],
+            ['http://10.0.2.2:8080/api/x', '10.0.2.2'],
+            ['http://192.168.1.10:8443/api/x', '192.168.1.10'],
+            ['http://localhost:8080/api/x', 'localhost'],
+            ['https://beanpool.local:8443/api/x', 'beanpool.local'],
+            ['http://mynode:8080/api/x', 'mynode'],
+            ['http://[::1]:8080/api/x', '[::1]'],
+            ['https://[fe80::1]/api/x', '[fe80::1]'],
+            ['https://a.test', 'a.test'],
+            ['https://a.test//api/x', 'a.test'],
+            ['https://a.test/api/x?who=a@b.test&back=c\\d', 'a.test'],
+        ] as const;
+        for (const [url, host] of REAL) {
+            expect(audienceOf(url), url).toBe(host);
+            const h = await buildSignedHeaders('POST', url, '{"a":1}', identity.privateKey, PUB);
+            expect(h['X-Signed-For'], url).toBe(host);
+            expect(boundFor(host, { url, method: 'POST', headers: h, body: '{"a":1}' }, signedPathOf(url)), url).toBe(true);
+        }
+        for (const [ws, host] of [['wss://mullum.beanpool.org/ws', 'mullum.beanpool.org'], ['ws://10.0.2.2:8080/ws', '10.0.2.2'], ['ws://[::1]:8080/ws', '[::1]']] as const) {
+            const q = new URLSearchParams(await buildSignedWsParams(ws, identity.privateKey, PUB));
+            expect(q.get('for'), ws).toBe(host);
+            const text = signedRequestText({ host, method: 'WS', path: '/ws', timestamp: q.get('ts')!, nonce: q.get('nonce')!, body: '' });
+            expect(signedByMia(q.get('sig')!, signedRequestBytes(text)), ws).toBe(true);
+        }
     });
 });
 

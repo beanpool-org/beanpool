@@ -7,6 +7,7 @@ import {
     type Signer,
 } from '@beanpool/core';
 import { requestSigningFormatFor } from './request-signing-version';
+import { assertPlainNodeAddress } from './node-url';
 
 if (typeof global.crypto !== 'object') {
     (global as any).crypto = {};
@@ -217,6 +218,9 @@ export function memberSigner(privateKeyHex: string): Signer {
  * plus `X-Signed-For: HOST`, so the signature counts only at the community it was
  * sent to. The old `METHOD\nPATH\nTS\nNONCE\nBODY` only for a node whose info said
  * it predates that (request-signing-version.ts).
+ *
+ * Throws, having signed nothing, for a URL whose authority isn't exactly `host[:port]` (node-url.ts
+ * `assertPlainNodeAddress`): iOS would connect to a different host than the one signed for.
  */
 export async function buildSignedHeaders(
     method: string,
@@ -225,6 +229,7 @@ export async function buildSignedHeaders(
     privateKeyHex: string,
     publicKeyHex: string,
 ): Promise<Record<string, string>> {
+    assertPlainNodeAddress(url);
     if (!audienceOf(url)) throw new Error(`Cannot sign a request for ${JSON.stringify(url)}: pass the full URL fetched`);
     const sign = memberSigner(privateKeyHex);
     const signed = await requestSigningFormatFor(url) === 2
@@ -239,13 +244,15 @@ export async function buildSignedHeaders(
  * timestamp, nonce, empty body). `wsUrl` is the full `ws(s)://…/ws` URL the socket
  * opens (before its query). The node gives the full live feed only to a
  * member-signed socket; an unsigned one gets public doorbells only. Returns a
- * `&`-joinable query fragment: in format 2 it adds `for=HOST&v=2`.
+ * `&`-joinable query fragment: in format 2 it adds `for=HOST&v=2`. Refuses, like {@link buildSignedHeaders}, a
+ * URL whose authority isn't plain.
  */
 export async function buildSignedWsParams(
     wsUrl: string,
     privateKeyHex: string,
     publicKeyHex: string,
 ): Promise<string> {
+    assertPlainNodeAddress(wsUrl);
     if (!audienceOf(wsUrl)) throw new Error(`Cannot sign a socket for ${JSON.stringify(wsUrl)}: pass the full URL opened`);
     const sign = memberSigner(privateKeyHex);
     return await requestSigningFormatFor(wsUrl) === 2

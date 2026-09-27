@@ -17,7 +17,7 @@ import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanp
 import { applyDelta, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
-import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 
 const SYNC_TIMEOUT_MS = 20_000;
@@ -96,7 +96,7 @@ async function discoverAnchor(): Promise<string | null> {
     // Clear saved node address temporarily to force Azure discovery
     await AsyncStorage.removeItem('pillar:anchor-url');
 
-    const safeCandidates = candidates.filter(url => !shouldBlockCleartextNodeUrl(url));
+    const safeCandidates = candidates.filter(url => !shouldBlockCleartextNodeUrl(url) && isPlainNodeAddress(url));
 
     if (safeCandidates.length === 0) {
         return null;

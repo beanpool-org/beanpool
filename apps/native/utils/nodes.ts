@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { audienceOf } from '@beanpool/core';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
+import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import {
     hydrateRequestSigning, knownRequestSigning, rememberRequestSigning, requestSigningOf,
 } from './request-signing-version';
@@ -23,9 +24,10 @@ export async function getSavedNodes(): Promise<SavedNode[]> {
         const data = await AsyncStorage.getItem(SAVED_NODES_STORE_KEY);
         const nodes: SavedNode[] = data ? JSON.parse(data) : [];
         
-        // Auto-migrate standard legacy active node if it exists
+        // Auto-migrate standard legacy active node if it exists. Never an address that isn't plain (node-url.ts):
+        // nothing is saved from one.
         const currentActiveUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (currentActiveUrl && !nodes.find(n => n.url === currentActiveUrl)) {
+        if (currentActiveUrl && isPlainNodeAddress(currentActiveUrl) && !nodes.find(n => n.url === currentActiveUrl)) {
             nodes.push({ url: currentActiveUrl, lastConnected: new Date().toISOString() });
             await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
         }
@@ -36,7 +38,12 @@ export async function getSavedNodes(): Promise<SavedNode[]> {
     }
 }
 
+/**
+ * Save `url` to the phone's list of communities, or refresh its entry. Throws, saving nothing, for an address whose
+ * authority isn't exactly `host[:port]` (node-url.ts `assertPlainNodeAddress`).
+ */
 export async function addSavedNode(url: string, alias?: string, currencyType?: 'text'|'image', currencyValue?: string) {
+    assertPlainNodeAddress(url);
     const nodes = await getSavedNodes();
     const existing = nodes.find(n => n.url === url);
     if (!existing) {
@@ -68,7 +75,7 @@ export async function recordRequestSigning(url: string, infoBody: unknown): Prom
         const nodes = await getSavedNodes();
         let changed = false;
         for (const n of nodes) {
-            if (audienceOf(n.url) === host && n.requestSigning !== version) {
+            if (isPlainNodeAddress(n.url) && audienceOf(n.url) === host && n.requestSigning !== version) {
                 n.requestSigning = version;
                 changed = true;
             }

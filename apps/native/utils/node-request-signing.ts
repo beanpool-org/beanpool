@@ -20,7 +20,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
-import { shouldBlockCleartextNodeUrl } from './node-url';
+import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { loadSavedRequestSigning } from './nodes';
 
 let installed = false;
@@ -79,8 +79,10 @@ export function installNodeRequestSigning(): void {
                 }
             }
         } catch (e) {
-            // Re-throw the NAT-4 block; swallow signing errors (best-effort).
+            // Re-throw the NAT-4 block; swallow signing errors (best-effort). But not a refused address (request
+            // binding, node-url.ts): on iOS it reaches another host than it names, so it fails, never goes unsigned.
             if (e instanceof Error && e.message.includes('NAT-4')) throw e;
+            if (e instanceof UnsafeNodeAddressError) throw e;
         }
         return originalFetch(input, init);
     };

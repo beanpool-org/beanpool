@@ -21,6 +21,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
+import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from './node-url';
 
 import { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
 
@@ -154,9 +155,11 @@ export type LinkResult =
 /**
  * Sign in to the node's Settings with the member key and get the 60-second, single-use sign-in token. The phone
  * signs a text it builds from the challenge id alone, never the node's text (member-statements.ts): a node that
- * sends anything else gets nothing signed.
+ * sends anything else gets nothing signed. Nor is anything sent to an address that isn't plain `host[:port]`
+ * (node-url.ts): on iOS it reaches another host than it names.
  */
 export async function requestSettingsLink(nodeUrl: string, identity: BeanPoolIdentity, totpCode?: string): Promise<LinkResult> {
+    if (!isPlainNodeAddress(nodeUrl)) return { kind: 'error', message: UNSAFE_NODE_ADDRESS_MESSAGE };
     try {
         const chalRes = await fetch(`${base(nodeUrl)}/api/local/admin/auth/challenge`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',

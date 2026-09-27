@@ -119,17 +119,18 @@ function readLocalList(): string[] | null {
 
 /**
  * The list from before as the browser holds it now (another tab may have changed it since this page last looked). A block
- * gone from it since this page's copy, and not on the node's list here, went through another tab (this page's own changes
- * set its copy themselves): it joins `leaving`.
+ * gone from it since this page's copy went through another tab (this page's own changes set its copy themselves): it joins
+ * `leaving`, even when this page's node list still holds it. That list may be older than a read already on its way, whose
+ * answer can lack the block (unblocked elsewhere, then moved up again by another tab), so only an answer asked after this
+ * tick settles it (#1246's review, 4115106774). A block already shown stays shown; the cost is at most the follow-up read.
  */
 function readStoredList(): string[] | null {
     const before = localList;
     localList = storedList();
     if (before) {
         const still = new Set(localList ?? []);
-        const onNode = new Set(nodeList);
         const tick = ++ticks;
-        for (const k of before) if (isWaiting(k) && !still.has(k) && !onNode.has(k)) leaving.set(k, tick);
+        for (const k of before) if (isWaiting(k) && !still.has(k)) leaving.set(k, tick);
     }
     return localList;
 }

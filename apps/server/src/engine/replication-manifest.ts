@@ -1,0 +1,419 @@
+/**
+ * Every table in schema.sql, and every community setting, classified by how a standby holds it: the one place that
+ * says what a promoted standby must have of its main server (design: scratch/global-node/DESIGN-standby-takeover-gaps-
+ * opus.md §4.2).
+ *
+ * This is main AS IT IS. Where the design says something should replicate and main does not replicate it yet, the
+ * entry says what main does and carries the design's gap id (`gap`); the fix PR for that gap moves the entry, and the
+ * twin suite (test-takeover-parity.ts) holds the difference in its KNOWN_GAPS list until then.
+ *
+ * Checked by test-replication-manifest.ts (every table and column of a fresh database is here) and used by
+ * test-takeover-parity.ts (what it compares between a promoted standby and a copy of its main server).
+ */
+
+/** A gap in the design's §2. */
+export type GapId = 'G0' | 'G1' | 'G1b' | 'G2a' | 'G2b' | 'G2c' | 'G3' | 'G4' | 'G5' | 'G6' | 'G7' | 'G8';
+
+/**
+ * A column a replicated table does not carry to its standby. Without `gap` it is local by design and never compared;
+ * with one, main drops it today although it should travel, and the twin suite compares it.
+ */
+export interface ColumnException {
+    reason: string;
+    gap?: GapId;
+}
+
+export type TableEntry =
+    /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[] }
+    /** `columns` copied, and the `except` ones not. Between them they name every column. */
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException> }
+    /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
+    | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
+    /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
+     *  key-value table whose keys are classified one by one (NODE_CONFIG_KEYS), not compared as rows. */
+    | { kind: 'takeover-bundle'; reason: string; bySetting?: true };
+
+/** Every payload carries the whole table, so a delta needs no watermark. */
+export const WHOLE_SET = 'whole set';
+
+/** Column names, from a space-separated list. */
+const cols = (names: string): string[] => names.trim().split(/\s+/);
+
+const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
+
+/**
+ * members columns not copied today (engine/sync.ts writes a fixed list, design §2 G2a). The export sends
+ * `isTreasury`, `earnedCredit` and `profileUpdatedAt`; the import drops them.
+ */
+const MEMBERS_STANDING_NOT_COPIED = [
+    'can_vouch', 'vouch_credit', 'credit_frozen', 'is_treasury', 'can_operate', 'earned_credit', 'earned_surplus',
+    'working_capital_ceiling', 'legacy_credit_floor', 'profile_updated_at', 'purpose', 'goal_amount', 'deadline_at',
+    'lifecycle', 'paused', 'paused_at', 'paused_by', 'paused_floor_snapshot', 'wind_up_initiated_at',
+    'wind_up_initiated_by', 'wind_up_finalised_at', 'lat', 'lng', 'location_auth_signer', 'auth_signer',
+    'location_updated_at',
+] as const;
+
+export const TABLES: Record<string, TableEntry> = {
+    // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
+    members: {
+        kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
+        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status elder_vouched_by archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at'),
+        except: {
+            last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
+            ...Object.fromEntries(MEMBERS_STANDING_NOT_COPIED.map((c) => [c, { reason: 'not in the import (a member\'s and an enterprise\'s standing)', gap: 'G2a' as const }])),
+            joined_at: { reason: 'written on the first copy only: a later change on the main server never reaches the standby', gap: 'G2a' },
+            invited_by: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
+            invite_code: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
+            home_node_url: { reason: 'written on the first copy only', gap: 'G2a' },
+        },
+    },
+    posts: {
+        kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
+        columns: cols('id type title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng updated_at reach reach_peers created_by poll_options poll_closes_at audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
+        except: {
+            origin_node: { reason: "a local listing's NULL is written as the main server's PeerId (`rp.originNode || remote.nodeId`)", gap: 'G1' },
+            category: { reason: 'only the INSERT writes it; a recategorised listing keeps its old category', gap: 'G1b' },
+            cash_also_needed: { reason: 'neither exported nor imported', gap: 'G1b' },
+            search_keywords: { reason: 'not exported; the boot backfill restores only the category', gap: 'G1b' },
+            target_archetypes: { reason: 'neither exported nor imported (not in the design\'s G1b table; found by this manifest)', gap: 'G1b' },
+            event_conversation_id: { reason: "neither exported nor imported: an event's chat link (not in the design's G1b table; found by this manifest)", gap: 'G1b' },
+        },
+    },
+    post_photos: {
+        kind: 'replicated-except', payload: 'photos', watermark: 'updated_at',
+        columns: cols('post_id order_num'),
+        except: {
+            photo_data: { reason: 'how this server holds the bytes: inline until its image store has them (the payload carries the bytes)' },
+            storage_key: { reason: "this server's image store object" },
+            sha256: { reason: "this server's image store object" },
+            bytes: { reason: "this server's image store object" },
+            mime: { reason: "this server's image store object" },
+            updated_at: { reason: STAMPED_BY_STANDBY, gap: 'G1b' },
+        },
+    },
+    projects: {
+        kind: 'replicated-except', payload: 'projects', watermark: 'updated_at',
+        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status created_at'),
+        except: {
+            enterprise_pubkey: { reason: 'the import writes 10 columns with INSERT OR REPLACE, wiping it on every copy', gap: 'G1b' },
+            migrated_at: { reason: 'the import writes 10 columns with INSERT OR REPLACE, wiping it on every copy', gap: 'G1b' },
+            updated_at: { reason: STAMPED_BY_STANDBY, gap: 'G1b' },
+        },
+    },
+    ratings: {
+        kind: 'replicated', payload: 'ratings', watermark: 'created_at',
+        columns: cols('id target_pubkey rater_pubkey role stars comment transaction_id created_at'),
+    },
+    accounts: {
+        kind: 'replicated', payload: 'accounts', watermark: WHOLE_SET,
+        columns: cols('public_key balance last_updated_at last_demurrage_epoch'),
+    },
+    transactions: {
+        kind: 'replicated-except', payload: 'transactions', watermark: 'timestamp',
+        columns: cols('id from_pubkey to_pubkey amount memo timestamp auth_signer auth_signature auth_payload'),
+        except: {
+            tax_fee: { reason: 'neither exported nor imported (the ledger columns go with G0, PR 1)', gap: 'G1b' },
+            project_id: { reason: 'neither exported nor imported (the ledger columns go with G0, PR 1)', gap: 'G1b' },
+        },
+    },
+    marketplace_transactions: {
+        kind: 'replicated-except', payload: 'marketplaceTransactions', watermark: 'updated_at',
+        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at'),
+        except: {
+            updated_at: { reason: STAMPED_BY_STANDBY + ' (the touch trigger)', gap: 'G1b' },
+            last_reminded_at: { reason: 'neither exported nor imported', gap: 'G1b' },
+            dispute_resolution: { reason: 'neither exported nor imported', gap: 'G1b' },
+            dispute_resolved_at: { reason: 'neither exported nor imported', gap: 'G1b' },
+            dispute_resolved_by: { reason: 'neither exported nor imported', gap: 'G1b' },
+        },
+    },
+    friends: {
+        kind: 'replicated-except', payload: 'friends', watermark: 'updated_at',
+        columns: cols('owner_pubkey friend_pubkey added_at'),
+        except: { updated_at: { reason: STAMPED_BY_STANDBY + ' (not in the design; found by this manifest)', gap: 'G1b' } },
+    },
+    conversations: {
+        kind: 'replicated', payload: 'conversations', watermark: 'created_at',
+        columns: cols('id type post_id name created_by created_at'),
+    },
+    conversation_participants: {
+        kind: 'replicated', payload: 'conversationParticipants', watermark: 'updated_at',
+        columns: cols('conversation_id public_key last_read_at updated_at'),
+    },
+    messages: {
+        kind: 'replicated', payload: 'messages', watermark: 'updated_at',
+        columns: cols('id conversation_id author_pubkey ciphertext nonce type system_type metadata timestamp edited_at updated_at'),
+    },
+    abuse_reports: {
+        kind: 'replicated', payload: 'abuseReports', watermark: 'updated_at',
+        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at'),
+    },
+    creator_channels: {
+        kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
+        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
+        except: {
+            fail_count: { reason: "the harvester's own record of failed fetches on this server; a promoted server's harvester starts afresh" },
+            last_error: { reason: "the harvester's own record of failed fetches on this server" },
+            is_stale: { reason: "the harvester's own record of failed fetches on this server" },
+        },
+    },
+    pulse_items: {
+        kind: 'replicated', payload: 'pulseItems', watermark: 'updated_at',
+        columns: cols('id channel_id owner_pubkey platform external_id url title thumbnail_url published_at category source muted curated created_at updated_at deleted_at'),
+    },
+    recovery_shares: {
+        kind: 'replicated-except', payload: 'recoveryShares', watermark: 'updated_at',
+        columns: cols('owner_pubkey holder_type holder_ref share_index encrypted_share share_iv share_tag ephemeral_pubkey sso_lookup_hash sso_lookup_salt kdf_params generation created_at updated_at'),
+        key: ['owner_pubkey', 'generation', 'holder_type', 'holder_ref'],
+        except: { id: { reason: 'a local row id: rows are matched by owner, generation and holder' } },
+    },
+    settlements: {
+        kind: 'replicated', payload: 'settlements', watermark: 'updated_at',
+        columns: cols('key direction peer_id buyer_pubkey buyer_home_node seller_pubkey post_id amount fee reserved_until state receipt receipt_payload failure_reason created_at updated_at'),
+    },
+    poll_votes: {
+        kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
+        columns: cols('post_id voter_pubkey option_id signature created_at'),
+    },
+    event_rsvps: {
+        kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',
+        columns: cols('post_id member_pubkey status signature reminder_offsets updated_at'),
+    },
+    groups: {
+        kind: 'replicated', payload: 'groups', watermark: 'updated_at',
+        columns: cols('id name slug description avatar_url category created_by lead_pubkey join_policy created_at updated_at'),
+    },
+    group_members: {
+        kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
+        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at'),
+    },
+    open_joins: {
+        kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
+        columns: cols('member_pubkey provider join_hash joined_at updated_at'),
+        except: { ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' } },
+    },
+    place_watches: {
+        kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
+        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at'),
+    },
+    directory_cache: {
+        kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
+        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at'),
+    },
+    join_requests: {
+        kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at'),
+        except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
+    },
+    moderation_notices: {
+        kind: 'replicated', payload: 'moderationNotices', watermark: 'updated_at',
+        columns: cols('id recipient title body data created_at seen_at updated_at'),
+    },
+    member_blocks: {
+        kind: 'replicated', payload: 'memberBlocks', watermark: 'updated_at',
+        columns: cols('owner_pubkey blocked_pubkey created_at updated_at'),
+    },
+    invalidated_keys: {
+        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at',
+        columns: cols('public_key reason invalidated_at rekeyed_to'),
+    },
+    tombstones: {
+        kind: 'replicated', payload: 'tombstones', watermark: 'deleted_at',
+        columns: cols('table_name row_key deleted_at'),
+    },
+
+    // ── Carried by the take-over bundle ──
+    node_roles: { kind: 'takeover-bundle', reason: 'the raw table is sealed in the bundle; the take-over\'s `roles` step writes it' },
+    node_config: {
+        kind: 'takeover-bundle', bySetting: true,
+        reason: 'a key-value store: parts travel in the sync payload, parts in the bundle, the rest is per server or lost today; each key is classified in NODE_CONFIG_KEYS',
+    },
+
+    // ── Not copied today, and the design says they should be ──
+    member_preferences: { kind: 'local', gap: 'G2b', reason: 'not in the payload: holiday, notification opt-outs, reminder defaults' },
+    treasury_operators: { kind: 'local', gap: 'G2c', reason: 'not in the payload: who keeps each enterprise' },
+    enterprise_pledges: { kind: 'local', gap: 'G2c', reason: "not in the payload: keepers' pledges" },
+    deferred_wage_claims: { kind: 'local', gap: 'G3', reason: "not in the payload: keepers' unpaid wages" },
+    decisions: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    decision_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    suspended_node_roles: { kind: 'local', gap: 'G3', reason: 'not in the payload nor the bundle: an owner parked by a Decision' },
+    enterprise_keeper_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    enterprise_keeper_changes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    enterprise_succession_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    enterprise_succession_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    group_convenor_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    group_convenor_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
+    invite_codes: { kind: 'local', gap: 'G3', reason: 'not in the payload: every invite already sent fails after a take-over' },
+    rekey_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload: an unused re-key code is refused after a take-over' },
+    recovery_releases: { kind: 'local', gap: 'G3', reason: 'not in the payload: the log of which recovery fragments left the node' },
+    federation_links: { kind: 'local', gap: 'G3', reason: 'not in the payload: a promoted server would make a second link treasury per peer' },
+    push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
+    message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
+    chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
+    thread_read_cursors: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
+    event_reminders_sent: { kind: 'local', gap: 'G4', reason: 'not in the payload: a reminder can be sent twice' },
+    activity_feed: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
+    pricing_guide_items: { kind: 'local', gap: 'G4', reason: "not in the payload: each server seeds its own at boot, and the admin's edits are lost" },
+    pricing_reports: { kind: 'local', gap: 'G4', reason: "not in the payload: members' price reports" },
+
+    // ── Local by design ──
+    sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
+    sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
+    system_logs: { kind: 'local', reason: "this server's logs" },
+    system_metrics: { kind: 'local', reason: "this server's metrics" },
+    signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
+    onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
+    pulse_thumbnail_backoff: { kind: 'local', reason: "this server's thumbnail fetch backoff" },
+    owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
+    owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
+    rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
+    recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
+    invite_links: { kind: 'local', reason: 'nothing reads or writes it (the design: delete it, day zero)' },
+    posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+};
+
+/** SQLite's own tables and a virtual table's shadow tables belong to no decision here. */
+export function isInternalTable(name: string, type: string): boolean {
+    return name.startsWith('sqlite_') || type === 'shadow';
+}
+
+/**
+ * members columns the touch trigger (`members_touch_updated_at`, schema.sql) does not list, and why. Every other
+ * column moves `updated_at` when it changes, so a delta carries the change.
+ */
+export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
+    updated_at: { reason: 'the stamp itself' },
+    last_active_at: { reason: 'travels only with another change of the row, by design' },
+    earned_surplus: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
+    working_capital_ceiling: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
+};
+
+// ── Community settings (design §2 G5) ──────────────────────────────────────────────────────
+
+export type SettingEntry =
+    /** In every sync payload, signed (engine/sync.ts exportSyncState). */
+    | { kind: 'payload'; reason: string }
+    /** In the take-over bundle (services/takeover-envelope.ts). */
+    | { kind: 'takeover-bundle'; reason: string; differsByDesign?: string }
+    /** The community's, and lost on a take-over today. */
+    | { kind: 'community'; reason: string; gap: GapId }
+    /** This server's own, and stays with it. */
+    | { kind: 'per-server'; reason: string };
+
+/** Every field of local-config.json (config/local-config.ts LocalConfig). */
+export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
+    callsign: { kind: 'community', gap: 'G5', reason: "the community's short name, in every app and the directory" },
+    communityName: { kind: 'community', gap: 'G5', reason: "the community's name" },
+    location: { kind: 'community', gap: 'G5', reason: "the community's place" },
+    contactEmail: { kind: 'community', gap: 'G5', reason: "the community's contact, sent to the directory" },
+    contactPhone: { kind: 'community', gap: 'G5', reason: "the community's contact, sent to the directory" },
+    currencyType: { kind: 'community', gap: 'G5', reason: "the currency's display" },
+    currencyValue: { kind: 'community', gap: 'G5', reason: "the currency's display" },
+    thresholds: { kind: 'community', gap: 'G5', reason: 'demurrage rate and epoch, health flags' },
+    gateway: { kind: 'community', gap: 'G5', reason: "the gateway's settings" },
+    adminHash: { kind: 'takeover-bundle', reason: "the community's admin password" },
+    salt: { kind: 'takeover-bundle', reason: "the community's admin password" },
+    totpEnabled: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
+    totpSecret: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
+    totpBackupCodesHashes: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
+    breakGlassMode: { kind: 'takeover-bundle', reason: 'break-glass sign-in' },
+    recoveryCode: { kind: 'takeover-bundle', reason: "the public record of the community's recovery code" },
+    identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
+    isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },
+    joinedAt: { kind: 'per-server', reason: "when this server's admin password was set" },
+    totpPendingSecret: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
+    totpPendingBackupCodesHashes: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
+    backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
+    backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
+    replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },
+    replicationTokenSalt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
+    backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },
+    backupReconcileMinutes: { kind: 'per-server', reason: "a standby's whole-copy interval" },
+    recoveryCodeLastId: { kind: 'per-server', reason: 'the last recovery code number this server made' },
+    nodeRole: { kind: 'per-server', reason: "this server's role" },
+    promotionAuditPending: { kind: 'per-server', reason: "this server's take-over audit" },
+    lastPromotionAudit: { kind: 'per-server', reason: "this server's take-over audit" },
+    recoveryCodeUsed: { kind: 'per-server', reason: 'the notice that a take-over spent the code, on the server it ran on' },
+    identityEpochSince: { kind: 'per-server', reason: 'when this server took the identity' },
+    identityReplaced: { kind: 'per-server', reason: 'this server noticed another took its identity' },
+};
+
+/**
+ * node_config rows, by key (exact) or by prefix (`*` at the end). The `node_config` row itself is a JSON object whose
+ * fields are classified in NODE_CONFIG_BLOB_FIELDS.
+ */
+export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
+    node_config: { kind: 'per-server', reason: 'a JSON object; each field is classified in NODE_CONFIG_BLOB_FIELDS' },
+    nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
+    'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
+    openJoinSalt: { kind: 'payload', reason: "the key the open door's hashes are made with (payload.openJoinSalt)" },
+    migration_mark_visitors_v1: { kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)" },
+    recovery_seal_main_epoch: { kind: 'payload', reason: "the recovery seal's epoch (payload.sealEpoch)" },
+    ledger_audit_baseline: { kind: 'community', gap: 'G5', reason: 'the accepted ledger audit baseline: the promotion audit uses the standby\'s own' },
+    ledger_audit_rebaseline_note: { kind: 'community', gap: 'G5', reason: 'why the baseline was accepted' },
+    pricing_data_source: { kind: 'community', gap: 'G5', reason: "the pricing guide's source" },
+    pricing_show_seasonality: { kind: 'community', gap: 'G5', reason: "the pricing guide's seasonality display" },
+    autosnapshot_config: { kind: 'community', gap: 'G5', reason: 'the snapshot schedule' },
+    commons_projects: { kind: 'community', gap: 'G5', reason: 'pending Commons proposals kept as one JSON value' },
+    avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
+    appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
+    directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
+    takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
+    replication_access: { kind: 'per-server', reason: "this server's replication access log" },
+    replicated_member_blocks_v1: { kind: 'per-server', reason: "a standby's own marker" },
+    replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
+    recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
+    recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },
+    image_store_evacuation_vacuumed_v1: { kind: 'per-server', reason: 'a one-shot marker of this server' },
+    'migration_*': { kind: 'per-server', reason: "one-shot boot markers of this server's own database" },
+};
+
+/** Fields of the `node_config` row's JSON object (state-engine.ts NodeConfig). */
+export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
+    serviceRadius: { kind: 'community', gap: 'G5', reason: "the community's service area: the map, the Market, the directory" },
+    publishLocation: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
+    publishMembers: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
+    publishContacts: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
+    publishHealth: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
+    directoryPushIntervalHours: { kind: 'community', gap: 'G5', reason: 'how often the directory is told' },
+    lastDirectoryPush: { kind: 'per-server', reason: 'when this server last told the directory' },
+    publicAddress: { kind: 'takeover-bundle', reason: 'the web address, with its tunnel token' },
+    ownerAddresses: { kind: 'takeover-bundle', reason: 'app addresses an owner confirmed' },
+    registrarNames: { kind: 'takeover-bundle', reason: 'every registrar name this key held' },
+};
+
+/** The entry for a node_config key, exact match first, then the longest prefix. */
+export function nodeConfigKeyEntry(key: string): SettingEntry | undefined {
+    if (NODE_CONFIG_KEYS[key]) return NODE_CONFIG_KEYS[key];
+    let best: { len: number; entry: SettingEntry } | undefined;
+    for (const [k, entry] of Object.entries(NODE_CONFIG_KEYS)) {
+        if (!k.endsWith('*')) continue;
+        const prefix = k.slice(0, -1);
+        if (key.startsWith(prefix) && (!best || prefix.length > best.len)) best = { len: prefix.length, entry };
+    }
+    return best?.entry;
+}
+
+/** Whether a setting is one a promoted standby must hold as its main server did (compared by the twin suite). */
+export function settingMustMatch(entry: SettingEntry): boolean {
+    return entry.kind === 'community' || entry.kind === 'payload' || (entry.kind === 'takeover-bundle' && !entry.differsByDesign);
+}
+
+/**
+ * The columns of `table` the twin suite compares, given its columns as they are: every column a replicated table
+ * copies, every one the design says should be copied (a `gap`), and the rows the take-over bundle brings. Columns
+ * local by design are left out. Null for a table the twin suite doesn't compare as rows (local by design, or
+ * classified key by key).
+ */
+export function comparedColumns(table: string, columns: string[]): string[] | null {
+    const entry = TABLES[table];
+    if (!entry) return null;
+    if (entry.kind === 'takeover-bundle') return entry.bySetting ? null : columns;
+    if (entry.kind === 'local' && !entry.gap) return null;
+    const except = 'except' in entry ? entry.except ?? {} : {};
+    return columns.filter((c) => !except[c] || !!except[c].gap);
+}

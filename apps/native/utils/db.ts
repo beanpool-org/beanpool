@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadIdentity } from './identity';
 import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
-import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRsvpStatus } from './events';
+import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
@@ -1884,9 +1884,12 @@ export async function persistEventView(post: any, memberPubkey: string) {
 
 /**
  * Going / Interested / not going (null) for the signed-in member (docs/events-on-the-map.md §2.2). The body
- * carries a signature over `postId:status` that the server checks against the member's key.
+ * carries a signature over `postId:status` that the server checks against the member's key. That text is plain
+ * UTF-8 and the id is the node's, so an id that isn't a UUID, or a status outside the three, is refused before
+ * anything is signed (events.ts isSignableRsvp).
  */
 export async function rsvpEvent(postId: string, status: EventRsvpStatus | null) {
+    if (!isSignableRsvp(postId, status)) throw new Error(UNSIGNABLE_RSVP_MESSAGE);
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         throw new Error('You are currently offline.');

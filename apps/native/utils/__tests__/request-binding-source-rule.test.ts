@@ -7,7 +7,7 @@
  * app's source (app, components, services, utils; not tests) and fails on any other path to the key:
  *
  *   - `signData(…)`, the raw signer, is called only inside `memberSigner` (the Signer handed to the builders and the
- *     fallbacks), and in `rsvpEvent`, whose `postId:status` statement is listed below;
+ *     fallbacks), and in `rsvpEvent`, whose `postId:status` statement is listed below with the check that makes it safe;
  *   - `memberSigner(…)` is called only in the functions that hand it to a core builder or a fallback;
  *   - a Signer is called directly only in the old-form fallbacks, and only on `utf8Bytes(…)`, which never starts
  *     with the 0xFF every format-2 signature does (request-binding.test.ts pins that);
@@ -104,12 +104,27 @@ describe('the member key signs only through core\'s builders and the listed old-
     it('signData, the raw signer, is called only inside memberSigner (and the listed RSVP statement)', () => {
         const allowed = new Set([
             'utils/crypto.ts memberSigner',
-            // The event RSVP carries a signature over `postId:status` (docs/events-on-the-map.md §2.2). Untagged and plain
-            // UTF-8, so never a format-2 signature; the node stores it and verifies nothing against it today. It moves to
-            // a format-2 statement if anything starts verifying it (design §6).
+            // The event RSVP's signature over `postId:status` (docs/events-on-the-map.md §2.2). The node verifies it
+            // against the member's key (apps/server engine/posts.ts rsvpEvent). It is plain UTF-8, so never a format-2
+            // signature. But the id is the node's, and until the switch every community still accepts old-format member
+            // signatures. So it is safe only because rsvpEvent first refuses an id that isn't a UUID, the shape the node
+            // issues, and a status outside going/interested/none (events.ts isSignableRsvp; pinned below). That leaves
+            // one line with one colon, which can't be a request in the old format or any other statement a node checks
+            // (#1224 review 4113495332). It moves to a tagged format-2 statement the next time it's touched (design §6).
             'utils/db.ts rsvpEvent',
         ]);
         expect(sites.filter(s => s.callee === 'signData' && !allowed.has(key(s))).map(key)).toEqual([]);
+    });
+
+    it('the RSVP checks the node\'s id and the status before it signs them', () => {
+        const src = fs.readFileSync(path.join(ROOT, 'utils/db.ts'), 'utf8');
+        const start = src.indexOf('export async function rsvpEvent(');
+        const fn = src.slice(start, src.indexOf('\n}\n', start));
+        const check = fn.indexOf('if (!isSignableRsvp(postId, status)) throw');
+        expect(start).toBeGreaterThan(-1);
+        expect(check).toBeGreaterThan(-1);
+        expect(check).toBeLessThan(fn.indexOf('signData('));
+        expect(fn.match(/signData\(/g)).toHaveLength(1);
     });
 
     it('memberSigner is handed out only where a core builder or an old-form fallback takes it', () => {

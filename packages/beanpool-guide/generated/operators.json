@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 56,
-  "hash": "75065c6d94257e4c8c633552053c127c9bdd737e69e487e98952023039f87cec",
+  "version": 57,
+  "hash": "e5ec7478bd0af57b68d1bb9541645c7a54492c23b1cde1ca1a54e13f6aff9ca2",
   "sections": [
     {
       "id": "setup",
@@ -1377,6 +1377,10 @@
           "text": "**Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far."
         },
         {
+          "type": "p",
+          "text": "On the global community there are no community votes. There the list shows emergency suspensions, each with the day it lifts and no vote totals, under the heading **Suspensions**. A suspension made while votes were switched off stays one nobody votes on, and shows that way, even if votes are switched back on before it ends."
+        },
+        {
           "type": "img",
           "src": "images/economy-decisions.webp",
           "alt": "The Proposals and Decisions screen in Settings"
@@ -1400,6 +1404,10 @@
           ]
         },
         {
+          "type": "p",
+          "text": "On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account."
+        },
+        {
           "type": "h2",
           "text": "Removing someone"
         },
@@ -1420,6 +1428,7 @@
           "items": [
             "Halting a removal in its grace period restores the person.",
             "Halting a \"keep the suspension\" vote lifts the suspension.",
+            "A suspension nobody votes on (on the global community) has **Lift suspension now** instead. It asks for a reason the same way, and lifts the suspension straight away.",
             "**Owner only**: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short."
           ]
         },

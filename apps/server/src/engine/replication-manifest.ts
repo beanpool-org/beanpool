@@ -164,8 +164,11 @@ export const TABLES: Record<string, TableEntry> = {
         columns: cols('conversation_id public_key last_read_at updated_at'),
     },
     messages: {
-        kind: 'replicated', payload: 'messages', watermark: 'updated_at',
-        columns: cols('id conversation_id author_pubkey ciphertext nonce type system_type metadata timestamp edited_at updated_at'),
+        kind: 'replicated-except', payload: 'messages', watermark: 'updated_at',
+        columns: cols('id conversation_id author_pubkey ciphertext nonce type system_type timestamp edited_at updated_at'),
+        except: {
+            metadata: { reason: "the send route stores a request's metadata as given, so '' is '' on the main server and null on the standby (the export sends `|| undefined`, the import writes `|| null`); neither app sends '' (not in the design; found by this net)", gap: 'G1b' },
+        },
     },
     abuse_reports: {
         kind: 'replicated', payload: 'abuseReports', watermark: 'updated_at',

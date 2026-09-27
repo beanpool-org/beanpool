@@ -15,8 +15,9 @@
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
- *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request, a
- *     rating with no comment, an empty bio and archetype, a group renamed) and a last delta.
+ *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a message with empty
+ *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed) and a last
+ *     delta.
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
@@ -96,6 +97,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:projects.updated_at', gap: 'G1b', why: "restamped with the standby's clock" },
     { key: 'db:groups.lead_pubkey', gap: 'G1b', why: "a group whose last convenor left keeps its old lead on the standby (the import keeps a lead over the main server's null)" },
     { key: 'db:conversations.name', gap: 'G1b', why: "a renamed group's chat keeps its old name until a whole copy (a rename moves no stamp; a delta picks conversations by created_at)" },
+    { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
     // G2a: the members row's other columns.
@@ -574,6 +576,9 @@ async function main(): Promise<void> {
         built('and sends a photo', await S_(ann, '/api/messages/send', {
             conversationId: convoId, authorPubkey: ann.pk, ciphertext: Buffer.from('a photo').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
             type: 'image', attachment: { data: Buffer.from('encrypted jpeg bytes').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), mime: 'image/jpeg' },
+        }));
+        built('Bo answers, with the empty metadata a hand-made request can send', await S_(bo, '/api/messages/send', {
+            conversationId: convoId, authorPubkey: bo.pk, ciphertext: Buffer.from('thanks').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), metadata: '',
         }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;

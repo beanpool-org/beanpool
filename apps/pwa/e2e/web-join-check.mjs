@@ -16,7 +16,8 @@
  *     saved while the invite was out leaves the held screen offering the sent key's words; and a kept key the node
  *     doesn't have yet, with the door open at the reload (4112075367), waits on "Finish joining", never the door's lobby
  *   - the invite join's ← Back on the photo step (card invite-back-step): the name alone on the same key, a name another
- *     member has refused with suggestions checked with that key left out, then a new name and that key's 12 words
+ *     member has refused with suggestions of 20 characters or fewer checked with that key left out, then a new name and
+ *     that key's 12 words
  *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google (the round
  *     trip through the same return page) and GitHub (the node's device flow): the stub node keeps the copy each join
  *     carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is opened
@@ -1117,8 +1118,8 @@ const SCENARIOS = [
         name: 'the invite join, ← Back on the photo step (card invite-back-step): the name alone, a taken name refused with suggestions, a new name on the same key, then its 12 words',
         async run(page, origin, view, seen) {
             seen.doorShut = true;
-            // Another member's name, long enough that its suggestions are long too.
-            seen.names.set('a-neighbour', 'Samantha Greenwood-Hughes');
+            // Another member's name, long enough that a word after it would run past the 20 characters a join keeps.
+            seen.names.set('a-neighbour', 'Samantha Greenwood');
             await sendInvite(page, origin, 'Rowan');
             await page.getByText(/Choose your look/).waitFor({ timeout: 20_000 });
             const key = await storedIdentityKey(page);
@@ -1130,15 +1131,20 @@ const SCENARIOS = [
             if (await page.getByRole('button', { name: 'Create Identity & Join →' }).count()) throw new Failure('the invite form came back after Back');
             const field = page.getByLabel('Your Callsign (Name)');
             if ((await field.inputValue()) !== 'Rowan') throw new Failure(`the name step holds "${await field.inputValue()}"`);
+            // The 20 characters a join keeps (MAX_JOIN_CALLSIGN): the app's register cuts a longer name on the node.
+            if ((await field.getAttribute('maxlength')) !== '20') throw new Failure(`the name field takes ${await field.getAttribute('maxlength')} characters`);
             await noSideScroll(page, 'the name again');
             await shot(page, view, 'invite-back-name');
 
-            await field.fill('Samantha Greenwood-Hughes');
+            await field.fill('Samantha Greenwood');
             await page.getByRole('button', { name: 'Next →' }).click();
             await page.getByRole('alert').filter({ hasText: 'is already taken in this community' }).waitFor();
             const offered = page.getByRole('button', { name: /^Use the name Samantha / });
             await offered.first().waitFor();
             if ((await offered.count()) !== 3) throw new Failure(`${await offered.count()} names were suggested`);
+            const tooLong = (await offered.allInnerTexts()).filter((s) => s.trim().length > 20);
+            if (tooLong.length) throw new Failure(`suggested past 20 characters: ${tooLong.join(', ')}`);
+            if (seen.nameChecks.some((c) => c.name.length > 20)) throw new Failure('a suggestion past 20 characters was checked');
             if (!seen.nameChecks.length || seen.nameChecks.some((c) => c.exclude !== key)) throw new Failure("a suggestion was checked without this member's key left out");
             if (seen.names.get(key) !== 'Rowan') throw new Failure('the taken name was written');
             await noSideScroll(page, 'a taken name, with suggestions');

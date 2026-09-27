@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 52,
-  "hash": "4471d292f6c7c7b2fa83ccc623e20591d273efe6a574044f71b8743c9da03f8b",
+  "version": 53,
+  "hash": "887d1e9d55c5f6f71288a07f55f0be40646f6171c6b369360af85b5169e20e05",
   "sections": [
     {
       "id": "setup",
@@ -2181,7 +2181,7 @@
         },
         {
           "type": "p",
-          "text": "Once your server has an address, it accepts only its listed ones, localhost included. So if members' apps also reach it on your home network, confirm that address too. To open its web app through an SSH tunnel at localhost, add BEANPOOL_ADDRESSES=localhost to the server's .env (an IPv6 address goes in brackets, as [::1]). Localhost is never an address of your community: a server with only localhost listed still has no address set up, and the list says so. Only this list shows localhost; apps and the directory never see it."
+          "text": "Once your server has an address, it accepts only its listed ones. It refuses localhost too, unless you list it. So if members' apps also reach it on your home network, confirm that address too. To open its web app through an SSH tunnel at localhost, add BEANPOOL_ADDRESSES=localhost to the server's .env (an IPv6 address goes in brackets, as [::1]), and remove it when you no longer need the tunnel: while it's listed, a request signed for localhost anywhere counts here. Localhost is never an address of your community: a server with only localhost listed still has no address set up, and the list says so. Only this list shows localhost; apps and the directory never see it."
         },
         {
           "type": "p",

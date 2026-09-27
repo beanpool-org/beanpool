@@ -10,9 +10,10 @@
  *
  * A list kept in this browser by a build from before (bp_blocked_users, and the older beanpool_blocked_users) belongs to
  * whoever is signed in when this build first reads the node's list, as #1225 decided for the phone. It is moved up to the
- * node once and the local keys deleted, only when the node has taken it; until then it still hides whom it names, and
- * the next read tries again. Past the node's limit, the newest it has room for go up. The node takes only the keys it has
- * a row for, and counts the rest (someone it never knew, or a member since removed): those are not kept.
+ * node once, and the local keys are deleted only when the node has taken every one of them; until then what is left still
+ * hides whom it names, and the next read tries again. Of a list, the node takes only the keys it has a row for, so each of
+ * the rest (an author from a connected community's board, blocked through the Market's peer browse) goes up on its own,
+ * as a block made now does. Past the node's limit, the newest it has room for go up.
  *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
@@ -115,6 +116,20 @@ function forgetLocalList(): void {
     }
 }
 
+/** What is left of the list this browser kept before, until it has gone up: kept as the build from before kept it. */
+function keepLocalList(keys: string[]): void {
+    if (keys.length === 0) return forgetLocalList();
+    localList = keys;
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify(keys));
+            localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
+        }
+    } catch (e) {
+        console.warn('[blocklist] Could not keep what is left of the list this browser kept before; this page still hides them', e);
+    }
+}
+
 function recompute(): void {
     const local = readLocalList() ?? [];
     current = [...new Set([...nodeList, ...local])];
@@ -151,8 +166,15 @@ export function getBlocklistStatus(): { loaded: boolean; error: string | null } 
 
 /**
  * The list this browser kept before, moved up to the node for the signed-in account. Answers the node's list after it:
- * the move's answer, or `res` when there was nothing to move or the node didn't take it (the local list then stays, and
- * the next read tries again).
+ * the move's last answer, or `res` when there was nothing to move or the node didn't take it (the local list then stays,
+ * and the next read tries again).
+ *
+ * Of a list the node takes only the keys it has a row for (routes/blocks.ts), so each key still missing from its answer
+ * then goes up on its own, which takes any key, as a block made now does: a member's blocks are never dropped with
+ * nothing said. The local list is deleted only once all of them are on the node's list. The first that doesn't go (the
+ * node unreachable, or the list full, 409 block_limit) stops the rest, since they would meet the same: it and those after
+ * it stay in this browser, still hiding whom they name, and the next read (the node's doorbell, the socket back, the next
+ * page) sends them the same way. A key the member unblocks meanwhile has left the local list, and is not sent.
  */
 async function moveLocalListUp(res: BlockList): Promise<BlockList> {
     const local = readLocalList();
@@ -168,15 +190,28 @@ async function moveLocalListUp(res: BlockList): Promise<BlockList> {
         forgetLocalList();
         return res;
     }
+    let now: BlockList;
     try {
-        const moved = await addToBlockList(moving);
-        if (moved.skipped) console.warn(`[blocklist] ${moved.skipped} of the ${moving.length} blocks this browser kept name no one your community knows, so they were not kept.`);
-        forgetLocalList();
-        return moved;
+        now = await addToBlockList(moving);
     } catch (e) {
         console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
         return res;
     }
+    const taken = new Set(now.blocked.map(b => b.publicKey));
+    const alone = moving.filter(k => !taken.has(k));
+    for (let i = 0; i < alone.length; i++) {
+        if (!readLocalList()?.includes(alone[i])) continue;
+        try {
+            now = await addToBlockList(alone[i]);
+        } catch (e) {
+            const left = alone.slice(i).filter(k => readLocalList()?.includes(k));
+            console.warn(`[blocklist] ${left.length} of the blocks this browser kept did not go up to the community; they stay here and are tried again`, e);
+            keepLocalList(left);
+            return now;
+        }
+    }
+    forgetLocalList();
+    return now;
 }
 
 /**
@@ -281,13 +316,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     }
     // A block still waiting to move up from this browser goes too, or it would be moved up again.
     const local = readLocalList();
-    if (local?.includes(targetPubkey)) {
-        localList = local.filter(k => k !== targetPubkey);
-        try {
-            if (typeof localStorage !== 'undefined') localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify(localList));
-            if (typeof localStorage !== 'undefined') localStorage.removeItem(LEGACY_BLOCKLIST_KEY);
-        } catch { /* the in-memory list is what the screens read */ }
-    }
+    if (local?.includes(targetPubkey)) keepLocalList(local.filter(k => k !== targetPubkey));
     takeNodeAnswer(res);
     emit();
     return true;

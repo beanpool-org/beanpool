@@ -17,6 +17,8 @@ const node = vi.hoisted(() => ({
     /** Keys the node has no row for: a list of keys (the one-time move) skips them and counts them. */
     unknown: [] as string[],
     calls: [] as string[],
+    /** Runs as each add reaches the node, before it is taken: to look at the browser then, or to fail that one add. */
+    onAdd: null as null | ((keys: string | string[]) => void),
 }));
 
 vi.mock('./api', () => {
@@ -34,6 +36,7 @@ vi.mock('./api', () => {
         }),
         addToBlockList: vi.fn(async (keys: string | string[]) => {
             node.calls.push(`add ${JSON.stringify(keys)}`);
+            node.onAdd?.(keys);
             fail();
             const ks = Array.isArray(keys) ? keys.filter(k => !node.unknown.includes(k)) : [keys];
             const fresh = ks.filter(k => !node.list.includes(k));
@@ -95,6 +98,7 @@ describe('the block list the community keeps for the account', () => {
         node.refuse = null;
         node.unknown = [];
         node.calls = [];
+        node.onAdd = null;
         vi.clearAllMocks();
     });
 
@@ -148,18 +152,100 @@ describe('the block list the community keeps for the account', () => {
         off();
     });
 
-    it('the one-time move: keys the node has no row for are skipped and counted, and the local keys still go', async () => {
+    it('the one-time move: a key the node has no row for goes up on its own, as a block made now does, and only then do the local keys go', async () => {
+        // K2: an author from a connected community's board, blocked through the Market's peer browse on an older build.
+        // Of a list the node takes only the keys it has a row for; a member's blocks are never dropped with nothing said.
         node.unknown = [K2];
         localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2, K3]));
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const keptWhenSent: (string | null)[] = [];
+        node.onAdd = () => { keptWhenSent.push(localStorage.getItem(BLOCKLIST_STORAGE_KEY)); };
+        const told: string[][] = [];
+        const off = onBlocklistUpdated(l => told.push(l));
         startBlocklist(ME);
         await vi.waitFor(() => expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull());
-        expect(api.addToBlockList).toHaveBeenCalledWith([K1, K2, K3]);
-        expect(node.list).toEqual([K1, K3]);
-        expect(getBlockedUsers()).toEqual([K1, K3]);
-        expect(warn.mock.calls.some(c => String(c[0]).includes('1 of the 3'))).toBe(true);
+        expect(node.calls).toEqual(['read', `add ${JSON.stringify([K1, K2, K3])}`, `add ${JSON.stringify(K2)}`]);
+        // The local list was still there when each add went: it is deleted only once K2 is on the node's list too.
+        expect(keptWhenSent).toEqual([JSON.stringify([K1, K2, K3]), JSON.stringify([K1, K2, K3])]);
+        expect(node.list).toEqual([K1, K3, K2]);
+        expect(getBlockedUsers()).toEqual([K1, K3, K2]);
+        expect(told).toEqual([[K1, K2, K3], [K1, K3, K2]]);
         expect(storedAboutBlocks()).toEqual([]);
-        warn.mockRestore();
+        off();
+    });
+
+    it('a key that could not go up on its own stays in the browser, still hiding them, and the next read sends it', async () => {
+        node.unknown = [K2, K3];
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2, K3]));
+        // The connection drops as K2 goes up on its own.
+        node.onAdd = keys => { if (keys === K2) throw new TypeError('Failed to fetch'); };
+        const told: string[][] = [];
+        const off = onBlocklistUpdated(l => told.push(l));
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(node.calls).toContain(`add ${JSON.stringify(K2)}`));
+        await settle();
+        // The first that fails stops the rest: K3 waits with it, untried.
+        expect(node.calls).toEqual(['read', `add ${JSON.stringify([K1, K2, K3])}`, `add ${JSON.stringify(K2)}`]);
+        expect(node.list).toEqual([K1]);
+        expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([K2, K3]);
+        expect(isUserBlocked(K2) && isUserBlocked(K3)).toBe(true);
+        expect(getBlocklistStatus()).toEqual({ loaded: true, error: null });
+
+        // The next read (the node's doorbell, the socket back, the next page) sends what is left.
+        node.onAdd = null;
+        await loadBlocklist();
+        expect(node.calls.slice(3)).toEqual(['read', `add ${JSON.stringify([K2, K3])}`, `add ${JSON.stringify(K2)}`, `add ${JSON.stringify(K3)}`]);
+        expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull();
+        expect(node.list).toEqual([K1, K2, K3]);
+        expect(getBlockedUsers()).toEqual([K1, K2, K3]);
+        // Nothing on the way showed any of them unblocked.
+        expect(told.length).toBeGreaterThan(0);
+        expect(told.every(l => [K1, K2, K3].every(k => l.includes(k)))).toBe(true);
+        expect(storedAboutBlocks()).toEqual([]);
+        off();
+    });
+
+    it('a key the full list refuses on its own stays in the browser, still blocked, and goes up once there is room', async () => {
+        const K5 = 'f7'.repeat(32);
+        node.max = 3;
+        node.list = [K4];
+        node.unknown = [K2];
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        // Meanwhile the member blocks K5 on another device, so the list is full when K2 goes up on its own.
+        node.onAdd = keys => { if (Array.isArray(keys)) node.list.push(K5); };
+        const told: string[][] = [];
+        const off = onBlocklistUpdated(l => told.push(l));
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(node.calls).toContain(`add ${JSON.stringify(K2)}`));
+        await settle();
+        expect(node.list).toEqual([K4, K5, K1]);
+        expect(JSON.parse(localStorage.getItem(BLOCKLIST_STORAGE_KEY)!)).toEqual([K2]);
+        expect(isUserBlocked(K2)).toBe(true);
+        expect(getBlocklistStatus()).toEqual({ loaded: true, error: null });
+
+        node.onAdd = null;
+        await unblockUser(K5);
+        expect(isUserBlocked(K2)).toBe(true);
+        await loadBlocklist();
+        expect(node.list).toEqual([K4, K1, K2]);
+        expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull();
+        expect(getBlockedUsers()).toEqual([K4, K1, K2]);
+        expect(told.length).toBeGreaterThan(0);
+        expect(told.every(l => l.includes(K2))).toBe(true);
+        off();
+    });
+
+    it('a key the member unblocks while the move is under way is not blocked again by it', async () => {
+        node.unknown = [K2, K3];
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2, K3]));
+        let unblocking: Promise<boolean> | null = null;
+        node.onAdd = keys => { if (keys === K2 && !unblocking) unblocking = unblockUser(K3); };
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull());
+        await unblocking;
+        await settle();
+        expect(node.calls).not.toContain(`add ${JSON.stringify(K3)}`);
+        expect(node.list).toEqual([K1, K2]);
+        expect(isUserBlocked(K3)).toBe(false);
     });
 
     it('a list an older build kept in this browser moves up to the signed-in account once, then the local keys are gone', async () => {

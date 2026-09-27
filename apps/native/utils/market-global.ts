@@ -34,8 +34,59 @@ export const NO_BEANS_TERMS = {
     note: 'There are no Beans here. The description says what they would like in return, or that it is free. Message them to ask.',
 } as const;
 
-/** What the edit form says in place of the price field, on a node with Beans off. */
+/** What a post's edit form, and the map's Offer/Need form, say in place of the price field, on a node with Beans off. */
 export const NO_BEANS_EDIT_NOTE = 'No price here: say in the description what you would like in return, or that it is free.';
+
+/*
+ * The map's Offer/Need form (app/(tabs)/map.tsx). With Beans off it has no price section, and the price never holds
+ * a post back: whatever the field holds (a draft saved with a price, an offer picked from the Community Pricing
+ * Guide), the post goes up at 0 Beans and a total price, which is all the server takes there. With Beans on, or on a
+ * node that says nothing, each of these is exactly what the form did before.
+ */
+
+/** The Beans the post goes up at. */
+export function postFormCredits(field: string, features: NodeFeatures | null | undefined): number {
+    return marketShowsBeans(features) ? Number(field) || 0 : 0;
+}
+
+/** Total, per hour, per day...: only where there is a price. */
+export function postFormPriceType(priceType: string, features: NodeFeatures | null | undefined): string {
+    return marketShowsBeans(features) ? priceType : 'fixed';
+}
+
+/** The price field is empty: the button asks for a price and stays grey. */
+export function postFormPriceMissing(field: string, features: NodeFeatures | null | undefined): boolean {
+    return marketShowsBeans(features) && field === '';
+}
+
+/** Tapping Post marks the price field: empty, or not a number. */
+export function postFormPriceInvalid(field: string, features: NodeFeatures | null | undefined): boolean {
+    return marketShowsBeans(features) && (field.trim() === '' || isNaN(Number(field)));
+}
+
+export interface PostFormState {
+    posting: boolean;
+    needBlocked: boolean;
+    postType: 'offer' | 'need';
+    category: string;
+    hasLocation: boolean;
+    photoCount: number;
+    credits: string;
+    title: string;
+    description: string;
+}
+
+/** The submit button's words: the next thing missing, or Post Offer / Post Need. */
+export function postFormSubmitLabel(s: PostFormState, features: NodeFeatures | null | undefined): string {
+    return s.posting ? 'Posting...'
+        : s.needBlocked ? '🟢 List an Offer first to post Needs'
+        : (!s.category) ? '📂 Select a category'
+        : (!s.hasLocation) ? '📍 Set a location'
+        : (s.photoCount < 1) ? '📷 Add a photo'
+        : postFormPriceMissing(s.credits, features) ? '💰 Set a price'
+        : (!s.title.trim() || !s.description.trim()) ? '✏️ Fill required fields'
+        : `Post ${s.postType === 'offer' ? 'Offer' : 'Need'}`;
+}
 
 /** Whether this node orders its listings from where the member is. */
 export function sortsByDistance(profile: NodeProfile | null | undefined): boolean {

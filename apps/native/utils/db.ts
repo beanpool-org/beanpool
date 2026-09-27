@@ -12,6 +12,7 @@ import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
+import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -2752,42 +2753,12 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
 }
 
 /**
- * The listings this phone holds that a whole posts pull (`sync=true`, no cursor) shows the node no longer has: after a
- * take-over, what the old main server wrote after its standby's last copy (services/pillar-sync.ts). No tombstone
- * will ever come for them, so they go here.
- *
- * The node sends its most recently changed listings first, capped at a page (200 today), so its answer speaks for
- * every listing changed after the oldest one it carries, and for all of them when it carries none. A cached row
- * changed after that and missing from the answer goes. An older row may just be past the page, so it stays, as it
- * would on a fresh install that never had it. A row the phone wrote itself has no `updated_at` until a sync brings
- * one, so its `created_at` stands in.
- *
- * It speaks only for the scopes it could carry. The pull is signed on its way out, but only best-effort
- * (node-request-signing.ts), and the node answers a reader it cannot name with the public listings alone (engine
- * posts.ts), so a group's or a person's listing is judged only when the answer carries one: only a signed reader is
- * sent those, and the one key this phone signs with is its own. Otherwise the public listings alone are judged.
+ * After a take-over, the listings the whole pull `posts` shows the node no longer has go (utils/posts-replace.ts says
+ * which: its rule, and why).
  */
 async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
-    const sent = new Set<string>();
-    let oldest: string | null = null;
-    let membersView = false;
-    for (const p of posts) {
-        if (p?.id) sent.add(String(p.id));
-        // Only a time that reads as one: an empty or malformed one (`''`, `'0'`) would sort before every row held.
-        const at = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at;
-        const isTime = typeof at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(at) && Number.isFinite(Date.parse(at));
-        if (isTime && (oldest === null || at < oldest)) oldest = at;
-        // As writeSyncedPost reads the scope.
-        if ((p?.audienceScope || p?.audience_scope || 'public') !== 'public') membersView = true;
-    }
-    // An answer with listings and no times speaks for nothing it left out.
-    if (posts.length > 0 && oldest === null) return;
-    const held = await txn.getAllAsync<{ id: string; at: string | null }>(
-        `SELECT id, COALESCE(updated_at, created_at) AS at FROM posts${membersView ? '' : " WHERE audience_scope IS NULL OR audience_scope = 'public'"}`,
-    );
-    const gone = held
-        .filter(r => !sent.has(r.id) && (oldest === null || (r.at !== null && r.at > oldest)))
-        .map(r => r.id);
+    const held = await txn.getAllAsync<HeldListing>('SELECT id, COALESCE(updated_at, created_at) AS at, audience_scope AS scope FROM posts');
+    const gone = postsTheNodeNoLongerHas(posts, held);
     for (let i = 0; i < gone.length; i += 500) {
         const batch = gone.slice(i, i + 500);
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
@@ -2831,7 +2802,12 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
     return { authorPubkey: post?.author_pubkey ?? null, type: post?.type ?? null, openDeal: !!deal, conversation: !!conversation };
 }
 
-export async function applyDelta(delta: any, expectedDbName?: string) {
+/**
+ * Writes a sync's delta to this node's cache. True once it has committed; false when it wrote nothing because the
+ * member switched community while the delta was on its way (the guard below): a caller that must know the write
+ * landed (a take-over's replace, services/pillar-sync.ts) reads this, since that case does not throw.
+ */
+export async function applyDelta(delta: any, expectedDbName?: string): Promise<boolean> {
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -2843,7 +2819,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
         // Skip the write; the newly-active node syncs cleanly on its own cycle.
         if (expectedDbName && currentDbName !== expectedDbName) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
-            return;
+            return false;
         }
         // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,
         // and awaiting it between SQLite statements would hold the write transaction open on
@@ -3107,6 +3083,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
+        return true;
     } finally {
         releaseSyncLock();
     }

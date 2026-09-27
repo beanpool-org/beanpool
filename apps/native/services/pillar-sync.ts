@@ -445,8 +445,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let postsReplaced = false;
         if (!postsIsIncremental && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
             try {
-                await applyDelta({ posts: postsData, ...(takenOver ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
-                postsReplaced = takenOver;
+                const wrote = await applyDelta({ posts: postsData, ...(takenOver ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                // Not written (the member switched community while this batch waited for the sync lock): the epoch
+                // stays as held, so the next cycle replaces the cache again.
+                postsReplaced = takenOver && wrote;
                 earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
@@ -685,8 +687,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Apply physical updates to local Native device SQLite Matrix
         if (Object.keys(gatedDelta).length > 0) {
             try {
-                await applyDelta(gatedDelta, expectedDbName);
-                if (gatedDelta.postsReplace) postsReplaced = true;
+                const wrote = await applyDelta(gatedDelta, expectedDbName);
+                if (gatedDelta.postsReplace && wrote) postsReplaced = true;
             } catch (applyErr) {
                 // parseIfChanged / the stringify gate already recorded these payloads'
                 // fingerprints as "applied". If the write actually failed (e.g. a DB

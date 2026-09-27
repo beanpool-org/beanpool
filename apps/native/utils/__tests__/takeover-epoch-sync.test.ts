@@ -255,6 +255,35 @@ describe('a take-over: the epoch changes, the cursors go, and a whole sync repla
         expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-n:Seedlings']);
         expect(store.get(EPOCH_KEY)).toBe('1');
     });
+
+    it('when a community switch skips the write of the whole pull, the epoch is not stored, and the next cycle does it again', async () => {
+        await phoneThatSyncedTheTail();
+        Object.assign(node, { epoch: '1', whole: [N, B, A], delta: [N] });
+        // The member switches to another community while the whole pull is on its way (the app opens that community's
+        // database, as a switch does), so applyDelta's node-switch guard skips its write; and back again before the
+        // cycle's own check of the active node, which then lets the cycle finish.
+        const answerAsNode = fetchMock.getMockImplementation()!;
+        const switchTo = async (anchor: string) => { store.set('beanpool_anchor_url', anchor); await getDb(); };
+        fetchMock.mockImplementationOnce(async (url: string) => answerAsNode(url));
+        fetchMock.mockImplementationOnce(async (url: string) => {
+            const res = await answerAsNode(url);
+            await switchTo('https://other.beanpool.org');
+            return res;
+        });
+        fetchMock.mockImplementationOnce(async (url: string) => {
+            await switchTo(ANCHOR);
+            return answerAsNode(url);
+        });
+        await sync();
+        expect(postsPulls()).toHaveLength(2);
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump (and the tyre levers)', 'post-t:Firewood, a trailer load']);
+        expect(store.get(EPOCH_KEY)).toBe('0');
+
+        await sync();
+        expect(isDelta(postsPulls()[postsPulls().length - 1])).toBe(false);
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-n:Seedlings']);
+        expect(store.get(EPOCH_KEY)).toBe('1');
+    });
 });
 
 describe('the same epoch, or none: nothing changes', () => {

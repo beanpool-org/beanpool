@@ -428,25 +428,31 @@ describe('what an app can be made to sign', () => {
     // text a node chose could be signed into something a format-2 server accepts. Builds before this one sign with
     // encodeUtf8, so this pins that no string at all, well-formed or not, encodes to a 0xFF.
     const noFF = (s: string) => !encodeUtf8(s).includes(0xff) && !utf8Bytes(s).includes(0xff);
+    // Each loop collects what fails and asserts once: 65,536 separate expect() calls took over 5 s on a loaded CI
+    // runner (main CI on 924fc37b) though every case passed. Every string is still checked.
 
     it('encodeUtf8 never emits 0xFF, for any code unit, including lone surrogates', () => {
+        const bad: string[] = [];
         for (let u = 0; u <= 0xffff; u++) {
             const c = String.fromCharCode(u);
-            expect(noFF(c) && noFF(`${c}a`) && noFF(`a${c}`) && noFF(`${c}\u{10ffff}`), `U+${u.toString(16)}`).toBe(true);
+            if (!(noFF(c) && noFF(`${c}a`) && noFF(`a${c}`) && noFF(`${c}\u{10ffff}`))) bad.push(`U+${u.toString(16)}`);
         }
+        expect(bad).toEqual([]);
     });
 
     it('nor for any surrogate followed by anything, or a string ending mid-pair', () => {
         const followers = [0x0000, 0x007f, 0x0080, 0x07ff, 0x0800, 0xd7ff, 0xd800, 0xdbff, 0xdc00, 0xdfff, 0xe000, 0xfffd, 0xffff];
+        const bad: string[] = [];
         for (let s = 0xd800; s <= 0xdfff; s++) {
             const hi = String.fromCharCode(s);
-            for (const f of followers) expect(noFF(hi + String.fromCharCode(f)), `${s.toString(16)} ${f.toString(16)}`).toBe(true);
-            expect(noFF(hi)).toBe(true);
-            expect(noFF(`x${hi}`)).toBe(true);
+            for (const f of followers) if (!noFF(hi + String.fromCharCode(f))) bad.push(`${s.toString(16)} ${f.toString(16)}`);
+            if (!noFF(hi)) bad.push(s.toString(16));
+            if (!noFF(`x${hi}`)) bad.push(`x ${s.toString(16)}`);
         }
         for (let hi = 0xd800; hi <= 0xdbff; hi += 0x3f) {
-            for (let lo = 0xdc00; lo <= 0xdfff; lo += 0x3f) expect(noFF(String.fromCharCode(hi, lo))).toBe(true);
+            for (let lo = 0xdc00; lo <= 0xdfff; lo += 0x3f) if (!noFF(String.fromCharCode(hi, lo))) bad.push(`${hi.toString(16)} ${lo.toString(16)}`);
         }
+        expect(bad).toEqual([]);
     });
 });
 

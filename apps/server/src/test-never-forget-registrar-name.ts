@@ -127,15 +127,17 @@ async function child(): Promise<void> {
         // What the node holds, as stored: node_config's row (not as a reader tidies it), the token file, its names.
         inspect: async () => {
             const { db } = await import('./db/db.js');
-            const { configuredAddresses, publishedAddresses, knowsItsNames } = await import('./engine/own-addresses.js');
+            const { configuredAddresses, publishedAddresses, knowsItsNames, forgetOwnAddresses } = await import('./engine/own-addresses.js');
             const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
             const stored = row?.value ? JSON.parse(row.value) : {};
             const tokenFile = path.join(process.env.BEANPOOL_DATA_DIR!, 'tunnel-token');
+            // Read afresh, at the real time: a list cached for a later moment would be what requests get until then.
+            forgetOwnAddresses();
             return {
                 publicAddress: stored.publicAddress ?? null,
                 registrarNames: stored.registrarNames ?? null,
                 tokenFile: fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, 'utf-8') : null,
-                configured: configuredAddresses(Date.now() + 10_000),
+                configured: configuredAddresses(),
                 published: publishedAddresses(),
                 named: knowsItsNames(),
             };
@@ -166,6 +168,12 @@ function assert(cond: unknown, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
 }
+
+/**
+ * A node reads its names again at most a second after they change (own-addresses.ts's cache), so each check waits that
+ * long first: it sees what a member's app gets from then on, never a copy from before the change.
+ */
+const settled = () => new Promise((r) => setTimeout(r, 1_100));
 
 /** One numbered section: an error in it fails it and the next one still runs. */
 async function section(n: string, body: () => Promise<void>): Promise<void> {
@@ -259,7 +267,10 @@ async function main(): Promise<void> {
         const nBase: string = setup.https;
         const admin = { 'X-Admin-Password': PW_N };
         const statusOpen = () => call(nBase, 'GET', '/api/local/admin/public-address/status', admin);
-        const bound = (node: NodeProc, hosts: string[]) => node.send('bound', { ownerSeedHex, hosts });
+        const bound = async (node: NodeProc, hosts: string[]) => {
+            await settled();
+            return node.send('bound', { ownerSeedHex, hosts });
+        };
 
         // A standby of N, copying it from the start (its keys are pulled again at the end).
         fs.mkdirSync(dirs.standby, { recursive: true });
@@ -314,6 +325,7 @@ async function main(): Promise<void> {
             assert(entry(s.registrarNames, 'newname.beanpool.org')?.role === 'current' && entry(s.registrarNames, 'bname.beanpool.org')?.role === 'former',
                 `the record: newname current, bname former (${JSON.stringify(s.registrarNames)})`);
             assert(s.tokenFile === 'T-newname', `the tunnel token is newname's (${s.tokenFile})`);
+            await settled();
             const info = await call(nBase, 'GET', '/api/community/info');
             const published: string[] = info.body?.addresses ?? [];
             assert(published.includes('newname.beanpool.org') && published.includes('b2.test') && !published.includes('bname.beanpool.org'),
@@ -347,6 +359,7 @@ async function main(): Promise<void> {
             const r = await bound(N, ['newname.beanpool.org', 'bname.beanpool.org', 'other.test']);
             assert(r['newname.beanpool.org'] === 200, `during the hold a request signed for newname.beanpool.org is still accepted (${r['newname.beanpool.org']}; main: 421)`);
             assert(r['bname.beanpool.org'] === 200 && r['other.test'] === 421, `bname still accepted, other.test 421 (${r['bname.beanpool.org']}, ${r['other.test']})`);
+            await settled();
             const s = await N.send('inspect');
             assert(s.tokenFile === null && s.publicAddress === null, `the token is removed and the stored address cleared, as before (${s.tokenFile}, ${JSON.stringify(s.publicAddress)})`);
             const nn = entry(s.registrarNames, 'newname.beanpool.org');
@@ -395,6 +408,7 @@ async function main(): Promise<void> {
             const r = await bound(U, ['uname.beanpool.org', 'random.example']);
             assert(r['uname.beanpool.org'] === 200, `uname is still accepted (${r['uname.beanpool.org']})`);
             assert(r['random.example'] === 421, `random.example → 421: U never falls back to accepting any host (${r['random.example']}; main: 200 until the switch)`);
+            await settled();
             const list = await call(uSetup.https, 'GET', '/api/local/admin/app-addresses', uAdmin);
             assert(list.body?.named === true, `Settings says U knows its names (named: ${list.body?.named}; main: false)`);
             await U.kill('SIGKILL');

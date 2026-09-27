@@ -329,6 +329,38 @@ describe('a community that keeps failing isn\'t tried on every return', () => {
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
         expect(mem.async.has(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe(false);
     });
+
+    it('a cold start\'s registration that fails with no answer doesn\'t cut a longer wait already under way short (review 4117101980)', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const t0 = Date.now();
+        nodes.answer = () => 500;
+        await kimSignsIn();
+        expect(registrations()).toHaveLength(1);
+        const returnAt = async (ms: number) => {
+            vi.setSystemTime(t0 + ms);
+            await comeBack();
+            return registrations().length;
+        };
+
+        // Refused at t0, +1, +3 and +7 minutes: four refusals in a row, waiting eight minutes now, due at t0 + 15.
+        expect(await returnAt(MINUTE)).toBe(2);
+        expect(await returnAt(3 * MINUTE)).toBe(3);
+        expect(await returnAt(7 * MINUTE)).toBe(4);
+        expect(due()[0]).toMatchObject({ refusals: 4, retryAt: t0 + 15 * MINUTE });
+
+        // A cold start at +8 minutes (registerAccountForPush, not a retry): Mullum drops this one's connection, no
+        // answer at all, which normally waits only a minute. It must not cut the longer wait already under way short.
+        vi.setSystemTime(t0 + 8 * MINUTE);
+        nodes.answer = () => 'down';
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        expect(registrations()).toHaveLength(5);
+        expect(due()[0]).toMatchObject({ refusals: 4, retryAt: t0 + 15 * MINUTE });
+
+        // The longer wait still lands once it is over.
+        nodes.answer = () => 'up';
+        expect(await returnAt(15 * MINUTE)).toBe(6);
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+    });
 });
 
 describe('a community the phone no longer keeps is never tried again', () => {
@@ -388,6 +420,39 @@ describe('a community the phone no longer keeps is never tried again', () => {
         expect(at(HOSTILE)).toBe(1);
         expect(due()).toEqual([]);
     });
+
+    it('forgetting a community while a retry\'s token is held sends nothing there once the token comes: the kept re-check holds after it too, not only before it (review 4117101846)', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await addSavedNode(HOSTILE);
+        nodes.answer = (s) => (s.community === HOSTILE ? 'down' : 'up');
+        await kimSignsIn(HOSTILE);
+        expect(at(HOSTILE)).toBe(1);
+        expect(due()).toMatchObject([{ publicKey: kim.publicKey, community: HOSTILE }]);
+
+        // She switches to Mullum; the minute passes, so Hostile's retry is due when the app next comes back.
+        await addSavedNode(MULLUM);
+        mem.async.set(ANCHOR, MULLUM);
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS);
+
+        // Back to the app: the retry asks for the token, which is slow to come. Hostile is still kept when this run
+        // picks it up, so it is in this run's due list before she forgets it.
+        let giveToken: (() => void) | undefined;
+        const slowToken = () => new Promise<string>((resolve) => { giveToken = () => resolve(PHONE_TOKEN); });
+        const retrying = retryDueRegistrations(slowToken, 'android');
+        await vi.waitFor(() => expect(giveToken).toBeDefined());
+
+        // She forgets it while the token is still held (settings.tsx handleForgetNode, use-communities.ts remove).
+        await removeSavedNode(HOSTILE);
+        giveToken!();
+        await retrying;
+
+        // Not contacted again: the re-check after the token holds, same as the one before the token was asked for.
+        expect(at(HOSTILE)).toBe(1);
+        // This run skipped it rather than crossing it off; the next run finds it no longer kept and drops it.
+        await comeBack();
+        expect(at(HOSTILE)).toBe(1);
+        expect(due()).toEqual([]);
+    });
 });
 
 describe('#1258\'s rules hold for a retry', () => {
@@ -442,6 +507,35 @@ describe('#1258\'s rules hold for a retry', () => {
 
         expect(registrations(before)).toHaveLength(0);
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(false);
+    });
+
+    it('a key taken off the phone without a leave while a retry\'s token is held: nothing goes for it once the token comes (the onPhone() re-check after the token)', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        // Ben's join, whose registration failed with no connection: due at the next chance.
+        offline();
+        await importIdentity(ben);
+        mem.async.set(ANCHOR, BYRON);
+        await registerAccountForPush(ben.publicKey, phoneToken, 'android');
+        expect(due()).toEqual([{ publicKey: ben.publicKey, community: BYRON, refusals: 0, retryAt: 0 }]);
+        online();
+
+        // Back to the app: the retry picks up Ben's own entry (he's still on the phone) and asks for the token, which
+        // is slow to come.
+        let giveToken: (() => void) | undefined;
+        const slowToken = () => new Promise<string>((resolve) => { giveToken = () => resolve(PHONE_TOKEN); });
+        const retrying = retryDueRegistrations(slowToken, 'android');
+        await vi.waitFor(() => expect(giveToken).toBeDefined());
+
+        // The door refuses his join while the token is held: his key comes off the phone with no leave
+        // (identity.ts discardUnjoinedIdentity).
+        expect(await discardUnjoinedIdentity(ben.publicKey)).toBe(true);
+        const before = nodes.sent.length;
+        giveToken!();
+        await retrying;
+
+        expect(registrations(before)).toHaveLength(0);
+        expect(nodes.has(BYRON, ben.publicKey)).toBe(false);
+        expect(await loadIdentity()).toBeNull();
     });
 
     it('her sign-in\'s registration, still waiting for its token as her Sign Out starts, writes nothing due for her when the token can\'t be had', async () => {

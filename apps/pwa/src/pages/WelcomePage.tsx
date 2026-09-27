@@ -26,6 +26,7 @@ import {
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { WebRestore } from '../components/WebRestore';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
+import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -110,6 +111,22 @@ function normaliseInviteCode(raw: string): string {
 function inviteHash(code: string): string {
     return bytesToHex(sha256(utf8ToBytes(code)));
 }
+
+/**
+ * What the photo step says when an invite join landed on another name than the one sent: the node keeps 20 characters
+ * (routes/community.ts), and numbers a name another member holds (engine/members.ts uniquifyCallsign). Null when it
+ * kept the one sent.
+ */
+function keptAnotherName(asked: string, kept: string): string | null {
+    const sent = asked.trim();
+    if (!sent || kept === sent) return null;
+    return sent.length > MAX_JOIN_CALLSIGN
+        ? `You're ${kept} here: a name here keeps ${MAX_JOIN_CALLSIGN} characters. Tap ← Back to change it.`
+        : `You're ${kept} here: ${sent} was taken. Tap ← Back to change it.`;
+}
+
+/** A rename the node took, whose copy in this browser could not be written (handleRename). */
+const RENAME_NOT_KEPT = "Your new name is saved on the community, but this browser couldn't keep it. Try again.";
 
 // ===================== FAQ DATA =====================
 
@@ -463,7 +480,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 return;
             }
             if (cancelled()) return;
-            enterAsInvited(member);
+            enterAsInvited(member, kept.callsign);
             setSentInvite('none');
             return;
         }
@@ -493,14 +510,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         checkSentInviteAgain();
     }
 
-    /** An invite's key the node has as a member, now saved here: on to the photo, then its 12 words. */
-    function enterAsInvited(member: BeanPoolIdentity) {
+    /**
+     * An invite's key the node has as a member, now saved here: on to the photo, then its 12 words. `asked`: the name the
+     * join sent. When the node kept another (member.callsign is the node's), the photo step says so, as the door's does.
+     */
+    function enterAsInvited(member: BeanPoolIdentity, asked: string) {
         inviteKey.current = null;
         setPendingIdentity(member);
         // Redeemed already, so the final step has nothing left to redeem.
         setInviteRedeemed(true);
         setShowAvatarSetup(true);
         setRenaming(false);
+        setRenameUnsaved(null);
+        setJoinedAsNote(keptAnotherName(asked, member.callsign));
         setError(null);
     }
 
@@ -534,6 +556,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // there for one another member has.
     const [renaming, setRenaming] = useState(false);
     const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
+    // A new name the node took on that step whose copy here could not be written (RENAME_NOT_KEPT): the node's name
+    // until this browser keeps it too, or another name goes to the node.
+    const [renameUnsaved, setRenameUnsaved] = useState<string | null>(null);
 
     // QR Device Pairing states (#89)
     const [showQrPairing, setShowQrPairing] = useState(false);
@@ -748,16 +773,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             await markInviteSent(identity, inviteHash(trimmedCode), sentAt, sentJoinGuard());
 
             // Redeem invite immediately so user is registered on node right away. Signed with the key it names, which
-            // is not this browser's identity yet.
+            // is not this browser's identity yet. The node may keep another name than the one sent (cut to 20, or
+            // numbered past another member's): its answer is this key's card, and that name is the one kept here.
             let joined = identity;
             try {
                 const { redeemInvite, redeemOfflineTicket } = await import('../lib/api');
-                if (trimmedCode.length > 20 && trimmedCode.startsWith('BP-')) {
-                    const ticketB64 = trimmedCode.slice(3);
-                    await redeemOfflineTicket(ticketB64, identity.publicKey, identity.callsign, identity);
-                } else {
-                    await redeemInvite(trimmedCode, identity.publicKey, identity.callsign, identity);
-                }
+                const answer = trimmedCode.length > 20 && trimmedCode.startsWith('BP-')
+                    ? await redeemOfflineTicket(trimmedCode.slice(3), identity.publicKey, identity.callsign, identity)
+                    : await redeemInvite(trimmedCode, identity.publicKey, identity.callsign, identity);
+                joined = { ...identity, callsign: nodeNameFor(identity, answer?.member) ?? identity.callsign };
             } catch (redeemErr: any) {
                 // Only a node saying this key is a member already goes on (an older node says it this way; today's
                 // answers that with a success). "Already been used" does not: the node answers a key that is a member
@@ -795,7 +819,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             await completeInviteSent(joined, sentJoinGuard());
             setSentInvite('none');
             setPendingInviteCode(trimmedCode);
-            enterAsInvited(joined);
+            enterAsInvited(joined, trimmedCallsign);
             setLoading(false);
         } catch (err) {
             setLoading(false);
@@ -836,6 +860,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         if (!pendingIdentity) return;
         setCallsign(pendingIdentity.callsign);
         setNameSuggestions([]);
+        setRenameUnsaved(null);
         setError(null);
         setRenaming(true);
     }
@@ -847,9 +872,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      * (409), and never counts the member's own as taken (engine/members.ts updateProfile, isCallsignAvailable with this
      * key excluded). The suggestions for a taken name are asked with this key excluded the same way.
      *
-     * A name here is held to what a join keeps (MAX_JOIN_CALLSIGN), and so are its suggestions: the app registers the
-     * member as soon as it opens (App.tsx registerMember), /api/community/register cuts the name to 20, and the node
-     * renames the member to the cut name, one they never saw, or a numbered variant of it (deciding pass 4113903999).
+     * A name here is held to what a join keeps (MAX_JOIN_CALLSIGN), as Settings' is, and so are its suggestions: a
+     * register cuts a name to 20 (/api/community/register), and one sent with a longer name renamed the member to the cut
+     * name, one they never saw (deciding pass 4113903999).
+     *
+     * The name the node answers with is the one kept here (keepRename). A write of it here that fails is said, with a
+     * retry, and the step stays (#1231's confirmation, 4113964223): carrying on showed a success while this browser kept
+     * the old name. Then the node's name is `renameUnsaved`: Next with it writes it here again and sends nothing, and any
+     * other name, the old one too, goes to the node first, so the two agree whichever the member picks.
      */
     async function handleRename() {
         const member = pendingIdentity;
@@ -865,7 +895,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         }
         setError(null);
         setNameSuggestions([]);
-        if (name === member.callsign) {
+        if (renameUnsaved !== null && name === renameUnsaved) {
+            // The node has this name already: only this browser's copy is left to write.
+            setLoading(true);
+            try {
+                await keepRename(member, name);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+        if (name === member.callsign && renameUnsaved === null) {
             setRenaming(false);
             return;
         }
@@ -892,15 +932,36 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 setError(res.status < 500 && said ? said : "Can't reach the community right now. Try again in a minute.");
                 return;
             }
-            const renamed = typeof body?.profile?.callsign === 'string' && body.profile.callsign ? body.profile.callsign : name;
-            // This browser's copy of the account says the same. The node has the new name whatever happens here.
-            await updateCallsign(renamed, member.publicKey).catch((e) => console.warn('[Welcome] the new name not saved in this browser:', e));
-            setPendingIdentity({ ...member, callsign: renamed });
-            setCallsign(renamed);
-            setRenaming(false);
+            // The node's name for this key, as its answer gives it (the member's own profile), else the one sent.
+            await keepRename(member, nodeNameFor(member, body?.profile) ?? name);
         } finally {
             setLoading(false);
         }
+    }
+
+    /**
+     * The node has `renamed` for this member: this browser's copy of the account says the same, then on to the photo. A
+     * write here that fails leaves the step with RENAME_NOT_KEPT and its retry. Nothing is written when this browser has
+     * that name already. A null from the write (the account saved here is another key now, or none) carries on as before:
+     * that one is not this join's to change.
+     */
+    async function keepRename(member: BeanPoolIdentity, renamed: string) {
+        if (renamed !== member.callsign) {
+            try {
+                await updateCallsign(renamed, member.publicKey);
+            } catch (e) {
+                console.warn('[Welcome] the new name not saved in this browser:', e);
+                setRenameUnsaved(renamed);
+                setCallsign(renamed);
+                setError(RENAME_NOT_KEPT);
+                return;
+            }
+        }
+        setRenameUnsaved(null);
+        setJoinedAsNote(null);
+        setPendingIdentity({ ...member, callsign: renamed });
+        setCallsign(renamed);
+        setRenaming(false);
     }
 
     const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1155,9 +1216,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             let identity = await createIdentityFromMnemonic(words, '', sentJoinGuard());
             try {
                 const mem = await checkMembership(identity.publicKey);
-                if (mem?.callsign) {
-                    identity = (await updateCallsign(mem.callsign)) || identity;
-                }
+                identity = (await adoptNodeName(identity, mem?.callsign)) || identity;
             } catch { /* offline — name lands on next boot */ }
 
             // Recovery complete — explicitly ask for location once
@@ -1395,7 +1454,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
-                                {loading ? 'Saving…' : 'Next →'}
+                                {/* After RENAME_NOT_KEPT, with the node's name still in the field: write it here again. */}
+                                {loading ? 'Saving…' : renameUnsaved !== null && callsign.trim() === renameUnsaved ? 'Try again' : 'Next →'}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (

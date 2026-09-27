@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { updateMemberProfile, getMemberProfile, registerMember } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
+import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { OnboardingGuide } from './OnboardingGuide';
 
@@ -85,8 +86,11 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
         if (!trimmedCallsign || trimmedCallsign === identity.callsign) return;
         const updated = await updateCallsign(trimmedCallsign);
         if (!updated) return;
-        await registerMember(updated.publicKey, updated.callsign);
-        onIdentityUpdated?.(updated);
+        const answer = await registerMember(updated.publicKey, updated.callsign);
+        // The node may keep another name than the one sent (a name another member holds is numbered): the member goes by
+        // the node's, here as everywhere (lib/member-name.ts).
+        const named = await adoptNodeName(updated, nodeNameFor(updated, answer?.member));
+        onIdentityUpdated?.(named ?? updated);
     }
 
     async function handleFinish() {

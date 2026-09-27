@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 59,
-  "hash": "07557da48ec350f037d62ce3823054459376ae0ace0d27159054119f49e0c12c",
+  "version": 60,
+  "hash": "28e00bb3809dcf73cb57c0d332cefb36de97f1ad89feb3eafae30750b6018305",
   "sections": [
     {
       "id": "about",
@@ -462,6 +462,7 @@
           "items": [
             "If a removal passes, the member is suspended and their credit frozen at once.",
             "After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.",
+            "A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.",
             "When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.",
             "The community can vote to remove anyone except the only owner of your community's server."
           ]
@@ -4847,12 +4848,30 @@
             "If you hold beans, they go to the Commons.",
             "If you are below zero, the Commons covers the debt.",
             "Your profile becomes \"Deleted Member\", and your posts come down.",
-            "It deletes your account only in the community you are using. Your accounts in other communities stay."
+            "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
+            "It deletes your account only in the community you are using. Your accounts in other communities stay.",
+            "Your community can never bring the account back. To come back, join again with a new invite."
           ]
         },
         {
           "type": "p",
           "text": "If you run your community's server and you are its only owner, you cannot delete your account until there is another owner."
+        },
+        {
+          "type": "h3",
+          "text": "If your community removed you"
+        },
+        {
+          "type": "p",
+          "text": "When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.",
+            "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
+            "If a deal of yours is still under way, the other member or an admin must close it first."
+          ]
         }
       ]
     },

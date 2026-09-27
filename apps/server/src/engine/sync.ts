@@ -528,6 +528,14 @@ function mutedUntil(rm: any): string | null {
 }
 
 /**
+ * members.deleted_by_owner_at: when the key's owner deleted the account, which nothing brings back. The main server sets
+ * it once and never clears it, so an update keeps the one this copy has when a main server from before it sends none.
+ */
+function deletedByOwnerAt(rm: any): string | null {
+    return instantOrNull(rm.deletedByOwnerAt);
+}
+
+/**
  * members.is_visitor, as the main server has it: 1 or 0, so a visitor who joins there is a member here too. Null from a
  * main server that predates the column, which sends no `isVisitor`: an update then keeps this row's own, and a new row
  * is a member's (the column's default), as every row was there. Once that server upgrades it marks its visitors
@@ -699,8 +707,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
                 if (!existing) {
                     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
-                                area_lat, area_lng, area_updated_at, is_visitor)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                area_lat, area_lng, area_updated_at, is_visitor, deleted_by_owner_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -718,7 +726,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.updatedAt || rm.joinedAt,
                         mutedUntil(rm),
                         ...importedArea(rm),
-                        importedVisitor(rm) ?? 0
+                        importedVisitor(rm) ?? 0,
+                        deletedByOwnerAt(rm)
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
@@ -759,6 +768,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         area_lng = ?,
                         area_updated_at = ?,
                         is_visitor = COALESCE(?, is_visitor),
+                        deleted_by_owner_at = COALESCE(?, deleted_by_owner_at),
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -773,6 +783,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         mutedUntil(rm),
                         ...importedArea(rm),
                         importedVisitor(rm),
+                        deletedByOwnerAt(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );

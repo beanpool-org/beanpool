@@ -823,18 +823,25 @@ const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this commun
  * - the key can't come back by any door: the join doors and knocks refused it already, and invite redemption (which
  *   this middleware never sees) refuses it itself;
  * - its push tokens and place watches went with the prune or the delete.
- * **The one exception: `POST /api/member/purge` again** (CLOSED_ACCOUNT_PURGE_AGAIN, #1177's 3c, 4109841495). Both apps
- * wipe the phone only after a 2xx from it (native purgeAccountOnNode, the PWA's SettingsPage), so a retry after a lost
- * reply, or a member an admin already removed tapping Delete account, must hear what purgeMemberSelf says of a pruned
- * row, not a refusal that leaves the key and its local data on the phone. It changes nothing: the middleware answers it
- * itself, no handler runs and no activity is stamped. A replaced key is still refused first (REPLACED_KEY_REFUSAL).
+ * **The one exception: its own Delete account, `POST /api/member/purge`** (isOwnDeleteAccount). A member the community
+ * removed keeps their profile here, so a vote could bring them back; tapping Delete account erases it (Marty's card
+ * removed-member-delete, 2026-09-27: "Erase their profile"), and after that nothing brings the account back
+ * (purgeMemberSelf, state-engine.ts isDeletedByOwner). A retry after a lost reply, or an account its owner already
+ * deleted, is answered as before ("Account is already pruned") and changes nothing: both apps wipe the phone only after a
+ * 2xx (native purgeAccountOnNode, the PWA's SettingsPage), so a refusal would leave the key and its data on the phone
+ * (#1177's 3c, 4109841495). The route acts for the signer alone (ctx.state.actor, never the body), the spoof check below
+ * still holds the body to the signer, and no activity is stamped on the closed row. Nothing else it can do changes. A
+ * replaced key is still refused first (REPLACED_KEY_REFUSAL).
  * The routes this middleware never sees keep their own checks: the admin surface (a session follows node_roles on
  * every request, and a prune deletes the role), device pairing (a relay that knows no member), invite redemption. A
  * flow that ever must take a closed account's key is named here, with its reason.
  */
 const CLOSED_ACCOUNT_REFUSAL = 'This key’s account in this community was closed, so the community no longer accepts it.';
-/** purgeMemberSelf's own answer for a row already 'pruned' (state-engine.ts), given by the middleware to a closed key. */
-const CLOSED_ACCOUNT_PURGE_AGAIN = { ok: true, message: 'Account is already pruned' } as const;
+
+/** The one request a closed account's key may sign (CLOSED_ACCOUNT_REFUSAL): deleting its own account. */
+function isOwnDeleteAccount(method: string, path: string): boolean {
+    return method === 'POST' && path.replace(/\/+$/, '').toLowerCase() === '/api/member/purge';
+}
 
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
@@ -1277,6 +1284,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
+        // A closed account's key (isClosedAccountKey), which reaches a route only to delete its own account.
+        let closedAccount = false;
         try {
             const signedMessage = verdict.text;
 
@@ -1287,21 +1296,17 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.body = { error: REPLACED_KEY_REFUSAL, code: 'key_invalidated' };
                 return;
             }
-            // Nor does a key whose account here was closed, removed or deleted by its owner (CLOSED_ACCOUNT_REFUSAL).
-            if (isClosedAccountKey(signerKey)) {
-                // The one exception: asking again to delete it (CLOSED_ACCOUNT_PURGE_AGAIN). Answered here, so no handler
-                // runs and no activity is stamped on the closed row.
-                if (ctx.method === 'POST' && ctx.path.replace(/\/+$/, '').toLowerCase() === '/api/member/purge') {
-                    ctx.body = CLOSED_ACCOUNT_PURGE_AGAIN;
-                    return;
-                }
+            // Nor does a key whose account here was closed, removed or deleted by its owner (CLOSED_ACCOUNT_REFUSAL), but for
+            // the one exception: deleting its own account (isOwnDeleteAccount), which reaches the route, stamping no activity.
+            closedAccount = isClosedAccountKey(signerKey);
+            if (closedAccount && !isOwnDeleteAccount(ctx.method, ctx.path)) {
                 ctx.status = 403;
                 ctx.body = { error: CLOSED_ACCOUNT_REFUSAL, code: 'account_closed' };
                 return;
             }
             // Nor does a visitor's row write anything the rule doesn't give it (visitor-allowlist.ts VISITOR_WRITES): its own
-            // direct conversations, its phone's pushes, Beans it holds, taking its own listing down and the join doors. One
-            // place, as for a closed account:
+            // direct conversations, its phone's pushes, Beans it holds, taking its own listing down, deleting its own row and
+            // the join doors. One place, as for a closed account:
             // three review rounds each found one more function that let such a row act as a member (a pledge, a keeper's
             // row, a node role). Answered as a visitor's refused write was (a key with no row's words where a route has
             // them), before the actor is bound and before any activity is stamped. Reads keep the read gate below.
@@ -1383,8 +1388,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         }
 
         // Activity (the lead-succession "gone quiet" signal) is recorded from the VERIFIED signer only, never
-        // from a body field — an unsigned request naming the lead must not stamp them active (PR #838 B2).
-        if (ctx.state.actor && MUTATING_METHODS.has(ctx.method)) {
+        // from a body field — an unsigned request naming the lead must not stamp them active (PR #838 B2). Never on a
+        // closed account, whose one request (its own Delete account) is no sign of a member back.
+        if (ctx.state.actor && MUTATING_METHODS.has(ctx.method) && !closedAccount) {
             try { recordActivity(ctx.state.actor); } catch (e: any) { console.warn('[Activity] could not record:', e?.message || e); }
         }
 

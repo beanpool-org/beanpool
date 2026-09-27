@@ -7683,7 +7683,8 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
  * only against the same phone's leave statements, never against this node's clock. A registration stamped no later than
  * a leave statement for the same key and token applied here in the last day is refused ('left'): the phone sent it
  * before the account left and it arrived after the statement. A registration never replaces the row's stamp with an
- * earlier one, so one delivered late can't bring the row back within reach of a statement made after a later one.
+ * earlier one, or with none (an older app on the phone), so one delivered late can't bring the row back within reach of
+ * a statement made after a later one.
  */
 export function registerPushToken(
     publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null,
@@ -7700,7 +7701,8 @@ export function registerPushToken(
             }
             db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
                 ON CONFLICT (public_key, token) DO UPDATE SET
-                    platform = excluded.platform, created_at = excluded.created_at, registered_at = excluded.registered_at
+                    platform = excluded.platform, created_at = excluded.created_at,
+                    registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
                 WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
                     OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
             console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);

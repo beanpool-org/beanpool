@@ -11,7 +11,8 @@
  *   2. a statement for another community, a forged one, a tampered one, another key's, a malformed one: nothing goes;
  *   3. a registration of T by K the phone sent before the leave and delivered after it is refused (409), for a day;
  *   4. K registering T again after the leave (signing back in on the same phone) is never undone by that statement,
- *      presented late or replayed, and a late older registration never lowers the row's stamp back within its reach;
+ *      presented late or replayed, and a late older registration, or one with no stamp, never lowers the row's stamp
+ *      back within its reach;
  *   5. a registration from an app before stamps (no `registeredAt`) is removed by any statement; a bad stamp is refused;
  *   6. the online form, K's own signed DELETE carrying the leave's stamp, does exactly what the statement does.
  *
@@ -197,6 +198,9 @@ async function main(): Promise<void> {
     const lateOlder = await register(kim, PHONE, 2800);
     assert(lateOlder.status === 200 && stampOf(kim, PHONE) === 3000,
         `a registration stamped 2800 delivered after the one stamped 3000 leaves the row's stamp at 3000 (${show(lateOlder)}, ${stampOf(kim, PHONE)})`);
+    const unstamped = await register(kim, PHONE);
+    assert(unstamped.status === 200 && stampOf(kim, PHONE) === 3000,
+        `a registration with no stamp (an older app on the phone) leaves the row's stamp at 3000 too (${show(unstamped)}, ${stampOf(kim, PHONE)})`);
     const between = await present(statement(kim, PHONE, 2900));
     assert(confirmed(between) && has(kim, PHONE), `so a statement stamped 2900 still leaves her 3000 registration (${show(between)})`);
     const leavesAgain = await present(statement(kim, PHONE, 4000));

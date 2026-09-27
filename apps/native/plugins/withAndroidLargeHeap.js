@@ -1,15 +1,6 @@
-let withAndroidManifest;
-try {
-  withAndroidManifest = require('@expo/config-plugins').withAndroidManifest;
-} catch (err) {
-  try {
-    const resolved = require.resolve('@expo/config-plugins', { paths: [process.cwd(), __dirname, __dirname + '/../node_modules', __dirname + '/../../node_modules'] });
-    withAndroidManifest = require(resolved).withAndroidManifest;
-  } catch (err2) {
-    const { withAndroidManifest: wam } = require('expo/config-plugins');
-    withAndroidManifest = wam;
-  }
-}
+// The expo package's own sub-export, so the plugin always gets the config-plugins version the SDK ships
+// (expo-doctor flags a direct @expo/config-plugins dependency).
+const { withAndroidManifest } = require('expo/config-plugins');
 
 module.exports = function withAndroidLargeHeap(config) {
   return withAndroidManifest(config, async (config) => {

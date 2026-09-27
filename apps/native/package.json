@@ -15,7 +15,6 @@
   "dependencies": {
     "@beanpool/core": "workspace:*",
     "@beanpool/guide": "workspace:*",
-    "@expo/config-plugins": "~55.0.0",
     "@expo/metro-runtime": "~55.0.11",
     "@noble/ciphers": "^2.1.1",
     "@noble/curves": "^2.0.1",

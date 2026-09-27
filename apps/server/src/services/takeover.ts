@@ -180,7 +180,12 @@ interface Journal {
         connectors: number;
         publicAddress: string | null;
         tunnel: TunnelOutcome | null;
-        audit: { ok: boolean; drift: number; strandedEscrows: number } | null;
+        // `ok` only when the ledger adds up (`addsUp`) AND is the main server's as this server last copied it (`copy`), so
+        // the result can say which failed: an all-zero or empty copy adds up. Both are absent from a journal written before.
+        audit: {
+            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            copy?: NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy'] | null;
+        } | null;
         announcement: string | null;
         reseal: string | null;
     };
@@ -936,8 +941,8 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
     }
     const recorded = getLocalConfig().lastPromotionAudit;
     if (j && j.steps.restart && !j.steps.audit && recorded) {
-        j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows };
         const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0;
+        j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows, addsUp: adds, copy: recorded.copy ?? null };
         const troubles = [
             ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s))`]),
             ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),

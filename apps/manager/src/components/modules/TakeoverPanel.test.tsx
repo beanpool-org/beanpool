@@ -179,6 +179,44 @@ describe('TakeoverPanel', () => {
         expect(calls.length).toBe(n);
     });
 
+    it("says why the ledger audit failed: a copy that adds up but isn't the main server's, a difference, or no record", async () => {
+        const lastCopy = { accounts: 7, holdings: 76.71, generatedAt: '2026-09-20T00:59:00.000Z' };
+        const complete = (audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>) => {
+            const p = progress('complete', 13);
+            return { ...p, result: { ...p.result, audit } };
+        };
+        const cases: { audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>; says: RegExp[]; never: RegExp[] }[] = [
+            // Every balance 0: the difference is 0, so "does NOT add up (difference 0)" would contradict the steps list.
+            {
+                audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: true, copy: { match: false, here: { accounts: 7, holdings: 0 }, lastCopy } },
+                says: [/The ledger is not the main server's as this server last copied it: here 7 account\(s\) holding 0\.00 Beans, the main server's 7 account\(s\) holding 76\.71 Beans\. Check it before members trade\./],
+                never: [/does NOT add up/],
+            },
+            {
+                audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: true, copy: { match: false, here: { accounts: 0, holdings: 0 }, lastCopy: null } },
+                says: [/no record of the main server's ledger, so it can't say the ledger is the main server's\. Check it before members trade\./],
+                never: [/does NOT add up/],
+            },
+            {
+                audit: { ok: false, drift: -9.82, strandedEscrows: 0, addsUp: false, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
+                says: [/The ledger does NOT add up \(difference -9\.82\)\. Check it before members trade\./],
+                never: [/not the main server's/],
+            },
+            // A server from before the copy was checked: its "not ok" is the sum's, as it always said.
+            { audit: { ok: false, drift: 2.5, strandedEscrows: 0 }, says: [/The ledger does NOT add up \(difference 2\.5\)\. Check it before members trade\./], never: [/main server's/] },
+        ];
+        for (const c of cases) {
+            sessionStorage.setItem('bp-takeover-progress:standby-1', 'd'.repeat(64));
+            stubFetch({ '/api/local/admin/takeover/progress': () => ({ status: 200, body: complete(c.audit) }) });
+            const { unmount } = render(<TakeoverPanel activeNode={node} isStandby={false} pollMs={60_000} />);
+            expect(await screen.findByText(/This server is now the community's main server/)).toBeInTheDocument();
+            for (const r of c.says) expect(screen.getByText(r)).toBeInTheDocument();
+            for (const r of c.never) expect(screen.queryByText(r)).toBeNull();
+            expect(screen.queryByText('The ledger adds up.')).toBeNull();
+            unmount();
+        }
+    });
+
     it('shows a stopped take-over plainly, naming the step', async () => {
         sessionStorage.setItem('bp-takeover-progress:standby-1', 'c'.repeat(64));
         stubFetch({

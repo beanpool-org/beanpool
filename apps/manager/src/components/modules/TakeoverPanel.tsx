@@ -39,7 +39,11 @@ export interface TakeoverProgressData {
         connectors?: number;
         publicAddress?: string | null;
         tunnel?: { source: string; message: string } | null;
-        audit?: { ok: boolean; drift: number; strandedEscrows: number } | null;
+        /** `addsUp` and `copy` are absent on servers before the ledger copy was checked; `ok` is both. */
+        audit?: {
+            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            copy?: { match: boolean; here: LedgerHeld; lastCopy: (LedgerHeld & { generatedAt: string | null }) | null } | null;
+        } | null;
         announcement?: string | null;
         reseal?: string | null;
     } | null;
@@ -103,6 +107,28 @@ function when(iso: string | number | null | undefined): string {
     if (iso === null || iso === undefined || iso === '') return 'never';
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+}
+
+/** Accounts and the Beans they hold (the take-over audit's measure of a ledger). */
+interface LedgerHeld { accounts: number; holdings: number }
+
+/**
+ * What the take-over's ledger audit found, in the words its reason needs. A ledger can add up and still not be the main
+ * server's (every balance 0, or no accounts: the difference is 0), so each failure is said as itself, never "does NOT add
+ * up (difference 0)". A server from before the copy was checked sends neither reason: its "not ok" is the sum's.
+ */
+function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>): string {
+    if (audit.ok) return 'The ledger adds up.';
+    const held = (h: LedgerHeld) => `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`;
+    const reasons: string[] = [];
+    if (audit.addsUp !== true) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    if (audit.copy && !audit.copy.match) {
+        reasons.push(audit.copy.lastCopy
+            ? `The ledger is not the main server's as this server last copied it: here ${held(audit.copy.here)}, the main server's ${held(audit.copy.lastCopy)}.`
+            : "This server has no record of the main server's ledger, so it can't say the ledger is the main server's.");
+    }
+    if (reasons.length === 0) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    return `${reasons.join(' ')} Check it before members trade.`;
 }
 
 const BTN = 'min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50';
@@ -367,9 +393,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                         <div className="space-y-2 text-xs text-nature-200" style={WRAP}>
                             {progress.result.audit && (
                                 <p className={`m-0 ${progress.result.audit.ok ? '' : 'text-red-300 font-bold'}`}>
-                                    {progress.result.audit.ok
-                                        ? 'The ledger adds up.'
-                                        : `The ledger does NOT add up (difference ${progress.result.audit.drift}). Check it before members trade.`}
+                                    {auditMessage(progress.result.audit)}
                                 </p>
                             )}
                             {progress.result.tunnel && <p className="m-0">{progress.result.tunnel.message}</p>}

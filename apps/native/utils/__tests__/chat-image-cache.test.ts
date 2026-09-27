@@ -44,7 +44,7 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 

@@ -12,8 +12,8 @@ import { requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { registerForPushNotifications, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
-import { normaliseInviteCode, extractInviteToken, extractNodeOrigin } from '../utils/invite-parser';
-import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
+import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports } from '../utils/blocklist';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
@@ -244,24 +244,21 @@ function RootLayoutNav() {
         }
         const parsedCode = normaliseInviteCode(inviteToken);
 
-        // Parse node origin / server address from deep link
-        let extractedNodeOrigin: string | null = extractNodeOrigin(currentUrl);
-        if (!extractedNodeOrigin) {
-            const parsed = Linking.parse(currentUrl);
-            const rawServer = parsed.queryParams?.server;
-            const serverParam = typeof rawServer === 'string'
-                ? rawServer
-                : Array.isArray(rawServer)
-                    ? rawServer[0]
-                    : undefined;
-            if (serverParam) {
-                let decoded = decodeURIComponent(serverParam).trim();
-                if (decoded && !decoded.startsWith('http')) {
-                    const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(decoded) || decoded.startsWith('localhost');
-                    decoded = (isIpOrLocal ? 'http://' : 'https://') + decoded;
-                }
-                extractedNodeOrigin = decoded;
+        // Parse node origin / server address from deep link. An address that isn't plain host[:port] (a login, a
+        // backslash: utils/node-url.ts) is refused outright: on iOS it reaches another host than it names, and every
+        // signature the phone made there would be bound to the name, not to the host it went to.
+        let extractedNodeOrigin: string | null;
+        try {
+            extractedNodeOrigin = deepLinkNodeOrigin(currentUrl, () => {
+                const rawServer = Linking.parse(currentUrl).queryParams?.server;
+                return typeof rawServer === 'string' ? rawServer : Array.isArray(rawServer) ? rawServer[0] : undefined;
+            });
+        } catch (e) {
+            if (e instanceof UnsafeNodeAddressError) {
+                Alert.alert('Invite not opened', e.message);
+                return;
             }
+            throw e;
         }
 
         // NAT-21 / NAT-4: never act on a deep-link node origin that would be

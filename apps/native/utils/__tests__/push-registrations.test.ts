@@ -38,7 +38,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pushRegisteredCommunities, registerPushTokenWithCommunity } from '../push-registrations';
 import { signOutOfThisPhone } from '../account-leaves-phone';
 import { draftIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
-import { decodeBase64, encodeUtf8, hexToBytes, verifyData } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -85,12 +85,13 @@ function nodes(answer: (url: string) => Answer = () => 'ok'): Sent[] {
     return sent;
 }
 
-/** This request, as signed: its signature checked against the key, not just the name. */
+/**
+ * This request, as signed: its signature checked against the key, not just the name, for the community it was sent
+ * to, as that node checks it (request binding).
+ */
 async function signedBy(req: Sent, account: BeanPoolIdentity): Promise<boolean> {
-    const h = req.headers;
-    const canonical = `${req.method}\n/api/push-tokens\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`;
-    return h['X-Public-Key'] === account.publicKey
-        && await verifyData(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(account.publicKey));
+    return new URL(req.url).pathname === '/api/push-tokens'
+        && boundSignatureValid({ url: req.url, method: req.method ?? 'GET', headers: req.headers, body: req.body }, account.publicKey);
 }
 
 const record = () => JSON.parse(mem.async.get(PUSH_REGISTERED_AT_STORE_KEY) ?? 'null');

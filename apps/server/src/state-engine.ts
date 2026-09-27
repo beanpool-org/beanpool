@@ -1436,6 +1436,27 @@ export function isClosedAccountKey(pubkey: string | null | undefined): boolean {
     return !!db.prepare("SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
 }
 
+/**
+ * An account its owner deleted (purgeMemberSelf, which sets members.deleted_by_owner_at): a member's own Delete account, a
+ * removed member's, or a visitor's for its own row (Marty's card removed-member-delete, 2026-09-27). Its row stays
+ * 'pruned' for good: a reinstate proposal is refused and a reinstate vote already open closes without doing anything
+ * (decisions-engine.ts), and setUserStatusRow never makes it anything else. They rejoin with a new invite, under a new
+ * key. Ignores case, as isClosedAccountKey does. False for a key with no row.
+ */
+export function isDeletedByOwner(pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare('SELECT 1 FROM members WHERE public_key IN (?, ?) AND deleted_by_owner_at IS NOT NULL').get(pubkey, pubkey.toLowerCase());
+}
+
+/** The answer to bringing back an account its owner deleted (isDeletedByOwner), in the words the apps show. */
+export const OWNER_DELETED_REFUSAL = 'This account was deleted by its owner; they can rejoin with a new invite';
+
+/**
+ * purgeMemberSelf's answer to an account the community closed that still has a deal in escrow or a payment between
+ * communities in flight: its key can't close either (the signature middleware refuses it), so the words say who can.
+ */
+const CLOSED_ACCOUNT_DEAL_UNDER_WAY = 'This account can’t be erased while a deal or a payment between communities is still under way. Once the other member or an admin closes it, it can be.';
+
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {
     return updateProfileEngine(broadcast, publicKey, update);
 }
@@ -2735,10 +2756,7 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
     let promoted: string | null = null;
     db.transaction(() => {
-        const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
-            .get(treasuryPubkey, memberPubkey) as any)?.role === 'lead';
-        unbindKeeper(treasuryPubkey, memberPubkey);
-        if (wasLead) promoted = promoteOrPauseAfterLeadLeft(treasuryPubkey, 'admin').promoted;
+        promoted = keeperLeaves(treasuryPubkey, memberPubkey, 'admin').promoted;
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
@@ -2817,7 +2835,23 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
 }
 
 /**
- * The lead has gone (removed by a community Decision, stepped down, or unbound by an admin) — answer G,
+ * A keeper leaves one enterprise: they step down, an admin unbinds them, or they delete their account (purgeMemberSelf).
+ * unbindKeeper; if they were the lead, their place is handed on by answer G's rule (promoteOrPauseAfterLeadLeft); and a
+ * succession proposal naming them as the candidate is moot. `by` is who paused the enterprise if nobody is left. Runs
+ * inside the caller's transaction; the caller clears the floor cache and broadcasts.
+ */
+function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as any)?.role === 'lead';
+    unbindKeeper(enterprisePubkey, memberPubkey);
+    const result = wasLead ? promoteOrPauseAfterLeadLeft(enterprisePubkey, by) : { promoted: null, paused: false };
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone'
+                WHERE enterprise_pubkey = ? AND candidate_pubkey = ? AND status = 'active'`).run(enterprisePubkey, memberPubkey);
+    return result;
+}
+
+/**
+ * The lead has gone (removed by a community Decision, stepped down, unbound by an admin, or deleted their account) — answer G,
  * 2026-09-19. The longest-serving remaining ACTIVE keeper becomes lead at once, marked auto-promoted so the
  * other keepers may run succession immediately to choose someone else. No active keeper left: the enterprise
  * pauses (its next step is wind-up). Runs inside the caller's transaction; the caller broadcasts.
@@ -3712,11 +3746,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
 
     let result = { promoted: null as string | null, paused: false };
     db.transaction(() => {
-        unbindKeeper(enterprisePubkey, memberPubkey);
-        if (op.role === 'lead') result = promoteOrPauseAfterLeadLeft(enterprisePubkey, memberPubkey);
-        // A proposal naming them as the candidate is moot.
-        db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone'
-                    WHERE enterprise_pubkey = ? AND candidate_pubkey = ? AND status = 'active'`).run(enterprisePubkey, memberPubkey);
+        result = keeperLeaves(enterprisePubkey, memberPubkey, memberPubkey);
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
@@ -5796,7 +5826,9 @@ export function actionReport(
             scrubPulseItems({ id: report.target_pulse_item_id });
         }
 
-        if (suspendUser && report.target_pubkey) {
+        // A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended' would give its key back
+        // everything a suspended member may still sign, a way back with no vote. Its report is still actioned.
+        if (suspendUser && report.target_pubkey && !isClosedAccountKey(report.target_pubkey)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
             try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
@@ -6268,6 +6300,10 @@ export function isAdminPubkey(publicKey: string): boolean {
  * The row write and the announcement are therefore separate, and the prune announces after it commits.
  */
 export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+    // An account its owner deleted stays closed, whoever asks (isDeletedByOwner). Each path that could ask answers first in
+    // its own words (a reinstate vote, an admin halting a removal); this is the last line, and throws inside the caller's
+    // transaction so nothing it wrote alongside stays either.
+    if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
     if (status !== 'active') {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
@@ -6670,27 +6706,43 @@ export function adminPruneUser(publicKey: string, actor: string) {
 }
 
 /**
- * Self-service member purge (#99): allows a member to permanently purge their identity
- * and account from this node, provided they have zero active or pending escrow deals.
+ * Delete account (#99): the key's owner permanently erases their account on this node, provided no deal of theirs is in
+ * escrow and no payment between communities is in flight. The route takes the key from the signature, never the body.
+ *
+ * One rule for three kinds of row (Marty's card removed-member-delete, 2026-09-27: "Erase their profile"; the director's
+ * call for a visitor's row):
+ * - a member's own account, which closes ('pruned');
+ * - an account the community closed (adminPruneUser: an admin, or a `remove_member` vote). The removal kept the profile so
+ *   a vote could bring it back; its owner deleting it erases that profile the same way. Their sign-in account is not
+ *   freed (below), and the key stays refused (the signature middleware lets it sign this route alone);
+ * - a visitor's row (a key a member messaged or paid, or a member of another community): its generated name goes, and the
+ *   Beans it holds go to the Commons, as a member's do.
+ * Each is marked deleted by its owner (members.deleted_by_owner_at, isDeletedByOwner): nothing brings it back, no
+ * reinstate vote and no admin path. They rejoin with a new invite, under a new key. Asking again changes nothing and is
+ * answered as before.
  *
  * Atomically:
- * 1. Validates no active escrows as buyer or seller.
- * 2. Settles positive or negative balance with COMMONS_POOL.
- * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area).
+ * 1. Validates no active escrows as buyer or seller, and no settlement in flight.
+ * 2. Settles positive or negative balance with COMMONS_POOL (a removal already settled it: then nothing moves).
+ * 3. Anonymizes the profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area) and marks
+ *    it deleted by its owner.
  * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
- * 5. Purges push tokens, guardian shares, friend links, preferences, and recovery state.
+ * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
+ * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
+ *    longest-serving active keeper, or the enterprise pauses with nobody left. Closes the keeper changes naming them.
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
-    // A visitor's row has no account here to delete, as a key with no row has none (getActingMember): a member who
-    // wrote to it or paid it keeps that conversation and those Beans.
-    const member = getActingMember(publicKey);
+    // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
+    const member = getMember(publicKey);
     if (!member) {
         throw new Error('Member not found');
     }
-    if (member.status === 'pruned') {
+    if (isDeletedByOwner(publicKey)) {
         return { ok: true, message: 'Account is already pruned' };
     }
+    // Closed by the community (or, on a row from before deleted_by_owner_at, by its owner): the profile a removal keeps.
+    const closed = member.status === 'pruned';
 
     if (isNodeOwner(publicKey)) {
         const ownerCount = (db.prepare(
@@ -6703,31 +6755,38 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         }
     }
 
-    // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records
+    // The guards, before the transaction: a refusal thrown inside conservingTransaction is taken for a possible
+    // conservation breach and rebuilds the ledger. Nothing can slip in between (better-sqlite3 is synchronous).
+    // 1. Guard against active or pending escrows (as buyer or seller)
+    const activeEscrows = db.prepare(`
+        SELECT COUNT(*) as c FROM marketplace_transactions
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
+          AND status IN ('requested', 'pending')
+    `).get(publicKey, publicKey) as any;
+
+    if (activeEscrows && activeEscrows.c > 0) {
+        // A closed account can't complete or cancel the deal itself (the middleware refuses its key): say who can.
+        throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
+            : 'Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
+    }
+
+    // 2. Guard against in-flight cross-node settlements
+    const activeSettlements = db.prepare(`
+        SELECT COUNT(*) as c FROM settlements
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
+          AND state IN ('escrowed', 'reserved', 'committed', 'held')
+    `).get(publicKey, publicKey) as any;
+
+    if (activeSettlements && activeSettlements.c > 0) {
+        throw new Error(closed ? CLOSED_ACCOUNT_DEAL_UNDER_WAY
+            : 'Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
+    }
+
+    // The enterprises they leave (step 7), announced once the transaction has committed.
+    const leftEnterprises: { enterprise: string; promoted: string | null }[] = [];
+    // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
-        // 1. Guard against active or pending escrows (as buyer or seller)
-        const activeEscrows = db.prepare(`
-            SELECT COUNT(*) as c FROM marketplace_transactions 
-            WHERE (buyer_pubkey = ? OR seller_pubkey = ?) 
-              AND status IN ('requested', 'pending')
-        `).get(publicKey, publicKey) as any;
-
-        if (activeEscrows && activeEscrows.c > 0) {
-            throw new Error('Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
-        }
-
-        // 2. Guard against in-flight cross-node settlements
-        const activeSettlements = db.prepare(`
-            SELECT COUNT(*) as c FROM settlements
-            WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
-              AND state IN ('escrowed', 'reserved', 'committed', 'held')
-        `).get(publicKey, publicKey) as any;
-
-        if (activeSettlements && activeSettlements.c > 0) {
-            throw new Error('Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
-        }
-
-        // 3. Settle balance with Commons Pool
+        // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
         const who = publicKey.slice(0, 8);
@@ -6761,10 +6820,11 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 area_lat = NULL,
                 area_lng = NULL,
                 area_updated_at = NULL,
+                deleted_by_owner_at = ?,
                 profile_updated_at = ?,
                 updated_at = ?
             WHERE public_key = ?
-        `).run(now, now, publicKey);
+        `).run(now, now, now, publicKey);
 
         // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`
@@ -6807,9 +6867,10 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // A member who deletes their own account frees the sign-in account they joined with through the open door,
         // so it can join again; the join itself stays on record and still counts for its address. Not while
         // suspended or disabled (the signature middleware lets them sign this route), or deleting the account
-        // would be a way out of the sanction with the same sign-in; and never on adminPruneUser, so a member the
-        // community removed cannot walk straight back in (engine/open-join.ts).
-        if (member.status !== 'suspended' && member.status !== 'disabled') releaseOpenJoin(publicKey);
+        // would be a way out of the sanction with the same sign-in; never on adminPruneUser, so a member the
+        // community removed cannot walk straight back in (engine/open-join.ts); and so not when that member deletes
+        // the account afterwards either, nor for a visitor's row, which joined through no door.
+        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) releaseOpenJoin(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -6817,7 +6878,24 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             }
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        // Every keeper change still waiting that names them, as the keeper added or removed or as the lead who made it, in
+        // any enterprise: it closes now rather than landing on a deleted account or failing days later.
+        const pendingIn = db.prepare(`SELECT DISTINCT enterprise_pubkey FROM enterprise_keeper_changes
+                                      WHERE status = 'pending' AND (member_pubkey = ? OR proposed_by = ?)`).all(publicKey, publicKey) as { enterprise_pubkey: string }[];
+        for (const { enterprise_pubkey } of pendingIn) closePendingKeeperChangesFor(enterprise_pubkey, publicKey, 'They deleted their account');
+        // Each enterprise they keep, left the way a keeper leaves one (keeperLeaves: step down, an admin's unbind), never by
+        // a bare DELETE of their bindings (4113694084). That left a lead's enterprise with no lead and no way to choose one:
+        // succession needs a lead to replace, a remove_lead_keeper Decision a lead to remove, and an admin binds only
+        // keepers. Now the longest-serving active keeper takes the lead, or the enterprise pauses with nobody left; their
+        // pledge is settled as when they step down. No Beans move: an enterprise's stay the enterprise's. Not in a try, as
+        // deleteAllShares above.
+        const kept = db.prepare("SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?").all(publicKey) as { treasury_pubkey: string }[];
+        for (const { treasury_pubkey } of kept) {
+            const { promoted } = keeperLeaves(treasury_pubkey, publicKey, publicKey);
+            leftEnterprises.push({ enterprise: treasury_pubkey, promoted });
+        }
+        // An enterprise's own key deleting it: its keepers' bindings go with it.
+        try { db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
@@ -6833,6 +6911,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
+    // What adminRevokeTreasuryOperator announces for a keeper it unbinds: the keeper promoted to lead, and the enterprise.
+    for (const { enterprise, promoted } of leftEnterprises) {
+        clearEnterpriseFloorCache(enterprise);
+        if (promoted) broadcast({ type: 'profile_updated', publicKey: promoted });
+        broadcast({ type: 'profile_updated', publicKey: enterprise });
+    }
 
     return { ok: true, message: 'Account successfully purged from node.' };
 }

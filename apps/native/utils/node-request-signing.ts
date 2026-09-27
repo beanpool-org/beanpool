@@ -20,7 +20,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
-import { shouldBlockCleartextNodeUrl } from './node-url';
+import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
+import { loadSavedRequestSigning } from './nodes';
 
 let installed = false;
 
@@ -39,6 +40,10 @@ function hasHeader(headers: any, name: string): boolean {
 export function installNodeRequestSigning(): void {
     if (installed) return;
     installed = true;
+
+    // Which format each saved community's server reads, as recorded on an earlier run (request binding). Signed
+    // requests made before it has loaded wait for it.
+    void loadSavedRequestSigning();
 
     const originalFetch = global.fetch;
 
@@ -64,18 +69,20 @@ export function installNodeRequestSigning(): void {
                 if (anchorUrl && url.startsWith(anchorUrl) && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();
                     if (identity?.privateKey && identity?.publicKey) {
-                        // Server verifies the signature over ctx.path (no query string).
-                        const path = url.slice(anchorUrl.length).split('?')[0] || '/';
+                        // Signed over the URL fetched: its host (request binding) and its path, which is the
+                        // server's ctx.path (no query string).
                         const signed = await buildSignedHeaders(
-                            'GET', path, '', identity.privateKey, identity.publicKey,
+                            'GET', url, '', identity.privateKey, identity.publicKey,
                         );
                         init = { ...(init || {}), headers: { ...(init?.headers || {}), ...signed } };
                     }
                 }
             }
         } catch (e) {
-            // Re-throw the NAT-4 block; swallow signing errors (best-effort).
+            // Re-throw the NAT-4 block; swallow signing errors (best-effort). But not a refused address (request
+            // binding, node-url.ts): on iOS it reaches another host than it names, so it fails, never goes unsigned.
             if (e instanceof Error && e.message.includes('NAT-4')) throw e;
+            if (e instanceof UnsafeNodeAddressError) throw e;
         }
         return originalFetch(input, init);
     };

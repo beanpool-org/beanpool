@@ -4,7 +4,7 @@ import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, type LivePostCh
 import { requestSync, applyLivePostChange } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
-import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { isPlainNodeAddress, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 
 class WebSocketSyncClient {
     private ws: WebSocket | null = null;
@@ -100,6 +100,13 @@ class WebSocketSyncClient {
                 this.isConnecting = false;
                 return;
             }
+            // Request binding (utils/node-url.ts): an address that isn't plain host[:port] reaches another host than
+            // it names on iOS, so no socket is opened to it.
+            if (!isPlainNodeAddress(anchorUrl)) {
+                console.warn('[WS Sync] Refusing a socket to an address that is not plain host[:port]');
+                this.isConnecting = false;
+                return;
+            }
 
             let identity = null;
             try {
@@ -123,8 +130,16 @@ class WebSocketSyncClient {
             // ENFORCE_WS_AUTH=true). Sent by every build since v1.1.56.
             if (identity && identity.privateKey && identity.publicKey) {
                 try {
-                    params.push(await buildSignedWsParams('/ws', identity.privateKey, identity.publicKey));
+                    // Signed over the URL the socket opens: its host (request binding) and its path.
+                    params.push(await buildSignedWsParams(wsUrl, identity.privateKey, identity.publicKey));
                 } catch (err) {
+                    // An address that isn't plain (node-url.ts) reaches another host than it names on iOS: no socket
+                    // at all, signed or not.
+                    if (err instanceof UnsafeNodeAddressError) {
+                        console.warn('[WS Sync] Refusing a socket to an address that is not plain host[:port]');
+                        this.isConnecting = false;
+                        return;
+                    }
                     console.warn('[WS Sync] Failed to sign WS connect', err);
                 }
             }

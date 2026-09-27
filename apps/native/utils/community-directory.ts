@@ -186,10 +186,11 @@ async function getJson<T>(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
-        const headers: Record<string, string> = identity?.privateKey && identity.publicKey
-            ? await buildSignedHeaders('GET', path, '', identity.privateKey, identity.publicKey)
-            : { Accept: 'application/json' };
         const url = `${base.replace(/\/+$/, '')}${path}${query.length ? `?${query.join('&')}` : ''}`;
+        // Signed for the host of `url`: the global node's own name, so the signature is good there and nowhere else.
+        const headers: Record<string, string> = identity?.privateKey && identity.publicKey
+            ? await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey)
+            : { Accept: 'application/json' };
         const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
         if (res.status === 404) {
             return { ok: false, kind: 'unavailable', message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unavailable };

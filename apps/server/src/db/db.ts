@@ -609,6 +609,9 @@ export function initSchema() {
     // the exec recreates it) lists it. 0 on every existing row; the node marks its visitors once, after the exec
     // (markExistingVisitors), when every table that rule reads exists.
     try { db.prepare(`ALTER TABLE members ADD COLUMN is_visitor INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    // When the key's owner deleted the account (state-engine.ts isDeletedByOwner). Before the schema.sql exec, whose
+    // members_touch_updated_at (dropped below, so the exec recreates it) lists it. NULL on every existing row.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN deleted_by_owner_at TEXT`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape

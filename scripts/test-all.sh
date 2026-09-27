@@ -278,6 +278,7 @@ run_federation_suites() {
       test-pricing-aggregator-lifecycle
       test-activity-feed
       test-member-purge
+      test-removed-member-delete
       test-keeper-deposit
       test-keeper-routes
       test-keeper-release
@@ -364,6 +365,7 @@ run_federation_suites() {
       test-profile-takeover
       test-open-join-failover
       test-standby-visitor-marks
+      test-standby-owner-deleted
       test-place-watch-failover
       test-standby-rekey
       test-recovery-tombstones

@@ -37,12 +37,14 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 
 import { applyDelta, createPost, getPosts, getMyPosts, getMemberPosts, rsvpEvent, fetchEventDetail } from '../db';
+import { UNSIGNABLE_RSVP_MESSAGE } from '../events';
 import { buildSignedHeaders, signData, decodeUtf8, decodeBase64 } from '../crypto';
+import { signedPathOf } from '@beanpool/core';
 
 const fetchMock = vi.fn();
 function reply(status: number, body: any) {
@@ -109,39 +111,79 @@ describe('events in the local cache', () => {
 });
 
 describe('rsvpEvent', () => {
+    // A post id as the node issues them (engine/posts.ts createPost: crypto.randomUUID()).
+    const EVENT_ID = '6f1c2b9a-3d4e-4f0a-9b1c-2d3e4f5a6b7c';
+
     it('is a signed POST to the RSVP route with a signature over postId:status, and caches my status', async () => {
-        fetchMock.mockResolvedValueOnce(reply(200, { success: true, post: { ...serverEvent, goingCount: 8, myRsvp: 'going' } }));
-        const res = await rsvpEvent('ev1', 'going');
+        fetchMock.mockResolvedValueOnce(reply(200, { success: true, post: { ...serverEvent, id: EVENT_ID, goingCount: 8, myRsvp: 'going' } }));
+        const res = await rsvpEvent(EVENT_ID, 'going');
         expect(res.post.goingCount).toBe(8);
 
         const [url, init] = fetchMock.mock.calls[0];
-        expect(url).toBe('https://test.beanpool.org/api/marketplace/posts/ev1/rsvp');
+        expect(url).toBe(`https://test.beanpool.org/api/marketplace/posts/${EVENT_ID}/rsvp`);
         expect(init.method).toBe('POST');
         const body = JSON.parse(init.body);
         expect(body.status).toBe('going');
         expect(body).not.toHaveProperty('memberPublicKey');
         // signData is stubbed to echo its message, so the signature decodes to what was signed.
-        expect(decodeUtf8(decodeBase64(body.signature))).toBe('ev1:going');
+        expect(decodeUtf8(decodeBase64(body.signature))).toBe(`${EVENT_ID}:going`);
         expect(signData).toHaveBeenCalled();
-        expect(buildSignedHeaders).toHaveBeenCalledWith('POST', '/api/marketplace/posts/ev1/rsvp', init.body, 'aa', 'me-pub');
+        expect(buildSignedHeaders).toHaveBeenCalledWith('POST', `https://test.beanpool.org/api/marketplace/posts/${EVENT_ID}/rsvp`, init.body, 'aa', 'me-pub');
 
         const writes = mockRunAsync.mock.calls.map(([sql, p]) => [String(sql), p]);
         expect(writes.some(([sql]) => (sql as string).startsWith('UPDATE posts SET event_start_at'))).toBe(true);
-        expect(writes.find(([sql]) => (sql as string).includes('INSERT OR REPLACE INTO event_rsvps'))?.[1]).toEqual(['ev1', 'me-pub', 'going', expect.any(String)]);
+        expect(writes.find(([sql]) => (sql as string).includes('INSERT OR REPLACE INTO event_rsvps'))?.[1]).toEqual([EVENT_ID, 'me-pub', 'going', expect.any(String)]);
     });
 
     it('sends null for not going, signs "none" and clears my cached status', async () => {
-        fetchMock.mockResolvedValueOnce(reply(200, { success: true, post: { ...serverEvent, myRsvp: null } }));
-        await rsvpEvent('ev1', null);
+        fetchMock.mockResolvedValueOnce(reply(200, { success: true, post: { ...serverEvent, id: EVENT_ID, myRsvp: null } }));
+        await rsvpEvent(EVENT_ID, null);
         const body = JSON.parse(fetchMock.mock.calls[0][1].body);
         expect(body.status).toBeNull();
-        expect(decodeUtf8(decodeBase64(body.signature))).toBe('ev1:none');
+        expect(decodeUtf8(decodeBase64(body.signature))).toBe(`${EVENT_ID}:none`);
         expect(mockRunAsync.mock.calls.some(([sql]) => String(sql).startsWith('DELETE FROM event_rsvps'))).toBe(true);
     });
 
     it("surfaces the node's refusal", async () => {
         fetchMock.mockResolvedValueOnce(reply(400, { error: 'This event has ended' }));
-        await expect(rsvpEvent('ev1', 'going')).rejects.toThrow('This event has ended');
+        await expect(rsvpEvent(EVENT_ID, 'going')).rejects.toThrow('This event has ended');
+    });
+
+    it('signs an id the node issued in capitals too (iOS writes UUIDs that way)', async () => {
+        fetchMock.mockResolvedValueOnce(reply(200, { success: true, post: { ...serverEvent, id: EVENT_ID.toUpperCase(), myRsvp: 'interested' } }));
+        await rsvpEvent(EVENT_ID.toUpperCase(), 'interested');
+        expect(decodeUtf8(decodeBase64(JSON.parse(fetchMock.mock.calls[0][1].body).signature))).toBe(`${EVENT_ID.toUpperCase()}:interested`);
+    });
+
+    it('refuses, signing and sending nothing, an id that isn\'t the node\'s shape or a status outside the three (#1224 review 4113495332)', async () => {
+        // postId comes from the node and `postId:status` is signed as plain UTF-8: never a line break, never another
+        // statement's shape, never anything but a UUID.
+        vi.mocked(signData).mockClear();
+        const badIds = [
+            'ev1\nGET',
+            `POST\n/api/member/purge\n${Date.now()}\n${'ab'.repeat(16)}\n{"action":"purge_account"}`,
+            `${EVENT_ID}\n`,
+            `${EVENT_ID}\r`,
+            `${EVENT_ID}:going`,
+            `beanpool-admin-auth:${'9f'.repeat(32)}`,
+            `beanpool-settings-signin:v1:approve:${'01'.repeat(32)}`,
+            '{"i":"x","t":1}',
+            ` ${EVENT_ID}`,
+            `${EVENT_ID} `,
+            EVENT_ID.replace('6f', 'g6'),
+            EVENT_ID.slice(1),
+            'ev1',
+            '',
+        ];
+        for (const id of badIds) {
+            await expect(rsvpEvent(id, 'going'), JSON.stringify(id)).rejects.toThrow(UNSIGNABLE_RSVP_MESSAGE);
+        }
+        for (const status of ['maybe', 'going\n', 'none', '', 'GOING']) {
+            await expect(rsvpEvent(EVENT_ID, status as any), status).rejects.toThrow(UNSIGNABLE_RSVP_MESSAGE);
+        }
+        expect(signData).not.toHaveBeenCalled();
+        expect(buildSignedHeaders).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });
 
@@ -152,7 +194,9 @@ describe('fetchEventDetail', () => {
         expect(v.eventPrivateNote).toBe('Gate code 1234');
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://test.beanpool.org/api/marketplace/posts?id=ev1');
-        expect(init.headers).toMatchObject({ 'X-Signed': 'GET /api/marketplace/posts' });
+        // Given the URL fetched; the path signed is its path without the query (@beanpool/core signedPathOf).
+        expect(init.headers).toMatchObject({ 'X-Signed': 'GET https://test.beanpool.org/api/marketplace/posts?id=ev1' });
+        expect(signedPathOf(url)).toBe('/api/marketplace/posts');
         for (const [, params] of mockRunAsync.mock.calls) {
             expect(params ?? []).not.toContain('Gate code 1234');
         }
@@ -217,7 +261,7 @@ describe('createPost: who the event is hosted by decides the route', () => {
         });
         expect(body).not.toHaveProperty('authorPublicKey');
         // The signature covers the path it is actually sent to, or the node refuses it.
-        expect(headers).toMatchObject({ 'X-Signed': 'POST /api/treasury/ent-pub/event' });
+        expect(headers).toMatchObject({ 'X-Signed': 'POST https://test.beanpool.org/api/treasury/ent-pub/event' });
     });
 
     it("a member's own event still posts to the marketplace route, as themselves", async () => {
@@ -227,7 +271,7 @@ describe('createPost: who the event is hosted by decides the route', () => {
         const { url, body, headers } = sent();
         expect(url).toBe('https://test.beanpool.org/api/marketplace/posts');
         expect(body).toMatchObject({ authorPublicKey: 'me-pub', title: 'Working bee' });
-        expect(headers).toMatchObject({ 'X-Signed': 'POST /api/marketplace/posts' });
+        expect(headers).toMatchObject({ 'X-Signed': 'POST https://test.beanpool.org/api/marketplace/posts' });
     });
 
     it('a group event is still the member posting, so it keeps the marketplace route', async () => {

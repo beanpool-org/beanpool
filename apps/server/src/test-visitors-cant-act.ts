@@ -15,7 +15,8 @@
  *     reporting, posting and poll votes, trades, groups, RSVPs and event chat, crowdfund pledges; and the rest the
  *     sweep found: the People list area, friends, the profile, holiday mode, enterprises and keeping one, projects,
  *     crowdfunds and a crowdfund pledged to through an enterprise's pledge route, Decisions, Pulse channels, recovery,
- *     re-registering, deleting the row, event reminders). A member
+ *     re-registering, event reminders). Deleting its own row is no longer one (the director's call on Marty's card
+ *     removed-member-delete, 2026-09-27): test-removed-member-delete measures it. A member
  *     makes each one (so the body reaches the rule); the visitor and a key with no row are then refused it with the
  *     same status, code and words, and the visitor's attempt changes nothing, in any table (its activity stamp aside).
  * 1b. Keeping an enterprise (4111054995): an admin appoints no visitor's row to keep one, nor switches its operator access
@@ -419,14 +420,10 @@ async function main(): Promise<void> {
         { name: 'list recoveries against its account', method: 'POST', path: () => '/api/recovery/collect/mine', body: () => ({}) },
         { name: 're-register under a new name', method: 'POST', path: () => '/api/community/register', body: a => ({ publicKey: a.pk, callsign: `${a.name} Renamed` }),
             memberOk: r => ok(r) && !!r.body?.member, refused: r => r.status === 200 && r.body?.member === null },
-        // Last: a member deleting their own account.
-        { name: 'delete its own account', method: 'POST', path: () => '/api/member/purge', body: () => ({}) },
     ];
-    let miaAgain = mia;
     for (const c of cases) {
         // The member first, so the body is one that reaches the rule; then the key with no row, then the visitor.
-        const control = c.name === 'delete its own account' ? (miaAgain = makeMember('MiaTwoVA')) : mia;
-        const m = await call(c.method, control, c.path(control), c.body?.(control));
+        const m = await call(c.method, mia, c.path(mia), c.body?.(mia));
         const n = await call(c.method, nobody, c.path(nobody), c.body?.(nobody));
         const before = snapshot();
         const v = await call(c.method, vera, c.path(vera), c.body?.(vera));
@@ -437,7 +434,6 @@ async function main(): Promise<void> {
             `${c.name}: the visitor is refused as a key with no row is (visitor ${show(v)}; no row ${show(n)})`);
         assert(changed.length === 0, `${c.name}: and nothing changes${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
     }
-    void miaAgain;
     assert(isVisitorRow(vera.pk) && (db.prepare('SELECT status, callsign FROM members WHERE public_key = ?').get(vera.pk) as any)?.status === 'active',
         "Vera's row is still an active visitor's, under her own name");
 
@@ -650,9 +646,10 @@ async function main(): Promise<void> {
     const swept = writes.filter(r => !outside(r.split(' ')[1]));
     // What a visitor may do: a line in its DM, marking it read, muting it, editing and deleting its own lines there and reacting
     // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
-    // DM is answered as for a key with no row.
+    // DM is answered as for a key with no row. And deleting its own row (test-removed-member-delete), which the sweeps below
+    // must not do to Vera or Zed.
     const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
-        'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
+        'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react', 'POST /api/member/purge']);
     const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
         if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
             : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
@@ -1013,6 +1010,8 @@ async function main(): Promise<void> {
             'POST /api/ledger/transfer',
             // Taking down its own listing, from before this rule (4111438923).
             'POST /api/marketplace/posts/remove',
+            // Deleting its own row (the director's call on Marty's card removed-member-delete, 2026-09-27).
+            'POST /api/member/purge',
             // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
             'POST /api/join', 'POST /api/join/sso-nonce', 'POST /api/join/github/start', 'POST /api/join/github/poll', 'POST /api/join/knock',
             // What anyone may do, signed or not.

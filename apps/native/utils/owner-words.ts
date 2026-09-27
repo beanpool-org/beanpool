@@ -46,9 +46,10 @@ function base(nodeUrl: string): string {
  */
 export async function fetchOwnerWordsStatus(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>): Promise<OwnerWordsStatus | null> {
     try {
-        const headers = await buildSignedHeaders('GET', OWNER_WORDS_CHECK_PATH, '', identity.privateKey, identity.publicKey);
+        const url = `${base(nodeUrl)}${OWNER_WORDS_CHECK_PATH}`;
+        const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(`${base(nodeUrl)}${OWNER_WORDS_CHECK_PATH}`, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
         if (res.status === 403) return { owner: false, wordsCheckedAt: null };
         if (!res.ok) return null;
         const body = await res.json() as { owner?: unknown; wordsCheckedAt?: unknown };
@@ -88,8 +89,9 @@ export function forgetOwnerWordsStatus(): void {
 export async function sendOwnerWordsAttestation(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>): Promise<number | null> {
     try {
         const body = JSON.stringify({ attestation: OWNER_WORDS_ATTESTATION });
-        const headers = await buildSignedHeaders('POST', OWNER_WORDS_CHECK_PATH, body, identity.privateKey, identity.publicKey);
-        const res = await fetch(`${base(nodeUrl)}${OWNER_WORDS_CHECK_PATH}`, { method: 'POST', headers: { Accept: 'application/json', ...headers }, body });
+        const url = `${base(nodeUrl)}${OWNER_WORDS_CHECK_PATH}`;
+        const headers = await buildSignedHeaders('POST', url, body, identity.privateKey, identity.publicKey);
+        const res = await fetch(url, { method: 'POST', headers: { Accept: 'application/json', ...headers }, body });
         if (!res.ok) return null;
         const json = await res.json() as { wordsCheckedAt?: unknown };
         return typeof json.wordsCheckedAt === 'number' ? json.wordsCheckedAt : null;

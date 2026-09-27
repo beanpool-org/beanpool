@@ -1,17 +1,42 @@
+import { assertPlainNodeAddress } from './node-url';
+
+/**
+ * The community address in `raw` (an invite link, a deep link, a shared message: "Join my BeanPool community node:
+ * https://…"), as `scheme://host[:port]`, or null when it names none.
+ *
+ * Throws UnsafeNodeAddressError when the address it names isn't plain `host[:port]` (a login, `\`, a
+ * percent-encoded or control character: node-url.ts `isPlainNodeAddress`). On iOS such an address reaches a
+ * different host than the one the app would sign for. Returning null instead would quietly use whatever community
+ * the phone is already on. Punctuation that ends a sentence around a bare address ("…at https://a.org.") isn't part
+ * of it.
+ */
 export function extractNodeOrigin(raw: string): string | null {
-    const trimmed = raw.trim();
-    if (trimmed.includes('http')) {
-        const originMatch = trimmed.match(/^.*?https?:\/\/[^/?#\s]+/);
-        if (originMatch) {
-            let extracted = originMatch[0];
-            const whitespaceIndex = extracted.indexOf('http');
-            if (whitespaceIndex > 0) {
-                extracted = extracted.substring(whitespaceIndex);
-            }
-            return extracted;
-        }
+    const m = /https?:\/\/[^/?#\s]+/i.exec(raw.trim());
+    if (!m) return null;
+    const origin = m[0].replace(/[.,;:!)'">]+$/, '');
+    assertPlainNodeAddress(origin);
+    return origin;
+}
+
+/**
+ * The community address a deep link names (app/_layout.tsx "Switch Nodes?"): its first http(s) address, else its
+ * `server=` value, read only when needed. A bare host gets http:// for an IP or localhost and https:// otherwise.
+ * Null when it names none. Throws UnsafeNodeAddressError, like {@link extractNodeOrigin}, for an address that isn't
+ * plain `host[:port]`: the deep link must be refused, not followed to the community the phone is already on.
+ */
+export function deepLinkNodeOrigin(link: string, serverParam: () => string | undefined): string | null {
+    const origin = extractNodeOrigin(link);
+    if (origin) return origin;
+    const raw = serverParam();
+    if (!raw) return null;
+    let decoded = decodeURIComponent(raw).trim();
+    if (!decoded) return null;
+    if (!decoded.startsWith('http')) {
+        const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(decoded) || decoded.startsWith('localhost');
+        decoded = (isIpOrLocal ? 'http://' : 'https://') + decoded;
     }
-    return null;
+    assertPlainNodeAddress(decoded);
+    return decoded;
 }
 
 export function extractInviteToken(raw: string): string {

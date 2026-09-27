@@ -53,7 +53,8 @@ import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { ReplaceNotSaved } from '../restore-account';
 import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
-import { decodeBase64, encodeUtf8, hexToBytes, mnemonicToKeypair, verifyData } from '../crypto';
+import { mnemonicToKeypair } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
 
@@ -327,14 +328,14 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         // Mullum and Bellingen had the token. Never Byron, which never had it.
         expect(sent.map((s) => s.url).sort()).toEqual([`${BELLINGEN}/api/push-tokens`, `${MULLUM}/api/push-tokens`]);
         expect(sent.some((s) => s.url.startsWith('https://byron.beanpool.org'))).toBe(false);
-        for (const { init, keyOnPhone } of sent) {
+        for (const { url, init, keyOnPhone } of sent) {
             const h = init?.headers as Record<string, string>;
             const body = String(init?.body);
-            const canonical = `DELETE\n/api/push-tokens\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${body}`;
             expect(init?.method).toBe('DELETE');
             expect(JSON.parse(body)).toEqual({ publicKey: phone.publicKey, token: PHONE_TOKEN });
             expect(h['X-Public-Key']).toBe(phone.publicKey);
-            expect(await verifyData(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(phone.publicKey))).toBe(true);
+            // Signed for the community it went to, as that node checks it (request binding).
+            expect(boundSignatureValid({ url, method: 'DELETE', headers: h, body }, phone.publicKey)).toBe(true);
             expect(keyOnPhone).toBe(phone.publicKey);
         }
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub });

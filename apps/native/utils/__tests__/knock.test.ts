@@ -22,9 +22,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-import { getPublicKey, verify } from '@noble/ed25519';
+import { getPublicKey } from '@noble/ed25519';
 import { toEd25519Pkcs8 } from '@beanpool/core';
-import { bytesToHex, hexToBytes, decodeBase64, encodeUtf8 } from '../crypto';
+import { bytesToHex } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
     rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, KNOCK_MESSAGES, KNOCK_FROM_NODE,
@@ -66,13 +67,12 @@ beforeEach(() => {
     });
 });
 
-/** The node's own check (https-server.ts requireSignature): METHOD\nPATH\nTS\nNONCE\nBODY, by X-Public-Key. */
+/**
+ * The node's own check (https-server.ts requireSignature → engine/member-signature.ts): format 2, signed for the
+ * host the request was sent to (X-Signed-For), by X-Public-Key.
+ */
 async function signedBy(req: Sent, publicKey: string): Promise<boolean> {
-    const path = new URL(req.url).pathname;
-    const h = req.headers;
-    if (h['X-Public-Key'] !== publicKey) return false;
-    const canonical = `${req.method}\n${path}\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`;
-    return verify(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(publicKey));
+    return boundSignatureValid(req, publicKey);
 }
 
 describe('a knock goes to the community, signed with the member’s own key', () => {

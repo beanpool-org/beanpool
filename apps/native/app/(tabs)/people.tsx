@@ -5,7 +5,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
-import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } from '../../utils/crypto';
+import { buildSignedHeaders } from '../../utils/crypto';
+import { makeOfflineTicket } from '../../utils/member-statements';
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -363,9 +364,10 @@ export default function PeopleScreen() {
                     intendedFor: intendedFor || undefined
                 };
                 const apiPayloadStr = JSON.stringify(apiPayload);
-                const headers = await buildSignedHeaders('POST', '/api/invite/generate', apiPayloadStr, identity.privateKey, identity.publicKey);
+                const generateUrl = `${anchorUrl}/api/invite/generate`;
+                const headers = await buildSignedHeaders('POST', generateUrl, apiPayloadStr, identity.privateKey, identity.publicKey);
 
-                const res = await fetch(`${anchorUrl}/api/invite/generate`, {
+                const res = await fetch(generateUrl, {
                     method: 'POST',
                     headers,
                     body: apiPayloadStr
@@ -403,25 +405,10 @@ export default function PeopleScreen() {
                 [{ text: 'OK' }]
             );
 
-            const payloadObj = {
-                i: identity.publicKey,
-                t: Date.now(),
-                f: intendedFor || undefined
-            };
-            const payloadStr = JSON.stringify(payloadObj);
-            
-            const messageBytes = encodeUtf8(payloadStr);
-            const privateKeyBytes = hexToBytes(identity.privateKey);
-            const signatureBytes = await signData(messageBytes, privateKeyBytes);
-            
-            const signatureBase64 = encodeBase64(signatureBytes);
-            const payloadBase64 = encodeBase64(messageBytes);
-            
-            const ticketObj = { p: payloadBase64, s: signatureBase64 };
-            const ticketBytes = encodeUtf8(JSON.stringify(ticketObj));
-            const ticketB64 = encodeBase64(ticketBytes);
-            
-            const code = `BP-${ticketB64}`;
+            // Request binding: the ticket names this community's host and joins only here (member-statements.ts);
+            // the old unbound form only for a node older than that.
+            const ticketFor = intendedFor || undefined;
+            const code = await makeOfflineTicket(anchorUrl, identity.publicKey, identity.privateKey, { intendedFor: ticketFor });
             setNewCode(code);
             setIntendedFor('');
 
@@ -429,7 +416,7 @@ export default function PeopleScreen() {
                 code,
                 createdBy: identity.publicKey,
                 createdAt: new Date().toISOString(),
-                intendedFor: payloadObj.f
+                intendedFor: ticketFor
             };
             
             const updated = [inviteObj, ...invites];

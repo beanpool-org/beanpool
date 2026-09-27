@@ -968,6 +968,46 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 17. An account its owner deleted (members.deleted_by_owner_at) ─────────────────────────────────────────────────
+    // Every node from before it: members without the column, and a members_touch_updated_at that doesn't list it. The
+    // fixture is a booted node rolled back to that shape, holding a member. It must boot onto exactly a fresh install's
+    // members columns, with the column NULL on the member it had (nobody deleted by their owner), and a write of the
+    // column alone must move updated_at, so delta sync carries it to a standby.
+    console.log('\n--- 17. Legacy members without deleted_by_owner_at ---');
+    {
+        const touchSql = (d: Database.Database): string =>
+            (d.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='members_touch_updated_at'`).get() as any)?.sql ?? '';
+        const dir = tmp('legacy-deleted-by-owner');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshMembers = columns(d, 'members');
+        const current = touchSql(d);
+        const old = current.replace(/,\s*deleted_by_owner_at\b/, '');
+        assert(freshMembers.includes('deleted_by_owner_at') && /\bdeleted_by_owner_at\b/.test(current) && !/\bdeleted_by_owner_at\b/.test(old),
+            'a fresh install has members.deleted_by_owner_at and lists it in members_touch_updated_at; the fixture takes both out');
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN deleted_by_owner_at; ${old};`);
+        const pk = 'ab'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`).run(pk);
+        assert(!columns(d, 'members').includes('deleted_by_owner_at'), 'the fixture genuinely lacks the column');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before deleted_by_owner_at boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'ending up with exactly the members columns a fresh install has');
+        assert(/\bdeleted_by_owner_at\b/.test(touchSql(after)), 'its members_touch_updated_at lists deleted_by_owner_at');
+        const row = after.prepare('SELECT deleted_by_owner_at FROM members WHERE public_key = ?').get(pk) as any;
+        assert(row && row.deleted_by_owner_at === null, 'the member it already had was not deleted by its owner');
+        after.prepare(`UPDATE members SET deleted_by_owner_at = '2026-09-27T00:00:00.000Z' WHERE public_key = ?`).run(pk);
+        const touched = (after.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as any)?.updated_at;
+        assert(touched > '2025-01-01T00:00:00.000Z', `an UPDATE that sets only deleted_by_owner_at moves updated_at (${touched})`);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

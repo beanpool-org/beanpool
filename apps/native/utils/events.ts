@@ -387,6 +387,28 @@ export function rsvpSignedMessage(postId: string, status: EventRsvpStatus | null
     return `${postId}:${status ?? 'none'}`;
 }
 
+/**
+ * A post id in the shape the node issues them: a UUID (engine/posts.ts createPost, `crypto.randomUUID()`; this app
+ * and the web app send one of their own the same shape, or none).
+ */
+const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether the app may sign an RSVP for `postId` (utils/db.ts rsvpEvent). The signature is over plain UTF-8,
+ * `postId:status`, and the id comes from the node. So the id must be a UUID and the status going, interested or
+ * none (null). That leaves one line with one colon, so never a request in the old format. It can match a poll vote's
+ * `postId:optionId`, but both routes take the member from the request signature, never from this one. Anything else
+ * is refused before anything is signed.
+ */
+export function isSignableRsvp(postId: unknown, status: unknown): boolean {
+    return typeof postId === 'string' && POST_ID_RE.test(postId)
+        && (status === null || status === 'going' || status === 'interested');
+}
+
+/** Why an RSVP wasn't sent. Shown as is. */
+export const UNSIGNABLE_RSVP_MESSAGE =
+    "This event's id isn't one BeanPool recognises, so your answer wasn't signed or sent.";
+
 // ===================== EVENT CHAT (docs/events-on-the-map.md §2.2, §3, slice 4) =====================
 
 export const EVENT_CHAT_MESSAGE_MAX = 2000;

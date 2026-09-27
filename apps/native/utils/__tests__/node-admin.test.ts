@@ -6,27 +6,34 @@ vi.mock('expo-local-authentication', () => ({
     authenticateAsync: vi.fn(),
 }));
 
-vi.mock('../crypto', () => ({
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };
+});
+
+// The request builder is stubbed (the role and queue reads assert what it was given); the member key's signer is
+// the app's own, so the Manage button's signature is real and checked below as the node checks it.
+vi.mock('../crypto', async (orig) => ({
+    ...(await orig<typeof import('../crypto')>()),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({
         'Content-Type': 'application/json',
         'X-Public-Key': 'pk',
-        'X-Signature': `sig:${method}:${path}`,
+        'X-Signature': `sig:${method}:${url}`,
         'X-Timestamp': '1',
         'X-Nonce': 'n',
     })),
-    signData: vi.fn(async () => new Uint8Array([1, 2, 3])),
-    encodeUtf8: (s: string) => new TextEncoder().encode(s),
-    hexToBytes: () => new Uint8Array(32),
-    encodeBase64: () => 'AQID',
 }));
 
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { adminSigninText, signedRequestBytes } from '@beanpool/core';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
     canManageNode, manageLabel, manageSubtitle, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
     buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
-const identity = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'me', createdAt: '' };
+const SEED = new Uint8Array(32).fill(7);
+const identity = { publicKey: Buffer.from(ed25519.getPublicKey(SEED)).toString('hex'), privateKey: Buffer.from(SEED).toString('hex'), callsign: 'me', createdAt: '' };
 const NODE = 'https://mullum.beanpool.org/';
 
 type Reply = { status: number; body: unknown };
@@ -45,7 +52,9 @@ function mockFetch(routes: Record<string, Reply | Reply[]>) {
     return calls;
 }
 
-const challengeOk: Reply = { status: 200, body: { challengeId: 'c1', challenge: 'beanpool-admin-auth:c1:1' } };
+// What a node's POST /api/local/admin/auth/challenge answers (apps/server admin-key-auth.ts createAdminChallenge).
+const CHALLENGE_ID = 'c1'.repeat(32);
+const challengeOk: Reply = { status: 200, body: { challengeId: CHALLENGE_ID, challenge: `beanpool-admin-auth:${CHALLENGE_ID}:${Date.now()}` } };
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -79,7 +88,7 @@ describe('role gating — owners and admins see Manage, moderators see Moderate'
         const calls = mockFetch({ '/api/node-admin/me': { status: 200, body: { role: 'owner', communityName: 'Mullum' } } });
         expect(await fetchMyNodeRole(NODE, identity)).toEqual({ role: 'owner', communityName: 'Mullum' });
         expect(calls[0].url).toBe('https://mullum.beanpool.org/api/node-admin/me');
-        expect((calls[0].init?.headers as any)['X-Signature']).toBe('sig:GET:/api/node-admin/me');
+        expect((calls[0].init?.headers as any)['X-Signature']).toBe('sig:GET:https://mullum.beanpool.org/api/node-admin/me');
     });
 
     it('a plain member or an unknown role gets no button', async () => {
@@ -210,7 +219,10 @@ describe("the phone's own unlock comes first", () => {
         expect(out.kind).toBe('opened');
         expect(LocalAuthentication.authenticateAsync).toHaveBeenCalledBefore(globalThis.fetch as any);
         const verifyBody = JSON.parse(calls[1].init!.body as string);
-        expect(verifyBody).toEqual({ challengeId: 'c1', memberPubkey: identity.publicKey, signature: 'AQID' });
+        expect(verifyBody).toEqual({ challengeId: CHALLENGE_ID, memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org' });
+        // The sign-in text the phone built from the id alone, for this node's host (request binding), never the node's text.
+        const signed = signedRequestBytes(adminSigninText('mullum.beanpool.org', CHALLENGE_ID));
+        expect(ed25519.verify(Buffer.from(verifyBody.signature, 'base64'), signed, Buffer.from(identity.publicKey, 'hex'))).toBe(true);
         expect(openUrl).toHaveBeenCalledWith('https://mullum.beanpool.org/settings#handoff=tok123&section=moderation&from=app');
     });
 });

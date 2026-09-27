@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from '../app/IdentityContext';
 import { getSavedNodes, removeSavedNode, addSavedNode, isGuestNode } from './nodes';
+import { assertPlainNodeAddress } from './node-url';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { communityName, realName } from './community-name';
 
@@ -86,6 +87,8 @@ export function useCommunities() {
         if (url === active || switching) return;
         setSwitching(true);
         try {
+            // Only a plain host[:port] becomes the phone's community (node-url.ts); refused before anything moves.
+            assertPlainNodeAddress(url);
             const { closeDB, initDB } = await import('./db');
             await closeDB();
             await AsyncStorage.setItem('beanpool_anchor_url', url);

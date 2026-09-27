@@ -19,7 +19,7 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: 
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
 import {
@@ -61,7 +61,7 @@ describe('fetchGroupSuccession', () => {
         expect(init.method).toBe('GET');
         // Whose view of the vote this is comes from the signature, never from a parameter.
         expect(url).not.toContain('publicKey');
-        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', '/api/groups/g1/succession', '', 'me-priv', 'me-pub');
+        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', 'https://test.beanpool.org/api/groups/g1/succession', '', 'me-priv', 'me-pub');
     });
 
     it('throws a route-missing error on 404, so an older node hides the section instead of erroring', async () => {

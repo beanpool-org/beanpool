@@ -52,6 +52,11 @@ export interface Member {
      * and a take-over keep it); never in the member directory.
      */
     isVisitor?: boolean;
+    /**
+     * When the key's owner deleted this account (members.deleted_by_owner_at): nothing brings it back. Carried by the
+     * replication export only (a standby and a take-over keep it); never in the member directory.
+     */
+    deletedByOwnerAt?: string | null;
 }
 
 export interface InviteCode {

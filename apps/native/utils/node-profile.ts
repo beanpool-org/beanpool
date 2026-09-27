@@ -32,11 +32,13 @@ export interface NodeFeatures {
     autoHideReports?: boolean;
     autoMute?: boolean;
     guestListingsOnly?: boolean;
+    /** A nearly empty Market shows a few example cards (utils/example-listings.ts). */
+    exampleListings?: boolean;
 }
 
 const FEATURE_KEYS: ReadonlyArray<keyof NodeFeatures> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
-    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly',
+    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings',
 ];
 
 export interface NodeProfile {

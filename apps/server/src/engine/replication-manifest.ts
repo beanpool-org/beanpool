@@ -43,6 +43,13 @@ const cols = (names: string): string[] => names.trim().split(/\s+/);
 const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
 
 /**
+ * A members text column the export (rowToMember) and the import both write as `value || null`, so a '' the main server
+ * holds is null on the standby. contact_value and contact_visibility share the `|| null` but stay copied: no writer
+ * stores '' in them (engine/members.ts updateProfile and db.ts's legacy import write null for an empty one).
+ */
+const EMPTY_COPIED_AS_NULL = "'' on the main server is null on the standby: the export (rowToMember) and the import write `|| null`";
+
+/**
  * members columns not copied today (engine/sync.ts writes a fixed list, design §2 G2a). The export sends
  * `isTreasury`, `earnedCredit` and `profileUpdatedAt`; the import drops them.
  */
@@ -58,8 +65,11 @@ export const TABLES: Record<string, TableEntry> = {
     // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols('public_key callsign avatar_url bio contact_value contact_visibility status archetype updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
+        columns: cols('public_key callsign contact_value contact_visibility status updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
         except: {
+            avatar_url: { reason: `${EMPTY_COPIED_AS_NULL} (an enterprise made with no photo holds '')`, gap: 'G2a' },
+            bio: { reason: `${EMPTY_COPIED_AS_NULL} (a member who clears their bio saves '')`, gap: 'G2a' },
+            archetype: { reason: `${EMPTY_COPIED_AS_NULL} (a profile saved with an empty archetype holds '')`, gap: 'G2a' },
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
             ...Object.fromEntries(MEMBERS_STANDING_NOT_COPIED.map((c) => [c, { reason: 'not in the import (a member\'s and an enterprise\'s standing)', gap: 'G2a' as const }])),
             joined_at: { reason: 'written on the first copy only: a later change on the main server never reaches the standby', gap: 'G2a' },
@@ -103,8 +113,11 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     ratings: {
-        kind: 'replicated', payload: 'ratings', watermark: 'created_at',
-        columns: cols('id target_pubkey rater_pubkey role stars comment transaction_id created_at'),
+        kind: 'replicated-except', payload: 'ratings', watermark: 'created_at',
+        columns: cols('id target_pubkey rater_pubkey role stars transaction_id created_at'),
+        except: {
+            comment: { reason: "a rating with no comment is '' on the main server (the route stores `comment || ''`, the export sends `|| ''`) and null on the standby (the import writes `rt.comment || null`) (not in the design; found by this net)", gap: 'G1b' },
+        },
     },
     accounts: {
         kind: 'replicated', payload: 'accounts', watermark: WHOLE_SET,

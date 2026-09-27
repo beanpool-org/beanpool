@@ -15,8 +15,8 @@
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
- *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request) and a
- *     last delta.
+ *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request, a
+ *     rating with no comment, an empty bio and archetype) and a last delta.
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
@@ -95,6 +95,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:projects.migrated_at', gap: 'G1b', why: "each copy wipes it, so the standby's boot migrates the project again" },
     { key: 'db:projects.updated_at', gap: 'G1b', why: "restamped with the standby's clock" },
     { key: 'db:groups.lead_pubkey', gap: 'G1b', why: "a group whose last convenor left keeps its old lead on the standby (the import keeps a lead over the main server's null)" },
+    { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
     // G2a: the members row's other columns.
     { key: 'db:members.is_treasury', gap: 'G2a', why: 'every enterprise is a plain member' },
@@ -119,6 +120,8 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:members.profile_updated_at', gap: 'G2a', why: 'not copied' },
     { key: 'db:members.elder_vouched_by', gap: 'G2a', why: 'a withdrawn vouch stays on the standby (the import keeps the first voucher it copied), and with it the vouch floor' },
     { key: 'db:members.avatar_url', gap: 'G2a', why: "an enterprise's empty avatar is copied as null (the row is not copied verbatim)" },
+    { key: 'db:members.bio', gap: 'G2a', why: 'a cleared bio is copied as null' },
+    { key: 'db:members.archetype', gap: 'G2a', why: 'an empty archetype is copied as null' },
     { key: 'db:members.updated_at', gap: 'G2a', why: "members rows restamped with the standby's clock (its own writes for the standing it lacks)" },
     { key: 'db:members.callsign', gap: 'G2a', why: "the copied BeanPool is no enterprise there, so the standby's boot renames it and makes its own" },
     { key: 'db:members rows extra', gap: 'G2a', why: "the standby's own BeanPool enterprise" },
@@ -508,7 +511,7 @@ async function main(): Promise<void> {
         built('Cy registers his phone', await S_(cy, '/api/push-tokens', { publicKey: cy.pk, token: 'ExponentPushToken[parity-cy]', platform: 'ios' }));
         built('the admin freezes Fay\'s credit', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         const tuneUp = await offer(kip, 'Tune-up', 10, { repeatable: true });
-        await deal(cy, kip, tuneUp.id, true);
+        const tuneUpDeal = await deal(cy, kip, tuneUp.id, true);
         built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
         // Probe Co hiring its own keeper while it holds nothing: refused, and the wage is owed (engine/escrow.ts isPayeeKeeper).
         built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
@@ -573,6 +576,8 @@ async function main(): Promise<void> {
         }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;
+        built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
+        built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
         await pull('the last delta');
 
         // ── 6. M dies; its twin T starts from its data directory ──

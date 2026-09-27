@@ -21,9 +21,13 @@
  *     asks for one force-resync, and no second one within the hour after.
  *  7. The conservation guard still refuses a payload signed by M that makes Beans, drops an account holding them, or
  *     names one account twice to hide a shift.
- *  8. A standby left as today's importer left it (every balance 0, stamped with its own clock, an account for SYSTEM, no
+ *  8. A copy that throws after its accounts section is written (a forged later row here; a disk error there would do the
+ *     same) leaves the standby's rows AND the ledger it holds in memory at its last good copy, so its own Commons flush
+ *     writes nothing that isn't that copy's, and the next real pull lands (before, memory kept the refused copy's pot, the
+ *     flush wrote it into the accounts, and every later copy was refused by the conservation guard, for good).
+ *  9. A standby left as today's importer left it (every balance 0, stamped with its own clock, an account for SYSTEM, no
  *     record of the importer's format) heals in one pull.
- *  9. The take-over's promotion audit, on a copy of S: its ledger is M's as last copied; and on the same copy with every
+ * 10. The take-over's promotion audit, on a copy of S: its ledger is M's as last copied; and on the same copy with every
  *     balance 0, or with no accounts at all, it says the ledger is not M's (before, both said "ok").
  *
  * Run:
@@ -121,7 +125,7 @@ async function child(): Promise<void> {
          * A payload M signs that does not conserve: one account given Beans from nowhere, or one holding Beans left out of
          * the account set. Signed with M's own key, so only the conservation guard stands between it and a standby.
          */
-        forge: async (a: { kind: 'mint' | 'drop' | 'twice'; publicKey: string }) => {
+        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later'; publicKey: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
@@ -130,7 +134,14 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             if (a.kind === 'mint') payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             else if (a.kind === 'drop') payload.accounts = payload.accounts.filter((x: any) => x.publicKey !== a.publicKey);
-            else {
+            else if (a.kind === 'throws-later') {
+                // The real ledger, and one trade for no listing: the import throws in the marketplace section, after the
+                // accounts section has written the ledger and before the copy commits (as a disk error there would).
+                payload.marketplaceTransactions = [...(payload.marketplaceTransactions ?? []), {
+                    id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: a.publicKey, sellerPubkey: a.publicKey,
+                    credits: 1, status: 'pending', createdAt: new Date().toISOString(),
+                }];
+            } else {
                 // The account named twice: 50 more, then 50 less than it holds. Each one against what the row held before
                 // the copy, the two cancel out, and 50 Beans would go.
                 const x = payload.accounts.find((y: any) => y.publicKey === a.publicKey);
@@ -144,6 +155,22 @@ async function child(): Promise<void> {
         import: async (a: { payload: any }) => {
             const { importRemoteState } = await import('./state-engine.js');
             try { await importRemoteState(a.payload); return { ok: true }; } catch (e: any) { return { ok: false, error: e?.message || String(e) }; }
+        },
+        /** A grant from the Commons, paid as production pays one (payFromCommons). */
+        grant: async (a: { publicKey: string; amount: number }) => {
+            const { payFromCommons } = await import('./state-engine.js');
+            return !!payFromCommons(a.publicKey, a.amount, 'a commons grant', { allowDeficit: true });
+        },
+        /** This server's own flush of demurrage and the Commons pot, as its 5-minute timer and ledger audit run it. */
+        persist: async () => {
+            const { persistDecayAndCommons } = await import('./state-engine.js');
+            persistDecayAndCommons();
+            return true;
+        },
+        /** The Commons pot this server holds in memory, which its flush writes to the COMMONS_POOL row. */
+        'memory-commons': async () => {
+            const { getCommonsBalanceExact } = await import('./state-engine.js');
+            return getCommonsBalanceExact();
         },
         /** A raw write on this server's own ledger, as a bug would make it. */
         'plant-balance': async (a: { publicKey: string; add: number }) => {
@@ -436,8 +463,32 @@ async function main(): Promise<void> {
         const after7: Ledger = await standby.send('ledger');
         assert(ledgerDiff(before7, after7).length === 0, `none of them changed the standby's ledger (differences ${first(ledgerDiff(before7, after7))})`);
 
-        // ── 8. A standby as today's importer left it ──
-        console.log('\n— 8. a standby left all-zero by the old importer heals in one pull —');
+        // ── 8. A copy that throws after its accounts are written ──
+        console.log('\n— 8. a copy that throws after the accounts section, the standby\'s own flush, then a real pull —');
+        built('the Commons grants Gwen 5 Beans', { status: (await main.send('grant', { publicKey: gwen.pk, amount: 5 })) ? 200 : 500, body: {} });
+        const before8: Ledger = await standby.send('ledger');
+        const commonsRow = (l: Ledger) => l.accounts.find((a) => a.public_key === 'COMMONS_POOL')?.balance ?? null;
+        const thrown = await standby.send('import', { payload: await main.send('forge', { kind: 'throws-later', publicKey: ann.pk }) });
+        require_(thrown.ok === false && !/Conservation violation/.test(thrown.error),
+            `M's real ledger with one trade for no listing throws after the accounts section, past the guard (${thrown.error ?? 'imported'})`);
+        const after8: Ledger = await standby.send('ledger');
+        const memPot = await standby.send('memory-commons');
+        assert(ledgerDiff(before8, after8).length === 0, `the copy rolled back: S's rows are its last good copy (differences ${first(ledgerDiff(before8, after8))})`);
+        assert(Math.abs(memPot - (commonsRow(after8) ?? NaN)) < 1e-9,
+            `and so is the Commons pot S holds in memory, not the refused copy's (memory ${memPot}, row ${commonsRow(after8)}, the copy's ${commonsRow(await main.send('ledger'))})`);
+        await standby.send('persist');
+        const flushed: Ledger = await standby.send('ledger');
+        assert(Math.abs(flushed.sum - before8.sum) < 1e-9, `S's own flush leaves its ledger summing to its last good copy's (${before8.sum} → ${flushed.sum})`);
+        const landed = await standby.send('pull', {});
+        const m8: Ledger = await main.send('ledger');
+        s = await standby.send('ledger');
+        assert(landed.ok === true && ledgerDiff(m8, s).length === 0,
+            `the next real pull lands and S's ledger is M's, the grant included (${JSON.stringify({ ok: landed.ok, mode: landed.mode, error: landed.error })}; differences ${first(ledgerDiff(m8, s))})`);
+        const potNow = await standby.send('memory-commons');
+        assert(Math.abs(potNow - (commonsRow(s) ?? NaN)) < 1e-9, `and the pot S holds in memory is the copy's (memory ${potNow}, row ${commonsRow(s)})`);
+
+        // ── 9. A standby as today's importer left it ──
+        console.log('\n— 9. a standby left all-zero by the old importer heals in one pull —');
         await standby.send('checkpoint');
         refused.push(...(await standby.send('fetches')).blocked);
         await standby.kill('SIGTERM');
@@ -454,16 +505,16 @@ async function main(): Promise<void> {
         const old = await spawnNode(SCRIPT, dir('old'), env(PW_STANDBY, 'backup'));
         nodes.push(old);
         const heal = await old.send('pull', {});
-        const m8: Ledger = await main.send('ledger');
-        const o8: Ledger = await old.send('ledger');
-        assert(heal.ok === true && ledgerDiff(m8, o8).length === 0,
-            `its next pull heals it: every account is M's (${JSON.stringify({ ok: heal.ok, mode: heal.mode, error: heal.error })}; differences ${first(ledgerDiff(m8, o8))})`);
-        assert(o8.format !== null && Number(o8.format) >= 1, `and it records the importer's format (${o8.format})`);
+        const m9: Ledger = await main.send('ledger');
+        const o9: Ledger = await old.send('ledger');
+        assert(heal.ok === true && ledgerDiff(m9, o9).length === 0,
+            `its next pull heals it: every account is M's (${JSON.stringify({ ok: heal.ok, mode: heal.mode, error: heal.error })}; differences ${first(ledgerDiff(m9, o9))})`);
+        assert(o9.format !== null && Number(o9.format) >= 1, `and it records the importer's format (${o9.format})`);
         refused.push(...(await old.send('fetches')).blocked);
         await old.kill('SIGTERM');
 
-        // ── 9. The take-over's promotion audit ──
-        console.log('\n— 9. the take-over\'s promotion audit —');
+        // ── 10. The take-over's promotion audit ──
+        console.log('\n— 10. the take-over\'s promotion audit —');
         // The state a take-over's confirm leaves before its restart (services/takeover.ts: nodeRole primary, the audit
         // pending), so the restart runs the audit as a take-over's does (resumeTakeoverAtBoot → runPendingPromotionAudit).
         const promote = async (name: string, plant?: (db: Database.Database) => void) => {

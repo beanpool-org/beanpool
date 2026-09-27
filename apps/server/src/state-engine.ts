@@ -2280,6 +2280,10 @@ export function conservingTransaction<T>(fn: () => T): T {
  * credit whose debit just rolled back — so `null` says to read the `COMMONS_POOL` row, which is the pot as
  * a restart would load it and the only half that matches the accounts being reloaded.
  *
+ * A standby's import uses it too, with `null`, once a replicated copy has committed (engine/sync.ts): the rows
+ * are the main server's ledger, both halves, and memory is set from nothing else. Halting there is the same
+ * call as here: a standby whose memory kept its previous copy would flush that pot over the new one.
+ *
  * The row read is inside the try on purpose: if SQLite is failing badly enough to break it, that is the
  * halt case below, not an exception thrown out of a catch block.
  */
@@ -5614,8 +5618,8 @@ function getSyncCb() {
         getPrivateKey,
         publicKeyToProtobuf,
         publicKeyFromProtobuf,
-        loadLedgerState: (accs: any[]) => ledger.loadState(accs),
-        setCommonsBalance: (bal: number) => setCommonsBalance(bal),
+        // After a replicated copy commits: accounts and the pot from the rows, or halt (resyncMemoryToRows).
+        resyncLedgerToRows: () => resyncMemoryToRows(null, 'a replicated copy that landed'),
         broadcast
     };
 }

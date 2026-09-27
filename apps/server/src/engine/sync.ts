@@ -180,8 +180,8 @@ export interface SyncCallbacks {
     getPrivateKey: () => any;
     publicKeyToProtobuf: (key: any) => Uint8Array;
     publicKeyFromProtobuf: (bytes: Uint8Array) => any;
-    loadLedgerState: (accounts: any[]) => void;
-    setCommonsBalance: (balance: number) => void;
+    /** Put the in-memory ledger (every account and the Commons pot) back to what the `accounts` rows hold. */
+    resyncLedgerToRows: () => void;
     broadcast: (event: any) => void;
 }
 
@@ -1119,16 +1119,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
                 }
 
-                const updatedAccs = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
-                cb.loadLedgerState(updatedAccs);
-
-                if (named.has('COMMONS_POOL')) {
-                    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'")
-                        .get() as { balance: number } | undefined;
-                    if (commonsRow) {
-                        cb.setCommonsBalance(commonsRow.balance);
-                    }
-                }
+                // The in-memory ledger follows these rows once they are committed, and only then. Loaded here, inside the
+                // transaction, it kept this copy's accounts and Commons pot when a later section threw and the rows rolled
+                // back; this standby's own flush (persistDecayAndCommons, every 5 minutes and in the ledger audit) then
+                // wrote that pot over its last good copy's, and every later copy was refused by the guard above, for good.
+                // A hook queued here is dropped when the transaction rolls back (db.ts), so memory stays at the rows.
+                afterTransactionCommit(() => cb.resyncLedgerToRows());
 
                 // The main server's ledger as this copy carries it, which a take-over's audit holds the promoted ledger to
                 // (services/takeover.ts). In this transaction, so it is the ledger of the last copy that landed; written

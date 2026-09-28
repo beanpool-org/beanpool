@@ -398,6 +398,7 @@ run_federation_suites() {
       test-staff-seen-prune
       test-never-forget-registrar-name
       test-registrar-names-record
+      test-registrar-name-watch
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility

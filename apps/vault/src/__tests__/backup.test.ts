@@ -2,13 +2,16 @@ import crypto from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
+import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { openSeedFromSso, openVaultRelease, vaultUnb64 } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import type { BackupStore } from '../api/backup-store.js';
 import { HOLD_MS, RESTORE_RETRY_MS } from '../api/server.js';
 import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.js';
-import { splitMasterSecret } from '../keyholder/slip39.js';
-import { compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
+import { openState, readStateFile, type WorkingKeys } from '../keyholder/keys.js';
+import { combineMnemonics, splitMasterSecret } from '../keyholder/slip39.js';
+import { BACKUP_BODY_AAD, BACKUP_DELETIONS_AAD, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
+import { openCustodianShare } from '../shared/ceremony.js';
 import {
     deposit,
     doGenesis,
@@ -94,6 +97,50 @@ describe('backups', () => {
         // The restore is finished: the vault is an ordinary one now.
         expect(readdirSync(b.dataDir)).not.toContain('restore-pending.bin');
         expect(b.keyholder().status().restorePending).toBe(false);
+    });
+
+    it('the file itself opens with keys from its own vault\'s K_backup and K_index, and not with another vault\'s', async () => {
+        const a = await vault();
+        const ga = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, ga, member, 'google', 'file-keys');
+        await signed(a, '/v1/copies/delete', { provider: 'google' }, member.seed);
+        await deposit(a, ga, member, 'apple', 'file-keys-2');
+        const file = parseBackupFile(readFileSync(path.join(a.storeDir, await a.api.runBackup())));
+        const b = await vault();
+        const gb = await doGenesis(b);
+
+        /** The working keys, as two of that vault's custodians would rebuild them from their shares. */
+        const workingKeys = (v: VaultUnderTest, g: Genesis): WorkingKeys => {
+            const m = combineMnemonics([0, 1].map(i => openCustodianShare(g.shares[i], v.custodians[i].seed)));
+            const opened = openState(m, readStateFile(v.stateDir)!);
+            m.fill(0);
+            if (!opened.ok) throw new Error(opened.reason);
+            return opened.keys;
+        };
+        const keysA = workingKeys(a, ga);
+        const keysB = workingKeys(b, gb);
+        // Derived here as the design says (HKDF-SHA256 of K_backup or K_index, salted with the vault id), not by the
+        // keyholder's own code.
+        const derive = (k: Uint8Array, info: string, vaultId = file.header.vaultId) =>
+            Buffer.from(crypto.hkdfSync('sha256', k, vaultUnb64(vaultId, 16)!, Buffer.from(info), 32));
+        const body = (key: Buffer) => xchacha20poly1305(key, file.body.nonce, Buffer.concat([Buffer.from(BACKUP_BODY_AAD), file.headerBytes])).decrypt(file.body.ct);
+        const deletions = (key: Buffer) => Buffer.from(xchacha20poly1305(key, file.deletions.nonce,
+            Buffer.concat([Buffer.from(BACKUP_DELETIONS_AAD), file.headerBytes])).decrypt(file.deletions.ct)).toString('utf8');
+        const BODY = 'beanpool-vault-backup-body/1';
+        const DELETIONS = 'beanpool-vault-deletions/1';
+
+        expect(Buffer.from(body(derive(keysA.kBackup, BODY)).subarray(0, 16)).toString('latin1')).toBe('SQLite format 3\0');
+        expect(JSON.parse(deletions(derive(keysA.kIndex, DELETIONS)))).toHaveLength(1);
+        for (const vaultId of [file.header.vaultId, readStateFile(b.stateDir)!.vaultId]) {
+            expect(() => body(derive(keysB.kBackup, BODY, vaultId))).toThrow();
+            expect(() => deletions(derive(keysB.kIndex, DELETIONS, vaultId))).toThrow();
+        }
+        // Each key opens only its own part.
+        expect(() => body(derive(keysA.kIndex, BODY))).toThrow();
+        expect(() => deletions(derive(keysA.kBackup, DELETIONS))).toThrow();
+        keysA.wipe();
+        keysB.wipe();
     });
 
     it('a deletion record in a newer backup drops the copy from an older one', async () => {

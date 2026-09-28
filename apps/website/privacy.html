@@ -24,53 +24,213 @@
             </div>
         </div>
     </nav>
+    <!--
+        This policy describes BeanPool as of the release, including work still being built. Every sentence that is
+        true only once a named change lands carries a DEPENDS comment; every fact that needs checking on a live system
+        carries a CHECK comment. The director re-checks each against main before the release. Drafted, not yet read by
+        a lawyer.
+    -->
     <section class="legal-content glass-panel">
         <h1>Privacy Policy</h1>
-        <p><strong style="color: #94a3b8;">Last Updated: September 18, 2026</strong></p>
-        
-        <h2>1. Your Keys, and What Recovery Costs You</h2>
-        <p>BeanPool is a peer-to-peer (P2P) localized protocol natively bypassing centralized tracking silos. Our systems are mathematically verifiable, functioning without a central corporate authority tracking your personal data. Your Ed25519 keypair is generated on your own device and never leaves it. Where it is kept differs by app, and we would rather say so than round it up: on the <strong>phone apps</strong> it is held in the operating system's secure storage (Android Keystore / iOS Keychain, via SecureStore), and you can put an optional biometric lock on the app itself; in the <strong>browser app</strong> it is held in that browser's own local database on your device, which is not hardware-protected. Your 12-word recovery phrase is the only recovery path that depends on nobody, and it is the only one the browser app has.</p>
-        <p><strong>Sign-in recovery is custodial, by design.</strong> If you link an Apple, Google, Facebook or GitHub sign-in on the phone app, your community's node keeps one half of your recovery seed in its own database and the other half sealed to that sign-in account. Together they can rebuild your account for anyone who passes that provider's sign-in, which means <strong>the operator of your community's node is able to restore your account</strong>. We chose that deliberately: it is the difference between a way back in and none at all for members who lose a phone. If you do not want anyone but you to hold a way in, do not link a sign-in account, and keep your 12 words safe. Those halves live on that node's disk, and they die with it — they are not held by us.</p>
-        
-        <h2>2. Location: You Place Every Pin</h2>
-        <p>BeanPool does not track your location. There is no background location tracking of any kind, and the app never follows or records where a member is; the phone apps ask for location only while you are using them.</p>
-        <p>Location exists in BeanPool only as a pin you place yourself, on a post, an enterprise or an event. You can use your device's location once, at the moment you place that pin, or drop the pin by hand anywhere on the map. Enterprise and event pins can be marked <strong>Approximate</strong>, which rounds the coordinate to roughly 100&nbsp;metres before it is saved, so a pin near home need not be your front door.</p>
-        <p><strong>Pins are public within your community.</strong> Anyone who can open your community's map can see them, which is what makes local discovery work — so place a pin where you are willing to be found, and use Approximate when it is at someone's house.</p>
+        <p><strong style="color: #94a3b8;">Last updated: September 29, 2026</strong></p> <!-- DEPENDS: set to the release date when this is published -->
 
-        <h2>3. Data Collection Restrictions</h2>
-        <p>We do not capture analytical telemetry, behavior-tracking metrics, or third-party marketing metadata. Your application communicates directly with the community nodes that you explicitly join and trust. Any marketplace Needs or Offers you create are broadcast strictly to the specific community ledger tied to your cryptographic callsign.</p>
-        
-        <h2>4. Account Eradication & Data Portability</h2>
-        <p>You retain complete control to erase your identity at any point via the <strong>Settings -> Reset / Wipe Identity</strong> option. Deleting your local keys renders all your historical transactions cryptographically untamperable and your local identity permanently closed.</p>
-        
-        <h2>5. Moderation &amp; Safety Compliance</h2>
-        <p>Because the platform enables users to broadcast public Needs and Offers within neighborhood networks, we enforce strict client-side blocking and reporting tools. Verified participants can sever, block, and report inappropriate content, which transmits signed cryptographic flags directly to community moderators to maintain safe, healthy local exchanges.</p>
+        <p>This page says what BeanPool keeps about you, where it is kept, who can see it, how long it is kept, and what you can do about it. It also says plainly what we cannot protect you from.</p>
+        <p>BeanPool is open-source software, not one company's server. Each community runs on its own server, and the person or group who runs that server (its <strong>operator</strong>) looks after that community's data. BeanPool itself runs a few shared services, listed in section 1. In this policy, "BeanPool", "we" and "us" mean the people who build BeanPool and run those services.</p>
 
-        <h2>6. Member-Connected Channels &amp; Platform Data (TikTok, Instagram &amp; Video Feeds)</h2>
+        <h2 id="short">The short version</h2>
+        <ul>
+            <li>Your account is a key made on your own device. Your 12 words are the only way back into it that depends on nobody.</li>
+            <li>Your community's operator can read what their server holds, except the content of your direct messages. Direct messages are end-to-end encrypted. Group, event and enterprise chats are not.</li>
+            <li>Other members can't see your balance or your trades. <!-- DEPENDS: fix/privacy-defaults (balances and trades private) --></li>
+            <li>On a local community, only its members see its listings. <!-- DEPENDS: fix/privacy-defaults (local listings members-only) --></li>
+            <li>The apps contain no analytics, advertising or crash-reporting code.</li>
+            <li>If you link a Google, Apple, GitHub or Facebook sign-in, a locked copy of your account is kept in BeanPool's key vault in Iceland. Opening it takes two of the three people who look after the vault, acting together. Apart from giving it back to you, we open a copy only under a valid court order. <!-- DEPENDS: vault V2-V6, the reshare, and D5 --></li>
+        </ul>
+
+        <p><strong>Contents:</strong>
+            <a href="#who">1. Who runs what</a> ·
+            <a href="#key">2. Your key and your 12 words</a> ·
+            <a href="#sign-in">3. Signing in with Google, Apple, GitHub or Facebook</a> ·
+            <a href="#community">4. What your community holds, and who sees it</a> ·
+            <a href="#location">5. Location</a> ·
+            <a href="#notifications">6. Notifications</a> ·
+            <a href="#services">7. Other services your device uses</a> ·
+            <a href="#pulse">8. The Pulse</a> ·
+            <a href="#events">9. Events</a> ·
+            <a href="#beanpool">10. What BeanPool itself holds</a> ·
+            <a href="#where">11. Where it is kept</a> ·
+            <a href="#retention">12. How long it is kept</a> ·
+            <a href="#choices">13. Your choices</a> ·
+            <a href="#legal">14. Requests from the authorities</a> ·
+            <a href="#security">15. Security, honestly</a> ·
+            <a href="#children">16. Children</a> ·
+            <a href="#changes">17. Changes to this policy</a> ·
+            <a href="#contact">18. Contact</a>
+        </p>
+
+        <h2 id="who">1. Who runs what</h2>
+        <p><strong>Communities.</strong> Each community runs on its own server. Most are run by people we don't know, who downloaded BeanPool's software. We have no access to their servers. Their operators, not BeanPool, decide how that data is looked after, so ask them about it first.</p>
+        <p><strong>What BeanPool runs itself:</strong></p>
+        <ul>
+            <li><strong>The global community</strong> at global.beanpool.org, where anyone can join with a sign-in account and try BeanPool without starting a community. We are its operator.</li>
+            <li><strong>A few local communities in Australia</strong>, for which we are also the operator.</li>
+            <li><strong>The key vault</strong>, which keeps sign-in recovery copies (section 3). <!-- DEPENDS: vault V2 live --></li>
+            <li><strong>The address service</strong>, which gives communities names such as yourtown.beanpool.org.</li>
+            <li><strong>The communities directory</strong>, the public map of communities on this website.</li>
+            <li><strong>This website</strong>, with its newsletter sign-up and the members' guide, and <strong>the feedback service</strong> the apps send feedback to.</li>
+            <li><strong>The apps</strong>, which we build and publish on Google Play and the App Store.</li>
+        </ul>
+
+        <h2 id="key">2. Your key and your 12 words</h2>
+        <p>Your BeanPool account is a key made on your own device. It signs everything you do. Your 12 words can rebuild it.</p>
+        <ul>
+            <li><strong>On a phone</strong>, the key and your 12 words are kept in the phone's secure storage (Android Keystore or the iOS Keychain). The app asks for your phone's lock before it shows your words or lets your account leave the phone. You can also turn on <strong>App Lock</strong> in Settings.</li>
+            <li><strong>In a web browser</strong>, the key is kept in that browser's own storage on your computer, which is not hardware-protected. Only BeanPool's own web app at global.beanpool.org keeps a key. Other communities' web pages let you look around, not sign in. <!-- DEPENDS: key custody K3 (keys only on the trusted origin) --></li>
+            <li><strong>Your key leaves your device only when you choose:</strong> when you link another device (it is sent there encrypted to that device), or inside a locked sign-in copy (section 3).</li>
+            <li><strong>Your 12 words</strong> are the one way back that depends on nobody. Write them down and keep them somewhere safe. A screenshot can end up in your phone's cloud photo backup.</li>
+        </ul>
+
+        <h2 id="sign-in">3. Signing in with Google, Apple, GitHub or Facebook</h2>
+        <p>You can link a sign-in account so that you can get back into BeanPool if you lose your phone. On a local community this is your choice. Joining the global community without an invite needs a sign-in account, and each sign-in account can have only one account on global at a time.</p>
+        <p><strong>What a sign-in shares.</strong> The provider tells BeanPool that it's you, with an account number and usually your email address. We use the email only to show you a shortened form of it (such as m•••@gmail.com), and we never store it. The provider learns that you signed in to BeanPool.</p>
+        <p><strong>The locked copy.</strong> When you link a sign-in account, your app locks a copy of your account with that sign-in and sends it to BeanPool's key vault: a small server in Iceland that does nothing else. No community keeps one, not even yours. <!-- DEPENDS: vault V2 (the vault), V4 (phone), V5 (communities refuse new copies), V6 (web on global) --> The vault keeps the locked copy, the notification addresses of your devices so that it can warn them, and a code made from your sign-in account with a secret key so that it can find your copy when you sign in. It keeps no names, email addresses, IP addresses or list of your communities. <!-- DEPENDS: vault V2 --></p>
+        <p><strong>Getting back in.</strong> The vault gives your copy back only after it has checked your sign-in with Google, Apple, GitHub or Facebook itself. Every restore with a sign-in then waits 24 hours, unless a device that still has your account taps <strong>Yes, it's me</strong>. Your devices are told at once and can stop it. The vault deletes its record of a restore seven days after it ends. <!-- DEPENDS: vault V2 + V4 (D2: every sign-in restore waits a day unless an existing device approves) --></p>
+        <p><strong>Who can open the copies.</strong> BeanPool can. It takes two of the three people who look after the vault, working together, and they live in different countries. Nobody can log in to the vault. A court could order us to open a copy (section 14). Anyone who takes over your Google, Apple, GitHub or Facebook account, including a government that makes that company help, could also get your account back, unless you stop it within the 24 hours. <!-- DEPENDS: the reshare to the custodians abroad (a hard gate on the release), and V2's hold --></p>
+        <p><strong>If you would rather nobody but you could ever get in</strong>, keep your 12 words safe and tap <strong>Disconnect</strong> next to each sign-in account in Settings. That deletes your copy from the vault at once, and from its backups within 30 days. Your 12 words always work, with or without the vault. <!-- DEPENDS: vault V2 (delete + deletion records in backups) and V4 (Disconnect goes to the vault) --></p>
+        <p><strong>Copies made by older versions.</strong> Older versions of the app kept this copy on your community's own server, where its operator could open it. The app offers to move your copy to the vault, and deletes the old one when it does. On a date we announce, the communities we run delete every old copy still left. <!-- DEPENDS: vault V4 (the move card) and V5 (release-only, then deletion on the date) --></p>
+        <p><strong>The global community's record.</strong> So that each sign-in account has only one account on global, global keeps a fingerprint of the account you joined with: a code made from the provider's name and your account number with a secret key, never the number itself or your email. Anyone holding a copy of global's database could check whether a particular sign-in account has joined. If you delete your account on global, the fingerprint is erased, unless the community had removed or suspended you.</p>
+
+        <h2 id="community">4. What your community holds, and who sees it</h2>
+        <p>Your community's server holds your profile (name, picture, bio and contact details), your listings, events, polls and photos, your messages, your balance and trades, the groups you are in, the reports and blocks you make, and your settings. When a photo is stored, the server removes its location data and the camera's hidden details.</p>
+        <p><strong>Other members</strong> see your profile, listings, events and polls. Your contact details are hidden until you choose who sees them. Other members do not see your balance or your trades: a trade is seen only by its two people. A community Decision about you shows your balance to the members voting on it, inside that Decision only. <!-- DEPENDS: fix/privacy-defaults (balance, transactions, export, members list AND the activity feed, which today names both members and the Beans of every completed trade) --> A poll is anonymous: everyone sees the counts, and nobody sees who voted what, unless the person who made the poll chose an open vote, which the poll says. In an open vote, members see who voted what. <!-- DEPENDS: fix/privacy-defaults (polls anonymous by default) --></p>
+        <p><strong>People who aren't members</strong> of a local community see a sign-in page instead of its listings. <!-- DEPENDS: fix/privacy-defaults (listings, one post, pins and listing photos members-only on local communities) --> A few things stay public for anyone who opens a local community's address: its name and basic details, its enterprises and their map pins, its crowdfunds, its community Decisions (which can name a member, for example in a vote to suspend someone), its Pulse feed (members' public posts from other platforms, with their name and picture), members' profile pictures, and whether a particular name is in use there. <!-- DEPENDS: fix/privacy-defaults leaves these public reads as they are (PUBLIC_READ_EXACT / PUBLIC_READ_PATTERNS); re-check the list on main --> On the global community, visitors see listings with only a rough area and no names.</p>
+        <p><strong>Your community's operator</strong> can read everything the server holds, except the content of your direct messages. That includes group, event and enterprise chats, every balance and trade, who reported or blocked whom, and how each member voted in polls and Decisions (the server records each vote so that each member counts once). Unless an old sign-in copy is still kept there (section 3), the operator has no way to your key or your 12 words. <!-- DEPENDS: vault V4 (the move deletes the old copy) and V5 (old copies deleted on the date) --></p>
+        <p><strong>A standby.</strong> Some communities keep a second server ready to take over if the first one fails. It copies nearly everything above, and whoever runs it can read that copy.</p>
+        <p><strong>The hosting company</strong> that rents out a community's server can reach its disk and its memory, as with any rented server.</p>
+        <p><strong>Messages.</strong> Direct messages between two people, and the photos in them, are end-to-end encrypted: the server stores them in a form only the two of you can read. It does know who wrote to whom, and when. Group, event and enterprise chats are not end-to-end encrypted: the server stores them in a form it can read, so the operator can read them. The app says so on those chats.</p>
+        <p><strong>Linked communities.</strong> Communities can link with each other, but linking is switched off unless an operator turns it on. A listing stays in your own community unless you choose to widen its reach.</p>
+
+        <h2 id="location">5. Location</h2>
+        <p>BeanPool does not track your location. There is no background location tracking of any kind. The phone apps ask for your location only while you are using them.</p>
+        <p>Location exists in BeanPool only as a pin you place yourself, on a listing, an enterprise or an event. You can use your device's location once, at the moment you place the pin, or drop the pin by hand anywhere on the map. A listing's pin is rounded to about 11&nbsp;metres. An enterprise or event pin is saved where you put it, unless you mark it <strong>Approximate</strong>, which rounds it to about 100&nbsp;metres before it is saved, so a pin near home need not be your front door.</p>
+        <ul>
+            <li><strong>Listing and event pins</strong> are seen by your community's members. On the global community, visitors see only a rough area. <!-- DEPENDS: fix/privacy-defaults (local listings and their pins members-only) --></li>
+            <li><strong>Enterprise pins</strong> can be seen by anyone who opens the community's map.</li>
+            <li><strong>Your rough area</strong>, if you choose to share it, is rounded to about 11&nbsp;km before it is stored. Other people see only how many kilometres away you are. Places you ask to be alerted about are stored rounded the same way.</li>
+        </ul>
+        <p>Place a pin where you are willing to be found, and use Approximate when it is at someone's house.</p>
+
+        <h2 id="notifications">6. Notifications</h2>
+        <p>If you allow notifications, your phone gives the app a notification address, and your community's server keeps it. Notifications go from the server through Expo's notification service, then Apple or Google, to your phone. Each carries a short line, such as who sent you a message, the name of a group, or which listing a deal is about. It never carries the text of a message. You can switch each kind of notification off in Settings.</p>
+        <p>The key vault also keeps your devices' notification addresses, inside your locked copy, so that it can warn you about a restore. <!-- DEPENDS: vault V2 + V4 (push tokens inside the envelope) --></p>
+
+        <h2 id="services">7. Other services your device uses</h2>
+        <ul>
+            <li><strong>Maps:</strong> the phone app shows maps from Google (on Android) or Apple (on iPhone). The web app loads its map pictures from OpenStreetMap. They see which area you are looking at.</li>
+            <li><strong>Address search:</strong> when you search for a place, what you type goes to OpenStreetMap's search service (Nominatim).</li>
+            <li><strong>Fonts:</strong> the web app loads its font from Google Fonts.</li>
+            <li><strong>Sign-in providers</strong>, when you use them (section 3).</li>
+            <li><strong>Video players:</strong> a Pulse video plays in its platform's own player, such as YouTube or TikTok, which follows that platform's own privacy policy.</li>
+            <li><strong>The members' guide</strong> in the apps is loaded from this website.</li>
+        </ul>
+
+        <h2 id="pulse">8. The Pulse: channels you connect (TikTok, Instagram and video feeds)</h2>
         <p>Members may optionally connect their external publishing accounts (such as TikTok, Instagram, YouTube, SoundCloud, or RSS feeds) to syndicate their public posts into the community Pulse feed. Connecting a platform is entirely voluntary and member-initiated.</p>
         <p>When connecting an account via OAuth (TikTok or Instagram):</p>
         <ul>
-            <li><strong>Device-Side Token Storage:</strong> You authorize your account directly with the platform provider. Platform OAuth access and refresh tokens are stored exclusively on your own device in secure hardware storage. Access tokens are never stored on or held by the community node database.</li>
+            <li><strong>Device-Side Token Storage:</strong> You authorize your account directly with the platform provider. Platform OAuth access and refresh tokens are stored only on your own device, in its secure storage. Access tokens are never stored on or held by the community node database.</li>
             <li><strong>Limited Scope &amp; No Private Data Access:</strong> BeanPool requests only the basic public profile permissions needed to verify channel ownership (such as username and public identifier) and list public videos or posts. The system does not access, read, or store your private messages, direct messages (DMs), follower or following lists, or private/unlisted content.</li>
             <li><strong>What the Node Stores:</strong> When public posts are syndicated to the feed, the community node stores only public post metadata: the platform name, your channel identifier and member public key, the platform post identifier, the canonical post URL, the public post title or caption snippet, the preview thumbnail image URL, the publication timestamp, and your selected category. The node also keeps a cached copy of each post's preview image, described below.</li>
             <li><strong>Preview Images Only &mdash; No Video or Audio Hosting:</strong> So that the feed loads on slow connections, and keeps working after a platform's image link expires, the community node fetches each post's preview thumbnail image and keeps a cached copy, which it can serve to the feed itself. Only still images are cached (JPEG, PNG, WebP, GIF or AVIF, at most 2&nbsp;MB each), in memory (up to 20&nbsp;MB, cleared when the node restarts) and on the node's disk (up to 100&nbsp;MB in total, with the least recently viewed images removed first when that limit is reached). Cached images are not copied to other nodes. Both the web app and the phone app load preview images through the node, so your device does not contact the platform's image servers when it shows a preview; if the node cannot supply an image, the card shows a plain platform placeholder instead. Video and audio are never downloaded, copied, or re-hosted on the community node: content is played through each platform's official player or opened via an external link.</li>
-            <li><strong>Retention &amp; Scrubbing:</strong> The node keeps the 20 most recently published items from each connected channel. Items beyond those 20 are automatically pruned, typically within minutes of newer posts arriving; items are not removed on age alone. Curated learning content that BeanPool supplies to every node is exempt from this limit and contains no member data. When an item is pruned or deleted, the node records a tombstone deletion timestamp and immediately scrubs the post URL, title, and thumbnail URL to <code>NULL</code>, permanently erasing that data from the database. From that moment the node stops serving the item's cached preview image. The cached image goes with the item on every path that removes it &mdash; deleting a single post, deleting a channel, deleting your account, the automatic retention pruning, the inactivity prune, and an operator takedown &mdash; and is deleted from the node's memory and disk at that moment, not on its next request.</li>
+            <li><strong>Retention &amp; Scrubbing:</strong> The node keeps the 20 most recently published items from each connected channel. Items beyond those 20 are automatically pruned, typically within minutes of newer posts arriving; items are not removed on age alone. Curated learning content that BeanPool supplies to every node is exempt from this limit and contains no member data. When an item is pruned or deleted, the node records a tombstone deletion timestamp and immediately scrubs the post URL, title, and thumbnail URL to <code>NULL</code>, erasing that data from the database. From that moment the node stops serving the item's cached preview image. The cached image goes with the item on every path that removes it &mdash; deleting a single post, deleting a channel, deleting your account, the automatic retention pruning, the inactivity prune, and an operator takedown &mdash; and is deleted from the node's memory and disk at that moment, not on its next request.</li>
             <li><strong>Disconnecting &amp; Deleting Channels:</strong> You can disconnect an OAuth account at any time in the app, which immediately deletes the stored access token from your device and clears verification on the node (existing imported items remain until you delete them or the channel, or until newer posts from the same channel push them out of the 20 kept). If you delete a channel entirely, the channel link and handle are immediately scrubbed to <code>NULL</code> and all associated imported feed items are scrubbed from the node.</li>
         </ul>
 
-        <h2>7. Events, RSVPs &amp; Event Chat</h2>
-        <p>Members can post an event to their own community or to one of its groups. The community node stores what you type into the event &mdash; its title and description, the start and end times, the place name, the map pin you drop, any photos, and the private note for people going &mdash; together with each RSVP: which member marked themselves Going or Interested, and when. The host sees who has replied. Members marked Going can see each other in the event chat. Everyone else sees only the counts.</p>
+        <h2 id="events">9. Events, RSVPs and event chat</h2>
+        <p>Members can post an event to their own community or to one of its groups. The community's server stores what you type into the event &mdash; its title and description, the start and end times, the place name, the map pin you drop, any photos, and the private note for people going &mdash; together with each RSVP: which member marked themselves Going or Interested, and when. The host sees who has replied. Members marked Going can see each other in the event chat. Everyone else sees only the counts.</p>
         <ul>
             <li><strong>The private note:</strong> shown only to the host and to members marked Going. It is never part of a public listing.</li>
-            <li><strong>The event chat:</strong> open to the host and everyone marked Going. It is <strong>not end-to-end encrypted</strong>, unlike a direct message: the node stores these messages in a form it can read, so that the host can remove a message and so that membership can follow the RSVPs. Your node's operator can read an event chat. The app says so on the chat screen.</li>
-            <li><strong>It stays in your community:</strong> an event is always local. The event, its RSVPs, the private note and the chat are never sent to another community's node &mdash; they stay on your own node and in that node's own backup.</li>
-            <li><strong>Thirty days after the event ends:</strong> the RSVPs, the chat messages and the private note are deleted from the node. The event post itself remains, inactive, as other finished posts do.</li>
+            <li><strong>The event chat:</strong> open to the host and everyone marked Going. It is <strong>not end-to-end encrypted</strong>, unlike a direct message: the server stores these messages in a form it can read, so that the host can remove a message and so that membership can follow the RSVPs. Your community's operator can read an event chat. The app says so on the chat screen.</li>
+            <li><strong>It stays in your community:</strong> an event, its RSVPs, the private note and the chat are never sent to another community. They stay on your community's own server, its standby if it has one, and its backups.</li>
+            <li><strong>Thirty days after the event ends:</strong> the RSVPs, the chat messages and the private note are deleted from the server, and from its standby. The event itself remains, inactive, as other finished posts do.</li>
         </ul>
 
-        <h2>Contact Administrator</h2>
-        <p>For protocol inquiries or privacy concerns regarding your specific local community node, please contact your local node operator or email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>.</p>
+        <h2 id="beanpool">10. What BeanPool itself holds</h2>
+        <ul>
+            <li><strong>The global community</strong> and <strong>the communities we run</strong>: everything in section 4, for their members, because we are their operator. Beans are switched off on the global community.</li>
+            <li><strong>The key vault:</strong> the locked copies described in section 3. <!-- DEPENDS: vault V2 --></li>
+            <li><strong>The address service:</strong> each community's name, its server's public key, how the server is reached (and its IP address, when it is reached directly), and a contact for its operator if they give one. Nothing about members.</li>
+            <li><strong>The communities directory:</strong> what each community's operator chooses to publish: its name, address and the area it serves, its member count, and a contact email or phone number. The directory is public.</li>
+            <li><strong>The newsletter:</strong> your email address, if you sign up on this website.</li>
+            <li><strong>Feedback:</strong> the text you send, its kind, the app version, platform and language, and your community's name if you type it. Not your IP address, your account or your community's address. We may copy feedback into an issue or discussion on GitHub, which may be public, so please put nothing private in it.</li>
+            <li><strong>This website</strong> loads its fonts from Google Fonts, some of its code from unpkg.com and jsdelivr.net, and its map pictures from OpenStreetMap. The directory map and the newsletter sign-up talk to Supabase.</li>
+        </ul>
+
+        <h2 id="where">11. Where it is kept</h2>
+        <ul>
+            <li><strong>Australia:</strong> the communities we run, at Binary Lane (an Australian company); the communities directory and the newsletter list, at Supabase (a US company), in its Sydney region.</li>
+            <li><strong>United States:</strong> the global community, at DigitalOcean in New York; notifications pass through Expo; feedback we copy to GitHub.</li>
+            <li><strong>Cloudflare</strong> (a US company with servers around the world): the address service, the feedback service and this website. Every community we run, including global, and every community that uses a beanpool.org address through a Cloudflare tunnel, is reached through Cloudflare, which decrypts its traffic at Cloudflare's servers before passing it on. The global community's photos are stored with Cloudflare. <!-- CHECK: global's .env has IMAGE_STORE=s3 (Cloudflare R2), as docker-compose.yml says; if not, drop the last sentence --></li>
+            <li><strong>Iceland:</strong> the key vault, at an Icelandic hosting company. Its encrypted backups are kept by a second provider in another country, which cannot read them. <!-- DEPENDS: the vault host bought (1984 or the fallback, after their answers) and the backup store chosen --></li>
+            <li><strong>Communities run by others:</strong> wherever their operator chose.</li>
+        </ul>
+
+        <h2 id="retention">12. How long it is kept</h2>
+        <ul>
+            <li><strong>Your account at a community:</strong> until you delete it (section 13). A community's server makes a snapshot of its database every day and keeps the last seven, unless its operator changes that.</li>
+            <li><strong>Event RSVPs, chat and private note:</strong> 30 days after the event ends.</li>
+            <li><strong>A request to join a community</strong> (a knock): what you wrote is cleared once it is answered or lapses, and the record is deleted 30 days later.</li>
+            <li><strong>Pulse items:</strong> the 20 newest from each channel.</li>
+            <li><strong>Your IP address:</strong> our servers use it to limit how often something can be done, and keep it only in memory. To limit sign-ups and knocks, a server keeps a code made from your address with a secret key, for one day. Server logs do not record IP addresses.</li>
+            <li><strong>Server logs:</strong> the newest 2,500 entries, plus the server's own output, capped at 30&nbsp;MB.</li>
+            <li><strong>The key vault:</strong> your copy until you tap Disconnect, or link a different BeanPool account to the same sign-in account; encrypted backups for 30 days; the record of a restore for seven days after it ends; its error log for seven days, with nothing about requests in it. <!-- DEPENDS: vault V2 --></li>
+            <li><strong>The global community's fingerprint</strong> of your sign-in account: while your account there exists (section 3).</li>
+            <li><strong>Feedback:</strong> until we delete it. There is no fixed schedule yet.</li>
+            <li><strong>The newsletter:</strong> until you ask us to remove your email address.</li>
+        </ul>
+
+        <h2 id="choices">13. Your choices</h2>
+        <ul>
+            <li><strong>12 words only, or a linked sign-in account</strong> (sections 2 and 3). <strong>Disconnect</strong> removes a sign-in account and its copy.</li>
+            <li><strong>Who sees your contact details</strong>, in your profile settings.</li>
+            <li><strong>Approximate pins</strong>, and whether to share your rough area (section 5).</li>
+            <li><strong>Which notifications you get</strong> (section 6).</li>
+            <li><strong>Sign out</strong> takes your account off this device only.</li>
+            <li><strong>Delete your account:</strong> in Settings, tap <strong>Permanently Delete Account</strong>. It deletes your account at the community you are using and clears this phone. Your profile is erased (your name becomes "Deleted Member"), with your picture, bio, contact details and rough area. Your listings are cancelled. Your notification addresses, place alerts, blocks, settings, Pulse channels and any sign-in copy held by that community are deleted. Any balance is settled with the community's Commons pool. You can't delete an account while one of your deals is in escrow.</li>
+            <li><strong>What stays after you delete:</strong> the ledger entries of your trades (amounts, dates and any note on them), because other members' balances depend on them; messages you sent; ratings; reports; your poll votes; and the text, photos and pins of your cancelled listings. They are shown under "Deleted Member" instead of your name, but anything written in them stays as it was written.</li>
+            <li><strong>Deleting is per community.</strong> It does not delete your account at your other communities: delete it in each one. It does not delete your copy in the key vault: tap <strong>Disconnect</strong> next to each sign-in account first. <!-- DEPENDS: vault V4 (Disconnect goes to the vault). Delete account does not call the vault as designed: see the PR body --></li>
+            <li><strong>Ask us:</strong> for anything BeanPool holds, email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>. For a community run by someone else, ask its operator. If you can't reach them, email us and we will pass your request on. See also <a href="data-deletion.html">Data Deletion</a>.</li>
+        </ul>
+
+        <h2 id="legal">14. Requests from the authorities</h2>
+        <p><strong>The key vault.</strong> We open a copy only under a valid court order, and we tell the member unless we are forbidden to. Opening one takes two of the vault's three custodians, who live in different countries. Once a year we publish how many requests we received. <!-- DEPENDS: D5 as decided (policy + yearly count; no canary until a lawyer checks it), the reshare, and a place to publish the count --></p>
+        <p><strong>Everything else BeanPool holds</strong> (section 10): we comply with valid legal orders. A community run by someone else answers to its own operator and the law where they are.</p>
+        <p><strong>Companies we use</strong> can be ordered directly in their own countries, without asking us: the hosting companies for the servers they host, and Cloudflare for the traffic it carries.</p>
+        <p>For child safety, see our <a href="safety.html">Child Safety</a> page.</p>
+
+        <h2 id="security">15. Security, honestly</h2>
+        <p><strong>What protects you:</strong> your key is made and kept on your device; direct messages are end-to-end encrypted; photos lose their location data; opening a vault copy takes two people in different countries <!-- DEPENDS: the reshare -->; and each community we run is kept apart from the others on the same machine, and holds no key that could change another community's address. <!-- DEPENDS: fix/tunnel-without-docker-socket and #1282 fix/deploy-no-fleet-secrets --></p>
+        <p><strong>What we cannot protect you from:</strong></p>
+        <ul>
+            <li>Your community's operator, and whoever runs its standby, can read what their server holds (section 4).</li>
+            <li>A hosting company can read the disk and memory of a server it hosts. That includes the key vault's host, while the vault is running. <!-- DEPENDS: vault V2 --></li>
+            <li>Cloudflare decrypts the traffic of every community reached through it (section 11).</li>
+            <li>Anyone who takes over your Google, Apple, GitHub or Facebook account could get your account back through the vault, unless you stop it within the 24 hours. Protect that account with its own strong password and two-step login. <!-- DEPENDS: vault V2 + V4 (the hold and Stop) --></li>
+            <li>Two of the vault's custodians together, or a court that makes two of them act, can open any copy.</li>
+            <li>Whoever can publish BeanPool's apps or server software could ship a version that reads your key. The phone apps change only through a new version in Google Play or the App Store. The web app's code comes from the global community's server, so the phone app is the safer place for your key.</li>
+            <li>Anyone who sees your 12 words, or a photo of them, can take your account.</li>
+        </ul>
+
+        <h2 id="children">16. Children</h2>
+        <p>BeanPool is meant for adults. It does not ask your age. If you believe a child has an account, report it in the app, or email <a href="mailto:safety@beanpool.org">safety@beanpool.org</a>. See our <a href="safety.html">Child Safety</a> page.</p>
+
+        <h2 id="changes">17. Changes to this policy</h2>
+        <p>When we change this policy, we change the date at the top. Earlier versions are kept in BeanPool's code repository on GitHub.</p>
+
+        <h2 id="contact">18. Contact</h2>
+        <p>For a question about a community run by someone else, contact its operator first. For anything BeanPool holds, or anything in this policy, email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>.</p>
     </section>
-    
+
     <!-- Footer Module -->
     <footer>
         <div class="container">

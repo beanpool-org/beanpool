@@ -20,6 +20,7 @@ import {
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { createVaultApi, type VaultApi } from '../api/server.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
+import type { MemoryHygiene } from '../keyholder/hygiene.js';
 import { Keyholder } from '../keyholder/keyholder.js';
 import { listenKeyholder, type KeyholderServer } from '../keyholder/server.js';
 import type { CustodianShare } from '../shared/ceremony.js';
@@ -155,6 +156,8 @@ export async function startVault(opts: {
     trustProxy?: boolean;
     /** Wraps the backup store (a slow or failing one). */
     store?: (inner: BackupStore) => BackupStore;
+    /** What the keyholder reports of its memory hygiene, in place of checking this process. */
+    hygiene?: MemoryHygiene;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -164,7 +167,9 @@ export async function startVault(opts: {
     const clock = opts.clock ?? makeClock();
     const stub = opts.stub ?? new StubProviders();
     const custodians = opts.custodians ?? [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
-    const makeKeyholder = () => new Keyholder({ stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0 });
+    const makeKeyholder = () => new Keyholder({
+        stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0, hygiene: opts.hygiene,
+    });
     let kh = makeKeyholder();
     let server: KeyholderServer = await listenKeyholder(kh, socketPath);
     const inner = new LocalDirectoryStore(storeDir);

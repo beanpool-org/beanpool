@@ -103,6 +103,20 @@ describe('the HTTP surface', () => {
         expect((await signed(v, '/v1/ticket', { purpose: 'deposit', provider: 'google' }, newMember().seed)).status).toBe(503);
     });
 
+    it('memory hygiene: what a misbuilt image got wrong is in the keyholder\'s status and the signed report', async () => {
+        const misbuilt = {
+            mlock: 'unavailable' as const, coreDumps: 'off' as const, swap: 'present' as const, kdump: 'on' as const, ptraceScope: 1, debugFlags: [],
+            sigusr1: 'disabled' as const,
+        };
+        v = await startVault({ hygiene: misbuilt });
+        expect(v.keyholder().status().memory).toEqual(misbuilt);
+        await doGenesis(v);
+        const r = await get(v, '/v1/report');
+        const { text, signature } = r.body.report as { text: string; signature: string };
+        expect(ed25519.verify(Buffer.from(signature, 'base64url'), Buffer.from(`beanpool-vault-report/1\n${text}`), Buffer.from(r.body.ticketKey, 'hex'))).toBe(true);
+        expect(JSON.parse(text).memory).toEqual(misbuilt);
+    });
+
     it('memory hygiene: refuses debugger flags anywhere and a possible core file on Linux', () => {
         const clean = {
             mlock: 'unavailable' as const, coreDumps: 'off' as const, swap: 'none' as const, kdump: 'off' as const, ptraceScope: 3, debugFlags: [],

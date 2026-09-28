@@ -48,6 +48,7 @@ import {
 } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import { noneAttestor, type Attestor } from './attestor.js';
+import { checkMemoryHygiene, type MemoryHygiene } from './hygiene.js';
 import {
     asStateFile,
     openState,
@@ -109,6 +110,8 @@ export interface KeyholderOptions {
     releaseHash?: string;
     /** SLIP-0039 iteration exponent for new shares. */
     iterationExponent?: number;
+    /** What this process's memory could leak to (hygiene.ts), as checked at start; reported in `status()` and `/v1/report`. */
+    hygiene?: MemoryHygiene;
 }
 
 /** A copy's row as the API holds it: every field base64url. */
@@ -182,9 +185,11 @@ export class Keyholder {
     private readonly clock: () => number;
     private readonly attestor: Attestor;
     private readonly genesisCustodians: string[];
+    private readonly hygiene: MemoryHygiene;
 
     constructor(private readonly opts: KeyholderOptions) {
         this.clock = opts.clock ?? (() => Date.now());
+        this.hygiene = opts.hygiene ?? checkMemoryHygiene();
         this.attestor = opts.attestor ?? noneAttestor;
         this.genesisCustodians = [...opts.genesisCustodians];
         this.stateFile = readStateFile(opts.stateDir);
@@ -261,6 +266,7 @@ export class Keyholder {
             pending: this.pendingStatus(),
             publicKeys: keys ? { ticket: keys.ticketPublicKeys, deposit: keys.depositPublicKeys } : null,
             wrapVersion: keys ? keys.wrap[0].version : null,
+            memory: this.hygiene,
         };
     }
 

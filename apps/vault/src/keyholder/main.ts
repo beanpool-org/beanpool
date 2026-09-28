@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
         stateDir: string; socketPath: string; genesisCustodians: string[]; releaseHash?: string;
     };
-    const kh = new Keyholder({ stateDir: config.stateDir, genesisCustodians: config.genesisCustodians, releaseHash: config.releaseHash });
+    const kh = new Keyholder({ stateDir: config.stateDir, genesisCustodians: config.genesisCustodians, releaseHash: config.releaseHash, hygiene });
     const server = await listenKeyholder(kh, config.socketPath);
     const stop = (code: number) => {
         kh.lock();

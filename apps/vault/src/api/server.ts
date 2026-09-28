@@ -106,6 +106,8 @@ interface KeyholderStatus {
     restorePending: boolean;
     publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] } | null;
     wrapVersion: number | null;
+    /** The keyholder's memory hygiene (hygiene.ts): what V3's image got wrong shows here and in the report. */
+    memory: Record<string, unknown> | null;
     reachable: boolean;
 }
 
@@ -269,7 +271,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch {
             return {
                 state: 'locked', since: startedAt, custodians: [], pending: null, generation: null, platform: 'none', releaseHash: 'unknown',
-                restorePending: false, publicKeys: null, wrapVersion: null, reachable: false,
+                restorePending: false, publicKeys: null, wrapVersion: null, memory: null, reachable: false,
             };
         }
     }
@@ -739,7 +741,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
             backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow },
             pushes: { sent: push.sent, failed: push.failed },
-            release: status.releaseHash, generation: status.generation, platform: status.platform,
+            release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
         });
     }

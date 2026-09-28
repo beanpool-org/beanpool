@@ -12,9 +12,10 @@ import net from 'node:net';
 /**
  * Internet addresses. A candidate is kept only when node:net reads it as an address, so a time (10:22:33), a MAC
  * address, `std::` or a version number (v1.2.3.4) is left alone. A trailing full stop ends an address ("from
- * 203.0.113.7."); a dot followed by a digit does not.
+ * 203.0.113.7."); a dot followed by a digit does not. An IPv6 one starts where a word does, or just after a label's
+ * colon: main's limiters logged their key, `ip:2001:db8::1`.
  */
-const IPV6_CANDIDATE = /(?<![0-9A-Za-z:.])(?:[0-9A-Fa-f]{0,4}:){2,7}(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9A-Fa-f]{0,4})(?:%[0-9A-Za-z_-]+)?(?![0-9A-Za-z:]|\.\d)/g;
+const IPV6_CANDIDATE = /(?:(?<![0-9A-Za-z:.])|(?<=[A-Za-z]:))(?:[0-9A-Fa-f]{0,4}:){2,7}(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9A-Fa-f]{0,4})(?:%[0-9A-Za-z_-]+)?(?![0-9A-Za-z:]|\.\d)/g;
 const IPV4_CANDIDATE = /(?<![0-9A-Za-z.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g;
 
 /** `text` with every internet address in it replaced, IPv6 first (its dotted IPv4 tail too), then IPv4. */

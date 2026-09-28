@@ -50,6 +50,11 @@ const testCases = [
         expected: "from [REDACTED_ADDRESS] and [REDACTED_ADDRESS]/64 and [[REDACTED_ADDRESS]]:443 and [REDACTED_ADDRESS]"
     },
     {
+        name: "An address in a limiter key, as main logged the gateway's (ip:<address>), IPv6 and IPv4",
+        input: "[gateway] rate limit reached for ip:2001:db8:15::14; answering 429 (ip:2001:db8:1:2::/64, ip:::1, ip:203.0.113.9)",
+        expected: "[gateway] rate limit reached for ip:[REDACTED_ADDRESS]; answering 429 (ip:[REDACTED_ADDRESS]/64, ip:[REDACTED_ADDRESS], ip:[REDACTED_ADDRESS])"
+    },
+    {
         name: "An address inside a multiaddr and in JSON metadata",
         input: '/ip4/203.0.113.7/tcp/4001 {"ip":"2001:db8::7"}',
         expected: '/ip4/[REDACTED_ADDRESS]/tcp/4001 {"ip":"[REDACTED_ADDRESS]"}'

@@ -378,6 +378,7 @@ run_federation_suites() {
       test-standby-listings-verbatim
       test-standby-standing
       test-standby-health
+      test-address-retention
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

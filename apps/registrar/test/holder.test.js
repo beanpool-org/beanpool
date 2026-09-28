@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import worker from '../src/index.js';
+import worker, { attestSweep } from '../src/index.js';
 import { nowS, toHex, world, liveName, makeKey, routing } from './harness.js';
 
 const DAY = 86400;
@@ -389,6 +389,193 @@ test('D-C: the admin rejecting a gated claim nobody approved frees the name at o
     } finally { w.restore(); }
 });
 
+// ── Block's promise holds through a release (r4117740868) ─────────────────────────────────────────────────────────
+// The names page offers Release only on a blocked row. Its default release must never hand the name back to the key
+// the admin blocked: it holds the name 30 days from EVERY key, that one included, then it is free. "Free now" frees it
+// at once. The same for a name the admin paused. A community's own release keeps D-C's meaning (the tests above).
+
+// What the blocked key's node gets, trying every way it has to get the name back, and what every other key gets.
+async function nobodyMayClaim(w, name, blocked, other) {
+    const before = await w.row(name);
+    const refused = { error: 'name blocked' };
+    const tries = {
+        claim: await w.claim(blocked, { name }),
+        'claim, direct': await w.claim(blocked, { name, mode: 'direct', public_ip: '198.51.100.7' }),
+        heal: await w.heal(blocked, { name }),
+        'heal, no name': await w.heal(blocked),
+        release: await w.release(blocked, { name }),
+        offline: await w.release(blocked, {}, '/api/registrar/offline'),
+    };
+    for (const [what, r] of Object.entries(tries)) {
+        assert.equal(r.status, 403, `the blocked key's ${what}: ${JSON.stringify(r.body)}`);
+        assert.deepEqual(r.body, refused, `the blocked key's ${what}`);
+    }
+    const grab = await w.claim(other, { name });
+    assert.equal(grab.status, 409, JSON.stringify(grab.body));
+    assert.deepEqual(grab.body, { error: 'name taken', owner: 'other' });
+    assert.equal((await w.available(name)).body.available, false);
+    assert.deepEqual(await w.row(name), before, 'nothing moved');
+    assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'nothing routed');
+    // Who holds it: to the blocked key, nobody it may claim; to anyone else, the key of the row that holds it.
+    assert.deepEqual((await w.holder(blocked, { name })).body, { name, held: 'reserved' });
+    const theirs = (await w.holder(other, { name })).body;
+    assert.equal(theirs.held, 'other');
+    assert.equal(theirs.holder_key, blocked.pubHex);
+}
+
+test('a blocked name released without "free now" is held 30 days from EVERY key, the blocked one included; then it is free', async () => {
+    const w = await world();
+    try {
+        const [blocked, other, later] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        await liveName(w, 'thornfield', blocked);
+        assert.equal((await w.admin('thornfield', 'block')).body.status, 'blocked');
+
+        // Release, as the names page sends it with its box unticked.
+        const rel = await w.admin('thornfield', 'release', { free_now: false });
+        assert.equal(rel.status, 200, JSON.stringify(rel.body));
+        const row = await w.row('thornfield');
+        assert.equal(row.status, 'released');
+        assert.equal(row.pause_reason, 'admin-held-all');
+        assert.equal(row.node_pubkey, blocked.pubHex);
+        const heldUntil = row.released_at + COOLOFF;
+        assert.deepEqual(rel.body, { status: 'released', name: 'thornfield', reason: 'admin-held-all', held_until: heldUntil });
+        assert.match(w.events('thornfield').at(-1).detail,
+            /^released by the admin \(was blocked\): held 30 days from every key, its own \S+ included, then free$/);
+
+        await nobodyMayClaim(w, 'thornfield', blocked, other);
+        // Its node hears the admin's release, and no hold it could take the name back inside.
+        const st = await w.status(blocked);
+        assert.equal(st.body.status, 'released');
+        assert.equal(st.body.reason, 'admin-held-all');
+        assert.equal(st.body.held_until, undefined, 'nothing for this key to take back');
+
+        // The same release again, without "free now", changes nothing: the hold runs from the first.
+        assert.deepEqual((await w.admin('thornfield', 'release')).body, rel.body);
+        assert.deepEqual(await w.row('thornfield'), row);
+        // Nor does the sweep, however often it runs.
+        await attestSweep(w.env); await attestSweep(w.env);
+        assert.deepEqual(await w.row('thornfield'), row);
+
+        // One minute short of 30 days: still held from every key.
+        await w.backdate('thornfield', { released_at: nowS() - COOLOFF + 60 });
+        await nobodyMayClaim(w, 'thornfield', blocked, other);
+
+        // Past the hold: free, to anyone.
+        await w.backdate('thornfield', { released_at: nowS() - COOLOFF - 1 });
+        assert.deepEqual((await w.available('thornfield')).body, { available: true, reason: 'free', tier: 'auto' });
+        for (const k of [blocked, other]) assert.deepEqual((await w.holder(k, { name: 'thornfield' })).body, { name: 'thornfield', held: 'free' });
+        const taken = await w.claim(other, { name: 'thornfield' });
+        assert.equal(taken.body.status, 'live', JSON.stringify(taken.body));
+        assert.equal((await w.row('thornfield')).node_pubkey, other.pubHex);
+        assert.equal((await w.claim(blocked, { name: 'thornfield' })).status, 409, 'another community holds it now');
+
+        // Past the hold the blocked key is a new claimant, never its old tenure taken back.
+        await liveName(w, 'brambles', blocked);
+        await w.admin('brambles', 'block');
+        await w.admin('brambles', 'release');                                // no body at all: the default, too
+        assert.equal((await w.row('brambles')).pause_reason, 'admin-held-all');
+        await w.backdate('brambles', { released_at: nowS() - COOLOFF - 1 });
+        assert.equal((await w.claim(blocked, { name: 'brambles' })).body.status, 'live');
+        assert.match(w.events('brambles').at(-1).detail, /^claimed by key \S+; it was released, last held by /);
+
+        // "Free now": free at once, to any key.
+        await liveName(w, 'nettles', blocked);
+        await w.admin('nettles', 'block');
+        const freed = await w.admin('nettles', 'release', { free_now: true });
+        assert.deepEqual(freed.body, { status: 'released', name: 'nettles' });
+        assert.equal((await w.row('nettles')).pause_reason, 'admin');
+        for (const k of [blocked, other]) assert.deepEqual((await w.holder(k, { name: 'nettles' })).body, { name: 'nettles', held: 'free' });
+        assert.equal((await w.claim(later, { name: 'nettles' })).body.status, 'live');
+        assert.equal((await w.row('nettles')).node_pubkey, later.pubHex);
+
+        // "Free now" also ends a hold from every key at once.
+        await liveName(w, 'thistle', blocked);
+        await w.admin('thistle', 'block');
+        await w.admin('thistle', 'release');
+        assert.deepEqual((await w.admin('thistle', 'release', { free_now: true })).body, { status: 'released', name: 'thistle' });
+        assert.equal((await w.claim(later, { name: 'thistle' })).body.status, 'live');
+    } finally { w.restore(); }
+});
+
+test('a blocked gated name released without "free now": nobody may claim it for 30 days, then its old key waits for approval', async () => {
+    const w = await world();
+    try {
+        const [blocked, other] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(blocked, { name: 'perth' })).body.status, 'pending');   // gated in the 0001 seed
+        assert.equal((await w.admin('perth', 'approve')).body.status, 'live');
+        assert.equal((await w.admin('perth', 'block')).body.status, 'blocked');
+        assert.equal((await w.admin('perth', 'release', { free_now: false })).body.status, 'released');
+        assert.equal((await w.row('perth')).pause_reason, 'admin-held-all');
+        await nobodyMayClaim(w, 'perth', blocked, other);
+
+        // Past the hold: free — and its old key's approval went with the name. It waits for the admin like anyone.
+        await w.backdate('perth', { released_at: nowS() - COOLOFF - 1 });
+        const again = await w.claim(blocked, { name: 'perth' });
+        assert.equal(again.status, 200, JSON.stringify(again.body));
+        assert.equal(again.body.status, 'pending', 'a gated name still needs approval');
+        assert.deepEqual(routing(w, 'perth'), { dns: null, tunnels: [] });
+
+        // With "free now": free at once, and its old key waits for approval too.
+        assert.equal((await w.claim(blocked, { name: 'hobart' })).body.status, 'pending');
+        assert.equal((await w.admin('hobart', 'approve')).body.status, 'live');
+        await w.admin('hobart', 'block');
+        assert.deepEqual((await w.admin('hobart', 'release', { free_now: true })).body, { status: 'released', name: 'hobart' });
+        assert.equal((await w.claim(blocked, { name: 'hobart' })).body.status, 'pending');
+    } finally { w.restore(); }
+});
+
+test('a name the admin paused, released without "free now", is held from every key too; any other pause keeps D-C', async () => {
+    const w = await world();
+    try {
+        const [paused, other] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'stillpond', paused);
+        assert.equal((await w.admin('stillpond', 'pause')).body.status, 'paused');
+        const rel = await w.admin('stillpond', 'release');
+        const row = await w.row('stillpond');
+        assert.deepEqual(rel.body, { status: 'released', name: 'stillpond', reason: 'admin-held-all', held_until: row.released_at + COOLOFF });
+        assert.match(w.events('stillpond').at(-1).detail, /^released by the admin \(was paused\): held 30 days from every key/);
+        await nobodyMayClaim(w, 'stillpond', paused, other);
+
+        // A pause the admin didn't make (the sweep's, a take-back's): the admin's release holds it for its key (D-C).
+        await liveName(w, 'sweptpond', paused);
+        await w.admin('sweptpond', 'pause');
+        await w.backdate('sweptpond', { pause_reason: 'impostor' });
+        const held = await w.admin('sweptpond', 'release');
+        assert.deepEqual(held.body, { status: 'released', name: 'sweptpond', held_until: (await w.row('sweptpond')).released_at + COOLOFF });
+        assert.equal((await w.row('sweptpond')).pause_reason, 'admin-held');
+        assert.equal((await w.holder(paused, { name: 'sweptpond' })).body.held, 'you');
+    } finally { w.restore(); }
+});
+
+test('the blocked node\'s own public-address agent, polling every 5 minutes through the hold, never brings the name back', async () => {
+    const w = await world();
+    try {
+        const [blocked, other] = await Promise.all([makeKey(), makeKey()]);
+        for (const [name, gated] of [['thornfield', false], ['perth', true]]) {
+            assert.equal((await w.claim(blocked, { name })).body.status, gated ? 'pending' : 'live');
+            if (gated) assert.equal((await w.admin(name, 'approve')).body.status, 'live');
+            await w.admin(name, 'block');
+            await w.admin(name, 'release', { free_now: false });
+            const row = await w.row(name);
+            // reconcile() (apps/server/src/services/public-address-agent.ts): /status; anything but live or pending is
+            // claimed again, with the body claimAddress() sends. An hour of it, the sweep running between.
+            for (let round = 0; round < 12; round++) {
+                const st = await w.status(blocked);
+                assert.equal(st.status, 200);
+                assert.notEqual(st.body.status, 'live', `round ${round}`);
+                assert.equal(st.body.tunnelToken, undefined);
+                const c = await w.claim(blocked, { name, mode: 'tunnel', origin: 'https://localhost:8443', community_name: 'Thorns' });
+                assert.equal(c.status, 403, `round ${round}: ${JSON.stringify(c.body)}`);
+                assert.equal(c.body.tunnelToken, undefined);
+                await attestSweep(w.env);
+            }
+            assert.deepEqual(await w.row(name), row, `${name}: the row is as the release left it`);
+            assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, `${name}: nothing at Cloudflare`);
+            assert.equal((await w.claim(other, { name })).status, 409);
+        }
+    } finally { w.restore(); }
+});
+
 // ── The names page ────────────────────────────────────────────────────────────────────────────────────────────────
 
 // The served admin script, run against a stub page: the tables it renders, and what its buttons send.
@@ -399,6 +586,9 @@ async function adminPage(w) {
     const boxes = {};
     const sent = [];
     const confirms = [];
+    const alerts = [];
+    // What the stubbed Worker answers an action (the Worker's own answers are tested above).
+    const answer = { status: 'released' };
     const ctx = {
         console,
         document: {
@@ -411,10 +601,10 @@ async function adminPage(w) {
         },
         sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
         confirm: (text) => { confirms.push(text); return true; },
-        alert() {},
+        alert: (text) => { alerts.push(text); },
         fetch: async (url, init = {}) => {
             sent.push({ url, init });
-            return { ok: true, status: 200, json: async () => ({ status: 'released', allocations: [], events: [] }) };
+            return { ok: true, status: 200, json: async () => ({ ...answer, allocations: [], events: [] }) };
         },
     };
     vm.createContext(ctx);
@@ -431,7 +621,8 @@ async function adminPage(w) {
         await ctx.adminAction(name, action, button(attrs));
     };
     const releases = () => sent.filter((s) => /\/release$/.test(s.url)).map((s) => ({ url: s.url, body: s.init.body === undefined ? undefined : JSON.parse(s.init.body) }));
-    return { ctx, els, boxes, confirms, shoot, click, releases };
+    const answers = (body) => { for (const k of Object.keys(answer)) delete answer[k]; Object.assign(answer, body); };
+    return { ctx, els, boxes, confirms, alerts, answers, shoot, click, releases };
 }
 
 test('the names page: Release has a "free now" box and sends free_now only when it is ticked; Reject and Free now free at once', async () => {
@@ -454,10 +645,10 @@ test('the names page: Release has a "free now" box and sends free_now only when 
         assert.doesNotMatch(table, /data-name="freedname"/, 'a name already free has no action');
         assert.doesNotMatch(table, /data-name="livename" data-action="release"/, 'a live name still has no Release');
 
-        // Release, box not ticked: held.
+        // Release on a blocked name, box not ticked: held — from every key, the blocked one included (r4117740868).
         await p.click('activeTableContainer', 'blockedname', 'release');
-        assert.match(p.confirms.at(-1), /held 30 days for its key/);
-        assert.doesNotMatch(p.confirms.at(-1), /FREE AT ONCE/);
+        assert.match(p.confirms.at(-1), /held 30 days from EVERY key, this one included/);
+        assert.doesNotMatch(p.confirms.at(-1), /FREE AT ONCE|can take it back/);
         // Ticked: free now.
         p.boxes.blockedname.checked = true;
         await p.click('activeTableContainer', 'blockedname', 'release');
@@ -476,6 +667,46 @@ test('the names page: Release has a "free now" box and sends free_now only when 
             { url: `${base}heldname/release`, body: { free_now: true } },
             { url: `${base}ownerheld/release`, body: { free_now: true } },
             { url: `${base}sydney/release`, body: { free_now: true } },
+        ]);
+    } finally { w.restore(); }
+});
+
+test('the names page says what a blocked name\'s release does: held from every key, the blocked one included', async () => {
+    const w = await world();
+    try {
+        const p = await adminPage(w);
+        const key = 'ab'.repeat(32);
+        p.ctx.renderActive([
+            { name: 'livename', status: 'live', node_pubkey: key, mode: 'tunnel' },
+            { name: 'blockedname', status: 'blocked', pause_reason: 'admin', node_pubkey: key, mode: 'tunnel', paused_at: 1 },
+            // A state the page doesn't know (a legacy 'revoked' row) gets Block and Release; its release keeps D-C.
+            { name: 'oldrow', status: 'revoked', node_pubkey: key, mode: 'tunnel' },
+        ]);
+        p.shoot();
+
+        // Block no longer promises that Release gives the name back to anyone.
+        await p.click('activeTableContainer', 'livename', 'block');
+        assert.match(p.confirms.at(-1), /its node cannot heal or release it/);
+        assert.match(p.confirms.at(-1), /Release holds it 30 days from every key, this one included/);
+
+        // A blocked name's release, and the Worker's answer to it.
+        p.answers({ status: 'released', name: 'blockedname', reason: 'admin-held-all', held_until: 1790000000 });
+        await p.click('activeTableContainer', 'blockedname', 'release');
+        assert.match(p.confirms.at(-1), /held 30 days from EVERY key, this one included/);
+        assert.match(p.alerts.at(-1), /^blockedname\.beanpool\.org is now released \(admin-held-all\), held from every key, its own included, until /);
+        assert.doesNotMatch(p.alerts.at(-1), /held for its key/);
+
+        // Any other row's release is held for its key, which can take it back (D-C).
+        p.answers({ status: 'released', name: 'oldrow', held_until: 1790000000 });
+        await p.click('activeTableContainer', 'oldrow', 'release');
+        assert.match(p.confirms.at(-1), /held 30 days for its key, which can take it back/);
+        assert.doesNotMatch(p.confirms.at(-1), /EVERY key/);
+        assert.match(p.alerts.at(-1), /^oldrow\.beanpool\.org is now released, held for its key until /);
+
+        const base = '/api/local/admin/registrar/';
+        assert.deepEqual(p.releases(), [
+            { url: `${base}blockedname/release`, body: { free_now: false } },
+            { url: `${base}oldrow/release`, body: { free_now: false } },
         ]);
     } finally { w.restore(); }
 });

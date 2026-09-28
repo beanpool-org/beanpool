@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 61,
-  "hash": "540a9a2044e25a9e2f95fa4ef477c9e785fe18cfc5b7cb727e781c1f6c69bb28",
+  "version": 62,
+  "hash": "4ee6e9a303abb0e5ca131099e2a97058d60325e95f10b08e11c27f0524b9d90e",
   "sections": [
     {
       "id": "setup",
@@ -2022,7 +2022,7 @@
         },
         {
           "type": "p",
-          "text": "Take the new docker-compose.yml with each update, not only the image. Since the 2026-09-28 update the server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server."
+          "text": "Take the new docker-compose.yml with each update, not only the image. The server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server."
         },
         {
           "type": "p",

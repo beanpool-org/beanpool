@@ -235,11 +235,22 @@ export interface ImportResult {
     conflictsSkipped: number;
     recoverySharesImported: number;
     /**
-     * `<member key>.<column>` for each value of the copy's members rows this table's own rules refuse (a goal below 0 from a
-     * main server whose column has no CHECK), left out of the write: this standby's row isn't the main server's there, and
-     * the whole-copy check says so (services/backup-puller.ts checkWholeCopy).
+     * Each value of the copy's members rows this table's own rules refuse (a goal below 0 from a main server whose column
+     * has no CHECK), left out of the write: this standby's row isn't the main server's there, and the whole-copy check says
+     * so (services/backup-puller.ts checkWholeCopy).
      */
-    valuesLeftOut: string[];
+    valuesLeftOut: ValueLeftOut[];
+}
+
+/** A value of a members row the import left out, the member's key in full (writeMemberStanding). */
+export interface ValueLeftOut {
+    publicKey: string;
+    column: string;
+}
+
+/** A value left out, as the logs and the whole-copy check name it: `<member key's first 16>.<column>`. */
+export function valueLeftOutName(v: ValueLeftOut): string {
+    return `${v.publicKey.slice(0, 16)}.${v.column}`;
 }
 
 export interface SyncCallbacks {
@@ -858,7 +869,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  */
 function writeMemberStanding(
     memberColumns: ReadonlySet<string>, rules: RowRules, cache: Map<string, Database.Statement>, publicKey: string,
-    standing: Record<string, unknown>, updatedAt: unknown, leftOut: string[],
+    standing: Record<string, unknown>, updatedAt: unknown, leftOut: ValueLeftOut[],
 ): 'new' | 'updated' | 'refused' | null {
     const offered = Object.keys(standing).filter((c) => memberColumns.has(c) && isColumnValue(standing[c])).sort();
     const stamp = typeof updatedAt === 'string' && updatedAt ? updatedAt : null;
@@ -866,7 +877,7 @@ function writeMemberStanding(
     if (existing && existing.updated_at === stamp && offered.every((c) => existing[c] === standing[c])) return null;
     const admitted = rules.admit(offered, standing, existing);
     if (!admitted) return 'refused';
-    for (const c of admitted.leftOut) leftOut.push(`${publicKey.slice(0, 16)}.${c}`);
+    for (const column of admitted.leftOut) leftOut.push({ publicKey, column });
     const columns = admitted.columns;
     // A row that differs only in a value left out is written once, not again with every copy.
     if (existing && existing.updated_at === stamp && columns.every((c) => existing[c] === standing[c])) return null;
@@ -1058,8 +1069,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     let groupChanges = 0;
     // Preferences, keepers and pledges written (design G2b, G2c).
     let standingChanges = 0;
-    // `<member key>.<column>` for each value of a members row this table's own rules refuse, left out of its write.
-    const valuesLeftOut: string[] = [];
+    // Each value of a members row this table's own rules refuse, left out of its write.
+    const valuesLeftOut: ValueLeftOut[] = [];
 
     // Photos go through the store BEFORE the transaction opens, never inside it — the same rule the create
     // and update paths keep (`storedPhotoColumns` in engine/posts.ts). Each `store.put` is a mkdir, a temp
@@ -1245,7 +1256,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             memberRules?.close();
             if (valuesLeftOut.length > 0) {
                 console.warn(`[Sync] ${valuesLeftOut.length} value(s) in the main server's members rows this table's rules refuse, left out `
-                    + `(the row keeps its own, or the default): ${valuesLeftOut.slice(0, 5).join(', ')}`);
+                    + `(the row keeps its own, or the default): ${valuesLeftOut.slice(0, 5).map(valueLeftOutName).join(', ')}`);
             }
 
             // Each member's preferences, with their row (design G2b): holiday, notification settings, reminder defaults.

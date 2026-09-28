@@ -49,7 +49,7 @@ import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
-import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, heldLedgerSum, clearForResync } from '../engine/sync.js';
+import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, heldLedgerSum, clearForResync, valueLeftOutName, type ValueLeftOut } from '../engine/sync.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -452,13 +452,15 @@ function recordQuietly(write: () => void): void {
  * `valuesLeftOut`: the values of this copy's members rows the import left out because this standby's table refuses them
  * (engine/sync.ts writeMemberStanding): any makes the copy not exact (recorded as `members` differing), and is logged,
  * but asks for no force-resync (one would leave the same values out); the main servers' own boot clean-up (db.ts)
- * brings such rows into the table's rules, and the next whole copy is exact again.
+ * brings such rows into the table's rules, and the next whole copy is exact again. The members table's content is
+ * compared with those values read as the copy names them, so it differs only where the import copied a row other than
+ * verbatim, which a force-resync mends.
  * Exported so a suite can run it on a copy it fetched.
  */
-export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly string[] = []): ReplicaConsistency {
+export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly ValueLeftOut[] = []): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
     if (valuesLeftOut.length > 0) {
-        c.valuesLeftOut = { count: valuesLeftOut.length, examples: valuesLeftOut.slice(0, 5) };
+        c.valuesLeftOut = { count: valuesLeftOut.length, examples: valuesLeftOut.slice(0, 5).map(valueLeftOutName) };
         c.ok = false;
     }
     lastConsistency = c;
@@ -468,7 +470,20 @@ export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly str
     // too, and never read as a copy gone wrong that a force-resync would mend (review 4118340860).
     const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
     const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
-    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut }) : null;
+    // The members values the import left out, as the copy names them: the main server's hash has them, this standby's row
+    // can't, and they are reported on their own (valuesLeftOut above), never as a difference a force-resync would mend.
+    const membersLeftOut = new Map<string, Record<string, unknown>>();
+    if (valuesLeftOut.length > 0) {
+        const standingOf = new Map((Array.isArray(payload.members) ? payload.members : []).map((m) => [m?.publicKey, m?.standing]));
+        for (const v of valuesLeftOut) {
+            const standing = standingOf.get(v.publicKey);
+            if (!standing || typeof standing !== 'object' || !Object.hasOwn(standing, v.column)) continue;
+            const cells = membersLeftOut.get(v.publicKey) ?? {};
+            cells[v.column] = standing[v.column];
+            membersLeftOut.set(v.publicKey, cells);
+        }
+    }
+    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut, membersLeftOut }) : null;
     // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
     // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
     // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it

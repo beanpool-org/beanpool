@@ -34,7 +34,10 @@
  *     goal below 0 now, and holds one as an older build wrote it. The running S's delta and whole copy land, the goal
  *     left out (S keeps its own), a listing made after it arrives, and the whole-copy check reports the value; a fresh
  *     standby's first copy lands with the goal at its default, and so do its next pulls (before, every copy was refused
- *     on the CHECK, and a fresh standby held no member). A standby cleans none of its rows at boot. M, booted on this
+ *     on the CHECK, and a fresh standby held no member). Neither copy is exact, and neither asks for a force-resync (one
+ *     would leave the same value out; #1274's content check read the goal as members differing and asked for one): the
+ *     next pull is a delta. A members row that differs anywhere else still asks for the force-resync. A standby cleans
+ *     none of its rows at boot. M, booted on this
  *     build as if for the first time (its marker gone), brings the goal into the schema's rules once: the column's
  *     default, the row stamped, nothing else changed.
  *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
@@ -224,6 +227,31 @@ async function child(): Promise<void> {
         consistency: async () => {
             const { getBackupStatus } = await import('./services/backup-puller.js');
             return getBackupStatus().consistency ?? null;
+        },
+        /** This standby's record of its copies: its last whole copy's verdict, and when it last asked for a force-resync. */
+        record: async () => {
+            const { readCopyRecord } = await import('./services/standby-copy-record.js');
+            const r = readCopyRecord();
+            return { lastWhole: r.lastWhole, lastMismatchResyncAt: r.lastMismatchResyncAt };
+        },
+        /** A member's bio changed on this server alone, as nothing a copy sends. */
+        'plant-bio': async (a: { pk: string; bio: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('UPDATE members SET bio = ? WHERE public_key = ?').run(a.bio, a.pk).changes === 1;
+        },
+        /**
+         * The whole-copy check itself (services/backup-puller.ts checkWholeCopy) on M's current whole copy, fetched with the
+         * replication token and not imported, with the values `leftOut` named as an import that left them out would.
+         */
+        'check-whole': async (a: { leftOut: { publicKey: string; column: string }[] }) => {
+            const { getLocalConfig } = await import('./config/local-config.js');
+            const { checkWholeCopy } = await import('./services/backup-puller.js');
+            const { readCopyRecord } = await import('./services/standby-copy-record.js');
+            const c = getLocalConfig();
+            const res = await fetch(`${c.backupPrimaryUrl}/api/local/admin/sync-snapshot`, { headers: { 'X-Replication-Token': c.backupReplicationToken! } });
+            const payload = await res.json();
+            const consistency = checkWholeCopy(payload, a.leftOut);
+            return { hashes: !!payload?.tableHashes, consistency, lastWhole: readCopyRecord().lastWhole };
         },
         /** Whether this database's members.goal_amount has the fresh schema's CHECK (an ALTER'd column has none). */
         'goal-rule': async () => {
@@ -623,6 +651,7 @@ async function main(): Promise<void> {
         const plums = await offer(ann, 'Late plums', 3);
         const next8 = await standby.send('pull', {});
         assert(next8.ok === true && (await boardOn(sb)).includes(plums.id), `and so does the next: a listing M makes after it arrives (${next8.ok ? next8.mode : next8.error})`);
+        const before8 = await standby.send('record');
         const whole8 = await standby.send('pull', { whole: true });
         const m8b: Rows = await main.send('rows');
         s8 = await standby.send('rows');
@@ -632,6 +661,14 @@ async function main(): Promise<void> {
         assert(check8?.ok === false && check8.valuesLeftOut?.count === 1 && check8.valuesLeftOut.examples?.[0] === example8
             && check8.tables.every((t: any) => t.match) && check8.ledger?.match === true,
             `the whole-copy check reports the value left out, so the copy isn't exact; every count and account matches (${JSON.stringify({ ok: check8?.ok, valuesLeftOut: check8?.valuesLeftOut, differ: check8?.tables?.filter((t: any) => !t.match) })})`);
+        // Not exact, and no force-resync: one would leave the same value out. S has asked for none before, so none is held
+        // back by the six hours between two.
+        const record8 = (await standby.send('record')).lastWhole;
+        assert(before8.lastMismatchResyncAt === null && record8?.exact === false && JSON.stringify(record8.differs) === '["members"]'
+            && record8.hashed === true && record8.resyncAsked === false,
+            `its record: not exact, members differing, every table's content compared, and no force-resync asked (${JSON.stringify({ lastResyncBefore: before8.lastMismatchResyncAt, record8 })})`);
+        const after8 = await standby.send('pull', {});
+        assert(after8.ok === true && after8.mode === 'delta', `and its next pull is a delta, not a force-resync (${after8.ok ? after8.mode : after8.error})`);
 
         fs.mkdirSync(dir('fresh'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('fresh'), 'genesis.json'));
@@ -645,10 +682,24 @@ async function main(): Promise<void> {
         assert(fresh1.ok === true && f8.members.length === m8c.members.length && goalOf(f8, seed.publicKey) === null && onlyTheGoal(rowsDiff(m8c, f8)),
             `a fresh standby's first copy lands: every member, and Seed Fund's goal at the column's default, none (${JSON.stringify({ ok: fresh1.ok, mode: fresh1.mode, error: fresh1.error })}; members ${f8.members.length} of ${m8c.members.length}; differences ${first(rowsDiff(m8c, f8))})`);
         assert(freshCheck?.ok === false && freshCheck.valuesLeftOut?.examples?.[0] === example8, `and its whole-copy check reports the value (${JSON.stringify(freshCheck?.valuesLeftOut ?? null)})`);
+        const freshRecord = await fresh.send('record');
+        assert(freshRecord.lastWhole?.exact === false && JSON.stringify(freshRecord.lastWhole.differs) === '["members"]' && freshRecord.lastWhole.hashed === true
+            && freshRecord.lastWhole.resyncAsked === false && freshRecord.lastMismatchResyncAt === null,
+            `its record: not exact, members differing, and no force-resync asked (${JSON.stringify(freshRecord)})`);
         const fresh2 = await fresh.send('pull', {});
         const fresh3 = await fresh.send('pull', { whole: true });
         assert(fresh2.ok === true && fresh2.mode === 'delta' && fresh3.ok === true && fresh3.whole === true,
             `its next pulls land, a delta and a whole copy (${JSON.stringify([fresh2, fresh3].map((r) => ({ ok: r.ok, mode: r.mode, error: r.error })))})`);
+        const fresh3Record = (await fresh.send('record')).lastWhole;
+        assert(fresh3Record?.exact === false && JSON.stringify(fresh3Record.differs) === '["members"]' && fresh3Record.resyncAsked === false,
+            `and that whole copy's check asks for none either (${JSON.stringify(fresh3Record)})`);
+        // The value left out is read as the copy's only where the import left it out: a members row that differs anywhere
+        // else is still a copy a force-resync mends. Checked on M's next whole copy, not imported, so the bio stays S's.
+        require_(await fresh.send('plant-bio', { pk: ann.pk, bio: 'Only on this standby' }), 'the fresh standby: Ann\'s bio changed there alone');
+        const guard8 = await fresh.send('check-whole', { leftOut: [{ publicKey: seed.publicKey, column: 'goal_amount' }] });
+        assert(guard8.hashes === true && guard8.consistency?.valuesLeftOut?.examples?.[0] === example8 && guard8.lastWhole?.exact === false
+            && JSON.stringify(guard8.lastWhole.differs) === '["members"]' && guard8.lastWhole.resyncAsked === true,
+            `a members row that differs beside the value left out still asks for the force-resync (${JSON.stringify({ hashes: guard8.hashes, lastWhole: guard8.lastWhole })})`);
         const markers8 = { main: await main.send('marker'), standby: await standby.send('marker'), fresh: await fresh.send('marker') };
         assert(markers8.main === '1' && markers8.standby === null && markers8.fresh === null,
             `M ran its clean-up at its first boot; a standby runs none on its rows and records none (${JSON.stringify(markers8)})`);

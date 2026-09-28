@@ -284,3 +284,62 @@ describe('proposalCandidates — the picker offers exactly the electorate', () =
         expect(view.candidates.some(m => m.memberPubkey === MEMBER)).toBe(true);
     });
 });
+
+describe('only people in the group before the lead went quiet take part (2026-09-28)', () => {
+    const BY = '2026-08-10T00:00:00.000Z';
+
+    it('says who votes, in the server\'s terms, while a vote can run', () => {
+        const members = buildSuccessionView(data({ silence: silence({ electorate: 'members', votersJoinedBy: BY }) }), ROSTER, NOW);
+        expect(members.whoVotesLine).toBe('Only members who joined by 10 Aug 2026 can vote.');
+        const convenors = buildSuccessionView(data({ silence: silence({ votersJoinedBy: BY }) }), ROSTER, NOW);
+        expect(convenors.whoVotesLine).toBe('Only convenors appointed by 10 Aug 2026 can vote.');
+    });
+
+    it('keeps saying it while a vote is running, so someone with no Yes/No reads why', () => {
+        const view = buildSuccessionView(data({
+            silence: silence({ electorate: 'members', votersJoinedBy: BY }),
+            proposals: [proposal({ canVote: false })],
+            canPropose: false,
+        }), ROSTER, NOW);
+        expect(view.canVote).toBe(false);
+        expect(view.whoVotesLine).toBe('Only members who joined by 10 Aug 2026 can vote.');
+    });
+
+    it('says nothing of the kind to a node older than the rule, which sends no day', () => {
+        expect(buildSuccessionView(data(), ROSTER, NOW).whoVotesLine).toBeNull();
+    });
+
+    it('offers only the people the server names as able to stand, not everyone holding the role', () => {
+        const view = buildSuccessionView(data({ silence: silence({ electorate: 'members', votersJoinedBy: BY }), voters: [OTHER] }), ROSTER, NOW);
+        expect(view.candidates.map(m => m.memberPubkey)).toEqual([OTHER]);
+        // A node older than the rule sends no list: the role alone decides, as before.
+        expect(proposalCandidates(silence({ electorate: 'members' }), ROSTER, undefined).map(m => m.memberPubkey)).toEqual([MEMBER, OTHER]);
+    });
+
+    it('when nobody who may vote is left, says so plainly and offers nothing', () => {
+        const view = buildSuccessionView(data({
+            silence: silence({ electorate: 'members', isEligible: false, votersJoinedBy: BY }),
+            canPropose: false, voters: [],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(true);
+        expect(view.outcomeOnly).toBe(false);
+        expect(view.silenceLine).toBe(
+            "Marty hasn't been active for 44 days. Only members who joined by 10 Aug 2026 can choose a new lead, and there are none, so no vote can open.");
+        expect(view.canPropose).toBe(false);
+        expect(view.canVote).toBe(false);
+        expect(view.whoVotesLine).toBeNull();
+    });
+
+    it('but not to a lead alone in their group: there is nobody else to tell', () => {
+        const alone = ROSTER.filter(m => m.memberPubkey === LEAD);
+        const view = buildSuccessionView(data({
+            silence: silence({ electorate: 'members', isEligible: false, votersJoinedBy: BY }), canPropose: false, voters: [],
+        }), alone, NOW);
+        expect(view.show).toBe(false);
+    });
+
+    it('says why a vote closed when its candidate can no longer be chosen', () => {
+        expect(outcomeLineText(proposal({ status: 'cancelled', closedReason: 'candidate_ineligible' })))
+            .toBe("Damo can't be chosen as lead, so the vote closed.");
+    });
+});

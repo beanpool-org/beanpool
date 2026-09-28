@@ -548,6 +548,9 @@ async function main(): Promise<void> {
         // Succession was already closed to them (its electorate asks for members.status = 'active'); kept as a check.
         const quietSince = new Date(Date.now() - 40 * 86_400_000).toISOString();
         db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(quietSince, quietSince, operator.pubKeyHex);
+        // Its members were there before the operator went quiet: only they vote on a new lead (test-groups-succession-electorate.ts).
+        const joinedBefore = new Date(Date.now() - 60 * 86_400_000).toISOString();
+        db.prepare('UPDATE group_members SET joined_at = ?, role_since = ? WHERE group_id = ?').run(joinedBefore, joinedBefore, quietGroup.id);
         refused('nor propose a new convenor where the convenor has gone quiet',
             await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/propose`, pruney, { candidatePubkey: bob.pubKeyHex }));
         const opened = proposeGroupConvenor(quietGroup.id, bob.pubKeyHex, alice.pubKeyHex);

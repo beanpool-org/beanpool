@@ -287,6 +287,69 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     assert(memberRow(garden.id, carol)?.status === 'active', 'a replica importing a leave and a re-join together keeps the member');
 
+    console.log('\n--- 1c. When a convenor was appointed travels; a main older than it erases nothing it still describes ---');
+    // group_members.role_since decides who votes on a quiet lead (engine/group-succession.ts). A main older than the
+    // column sends no roleSince. When its row keeps the role, status and joined_at the replica holds, it is the same
+    // appointment and the replica keeps the time it knows. When any of those changed there, that time belongs to an
+    // earlier appointment: the replica drops it and reads joined_at, as for a row from before the column.
+    const since3 = new Date(Date.now() - 1).toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    const orchard = createGroup({ name: 'Orchard Keepers', joinPolicy: 'open', createdBy: alice });
+    const ivy = makeMember('Ivy');       // made a convenor; an older main rewrites her row unchanged
+    const jude = makeMember('Jude');     // a member; an older main makes him a convenor
+    const kit = makeMember('Kit');       // removed; an older main re-admits them as a convenor
+    const lee = makeMember('Lee');       // made a convenor on a current main
+    for (const p of [ivy, jude, kit, lee]) joinGroup(orchard.id, p);
+    await new Promise(r => setTimeout(r, 5));
+    setMemberRole(orchard.id, alice, ivy, 'convenor');
+    setMemberRole(orchard.id, alice, lee, 'convenor');
+    removeGroupMember(orchard.id, alice, kit);
+    const tenure = (pub: string) => db.prepare(`SELECT role, status, joined_at, role_since, COALESCE(role_since, joined_at) AS since
+        FROM group_members WHERE group_id = ? AND member_pubkey = ?`).get(orchard.id, pub) as any;
+    const ivyThen = tenure(ivy), judeThen = tenure(jude), kitThen = tenure(kit), leeThen = tenure(lee);
+    assert(!!ivyThen?.role_since && ivyThen.role_since > ivyThen.joined_at, 'Ivy\'s appointment is later than her joining');
+
+    const orchardDelta: any = await exportSyncState(nodeId, since3);
+    const exportedRow = (pub: string) => (orchardDelta.groupMembers ?? []).find((m: any) => m.groupId === orchard.id && m.memberPubkey === pub);
+    assert(exportedRow(ivy)?.roleSince === ivyThen.role_since, 'the export carries when a convenor was appointed');
+
+    // What an older main sends: no roleSince. Ivy's row unchanged; Jude made a convenor; Kit re-admitted as a
+    // convenor and joined again (an older main stamps joined_at on re-admission). Lee's row is a current main's.
+    const olderMain = (pub: string, change: Record<string, unknown> = {}) => {
+        const { roleSince: _r, ...row } = exportedRow(pub) ?? {};
+        return { ...row, ...change };
+    };
+    await new Promise(r => setTimeout(r, 5));
+    const readmittedAt = new Date().toISOString();
+    const { signature: _s3, publicKey: _p3, ...unsigned3 } = orchardDelta;
+    const mixed = await signSyncPayload({
+        ...unsigned3, tombstones: [],
+        groupMembers: [
+            olderMain(ivy),
+            olderMain(jude, { role: 'convenor' }),
+            olderMain(kit, { role: 'convenor', status: 'active', joinedAt: readmittedAt, updatedAt: readmittedAt }),
+            { ...exportedRow(lee) },
+        ],
+    });
+    // Roll this database back to what a replica held before those writes: Lee still a member, every row older.
+    db.prepare(`UPDATE group_members SET role = 'member', role_since = joined_at WHERE group_id = ? AND member_pubkey = ?`).run(orchard.id, lee);
+    db.prepare(`UPDATE group_members SET updated_at = '2001-01-01T00:00:00.000Z' WHERE group_id = ?`).run(orchard.id);
+    setNodeRole('backup');
+    await importRemoteState(mixed);
+    setNodeRole('primary');
+
+    const ivyNow = tenure(ivy), judeNow = tenure(jude), kitNow = tenure(kit), leeNow = tenure(lee);
+    assert(ivyNow?.role_since === ivyThen.role_since,
+        'an older main rewriting the same appointment does not erase when it began');
+    assert(judeNow?.role === 'convenor' && judeNow.role_since === null && judeNow.since === judeThen.joined_at,
+        'a convenor made on an older main has no appointment time: it reads as joined_at');
+    assert(kitNow?.status === 'active' && kitNow.role === 'convenor' && kitNow.role_since === null,
+        'a convenor re-admitted on an older main does not keep the time of their removal');
+    assert(kitNow?.since === readmittedAt && kitNow.since !== kitThen.role_since,
+        'so their appointment reads as the re-admission, not earlier');
+    assert(leeNow?.role === 'convenor' && leeNow.role_since === leeThen.role_since,
+        'a current main\'s appointment time replaces the one the replica held');
+
     console.log(`\n${passed}/${run} passed`);
     await p2pNode.stop();
     process.exit(passed === run ? 0 : 1);

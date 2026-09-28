@@ -40,6 +40,7 @@ Some of these changes live on your community's server. You get them when your co
 - **One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.
 - The old group chats in Chats have been removed, with their messages.
 - Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group's other convenors — or its members, if the lead is its only convenor — will be able to choose a new one. The screens for that vote come in a later update.
+- **Choosing a new lead for a quiet group.** Only people who were in the group before its lead went quiet can vote. People who joined, or were made convenors, after that have no say, so new accounts can't take over a group whose lead has gone quiet.
 
 ### Safety
 

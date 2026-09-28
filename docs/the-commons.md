@@ -265,7 +265,13 @@ and edits the group; only the lead can remove or demote a convenor; and nobody c
 lead, node admins included (they hold no power over groups, and this changed nothing about that). The
 lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), or by
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
-its members when the lead is its only convenor. That vote got its screens on 2026-09-23, in both apps, on
+its members when the lead is its only convenor. Only people who were there before the lead went quiet take
+part (Marty, 2026-09-28, on every node): members whose membership began by the end of the lead's last active
+UTC day, and convenors appointed by then (`group_members.role_since`). Anyone later cannot propose, stand or
+vote and is not counted, so accounts made after a group is abandoned — one Google sign-in apiece on the global
+node — gain nothing; the same idea as a Decision's voters having joined before it opened. When no fellow
+convenor qualifies it is the members' vote, and when nobody qualifies no vote can open and the group's screen
+says why. That vote got its screens on 2026-09-23, in both apps, on
 the group's own info screen above the roster: it is hidden entirely while the lead is active and no vote is
 running, apart from a single line saying how the last vote ended, which stays for a fortnight after it closed
 (PR #1062 review). So a healthy group never sees it. There is no community Decision route: no Decision effect

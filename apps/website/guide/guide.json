@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 67,
-  "hash": "ae1095a38867fb9101404ee2f338b769f2dc4d6b5063033559f8ebd7b279a2c5",
+  "version": 68,
+  "hash": "aaf12ccc1e913aa8f75e33f655406653d00c88fa271b56133b53487b0f91269a",
   "sections": [
     {
       "id": "about",
@@ -564,7 +564,7 @@
             "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
             "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
-            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Any of them can propose someone from that same group of voters, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
+            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Only people who were already there on the day the lead was last active take part: members who joined the group by that day, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
             "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
         },
@@ -771,7 +771,8 @@
             "**Mute a chat** for 8 hours, a week or for good. @mentions still get through.",
             "**One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.",
             "The old group chats in Chats have been removed, with their messages.",
-            "Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group's other convenors — or its members, if the lead is its only convenor — will be able to choose a new one. The screens for that vote come in a later update."
+            "Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group's other convenors — or its members, if the lead is its only convenor — will be able to choose a new one. The screens for that vote come in a later update.",
+            "**Choosing a new lead for a quiet group.** Only people who were in the group before its lead went quiet can vote. People who joined, or were made convenors, after that have no say, so new accounts can't take over a group whose lead has gone quiet."
           ]
         },
         {

@@ -1630,9 +1630,16 @@ CREATE TABLE IF NOT EXISTS group_members (
     role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('convenor', 'member', 'observer')),
     -- 'removed' = a convenor removed them; kept so the removal sticks (only a convenor re-admits). Leaving deletes.
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited', 'removed')),
+    -- When the membership began: the moment the row became active (joining an open group, a request approved, an
+    -- invitation accepted), or when a request or invitation was made while it is still one. Leaving deletes the
+    -- row, so a re-join starts a new membership; a re-key moves the row and keeps it.
     joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     invited_by TEXT REFERENCES members(public_key),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- When the row took the role and status it has now (2026-09-28): for an active convenor, when they became one.
+    -- Only people who were convenors before a silent lead's last activity vote on replacing them
+    -- (engine/group-succession.ts). NULL on a row written before the column existed: read as joined_at.
+    role_since DATETIME,
     PRIMARY KEY (group_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);

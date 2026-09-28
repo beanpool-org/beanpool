@@ -40,6 +40,7 @@ import { db, createCrowdfundProject, initSchema } from './db/db.js';
 import { getPricingGuideItems, savePricingGuideItem } from './db/pricing-guide-db.js';
 import { ensureFederationLink } from './federation-link.js';
 import { ledger } from './engine/ledger.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8663;
 const BASE = `https://localhost:${PORT}`;
@@ -328,16 +329,18 @@ async function main() {
         const b = seedMember('msgB');
         const disabled = seedMember('msgDisabled', 0, { status: 'disabled' });
         const conv = createConversation('dm', [a.pub, b.pub], a.pub)!;
-        const existing = sendMessage(conv.id, a.pub, 'Zmlyc3Q=', 'bjE=')!;
+        // Every DM line and edit below is in the encrypted form, so each refusal is the one it names.
+        const first = lockedDm();
+        const existing = sendMessage(conv.id, a.pub, first.ciphertext, first.nonce)!;
 
         db.exec(`CREATE TEMP TRIGGER fault_msg_insert BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         db.exec(`CREATE TEMP TRIGGER fault_msg_update BEFORE UPDATE ON messages BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         db.exec(`CREATE TEMP TRIGGER fault_conv_insert BEFORE INSERT ON conversations BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         try {
-            const s = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'c2Vjb25k', nonce: 'bjI=' }, a);
+            const s = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...lockedDm() }, a);
             assert(s.status === 500, `send: a database fault is 500 (got ${s.status})`);
             assert(!/locked|injected/i.test(s.json?.error || ''), `send: the driver text is not echoed (got "${s.json?.error}")`);
-            const e = await send('POST', '/api/messages/edit', { messageId: existing.id, ciphertext: 'ZWRpdA==', nonce: 'bjM=' }, a);
+            const e = await send('POST', '/api/messages/edit', { messageId: existing.id, ...lockedDm() }, a);
             assert(e.status === 500, `edit: a database fault is 500 (got ${e.status})`);
             const r = await send('POST', '/api/messages/react', { messageId: existing.id, emoji: '👍' }, a);
             assert(r.status === 500, `react: a database fault is 500 (got ${r.status})`);
@@ -348,15 +351,16 @@ async function main() {
             db.exec('DROP TRIGGER IF EXISTS temp.fault_msg_insert; DROP TRIGGER IF EXISTS temp.fault_msg_update; DROP TRIGGER IF EXISTS temp.fault_conv_insert;');
         }
 
-        const refusedSend = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: disabled.pub, ciphertext: 'eA==', nonce: 'bjQ=' }, disabled);
+        const refusedSend = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: disabled.pub, ...lockedDm() }, disabled);
         assert(refusedSend.status === 400 && refusedSend.json?.error === 'Account is disabled', `send: a disabled account is still 400 with its message (got ${refusedSend.status} ${refusedSend.json?.error})`);
-        const refusedEdit = await send('POST', '/api/messages/edit', { messageId: existing.id, ciphertext: 'ZWRpdA==', nonce: 'bjU=' }, b);
+        const refusedEdit = await send('POST', '/api/messages/edit', { messageId: existing.id, ...lockedDm() }, b);
         assert(refusedEdit.status === 400 && /Only the author/.test(refusedEdit.json?.error || ''), `edit: a non-author is still 400 (got ${refusedEdit.status})`);
         const dupId = crypto.randomUUID();
-        await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'ZHVw', nonce: 'bjY=', id: dupId }, a);
-        const conflict = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: b.pub, ciphertext: 'ZHVw', nonce: 'bjc=', id: dupId }, b);
+        const dup = lockedDm();
+        await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...dup, id: dupId }, a);
+        const conflict = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: b.pub, ciphertext: dup.ciphertext, nonce: lockedDm().nonce, id: dupId }, b);
         assert(conflict.status === 409, `send: an id conflict is still 409 (got ${conflict.status})`);
-        const ok = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'b2s=', nonce: 'bjg=' }, a);
+        const ok = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...lockedDm() }, a);
         assert(ok.status === 200, `send works once the fault clears (got ${ok.status})`);
     }
 

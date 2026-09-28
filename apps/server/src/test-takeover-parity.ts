@@ -46,6 +46,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -497,12 +498,13 @@ async function main(): Promise<void> {
             `M: the removal passed and waits out its grace period (${graced.body?.decision?.status}; sweep ${JSON.stringify(tick)})`);
         const convo = built('Ann starts a chat with Bo', await S_(ann, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
         const convoId = convo.conversation?.id ?? convo.id;
+        const jpeg = lockedDm(64); // a DM photo goes in encrypted, its caption and its bytes alike
         built('and sends a photo', await S_(ann, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: ann.pk, ciphertext: Buffer.from('a photo').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
-            type: 'image', attachment: { data: Buffer.from('encrypted jpeg bytes').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), mime: 'image/jpeg' },
+            conversationId: convoId, authorPubkey: ann.pk, ...lockedDm(),
+            type: 'image', attachment: { data: jpeg.ciphertext, nonce: jpeg.nonce, mime: 'image/jpeg' },
         }));
         built('Bo answers, with the empty metadata a hand-made request can send', await S_(bo, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: bo.pk, ciphertext: Buffer.from('thanks').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), metadata: '',
+            conversationId: convoId, authorPubkey: bo.pk, ...lockedDm(), metadata: '',
         }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;

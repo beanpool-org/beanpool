@@ -435,25 +435,36 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     // it was being made).
     const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
     const contents = theirs ? compareTableHashes(theirs) : null;
-    // With every account compared (c.ledger), the accounts' count and their sum say nothing more: an account only one
-    // side holds is a differing one there, and an entry of the copy this server can't store is an unreadable one, which
-    // no force-resync mends.
-    const ledgerChecked = !!c.ledger;
-    const differs = new Set<string>([
-        ...c.tables.filter((t) => !t.match && !(ledgerChecked && t.name === 'accounts')).map((t) => t.name),
-        ...(contents?.differing.map((d) => d.table) ?? []),
-    ]);
-    if (!c.sumBalances.match && !ledgerChecked) differs.add(LEDGER_DIFFERS.sum);
+    // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
+    // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
+    // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it
+    // would read the same entries (review 4118340781; #1268's step 15, a copy whose every entry is unreadable).
+    const named: unknown[] = Array.isArray(payload.accounts) ? payload.accounts : [];
+    const ledgerWhole = named.length === 0
+        ? c.tables.some((t) => t.name === 'accounts' && t.match)
+        : !!c.ledger && c.ledger.unreadable === 0 && new Set(named.map((a) => (a as { publicKey?: unknown } | null)?.publicKey)).size === named.length;
+    const ledgerDiffering = c.ledger?.differing ?? 0;
+    // What differs that a copy from the main server mends, so a force-resync can put it right: a table's count or content,
+    // an account's balance (or an account only one side holds), the Commons. Never the accounts' count or sum: each account
+    // is compared on its own, or the copy doesn't carry them all.
+    const differs = new Set<string>();
+    for (const t of c.tables) if (!t.match && t.name !== 'accounts') differs.add(t.name);
+    for (const d of contents?.differing ?? []) {
+        // The accounts' content only with the ledger compared whole and alike: a balance that differs is the ledger's line
+        // below, and entries this server can't hold differ on every copy.
+        if (d.table === 'accounts' && (!ledgerWhole || ledgerDiffering > 0)) continue;
+        differs.add(d.table);
+    }
     if (c.commons && !c.commons.match) differs.add(LEDGER_DIFFERS.commons);
-    // Anything but entries of the copy this server can't read: a force-resync can mend it.
-    const wrong = differs.size > 0 || (c.ledger?.differing ?? 0) > 0;
-    // The ledger's line in what differed: an account whose balance differs, one only one side holds, one this server can't
-    // store, or (with every account alike) a copy that names one twice.
-    if ((c.ledger && !c.ledger.match) || (!c.ok && differs.size === 0)) differs.add(LEDGER_DIFFERS.ledger);
-    // A verdict only from a check that compared everything. A copy the main server sent without its hashes (one written to
-    // while it was being made) can't show a table's content differing, so finding nothing is no "exact": it neither ends
-    // nor starts anything the last verdict says, and the last exact copy's time stays the older one (review 4118340714).
-    const verdict: 'exact' | 'inexact' | 'uncompared' = differs.size > 0 ? 'inexact' : contents ? 'exact' : 'uncompared';
+    if (ledgerDiffering > 0) differs.add(LEDGER_DIFFERS.ledger);
+    // Everything in it is something a force-resync can mend.
+    const wrong = differs.size > 0;
+    // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
+    // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
+    // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
+    // stays the older one (review 4118340714).
+    const notCompared: ('content' | 'ledger')[] = [...(contents ? [] : ['content' as const]), ...(ledgerWhole ? [] : ['ledger' as const])];
+    const verdict: 'exact' | 'inexact' | 'uncompared' = differs.size > 0 ? 'inexact' : notCompared.length === 0 ? 'exact' : 'uncompared';
     const exact = verdict === 'exact';
     if (differs.size > 0) {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
@@ -468,12 +479,13 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
         lastLedgerResyncAt = now;
     }
     if (verdict === 'uncompared') {
-        logger.info('P2P', '[Backup] This whole copy came without the main server\'s table hashes (it was written to while it was being made): '
-            + 'its counts and its ledger match; no verdict on its content.');
-        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared: ['content'], snapshotGeneratedAt: c.snapshotGeneratedAt }));
+        logger.info('P2P', `[Backup] This whole copy could not be compared in full (${notCompared.map((n) => (n === 'content'
+            ? 'no table hashes: the main server was written to while making it' : 'accounts this server cannot hold')).join('; ')}); `
+            + 'nothing compared differs. No verdict.');
+        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared, snapshotGeneratedAt: c.snapshotGeneratedAt }));
     } else {
         recordQuietly(() => noteWholeCopyCheck({
-            at: now, exact, differs: [...differs].sort(), ledgerDiffering: c.ledger?.differing ?? 0, hashed: !!contents,
+            at: now, exact, differs: [...differs].sort(), ledgerDiffering, hashed: !!contents,
             snapshotGeneratedAt: c.snapshotGeneratedAt,
         }));
     }

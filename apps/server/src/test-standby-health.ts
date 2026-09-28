@@ -13,6 +13,7 @@
  *  1. A healthy standby: its first copy, a delta, a whole copy. The main server sends its table hashes with the whole copy
  *     (signed with the rest), the standby finds every table and every account equal, and reports it. No incident, no push,
  *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>".
+ *     A whole copy whose every account entry has no key a server can hold (#1268's case): no force-resync, no verdict.
  *  2. The standby stops for an hour (the main server's clock): one incident, one push, to the owner's phone only (not the
  *     admin's, the moderator's or a member's); the owner's admin queue and Settings banner show it, an admin's and a
  *     moderator's queue don't. A second check pushes nothing more. The standby pulls again: the incident ends.
@@ -166,6 +167,22 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             payload.generatedAt = new Date().toISOString();
+            return signSyncPayload(payload);
+        },
+        /** A whole copy M signs whose every account entry has no key a server can hold (none, half a surrogate pair). */
+        'forge-unreadable-accounts': async () => {
+            const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
+            const { getPrivateKey } = await import('./p2p.js');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            delete payload.signature;
+            delete payload.publicKey;
+            const at = new Date().toISOString();
+            payload.accounts = [
+                { publicKey: '', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+                { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+            ];
+            payload.generatedAt = at;
             return signSyncPayload(payload);
         },
         /** M's own whole copy as its route sends one it was written to while making (routes/backup.ts): signed, no table hashes. */
@@ -391,6 +408,25 @@ async function main(): Promise<void> {
         rec = await standby.send('record');
         assert(afterRestart.ok && afterRestart.whole && rec?.lastWhole?.exact === true,
             `S restarts on its own; its next whole copy is still exact (${afterRestart.mode}; ${brief(rec?.lastWhole)})`);
+
+        // A whole copy whose every account entry has no key a server can hold carries no ledger, as the importer reads it
+        // (#1268): nothing a force-resync would mend, since it would read the same entries (review 4118340781).
+        const exactBefore = rec;
+        door.next({ status: 200, body: await main.send('forge-unreadable-accounts') });
+        const unreadable = await pull(true);
+        const afterUnreadable = await pull();
+        rec = await standby.send('record');
+        assert(unreadable.ok && unreadable.whole && afterUnreadable.ok && afterUnreadable.mode === 'delta',
+            `a whole copy M signs whose accounts S can't hold lands, and asks for no force-resync: the next pull is a delta (${brief([unreadable.mode, unreadable.error, afterUnreadable.mode])})`);
+        assert(rec?.lastUncompared?.notCompared?.includes('ledger') === true && rec.lastWhole?.exact === true
+            && rec.lastWhole.at === exactBefore?.lastWhole?.at && rec.lastExactAt === exactBefore?.lastExactAt,
+            `it gives no verdict: recorded as a ledger not compared, the last exact copy unchanged (${brief({ uncompared: rec?.lastUncompared, exactAt: rec?.lastExactAt })})`);
+        health = await main.send('health');
+        words = await standby.send('preview-words', {});
+        assert(health?.state.incident === null && words?.warning === false
+            && words.lines[0] === `Last exact copy of the main server: ${inWords(exactBefore?.lastExactAt)}.`
+            && words.lines.some((l: string) => /could not be compared with it in full: .*its ledger could not be compared account by account\.$/.test(l)),
+            `no incident, and the preview names the last exact copy and says the later one could not be compared in full: ${brief(words?.lines)}`);
 
         // ── 2. Stopped for an hour ──
         console.log('\n— 2. the standby stops for an hour —');

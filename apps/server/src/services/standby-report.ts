@@ -30,7 +30,7 @@ export type WhyCode = 'conservation' | 'signature' | 'import-error' | 'timeout' 
 const WHY = /^(conservation|signature|import-error|timeout|network|unparseable|http-[1-5]\d\d)$/;
 
 /** What a whole copy found different: a copied table by name, or one of these. */
-export const LEDGER_DIFFERS = { ledger: 'ledger', sum: 'ledger-sum', commons: 'commons' } as const;
+export const LEDGER_DIFFERS = { ledger: 'ledger', commons: 'commons' } as const;
 
 function differsName(name: unknown): name is string {
     if (typeof name !== 'string') return false;
@@ -122,7 +122,6 @@ const TABLE_WORDS: Record<string, string> = {
     invalidated_keys: 'replaced keys',
     tombstones: 'deletions',
     [LEDGER_DIFFERS.ledger]: "members' balances",
-    [LEDGER_DIFFERS.sum]: "the ledger's total",
     [LEDGER_DIFFERS.commons]: 'the Commons',
 };
 

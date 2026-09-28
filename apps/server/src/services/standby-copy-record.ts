@@ -40,7 +40,8 @@ export interface UncomparedCheck {
     at: number;
     /**
      * What it could not compare: `content`, each table's content (the main server sent no hashes with the copy: it was
-     * written to while the copy was being made); `ledger`, every account (the copy names accounts this server can't hold).
+     * written to while the copy was being made); `ledger`, every account (the copy names accounts this server can't hold,
+     * names one twice, or names none while this server holds some).
      */
     notCompared: ('content' | 'ledger')[];
     snapshotGeneratedAt: string | null;
@@ -170,7 +171,7 @@ export function standbyReport(now = Date.now()): StandbyReport {
 function notComparedInWords(notCompared: UncomparedCheck['notCompared']): string {
     const words = notCompared.map((n) => (n === 'content'
         ? 'the main server was changing while it made that copy, so it sent nothing to compare each table\'s content with'
-        : 'the copy named accounts this server cannot hold, so its ledger could not be compared account by account'));
+        : 'the copy did not carry every account in a form this server can hold, so its ledger could not be compared account by account'));
     return words.length > 0 ? words.join('; ') : 'not everything in it could be compared';
 }
 

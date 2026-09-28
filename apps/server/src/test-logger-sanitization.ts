@@ -51,8 +51,13 @@ const testCases = [
     },
     {
         name: "An address in a limiter key, as main logged the gateway's (ip:<address>), IPv6 and IPv4",
-        input: "[gateway] rate limit reached for ip:2001:db8:15::14; answering 429 (ip:2001:db8:1:2::/64, ip:::1, ip:203.0.113.9)",
+        input: "[gateway] rate limit reached for ip:2001:db8:15::14; answering 429 (ip:2001:db8:1:2::/64, ip:2001:db8::9, ip:203.0.113.9)",
         expected: "[gateway] rate limit reached for ip:[REDACTED_ADDRESS]; answering 429 (ip:[REDACTED_ADDRESS]/64, ip:[REDACTED_ADDRESS], ip:[REDACTED_ADDRESS])"
+    },
+    {
+        name: "Loopback and unspecified addresses name no one and stay, in every spelling; their neighbours do not",
+        input: "BEANPOOL_ADDRESSES: \"::1\" is not an address; listening on [::1]:8443, 127.0.0.1:8080, 127.9.9.9, 0.0.0.0:443, [::]:443, ip:::1, 0:0:0:0:0:0:0:1, ::ffff:127.0.0.1, ::ffff:7f00:1; not ::2, 128.0.0.1, ::ffff:203.0.113.7",
+        expected: "BEANPOOL_ADDRESSES: \"::1\" is not an address; listening on [::1]:8443, 127.0.0.1:8080, 127.9.9.9, 0.0.0.0:443, [::]:443, ip:::1, 0:0:0:0:0:0:0:1, ::ffff:127.0.0.1, ::ffff:7f00:1; not [REDACTED_ADDRESS], [REDACTED_ADDRESS], [REDACTED_ADDRESS]"
     },
     {
         name: "An address inside a multiaddr and in JSON metadata",

@@ -18,11 +18,25 @@ import net from 'node:net';
 const IPV6_CANDIDATE = /(?:(?<![0-9A-Za-z:.])|(?<=[A-Za-z]:))(?:[0-9A-Fa-f]{0,4}:){2,7}(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9A-Fa-f]{0,4})(?:%[0-9A-Za-z_-]+)?(?![0-9A-Za-z:]|\.\d)/g;
 const IPV4_CANDIDATE = /(?<![0-9A-Za-z.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g;
 
+/**
+ * Loopback and unspecified addresses name no one, and an operator needs them in config warnings ("the bare ::1 is
+ * left out"), so they stay. Every spelling counts: 0:0:0:0:0:0:0:1, ::ffff:127.0.0.1 and ::ffff:7f00:1 too.
+ */
+const NAMES_NO_ONE = new net.BlockList();
+NAMES_NO_ONE.addSubnet('127.0.0.0', 8, 'ipv4');
+NAMES_NO_ONE.addAddress('0.0.0.0', 'ipv4');
+NAMES_NO_ONE.addAddress('::1', 'ipv6');
+NAMES_NO_ONE.addAddress('::', 'ipv6');
+NAMES_NO_ONE.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
 /** `text` with every internet address in it replaced, IPv6 first (its dotted IPv4 tail too), then IPv4. */
 export function redactAddresses(text: string): string {
     return text
-        .replace(IPV6_CANDIDATE, (m) => (/[0-9a-f]/i.test(m) && net.isIPv6(m.split('%')[0]) ? '[REDACTED_ADDRESS]' : m))
-        .replace(IPV4_CANDIDATE, (m) => (net.isIPv4(m) ? '[REDACTED_ADDRESS]' : m));
+        .replace(IPV6_CANDIDATE, (m) => {
+            const address = m.split('%')[0];
+            return /[0-9a-f]/i.test(m) && net.isIPv6(address) && !NAMES_NO_ONE.check(address, 'ipv6') ? '[REDACTED_ADDRESS]' : m;
+        })
+        .replace(IPV4_CANDIDATE, (m) => (net.isIPv4(m) && !NAMES_NO_ONE.check(m, 'ipv4') ? '[REDACTED_ADDRESS]' : m));
 }
 
 /**

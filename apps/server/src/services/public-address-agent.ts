@@ -43,7 +43,8 @@ const holdsTunnelAddress = (): boolean => {
     return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct';
 };
 
-async function reconcile(): Promise<void> {
+/** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
+export async function reconcile(): Promise<void> {
     if (getNodeRole() !== 'primary') return;
     const claims = isEnabled();
     if (!claims && !holdsTunnelAddress()) return;

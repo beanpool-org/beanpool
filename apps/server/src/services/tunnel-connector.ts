@@ -214,7 +214,11 @@ function onLine(raw: string): void {
     forward(level === 'warn' ? 'warn' : 'error', scrub(error && message ? `${message}: ${error}` : reason));
     lastError = reason;
     if (/unauthorized/i.test(reason) && unauthorizedSince === null) unauthorizedSince = Date.now();
-    if (status.state !== 'connected' && running) setStatus('retrying', reason);
+    if (status.state !== 'connected' && running) {
+        // A child started after crashes says so too: the newest line alone would hide that it keeps stopping.
+        const streak = crashes > 0 && Date.now() - running.startedAt < opts.backoffResetMs;
+        setStatus('retrying', streak ? `${reason} (cloudflared has stopped ${crashes} time${crashes === 1 ? '' : 's'} in a row)` : reason);
+    }
     maybeHeal();
 }
 
@@ -283,7 +287,8 @@ async function spawnChild(token: string): Promise<void> {
         crashes++;
         const delay = Math.min(opts.backoffBaseMs * 2 ** (crashes - 1), opts.backoffMaxMs);
         const how = signal ? `was stopped by ${signal}` : `stopped (exit code ${code})`;
-        setStatus('retrying', `cloudflared ${how}${lastError ? `: ${lastError}` : ''}; starting it again in ${Math.round(delay / 1000)} s`);
+        const wait = delay < 1_000 ? `${delay} ms` : `${Math.round(delay / 1000)} s`;
+        setStatus('retrying', `cloudflared ${how}${lastError ? `: ${lastError}` : ''}; starting it again in ${wait}`);
         say('warn', status.reason!);
         if (respawnTimer) clearTimeout(respawnTimer);
         respawnTimer = setTimeout(() => { respawnTimer = null; void syncTunnel(); }, delay);
@@ -398,7 +403,7 @@ async function poll(): Promise<void> {
         maybeMoveOrigin();
     } else if (status.state === 'connected') {
         setStatus('retrying', lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
-        say('warn', status.reason!);
+        say('warn', `no longer connected to Cloudflare (${status.reason})`);
     } else if (lastError) {
         setStatus('retrying', lastError);
     }

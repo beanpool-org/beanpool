@@ -22,6 +22,12 @@ const at = (f) => path.join(dir, f);
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(at(f), 'utf-8')); } catch { return null; } };
 const parent = process.ppid;
 
+// First, so a SIGTERM that arrives while it starts is recorded too.
+process.on('SIGTERM', () => {
+    fs.appendFileSync(at('exits.jsonl'), JSON.stringify({ pid: process.pid, signal: 'SIGTERM', at: Date.now() }) + '\n');
+    process.exit(0);
+});
+
 fs.mkdirSync(dir, { recursive: true });
 fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now() }) + '\n');
 
@@ -51,8 +57,3 @@ setInterval(() => {
     for (const line of fs.readFileSync(taken, 'utf-8').split('\n')) if (line.trim()) process.stderr.write(line + '\n');
     fs.rmSync(taken, { force: true });
 }, 25);
-
-process.on('SIGTERM', () => {
-    fs.appendFileSync(at('exits.jsonl'), JSON.stringify({ pid: process.pid, signal: 'SIGTERM', at: Date.now() }) + '\n');
-    process.exit(0);
-});

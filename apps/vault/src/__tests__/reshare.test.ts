@@ -7,6 +7,7 @@ import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
 import { cancelPending, confirmShare, custodianKey, fetchPendingShare, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
+import { KeyholderError } from '../keyholder/keyholder.js';
 import { PENDING_FILE, readStateFile, writePendingFile } from '../keyholder/keys.js';
 import { buildConfirmation, confirmStatement, shareCheck, signStatement, type CustodianShare } from '../shared/ceremony.js';
 import { confirmWith, deposit, doGenesis, get, newMember, signed, startRestore, startVault, type Member, type VaultUnderTest } from './harness.js';
@@ -259,6 +260,29 @@ describe('a reshare switches only once two new custodians hold their shares', ()
         await v.api.idle();
         expect(wrapVersions(v)).toEqual([2]);
         await expectCopy(v, 'google', 'two-step', member);
+    });
+
+    it('a re-wrap cut short by a keyholder restart is finished after the unlock, and the report counts what is left', async () => {
+        const { v, g, c1, c2, c4, reshare } = await setUp();
+        await deposit(v, g, newMember(), 'apple', 'two-step-2');
+        const fresh = await reshare();
+        // The keyholder fails every re-wrap after the switch, as one that went away in the middle would.
+        (v.keyholder() as unknown as { rewrap: () => never }).rewrap = () => {
+            throw new KeyholderError('internal', 'gone');
+        };
+        await confirmShare(v.baseUrl, c1, fresh[0], v.call());
+        expect((await confirmShare(v.baseUrl, c2, fresh[1], v.call())).body).toMatchObject({ state: 'open', switched: true });
+        await v.api.idle();
+        expect(wrapVersions(v)).toEqual([1, 1]);
+        const report = async () => JSON.parse((await get(v, '/v1/report')).body.report.text as string);
+        expect((await report()).wraps).toEqual({ current: 2, older: 2 });
+
+        await v.restartKeyholder();
+        await present(v, c2, fresh[1]);
+        expect((await present(v, c4, fresh[2])).body).toMatchObject({ state: 'open' });
+        await v.api.idle();
+        expect(wrapVersions(v)).toEqual([2, 2]);
+        expect((await report()).wraps).toEqual({ current: 2, older: 0 });
     });
 
     it('both confirmed, and the switch stopped before the old file was removed: the new state is in force after a restart', async () => {

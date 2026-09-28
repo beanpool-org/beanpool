@@ -735,6 +735,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     function reportText(now: number, day: string, counts: Counters['counts'], database: VaultDb, status: KeyholderStatus): string {
         return JSON.stringify({
             v: 1, day, at: now, copies: database.countCopies(), counts,
+            // After a reshare, envelopes still under the old K_wrap (which the old M opens) until the re-wrap is done.
+            wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
             backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow },
             pushes: { sent: push.sent, failed: push.failed },
             release: status.releaseHash, generation: status.generation, platform: status.platform,

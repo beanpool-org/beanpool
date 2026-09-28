@@ -138,6 +138,13 @@ export class VaultDb {
         return Number((this.db.prepare('SELECT COUNT(*) AS n FROM copies').get() as { n: number }).n);
     }
 
+    /** Envelopes under any wrap key but `version` (bytes 2-5 of an envelope): what a re-wrap still has to do. */
+    countEnvelopesNotUnder(version: number): number {
+        const v = Buffer.alloc(4);
+        v.writeUInt32BE(version);
+        return Number((this.db.prepare('SELECT COUNT(*) AS n FROM copies WHERE substr(envelope, 2, 4) != ?').get(v) as { n: number }).n);
+    }
+
     insertCopy(row: CopyRow): void {
         this.db.prepare('INSERT INTO copies (id, sub_index, pk_index, envelope, updated_day) VALUES (?, ?, ?, ?, ?)')
             .run(row.id, row.sub_index, row.pk_index, row.envelope, row.updated_day);

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 60,
-  "hash": "a667a96a865ba8764db792c2e4460cd9c26191c581873844cdcf76a29f10df30",
+  "version": 61,
+  "hash": "0a9e28bad6cd87eb2836ebbd05c31926f7bf199df7ebbd1a51e09b8ea4d5bf15",
   "sections": [
     {
       "id": "setup",
@@ -2222,7 +2222,7 @@
         },
         {
           "type": "p",
-          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent: to leave the directory altogether, set **Update Schedule** to **Never (Disabled)**. Your members' names and posts are never sent."
+          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
         },
         {
           "type": "h2",
@@ -2468,7 +2468,7 @@
         {
           "type": "ul",
           "items": [
-            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or leave the directory altogether.",
+            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.",
             "Members' Pulse channels are fetched from the sites they link to.",

@@ -87,8 +87,8 @@ async function plainRows(): Promise<Record<string, Record<string, unknown>[]>> {
     for (const t of PLAIN) {
         const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk').all(t) as { name: string }[]).map((c) => `"${c.name}"`);
         out[t] = (db.prepare(`SELECT * FROM ${t} ORDER BY ${key.join(', ')}`).all() as Record<string, unknown>[]).map((r) => {
-            const { break_glass_hash: _b, ...rest } = r;
-            return t === 'suspended_node_roles' ? rest : r;
+            if (t === 'suspended_node_roles') delete r.break_glass_hash;
+            return r;
         });
     }
     return out;
@@ -295,6 +295,7 @@ async function child(): Promise<void> {
             const reads: Record<string, string> = {};
             for (const [name, read] of [
                 ['getSuccessionProposals', () => se.getSuccessionProposals(id.probe)],
+                ['getKeeperChanges', () => se.getKeeperChanges(id.probe)],
                 ['getGroupSuccession', () => se.getGroupSuccession(id.group, id.bo)],
                 ['getRekeyStatus', () => wiz.getRekeyStatus(id.pam)],
                 ['recordActivity', async () => (await import('./engine/members.js')).recordActivity(id.ann)],

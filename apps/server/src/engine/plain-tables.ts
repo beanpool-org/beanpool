@@ -162,6 +162,7 @@ function importTable(spec: PlainTable, shape: Shape, rows: unknown[], whole: boo
             if (!keep.has(plainRowKey(here))) result.changes += drop.run(...here).changes;
         }
     }
+    if (named.length === 0) return;
 
     const rules = new RowRules(db, spec.table);
     try {

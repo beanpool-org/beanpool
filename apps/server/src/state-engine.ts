@@ -3672,7 +3672,9 @@ export function getKeeperChange(changeId: string): KeeperChangeInfo | null {
 
 /** Keeper changes for an enterprise, newest first. Public, like the keeper list itself. */
 export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChangeInfo['status']): KeeperChangeInfo[] {
-    applyDueKeeperChanges(enterprisePubkey);
+    // A read that applies what is due first, on a main server. A standby's changes are its main server's, which applies
+    // them (config/node-role.ts assertPlainTablesWritable): it answers them as they are.
+    if (getNodeRole() !== 'backup') applyDueKeeperChanges(enterprisePubkey);
     const rows = status
         ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
         : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);

@@ -132,7 +132,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names (live, paused, blocked, released)</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one (at once, to anyone).</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included.</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
         </div>
 
@@ -198,13 +198,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             approve: function(n) { return 'Approve ' + n + '.beanpool.org?'; },
             pause: function(n) { return 'Pause ' + n + '.beanpool.org?\\n\\nRouting stops (DNS removed); the name and tunnel stay with its owner. Only Resume lifts it — the node cannot.'; },
             resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back only when nobody but its owner can be answering: at once on a fresh tunnel, otherwise after an edge re-attest signed by its key. A tunnel kept by a block, or by a pause you did not make, is deleted first. If the re-attest fails, your hold is lifted and the name stays paused until its node heals it.'; },
-            block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume, or free it with Release.'; },
-            release: function(n) { return '⚠️ RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted and the name is FREE AT ONCE, to any key.'; },
+            block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume. Release holds it 30 days from every key, this one included, then frees it (at once with "free now").'; },
+            // fromAll: a name you blocked or paused — its release holds it from its own key too.
+            release: function(n, freeNow, fromAll) {
+                if (freeNow) return '⚠️ RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted and the name is FREE AT ONCE, to any key.';
+                return fromAll
+                    ? 'RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name is held 30 days from EVERY key, this one included: its node cannot take it back. Then it is free to anyone, this key too. To keep this key off it, leave it blocked; to free it now for someone new, tick "free now".'
+                    : 'RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name is held 30 days for its key, which can take it back; then it is free. To free it now for someone new, tick "free now".';
+            },
         };
 
         document.addEventListener('click', function(e) {
             const target = e.target.closest('[data-action]');
-            if (target) adminAction(target.getAttribute('data-name'), target.getAttribute('data-action'));
+            if (target) adminAction(target.getAttribute('data-name'), target.getAttribute('data-action'), target);
         });
 
         async function loadRegistrarData() {
@@ -266,7 +272,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
                     '<td style="text-align: right;">' +
                         '<button data-name="' + esc(claim.name) + '" data-action="approve" class="btn-approve">Approve</button>' +
-                        '<button data-name="' + esc(claim.name) + '" data-action="release" class="btn-revoke" style="margin-left: 0.4rem;" title="Rejects the claim; the name is free again">Reject</button>' +
+                        '<button data-name="' + esc(claim.name) + '" data-action="release" data-free-now="1" class="btn-revoke" style="margin-left: 0.4rem;" title="Rejects the claim; the name is free again">Reject</button>' +
                     '</td>' +
                 '</tr>';
             });
@@ -291,7 +297,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 live: [['pause', 'Pause'], ['block', 'Block']],
                 paused: [['resume', 'Resume'], ['block', 'Block']],
                 blocked: [['resume', 'Resume'], ['release', 'Release']],
-                released: [['release', 'Free now']],
+                released: [['release', 'Free now', true]],   // a held release: this button frees it at once
             };
 
             active.forEach(function(alloc) {
@@ -304,9 +310,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const why = alloc.pause_reason ? ' · ' + esc(alloc.pause_reason) : '';
                 const since = alloc.paused_at || alloc.released_at;
                 const sinceText = since ? '<br><span style="color: var(--text-muted); font-size: 0.7rem;">since ' + new Date(since * 1000).toLocaleString() + '</span>' : '';
-                // An admin release (or a withdrawn claim nobody approved) is already free; the owner's release is held
-                // 30 days for its key — "Free now" skips that.
+                // An admin release with "free now" (or a withdrawn claim nobody approved) is already free; the owner's
+                // release and the admin's default one are held 30 days for its key — "Free now" skips that.
                 const acts = (alloc.status === 'released' && (alloc.pause_reason === 'admin' || alloc.pause_reason === 'withdrawn')) ? [] : (ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']]);
+                // Released after you blocked or paused it, the name is held from its own key too (the Worker's rule).
+                const fromAll = alloc.status === 'blocked' || (alloc.status === 'paused' && alloc.pause_reason === 'admin');
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +
@@ -316,7 +324,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<td><span style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem; font-family: monospace;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' + sinceText + '</td>' +
                     '<td style="text-align: right; white-space: nowrap;">' +
                         acts.map(function(a) {
-                            return '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '" class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn btn-revoke') + '" style="margin-left: 0.4rem;">' + a[1] + '</button>';
+                            // Release holds the name 30 days (for its key, or from every key) unless its "free now" box is ticked.
+                            const box = (a[0] === 'release' && !a[2])
+                                ? '<label style="margin-left: 0.6rem; font-size: 0.75rem; color: var(--text-muted);" title="Free the name at once, to any key, instead of holding it 30 days">' +
+                                    '<input type="checkbox" data-free-now-for="' + esc(alloc.name) + '"> free now</label>'
+                                : '';
+                            const flags = (a[2] ? ' data-free-now="1"' : '') + (a[0] === 'release' && fromAll ? ' data-held-from-all="1"' : '');
+                            return box + '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '"' + flags + ' class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn btn-revoke') + '" style="margin-left: 0.4rem;">' + a[1] + '</button>';
                         }).join('') +
                     '</td>' +
                 '</tr>';
@@ -326,18 +340,25 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             container.innerHTML = html;
         }
 
-        async function adminAction(name, action) {
+        async function adminAction(name, action, target) {
             const secret = secretInput.value.trim();
-            if (!CONFIRM[action] || !confirm(CONFIRM[action](name))) return;
+            // A release frees the name at once only when its button says so (Free now, Reject) or its box is ticked.
+            const box = document.querySelector('input[data-free-now-for="' + name + '"]');
+            const freeNow = action === 'release' && ((!!target && target.getAttribute('data-free-now') === '1') || (!!box && box.checked));
+            const fromAll = !!target && target.getAttribute('data-held-from-all') === '1';
+            if (!CONFIRM[action] || !confirm(CONFIRM[action](name, freeNow, fromAll))) return;
 
             try {
-                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + action, {
-                    method: 'POST',
-                    headers: { 'x-admin-secret': secret }
-                });
+                const init = { method: 'POST', headers: { 'x-admin-secret': secret } };
+                if (action === 'release') {
+                    init.headers['content-type'] = 'application/json';
+                    init.body = JSON.stringify({ free_now: freeNow });
+                }
+                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + action, init);
                 const data = await res.json();
                 if (res.ok) {
-                    alert(name + '.beanpool.org is now ' + data.status + (data.reason ? ' (' + data.reason + (data.why ? ': ' + data.why : '') + ')' : '') + '.');
+                    alert(name + '.beanpool.org is now ' + data.status + (data.reason ? ' (' + data.reason + (data.why ? ': ' + data.why : '') + ')' : '') +
+                        (data.held_until ? (data.reason === 'admin-held-all' ? ', held from every key, its own included, until ' : ', held for its key until ') + new Date(data.held_until * 1000).toLocaleString() : '') + '.');
                     loadRegistrarData();
                 } else {
                     alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : ''));

@@ -387,6 +387,7 @@ run_federation_suites() {
       test-standby-standing
       test-standby-health
       test-standby-in-flight
+      test-standby-refusal-keeps-copy
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

@@ -66,8 +66,9 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * its lines. Where a difference has more than one cause (a behaviour read), `gap` names each: a fix PR takes its id out,
  * and the last one deletes the line, which the suite then requires.
  *
- * G0 (the ledger), G9 (a new standby's first pull, which this suite found) and G1 (listings another community's) are
- * closed, and so are G1b's listing, deal, photo and project columns: a difference in any of them is new.
+ * G0 (the ledger), G1 (listings another community's), G5 (the community's own settings) and G9 (a new standby's first
+ * pull, which this suite found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any
+ * of them is new.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
@@ -115,7 +116,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:a keeper posts for the enterprise', gap: 'G2a, G2c', why: '404 "Not a treasury" where the main server says the enterprise is paused' },
     { key: 'http:approve the pending request', gap: 'G2a', why: 'the buyer is an Elder whose granted credit is lost: "Buyer has insufficient balance to cover escrow" (before G1\'s fix, "belongs to another community")' },
     { key: 'http:every balance', gap: 'G2a', why: "floors and tiers from granted credit and vouches lost (an Elder in debt is frozen below a floor of 0), and a withdrawn vouch's floor back" },
-    { key: 'http:the ledger audit a take-over runs', gap: 'G5', why: "the main server's sum, measured against the standby's own baseline (0, not the accepted 0.1)" },
 
     // G2b: member_preferences.
     { key: 'db:member_preferences (not copied)', gap: 'G2b', why: 'holiday and notification opt-outs are forgotten' },
@@ -142,19 +142,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:the pricing guide', gap: 'G4, G2a, G2b', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices (G4); a paused enterprise's and a holiday member's listings count as active there (G2a, G2b)" },
     { key: 'http:a push of each category', gap: 'G4, G2b', why: 'no phone to push to (G4); behind it, a notification opt-out is forgotten (G2b)' },
 
-    // G5: the community's own settings.
-    { key: 'setting:local-config.callsign', gap: 'G5', why: "the community's short name" },
-    { key: 'setting:local-config.communityName', gap: 'G5', why: "the community's name becomes the standby's" },
-    { key: 'setting:local-config.location', gap: 'G5', why: "the community's place" },
-    { key: 'setting:local-config.contactEmail', gap: 'G5', why: "the community's contact" },
-    { key: 'setting:local-config.contactPhone', gap: 'G5', why: "the community's contact" },
-    { key: 'setting:local-config.thresholds', gap: 'G5', why: 'demurrage runs on the defaults' },
-    { key: 'setting:node_config.node_config.publishContacts', gap: 'G5', why: 'a community that hid its contacts publishes them' },
-    { key: 'setting:node_config.node_config.publishMembers', gap: 'G5', why: 'and its member count' },
-    { key: 'setting:node_config.node_config.serviceRadius', gap: 'G5', why: "the community's service area" },
-    { key: 'setting:node_config.ledger_audit_baseline', gap: 'G5', why: "the promotion audit uses the standby's own baseline" },
-    { key: 'setting:node_config.ledger_audit_rebaseline_note', gap: 'G5', why: 'why the baseline was accepted' },
-    { key: 'http:the community, as the directory and apps see it', gap: 'G5, G2a', why: "the standby's name and no contacts (G5); one more member, its own BeanPool (G2a)" },
+    { key: 'http:the community, as the directory and apps see it', gap: 'G2a', why: 'one more member, its own BeanPool' },
 
     // Reads that several gaps change at once.
     { key: 'http:the board, as a guest', gap: 'G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, authors' standing lost" },

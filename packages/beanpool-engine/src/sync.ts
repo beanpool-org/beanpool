@@ -482,6 +482,35 @@ export interface SyncDirectoryCommunity {
     updatedAt: string;
 }
 
+/**
+ * Who keeps an enterprise (treasury_operators, apps/server state-engine.ts): the lead and each keeper, as the main server
+ * holds them. The whole set in every payload, delta or whole (it is small: enterprises × keepers), so a standby applies it
+ * as a diff and an unbound keeper needs no tombstone (design G2c).
+ */
+export interface SyncTreasuryOperator {
+    treasuryPubkey: string;
+    memberPubkey: string;
+    role: string;
+    grantedAt: string | null;
+    grantedBy: string | null;
+    backing: number | null;
+    autoPromotedAt: string | null;
+}
+
+/**
+ * A keeper's pledge of backing to an enterprise (enterprise_pledges): the derived part of its credit floor. Watermarked on
+ * `pledgedAt` or `releasedAt`, the only writes a pledge has (a pledge is never deleted; a re-key moves its keys on both
+ * servers). Design G2c.
+ */
+export interface SyncEnterprisePledge {
+    id: string;
+    keeper: string;
+    enterprise: string;
+    amount: number;
+    pledgedAt: string | null;
+    releasedAt: string | null;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -527,6 +556,13 @@ export interface SyncPayload {
      * that predates it: a standby then keeps the rows it has.
      */
     invalidatedKeys?: SyncInvalidatedKey[];
+    /**
+     * Every enterprise's keepers, the whole set in every payload. Absent from a main server that predates it: a standby then
+     * keeps the rows it has.
+     */
+    treasuryOperators?: SyncTreasuryOperator[];
+    /** Watermarked on `pledged_at` or `released_at`. Absent from a main server that predates it. */
+    enterprisePledges?: SyncEnterprisePledge[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -653,23 +689,80 @@ export function exportSyncState(
             ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
             : db.prepare(`SELECT * FROM ${table}`).all() as any[];
 
-    // The mute (G3), a person's coarse area (G4), whether the row is a visitor's, whether its owner deleted it and when
-    // their board standing last changed travel with the member, so a promoted standby keeps them; rowToMember leaves
-    // them out because the member directory is built from it too. This payload goes only to a standby pulling with the
-    // replication token or the admin password (routes/backup.ts): the database's own trust.
+    // Each member's preferences (holiday, notification settings, reminder defaults) travel with their row, in one query:
+    // every writer moves the member's updated_at, so a delta that carries a change carries the member (design G2b).
+    const preferencesOf = new Map<string, Record<string, string>>();
+    try {
+        const prefRows = (delta
+            ? db.prepare(`SELECT p.public_key, p.pref_key, p.pref_value FROM member_preferences p
+                          JOIN members m ON m.public_key = p.public_key WHERE m.updated_at >= ?`).all(since)
+            : db.prepare('SELECT public_key, pref_key, pref_value FROM member_preferences').all()
+        ) as { public_key: string; pref_key: string; pref_value: string }[];
+        for (const r of prefRows) {
+            let prefs = preferencesOf.get(r.public_key);
+            if (!prefs) preferencesOf.set(r.public_key, prefs = {});
+            prefs[r.pref_key] = r.pref_value;
+        }
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
+    // The whole row travels as `standing` (design G2a), so a promoted standby is every column of the main server's, and a
+    // column added later travels without anyone listing it; rowToMember leaves most of them out because the member
+    // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
+    // delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
+    // pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
     const members = (delta
         ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
         : db.prepare("SELECT * FROM members").all() as any[]
-    ).map((row): Member => ({
-        ...rowToMember(row),
-        moderationMutedUntil: row.moderation_muted_until ?? null,
-        areaLat: row.area_lat ?? null,
-        areaLng: row.area_lng ?? null,
-        areaUpdatedAt: row.area_updated_at ?? null,
-        isVisitor: !!row.is_visitor,
-        deletedByOwnerAt: row.deleted_by_owner_at ?? null,
-        boardStandingChangedAt: row.board_standing_changed_at ?? null,
-    }));
+    ).map((row): Member => {
+        const { public_key: _key, updated_at: _stamp, ...standing } = row;
+        return {
+            ...rowToMember(row),
+            moderationMutedUntil: row.moderation_muted_until ?? null,
+            areaLat: row.area_lat ?? null,
+            areaLng: row.area_lng ?? null,
+            areaUpdatedAt: row.area_updated_at ?? null,
+            isVisitor: !!row.is_visitor,
+            deletedByOwnerAt: row.deleted_by_owner_at ?? null,
+            boardStandingChangedAt: row.board_standing_changed_at ?? null,
+            standing,
+            preferences: preferencesOf.get(row.public_key) ?? {},
+        };
+    });
+
+    // Who keeps each enterprise, the whole set every time (design G2c): an unbound keeper is a row the set no longer has.
+    let treasuryOperators: SyncTreasuryOperator[] = [];
+    try {
+        treasuryOperators = (db.prepare('SELECT * FROM treasury_operators').all() as any[]).map((r) => ({
+            treasuryPubkey: r.treasury_pubkey,
+            memberPubkey: r.member_pubkey,
+            role: r.role,
+            grantedAt: r.granted_at ?? null,
+            grantedBy: r.granted_by ?? null,
+            backing: r.backing ?? null,
+            autoPromotedAt: r.auto_promoted_at ?? null,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+    // Keepers' pledges, by the two writes a pledge has: made, and released.
+    let enterprisePledges: SyncEnterprisePledge[] = [];
+    try {
+        enterprisePledges = (delta
+            ? db.prepare('SELECT * FROM enterprise_pledges WHERE pledged_at >= ? OR released_at >= ?').all(since, since)
+            : db.prepare('SELECT * FROM enterprise_pledges').all()
+        ).map((r: any) => ({
+            id: r.id,
+            keeper: r.keeper,
+            enterprise: r.enterprise,
+            amount: r.amount,
+            pledgedAt: r.pledged_at ?? null,
+            releasedAt: r.released_at ?? null,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
 
     const postRows = sel('posts', 'updated_at');
     const posts: MarketplacePost[] = postRows.map(row => ({
@@ -1177,6 +1270,8 @@ export function exportSyncState(
         moderationNotices,
         memberBlocks,
         invalidatedKeys,
+        treasuryOperators,
+        enterprisePledges,
         tombstones,
     };
 }

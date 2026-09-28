@@ -7672,7 +7672,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
  * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
  */
-export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean } = {}): void {
+export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
     const tables = [
         'members', 'posts', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
@@ -7682,6 +7682,9 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
         // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
         // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
         ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
+        // Only when the incoming copy carries the members' preferences, keepers and pledges (`opts.standing`, engine/sync.ts
+        // importRemoteState): from a main server that predates them, this node's are the only ones it has.
+        ...(opts.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
@@ -7914,6 +7917,9 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
                 if (key === 'eventReminderOffsets') continue;
                 stmt.run(publicKey, key, String(value));
             }
+            // A preference is on no column of the member's row, so the row is stamped here, as setHolidayMode does: delta
+            // sync carries a member's preferences with their row, to a standby (engine sync.ts exportSyncState).
+            db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
             if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();

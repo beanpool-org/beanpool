@@ -63,6 +63,20 @@ export interface Member {
      * member directory.
      */
     boardStandingChangedAt?: string | null;
+    /**
+     * The member's row as the main server holds it: every column but `public_key` and `updated_at`, by column name (design
+     * G2a). A standby writes each one that is a column of its own table, so an enterprise stays an enterprise, a vouch or a
+     * freeze holds, and a column added later travels without anyone listing it. Carried by the replication export only
+     * (a standby and a take-over keep it); never in the member directory.
+     */
+    standing?: Record<string, unknown>;
+    /**
+     * The member's preferences, `pref_key: pref_value`, every one they have (member_preferences: holiday, notification
+     * settings, reminder defaults; design G2b). Every writer moves the member's `updated_at`, so a delta that carries a
+     * change carries the member, and a standby replaces the member's rows with these. Carried by the replication export
+     * only; never in the member directory.
+     */
+    preferences?: Record<string, string>;
 }
 
 export interface InviteCode {

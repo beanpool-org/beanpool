@@ -290,7 +290,11 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // deletes a row). One from a main server older than that sends none, and this standby keeps its own. With the
             // clear, in its transaction, what the copy is held to: nothing for a seed, and the ledger's total now for the
             // resync after a copy that didn't match.
-            heldToSum = clearForResync(seed, () => clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) }));
+            // And the members' preferences, keepers and pledges, when this copy carries them (every copy of a main server
+            // that sends its keepers does, the whole set).
+            heldToSum = clearForResync(seed, () => clearReplicatedTables(keepPhotos, {
+                invalidatedKeys: Array.isArray(payload.invalidatedKeys), standing: Array.isArray(payload.treasuryOperators),
+            }));
             // The format re-seed is used up once a resync has cleared, and not before: one whose fetch failed is asked for
             // again on the next tick. One whose import fails is used up all the same, so a failing import can't clear this
             // standby on every tick; its next pull, a whole copy onto a standby with no copy it landed, is a seed anyway.

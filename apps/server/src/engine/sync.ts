@@ -23,6 +23,7 @@ import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
 import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer, PAIR_TOMBSTONES_OF } from './member-blocks.js';
+import { DELETED_POST_TITLE, dropSearchLeftovers } from './post-scrub.js';
 import {
     mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
     type ReplicatedRekey,
@@ -1094,7 +1095,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     }
 
     let newMembers = 0, newPosts = 0;
-    let updatedMembers = 0, updatedPosts = 0;
+    let updatedMembers = 0, updatedPosts = 0, wipedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
     let groupChanges = 0;
@@ -1314,7 +1315,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             }
 
             for (const rp of remote.posts ?? []) {
-                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at, title FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null; title: string } | undefined;
                 const pollOptionsJson = rp.pollOptions != null
                     ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
                     : null;
@@ -1435,8 +1436,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.id
                     );
                     if (res.changes > 0) updatedPosts++;
+                    // A post the main server wiped with its author's account (engine/post-scrub.ts): its old words leave
+                    // this server's search index for good too, once the copy has committed.
+                    if (res.changes > 0 && rp.title === DELETED_POST_TITLE && existing.title !== rp.title) wipedPosts++;
                 }
             }
+            if (wipedPosts > 0) afterTransactionCommit(dropSearchLeftovers);
 
             if (importedPhotoColumns) {
                 // INSERT OR REPLACE over a row that already named an object leaves that object with

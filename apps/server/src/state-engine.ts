@@ -38,6 +38,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
+import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
@@ -6964,7 +6965,8 @@ function deleteReplicatedRows(table: 'suspended_node_roles' | 'recovery_releases
  * 2. Settles positive or negative balance with COMMONS_POOL (a removal already settled it: then nothing moves).
  * 3. Anonymizes the profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area) and marks
  *    it deleted by its owner.
- * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
+ * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
+ *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
@@ -7073,12 +7075,15 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND type = 'poll' AND status IN ${POLLS_A_PRUNE_CLOSES}
         `).run(now, publicKey);
         db.prepare(`
-            UPDATE posts 
-            SET status = 'cancelled', 
-                active = 0, 
-                updated_at = ? 
+            UPDATE posts
+            SET status = 'cancelled',
+                active = 0,
+                updated_at = ?
             WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
+        // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
+        // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
+        scrubPostsOf(publicKey, now);
 
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }

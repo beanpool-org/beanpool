@@ -957,7 +957,13 @@ export function exportSyncState(
         updatedAt: row.updated_at || row.added_at,
     }));
 
-    const conversationRows = sel('conversations', 'created_at');
+    // An event's chat is named with the event's title (apps/server engine/event-thread.ts), and a deleted account's event
+    // is renamed with its post (apps/server engine/post-scrub.ts): a delta carries the chat of each event it carries, so a
+    // standby's copy of the name goes too, not only at its next whole copy.
+    const conversationRows = delta
+        ? db.prepare(`SELECT * FROM conversations WHERE created_at >= ?
+                      OR (type = 'event_thread' AND id IN (SELECT id FROM posts WHERE type = 'event' AND updated_at >= ?))`).all(since, since) as any[]
+        : sel('conversations', 'created_at');
     const conversations: SyncConversation[] = conversationRows.map(row => ({
         id: row.id,
         type: row.type,

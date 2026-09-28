@@ -34,6 +34,11 @@
  *  7. The promotion audit ran on M's baseline: "the ledger adds up" (before, S's own baseline: "does NOT add up").
  *  8. The directory publisher on the promoted server sends the community's name and area, and not its contacts, member
  *     count or health, which the community had turned off; nothing of S's own name or contacts.
+ *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed before the take-over
+ *     resumes), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
+ *     community-settings step and finished at the next start (resumeTakeoverAtBoot), with no restart after: the promoted
+ *     server's snapshot timer runs on M's schedule, not S3's (before, it kept S3's until it next restarted, while the
+ *     Backup tab showed M's).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-community-settings.ts
@@ -55,6 +60,7 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Settings-Main-Pw-5520!';
 const PW_STANDBY = 'Settings-Standby-Pw-118!';
 const PW_STANDBY2 = 'Settings-Standby2-Pw-406!';
+const PW_STANDBY3 = 'Settings-Standby3-Pw-731!';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -200,6 +206,11 @@ async function child(): Promise<void> {
                 restartScheduler();
             }
             return delays;
+        },
+        /** How often this server's snapshot timer takes a snapshot now, in hours; null when none runs. */
+        'snapshot-timer': async () => {
+            const { armedSnapshotInterval } = await import('./services/snapshot-scheduler.js');
+            return armedSnapshotInterval();
         },
         /** Whether a password is this server's admin password now. */
         'admin-password-is': async (a: { password: string }) => {
@@ -442,7 +453,7 @@ async function main(): Promise<void> {
         }));
         built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
-        built('its snapshot schedule', await A('/api/local/admin/snapshots/config', { enabled: false, intervalHours: 6, keep: 3 }));
+        built('its snapshot schedule: one every 6 hours', await A('/api/local/admin/snapshots/config', { enabled: true, intervalHours: 6, keep: 3 }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
@@ -603,6 +614,26 @@ async function main(): Promise<void> {
         assert(j(perServer(sBefore)) === j(perServer(sNow)) && differing(sOwnCommunity, communitySettings(sNow)).length === 0,
             `and S's own settings, of one server and of the community, are as they were (${j(perServer(sNow)).slice(0, 200)})`);
 
+        // ── 9, before M is killed: a standby with its own snapshots off copies it ──
+        console.log('\n— 9 (while the main server is up): a standby with its own snapshots off copies it —');
+        fs.mkdirSync(dir('standby3'), { recursive: true });
+        fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby3'), 'genesis.json'));
+        // Booted as index.ts boots: the snapshot scheduler armed from the schedule row, then the take-over resumed. Its
+        // take-over is killed the moment the step before community-settings is recorded, as a power cut would.
+        const s3Env = env(PW_STANDBY3, 'backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
+        let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
+        nodes.push(standby3);
+        await standby3.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, { 'X-Admin-Password': PW_STANDBY3 });
+        require_(s3Off.status === 200 && s3Off.body?.config?.enabled === false, `S3 turns its own snapshots off (${s3Off.status} ${j(s3Off.body)})`);
+        const s3Pull = await standby3.send('pull');
+        require_(s3Pull.ok === true && s3Pull.envelope === 'stored', `S3's copy lands, with the locked keys (${s3Pull.ok ? `imported; keys ${s3Pull.envelope}` : s3Pull.error})`);
+        const s3Kept = JSON.parse((await standby3.send('settings')).kept?.record?.nodeConfig?.autosnapshot_config ?? '{}');
+        const s3Timer = await standby3.send('snapshot-timer');
+        assert(s3Timer === null && s3Kept.enabled === true && s3Kept.intervalHours === 6,
+            `while a standby, S3 takes no snapshots, its own choice, and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
+        refused.push(...(await standby3.send('fetches')).blocked);
+
         // ── 6. The take-over ──
         console.log('\n— 6. the main server is killed; the standby takes over with the recovery code —');
         refused.push(...(await main.send('fetches')).blocked);
@@ -669,8 +700,29 @@ async function main(): Promise<void> {
             && body.version === null && body.status === null,
             `and not its contacts, member count or health, which the community turned off (${j(body && { communityName: body.communityName, contactEmail: body.contactEmail, contactPhone: body.contactPhone, memberCount: body.memberCount, version: body.version })})`);
         assert(!/Standby Seven|standby-7|ops@standby\.example|\+44 20 7946/.test(j(body)), 'nothing of the standby\'s own name or contacts');
-
         refused.push(...(await standby.send('fetches')).blocked);
+
+        // ── 9. A take-over finished at the next start ──
+        console.log('\n— 9. a take-over cut off before its community-settings step, finished at the next start —');
+        const opened3 = await post(standby3.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY3 });
+        require_(opened3.status === 200 && opened3.body.success, `the code opens the keys on S3 (${opened3.status} ${j(opened3.body).slice(0, 160)})`);
+        // The process dies inside this request, the moment `open-door` is recorded: there may be no answer.
+        await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY3 });
+        await standby3.exited;
+        standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
+        nodes.push(standby3);
+        require_(standby3.ready.role === 'primary' && standby3.ready.resumed === true,
+            `S3's next start finishes the take-over, with no restart after it (${j({ role: standby3.ready.role, resumed: standby3.ready.resumed })})`);
+        const inspected3 = await standby3.send('inspect');
+        const step3 = inspected3.progress.steps.find((st: any) => st.step === 'community-settings');
+        const s3After: Settings = await standby3.send('settings');
+        assert(step3?.done === true && s3After.rows.autosnapshot_config === mSettings.rows.autosnapshot_config,
+            `the community-settings step ran at that start and installed M's snapshot schedule (${j({ step: step3 ?? null, row: s3After.rows.autosnapshot_config })})`);
+        const s3Armed = await standby3.send('snapshot-timer');
+        assert(s3Armed === 6,
+            `the promoted server's snapshot timer runs on M's schedule, one every 6 hours, not S3's own (off) until its next restart (${j(s3Armed)})`);
+        refused.push(...(await standby3.send('fetches')).blocked);
+
         assert(refused.length === 0, `nothing reached off this machine (refused: ${refused.join(', ') || 'none'})`);
     } finally {
         for (const n of nodes) await n.kill();

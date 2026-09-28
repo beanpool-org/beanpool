@@ -84,6 +84,8 @@ export function isAutoSnapshotInterval(v: unknown): v is number {
 const timerHours = (h: number): number => Math.min(MAX_AUTOSNAPSHOT_INTERVAL_HOURS, Math.max(1, Math.round(h)));
 
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+/** The interval the running timer was armed with, in hours. */
+let armedHours: number | null = null;
 let creating = false;
 
 /**
@@ -343,7 +345,17 @@ export function createSnapshot(): SnapshotInfo {
 
 // ===================== SCHEDULER =====================
 
+/**
+ * Arm the timer from the schedule row as it is now, replacing any timer already running: a standby promoted by hand
+ * installs its community's schedule (config/community-settings.ts) and re-arms inside initStateEngine, before
+ * initSnapshotScheduler arms again, and two timers would take every snapshot twice.
+ */
 function arm(): void {
+    if (snapshotTimer) {
+        clearInterval(snapshotTimer);
+        snapshotTimer = null;
+    }
+    armedHours = null;
     const cfg = getAutoSnapshotConfig();
     if (!cfg.enabled) {
         logger.info('SYS', '[Snapshots] Auto-snapshots disabled.');
@@ -355,6 +367,7 @@ function arm(): void {
         try { createSnapshot(); }
         catch (e) { logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
     }, intervalMs);
+    armedHours = cfg.intervalHours;
 }
 
 /** Initialize the scheduler. Call once after initStateEngine(). */
@@ -365,9 +378,14 @@ export function initSnapshotScheduler(): void {
 
 /** Re-read config and re-arm the timer (used when config changes). */
 export function restartScheduler(): void {
-    if (snapshotTimer) {
-        clearInterval(snapshotTimer);
-        snapshotTimer = null;
-    }
     arm();
+}
+
+/**
+ * How often the running timer takes a snapshot, in hours; null when none is running (snapshots are off, or the
+ * scheduler never started). What this server does, which the schedule row alone doesn't say: a row written without a
+ * re-arm is not the schedule until the next start.
+ */
+export function armedSnapshotInterval(): number | null {
+    return snapshotTimer ? armedHours : null;
 }

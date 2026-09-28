@@ -2,7 +2,8 @@
  * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
- * genesis, admin password, database, the take-over resume at boot (which may finish steps and run the audit),
+ * genesis, admin password, database, the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1), the
+ * take-over resume at boot (which may finish steps and run the audit),
  * libp2p (on port 0), the envelope service in the node's role, the take-over's after-boot steps; then the real
  * backup and take-over routes over HTTP with the real admin auth. A take-over's restart is the real
  * `process.exit(0)`, and the orchestrator starts the process again on the same data dir, as Docker would.
@@ -132,6 +133,12 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     await ensureGenesis();
     initAdminPassword();
     initStateEngine();
+    // index.ts step 2.55: the snapshot scheduler, armed from the schedule row before the take-over resumes. Only for a
+    // suite that asks (BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1): every other suite's nodes would each arm a timer.
+    if (process.env.BEANPOOL_TEST_SNAPSHOT_SCHEDULER === '1') {
+        const { initSnapshotScheduler } = await import('./services/snapshot-scheduler.js');
+        initSnapshotScheduler();
+    }
     const boot = resumeTakeoverAtBoot();
     // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });

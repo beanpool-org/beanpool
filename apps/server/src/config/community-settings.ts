@@ -33,7 +33,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig, type GatewayConfig } from './local-config.js';
 import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
-import { isAutoSnapshotInterval } from '../services/snapshot-scheduler.js';
+import { isAutoSnapshotInterval, restartScheduler } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 
 export type { SyncCommunitySettings };
@@ -357,6 +357,11 @@ export function installCommunitySettings(): InstallOutcome {
         if (Object.keys(directory).length > 0) updateNodeConfig(directory);
         upsert.run(KEPT_COMMUNITY_SETTINGS_KEY, JSON.stringify({ ...kept, installedAt }));
     })();
+    // The snapshot timer runs on the schedule it was armed with, not on the row. A take-over finished at boot
+    // (resumeTakeoverAtBoot, after index.ts armed the scheduler from this server's own row) has no restart after it:
+    // without this, the promoted server kept the standby's schedule until its next restart while the Backup tab
+    // showed the community's.
+    if ('autosnapshot_config' in nc) restartScheduler();
 
     const name = lc.communityName || lc.callsign || null;
     const hidden = [dir.publishContacts === false ? 'contacts' : null, dir.publishMembers === false ? 'member count' : null]

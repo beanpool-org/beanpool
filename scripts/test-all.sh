@@ -168,6 +168,12 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 
+# deploy.sh used to hand every server the fleet secrets: a Cloudflare token for the whole beanpool.org zone, the one admin
+# password all our servers shared, and the fleet tunnel token in data/tunnel-token (sensitive-data report A8, 2026-09-28).
+# This reads deploy.sh, runs it against a stubbed server with sentinel values in its .env, and fails if any of them would
+# reach a server. Pure shell against a temp dir; no server is contacted.
+run_check "deploy_no_fleet_secrets" bash scripts/test-deploy-no-fleet-secrets.sh
+
 # deploy.sh called a crash-looping node "✅ deployed" and let tagged images fill qld's disk (2026-09-19).
 # Its health wait and disk preflight live in scripts/deploy-lib.sh; this runs them against a URL nothing
 # answers and stubbed container/disk state. Local only, a few seconds.

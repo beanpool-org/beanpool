@@ -117,6 +117,10 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             {view.silenceLine && (
                 <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">{view.silenceLine}</p>
             )}
+            {/* Who takes part: only people in the group before the lead went quiet. Anyone offered no button reads why. */}
+            {view.whoVotesLine && (
+                <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">{view.whoVotesLine}</p>
+            )}
 
             {error && (
                 <div className="p-3 bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 rounded-xl text-xs text-red-700 dark:text-red-300">

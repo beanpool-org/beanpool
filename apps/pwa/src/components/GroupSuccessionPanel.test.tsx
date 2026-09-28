@@ -261,3 +261,22 @@ describe('GroupSuccessionPanel — a closed vote', () => {
         expect(container).toBeEmptyDOMElement();
     });
 });
+
+describe('GroupSuccessionPanel — only people in the group before the lead went quiet take part', () => {
+    it('says who votes, so someone offered no button reads why', async () => {
+        answer({ silence: silence({ votersJoinedBy: '2026-08-10T00:00:00.000Z' }), proposals: [proposal({ canVote: false })] });
+        panel();
+        expect(await screen.findByText('Only convenors appointed by 10 Aug 2026 can vote.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Vote yes/ })).toBeNull();
+    });
+
+    it('when nobody who may vote is left, says so and offers no proposal', async () => {
+        answer({ silence: silence({ electorate: 'members', isEligible: false, votersJoinedBy: '2026-08-10T00:00:00.000Z' }), voters: [] });
+        panel();
+        expect(await screen.findByText(
+            "Marty hasn't been active for 44 days. Only members who joined by 10 Aug 2026 can choose a new lead, and there are none, so no vote can open.",
+        )).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Propose/ })).toBeNull();
+        expect(screen.queryByLabelText('Propose a new lead')).toBeNull();
+    });
+});

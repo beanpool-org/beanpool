@@ -185,7 +185,8 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //     before. An unsigned socket, or one signed by a key that is not (yet) a member, is accepted
 //     but gets only a bare doorbell for public changes (PUBLIC_WS_EVENTS in state-engine.ts) — the
 //     same things anyone can already read without signing, so on a node that shows visitors only
-//     the listings (`guestListingsOnly`), only the listings' (state-engine keylessSocketMayUse).
+//     the listings (`guestListingsOnly`), only the listings', and elsewhere every one but the
+//     listings', which are members-only there (state-engine keylessSocketMayUse).
 //     A signature that is forged, stale or replayed is refused with 401.
 //   - ENFORCE_WS_AUTH=true: only member-signed sockets are accepted; everything else gets 401.
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
@@ -289,7 +290,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',        // governance transparency: list of decisions
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
-    '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
+    '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
@@ -352,6 +353,31 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/projects(\/|$)/,
 ];
 
+// Public reads that are the listings, and public only on a node that shows visitors the listings and not the people
+// (`guestListingsOnly`, the global node): there anyone looks around, in the visitors' view (rough areas, no people). On
+// every other node, a local community's, the listings are its members' (Marty, 2026-09-28: "nothing on a private node
+// should be public now that we have a global node"), so these fall to the ordinary gate: a signed read by a member of this
+// node (passesReadGate, a suspended member included), and nobody else, a visitor's row and a signed non-member included.
+// The refusal names the global community (LISTINGS_MEMBERS_ONLY), where the apps send a stranger to look around. A
+// listing's photos keep their public route: an `<img>` cannot sign, and a photo's URL is made of its listing's random
+// id, which only a read of the listing gives out. A linked peer's app browsing here unsigned (routes/marketplace.ts
+// isPeerRequest) is refused too, until linked communities get signed access of their own.
+export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/marketplace/posts',
+]);
+
+/** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
+export const LISTINGS_MEMBERS_ONLY = {
+    error: "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    code: 'members_only',
+    global: 'https://global.beanpool.org',
+} as const;
+
+function isListingsRead(path: string): boolean {
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed);
+}
+
 function isAllowlisted(path: string): boolean {
     return PUBLIC_READ_EXACT.has(path) || PUBLIC_READ_PATTERNS.some(re => re.test(path));
 }
@@ -368,6 +394,8 @@ function namesMembers(path: string): boolean {
 
 function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
+    // The listings: public only where visitors get the listings' view.
+    if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
     // The switches are read only for these few paths, so no other request pays for them.
     if (!namesMembers(path)) return true;
     const switches = getProfileSwitches();
@@ -1225,7 +1253,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         } else {
             if (!pubKeyHex || !signatureBase64) {
                 ctx.status = 401;
-                ctx.body = { error: 'Missing cryptographic signature headers' };
+                ctx.body = isGatedRead && isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Missing cryptographic signature headers' };
                 return;
             }
         }
@@ -1344,7 +1372,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             // membership isn't required there — e.g. first-time registration.)
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
-                ctx.body = { error: 'Read access requires a member identity' };
+                ctx.body = isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Read access requires a member identity' };
                 return;
             }
 

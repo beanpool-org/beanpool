@@ -1111,15 +1111,22 @@ const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post
 // As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
 const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
 
+// The listings' own doorbells. A local community's listings are its members' (Marty, 2026-09-28; https-server.ts
+// PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT): a socket with no member's key reads them only where the visitors' view is on.
+const LISTING_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed']);
+
 /**
- * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
- * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
- * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
- * still is.
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node.
+ * On a node whose `guestListingsOnly` switch is on, only the listings' (GUEST_LISTINGS_WS_EVENTS). On every other node,
+ * every public doorbell but the listings': the Commons' reads are public there and the listings are members-only.
+ * With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell still is.
  */
 function keylessSocketMayUse(type: string): boolean {
-    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
-    return !getProfileSwitches().guestListingsOnly;
+    if (!READ_AUTH_ON) return true;
+    const guestView = getProfileSwitches().guestListingsOnly;
+    if (LISTING_WS_EVENTS.has(type)) return guestView;
+    if (GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
+    return !guestView;
 }
 
 export type ListingDoorbell = 'post_removed' | 'post_updated';
@@ -1135,7 +1142,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
- * post for no listing). Every node, whatever it lets such a socket read: it may read the listings everywhere.
+ * post for no listing). A socket with no member's key hears it only where it may read the listings: on a node with the
+ * visitors' view (keylessSocketMayUse). A visitor's and a suspended member's socket, which hold a key, hear it everywhere.
  *
  * One per change, never one per post, and those asked for in the same turn go as one (each type once). Sent after the
  * work in hand, so it may be asked for inside a transaction: one that then unwinds costs a read of what is there. The
@@ -1150,8 +1158,11 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
         listingDoorbellsDue = null;
         for (const t of due) {
             const out = JSON.stringify({ type: t });
+            // A socket with no member's key hears it only where it may read the listings (keylessSocketMayUse).
+            const keyless = keylessSocketMayUse(t);
             for (const ws of wsClients) {
                 if (ws._memberFeed || ws._openFeed) continue;
+                if (!ws._memberPubkey && !keyless) continue;
                 try { ws.send(out); } catch { wsClients.delete(ws); }
             }
         }

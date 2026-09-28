@@ -26,6 +26,7 @@ import {
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
+    passesReadGate,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
@@ -334,10 +335,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             windUpGraceEndsAt = new Date(new Date(m.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         }
 
-        const posts = db.prepare(
+        // Its listings are listings: a local community's are its members' (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT),
+        // so this public page lists them only to a reader who may read the board here, a member (passesReadGate), or to
+        // anyone where every read is open (ENFORCE_READ_AUTH=false). On a node with the visitors' view the whole page is
+        // members-only already (MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS).
+        const readerMayReadListings = !deps.enforceReadAuth || (!!ctx.state?.actor && passesReadGate(ctx.state.actor));
+        const posts = readerMayReadListings ? db.prepare(
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
-        ).all(treasury) as any[];
+        ).all(treasury) as any[] : [];
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));

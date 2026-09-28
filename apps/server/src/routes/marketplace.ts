@@ -224,8 +224,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
-    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same public
-    // endpoint, so the peer origin is the only signal available.
+    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same
+    // endpoint, so the peer origin is the only signal available. It reaches this handler only on a
+    // node with the visitors' view on: elsewhere the listings are members-only and the signature gate
+    // refuses a peer's unsigned read first (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT).
     //
     // Origin is a HINT, not a credential, and that is the right strength here: reach is a discovery
     // filter, not an access control (docs/federation-economics.md Rule 9). Nothing is protected by
@@ -237,9 +239,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     const viewerPubkey = ctx.state.actor as string | undefined;
-    // Who voted for what in a poll goes to a member of this node only; everyone else gets the counts. This route is a
-    // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
-    // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
+    // Who voted for what in an open-vote poll goes to a member of this node only; everyone else gets the counts. On a
+    // node with the visitors' view this route is a public read, so an unsigned reader, a signed non-member and a pruned
+    // account reach it; elsewhere only a member does, a suspended one included, who reads the counts only. Membership is
+    // in the ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
     // confirmed with a 304.
     const includeVoters = viewerTier(ctx) === 'member';
     // The listings, not the people (G9a, the global profile's `guestListingsOnly`): anyone who isn't a member gets each

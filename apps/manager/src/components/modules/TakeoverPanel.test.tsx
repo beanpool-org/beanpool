@@ -150,6 +150,49 @@ describe('TakeoverPanel', () => {
         expect(sessionStorage.getItem('bp-takeover-progress:standby-1')).toBe('a'.repeat(64));
     });
 
+    it("says in plain words when the standby's copy didn't match, and the take-over still goes ahead", async () => {
+        const lines = [
+            "This server's last whole copy of the main server, at 2026-09-19 11:45 UTC, did not match it: members and listings differed.",
+            'Last exact copy of the main server: 2026-09-19 11:30 UTC.',
+            'The take-over goes ahead all the same: what did not match, or changed since, may be missing or wrong afterwards.',
+        ];
+        const calls = stubFetch({
+            '/api/local/admin/takeover/progress': (_b, headers) => ({ status: 200, body: headers['X-Takeover-Progress'] ? progress('restarting', 8) : progress('none') }),
+            '/api/local/admin/takeover/open': () => ({ status: 200, body: { success: true, preview: { ...PREVIEW, copy: { warning: true, lines } } } }),
+            '/api/local/admin/takeover/confirm': () => ({ status: 200, body: { success: true, progressToken: 'c'.repeat(64), progress: progress('restarting', 8) } }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'I understand, continue' }));
+        fireEvent.change(screen.getByLabelText(/The recovery code on the paper/), { target: { value: 'BPRC-1 RIGHT' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Open the keys' }));
+        await screen.findByText(/Identity kept:/);
+        const box = document.querySelector('#takeover-copy-warning') as HTMLElement;
+        expect(box).not.toBeNull();
+        for (const l of lines) expect(box.textContent).toContain(l);
+        expect(document.querySelector('#takeover-copy-exact')).toBeNull();
+        // Never a gate: the same tickbox, and the take-over goes ahead.
+        fireEvent.click(screen.getByLabelText(/The main server is gone, and nobody will start it again/));
+        const takeOver = screen.getByRole('button', { name: 'Take over now' });
+        expect(takeOver).not.toBeDisabled();
+        fireEvent.click(takeOver);
+        await waitFor(() => expect(calls.some((c) => c.path.endsWith('/confirm'))).toBe(true));
+    });
+
+    it("says when the standby's last exact copy was, as one line, when it matched", async () => {
+        stubFetch({
+            '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('none') }),
+            '/api/local/admin/takeover/open': () => ({ status: 200, body: { success: true, preview: { ...PREVIEW, copy: { warning: false, lines: ['Last exact copy of the main server: 2026-09-19 11:59 UTC.'] } } } }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'I understand, continue' }));
+        fireEvent.change(screen.getByLabelText(/The recovery code on the paper/), { target: { value: 'BPRC-1 RIGHT' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Open the keys' }));
+        expect(await screen.findByText('Last exact copy of the main server: 2026-09-19 11:59 UTC.')).toBeInTheDocument();
+        expect(document.querySelector('#takeover-copy-warning')).toBeNull();
+    });
+
     it('says the server is restarting while it does not answer, then shows the true result with the progress token', async () => {
         sessionStorage.setItem('bp-takeover-progress:standby-1', 'b'.repeat(64));
         let phase: 'down' | 'done' = 'down';

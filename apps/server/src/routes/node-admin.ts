@@ -64,8 +64,9 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'Only the node owner, an admin or a moderator can see the admin queue' };
             return;
         }
-        // A moderator sees only the reports waiting: the rest is work their session cannot open.
-        ctx.body = getAdminQueue({ forModerator: role === 'moderator' });
+        // A moderator sees only the reports waiting: the rest is work their session cannot open. Only an owner is told
+        // the standby needs them (services/standby-health.ts).
+        ctx.body = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner' });
     });
 
     return router;

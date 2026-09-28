@@ -18,6 +18,8 @@ interface HomeScreenProps {
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number } | null };
     onStartColdStartWizard?: () => void;
     onAcknowledgeShutdown?: () => Promise<void>;
+    /** An owner's "this standby is gone for good": the node stops watching it (its next report watches it again). */
+    onForgetStandby?: (id: string) => Promise<void>;
 }
 
 export function HomeScreen({
@@ -34,6 +36,7 @@ export function HomeScreen({
     auditState,
     onStartColdStartWizard,
     onAcknowledgeShutdown,
+    onForgetStandby,
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
 
@@ -91,8 +94,12 @@ export function HomeScreen({
         !shutdownDismissed
     );
 
+    // The standby's incident (the node's standby watch; absent on a server before it, null to anyone but an owner)
+    const standbyIncident = diag?.standbyHealth?.incident ?? null;
+    const unhealthyStandbys = (diag?.standbyHealth?.standbys ?? []).filter((s) => !s.healthy);
+
     // Action items
-    const actionItems: { icon: string; text: string; tab: 'people' | 'economy' | 'bulletin' | 'appliance'; sub?: string }[] = [];
+    const actionItems:{ icon: string; text: string; tab: 'people' | 'economy' | 'bulletin' | 'appliance'; sub?: string }[] = [];
     if (pendingReportsCount > 0) {
         actionItems.push({
             icon: '⚠️',
@@ -260,6 +267,40 @@ export function HomeScreen({
                         </div>
                     </div>
                 )
+            )}
+
+            {/* The standby needs its owners (owners only: the node sends it to nobody else) */}
+            {standbyIncident && (
+                <div
+                    data-testid="standby-health-banner"
+                    role="alert"
+                    className="p-5 rounded-2xl bg-amber-950/70 border-2 border-amber-600/70 shadow-xl space-y-3 animate-fade-in text-left"
+                    style={{ overflowWrap: 'anywhere' }}
+                >
+                    <div className="flex items-start gap-3.5">
+                        <span className="text-2xl" aria-hidden="true">🛟</span>
+                        <div className="min-w-0 space-y-1">
+                            <h3 className="text-base font-black text-white m-0">Your standby server needs attention</h3>
+                            {standbyIncident.lines.map((l) => <p key={l} className="text-sm text-amber-100 m-0">{l}</p>)}
+                            {standbyIncident.whatToDo.map((w) => <p key={w} className="text-xs text-amber-200/80 m-0">{w}</p>)}
+                            <p className="text-xs text-amber-200/70 m-0">This stays here until the standby copies this server again, exactly.</p>
+                        </div>
+                    </div>
+                    {onForgetStandby && unhealthyStandbys.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
+                            {unhealthyStandbys.map((s) => (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={async () => { await onForgetStandby(s.id).catch(() => {}); }}
+                                    className="min-h-[44px] px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-xs font-bold transition-all border border-nature-700"
+                                >
+                                    {s.label} is gone for good: stop watching it
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* 2. Action required — either All clear or live list */}

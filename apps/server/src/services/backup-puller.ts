@@ -54,6 +54,13 @@ import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
+import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
+import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
+import {
+    HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncTaken, noteUncomparedCheck,
+    noteWholeCopyCheck, pendingMismatchResync, standbyReport, whyOf,
+} from './standby-copy-record.js';
+import { errorMessage } from '../error-message.js';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
 
 // Said once per value, not on every 60 s pull.
@@ -135,10 +142,14 @@ let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 // The kind of the last pull tried: 'delta', 'full' or 'resync'.
 let lastPullMode: PullMode | null = null;
-// A whole copy found this standby's ledger isn't its main server's (checkWholeCopy): the next pull is a force-resync.
-let ledgerResyncDue = false;
+// A whole copy found this standby's copy isn't its main server's (checkWholeCopy), at this time: the next pull is a
+// force-resync, until a copy comes for it (pullOnce), for up to HEALING_MS. The standby's record keeps it too, so a
+// restart before then still takes it (nextMode reads it once a process; review 4119011899).
+let ledgerResyncAskedAt: number | null = null;
+let ledgerResyncRestored = false;
+// When this process last asked for one; the standby's record keeps it across restarts (standby-copy-record.ts).
 let lastLedgerResyncAt = 0;
-// At most one force-resync for a ledger that doesn't match in this long: one a resync doesn't cure must not clear this
+// At most one force-resync for a copy that doesn't match in this long: one a resync doesn't cure must not clear this
 // standby over and over.
 const LEDGER_RESYNC_EVERY_MS = 6 * 60 * 60_000;
 
@@ -212,6 +223,11 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     const authHeader: Record<string, string> = replicationToken
         ? { 'X-Replication-Token': replicationToken }
         : { 'X-Admin-Password': adminPassword as string };
+    // How this standby's copies have gone, for its main server to tell the community's owners when it needs them
+    // (services/standby-health.ts). Only on the replication-token channel: the main server reads it nowhere else.
+    if (replicationToken) {
+        try { authHeader[STANDBY_REPORT_HEADER] = JSON.stringify(standbyReport()); } catch { /* a pull never waits on its report */ }
+    }
 
     const fresh = mode === 'resync';
     // Delta only when explicitly asked AND we already have a cursor to delta-from;
@@ -227,6 +243,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     let heldToSum = seed ? null : heldLedgerSum();
 
     inFlight = true;
+    // Where a failure happened: no copy came ('fetch'), or it came and was not imported ('import'). Only the second counts
+    // toward "refused in a row" in the report.
+    let stage: 'fetch' | 'import' = 'fetch';
     const url = primaryUrl.replace(/\/$/, '') + (isDelta ? DELTA_PATH : SNAPSHOT_PATH);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -247,6 +266,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
             consecutiveFailures = 0;
             if (!isDelta) lastFullReconcileAt = Date.now();
+            recordQuietly(() => noteCopyLanded(lastSuccessAt!));
             return { ok: true };
         }
         if (!res.ok) {
@@ -273,6 +293,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             }
         }
 
+        stage = 'import';
         // Force-resync: wipe the replicated tables so the upsert importer rebuilds an
         // exact copy with no orphan rows. Only after a successful fetch+parse, so the
         // empty window is milliseconds.
@@ -287,6 +308,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 logger.warn('P2P', `[Backup] ⚠️ Force-resync: the primary could not read ${keepPhotos.length} photo object(s) `
                     + 'of its own, so this payload does not carry those rows. Keeping this replica\'s copies of them — '
                     + 'they may be the only readable ones left.');
+            }
+            // The force-resync a copy that didn't match asked for is taken once a copy came for it, in this process and in
+            // the standby's record, whatever its import does: one whose fetch failed (a main server restarting with the
+            // same update) is asked for again on the next pull, and none is taken twice.
+            if (why === 'mismatch') {
+                ledgerResyncAskedAt = null;
+                recordQuietly(() => noteMismatchResyncTaken());
             }
             // The replaced keys too, when this copy carries the main server's (it sends every one it has: it never
             // deletes a row). One from a main server older than that sends none, and this standby keeps its own. With the
@@ -339,6 +367,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
+        recordQuietly(() => noteCopyLanded(lastSuccessAt!));
         // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode), and the
         // record that this standby holds a copy it landed, so no later one is a seed of that kind.
         if (fresh || seed) noteReplicaFormat();
@@ -382,6 +411,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         return { ok: true };
     } catch (e: any) {
         consecutiveFailures++;
+        recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyOf(stage, e)));
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
@@ -396,30 +426,101 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     }
 }
 
+/** The standby's record of its copies (services/standby-copy-record.ts) never fails a pull, nor masks how one went. */
+function recordQuietly(write: () => void): void {
+    try { write(); } catch (e) { logger.warn('P2P', `[Backup] Could not record how this pull went: ${errorMessage(e)}`); }
+}
+
 /**
  * The whole-copy check, after a full pull: this standby against the copy it just imported, every account included
- * (engine audit.ts getReplicaConsistency). A ledger that isn't the copy's is recorded (node_config
- * `replica_ledger_mismatch`, which the owners' notice will read, design G8) and asks for one force-resync, at most one
- * every six hours. That force-resync is not a seed: a main server can send a copy that fails this check, so its import
- * is held to the total this standby's ledger had before its clear (ResyncKind). An entry of the copy with no key this
- * server can store or no number for a balance is recorded and asks for none: a force-resync would read the same entry.
- * Exported so a suite can run it on a copy it fetched.
+ * (engine audit.ts getReplicaConsistency), and every copied table's row count and content against the hashes the main
+ * server sent with it (engine/replica-hashes.ts; routes/backup.ts sends them). The verdict goes in this standby's record
+ * (services/standby-copy-record.ts): its next pull reports it to the main server, which tells the community's owners when
+ * it isn't exact (design G8), and the take-over preview reads it.
+ *
+ * A copy that isn't the main server's asks for one force-resync, at most one every six hours, restarts included (the
+ * standby's record keeps when it last asked, and whether a copy has come for it since, so a restart before the resync
+ * still takes it); while it takes that resync, its main server tells nobody, and the check
+ * after it says whether it cured the copy (standby-copy-record.ts HEALING_MS). A ledger that isn't is also
+ * recorded in node_config `replica_ledger_mismatch`. That force-resync is not a seed: a main server can send a copy that
+ * fails this check, so its import is held to the total this standby's ledger had before its clear (ResyncKind). An entry
+ * of the copy with no key this server can store or no number for a balance is recorded and asks for none: a force-resync
+ * would read the same entry. Exported so a suite can run it on a copy it fetched.
  */
 export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
     lastConsistency = c;
-    if (!c.ok) {
+    // Each table's content, when the main server sent its hashes with this copy (it sends none with one written to while
+    // it was being made). The listing photos the main server could not read from its own storage are not in the copy,
+    // which names them, nor in its hash of that table (routes/backup.ts): no copy brings them, so they are left out here
+    // too, and never read as a copy gone wrong that a force-resync would mend (review 4118340860).
+    const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
+    const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
+    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut }) : null;
+    // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
+    // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
+    // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it
+    // would read the same entries (review 4118340781; #1268's step 15, a copy whose every entry is unreadable).
+    const named: unknown[] = Array.isArray(payload.accounts) ? payload.accounts : [];
+    const ledgerWhole = named.length === 0
+        ? c.tables.some((t) => t.name === 'accounts' && t.match)
+        : !!c.ledger && c.ledger.unreadable === 0 && new Set(named.map((a) => (a as { publicKey?: unknown } | null)?.publicKey)).size === named.length;
+    const ledgerDiffering = c.ledger?.differing ?? 0;
+    // What differs that a copy from the main server mends, so a force-resync can put it right: a table's count or content,
+    // an account's balance (or an account only one side holds), the Commons. Never the accounts' count or sum: each account
+    // is compared on its own, or the copy doesn't carry them all.
+    const differs = new Set<string>();
+    for (const t of c.tables) if (!t.match && t.name !== 'accounts') differs.add(t.name);
+    for (const d of contents?.differing ?? []) {
+        // The accounts' content only with the ledger compared whole and alike: a balance that differs is the ledger's line
+        // below, and entries this server can't hold differ on every copy.
+        if (d.table === 'accounts' && (!ledgerWhole || ledgerDiffering > 0)) continue;
+        differs.add(d.table);
+    }
+    if (c.commons && !c.commons.match) differs.add(LEDGER_DIFFERS.commons);
+    if (ledgerDiffering > 0) differs.add(LEDGER_DIFFERS.ledger);
+    // Everything in it is something a force-resync can mend.
+    const wrong = differs.size > 0;
+    // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
+    // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
+    // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
+    // stays the older one (review 4118340714).
+    const notCompared: ('content' | 'ledger')[] = [...(contents ? [] : ['content' as const]), ...(ledgerWhole ? [] : ['ledger' as const])];
+    const verdict: 'exact' | 'inexact' | 'uncompared' = differs.size > 0 ? 'inexact' : notCompared.length === 0 ? 'exact' : 'uncompared';
+    const exact = verdict === 'exact';
+    if (differs.size > 0) {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
+        for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
         logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
     }
+    const now = Date.now();
+    // The last force-resync this standby asked for, from its record too: a restart allows no sooner one, so a difference no
+    // resync mends never loops. This process's memory stays a floor, should the record be unwritable.
+    let lastResyncAt = lastLedgerResyncAt;
+    try { lastResyncAt = Math.max(lastResyncAt, lastMismatchResyncAt()); } catch { /* the floor */ }
+    const resync = wrong && now - lastResyncAt >= LEDGER_RESYNC_EVERY_MS;
+    if (resync) {
+        ledgerResyncAskedAt = now;
+        lastLedgerResyncAt = now;
+        lastResyncAt = now;
+    }
+    if (verdict === 'uncompared') {
+        logger.info('P2P', `[Backup] This whole copy could not be compared in full (${notCompared.map((n) => (n === 'content'
+            ? 'no table hashes: the main server was written to while making it' : 'accounts this server cannot hold')).join('; ')}); `
+            + 'nothing compared differs. No verdict.');
+        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared, photosLeftOut: photosLeftOut.size, snapshotGeneratedAt: c.snapshotGeneratedAt }));
+    } else {
+        recordQuietly(() => noteWholeCopyCheck({
+            at: now, exact, differs: [...differs].sort(), ledgerDiffering, hashed: !!contents, photosLeftOut: photosLeftOut.size,
+            resyncAsked: resync, snapshotGeneratedAt: c.snapshotGeneratedAt,
+        }));
+    }
+    if (wrong && !(c.ledger && !c.ledger.match)) {
+        logger.warn('P2P', `[Backup] This standby's copy is not its main server's after a whole copy (${[...differs].join(', ')}). `
+            + (resync ? 'Taking a force-resync next.' : `No force-resync before ${new Date(lastResyncAt + LEDGER_RESYNC_EVERY_MS).toISOString()}.`));
+    }
     if (c.ledger && !c.ledger.match) {
-        const now = Date.now();
-        const resync = c.ledger.differing > 0 && now - lastLedgerResyncAt >= LEDGER_RESYNC_EVERY_MS;
-        if (resync) {
-            ledgerResyncDue = true;
-            lastLedgerResyncAt = now;
-        }
         noteLedgerMismatch({
             at: new Date(now).toISOString(),
             snapshotGeneratedAt: c.snapshotGeneratedAt,
@@ -427,7 +528,7 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
             unreadable: c.ledger.unreadable,
             examples: c.ledger.examples,
             resync: resync ? 'scheduled'
-                : c.ledger.differing > 0 ? `not before ${new Date(lastLedgerResyncAt + LEDGER_RESYNC_EVERY_MS).toISOString()}`
+                : wrong ? `not before ${new Date(lastResyncAt + LEDGER_RESYNC_EVERY_MS).toISOString()}`
                     : 'none: the copy has entries this server cannot read',
         });
         logger.security('P2P', `[Backup] ❌ This standby's ledger is not its main server's after a whole copy: ${c.ledger.differing} `
@@ -482,10 +583,24 @@ function nextMode(): PullMode | ResyncKind {
         logger.info('P2P', `[Backup] This standby's copy was made by an older importer (format ${replicaFormatOfCopy()}, now ${REPLICA_FORMAT}): taking one force-resync`);
         return 'format';
     }
-    // The last whole copy found a ledger that isn't the main server's (checkWholeCopy): not a seed.
-    if (ledgerResyncDue) {
-        ledgerResyncDue = false;
-        return 'mismatch';
+    // The last whole copy found a copy that isn't the main server's, its ledger or any table (checkWholeCopy): not a seed.
+    // Taken once a copy comes for it (pullOnce); while none does, only for as long as the copy counts as mending itself.
+    // Once a process, the one asked for before this restart that no copy came for yet, from the standby's record.
+    if (!ledgerResyncRestored) {
+        ledgerResyncRestored = true;
+        try {
+            const asked = pendingMismatchResync();
+            if (asked !== null && ledgerResyncAskedAt === null) {
+                ledgerResyncAskedAt = asked;
+                logger.info('P2P', '[Backup] Taking the force-resync a whole copy that did not match asked for before this restart');
+            }
+        } catch { /* the record unreadable: none is asked for from it */ }
+    }
+    if (ledgerResyncAskedAt !== null) {
+        if (Date.now() - ledgerResyncAskedAt < HEALING_MS) return 'mismatch';
+        logger.warn('P2P', '[Backup] The force-resync asked for a copy that did not match got no copy from the main server in an hour: '
+            + 'dropped. The main server tells its owners; the next one waits for the six-hour limit.');
+        ledgerResyncAskedAt = null;
     }
     if (!lastImportedCursor) return 'full'; // seed
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats

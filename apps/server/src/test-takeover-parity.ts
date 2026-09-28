@@ -66,9 +66,9 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * its lines. Where a difference has more than one cause (a behaviour read), `gap` names each: a fix PR takes its id out,
  * and the last one deletes the line, which the suite then requires.
  *
- * G0 (the ledger), G1 (listings another community's), G5 (the community's own settings) and G9 (a new standby's first
- * pull, which this suite found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any
- * of them is new.
+ * G0 (the ledger), G1 (listings another community's), G3 (in-flight money and governance, on the plain-table path), G5
+ * (the community's own settings) and G9 (a new standby's first pull, which this suite found) are closed, and so are G1b's
+ * listing, deal, photo and project columns: a difference in any of them is new.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
@@ -124,15 +124,6 @@ const KNOWN_GAPS: KnownGap[] = [
     // G2c: keepers and pledges.
     { key: 'db:treasury_operators (not copied)', gap: 'G2c', why: 'no keeper can act for any enterprise' },
     { key: 'db:enterprise_pledges (not copied)', gap: 'G2c', why: "keepers' pledges vanish" },
-
-    // G3: in-flight money and governance.
-    { key: 'db:deferred_wage_claims (not copied)', gap: 'G3', why: "a keeper's unpaid wage vanishes" },
-    { key: 'db:decisions (not copied)', gap: 'G3', why: 'an open Decision and one in its grace period vanish' },
-    { key: 'db:decision_votes (not copied)', gap: 'G3', why: 'their votes' },
-    { key: 'db:invite_codes (not copied)', gap: 'G3', why: 'every invite already sent fails' },
-    { key: 'db:rekey_requests (not copied)', gap: 'G3', why: 'an unused re-key code is refused' },
-    { key: 'http:redeem the unused invite', gap: 'G3', why: '"Invalid invite code"' },
-    { key: 'http:the Decision sweep, eight days on', gap: 'G3', why: 'the removal never completes and the open Decision never closes' },
 
     // G4: members' devices and conveniences.
     { key: 'db:push_tokens (not copied)', gap: 'G4', why: 'no push reaches anyone' },

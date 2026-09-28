@@ -74,9 +74,8 @@
         <ul>
             <li>Type your name in the community. The app may suggest &quot;Is this you?&quot;.</li>
             <li>Type your community's name or address.</li>
-            <li>Tap <strong>Recover with</strong> and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.</li>
+            <li>Tap <strong>Recover with</strong> and the account you linked: Google or Facebook, or Apple on an iPhone.</li>
             <li>With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.</li>
-            <li>With GitHub, the app shows a code, already copied, and what to do on GitHub. Tap <strong>Open GitHub</strong> (on an iPhone, GitHub's page opens by itself). On GitHub, press and hold the first box and choose <strong>Paste</strong>, then approve. When GitHub says you're all set, tap <strong>✕</strong> at the top left to come back (an iPhone comes back by itself). Tap <strong>Copy</strong> to copy the code again, or <strong>Open GitHub</strong> to get back to the page. While the app is waiting for GitHub, <strong>Cancel</strong> stops it. When GitHub confirms, the code and <strong>Cancel</strong> go away and the app finishes getting your account back.</li>
         </ul>
         <p>If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see &quot;Your 12 words&quot;). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).</p>
         <h2>Protecting your account now</h2>
@@ -85,13 +84,17 @@
             <li>Under <strong>Sign-In Recovery Providers</strong>, tap <strong>Protect with</strong> and choose an account.</li>
             <li>Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.</li>
             <li>With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.</li>
-            <li>With GitHub, the app shows a code and copies it. Tap <strong>Open GitHub</strong>, press and hold the first box and choose <strong>Paste</strong>, then approve. When GitHub says you're all set, tap <strong>✕</strong> at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, <strong>Cancel</strong> stops it.</li>
         </ul>
         <p>This works on a phone with no 12 words too.</p>
         <p>If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap <strong>Connect again</strong> next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so <strong>Connect again</strong> is not shown.</p>
-        <p>GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead.</p>
         <p>This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community.</p>
         <p>To remove it, tap <strong>Disconnect</strong>.</p>
+        <h2>If you had linked GitHub</h2>
+        <p>BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locked to it was not locked to anything only you have. When your community's server is updated, it deletes every copy linked to GitHub. Your account itself is not touched, and your 12 words still work.</p>
+        <ul>
+            <li>If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.</li>
+            <li>If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account.</li>
+        </ul>
         <h2>Who can open the copy</h2>
         <p>A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.</p>
         <p>If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap <strong>Disconnect</strong> next to each sign-in account. Disconnecting deletes the copy. A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Disconnecting does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too.</p>
@@ -109,7 +112,7 @@
             <li><a href="communities.html"><strong>More than one community</strong><span>Belong to several communities with one account, and switch between them.</span></a></li>
             <li><a href="faq.html"><strong>Questions</strong><span>Short answers to the questions members ask most.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 72.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 73.</p>
     </main>
 </body>
 </html>

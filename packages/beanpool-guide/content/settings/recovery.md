@@ -23,9 +23,8 @@ This works only if you linked one before (see below), and only while your commun
 
 - Type your name in the community. The app may suggest "Is this you?".
 - Type your community's name or address.
-- Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.
+- Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
-- With GitHub, the app shows a code, already copied, and what to do on GitHub. Tap **Open GitHub** (on an iPhone, GitHub's page opens by itself). On GitHub, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back (an iPhone comes back by itself). Tap **Copy** to copy the code again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back.
 
 If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see "Your 12 words"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).
 
@@ -35,17 +34,21 @@ If the sign-in account was linked from a phone that had your 12 words, on an up-
 - Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.
 - Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
-- With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it.
 
 This works on a phone with no 12 words too.
 
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
-GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead.
-
 This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community.
 
 To remove it, tap **Disconnect**.
+
+## If you had linked GitHub
+
+BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locked to it was not locked to anything only you have. When your community's server is updated, it deletes every copy linked to GitHub. Your account itself is not touched, and your 12 words still work.
+
+- If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.
+- If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account.
 
 ## Who can open the copy
 

@@ -28,9 +28,11 @@ So others can read how each member voted. Whoever runs the machine can copy the 
 
 ## Members' sign-in recovery copies
 
-A member who connects Google, Apple, Facebook or GitHub in the app, and everyone who joins the global community with a sign-in, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
+A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
 
-Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in, and a GitHub id is public. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
+Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
+
+GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas).
 
 ## Who can read what over the internet
 

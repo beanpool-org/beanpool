@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 72,
-  "hash": "bd84548d7fefb33bedc3eac1dd218383737e16f481be7cbac85a1702c578a36a",
+  "version": 73,
+  "hash": "e2a05378ecea23b4512f85d3edebe061f52c97ee2777a0b7103ceab6ef880291",
   "sections": [
     {
       "id": "about",
@@ -874,7 +874,7 @@
           "type": "ul",
           "items": [
             "On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.",
-            "Sign in once with Google, Apple (on an iPhone), Facebook or GitHub. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.",
+            "Sign in once with Google, Apple (on an iPhone) or Facebook. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
           ]
         },
@@ -1180,7 +1180,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone app you can also link a Google, Facebook or GitHub account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See \"Getting your account back\"."
+          "text": "On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See \"Getting your account back\"."
         },
         {
           "type": "p",
@@ -1734,7 +1734,7 @@
           "items": [
             "Tap **Join**, then **I'm new to BeanPool**.",
             "Choose the name people will see. It needs at least 2 letters, and at most 20.",
-            "Sign in once, with one of the accounts the page shows: **Google**, **Apple**, **Facebook** or **GitHub**. The page takes you to that company's own sign-in and brings you back. With GitHub it shows a code instead: tap **Copy code**, then **Open GitHub**, enter the code there and come back.",
+            "Sign in once, with one of the accounts the page shows: **Google**, **Apple** or **Facebook**. The page takes you to that company's own sign-in and brings you back.",
             "Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in**, **Your Photo**, **Safety Backup** and **How it Works**."
           ]
         },
@@ -1813,7 +1813,7 @@
             "Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)",
             "A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.",
             "Type your name here. Tap your account when it shows.",
-            "Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.",
+            "Choose the sign-in you joined with: **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.",
             "The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.",
             "You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them. If the copy didn't keep them, this browser doesn't have them, and Settings says so (see \"Keep your 12 words\" below)."
           ]
@@ -1821,6 +1821,10 @@
         {
           "type": "p",
           "text": "Your account's devices are told that it is being brought back, in case it isn't you."
+        },
+        {
+          "type": "p",
+          "text": "If you joined with GitHub, it can't bring your account back: BeanPool no longer uses GitHub (see \"Getting your account back\"). Use your 12 words instead."
         },
         {
           "type": "p",
@@ -4990,9 +4994,8 @@
           "items": [
             "Type your name in the community. The app may suggest \"Is this you?\".",
             "Type your community's name or address.",
-            "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.",
-            "With GitHub, the app shows a code, already copied, and what to do on GitHub. Tap **Open GitHub** (on an iPhone, GitHub's page opens by itself). On GitHub, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back (an iPhone comes back by itself). Tap **Copy** to copy the code again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back."
+            "Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.",
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead."
           ]
         },
         {
@@ -5009,8 +5012,7 @@
             "Open **Settings** and tap **Account Protection**.",
             "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
             "Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.",
-            "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
           ]
         },
         {
@@ -5023,15 +5025,26 @@
         },
         {
           "type": "p",
-          "text": "GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead."
-        },
-        {
-          "type": "p",
           "text": "This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community."
         },
         {
           "type": "p",
           "text": "To remove it, tap **Disconnect**."
+        },
+        {
+          "type": "h2",
+          "text": "If you had linked GitHub"
+        },
+        {
+          "type": "p",
+          "text": "BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locked to it was not locked to anything only you have. When your community's server is updated, it deletes every copy linked to GitHub. Your account itself is not touched, and your 12 words still work."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.",
+            "If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account."
+          ]
         },
         {
           "type": "h2",

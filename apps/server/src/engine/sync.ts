@@ -1812,6 +1812,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             // Memberships, every status — a 'removed' row is what keeps a removal in force after failover. A row
             // no newer than a local tombstone for the same key is a leave that already happened, and must not
             // come back (a re-join is stamped after the tombstone and passes).
+            // role_since (when the row took its role) decides who votes on a quiet lead. A primary older than the
+            // column sends none. Its row is still the appointment this node knows when role, status and joined_at
+            // are unchanged, so the known time stays; when any of them changed there, the known time belongs to an
+            // earlier appointment and would backdate this one, so it is dropped and the reader takes joined_at.
             if (remote.groupMembers) {
                 const importGroupMember = db.prepare(`INSERT INTO group_members
                     (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at, role_since)
@@ -1822,7 +1826,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         joined_at = excluded.joined_at,
                         invited_by = excluded.invited_by,
                         updated_at = excluded.updated_at,
-                        role_since = excluded.role_since
+                        role_since = CASE
+                            WHEN excluded.role_since IS NOT NULL THEN excluded.role_since
+                            WHEN excluded.role = group_members.role AND excluded.status = group_members.status
+                                 AND excluded.joined_at IS group_members.joined_at THEN group_members.role_since
+                            ELSE NULL END
                     WHERE excluded.updated_at IS NOT NULL
                       AND (group_members.updated_at IS NULL OR excluded.updated_at > group_members.updated_at)`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'group_members' AND row_key = ?`);

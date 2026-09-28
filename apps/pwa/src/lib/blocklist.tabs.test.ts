@@ -782,6 +782,70 @@ describe('two tabs, and a node that takes time to answer', () => {
             expect(node.list).toEqual([K2, K1]);
             expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2].sort());
         });
+
+        it('a block whose answer came back first stays shown when a later request that crossed it on the way answers without it', async () => {
+            const T = await oneTabRead([], ringAfter);
+            // The block of K1 reaches the node at 50 ms and answers at 51 ms, K1 and K2. The block of K2, made at 10 ms,
+            // reached the node first, at 11 ms, and its answer (K2 alone) comes back only at 111 ms: asked for later, but older.
+            // (`there` waits are taken in the order the requests are sent, `back` waits in the order they reach the node.)
+            node.thereQueue = { add: [50, 1] };
+            node.backQueue = { add: [100, 1] };
+            const first = T.blockUser(K1);
+            await vi.advanceTimersByTimeAsync(10);
+            const second = T.blockUser(K2);
+            await vi.advanceTimersByTimeAsync(45);
+            await expect(first).resolves.toBe(true);
+            expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2].sort());
+            const w = watch(() => [K1, K2]);
+            w.add('T', T);
+            await w.run(3000);
+            w.stop();
+            await expect(second).resolves.toBe(true);
+            expect(w.gaps).toEqual([]);
+            expect(node.list).toEqual([K2, K1]);
+            expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2].sort());
+        });
+    });
+
+    it('an unblock of K1 on its way with a block of K2 answers last: K1 is not shown again, and no read is needed', async () => {
+        const T = await oneTabRead([K1], null);
+        // The block of K2 answers at 21 ms, K1 and K2. The unblock of K1, made at 5 ms, was on its way with it; it reaches the
+        // node after the block and answers at 56 ms, K2 alone: without K1 because of itself.
+        node.there = { add: 1, remove: 1 };
+        node.back = { add: 20, remove: 50 };
+        let blocked = false;
+        let done = false;
+        const blocking = T.blockUser(K2).then(r => { blocked = true; return r; });
+        await vi.advanceTimersByTimeAsync(5);
+        const unblocking = T.unblockUser(K1).then(r => { done = true; return r; });
+        const w = watch(() => (blocked ? [K2] : []), () => (done ? [K1] : []));
+        w.add('T', T);
+        await w.run(3000);
+        w.stop();
+        await expect(blocking).resolves.toBe(true);
+        await expect(unblocking).resolves.toBe(true);
+        expect(w.gaps).toEqual([]);
+        expect(node.list).toEqual([K2]);
+        expect(T.getBlockedUsers()).toEqual([K2]);
+        expect(node.sent).toEqual([`add ${K2}`, `remove ${K1}`]);
+    });
+
+    it('Unblock All pressed while a block of K2 is on its way, and answered after it: one more read, and the page shows what the node holds', async () => {
+        const T = await oneTabRead([K1], null);
+        // The block of K2 reaches the node at 1 ms and answers at 21 ms, K1 and K2. Unblock All, pressed at 5 ms while K2 isn't
+        // shown yet, reaches it at 6 ms and answers at 56 ms: nobody. The two were on their way together, so K2 stays shown
+        // until a read asked after both says the node doesn't hold it.
+        node.there = { add: 1, clear: 1, read: 1 };
+        node.back = { add: 20, clear: 50, read: 1 };
+        const blocking = T.blockUser(K2);
+        await vi.advanceTimersByTimeAsync(5);
+        const clearing = T.clearBlocklist();
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(blocking).resolves.toBe(true);
+        await clearing;
+        expect(node.list).toEqual([]);
+        expect(T.getBlockedUsers()).toEqual([]);
+        expect(node.sent).toEqual([`add ${K2}`, 'clear', 'read']);
     });
 
     it.each(['Unblock All', 'unblock of K1'] as const)('an %s asked after a block of K2 is the newer answer, and applies as it comes back last', async how => {

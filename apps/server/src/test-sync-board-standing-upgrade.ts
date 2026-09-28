@@ -18,8 +18,9 @@
  *   - the column is filled: Hana's and Farm's with the upgrade's time, Ben's and Olly's left empty; no updated_at
  *     moves, and the marker is written;
  *   - Carol's next delta carries Hana's and Farm's offers as paused, and neither Ben's nor Olly's; after it the phone
- *     from before #1238 (both live communities) has the board. An unsigned delta from the same cursor carries the same
- *     offers, and no unsigned delta reveals when Ben's or Olly's row changed before the upgrade;
+ *     from before #1238 (both live communities) has the board. A bystander's delta from the same cursor carries the same
+ *     offers, and no such delta reveals when Ben's or Olly's row changed before the upgrade (a member with no ties
+ *     stands where an unsigned reader did: a local community's board is its members' since 2026-09-28);
  *   - after the upgrade, Ben's bio edit moves no standing: a delta from just before it doesn't carry his offer.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-board-standing-upgrade.ts
@@ -105,6 +106,9 @@ async function main() {
     if (!booted.includes('BOOT_OK')) throw new Error(`the fixture's first boot failed: ${booted}`);
 
     const carol = keypair(), hana = keypair(), ben = keypair(), olly = keypair();
+    // A member with no listing and no deal, whose deltas stand where an unsigned one did while the board was public on
+    // every node: a local community's board is its members' since 2026-09-28.
+    const bea = keypair();
     const farm = crypto.randomBytes(32).toString('hex');
     const seeded = {
         hana: ago(120 * MIN), farm: ago(120 * MIN), ben: ago(30 * MIN), olly: ago(120 * MIN), carol: ago(180 * MIN),
@@ -126,6 +130,7 @@ async function main() {
         member.run(hana.pubKeyHex, 'HolidayHana', joined, 'INV-HANA', seeded.hana, 0, 0, null);
         member.run(ben.pubKeyHex, 'BackBen', joined, 'INV-BEN', seeded.ben, 0, 0, null);
         member.run(olly.pubKeyHex, 'OtherOlly', joined, 'INV-OLLY', seeded.olly, 0, 0, null);
+        member.run(bea.pubKeyHex, 'BystanderBea', joined, 'INV-BEA', seeded.carol, 0, 0, null);
         member.run(farm, 'PausedFarm', joined, null, seeded.farm, 1, 1, seeded.farm);
         const pref = d.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`);
         pref.run(hana.pubKeyHex, 'true');
@@ -189,14 +194,14 @@ async function main() {
         assert(market.size === board.size && [...market].every(id => board.has(id)),
             `${which}: after that delta its Market is the board (board: ${show(board)} | phone: ${show(market)})`);
     }
-    const open = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}${since}`, null);
+    const open = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}${since}`, bea);
     const carried = (rows: any[]) => rows.map(r => r.id as string).filter(id => ours.has(id)).sort().join(',');
-    assert(carried(open) === carried(delta), `an unsigned delta from the same cursor carries the same offers (${show(open.map(r => r.id).filter(id => ours.has(id)))})`);
+    assert(carried(open) === carried(delta), `a bystander's delta from the same cursor carries the same offers (${show(open.map(r => r.id).filter(id => ours.has(id)))})`);
     // The offers were written 4 h ago, Olly's row changed 2 h ago and Ben's 30 min ago. A delta from between those times
     // must not carry their offers, or bisecting such cursors would give each row's time to the millisecond.
     for (const [who, from] of [['olly', 150], ['ben', 45]] as const) {
-        const probe = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(ago(from * MIN))}`, null);
-        assert(!probe.some(r => r.id === offers[who]), `an unsigned delta from ${from} min ago doesn't carry ${who}'s offer: his row's time stays private`);
+        const probe = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(ago(from * MIN))}`, bea);
+        assert(!probe.some(r => r.id === offers[who]), `a bystander's delta from ${from} min ago doesn't carry ${who}'s offer: his row's time stays private`);
     }
 
     console.log('\n── after the upgrade ──');
@@ -205,7 +210,7 @@ async function main() {
     const edited = await postJson('/api/profile/update', { bio: 'Bakes on Fridays' }, ben);
     assert(edited === 200 && row(ben.pubKeyHex).updated_at > seeded.ben && standing(ben.pubKeyHex) == null,
         `Ben edits his bio over HTTP: his updated_at moves, his standing doesn't (${edited}, ${standing(ben.pubKeyHex)})`);
-    const afterBio = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(beforeBio)}`, null);
+    const afterBio = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(beforeBio)}`, bea);
     assert(!afterBio.some(r => r.id === offers.ben), 'a delta from just before it doesn\'t carry his offer');
 
     console.log(`\n${passed}/${run} checks passed.`);

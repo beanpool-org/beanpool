@@ -10,9 +10,11 @@
  *   1. unsigned reads of a conversation, a conversation list, a member's transactions and a balance → 401
  *   2. a signed member reading their own of each → 200
  *   3. a signed member reading someone else's conversation / conversation list → 403
+ *   3b. a signed member reading someone else's balance / transactions → 403 (balances and trades are private)
  *   4. every public read the guest path needs → 200, both unsigned (the Welcome screen, before any
  *      identity exists) and signed by a key that is NOT a member here (the PWA guest of #849/#850,
- *      which holds a keypair and signs every read); that guest is still refused private reads (403)
+ *      which holds a keypair and signs every read); that guest is still refused private reads (403),
+ *      and a local community's listings (401/403 naming the global community)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-read-auth-default.ts
  */
@@ -109,12 +111,12 @@ async function main() {
     assert(otherConv.status === 403, `carol, signed, is refused alice and bob's conversation (got ${otherConv.status})`);
     const otherList = await get(`/api/messages/conversations/${alice.pubKeyHex}`, carol);
     assert(otherList.status === 403, `carol, signed, is refused alice's conversation list (got ${otherList.status})`);
-    // Not asserted, reported: balances and the ledger are readable by ANY signed member (the handlers
-    // check membership, not ownership). That is how the app shows another member's trust and trading
-    // gates; whether it should stay member-visible is a product decision, not part of the default flip.
+    // Balances and trades are private (Marty, 2026-09-28, reversing 2026-09-18's "member-visible by design", which this
+    // suite only measured): a member reads their own and nobody else's (test-privacy-defaults has the rest).
     const otherBal = await get(`/api/ledger/balance/${alice.pubKeyHex}`, carol);
     const otherTx = await get(`/api/ledger/transactions?publicKey=${alice.pubKeyHex}`, carol);
-    console.log(`  (measured: another member's balance → ${otherBal.status}, their transactions → ${otherTx.status}; member-visible by design)`);
+    assert(otherBal.status === 403, `carol, signed, is refused alice's balance (got ${otherBal.status})`);
+    assert(otherTx.status === 403, `carol, signed, is refused alice's transactions (got ${otherTx.status})`);
 
     console.log('\n── 4. a guest can still browse ──');
     const enterprise = createTreasury('Guest Visible Bakery', 'data:image/png;base64,iVBORw0KGgo=', 0, { leadKeeperPubkey: alice.pubKeyHex }).publicKey;
@@ -124,7 +126,8 @@ async function main() {
         '/api/community/health',
         '/api/node/config',
         '/api/node/info',
-        '/api/marketplace/posts',
+        // Not /api/marketplace/posts: a local community's listings are its members' (Marty, 2026-09-28), so a guest is
+        // refused them below. It was listed here while the board was public on every node.
         '/api/enterprises',
         '/api/enterprises/map',
         '/api/treasuries',
@@ -155,6 +158,13 @@ async function main() {
         const g = await get(path, guest);
         assert(g.status === 403, `non-member guest, signed, is refused ${what} (got ${g.status})`);
     }
+    // The listings: refused to both, in words that send them to the global community.
+    const boardUnsigned = await get('/api/marketplace/posts');
+    const boardGuest = await get('/api/marketplace/posts', guest);
+    assert(boardUnsigned.status === 401 && /global\.beanpool\.org/.test(boardUnsigned.error ?? ''), `unsigned GET /api/marketplace/posts is refused, naming the global community (got ${boardUnsigned.status})`);
+    assert(boardGuest.status === 403 && /global\.beanpool\.org/.test(boardGuest.error ?? ''), `non-member guest, signed, GET /api/marketplace/posts is refused the same way (got ${boardGuest.status})`);
+    const boardMember = await get('/api/marketplace/posts', alice);
+    assert(boardMember.status === 200, `alice, a member, reads the board (got ${boardMember.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

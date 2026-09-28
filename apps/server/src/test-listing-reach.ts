@@ -63,6 +63,20 @@ async function get(path: string): Promise<{ status: number; json: any }> {
     return { status: res.status, json };
 }
 
+/** A signed read, as a member's app makes one: a local community's board is its members' (2026-09-28). */
+async function getAs(path: string, id: { pk: string; privateKey: crypto.KeyObject }): Promise<{ status: number; json: any }> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+    const res = await fetch(`${BASE}${path}`, { headers: {
+        'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Timestamp': String(ts), 'X-Nonce': nonce,
+    } });
+    let json: any = null;
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, json };
+}
+
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
 /**
@@ -71,13 +85,16 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
  * depend on invite state it has nothing to do with.
  */
 function makeMember(callsign: string): string {
-    const { publicKey } = crypto.generateKeyPairSync('ed25519');
+    return makeSigningMember(callsign).pk;
+}
+function makeSigningMember(callsign: string): { pk: string; privateKey: crypto.KeyObject } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
         .run(pk, callsign, TINY_PNG);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pk);
-    return pk;
+    return { pk, privateKey };
 }
 
 const titlesFor = (peerId: string): string[] => listingsForPeer(peerId).map(l => l.title);
@@ -204,10 +221,17 @@ async function main() {
             `10b. and NOT ${leaked} — the receiving node writes what it is sent, so every field omitted here is one that cannot leak later`);
     }
 
-    // ── 11. The route a peer reads is unchanged by all this. ───────────────────────────────────────────
-    const local = await get('/api/marketplace/posts');
+    // ── 11. The board is unchanged by all this. ────────────────────────────────────────────────────────
+    // Read by a member: a local community's board is its members' since 2026-09-28, so a linked peer's app reading it
+    // unsigned is refused like any stranger, until linked communities get signed access of their own (11b). The libp2p
+    // serve path above (§10) is what peers use node to node, and it is untouched.
+    const neighbour = makeSigningMember('Neighbour');
+    const local = await getAs('/api/marketplace/posts', neighbour);
     assert(local.status === 200 && Array.isArray(local.json),
         '11. the ordinary marketplace read still works — reach is a federation concern and must not disturb the local board');
+    const stranger = await get('/api/marketplace/posts');
+    assert(stranger.status === 401 && stranger.json?.code === 'members_only',
+        `11b. and a stranger's unsigned read, a linked peer's app's included, is refused members_only (got ${stranger.status})`);
 
     // ── 12. THE PUBLIC BOARD DOES NOT NAME A MEMBER'S CHOSEN NEIGHBOURS. ───────────────────────────────
     //
@@ -221,10 +245,11 @@ async function main() {
     // compose copy was reworded to match ("Where does this travel?"), which is the honest half of this fix.
     const named = createPost('offer', 'other', 'Named neighbours', 'd', 10, 'fixed', author,
         undefined, undefined, undefined, false, undefined, false, { reach: 'peers', reachPeers: [BYRON] });
-    const board = await get('/api/marketplace/posts');
-    const strangerView = (board.json as any[]).find(p => p.id === named!.id);
+    // Read by another member: strangers read no local board at all since 2026-09-28 (§11b).
+    const board = await getAs('/api/marketplace/posts', neighbour);
+    const strangerView = (Array.isArray(board.json) ? board.json as any[] : []).find(p => p.id === named!.id);
     assert(strangerView !== undefined && strangerView.reach === 'peers',
-        `12a. a stranger still sees the listing and its reach (got ${strangerView?.reach}) — reach is a property of the listing, and the cached copy needs it for loop prevention`);
+        `12a. another member still sees the listing and its reach (got ${strangerView?.reach}) — reach is a property of the listing, and the cached copy needs it for loop prevention`);
     assert(strangerView !== undefined && !('reachPeers' in strangerView),
         '12b. but NOT which communities were named — that is a fact about third parties, and the poster\'s business');
 

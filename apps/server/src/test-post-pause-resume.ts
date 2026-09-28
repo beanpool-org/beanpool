@@ -103,9 +103,11 @@ async function main() {
     assert(pauseRes.status === 200 && pauseRes.body?.success === true, 'author successfully paused post');
 
     // ── 4. Feed Visibility when Paused ─────────────────────────────────────────
-    const publicFeed = await fetch(`${BASE}/api/marketplace/posts`);
-    const publicItems = (await publicFeed.json()) as any[];
-    assert(!publicItems.some(p => p.id === postId), 'paused post is hidden from public feed');
+    // The board as another member reads it: a local community's board is its members' since 2026-09-28 (this read was
+    // unsigned while the board was public on every node).
+    const publicFeed = await signedFetch('GET', '/api/marketplace/posts', stranger);
+    const publicItems = (Array.isArray(publicFeed.body) ? publicFeed.body : []) as any[];
+    assert(publicFeed.status === 200 && !publicItems.some(p => p.id === postId), 'paused post is hidden from public feed');
 
     const authorSelfView = getPosts({ authorPubkey: author.pubKeyHex, viewerPubkey: author.pubKeyHex });
     assert(authorSelfView.some(p => p.id === postId), 'author viewing their own posts sees paused post');
@@ -126,8 +128,8 @@ async function main() {
     });
     assert(resumeRes.status === 200 && resumeRes.body?.success === true, 'author successfully resumed post');
 
-    const restoredFeed = await fetch(`${BASE}/api/marketplace/posts`);
-    const restoredItems = (await restoredFeed.json()) as any[];
+    const restoredFeed = await signedFetch('GET', '/api/marketplace/posts', stranger);
+    const restoredItems = (Array.isArray(restoredFeed.body) ? restoredFeed.body : []) as any[];
     assert(restoredItems.some(p => p.id === postId), 'resumed post is visible again in public feed');
 
     console.log(`\n${passed}/${run} checks passed.`);

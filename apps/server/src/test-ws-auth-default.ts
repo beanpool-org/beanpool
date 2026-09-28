@@ -195,7 +195,10 @@ async function main() {
         for (const t of PRIVATE_TYPES) assert(!got.includes(t), `${name} socket does not get ${t} (got [${got.join(', ')}])`);
         for (const secret of secrets) assert(!s.raw.some(r => r.includes(secret)), `${name} socket never sees ${secret.slice(0, 14)}…`);
         assert(s.events.every(e => Object.keys(e).length === 1), `${name} socket gets bare { type } doorbells only`);
-        assert(got.filter(t => t === 'new_post').length === 1, `${name} socket gets exactly one new_post doorbell — the public event, not the direct post (got ${got.filter(t => t === 'new_post').length})`);
+        // No new_post at all: a local community's listings are its members' (2026-09-28), so a socket with no member's key
+        // hears no listing doorbell here. It got exactly one, for the public event and not the direct post, while the
+        // board was public on every node (test-visitor-doorbells has the global node's).
+        assert(got.filter(t => t === 'new_post').length === 0, `${name} socket gets no new_post doorbell: it may not read the listings here (got ${got.filter(t => t === 'new_post').length})`);
     }
 
     if (OPEN_FEED) {

@@ -107,7 +107,8 @@ async function main() {
         setUserStatusRow(kept.pub, 'disabled'); // the suspend_member Decision's exact write
         assert(!keeperOf(kept.pub).includes(ent), 'a Decision-suspended keeper no longer lists the enterprise in keeperOf');
         assert(!getBalance(kept.pub).keeperOf.includes(ent), 'getBalance().keeperOf leaves it out too');
-        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined, other); // member-only read
+        // Read by the keeper themself: a balance is its owner's only (2026-09-28), and a suspended member reads their own.
+        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined, kept);
         assert(bal.status === 200 && Array.isArray(bal.json?.keeperOf) && !bal.json.keeperOf.includes(ent),
             `GET /api/ledger/balance keeperOf leaves it out (got ${bal.status} ${JSON.stringify(bal.json?.keeperOf)})`);
         assert(keeperOf(other.pub).includes(ent), 'the unsuspended keeper still lists the enterprise');

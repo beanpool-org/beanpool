@@ -912,10 +912,12 @@ async function main(): Promise<void> {
             assert(isClosed(gated), `${how}: a gated read it signs is refused the same way (got ${gated.status} ${JSON.stringify(gated.body)})`);
             const own = await signedFetch('GET', '/api/community/me', s.m);
             assert(isClosed(own), `${how}: so is a read of its own standing (got ${own.status})`);
-            const signedPublic = await signedFetch('GET', '/api/marketplace/posts', s.m);
+            // A read that is public on a local node: the community's info. (The listings were the example while the board
+            // was public on every node; a local community's are its members' since 2026-09-28.)
+            const signedPublic = await signedFetch('GET', '/api/community/info', s.m);
             assert(isClosed(signedPublic), `${how}: and a public read it signs (got ${signedPublic.status})`);
         }
-        const unsignedPublic = await unsigned('GET', '/api/marketplace/posts');
+        const unsignedPublic = await unsigned('GET', '/api/community/info');
         assert(unsignedPublic.status === 200, `the same public read unsigned is answered as before (got ${unsignedPublic.status})`);
 
         // Invite redemption, which the middleware never sees, refuses a closed account's key itself and uses no code.

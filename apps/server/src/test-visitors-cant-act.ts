@@ -552,10 +552,12 @@ async function main(): Promise<void> {
         const veraReads = await call('GET', vera, `/api/marketplace/posts?id=${orchardEvent.id}`);
         assert(kaiReads.body?.[0]?.eventPrivateNote === 'Orchard gate 5580' && Array.isArray(kaiReads.body?.[0]?.eventRsvps),
             `a member who keeps the orchard hosts its event: its note and who is going (control: ${show(kaiReads)})`);
-        // The note found by its words and its field, not its digits, which a random id or key in the body can hold.
-        assert(veraReads.status === 200 && veraReads.body?.[0]?.id === orchardEvent.id && veraReads.body[0].eventPrivateNote === undefined
+        // The note found by its words and its field, not its digits, which a random id or key in the body can hold. A local
+        // community's listings are its members' (2026-09-28): a visitor's row is refused the event outright here, where it
+        // read it without its note while the board was public on every node.
+        assert(veraReads.status === 403 && veraReads.body?.code === 'members_only'
             && !JSON.stringify(veraReads.body).includes('gate 5580') && !veraReads.body?.[0]?.eventRsvps,
-            `Vera, who keeps it too, reads the event without its note or who is going (${show(veraReads)})`);
+            `Vera, who keeps it too, is refused the event, and nothing of its note or who is going (${show(veraReads)})`);
 
         // ── 1c. Node roles (4111202677) ──
         console.log("\n── 1c. Node roles: an owner gives a visitor's row none, and one it holds from before this rule acts for nothing");
@@ -992,7 +994,9 @@ async function main(): Promise<void> {
         const noteSeen = byId.body?.[0]?.eventPrivateNote !== undefined || listed?.eventPrivateNote !== undefined
             || holdsNote(JSON.stringify(byId.body) + JSON.stringify(board.body));
         const bobsNote = bobReads.body?.[0]?.eventPrivateNote;
-        assert(byId.status === 200 && byId.body?.[0]?.id === event.id && board.status === 200 && !!listed && !noteSeen
+        // Refused both on a local community, whose listings are its members' (2026-09-28); they were 200s without the note
+        // while the board was public on every node.
+        assert(byId.status === 403 && byId.body?.code === 'members_only' && board.status === 403 && board.body?.code === 'members_only' && !listed && !noteSeen
             && bobsNote === `${NOTE}, new code 9902`,
             `nor the event itself, by id or on the board, though a member going reads the note (visitor: by id ${byId.status} ${byId.body?.[0]?.id === event.id ? 'the event' : 'not it'}, board ${board.status} ${listed ? 'lists it' : 'lacks it'}, note ${noteSeen ? 'SEEN' : 'unseen'}; member ${bobReads.status}, note ${JSON.stringify(bobsNote ?? null)})`);
         vs.ws.close(); bs.ws.close();

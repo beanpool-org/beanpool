@@ -323,7 +323,8 @@ async function main(): Promise<void> {
         eventPlaceName: PLACE_NAME, eventPrivateNote: 'Sentinel side gate code 4417',
     }, 'event', 'community');
     const poll = post(alice, 'Sentinel poll: where should the tool library go', undefined, {
-        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }],
+        // An open vote, so a member's read names its voters (polls are anonymous unless their creator chooses this).
+        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true,
     }, 'poll', 'community');
     const trade = post(alice, 'Sentinel bike repair, done', TRADE_AT);
     const pendingPost = post(alice, 'Sentinel pumpkin seedlings', PENDING_AT);
@@ -1556,28 +1557,17 @@ async function main(): Promise<void> {
     }
 
     async function localChecks(): Promise<void> {
-        console.log('── a local node: a guest reads what the engine gives that reader, as before G9a ──');
+        // A local community's listings are its members' (Marty, 2026-09-28): with no visitors' view, a guest is refused
+        // every read of them, in words that send them to the global community. Until then a guest read what the engine
+        // gives that reader, authors and places included, as before G9a.
+        console.log("── a local node: a guest is refused the listings; the rest is as before G9a ──");
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
-            for (const p of postReads) {
+            for (const p of [...postReads, `${POSTS}?author=${alice.pk}`]) {
                 const r = await call('GET', id, p);
-                const params = new URL(`https://x${p}`).searchParams;
-                const want = getPosts({
-                    id: params.get('id') ?? undefined, types: params.has('types') ? ['offer', 'need', 'poll', 'event'] : undefined,
-                    excludeEvents: !params.get('id') && !params.has('types'), query: params.get('q') ?? undefined,
-                    limit: params.has('limit') ? Number(params.get('limit')) : 50, offset: 0,
-                    updatedAfter: params.get('updatedAfter') ?? undefined, viewerPubkey: id?.pk, sync: params.get('sync') === 'true', beansOnly: false,
-                    audienceScope: params.get('audienceScope') ?? undefined, includeHidden: false, includeVoters: false,
-                    near: params.has('lat') ? { lat: Number(params.get('lat')), lng: Number(params.get('lng')), radiusKm: params.has('radiusKm') ? Number(params.get('radiusKm')) : undefined } : undefined,
-                    sortByDistance: params.get('sort') === 'distance',
-                } as any);
-                assert(r.status === 200 && r.text === JSON.stringify(want) && r.headers.get('x-beanpool-view') === null,
-                    `${who} ${p.replace(POSTS, '')}: the engine's read for that reader, no view header`);
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === 'https://global.beanpool.org'
+                    && r.headers.get('x-beanpool-view') === null && !r.text.includes(alice.pk) && !r.text.includes('Sentinel'),
+                    `${who} ${p.replace(POSTS, '')}: refused members_only, naming the global community, with nothing of a listing (got ${r.status})`);
             }
-            const list = await call('GET', id, `${POSTS}?${ALL_TYPES}`);
-            assert(list.text.includes(alice.pk) && list.text.includes('SentinelAlice') && list.text.includes(String(OFFER_AT.lat)) && list.text.includes(PLACE_NAME),
-                `${who}: the listings name their authors and places, as on every local node`);
-            const byAuthor = await call('GET', id, `${POSTS}?author=${alice.pk}`);
-            assert(byAuthor.status === 200 && Array.isArray(byAuthor.body) && byAuthor.body.length > 0, `${who}: ?author= is answered (${byAuthor.status})`);
             const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
             assert(probe.body?.callsign === 'SentinelAlice', `${who}: the membership probe names the member (${JSON.stringify(probe.body)})`);
             for (const p of ['/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed']) {

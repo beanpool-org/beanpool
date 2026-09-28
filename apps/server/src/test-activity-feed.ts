@@ -79,9 +79,13 @@ async function main() {
     });
     assert(id4 > id3, 'Records rating_given event');
 
-    // 7. Query feed and verify joins
-    const feed = getActivityFeed(10, 0);
+    // 7. Query feed and verify joins, read as Alice: a trade reaches only its two people (2026-09-28), and she is one
+    const feed = getActivityFeed(10, 0, 'pubkey-alice');
     assert(feed.length >= 4, 'Retrieves all recorded events');
+    const asCarol = getActivityFeed(10, 0, 'pubkey-carol');
+    assert(!asCarol.some(e => e.eventType === 'trade_completed') && asCarol.some(e => e.eventType === 'rating_given'),
+        'Someone outside the trade reads every other event, and not the trade');
+    assert(!getActivityFeed(10, 0).some(e => e.eventType === 'trade_completed'), 'Nor does a read for nobody in particular');
 
     // Latest event should be rating_given by Bob to Alice
     const latest = feed[0];
@@ -108,8 +112,8 @@ async function main() {
     assert(joinEvent?.actorCallsign === 'Alice', 'Join actor is Alice');
 
     // 8. Pagination
-    const page1 = getActivityFeed(2, 0);
-    const page2 = getActivityFeed(2, 2);
+    const page1 = getActivityFeed(2, 0, 'pubkey-alice');
+    const page2 = getActivityFeed(2, 2, 'pubkey-alice');
     assert(page1.length === 2, 'Page 1 limit 2 returns 2 items');
     assert(page2.length >= 2, 'Page 2 offset 2 returns next items');
     assert(page1[0].id !== page2[0].id, 'Page 1 and Page 2 contain distinct items');

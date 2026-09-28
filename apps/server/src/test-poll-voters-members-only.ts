@@ -1,7 +1,7 @@
 /**
  * Who voted for what in a poll reaches the members of this node, and nobody else — on every read and every live update.
  *
- * GET /api/marketplace/posts is a public read on every node (the marketplace board), and each poll in it carried
+ * GET /api/marketplace/posts was a public read on every node (the marketplace board), and each poll in it carried
  * `pollVotes`: every voter's public key, name and chosen option. So anyone who could reach a node, unsigned, from
  * anywhere, could read how each member voted in every poll (found on main by the director, 2026-09-25). Marty's
  * answer: members only, on every node. Members seeing the voters is the open ballot the apps promise ("Your vote is
@@ -21,7 +21,9 @@
  *     (completeRekey). Read on a socket it opened while it was a member, on one it opens after, and over HTTP; then the
  *     member's NEW key once the re-key completes, which gets the voters again,
  *   - members: a reader, the voter and the author.
- * Only the members get `pollVotes`; everyone gets `totalVotes` and each option's `votes` and `percentage`. The check on
+ * The poll is an open vote (an anonymous one names nobody, test-privacy-defaults). Only the members get `pollVotes`;
+ * everyone who may read the board gets `totalVotes` and each option's `votes` and `percentage`. On a local node with the
+ * defaults, a stranger and a signed non-member may not read the board at all (2026-09-28). The check on
  * the non-members is a search of the raw text for the voter's key and name, so a voter riding along under any field
  * name is caught.
  *
@@ -147,8 +149,10 @@ async function main() {
 
     const poll = createPost('poll', 'community', 'Where should the tool library go?', '', 0, 'fixed', author.pubKeyHex,
         undefined, undefined, undefined, false, undefined, false,
-        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }] });
-    assert(!!poll?.id, 'the author opens a poll');
+        // An open vote: who chose what reaches members only. (Polls are anonymous unless their creator chooses this,
+        // 2026-09-28; an anonymous poll names its voters to nobody, test-privacy-defaults.)
+        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true });
+    assert(!!poll?.id && poll.pollOpenVote === true, 'the author opens a poll, an open vote');
     const pollId = poll!.id;
 
     /** Anything that names the voter: their key or their name. */
@@ -189,7 +193,10 @@ async function main() {
         ] as const;
         for (const [label, s] of nonMemberSockets) {
             const updates = updatesFor(s);
-            assert(updates.length > 0, `${label} socket still hears that the poll changed (${updates.length} post_updated)`);
+            // A socket with no member's key hears no listing doorbell on a local node, whose listings are its members'
+            // (2026-09-28); it did while the board was public on every node. Every read is open with read auth off.
+            if (OPEN_NODE) assert(updates.length > 0, `${label} socket still hears that the poll changed (${updates.length} post_updated)`);
+            else assert(updates.length === 0, `${label} socket hears nothing of it: it may not read a local community's listings (${updates.length} post_updated)`);
             assert(!s.raw.some(namesVoter), `${label} socket is sent nothing that names the voter`);
             assert(updates.every(e => e.post === undefined || !('pollVotes' in e.post)), `${label} socket gets no pollVotes field`);
             if (OPEN_NODE) {
@@ -235,6 +242,13 @@ async function main() {
                 // with the counts and no voters.
                 assert(r.status === 403 && JSON.parse(r.text)?.code === 'account_closed' && !namesVoter(r.text),
                     `${label} is refused ${path}, 403 account_closed, and sent nothing that names the voter (got ${r.status})`);
+                continue;
+            }
+            if (!isMember && !OPEN_NODE) {
+                // A local community's listings are its members' (2026-09-28): a stranger and a signed non-member are
+                // refused the board, and sent nothing that names the voter. Both read it without the voters before.
+                assert((r.status === 401 || r.status === 403) && JSON.parse(r.text)?.code === 'members_only' && !namesVoter(r.text),
+                    `${label} is refused ${path}, members_only, and sent nothing that names the voter (got ${r.status})`);
                 continue;
             }
             assert(r.status === 200, `${label} reads ${path} → 200 (got ${r.status})`);
@@ -286,7 +300,10 @@ async function main() {
         // before joining must not be confirmed with a 304 afterwards.
         const newcomer = keypair();
         const before = await get('/api/marketplace/posts', newcomer);
-        assert(before.status === 200 && !namesVoter(before.text), 'before joining, the newcomer reads the board without the voters');
+        // Before joining, a local community refuses the newcomer its board (2026-09-28); with read auth off they read it
+        // without the voters, as everyone did before.
+        assert(OPEN_NODE ? before.status === 200 && !namesVoter(before.text) : before.status === 403 && !namesVoter(before.text),
+            `before joining, the newcomer reads nothing that names the voter (got ${before.status})`);
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
                     VALUES (?, 'Newcomer', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'INV-NEWCOMER', ?)`).run(newcomer.pubKeyHex, AVATAR);
         const after = await get('/api/marketplace/posts', newcomer, { 'If-None-Match': before.etag || '' });
@@ -311,7 +328,8 @@ async function main() {
             ['the old key\'s socket opened after the re-key completed', oldKeySocket],
         ] as const) {
             const updates = updatesFor(s);
-            assert(updates.length > 0, `${label} still hears that the poll changed (${updates.length} post_updated)`);
+            if (OPEN_NODE) assert(updates.length > 0, `${label} still hears that the poll changed (${updates.length} post_updated)`);
+            else assert(updates.length === 0, `${label} hears nothing of it: it may not read a local community's listings (${updates.length} post_updated)`);
             assert(!s.raw.some(namesVoter), `${label} is sent nothing that names the voter`);
             assert(updates.every(e => e.post === undefined || !('pollVotes' in e.post)), `${label} gets no pollVotes field`);
         }

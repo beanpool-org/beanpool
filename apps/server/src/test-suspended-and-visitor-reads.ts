@@ -226,11 +226,12 @@ async function main() {
     const oonaJoin = joinOpenDoor(oona, 'oona-sub');
     assert(oonaJoin.ok === true, `a member joins through the open door (${JSON.stringify(oonaJoin).slice(0, 120)})`);
 
-    // A poll Vic votes on: its voters are member-only.
+    // A poll Vic votes on: an open vote, whose voters are member-only. (Polls are anonymous unless their creator chooses
+    // an open vote, 2026-09-28: an anonymous one names its voters to nobody, test-privacy-defaults.)
     const poll = se.createPost('poll', 'community', 'Where should the seed bank go?', '', 0, 'fixed', olive.pubKeyHex,
         undefined, undefined, undefined, false, undefined, false,
-        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }] });
-    assert(!!poll?.id, 'Olive opens a poll');
+        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true });
+    assert(!!poll?.id && poll.pollOpenVote === true, 'Olive opens a poll, an open vote');
     const pollId = poll!.id;
     let voteIndex = 0;
     const vote = async () => {
@@ -428,9 +429,14 @@ async function main() {
         clear();
         await vote();
         assert(gotVoters(sockets.member), "a member's socket gets the vote with its voters");
+        // A socket with no member's key (the re-key-invalidated key's, one with no row yet, an unsigned one) hears no
+        // listing doorbell on a local node, whose listings are its members' (2026-09-28); it heard a bare one before. A
+        // socket that holds a member's or a visitor's key still hears it, bare.
+        const keyless = new Set(['rex', 'nia', 'unsigned']);
         for (const [label, key] of noFeed) {
             const s = sockets[key];
-            assert(heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears the poll changed and gets no voter`);
+            if (keyless.has(key)) assert(!heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears nothing of the vote, and gets no voter`);
+            else assert(heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears the poll changed and gets no voter`);
         }
 
         clear();

@@ -71,12 +71,13 @@ export function verifySignedRequest(args: {
     const signature = Buffer.from(sig, 'base64');
     if (signature.length !== 64) return refuse(401, 'bad_signature', 'The signature does not check out.');
     const bytes = signedRequestBytes(signedRequestText({ host, method: args.method, path: args.path, timestamp, nonce, body: args.body }));
-    let valid = false;
-    try {
-        valid = ed25519.verify(signature, bytes, Buffer.from(key, 'hex'), { zip215: false });
-    } catch {
-        valid = false;
-    }
+    const valid = (() => {
+        try {
+            return ed25519.verify(signature, bytes, Buffer.from(key, 'hex'), { zip215: false });
+        } catch {
+            return false;
+        }
+    })();
     if (!valid) return refuse(401, 'bad_signature', 'The signature does not check out.');
     if (!args.nonces.consume(`${key}:${nonce}`, args.now, Number(timestamp))) return refuse(401, 'replayed', 'This request was already used.');
     return { ok: true, key };

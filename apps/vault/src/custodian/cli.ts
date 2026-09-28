@@ -74,7 +74,8 @@ async function main(): Promise<void> {
         console.error('usage: vault-custodian new-key|genesis|unlock|reshare|restore ...');
         process.exit(2);
     }
-    const { custodianShares: _shares, ...rest } = result.body;
+    const rest: Record<string, unknown> = { ...result.body };
+    delete rest.custodianShares;
     console.log(result.status, JSON.stringify(rest));
     if (result.status !== 200) process.exit(1);
 }

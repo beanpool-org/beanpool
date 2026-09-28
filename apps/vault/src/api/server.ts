@@ -794,16 +794,21 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return addressBucket(req.socket.remoteAddress);
     }
 
+    /** The body, up to 64 KB. Past that: 413, and the connection is closed once the answer is out. */
     function readBody(req: http.IncomingMessage): Promise<string> {
         return new Promise((resolve, reject) => {
+            const tooLarge = () => {
+                (req as http.IncomingMessage & { tooLarge?: boolean }).tooLarge = true;
+                reject(new HttpError(413, 'too_large', 'That request is too large.'));
+            };
+            if (Number(req.headers['content-length'] ?? 0) > MAX_BODY_BYTES) return tooLarge();
             const chunks: Buffer[] = [];
             let size = 0;
             req.on('data', (c: Buffer) => {
                 size += c.length;
                 if (size > MAX_BODY_BYTES) {
-                    reject(new HttpError(413, 'too_large', 'That request is too large.'));
-                    req.destroy();
-                    return;
+                    if (chunks.length) chunks.length = 0;
+                    return tooLarge();
                 }
                 chunks.push(c);
             });
@@ -896,6 +901,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             answer = errorAnswer(e);
         }
         answer.headers = { ...cors, ...answer.headers };
+        if ((req as http.IncomingMessage & { tooLarge?: boolean }).tooLarge) {
+            answer.headers.Connection = 'close';
+            res.on('finish', () => req.socket.destroy());
+        }
         send(res, answer);
     }
 

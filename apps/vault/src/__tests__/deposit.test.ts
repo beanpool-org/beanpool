@@ -189,7 +189,9 @@ describe('replace and delete', () => {
         const gone = rows.find(r => !left.some(l => l.id === r.id))!;
         const kept = rows.find(r => left.some(l => l.id === r.id))!;
         const envelope = Buffer.from(gone.envelope);
-        expect(scan(v.dataDir, [gone.id, envelope.subarray(5, 37), envelope.subarray(envelope.length - 32)])).toEqual([]);
+        // The envelope's bytes are gone. Its random id stays in the deletion record (§1.7), which is how an older backup
+        // restored later knows to drop this copy; it says nothing about anyone.
+        expect(scan(v.dataDir, [envelope.subarray(5, 37), envelope.subarray(40, 72), envelope.subarray(envelope.length - 32)])).toEqual([]);
         // The scan can see a row: the one still kept is found.
         expect(scan(v.dataDir, [Buffer.from(kept.envelope).subarray(5, 37)])).toHaveLength(1);
 

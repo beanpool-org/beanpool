@@ -30,7 +30,7 @@ async function vault(opts: Parameters<typeof startVault>[0] = {}): Promise<Vault
 }
 
 async function present(v: VaultUnderTest, who: CustodianKey, share: CustodianShare | string, extra: { purpose?: 'unlock' | 'reshare'; newCustodians?: string[] } = {}) {
-    return presentShare(v.baseUrl, who, share, v.call(extra));
+    return presentShare(v.baseUrl, who, share, { ...v.call(), ...extra });
 }
 
 async function expectCopy(v: VaultUnderTest, provider: SsoProvider, sub: string, member: Member): Promise<void> {

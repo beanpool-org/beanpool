@@ -667,7 +667,8 @@ export class Keyholder {
             } catch {
                 fail('bad_backup', 'The backup does not open with this vault\'s keys.');
             }
-            const { state: _state, ...header } = parsed.header;
+            const header: Omit<BackupHeader, 'state'> & { state?: unknown } = { ...parsed.header };
+            delete header.state;
             return { header, deletions: Buffer.from(deletions).toString('utf8'), body: Buffer.from(body.buffer, body.byteOffset, body.byteLength) };
         } finally {
             k.deletions.fill(0);

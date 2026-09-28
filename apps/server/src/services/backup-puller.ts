@@ -412,15 +412,21 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     // it was being made).
     const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
     const contents = theirs ? compareTableHashes(theirs) : null;
+    // With every account compared (c.ledger), the accounts' count and their sum say nothing more: an account only one
+    // side holds is a differing one there, and an entry of the copy this server can't store is an unreadable one, which
+    // no force-resync mends.
+    const ledgerChecked = !!c.ledger;
     const differs = new Set<string>([
-        ...c.tables.filter((t) => !t.match).map((t) => t.name),
+        ...c.tables.filter((t) => !t.match && !(ledgerChecked && t.name === 'accounts')).map((t) => t.name),
         ...(contents?.differing.map((d) => d.table) ?? []),
     ]);
-    if (!c.sumBalances.match) differs.add(LEDGER_DIFFERS.sum);
+    if (!c.sumBalances.match && !ledgerChecked) differs.add(LEDGER_DIFFERS.sum);
     if (c.commons && !c.commons.match) differs.add(LEDGER_DIFFERS.commons);
     // Anything but entries of the copy this server can't read: a force-resync can mend it.
     const wrong = differs.size > 0 || (c.ledger?.differing ?? 0) > 0;
-    if (c.ledger && !c.ledger.match) differs.add(LEDGER_DIFFERS.ledger);
+    // The ledger's line in what differed: an account whose balance differs, one only one side holds, one this server can't
+    // store, or (with every account alike) a copy that names one twice.
+    if ((c.ledger && !c.ledger.match) || (!c.ok && differs.size === 0)) differs.add(LEDGER_DIFFERS.ledger);
     const exact = c.ok && differs.size === 0;
     if (!exact) {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);

@@ -457,6 +457,7 @@ run_federation_suites() {
       test-etag-short-circuit
       test-api-headers-and-feed-etag
       test-directory-publisher
+      test-website-directory-map
       test-members-holiday
       test-admin-seed-invite
       test-admin-genesis-pubkey

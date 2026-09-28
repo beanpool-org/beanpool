@@ -18,6 +18,12 @@ import {
 const KEY = 'standby_copy_record';
 /** A last copy older than this, and the take-over preview says so. */
 const STALE_MS = 60 * 60_000;
+/**
+ * How long a copy that didn't match counts as mending itself after its check asked for the held force-resync
+ * (services/backup-puller.ts): the resync is the next pull, and its own whole copy is checked. Past this with no check
+ * that gave a verdict since (one whose copy came without hashes gives none), it is told as not matching.
+ */
+export const HEALING_MS = 60 * 60_000;
 
 export interface WholeCopyCheck {
     /** When this standby checked it. */
@@ -34,6 +40,11 @@ export interface WholeCopyCheck {
      * `photosOmitted`): no copy brings them, so they are said as such, never as a difference.
      */
     photosLeftOut: number;
+    /**
+     * This check asked for the held force-resync (services/backup-puller.ts): the standby mends the copy by itself, and
+     * its main server tells nobody unless the check after that resync still differs (design G8, Marty's answer 2).
+     */
+    resyncAsked: boolean;
     snapshotGeneratedAt: string | null;
 }
 
@@ -66,12 +77,17 @@ export interface CopyRecord {
     lastUncompared: UncomparedCheck | null;
     /** When the last exact whole copy was: only a check that compared everything moves it. */
     lastExactAt: number | null;
+    /**
+     * When this standby last asked for a force-resync for a copy that didn't match. Kept here, not only in the puller's
+     * memory, so a restart allows no sooner one: at most one in six hours, and a difference no resync mends never loops.
+     */
+    lastMismatchResyncAt: number | null;
 }
 
 function fresh(): CopyRecord {
     return {
         id: crypto.randomBytes(16).toString('hex'), lastPullAt: null, lastOutcome: null, lastWhy: null,
-        failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null,
+        failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null, lastMismatchResyncAt: null,
     };
 }
 
@@ -96,7 +112,7 @@ export function readCopyRecord(): CopyRecord {
             lastWhole: w && typeof w === 'object' && num(w.at) !== null && typeof w.exact === 'boolean' ? {
                 at: w.at, exact: w.exact, differs: Array.isArray(w.differs) ? w.differs.filter((d: unknown) => typeof d === 'string') : [],
                 ledgerDiffering: Number.isInteger(w.ledgerDiffering) ? w.ledgerDiffering : 0, hashed: w.hashed === true,
-                photosLeftOut: count(w.photosLeftOut),
+                photosLeftOut: count(w.photosLeftOut), resyncAsked: w.resyncAsked === true,
                 snapshotGeneratedAt: typeof w.snapshotGeneratedAt === 'string' ? w.snapshotGeneratedAt : null,
             } : null,
             lastUncompared: u && typeof u === 'object' && num(u.at) !== null ? {
@@ -106,6 +122,7 @@ export function readCopyRecord(): CopyRecord {
                 snapshotGeneratedAt: typeof u.snapshotGeneratedAt === 'string' ? u.snapshotGeneratedAt : null,
             } : null,
             lastExactAt: num(r?.lastExactAt),
+            lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
         };
     } catch {
         return fresh();
@@ -135,7 +152,23 @@ export function noteCopyFailed(outcome: Exclude<PullOutcome, 'ok'>, why: WhyCode
 /** A whole copy's check that gave a verdict (services/backup-puller.ts checkWholeCopy). */
 export function noteWholeCopyCheck(check: WholeCopyCheck): void {
     const r = readCopyRecord();
-    write({ ...r, lastWhole: check, lastUncompared: null, lastExactAt: check.exact ? check.at : r.lastExactAt });
+    write({
+        ...r, lastWhole: check, lastUncompared: null, lastExactAt: check.exact ? check.at : r.lastExactAt,
+        lastMismatchResyncAt: check.resyncAsked ? check.at : r.lastMismatchResyncAt,
+    });
+}
+
+/** When this standby last asked for a force-resync for a copy that didn't match, across restarts; 0 for never. */
+export function lastMismatchResyncAt(): number {
+    return readCopyRecord().lastMismatchResyncAt ?? 0;
+}
+
+/**
+ * Whether the last whole copy's check found a difference this standby is mending by itself: it asked for the held
+ * force-resync, and no check that gave a verdict has come since, for up to HEALING_MS. Its main server tells nobody of it.
+ */
+function mending(w: WholeCopyCheck | null, now: number): boolean {
+    return !!w && !w.exact && w.resyncAsked && now - w.at < HEALING_MS;
 }
 
 /**
@@ -173,7 +206,7 @@ export function standbyReport(now = Date.now()): StandbyReport {
         v: 1, id: r.id, last: r.lastOutcome ?? 'none', why: r.lastWhy, fails: r.failedImportsInARow,
         okAgo: ago(r.lastOkAt), wholeAgo: ago(r.lastWhole?.at ?? null), exact: r.lastWhole ? r.lastWhole.exact : null,
         exactAgo: ago(r.lastExactAt), differs: r.lastWhole && !r.lastWhole.exact ? r.lastWhole.differs.slice(0, 40) : [],
-        hashed: r.lastWhole?.hashed ?? false,
+        hashed: r.lastWhole?.hashed ?? false, healing: mending(r.lastWhole, now),
     };
 }
 

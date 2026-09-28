@@ -60,6 +60,11 @@ export interface StandbyReport {
     differs: string[];
     /** Whether the check compared each table's content (the main server sent its hashes), not only the counts. */
     hashed: boolean;
+    /**
+     * That whole copy didn't match, and the standby is mending it by itself: it asked for its held force-resync, and no
+     * check since has given a verdict (services/standby-copy-record.ts). The main server tells nobody of it yet.
+     */
+    healing: boolean;
 }
 
 const age = (v: unknown): v is number | null => v === null || (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_AGE_MS);
@@ -78,14 +83,14 @@ export function parseStandbyReport(raw: unknown): StandbyReport | null {
     if (!(r.why === null || (typeof r.why === 'string' && WHY.test(r.why)))) return null;
     const fails = r.fails;
     if (typeof fails !== 'number' || !Number.isInteger(fails) || fails < 0 || fails > 1_000_000) return null;
-    const { okAgo, wholeAgo, exactAgo, exact, differs, hashed } = r;
+    const { okAgo, wholeAgo, exactAgo, exact, differs, hashed, healing } = r;
     if (!age(okAgo) || !age(wholeAgo) || !age(exactAgo)) return null;
     if (!(exact === null || typeof exact === 'boolean')) return null;
     if (!Array.isArray(differs) || differs.length > MAX_DIFFERS || !differs.every(differsName)) return null;
-    if (typeof hashed !== 'boolean') return null;
+    if (typeof hashed !== 'boolean' || typeof healing !== 'boolean') return null;
     return {
         v: 1, id: r.id, last, why: r.why as WhyCode | null, fails, okAgo, wholeAgo,
-        exact, exactAgo, differs: [...new Set<string>(differs)], hashed,
+        exact, exactAgo, differs: [...new Set<string>(differs)], hashed, healing: exact === false && healing,
     };
 }
 

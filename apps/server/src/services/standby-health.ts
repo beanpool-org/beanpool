@@ -6,7 +6,9 @@
  * channel only). This server keeps the latest report of each, and the standby needs its owners when:
  *   - it hasn't made a copy of this server for an hour (it stopped pulling, or its pulls land nothing);
  *   - three copies in a row came and were refused; or
- *   - its last whole copy wasn't this server's exactly (the standby also takes one force-resync, services/backup-puller.ts).
+ *   - its last whole copy wasn't this server's exactly, and the standby couldn't mend it by itself: its held force-resync
+ *     (services/backup-puller.ts) didn't cure it, or it may take none for hours. A copy it mends by itself is told to
+ *     nobody (Marty's answer 2: the standby re-seeds itself when it can; the common case heals without anyone).
  * Then an incident opens: the community's owners get one push, and a banner in Settings and the app's admin queue
  * (engine/admin-queue.ts) until the standby is healthy again, which ends it; a later one is a new incident. Nobody else is
  * told, and nothing reaches anyone outside the community.
@@ -65,6 +67,8 @@ export interface StandbySeen {
     lastExactAt: number | null;
     differs: string[];
     hashed: boolean;
+    /** Its last whole copy didn't match, and it is mending it by itself (services/standby-report.ts `healing`). */
+    healing: boolean;
 }
 
 export type Problem =
@@ -133,7 +137,7 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             }
             seen = {
                 id: r.id, address: null, firstSeenAt: t, lastPullAt: t, lastOutcome: null, lastWhy: null, failedInARow: 0,
-                lastCopyAt: null, lastWholeAt: null, exact: null, lastExactAt: null, differs: [], hashed: false,
+                lastCopyAt: null, lastWholeAt: null, exact: null, lastExactAt: null, differs: [], hashed: false, healing: false,
             };
             s.standbys.push(seen);
             logger.info('P2P', `[StandbyHealth] Watching a new standby (${r.id.slice(0, 8)}) for this community's owners.`);
@@ -151,6 +155,7 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             lastExactAt: at(r.exactAgo),
             differs: r.differs,
             hashed: r.hashed,
+            healing: r.healing,
         });
         evaluate(s, t);
         return true;
@@ -166,12 +171,17 @@ function problemsOf(s: HealthState, t: number): Problem[] {
     // unable to reach this server while it was down. One already found stays found until the standby copies again, so a
     // restart never reads as an all-clear.
     const stillStopped = new Set((s.incident?.problems ?? []).filter((p) => p.kind === 'stopped').map((p) => p.standby));
+    // A copy that didn't match is told only when the standby can't mend it by itself; one already told stays told while it
+    // tries again, until a check finds it exact.
+    const stillInexact = new Set((s.incident?.problems ?? []).filter((p) => p.kind === 'inexact').map((p) => p.standby));
     const justStarted = t - bootAt < STOPPED_AFTER_MS;
     for (const x of s.standbys) {
         const since = x.lastCopyAt ?? x.firstSeenAt;
         if (t - since >= STOPPED_AFTER_MS && (!justStarted || stillStopped.has(x.id))) out.push({ standby: x.id, kind: 'stopped', since });
         if (x.failedInARow >= REFUSED_IN_A_ROW) out.push({ standby: x.id, kind: 'refused', count: x.failedInARow, why: x.lastWhy });
-        if (x.exact === false) out.push({ standby: x.id, kind: 'inexact', at: x.lastWholeAt, differs: x.differs, lastExactAt: x.lastExactAt });
+        if (x.exact === false && (x.healing !== true || stillInexact.has(x.id))) {
+            out.push({ standby: x.id, kind: 'inexact', at: x.lastWholeAt, differs: x.differs, lastExactAt: x.lastExactAt });
+        }
     }
     return out;
 }
@@ -311,7 +321,7 @@ function pushBody(problems: Problem[]): string {
 const WHAT_TO_DO: Record<Problem['kind'], string> = {
     stopped: 'Check the standby server is running and can reach this one, and that it still has the replication token (a new token from Replication Access replaces the old one).',
     refused: "Open the standby's own Settings, under Live Backup Server, for what it says; a force-resync there copies this server afresh.",
-    inexact: "It copies this server afresh by itself, at most every six hours. If this stays, run a force-resync from the standby's own Settings, under Live Backup Server.",
+    inexact: "It copies this server afresh by itself, at most every six hours, and its copy still did not match after its last one. If this stays, run a force-resync from the standby's own Settings, under Live Backup Server.",
 };
 
 export interface StandbyHealthBanner {

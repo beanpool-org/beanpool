@@ -22,10 +22,12 @@
  *  3. Three copies in a row refused (payloads the main server signed that make Beans): the standby's record says so, and its
  *     preview; its next pull reports it and an incident opens, with one push; the pull after ends it.
  *  4. A whole copy that isn't the main server's (a planted change in a table, the ledger fine): recorded with what differed,
- *     one force-resync asked for, and the incident with one push. That resync is held to the ledger (not a seed): a forged
- *     payload that makes Beans is refused, and the real copy after it lands and is exact, which ends the incident. Planted
- *     again at once: recorded, and no second force-resync inside the limit; the incident opens again without a push (it
- *     flaps: the last one ended less than an hour ago) and the banner says what didn't match. Then a whole copy the main
+ *     and one force-resync asked for. That resync is held to the ledger (not a seed): a forged payload that makes Beans is
+ *     refused, and the real copy after it lands and is exact. The standby mended it by itself, so nobody was told: no
+ *     incident, no push (Marty's answer 2). Six hours on (a restart, the record's last resync moved back), planted again:
+ *     the held resync lands a copy M signed whose members aren't M's, the check after it still differs, and that is when
+ *     the incident opens, with one push. A restart then allows no sooner force-resync (the record keeps when the last was),
+ *     the incident stays, and the banner and the preview say what didn't match. Then a whole copy the main
  *     server sends without its hashes (as it does when written to while making one): recorded as not compared in full, it
  *     is no all-clear (review 4118340714): the incident stays open, and the preview still warns and names the older exact copy.
  *  5. The report can't be forged into anything: too long, not JSON, a field out of shape, sent with the admin password
@@ -143,6 +145,16 @@ async function child(): Promise<void> {
             const { getBackupStatus } = await import('./services/backup-puller.js');
             return m ? m.copyCheckForPreview(getBackupStatus().lastSuccessAt, Date.now() + (a.offsetMs ?? 0)) : null;
         },
+        /** Move the standby's record of its last force-resync for a copy that didn't match back by `agoMs`. */
+        'resync-slot': async (a: { agoMs: number }) => {
+            const { db } = await import('./db/db.js');
+            const row = db.prepare("SELECT value FROM node_config WHERE key = 'standby_copy_record'").get() as { value: string } | undefined;
+            if (!row) return false;
+            const r = JSON.parse(row.value);
+            r.lastMismatchResyncAt = Date.now() - a.agoMs;
+            db.prepare("UPDATE node_config SET value = ? WHERE key = 'standby_copy_record'").run(JSON.stringify(r));
+            return true;
+        },
         /** A change in a copied table, made on the standby alone, as a bug would make it: the ledger untouched. */
         plant: async (a: { publicKey: string; value: string }) => {
             const { db } = await import('./db/db.js');
@@ -194,6 +206,26 @@ async function child(): Promise<void> {
                 { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
             ];
             payload.generatedAt = at;
+            return signSyncPayload(payload);
+        },
+        /**
+         * A whole copy M signs with its table hashes, as its route sends one (routes/backup.ts), but with one member's contact
+         * not what M holds: the ledger M's, so a held force-resync lands it, and the check after it finds the members differ.
+         */
+        'forge-content': async (a: { publicKey: string; value: string }) => {
+            const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
+            const { tableContentHashes } = await import('./engine/replica-hashes.js');
+            const { getPrivateKey } = await import('./p2p.js');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const hashes: any = tableContentHashes();
+            const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            const omitted: string[] = payload.photosOmitted ?? [];
+            if (omitted.length > 0) hashes.tables.post_photos = (tableContentHashes as any)({ only: ['post_photos'], photosLeftOut: new Set(omitted) }).tables.post_photos;
+            delete payload.signature;
+            delete payload.publicKey;
+            payload.tableHashes = hashes;
+            payload.members = payload.members.map((x: any) => (x.publicKey === a.publicKey ? { ...x, contactValue: a.value } : x));
+            payload.generatedAt = new Date().toISOString();
             return signSyncPayload(payload);
         },
         /** M's own whole copy as its route sends one it was written to while making (routes/backup.ts): signed, no table hashes. */
@@ -543,46 +575,78 @@ async function main(): Promise<void> {
         console.log('\n— 4. a whole copy that is not the main server\'s —');
         await main.send('health-clock', { offsetMs: 6 * HOUR });
         assert((await pull()).ok, 'hours later, S pulls: healthy');
+        // One the standby mends by itself is told to nobody (Marty's answer 2: the standby re-seeds itself when it can).
         assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted on the standby' }) === 1, "a change planted on S alone: Cy's contact, the ledger untouched");
         await main.send('touch');
         const inexact = await pull(true);
         rec = await standby.send('record');
         assert(inexact.ok && inexact.whole && rec?.lastWhole?.exact === false && JSON.stringify(rec.lastWhole.differs) === JSON.stringify(['members'])
-            && rec.lastWhole.hashed === true && rec.lastWhole.ledgerDiffering === 0,
-            `S's whole copy lands but isn't M's: the members table's content differs, and only it (${brief(rec?.lastWhole)})`);
+            && rec.lastWhole.hashed === true && rec.lastWhole.ledgerDiffering === 0 && rec.lastWhole.resyncAsked === true,
+            `S's whole copy lands but isn't M's: the members table's content differs, and only it; it asks for its held force-resync (${brief(rec?.lastWhole)})`);
         door.next({ status: 200, body: await main.send('forge-mint', { publicKey: cy.pk }) });
         const heldResync = await pull();
         assert(heldResync.mode === 'resync' && !heldResync.ok && /conservation/i.test(heldResync.error ?? ''),
             `the next pull is the force-resync it asked for, held to the ledger (not a seed): a copy that makes Beans is refused (${heldResync.mode}: ${heldResync.error?.slice(0, 90)})`);
         const mended = await pull();
         rec = await standby.send('record');
+        assert(mended.ok && rec?.lastWhole?.exact === true, `M's real copy after it lands, and is exact (${mended.mode}; ${brief(rec?.lastWhole)})`);
+        health = await main.send('health');
+        const mending = health?.state.standbys.find((x: any) => x.id === rec?.id);
+        assert(mending?.exact === false && mending.healing === true && health?.state.incident === null,
+            `that pull reported the copy that didn't match as one S is mending by itself: M opens no incident (${brief(mending && { exact: mending.exact, healing: mending.healing })})`);
+        await pull();
+        health = await main.send('health');
+        pushes = await pushesSoFar();
+        assert(health?.state.incident === null && health.state.lastIncident?.id === incident2?.id && pushes.length === 2,
+            `a copy that heals itself pushes nobody: no incident at any point, and no push (${brief({ incident: health?.state.incident, pushes: pushes.length })})`);
+
+        // One the held resync doesn't cure. Six hours on (S restarted, its record's last force-resync moved back past the
+        // limit), a difference again; the resync it asks for is served a copy M signed whose members aren't M's (its ledger
+        // M's), so the check after it still differs. That is when the owners are told.
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
+        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted again' }) === 1, 'planted again');
+        await main.send('touch');
+        const again = await pull(true);
+        rec = await standby.send('record');
+        assert(again.ok && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === true, `recorded, and it asks for its held force-resync (${brief(rec?.lastWhole)})`);
+        door.next({ status: 200, body: await main.send('forge-content', { publicKey: cy.pk, value: 'not what M holds' }) });
+        const uncured = await pull();
+        rec = await standby.send('record');
+        assert(uncured.mode === 'resync' && uncured.ok && rec?.lastWhole?.exact === false && JSON.stringify(rec.lastWhole.differs) === JSON.stringify(['members'])
+            && rec.lastWhole.resyncAsked === false,
+            `that force-resync lands a copy M signed whose members aren't M's: the check after it still differs, and asks for no second one inside the limit (${uncured.mode}; ${brief(rec?.lastWhole)})`);
+        const toldUncured = await pull();
         health = await main.send('health');
         pushes = await pushesSoFar();
         const incident3 = health?.state.incident;
-        assert(mended.ok && rec?.lastWhole?.exact === true, `M's real copy after it lands, and is exact (${mended.mode}; ${brief(rec?.lastWhole)})`);
-        assert(incident3?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members'])),
-            `that pull reported the inexact copy: an incident, "inexact", members (${brief(incident3?.problems)})`);
+        assert(toldUncured.ok && toldUncured.mode !== 'resync' && incident3?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members'])),
+            `the pull after (a ${toldUncured.mode}) reports it: the held resync did not cure it, and M opens an incident, "inexact", members (${brief(incident3?.problems)})`);
         assert(pushes.length === 3 && JSON.stringify(pushes[2].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${pushes.length})`);
-        await pull();
-        health = await main.send('health');
-        assert(health?.state.incident === null && health.state.lastIncident?.id === incident3?.id, 'the pull after reports the exact copy: the incident is over');
 
-        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted again' }) === 1, 'planted again at once');
+        // A restart allows no sooner force-resync: S's record keeps when it last asked for one, so a difference a resync
+        // doesn't mend never loops.
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
         await main.send('touch');
-        const again = await pull(true);
-        const after = await pull();
+        const afterRestart4 = await pull(true);
+        const next4 = await pull();
         rec = await standby.send('record');
-        assert(again.ok && rec?.lastWhole?.exact === false && after.mode !== 'resync' && after.ok,
-            `recorded, and no second force-resync inside the limit (the pull after is a ${after.mode})`);
-        assert(pulls.filter((p) => p.mode === 'resync').length === 2,
-            `force-resyncs in all: the new standby's first copy and the one the mismatch asked for (${pulls.map((p) => p.mode).join(',')})`);
+        assert(afterRestart4.ok && afterRestart4.whole && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === false && next4.ok && next4.mode !== 'resync',
+            `S restarts: its next whole copy still differs, and asks for no force-resync (the pull after is a ${next4.mode}; ${brief(rec?.lastWhole)})`);
+        assert(pulls.filter((p) => p.mode === 'resync').length === 3,
+            `force-resyncs in all: the new standby's first copy, and the two that copies that didn't match asked for, six hours apart (${pulls.map((p) => p.mode).join(',')})`);
         health = await main.send('health');
         pushes = await pushesSoFar();
+        assert(health?.state.incident?.id === incident3?.id && pushes.length === 3, `the incident stays open, and nothing is pushed again (${pushes.length})`);
         const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN })).body?.standbyHealth;
-        assert(health?.state.incident?.pushedAt === null && pushes.length === 3,
-            `M opens an incident again but pushes nothing: the last one ended less than an hour ago (pushes ${pushes.length})`);
         assert(bannerNow?.incident?.lines.some((l: string) => /did not match it: members differed\. Last exact copy: \d{4}-/.test(l))
-            && bannerNow.incident.whatToDo.some((w: string) => /copies this server afresh by itself/.test(w)),
+            && bannerNow.incident.whatToDo.some((w: string) => /copies this server afresh by itself, at most every six hours, and its copy still did not match/.test(w)),
             `the banner says what didn't match: ${brief(bannerNow?.incident?.lines)}`);
         words = await standby.send('preview-words', {});
         assert(words?.warning === true && words.lines.some((l: string) => /^This server's last whole copy of the main server, at .* UTC, did not match it: members differed\.$/.test(l))
@@ -618,7 +682,7 @@ async function main(): Promise<void> {
         console.log('\n— 5. a report that is not one —');
         const standbysNow = async () => ((await main.send('health'))?.state.standbys ?? []).map((s: any) => s.id).sort();
         const known = await standbysNow();
-        const good = (id: string) => JSON.stringify({ v: 1, id, last: 'ok', why: null, fails: 0, okAgo: 1000, wholeAgo: 1000, exact: true, exactAgo: 1000, differs: [], hashed: true });
+        const good = (id: string) => JSON.stringify({ v: 1, id, last: 'ok', why: null, fails: 0, okAgo: 1000, wholeAgo: 1000, exact: true, exactAgo: 1000, differs: [], hashed: true, healing: false });
         const newIdHex = () => crypto.randomBytes(16).toString('hex');
         const deltaWith = (headers: Record<string, string>) => fetch(`${main.base}/api/local/admin/sync-delta`, { headers: { 'X-Since-Cursor': new Date().toISOString(), ...headers } });
         const forged: [string, Record<string, string>][] = [
@@ -628,6 +692,7 @@ async function main(): Promise<void> {
             ['a count out of range', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"fails":0', '"fails":-1') }],
             ['a table that is not copied', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"differs":[]', '"differs":["sqlite_master"]') }],
             ['free text for a reason', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"why":null', '"why":"call +61 555 0100"') }],
+            ['a "mending" that is not a yes or no', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"healing":false', '"healing":"yes"') }],
             ['the admin password, not the token', { 'X-Admin-Password': PW_MAIN, 'X-Standby-Report': good(newIdHex()) }],
         ];
         // A main server takes the admin password for a pull only with token-only off (its default is on): off, so that

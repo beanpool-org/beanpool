@@ -95,7 +95,8 @@ const MISSING_FALLBACK = [
     'enterprise pledges and keeper changes',
     'invites',
     "members' notification settings",
-    'settings the main server keeps in its database other than its web address (for example what it lists in the directory)',
+    'Commons project proposals still waiting for a decision',
+    "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
     'anything that changed on the main server after this standby last copied it',
 ];
 

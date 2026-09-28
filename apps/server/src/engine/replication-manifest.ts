@@ -346,6 +346,11 @@ export type SettingEntry =
     | { kind: 'payload'; reason: string; differsByDesign?: string }
     /** In the take-over bundle (services/takeover-envelope.ts). */
     | { kind: 'takeover-bundle'; reason: string; differsByDesign?: string }
+    /**
+     * The community's own: in every sync payload's signed `communitySettings` record (config/community-settings.ts). A
+     * standby keeps the record and applies none of it; a take-over, or a hand promotion, installs it.
+     */
+    | { kind: 'community-settings'; reason: string }
     /** The community's, and lost on a take-over today. */
     | { kind: 'community'; reason: string; gap: GapId }
     /** This server's own, and stays with it. */
@@ -353,15 +358,19 @@ export type SettingEntry =
 
 /** Every field of local-config.json (config/local-config.ts LocalConfig). */
 export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
-    callsign: { kind: 'community', gap: 'G5', reason: "the community's short name, in every app and the directory" },
-    communityName: { kind: 'community', gap: 'G5', reason: "the community's name" },
-    location: { kind: 'community', gap: 'G5', reason: "the community's place" },
-    contactEmail: { kind: 'community', gap: 'G5', reason: "the community's contact, sent to the directory" },
-    contactPhone: { kind: 'community', gap: 'G5', reason: "the community's contact, sent to the directory" },
-    currencyType: { kind: 'community', gap: 'G5', reason: "the currency's display" },
-    currencyValue: { kind: 'community', gap: 'G5', reason: "the currency's display" },
-    thresholds: { kind: 'community', gap: 'G5', reason: 'demurrage rate and epoch, health flags' },
-    gateway: { kind: 'community', gap: 'G5', reason: "the gateway's settings" },
+    callsign: { kind: 'community-settings', reason: "the community's short name, in every app and the directory" },
+    communityName: { kind: 'community-settings', reason: "the community's name" },
+    location: { kind: 'community-settings', reason: "the community's place" },
+    contactEmail: { kind: 'community-settings', reason: "the community's contact, sent to the directory" },
+    contactPhone: { kind: 'community-settings', reason: "the community's contact, sent to the directory" },
+    currencyType: { kind: 'community-settings', reason: "the currency's display" },
+    currencyValue: { kind: 'community-settings', reason: "the currency's display" },
+    thresholds: { kind: 'community-settings', reason: 'demurrage rate and epoch, health flags' },
+    gateway: {
+        kind: 'community-settings',
+        reason: "the web app's other origins, the subsystem switches and the request limit; not the admin IP allowlist in it, which "
+            + "names addresses on one server's own network, stays with each server and is never in the record",
+    },
     adminHash: { kind: 'takeover-bundle', reason: "the community's admin password" },
     salt: { kind: 'takeover-bundle', reason: "the community's admin password" },
     totpEnabled: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
@@ -406,12 +415,16 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
         differsByDesign: "a standby records 'copied': the marks in its copy are its main server's (db.ts noteVisitorsMarkedByMainServer)",
     },
     recovery_seal_main_epoch: { kind: 'payload', reason: "the recovery seal's epoch (payload.sealEpoch)" },
-    ledger_audit_baseline: { kind: 'community', gap: 'G5', reason: 'the accepted ledger audit baseline: the promotion audit uses the standby\'s own' },
-    ledger_audit_rebaseline_note: { kind: 'community', gap: 'G5', reason: 'why the baseline was accepted' },
-    pricing_data_source: { kind: 'community', gap: 'G5', reason: "the pricing guide's source" },
-    pricing_show_seasonality: { kind: 'community', gap: 'G5', reason: "the pricing guide's seasonality display" },
-    autosnapshot_config: { kind: 'community', gap: 'G5', reason: 'the snapshot schedule' },
-    commons_projects: { kind: 'community', gap: 'G5', reason: 'pending Commons proposals kept as one JSON value' },
+    ledger_audit_baseline: { kind: 'community-settings', reason: "the accepted ledger audit baseline, which the promotion audit holds the ledger to; in the record only where the main server has one" },
+    ledger_audit_rebaseline_note: { kind: 'community-settings', reason: 'why the baseline was accepted' },
+    pricing_data_source: { kind: 'community-settings', reason: "the pricing guide's source" },
+    pricing_show_seasonality: { kind: 'community-settings', reason: "the pricing guide's seasonality display" },
+    autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
+    commons_projects: {
+        kind: 'community', gap: 'G3',
+        reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '
+            + 'so in-flight governance, not a setting',
+    },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
@@ -421,6 +434,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     replica_format: { kind: 'per-server', reason: "the importer format a standby's copy was made with (engine/sync.ts REPLICA_FORMAT)" },
     replica_main_ledger: { kind: 'per-server', reason: "a standby's record of its main server's ledger at its last copy, which a take-over's audit holds it to" },
     replica_ledger_mismatch: { kind: 'per-server', reason: "a standby's last whole copy whose ledger wasn't its main server's (services/backup-puller.ts)" },
+    replica_community_settings: { kind: 'per-server', reason: "a standby's kept copy of its main server's community settings, until a take-over or a hand promotion installs it (config/community-settings.ts)" },
     replica_held_sum: { kind: 'per-server', reason: "the total a standby's next copy is held to after it cleared its ledger for a force-resync that isn't a seed (engine/sync.ts clearForResync)" },
     standby_copy_record: { kind: 'per-server', reason: "a standby's record of how its copies went, which it reports to its main server (services/standby-copy-record.ts)" },
     standby_health: { kind: 'per-server', reason: "a main server's watch on its own standbys, for its owners (services/standby-health.ts)" },
@@ -433,12 +447,12 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
 
 /** Fields of the `node_config` row's JSON object (state-engine.ts NodeConfig). */
 export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
-    serviceRadius: { kind: 'community', gap: 'G5', reason: "the community's service area: the map, the Market, the directory" },
-    publishLocation: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
-    publishMembers: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
-    publishContacts: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
-    publishHealth: { kind: 'community', gap: 'G5', reason: 'a directory switch; unset reads as publish' },
-    directoryPushIntervalHours: { kind: 'community', gap: 'G5', reason: 'how often the directory is told' },
+    serviceRadius: { kind: 'community-settings', reason: "the community's service area: the map, the Market, the directory" },
+    publishLocation: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishMembers: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishContacts: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishHealth: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    directoryPushIntervalHours: { kind: 'community-settings', reason: 'how often the directory is told' },
     lastDirectoryPush: { kind: 'per-server', reason: 'when this server last told the directory' },
     publicAddress: { kind: 'takeover-bundle', reason: 'the web address, with its tunnel token' },
     ownerAddresses: { kind: 'takeover-bundle', reason: 'app addresses an owner confirmed' },
@@ -459,7 +473,7 @@ export function nodeConfigKeyEntry(key: string): SettingEntry | undefined {
 
 /** Whether a setting is one a promoted standby must hold as its main server did (compared by the twin suite). */
 export function settingMustMatch(entry: SettingEntry): boolean {
-    if (entry.kind === 'community') return true;
+    if (entry.kind === 'community' || entry.kind === 'community-settings') return true;
     return (entry.kind === 'payload' || entry.kind === 'takeover-bundle') && !entry.differsByDesign;
 }
 

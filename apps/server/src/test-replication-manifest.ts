@@ -13,7 +13,8 @@
  *     named tombstone arrives (the importer is read for the clear).
  *  4. Every members column except the declared ones is in `members_touch_updated_at`'s column list (read from
  *     sqlite_master), and each declared one is really missing from it, so the fix that adds one deletes its line.
- *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified.
+ *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified, and the
+ *     community settings record (config/community-settings.ts) carries exactly the ones classified as the community's.
  *
  * Adding a table, a column or a setting then fails here until the same PR decides how a standby holds it.
  *
@@ -230,6 +231,21 @@ async function main(): Promise<void> {
         const extra = Object.keys(classified).filter((f) => !fields.includes(f));
         assert(fields.length > 5 && un.length === 0 && extra.length === 0,
             `every field of ${what} is classified (${fields.length} fields; unclassified: ${list(un)}; not a field: ${list(extra)})`);
+    }
+    // The community's own settings travel in one record (config/community-settings.ts): what it carries is what the
+    // manifest calls the community's, no more and no less, so a setting added to either is decided in the other too.
+    const record = await import('./config/community-settings.js');
+    const { NODE_CONFIG_KEYS } = manifest;
+    for (const [what, carried, classified] of [
+        ['local-config.json', record.COMMUNITY_LOCAL_CONFIG_FIELDS, LOCAL_CONFIG_FIELDS],
+        ['node_config', record.COMMUNITY_NODE_CONFIG_KEYS, NODE_CONFIG_KEYS],
+        ["the node_config row's object", record.COMMUNITY_DIRECTORY_FIELDS, NODE_CONFIG_BLOB_FIELDS],
+    ] as const) {
+        const community = Object.entries(classified as Record<string, { kind: string }>).filter(([, e]) => e.kind === 'community-settings').map(([k]) => k);
+        const notCarried = community.filter((k) => !(carried as readonly string[]).includes(k));
+        const notCommunity = (carried as readonly string[]).filter((k) => !community.includes(k));
+        assert(community.length > 0 && notCarried.length === 0 && notCommunity.length === 0,
+            `the community settings record carries exactly the ${what} settings the manifest calls the community's (${community.length}; not carried: ${list(notCarried)}; carried but not the community's: ${list(notCommunity)})`);
     }
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);

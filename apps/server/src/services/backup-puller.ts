@@ -58,6 +58,7 @@ import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import { noteCopyFailed, noteCopyLanded, noteWholeCopyCheck, standbyReport, whyOf } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
+import { keepMainServerCommunitySettings } from '../config/community-settings.js';
 
 // Said once per value, not on every 60 s pull.
 let lastProfileNote: string | null = null;
@@ -75,6 +76,24 @@ function noteMainServerProfile(record: unknown): void {
             + `this standby is refused until NODE_PROFILE=${copied === 'local' ? '(unset)' : copied} is set here.`);
     }
     lastProfileNote = note;
+}
+
+// Said once per list, not on every 60 s pull.
+let lastSettingsNote: string | null = null;
+
+/**
+ * The main server's own settings (config/community-settings.ts), from a copy the import verified: kept for a take-over
+ * or a hand promotion to install, applied to nothing while this is a standby. What this standby can't take is left out,
+ * and said.
+ */
+function noteMainServerCommunitySettings(record: unknown, copiedAt: string | null): void {
+    const { kept, left } = keepMainServerCommunitySettings(record, copiedAt);
+    const note = `${kept}|${left.join(',')}`;
+    if (left.length > 0 && note !== lastSettingsNote) {
+        logger.warn('P2P', `[Backup] The main server's settings came with what this standby doesn't take, left out: ${left.join(', ')}.`
+            + (kept ? ' The rest is kept.' : ' Kept the record it had.'));
+    }
+    lastSettingsNote = note;
 }
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
@@ -309,6 +328,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // kept as this database's record, so a take-over or a hand promotion from here meets the main server's
         // profile, not this standby's (config/node-profile.ts). A primary too old to send it leaves the record alone.
         if (payload.nodeProfile) noteMainServerProfile(payload.nodeProfile);
+        // The community's own settings, signed with it too: kept, not applied, while this is a standby. A primary too old to
+        // send them leaves this standby's record alone, and a take-over from here then keeps this standby's own.
+        if (payload.communitySettings !== undefined) noteMainServerCommunitySettings(payload.communitySettings, payload.generatedAt ?? null);
         // A whole copy from a main server whose visitors are marked: every row here has its mark now (db.ts).
         if (!isDelta && payload.visitorsMarked === true) noteWholeCopyOfVisitorMarks();
         // A whole copy that carries the main server's replaced keys: every one is here now (engine/key-move.ts).

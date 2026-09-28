@@ -419,6 +419,48 @@ export interface SyncInvalidatedKey {
 }
 
 /**
+ * The community's own settings, as its main server holds them (apps/server config/community-settings.ts, design G5).
+ * Each field is the main server's value, or null where it has none (the default applies). A field left out is one the
+ * main server didn't say: a standby keeps its own. Never the settings that belong to one server: its admin password,
+ * replication token, main server's address, TLS or identity epoch, or its admin IP allowlist.
+ */
+export interface SyncCommunitySettings {
+    /** Fields of local-config.json. `gateway` without its admin IP allowlist. */
+    localConfig: {
+        callsign?: string | null;
+        communityName?: string | null;
+        location?: { lat: number; lng: number } | null;
+        contactEmail?: string | null;
+        contactPhone?: string | null;
+        currencyType?: 'text' | 'image' | null;
+        currencyValue?: string | null;
+        thresholds?: Record<string, number> | null;
+        gateway?: {
+            corsAllowedOrigins?: string[];
+            features?: Record<string, boolean>;
+            rateLimiting?: { enabled?: boolean; maxRequestsPerMinute?: number };
+        } | null;
+    };
+    /** node_config rows, as stored. The audit baseline is left out where the main server has none. */
+    nodeConfig: {
+        ledger_audit_baseline?: string;
+        ledger_audit_rebaseline_note?: string | null;
+        pricing_data_source?: string | null;
+        pricing_show_seasonality?: string | null;
+        autosnapshot_config?: string | null;
+    };
+    /** Fields of the `node_config` row's object: the service area and the directory's switches. */
+    directory: {
+        serviceRadius?: { lat: number; lng: number; radiusKm: number } | null;
+        publishLocation?: boolean;
+        publishMembers?: boolean;
+        publishContacts?: boolean;
+        publishHealth?: boolean;
+        directoryPushIntervalHours?: number;
+    };
+}
+
+/**
  * One community in the global node's mirror of the public directory registry (G5, apps/server engine/directory-cache.ts),
  * as its hourly run last wrote it: public data, checked field by field. Replicated so a server that takes over knows
  * which communities the old one had already seen (`firstSeenAt`), and tells no watcher about them again. Never deleted:
@@ -523,6 +565,14 @@ export interface SyncPayload {
      * were updated in. Absent from a main server that predates it or has not recorded its clear. Signed with the rest.
      */
     sealEpoch?: string;
+    /**
+     * The community's own settings as the main server holds them (apps/server config/community-settings.ts): its name,
+     * place, contacts, currency display, thresholds, gateway, directory choices, audit baseline, pricing and snapshot
+     * schedule. A standby keeps the record and applies none of it while it is a standby; a take-over, or a hand
+     * promotion, installs it. Additive and optional like `nodeProfile`: a peer that does not know it ignores it, and a
+     * standby of a main server that predates it keeps its own. Checked field by field on the way in. Signed with the rest.
+     */
+    communitySettings?: SyncCommunitySettings;
     nodeId: string;
     generatedAt?: string;
     signature?: string;

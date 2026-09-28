@@ -7220,7 +7220,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
-    if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
+    // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    if (conv) {
+        sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
+            'text', undefined, undefined, undefined, { nodeAuthored: true });
+    }
 }
 
 export function migrateAdminConversations() {} // Deprecated, state is clean now.

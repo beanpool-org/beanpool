@@ -9,7 +9,7 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## Private even from you
 
-- **Direct messages** between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read.
+- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
 
 ## What the server holds in the clear
 
@@ -17,7 +17,8 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
-- who messaged whom, and when, even for direct messages;
+- the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
+- who messaged whom, and when, and their emoji reactions, even for direct messages;
 - **how each member voted**.
 
 ## Secret ballots

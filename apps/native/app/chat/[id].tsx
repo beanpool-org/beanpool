@@ -29,6 +29,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
+import { isDmNotLocked, dmNotLockedLine, restoredDraft } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -145,6 +146,8 @@ function ChatScreen() {
     // The first local read has come back (a cold database open is not instant), and what went wrong if it did not.
     const [firstLoadDone, setFirstLoadDone] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    // A DM line that couldn't be locked was not sent (utils/dm-lock): one plain line above the box, until a send goes.
+    const [lockNotice, setLockNotice] = useState<string | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
@@ -534,7 +537,16 @@ function ChatScreen() {
                 setReplyToMessage(null);
                 loadMessages();
             }
+            setLockNotice(null);
         } catch (err: any) {
+            if (isDmNotLocked(err)) {
+                // Nothing went. The words go back in the box (with anything typed since), an edit stays an edit, and
+                // the next Send tries the lock again.
+                hapticWarning();
+                composerRef.current?.setText(restoredDraft(currentDraft, composerRef.current?.currentText() ?? ''));
+                setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                return;
+            }
             Alert.alert(wasEditing ? "Edit Failed" : "Message Failed", err.message || "Could not execute send.");
             if (wasEditing) setEditingMessage(null); // drop back to normal compose on failure (e.g. window expired)
         } finally {
@@ -596,14 +608,17 @@ function ChatScreen() {
                 const meta = { ...(item.metadata || {}) };
                 delete meta.__sendState;
                 const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
-                await deleteLocalMessage(item.id).catch(() => {});
                 try {
                     // Reuse the failed row's id: if the original POST actually landed
                     // (timeout after server commit), the retry is idempotent instead
-                    // of a duplicate the peer sees twice.
+                    // of a duplicate the peer sees twice. insertMessage replaces the
+                    // failed row only once the words are locked, so a resend that
+                    // can't be locked leaves it here to try again.
                     await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
+                    setLockNotice(null);
                 } catch (e: any) {
-                    Alert.alert('Message Failed', e.message || 'Could not resend.');
+                    if (isDmNotLocked(e)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                    else Alert.alert('Message Failed', e.message || 'Could not resend.');
                 }
                 loadMessages(true);
             }},
@@ -633,11 +648,13 @@ function ChatScreen() {
                 // the timeout keeps a dead network from latching sendingRef forever.
                 await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, 'Sending the image');
                 setReplyToMessage(null);
+                setLockNotice(null);
                 hapticSuccess();
                 loadMessages();
             } catch (err: any) {
                 hapticWarning();
-                Alert.alert('Image Failed', err.message || 'Could not send image.');
+                if (isDmNotLocked(err)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                else Alert.alert('Image Failed', err.message || 'Could not send image.');
             } finally {
                 sendingRef.current = false;
             }
@@ -1322,6 +1339,7 @@ function ChatScreen() {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
+                        notice={lockNotice}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

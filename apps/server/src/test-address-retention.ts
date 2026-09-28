@@ -340,7 +340,7 @@ async function main() {
         assert(!!a && a !== logTag!.logAddressTag('203.0.113.80', t0 + DAY), '7. the next day, another tag');
     } finally {
         server.close();
-        await node.stop().catch(() => { });
+        try { await node.stop(); } catch { /* the suite's result is already counted */ }
     }
 
     say(`\n${passed}/${run} passed`);

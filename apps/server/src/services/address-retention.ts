@@ -39,10 +39,14 @@ const SWEEP_EVERY_MS = 60 * 60_000;
 /** An entry's time, kept when it is on or after `cutoff`. Anything else (missing, not a number) forgets its address. */
 const expired = (at: unknown, cutoff: number) => !(typeof at === 'number' && Number.isFinite(at) && at >= cutoff);
 
+/** The node_config rows that hold an address. A literal, so test-replication-manifest.ts can read each key written. */
+export const ADDRESS_ROWS = ['replication_access', 'standby_health', 'takeover_envelope_holders'] as const;
+export type AddressRow = typeof ADDRESS_ROWS[number];
+
 /** Clears, in place, each address in `value` (the row's parsed JSON) whose entry is older than `cutoff`. True if any. */
 type Forget = (value: any, cutoff: number) => boolean;
 
-const ROWS = {
+const ROWS: Record<AddressRow, Forget> = {
     replication_access: (log, cutoff) => {
         let changed = false;
         if (log.lastPullIp != null && expired(log.lastPullAt, cutoff)) { log.lastPullIp = null; changed = true; }
@@ -67,11 +71,7 @@ const ROWS = {
         }
         return changed;
     },
-} satisfies Record<string, Forget>;
-
-export type AddressRow = keyof typeof ROWS;
-/** The node_config rows that hold an address, for a suite. */
-export const ADDRESS_ROWS = Object.keys(ROWS) as AddressRow[];
+};
 
 /** `value`, the parsed JSON of node_config `key`, with each address older than 7 days (at `now`) removed, in place. */
 export function withoutOldAddresses<T>(key: AddressRow, value: T, now = Date.now()): T {

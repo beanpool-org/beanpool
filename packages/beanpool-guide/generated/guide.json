@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 71,
-  "hash": "8e42a77168472957af53ee5a84ea7ace12a8a47f8ed121e9c91084386194b520",
+  "version": 74,
+  "hash": "4dee8af3c60b06e44649e555bcd7284ec66b3b6ea9e8f6e1a24b08563947f728",
   "sections": [
     {
       "id": "about",
@@ -784,7 +784,8 @@
           "items": [
             "Only an owner can give back or take away an owner's or admin's role.",
             "An admin cannot settle a stuck trade they are part of.",
-            "Group and event chats limit how fast one person can post."
+            "Group and event chats limit how fast one person can post.",
+            "**Chats between two people are always locked.** The app used to send a message without the lock if it could not find the other person's key. Now it does not send it: your words stay in the message box, and you can send again in a moment. Your community's server refuses a message between two people that is not locked."
           ]
         },
         {
@@ -2671,7 +2672,10 @@
         {
           "type": "ul",
           "items": [
-            "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.",
+            "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.",
+            "A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.",
+            "The notices BeanPool adds to a chat about a deal are not encrypted: beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
+            "The server also knows who messaged whom, and when, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
             "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "A group's chat can also be read by the group's members.",
@@ -4473,7 +4477,7 @@
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
-            "**App Lock:** asks for your phone's passcode or fingerprint each time the app opens.",
+            "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. It needs a screen lock on the phone: without one there is nothing for it to ask.",
             "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
           ]
         },
@@ -4484,7 +4488,7 @@
         {
           "type": "ul",
           "items": [
-            "Chats between two people are usually end-to-end encrypted. See \"Messages\" for the one exception.",
+            "Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See \"Messages\".",
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust."
           ]
@@ -4909,7 +4913,10 @@
             "You cannot delete while you have a deal under way. Finish or cancel it first.",
             "If you hold beans, they go to the Commons.",
             "If you are below zero, the Commons covers the debt.",
-            "Your profile becomes \"Deleted Member\", and your posts come down.",
+            "Your profile becomes \"Deleted Member\".",
+            "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
+            "Events you host are cancelled and wiped the same way. The people going can still read the event's chat until 30 days after the event.",
+            "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
             "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
             "It deletes your account only in the community you are using. Your accounts in other communities stay.",
@@ -4931,7 +4938,7 @@
         {
           "type": "ul",
           "items": [
-            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.",
+            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.",
             "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
             "If a deal of yours is still under way, the other member or an admin must close it first."
           ]

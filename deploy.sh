@@ -37,12 +37,18 @@ fi
 
 IMAGE="ghcr.io/beanpool-org/beanpool-node:${DEPLOY_TAG:-latest}"
 
-# Load .env file for Cloudflare credentials (if it exists)
+# Load this Mac's .env, if there is one. None of its secrets go to a server any more (FLEET SECRETS in scripts/deploy-lib.sh).
+# Its CF_TUNNEL_TOKEN is used only to recognise the copy earlier deploys wrote to each server's data/tunnel-token: a server is
+# sent that token's sha256, never the token.
 if [ -f "$SCRIPT_DIR/.env" ]; then
   echo "🔑 Loading .env file..."
   set -a
   source "$SCRIPT_DIR/.env"
   set +a
+fi
+FLEET_TUNNEL_SHA=""
+if [ -n "${CF_TUNNEL_TOKEN:-}" ]; then
+  FLEET_TUNNEL_SHA=$(printf '%s' "$CF_TUNNEL_TOKEN" | tr -d '[:space:]' | sha256_hex)
 fi
 
 # Load targets from local configuration file if it exists, otherwise fall back to example target
@@ -223,7 +229,7 @@ for NODE in "${TARGETS[@]}"; do
   # Remote exit 3 = aborted BEFORE the running container was touched.
   REMOTE_RC=0
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF || REMOTE_RC=$?
-    $(declare -f docker_free_kb disk_preflight)
+    $(declare -f docker_free_kb disk_preflight fleet_secret_names sha256_hex strip_fleet_secrets_env remove_fleet_tunnel_token first_password_notice)
     if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
     disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || {
       echo "🛑 ABORT $NAME: not enough free disk even after pruning unused images. The running container is untouched."
@@ -247,8 +253,11 @@ for NODE in "${TARGETS[@]}"; do
       sudo docker rm -f $PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-$PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-beanpool-$NAME-beanpool-node-1 2>/dev/null || true
-      sudo docker compose --profile tunnel -p \$PROJ_NAME down --remove-orphans 2>/dev/null || true
-      sudo docker compose --profile tunnel -p beanpool-\$PROJ_NAME down --remove-orphans 2>/dev/null || true
+      # The tunnel profile stops the compose cloudflared sidecar that earlier deploys started on test and yarravalley. Until
+      # 2026-09-28 the project name here was escaped, so the server read an empty variable, compose failed on its arguments,
+      # and these two lines never ran.
+      sudo docker compose --profile tunnel -p $PROJ_NAME down --remove-orphans 2>/dev/null || true
+      sudo docker compose --profile tunnel -p beanpool-$PROJ_NAME down --remove-orphans 2>/dev/null || true
       sleep 1
     )
     # --- BEGIN preserve/restore (scripts/test-deploy-preserve.sh extracts and runs this exact block) ---
@@ -305,19 +314,13 @@ for NODE in "${TARGETS[@]}"; do
     # --- END preserve/restore ---
     cd $PROJECT_DIR
     export PUBLIC_IP=\$(curl -s -4 ifconfig.me)  # IPv4: an IPv6-first host answered with its v6 address (global node, 2026-09-25)
-    export CF_API_TOKEN='${CF_API_TOKEN}'
-    export CF_ZONE_ID='${CF_ZONE_ID}'
     export CF_RECORD_NAME='${DNS}'
     ${DEPLOY_TAG:+export BEANPOOL_IMAGE_TAG='${DEPLOY_TAG}'}
-    export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
-    export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
+    # No Cloudflare token, no shared admin password and no fleet tunnel token reach this server (FLEET SECRETS in
+    # scripts/deploy-lib.sh). These remove what earlier deploys and hand edits left, naming what they remove, never a value.
+    strip_fleet_secrets_env "$PROJECT_DIR/.env"
+    remove_fleet_tunnel_token "$PROJECT_DIR/data/tunnel-token" "$FLEET_TUNNEL_SHA"
     sudo mkdir -p $PROJECT_DIR/data
-    if [ -n "\$CF_TUNNEL_TOKEN" ]; then
-      echo "\$CF_TUNNEL_TOKEN" | sudo tee $PROJECT_DIR/data/tunnel-token > /dev/null
-    fi
-    if [ -f "$PROJECT_DIR/data/tunnel-token" ]; then
-      sudo chmod 644 $PROJECT_DIR/data/tunnel-token
-    fi
     if [ "$DIR" = "BeanPool-Review" ]; then
       # Review node (VIC): tunnel-only HTTPS on 8447
       sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
@@ -379,12 +382,12 @@ for NODE in "${TARGETS[@]}"; do
     if [ -n "${DEPLOY_TAG:-}" ]; then
       echo "Image Tag: ${DEPLOY_TAG}"
     fi
+    first_password_notice "$PROJECT_DIR/data" "$USER@$IP"
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
-    COMPOSE_FLAGS=()
-    if [ "$NAME" = "test" ] || [ "$NAME" = "yarravalley" ]; then
-      COMPOSE_FLAGS=(--profile tunnel)
-    fi
+    # No server of ours starts the compose cloudflared sidecar (the tunnel profile) any more: every one is reached through its
+    # host's own tunnel (qld, vic, global), and the sidecar only ran the fleet token, whose tunnel no longer exists. The
+    # down with the tunnel profile above still stops a sidecar an earlier deploy started.
     # Build on the target host by default, which is why every name below is listed: the running image is then
     # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
     #
@@ -401,29 +404,29 @@ for NODE in "${TARGETS[@]}"; do
         echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
       fi
       echo "📦 DEPLOY_PULL=1 — taking the published image (${DEPLOY_TAG:-latest}) for: $NAME (NOT your working tree)"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+      sudo -E docker compose -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
         echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
         echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
         echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+      sudo -E docker compose -p $PROJ_NAME up -d
     elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
       echo "🔨 Local build enabled for target: $NAME"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
+      sudo -E docker compose -p $PROJ_NAME up -d --build
     else
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+      sudo -E docker compose -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
         echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
         echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
         echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+      sudo -E docker compose -p $PROJ_NAME up -d
     fi
 
-    CONTAINER_ID=\$(sudo docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME ps -q beanpool-node 2>/dev/null | head -n1)
+    CONTAINER_ID=\$(sudo docker compose -p $PROJ_NAME ps -q beanpool-node 2>/dev/null | head -n1)
     if [ -n "\$CONTAINER_ID" ]; then
       IMAGE_ID=\$(sudo docker inspect --format '{{.Image}}' "\$CONTAINER_ID" 2>/dev/null)
       REPO_TAG=\$(sudo docker inspect --format '{{.Config.Image}}' "\$CONTAINER_ID" 2>/dev/null)

@@ -1,370 +1,59 @@
 import crypto from 'node:crypto';
+import {
+    configuredAudiences,
+    createJwksCache,
+    createSignInVerifier,
+    defaultAudiences,
+    NONCE_TTL_MS,
+    SsoVerificationError,
+    webClientId as webClientIdFor,
+    webClientIds as webClientIdsFor,
+    type AudienceSettings,
+    type JwksEntry,
+    type SignInCredential,
+    type SsoIdentity,
+    type SsoProvider,
+    type WebSignInProvider,
+} from '@beanpool/signin';
 import { consumeGithubSession } from './engine/github-device.js';
 
 /**
- * OIDC `id_token` verification for the sign-in keyholder. Zero dependencies, same as totp.ts.
+ * Sign-in verification for the sign-in keyholder, as this node runs it.
  *
- * Was `sso-google.ts` (#218). Generalised here because Apple is the second and last provider
- * (D11 pauses Facebook and GitHub), and the shape of the second one is what shows which parts of
- * the first were Google and which were OIDC. Everything below the provider table is OIDC.
- *
- * WHY NO LIBRARY
- * --------------
- * `jose` would do this in three lines and is well regarded. It is not used because every
- * self-hosted node ships this code, and D5 already forces the design to be the kind that needs
- * no secrets; adding a dependency to the trust path of an account-recovery keyholder is a cost
- * paid by operators who cannot audit it. Node's `crypto` builds an RSA key straight from a JWK
- * and verifies RS256 natively, so the whole thing is standard-library calls.
- *
- * WHAT THIS IS FOR
- * ----------------
- * K4 in the keyholder model: "your sign-in account". Signing in with Google or Apple does NOT log
- * anybody in and creates no account (D9) — it returns ONE fragment of a Shamir split. The only
- * thing this module establishes is *which provider account* is presenting itself, as a stable
- * `sub`.
- *
- * NO CLIENT SECRET, EITHER PROVIDER. This is D5, and it is why these two providers survived D11.
- * Apple's `.p8` key and the 6-month client-secret JWT belong to the authorization-code exchange
- * (`/auth/token`) and to `/auth/revoke`. We never call either: both the native flow and the web
- * `form_post` hand us the `id_token` directly, and it verifies against public JWKS. So there is
- * no secret to rotate and no expiry to miss.
- *
- * WHAT IS ACTUALLY CHECKED, and why each one matters:
- *
- *   signature   RS256 against the provider's published JWKS. Without it everything below is
- *               decoration.
- *   alg         pinned to RS256 and read from the header ONLY to reject anything else. The classic
- *               JWT breaks are `alg: none` and HS256-with-the-public-key-as-HMAC-secret; both are
- *               impossible here because the algorithm is never chosen from the token.
- *   kid         selects the key. Both providers publish several and rotate them.
- *   iss         the provider's issuer, exactly. Google uses two spellings; Apple uses one.
- *   aud         must be one of OUR client IDs. This is the check that distinguishes "a valid
- *               provider token" from "a token issued to us" — without it, any app's token
- *               verifies, which is token substitution.
- *   exp / iat   with a small clock skew allowance, because self-hosted nodes are not NTP-perfect.
- *   nonce       must equal the one this node issued. Every node accepts the same audiences, so
- *               without nonce binding a token obtained at one node is replayable at every other
- *               node in the federation. See issueNonce() below.
- *
- * NOT checked here: `email_verified`. Email is not an identifier in this design — `sub` is. An
- * account with an unverified email still has a stable, unique `sub`, and the keeper lookup is a
- * hash of the subject, never the address. This matters more for Apple than for Google: Apple's
- * private-relay addresses are per-app aliases, and Apple omits the email entirely on every sign-in
- * after the first.
+ * The checks themselves (the provider table, `id_token` verification, the JWKS cache, BeanPool's client ids
+ * and GitHub's device flow) live in @beanpool/signin (packages/beanpool-signin), shared with the key vault so
+ * that both check a sign-in with exactly the same code (key vault V1). What stays here is what belongs to this
+ * node: the nonces it issues, its one key cache and verifier, the keeper lookup hash, and the client ids its
+ * operator configured in its env. Every name this file exported before the move is still exported from here.
  */
 
-export type SsoProvider = 'google' | 'apple' | 'facebook' | 'github';
-
-export class SsoVerificationError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'SsoVerificationError';
-    }
-}
-
-/**
- * The provider could not be asked: its keys or its user endpoint failed (5xx), came back unusable,
- * or could not be reached. Nothing was learned about the token, and the nonce is still unspent.
- *
- * A subclass, so every caller that treats any SsoVerificationError as "the sign-in did not check
- * out" keeps doing exactly that. A caller that can tell the member "try again in a minute" instead
- * (the open door, routes/open-join.ts; the keeper and recovery routes, signInFailure in
- * routes/keepers.ts) checks for this one first.
- */
-export class SsoProviderUnavailableError extends SsoVerificationError {
-    constructor(message: string) {
-        super(message);
-        this.name = 'SsoProviderUnavailableError';
-    }
-}
-
-// ─── the provider table ───────────────────────────────────────────────────────────────────────
-//
-// Everything provider-specific is here. If a third provider is ever un-paused, it is an entry in
-// this table plus its audiences, and nothing below changes.
-
-interface OidcProviderConfig {
-    kind: 'oidc';
-    /** Human name, used in error messages the member may end up reading. */
-    label: string;
-    /** Hardcoded rather than discovered: a discovery fetch would be one more failure mode at
-     *  recovery time, and neither URL has moved. */
-    jwksUri: string;
-    issuers: string[];
-    /**
-     * Whether the provider may echo SHA-256(nonce) instead of the nonce.
-     *
-     * Apple only. Apple's native `ASAuthorization` flow is conventionally driven with a hashed
-     * nonce — the pattern every SDK sample follows is "hash it, send the hash to Apple, keep the
-     * raw one" — and reports differ on whether the value comes back hashed or verbatim depending
-     * on platform and SDK. Accepting both costs nothing: the nonce is 32 random bytes, so its
-     * SHA-256 is no more guessable than the nonce itself, and an attacker needs one or the other
-     * to forge anything. Getting this wrong in the strict direction fails the way this project
-     * likes least — silently, at recovery, months later.
-     *
-     * Google is left strict because Google echoes the nonce verbatim and always has. A tolerance
-     * with no failure mode behind it is just a wider door.
-     */
-    nonceMayBeHashed: boolean;
-}
-
-/**
- * A provider with no token a node could check. GitHub: not OIDC, and the only endpoint that says which
- * app a token belongs to needs the client secret. So the node runs the device flow itself
- * (engine/github-device.ts) and the client hands in the session id, never a token.
- */
-interface NodeRunProviderConfig {
-    kind: 'node-run';
-    label: string;
-}
-
-type ProviderConfig = OidcProviderConfig | NodeRunProviderConfig;
-
-const PROVIDERS: Record<SsoProvider, ProviderConfig> = {
-    google: {
-        kind: 'oidc',
-        label: 'Google',
-        jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
-        // Both spellings appear in real Google tokens.
-        issuers: ['accounts.google.com', 'https://accounts.google.com'],
-        nonceMayBeHashed: false,
-    },
-    apple: {
-        kind: 'oidc',
-        label: 'Apple',
-        jwksUri: 'https://appleid.apple.com/auth/keys',
-        issuers: ['https://appleid.apple.com'],
-        nonceMayBeHashed: true,
-    },
-    facebook: {
-        kind: 'oidc',
-        label: 'Facebook',
-        jwksUri: 'https://www.facebook.com/.well-known/oauth/openid/jwks/',
-        issuers: ['https://www.facebook.com', 'https://facebook.com', 'https://limited.facebook.com'],
-        nonceMayBeHashed: false,
-    },
-    github: {
-        kind: 'node-run',
-        label: 'GitHub',
-    },
-};
-
-export function isSsoProvider(value: unknown): value is SsoProvider {
-    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, value);
-}
-
-/** The provider's name as a member reads it ("Google"), for messages about their account. */
-export function ssoProviderLabel(provider: SsoProvider): string {
-    return providerConfig(provider).label;
-}
-
-/**
- * The providers this node can verify, in the order they are offered.
- *
- * Derived from the table rather than written out anywhere, so un-pausing a provider (D11) is one
- * row here and no stale list elsewhere claiming otherwise. A member reading "Supported: google,
- * apple" on a node that also does Facebook has been told something false by a message whose whole
- * job was to tell them what to do next.
- */
-export const SSO_PROVIDERS = Object.keys(PROVIDERS) as SsoProvider[];
-
-/**
- * Ceiling on a token before it is split, decoded or verified.
- *
- * Real `id_token`s are ~1 KB — Google's runs to about 1.3 KB with the profile scope attached,
- * Apple's to roughly 0.9 KB — so 8 KB is several times any legitimate token and rejects nothing
- * real. Without it, `decodeSegment` must `JSON.parse` the header before anything is verified (the
- * `kid` lives there), so a 10 MB base64 blob buys an attacker a multi-megabyte buffer allocation
- * and a large JSON parse per request, on 1-CPU VMs, for free.
- *
- * Review called this defence-in-depth on the grounds that the route's rate limiter bounds it. That
- * is the right instinct and the wrong fact: the routes do not exist yet, so today there is no
- * limiter, and the guard that belongs in the verifier should not be waiting on the layer above to
- * be written. Same reasoning as making ssoLookupHash async in #218 — cheapest to fix while the
- * function has no callers.
- */
-const MAX_ID_TOKEN_BYTES = 8192;
-
-function providerConfig(provider: SsoProvider): ProviderConfig {
-    const config = PROVIDERS[provider];
-    // Reachable from a route that forwards a body field. Named rather than a crash, because the
-    // whole point of holder_ref is that it is a provider we verified against.
-    if (!config) throw new SsoVerificationError(`Unknown sign-in provider '${provider}'.`);
-    return config;
-}
-
-/**
- * What an app that hands this node a GitHub token is told. Only an app from before the node ran the
- * GitHub sign-in itself does that, so the next step is an update; the 12 words work either way.
- */
-export const GITHUB_TOKEN_REFUSED =
-    'Update BeanPool to connect GitHub. This community\'s node now runs the GitHub sign-in itself, so it no '
-    + 'longer accepts a GitHub token from the app. Your 12 words still work.';
-
-/** The rules for a provider whose `id_token` this node checks. GitHub has none, and is refused by name. */
-function oidcConfig(provider: SsoProvider): OidcProviderConfig {
-    const config = providerConfig(provider);
-    if (config.kind !== 'oidc') throw new SsoVerificationError(GITHUB_TOKEN_REFUSED);
-    return config;
-}
-
-/** Tolerance for exp/iat. Nodes run on cheap VMs whose clocks drift; 2 minutes is enough to
- *  survive that without meaningfully extending the life of a stolen token. */
-const CLOCK_SKEW_SECONDS = 120;
-
-/** Nonces expire fast. The window only has to cover one sign-in round trip. A finished GitHub sign-in
- *  that has not been spent expires after the same window (engine/github-device.ts). */
-export const NONCE_TTL_MS = 10 * 60 * 1000;
-
-export interface SsoIdentity {
-    provider: SsoProvider;
-    /** Stable, unique per account per developer team/client. THE identifier — never the email. */
-    sub: string;
-    /**
-     * Present for display only ("Google (m•••@gmail.com)"). Never used for lookup.
-     *
-     * Routinely ABSENT for Apple: Apple returns the email on the first authorization only, and a
-     * member re-adding Apple as a keeper is by definition not on their first. An undefined email
-     * is normal, not a failure.
-     */
-    email?: string;
-    emailVerified?: boolean;
-    /** True when Apple issued a private-relay alias rather than the real address. */
-    privateEmail?: boolean;
-    /** Which of our client IDs the token was issued to. */
-    audience: string;
-    issuedAt: number;
-    expiresAt: number;
-}
-
-interface Jwk {
-    kid: string;
-    kty: string;
-    alg?: string;
-    use?: string;
-    n: string;
-    e: string;
-}
+export {
+    SsoVerificationError,
+    SsoProviderUnavailableError,
+    isSsoProvider,
+    ssoProviderLabel,
+    SSO_PROVIDERS,
+    GITHUB_TOKEN_REFUSED,
+    NONCE_TTL_MS,
+    signInCredentialFrom,
+    type SsoProvider,
+    type SsoIdentity,
+    type SignInCredential,
+    type WebSignInProvider,
+} from '@beanpool/signin';
 
 // ─── JWKS cache ───────────────────────────────────────────────────────────────────────────────
 //
-// Both providers rotate signing keys and publish a Cache-Control max-age. Honouring it matters in
-// both directions: fetching per verification would make the provider a hard dependency of every
-// recovery attempt, and caching forever would break the day they rotate.
-//
-// KEYED BY PROVIDER, and that is not tidiness. A single shared cache was the obvious way to
-// generalise #218's module-level variable, and it is wrong: whichever provider fetched last owns
-// the cache, so every token from the other provider misses on its kid, triggers the
-// refetch-once path, clobbers the cache in turn, and the two providers evict each other on every
-// single verification. Worse, a kid collision across providers would select the wrong issuer's
-// key. Separate entries make cross-provider key confusion unrepresentable rather than unlikely.
-//
-// The refetch-once-on-unknown-kid path below is the important one. A rotation that lands between
-// our cache being populated and expiring would otherwise fail every verification for the rest of
-// the TTL, and the user's symptom would be "recovery is broken" with nothing in the logs to say why.
+// One per node process, keyed by provider (see packages/beanpool-signin/src/jwks.ts for why).
 
-const jwksCache = new Map<SsoProvider, { keys: Jwk[]; expiresAt: number }>();
-const inFlight = new Map<SsoProvider, Promise<Jwk[]>>();
-
-function parseMaxAge(cacheControl: string | null): number {
-    const m = cacheControl?.match(/max-age=(\d+)/);
-    const seconds = m ? parseInt(m[1], 10) : NaN;
-    // Clamp: a hostile or broken header must not pin us to a key set for a week, nor cause a
-    // fetch storm. 5 minutes to 24 hours.
-    if (!Number.isFinite(seconds)) return 3600_000;
-    return Math.min(Math.max(seconds, 300), 86_400) * 1000;
-}
-
-async function fetchJwks(provider: SsoProvider): Promise<Jwk[]> {
-    // Coalesce concurrent misses into one request, so a node restarting under load does not open
-    // a connection per in-flight verification. Per provider, for the same reason the cache is.
-    const pending = inFlight.get(provider);
-    if (pending) return pending;
-
-    const config = oidcConfig(provider);
-    const request = (async () => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10_000);
-        // Every way of not getting keys is the provider failing, not the member: these messages reach
-        // the member (routes/keepers.ts signInFailure), so they say what happened and to try again.
-        const unusable = `${config.label} sent sign-in keys this node could not use, so the sign-in could not be `
-            + 'checked. Please try again in a minute.';
-        try {
-            let res: Response;
-            try {
-                res = await fetch(config.jwksUri, { signal: controller.signal });
-            } catch {
-                // Unreachable, or the 10 s timeout above.
-                throw new SsoProviderUnavailableError(
-                    `${config.label} could not be reached to check the sign-in. Please try again in a minute.`);
-            }
-            if (!res.ok) {
-                throw new SsoProviderUnavailableError(`${config.label} is not answering right now (HTTP ${res.status}), so `
-                    + 'the sign-in could not be checked. Please try again in a minute.');
-            }
-            let body: { keys?: unknown } | null;
-            try {
-                body = await res.json() as { keys?: unknown } | null;
-            } catch {
-                throw new SsoProviderUnavailableError(unusable);
-            }
-            const listed: unknown = body?.keys;
-            const keys = (Array.isArray(listed) ? listed as Jwk[] : []).filter(k => k && k.kty === 'RSA' && k.n && k.e && k.kid);
-            if (!keys.length) throw new SsoProviderUnavailableError(unusable);
-            jwksCache.set(provider, {
-                keys,
-                expiresAt: Date.now() + parseMaxAge(res.headers.get('cache-control')),
-            });
-            return keys;
-        } finally {
-            clearTimeout(timeout);
-            inFlight.delete(provider);
-        }
-    })();
-
-    inFlight.set(provider, request);
-    return request;
-}
-
-async function getSigningKey(provider: SsoProvider, kid: string): Promise<Jwk> {
-    // `refetched` is what makes "refetch once" true (CR finding on #218). Without it an expired
-    // cache fetched here, missed on the kid, and then fetched AGAIN immediately — two round trips
-    // for identical data, and exactly the provider-hammering the comment below claims to prevent.
-    // A garbage kid arriving against a cold cache was the cheapest way to trigger it.
-    let refetched = false;
-    const cached = jwksCache.get(provider);
-    if (!cached || cached.expiresAt <= Date.now()) {
-        await fetchJwks(provider);
-        refetched = true;
-    }
-    let key = jwksCache.get(provider)?.keys.find(k => k.kid === kid);
-    if (!key && !refetched) {
-        // Unknown kid against a cache we believe is fresh means the provider rotated early.
-        // Refetch once rather than fail — but only once, so a token with a garbage kid cannot be
-        // used to make this node hammer the provider.
-        await fetchJwks(provider);
-        key = jwksCache.get(provider)?.keys.find(k => k.kid === kid);
-    }
-    if (!key) {
-        throw new SsoVerificationError(
-            `${providerConfig(provider).label} token signed by unknown key (kid=${kid})`,
-        );
-    }
-    return key;
-}
+const jwks = createJwksCache();
 
 /** Exposed for tests, which need a deterministic starting point. Omit `provider` to clear all. */
 export function _resetJwksCacheForTests(
     provider?: SsoProvider,
-    seed?: { keys: Jwk[]; expiresAt: number } | null,
+    seed?: JwksEntry | null,
 ): void {
-    if (!provider) {
-        jwksCache.clear();
-        inFlight.clear();
-        return;
-    }
-    if (seed) jwksCache.set(provider, seed); else jwksCache.delete(provider);
-    inFlight.delete(provider);
+    jwks.reset(provider, seed);
 }
 
 // ─── nonce ────────────────────────────────────────────────────────────────────────────────────
@@ -435,230 +124,50 @@ export function _clearNoncesForTests(): void {
     issuedNonces.clear();
 }
 
-/** Constant-time compare of the token's nonce against one candidate spelling of ours. */
-function nonceEquals(presented: Buffer, candidate: string): boolean {
-    const expected = Buffer.from(candidate, 'utf-8');
-    return presented.length === expected.length && crypto.timingSafeEqual(presented, expected);
-}
-
 // ─── verification ─────────────────────────────────────────────────────────────────────────────
 
-function decodeSegment(segment: string, label: string): any {
-    try {
-        return JSON.parse(Buffer.from(segment, 'base64url').toString('utf-8'));
-    } catch {
-        throw new SsoVerificationError(`${label} token is not valid JWT JSON`);
-    }
-}
+const verifier = createSignInVerifier({
+    jwks,
+    consumeNonce,
+    // Resolved at call time: engine/github-device.ts imports this file too.
+    consumeGithubSession: (sessionId, subject) => consumeGithubSession(sessionId, subject),
+});
 
 /**
- * Apple sends `email_verified` and `is_private_email` as the STRINGS "true"/"false" in some
- * flows and as real booleans in others. #218 read it with `typeof === 'boolean'`, which silently
- * dropped Apple's string form to undefined. Nothing depends on the value — email is not an
- * identifier here — but a field that is sometimes right and sometimes undefined is worse than one
- * that is simply absent, because the next person to use it will not know which they have.
- */
-function coerceBoolean(value: unknown): boolean | undefined {
-    if (typeof value === 'boolean') return value;
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return undefined;
-}
-
-/**
- * Verify a provider `id_token`.
+ * Verify a provider `id_token` (packages/beanpool-signin/src/verify.ts has what is checked, and why).
  *
- * @param provider           which provider's rules to apply. Never taken from the token — a token
- *                           is checked against the issuer the CALLER named, so a Google token
- *                           presented as an Apple one fails on the issuer rather than quietly
- *                           being filed under Apple.
+ * @param provider           which provider's rules to apply. Never taken from the token.
  * @param idToken            the raw JWT from the client
- * @param allowedAudiences   this node's configured client IDs for that provider. A node that has
- *                           none configured cannot verify anything, and says so rather than
- *                           accepting a token it cannot bind to itself.
- * @param expectedNonce      the nonce this node issued for this sign-in. Required — see the
- *                           replay note at the top of the file.
+ * @param allowedAudiences   this node's configured client IDs for that provider (getConfiguredAudiences)
+ * @param expectedNonce      the nonce this node issued for this sign-in (issueNonce). Required.
  * @param subject            the authenticated caller. The nonce must have been issued to
  *                           THEM; a nonce issued to someone else is refused even if valid.
  */
-export async function verifyIdToken(
+export function verifyIdToken(
     provider: SsoProvider,
     idToken: string,
     allowedAudiences: string[],
     expectedNonce: string,
     subject: string,
 ): Promise<SsoIdentity> {
-    // First, before any check or request: a GitHub token proves nothing (see NodeRunProviderConfig).
-    const config = oidcConfig(provider);
-    if (!subject) {
-        throw new SsoVerificationError(
-            `A ${config.label} sign-in must be verified against a known member.`,
-        );
-    }
-    if (!allowedAudiences?.length) {
-        throw new SsoVerificationError(
-            `This node has no ${config.label} client ID configured, so it cannot verify a `
-            + `${config.label} sign-in.`,
-        );
-    }
-    if (!expectedNonce) {
-        throw new SsoVerificationError(`${config.label} sign-in is missing its nonce.`);
-    }
-
-    // Length first, before split/decode/parse — see MAX_ID_TOKEN_BYTES. Byte length, not character
-    // length: a JWT is base64url so the two agree, but measuring what is actually allocated is the
-    // point of the check.
-    if (typeof idToken === 'string' && Buffer.byteLength(idToken, 'utf-8') > MAX_ID_TOKEN_BYTES) {
-        throw new SsoVerificationError(`${config.label} token is implausibly large.`);
-    }
-
-    // Facebook has no special case: its OIDC id_token takes the path below, the same as Google's
-    // and Apple's. An access token is refused as malformed, never sent to Graph — Graph answers for
-    // a token from ANY app, and only the app secret can ask which one issued it (D5).
-    const parts = idToken?.split('.');
-    if (!parts || parts.length !== 3) {
-        throw new SsoVerificationError(`${config.label} token is malformed.`);
-    }
-    const [headerB64, payloadB64, signatureB64] = parts;
-
-    const header = decodeSegment(headerB64, config.label);
-    // Pinned, not selected. The algorithm is never taken from the token — this reads it purely to
-    // refuse anything that is not RS256, which is what closes alg-confusion and `alg: none`.
-    // Both providers sign with RS256.
-    if (header.alg !== 'RS256') {
-        throw new SsoVerificationError(
-            `${config.label} token uses unexpected algorithm ${header.alg}`,
-        );
-    }
-    if (!header.kid) throw new SsoVerificationError(`${config.label} token has no key id.`);
-
-    const jwk = await getSigningKey(provider, header.kid);
-    const publicKey = crypto.createPublicKey({ key: jwk as any, format: 'jwk' });
-
-    const signed = Buffer.from(`${headerB64}.${payloadB64}`, 'utf-8');
-    const signature = Buffer.from(signatureB64, 'base64url');
-    if (!crypto.verify('RSA-SHA256', signed, publicKey, signature)) {
-        throw new SsoVerificationError(`${config.label} token signature is not valid.`);
-    }
-
-    // Everything below this line is only meaningful because the signature held.
-    const claims = decodeSegment(payloadB64, config.label);
-
-    if (!config.issuers.includes(claims.iss)) {
-        throw new SsoVerificationError(`${config.label} token has wrong issuer (${claims.iss})`);
-    }
-    if (!claims.aud || !allowedAudiences.includes(claims.aud)) {
-        throw new SsoVerificationError(
-            `${config.label} token was issued to a different application.`,
-        );
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_SECONDS < now) {
-        throw new SsoVerificationError(`${config.label} token has expired.`);
-    }
-    if (typeof claims.iat === 'number' && claims.iat - CLOCK_SKEW_SECONDS > now) {
-        throw new SsoVerificationError(`${config.label} token is dated in the future.`);
-    }
-
-    // Compared in constant time, then consumed. The comparison guards the value; the consume makes
-    // it single-use.
-    //
-    // DELIBERATE: the nonce is consumed only when it MATCHED. Review suggested consuming
-    // unconditionally so single-use holds "regardless of match result" — declined, because a
-    // mismatch means this token was not issued for this request, and burning the pending nonce on
-    // someone else's bad token turns a failed attempt into a denial of service against the person
-    // legitimately signing in.
-    //
-    // Nothing is gained by consuming early. Replay requires a token that is validly signed by the
-    // provider AND carries this exact nonce; that path consumes, and is covered by a test. An
-    // attacker cannot mint a token bearing a nonce they do not know, so unlimited failed attempts
-    // within the TTL buy them nothing. Unconsumed nonces are bounded by NONCE_TTL_MS and the sweep.
-    //
-    // This does assume the caller binds `expectedNonce` to the requesting session rather than
-    // taking it from the request body — otherwise an attacker could aim failures at someone else's
-    // pending nonce. That is a constraint on the route, and it is why this is written down here.
-    const presented = Buffer.from(String(claims.nonce ?? ''), 'utf-8');
-    let nonceMatches = nonceEquals(presented, expectedNonce);
-    if (!nonceMatches && config.nonceMayBeHashed) {
-        // See ProviderConfig.nonceMayBeHashed. Apple's native flow conventionally carries
-        // SHA-256(nonce); the digest of 32 random bytes is exactly as unguessable as the nonce.
-        nonceMatches = nonceEquals(
-            presented,
-            crypto.createHash('sha256').update(expectedNonce, 'utf-8').digest('hex'),
-        );
-    }
-    // No exception for a token that carries no nonce, Google's included. Consuming the caller's
-    // nonce proves nothing about a token that does not name it: it is bound to no request, so a
-    // node it was once shown to could replay it anywhere, under a nonce of its own.
-    if (!nonceMatches || !consumeNonce(expectedNonce, subject)) {
-        throw new SsoVerificationError(
-            `${config.label} sign-in could not be matched to this request.`,
-        );
-    }
-
-    if (!claims.sub) throw new SsoVerificationError(`${config.label} token has no subject.`);
-
-    return {
-        provider,
-        sub: String(claims.sub),
-        email: claims.email ? String(claims.email) : undefined,
-        emailVerified: coerceBoolean(claims.email_verified),
-        privateEmail: coerceBoolean(claims.is_private_email),
-        audience: String(claims.aud),
-        issuedAt: Number(claims.iat ?? 0),
-        expiresAt: Number(claims.exp),
-    };
-}
-
-/**
- * The proof a sign-in arrives with. An OIDC provider's is its `id_token`; GitHub's is the id of the
- * device-flow session this node ran (engine/github-device.ts), sent as `proof: { sessionId }`.
- */
-export interface SignInCredential {
-    idToken?: string;
-    sessionId?: string;
-}
-
-/** The credential in a deposit, collect or join body: `idToken`, or `proof: { sessionId }`. */
-export function signInCredentialFrom(body: unknown): SignInCredential {
-    const b = (body && typeof body === 'object' ? body : {}) as Record<string, any>;
-    const proof = b.proof && typeof b.proof === 'object' ? b.proof as Record<string, unknown> : {};
-    return {
-        idToken: typeof b.idToken === 'string' && b.idToken ? b.idToken : undefined,
-        sessionId: typeof proof.sessionId === 'string' && proof.sessionId ? proof.sessionId : undefined,
-    };
+    return verifier.verifyIdToken(provider, idToken, allowedAudiences, expectedNonce, subject);
 }
 
 /**
  * Verify a sign-in, whichever provider it is. The one entry point every route uses.
  *
  * OIDC providers go to verifyIdToken. GitHub spends the node's own finished device-flow session, bound
- * to `subject` and single use; it needs no nonce, because the session id is already a single-use,
- * subject-bound challenge. A GitHub `idToken` is refused before anything else runs, network included:
- * accepting a handed-in token is the hole this path exists to close, and a new app never sends one.
+ * to `subject` and single use (engine/github-device.ts); a GitHub `idToken` is refused before anything
+ * else runs, network included.
  */
-export async function verifySignIn(
+export function verifySignIn(
     provider: SsoProvider,
     credential: SignInCredential,
     allowedAudiences: string[],
     expectedNonce: string,
     subject: string,
 ): Promise<SsoIdentity> {
-    const config = providerConfig(provider);
-    if (config.kind === 'oidc') {
-        return verifyIdToken(provider, credential.idToken ?? '', allowedAudiences, expectedNonce, subject);
-    }
-    if (credential.idToken) throw new SsoVerificationError(GITHUB_TOKEN_REFUSED);
-    if (!credential.sessionId) throw new SsoVerificationError(`${config.label} sign-in is missing its session.`);
-    if (!subject) throw new SsoVerificationError(`A ${config.label} sign-in must be verified against a known member.`);
-    const identity = consumeGithubSession(credential.sessionId, subject);
-    // The session names the client id it ran under. One this node no longer accepts (an operator
-    // changed GITHUB_CLIENT_IDS mid-sign-in) is refused like a token issued to another app.
-    if (!allowedAudiences?.includes(identity.audience)) {
-        throw new SsoVerificationError(`${config.label} sign-in was run for a different application.`);
-    }
-    return identity;
+    return verifier.verifySignIn(provider, credential, allowedAudiences, expectedNonce, subject);
 }
 
 // ─── keeper lookup ────────────────────────────────────────────────────────────────────────────
@@ -699,57 +208,16 @@ export function newSsoLookupSalt(): string {
 }
 
 // ─── which client IDs this node accepts ───────────────────────────────────────────────────────
+//
+// BeanPool's own ids, and the rule that an operator's list replaces them, are in
+// packages/beanpool-signin/src/audiences.ts. This node's settings come from its env.
 
-/**
- * BeanPool's own client IDs.
- *
- * Baked in rather than required config, because the alternative is that every node operator has
- * to obtain a Google client ID and an Apple developer account before the official app can hand
- * their members a keeper fragment — and the app's token carries OUR audience regardless of which
- * node it is talking to.
- *
- * These are public values. A client ID identifies an application; it authorises nothing on its
- * own, which is the whole reason Google and Apple survived D11 while Facebook and GitHub did not.
- *
- * Android note: the ANDROID client IDs are listed for completeness but the app sends the WEB one
- * as its serverClientId, so in practice `aud` comes back as the web ID on both platforms. They are
- * accepted anyway because which ID lands in `aud` depends on SDK and configuration, and a node
- * that refuses a legitimate token from the official app is a worse failure than one that accepts
- * a token from our own Android client.
- */
-const BEANPOOL_GOOGLE_CLIENT_IDS = [
-    '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com', // Web / serverClientId
-    '653933790375-do6obrlc7h7qjvanb896mc33vvsvndth.apps.googleusercontent.com', // iOS
-    '653933790375-1j7k7rg0rhsiedpb0rqqqipv14k90vic.apps.googleusercontent.com', // Android, EAS build key
-    '653933790375-ts3j6m5s3b27q95tfhlttuucacvakr4l.apps.googleusercontent.com', // Android, Play signing key
-];
+/** Read once, when this module loads: these two only ever were. */
+const FACEBOOK_APP_ID_AT_START = process.env.FACEBOOK_APP_ID;
+const GITHUB_CLIENT_ID_AT_START = process.env.GITHUB_CLIENT_ID;
 
-/**
- * Apple has no `apps.googleusercontent.com`-style client ID. The audience is the identifier of
- * whichever Apple client issued the token:
- *
- *   native  the App ID / bundle identifier   — apps/native/app.json `ios.bundleIdentifier`
- *   web     the Services ID                  — also apple-probe.ts's APPLE_SERVICES_ID
- *
- * Both are accepted because the same member may deposit from the phone and recover from a
- * browser. That is the cross-platform case the whole design exists for, and it only works if
- * Apple returns the SAME `sub` on both — which requires the Services ID to be grouped under the
- * primary App ID, and is what #213's probe measures. Accepting both audiences is necessary for
- * that to work; it is not sufficient, and the probe is still owed.
- */
-const BEANPOOL_APPLE_BUNDLE_ID = 'org.beanpool.pillar';
-const BEANPOOL_APPLE_SERVICES_ID = 'org.beanpool.web';
-const BEANPOOL_FACEBOOK_APP_IDS = [
-    '818892721251369',
-    process.env.FACEBOOK_APP_ID?.trim() || '',
-].filter(Boolean);
-
-export const BEANPOOL_GITHUB_CLIENT_IDS = [
-    'Ov23li8mmDfBr7GyJVRU',
-    'Ov23liilgPHDo8VujObM',
-    process.env.GITHUB_CLIENT_ID?.trim() || '',
-].filter(Boolean);
-
+/** BeanPool's GitHub client ids, plus this node's `GITHUB_CLIENT_ID`. */
+export const BEANPOOL_GITHUB_CLIENT_IDS = defaultAudiences('github', { githubClientId: GITHUB_CLIENT_ID_AT_START });
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {
@@ -759,19 +227,19 @@ const CLIENT_ID_ENV: Record<SsoProvider, string> = {
     github: 'GITHUB_CLIENT_IDS',
 };
 
-/** The Apple client a browser signs in with: this node's `APPLE_SERVICES_ID`, else BeanPool's. */
-function appleServicesId(): string {
-    return process.env.APPLE_SERVICES_ID?.trim() || BEANPOOL_APPLE_SERVICES_ID;
-}
-
-function defaultAudiences(provider: SsoProvider): string[] {
-    if (provider === 'google') return [...BEANPOOL_GOOGLE_CLIENT_IDS];
-    if (provider === 'apple') {
-        return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, appleServicesId()])];
-    }
-    if (provider === 'facebook') return [...BEANPOOL_FACEBOOK_APP_IDS];
-    if (provider === 'github') return [...BEANPOOL_GITHUB_CLIENT_IDS];
-    return [];
+/** This node's audience settings, read from its env at each call (APPLE_SERVICES_ID and the *_CLIENT_IDS lists). */
+function audienceSettings(): AudienceSettings {
+    return {
+        facebookAppId: FACEBOOK_APP_ID_AT_START,
+        githubClientId: GITHUB_CLIENT_ID_AT_START,
+        appleServicesId: process.env.APPLE_SERVICES_ID,
+        replace: {
+            google: process.env[CLIENT_ID_ENV.google],
+            apple: process.env[CLIENT_ID_ENV.apple],
+            facebook: process.env[CLIENT_ID_ENV.facebook],
+            github: process.env[CLIENT_ID_ENV.github],
+        },
+    };
 }
 
 /**
@@ -781,46 +249,23 @@ function defaultAudiences(provider: SsoProvider): string[] {
  * adding to them. An operator who sets one is saying "only my application may deposit keeper
  * fragments here", and silently continuing to accept BeanPool's would defeat that. An operator
  * who wants both lists theirs alongside ours explicitly.
- *
- * Self-hosted web sign-in needs this: Google has no wildcard for JavaScript origins, so a node on
- * its own domain cannot use our Web client from a browser and needs its own. Apple is the same
- * story with a Services ID and its Return URLs. The native app is unaffected by either — its
- * clients are keyed on package/bundle ID, not domain, which is why native is the path we build
- * first for both providers.
  */
 export function getConfiguredAudiences(provider: SsoProvider): string[] {
-    providerConfig(provider);
-    const raw = process.env[CLIENT_ID_ENV[provider]];
-    if (!raw?.trim()) return defaultAudiences(provider);
-    return raw.split(',').map(s => s.trim()).filter(Boolean);
+    return configuredAudiences(provider, audienceSettings());
 }
-
-/** The providers a browser signs in with by leaving the page for the provider's own (design G11 §3). */
-export type WebSignInProvider = 'google' | 'apple' | 'facebook';
 
 /**
  * The client id a BROWSER puts in its sign-in request to `provider`, or null when this node accepts none a browser
  * can use. Answered beside every sign-in nonce (`clientIds`), so the web app learns it from the node it is on, not
  * from its build: a self-hosted node with its own ids serves web sign-in with the same web app.
  *
- *   google    the first audience this node accepts. BeanPool's list starts with its Web client; an operator who
- *             replaces the list with GOOGLE_CLIENT_IDS lists their web client first.
- *   apple     the Services ID (appleServicesId), only while this node accepts it: an APPLE_CLIENT_IDS that leaves
- *             it out gets null, never an id whose tokens this node would then refuse.
- *   facebook  the first app id this node accepts.
- *
  * GitHub has none: the node runs its sign-in itself (engine/github-device.ts).
  */
 export function webClientId(provider: WebSignInProvider): string | null {
-    const accepted = getConfiguredAudiences(provider);
-    if (provider === 'apple') {
-        const servicesId = appleServicesId();
-        return accepted.includes(servicesId) ? servicesId : null;
-    }
-    return accepted[0] ?? null;
+    return webClientIdFor(provider, audienceSettings());
 }
 
 /** `webClientId` for each provider a browser redirects to, as the nonce answers carry it. */
 export function webClientIds(): Record<WebSignInProvider, string | null> {
-    return { google: webClientId('google'), apple: webClientId('apple'), facebook: webClientId('facebook') };
+    return webClientIdsFor(audienceSettings());
 }

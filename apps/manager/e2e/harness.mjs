@@ -267,7 +267,7 @@ export const ALL_MODALS = [
     { name: 'clean-storage', screen: { tab: 'appliance', sub: 'diagnostics' }, steps: [{ in: 'main', button: /Clean Orphaned Media/ }] },
     { name: 'standby-resync', screen: { tab: 'appliance', sub: 'backups' }, steps: [{ in: 'main', button: /Force Full Resync/ }] },
     { name: 'remove-peer', screen: { tab: 'appliance', sub: 'gateway' }, steps: [{ in: 'main', button: /^Remove$/ }] },
-    { name: 'reset-tunnel', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Reset Tunnel/ }] },
+    { name: 'restart-tunnel', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Restart tunnel/ }] },
     { name: 'take-offline', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Take offline/ }] },
     { name: 'generate-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /Generate \/ rotate token/ }] },
     { name: 'takeover-explain', screen: { tab: 'appliance', sub: 'backups' }, steps: [{ in: 'main', button: /^Take over as the main server$/ }] },

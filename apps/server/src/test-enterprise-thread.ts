@@ -55,6 +55,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8631;
 const BASE = `https://localhost:${PORT}`;
@@ -517,27 +518,31 @@ async function main() {
     check(woundUpEditRes.status === 403, `Edit in a wound-up enterprise thread returns 403 (got ${woundUpEditRes.status})`);
     check(rowOf(toolMsg.id).ciphertext === toolBefore.ciphertext, 'Wound-up thread message ciphertext unchanged');
 
-    // A removed message is never editable, whatever conversation it sits in.
+    // A removed message is never editable, whatever conversation it sits in. DM lines and edits are in the
+    // encrypted form a DM takes, so each refusal below is the rule it names, not the form.
     const dmConv = createConversation('dm', [danActive.pubKeyHex, leadAlice.pubKeyHex], danActive.pubKeyHex);
-    const removedDm = sendMessage(dmConv!.id, danActive.pubKeyHex, b64('to be removed'), 'dm-nonce-0')!;
+    const toBeRemoved = lockedDm();
+    const removedDm = sendMessage(dmConv!.id, danActive.pubKeyHex, toBeRemoved.ciphertext, toBeRemoved.nonce)!;
     db.prepare("UPDATE messages SET type = 'removed' WHERE id = ?").run(removedDm.id);
     const removedDmRes = await signedFetch('POST', '/api/messages/edit', danActive, {
-        messageId: removedDm.id, ciphertext: b64('edited anyway'), nonce: 'dm-nonce-x'
+        messageId: removedDm.id, ...lockedDm()
     });
     check(removedDmRes.status === 403, `Edit of a removed message outside a thread returns 403 (got ${removedDmRes.status})`);
-    check(rowOf(removedDm.id).ciphertext === b64('to be removed'), 'Removed DM message ciphertext unchanged');
+    check(rowOf(removedDm.id).ciphertext === toBeRemoved.ciphertext, 'Removed DM message ciphertext unchanged');
 
     // Ordinary DM editing is unchanged: the author can edit within the window.
-    const dmMsg = sendMessage(dmConv!.id, danActive.pubKeyHex, b64('see you at 9'), 'dm-nonce-1')!;
+    const seeYouAt9 = lockedDm();
+    const dmMsg = sendMessage(dmConv!.id, danActive.pubKeyHex, seeYouAt9.ciphertext, seeYouAt9.nonce)!;
+    const seeYouAt10 = lockedDm();
     const dmEditRes = await signedFetch('POST', '/api/messages/edit', danActive, {
-        messageId: dmMsg.id, ciphertext: b64('see you at 10'), nonce: 'dm-nonce-2'
+        messageId: dmMsg.id, ...seeYouAt10
     });
     check(dmEditRes.status === 200 && dmEditRes.body?.success === true, `Ordinary DM edit returns 200 (got ${dmEditRes.status})`);
     const dmAfter = rowOf(dmMsg.id);
-    check(dmAfter.ciphertext === b64('see you at 10') && dmAfter.nonce === 'dm-nonce-2', 'DM edit stored the new ciphertext and nonce');
+    check(dmAfter.ciphertext === seeYouAt10.ciphertext && dmAfter.nonce === seeYouAt10.nonce, 'DM edit stored the new ciphertext and nonce');
     check(!!dmAfter.edited_at, 'DM edit sets edited_at');
     const dmOtherRes = await signedFetch('POST', '/api/messages/edit', leadAlice, {
-        messageId: dmMsg.id, ciphertext: b64('hijacked'), nonce: 'dm-nonce-3'
+        messageId: dmMsg.id, ...lockedDm()
     });
     check(dmOtherRes.status === 400, `Non-author DM edit still returns 400 (got ${dmOtherRes.status})`);
 

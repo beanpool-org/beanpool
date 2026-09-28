@@ -44,7 +44,8 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
     if [ -n "$CHANGED_FILES" ]; then
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-core/" || HAS_CORE_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-engine/" || HAS_ENGINE_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^apps/server/" || HAS_SERVER_CHANGES=0
+      # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them.
+      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/" || HAS_SERVER_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^apps/native/" || HAS_NATIVE_CHANGES=0
     fi
   fi
@@ -167,6 +168,12 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # booted on a stale backup's community.key — silently, because both moves were `|| true`. Pure
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
+
+# deploy.sh used to hand every server the fleet secrets: a Cloudflare token for the whole beanpool.org zone, the one admin
+# password all our servers shared, and the fleet tunnel token in data/tunnel-token (sensitive-data report A8, 2026-09-28).
+# This reads deploy.sh, runs it against a stubbed server with sentinel values in its .env, and fails if any of them would
+# reach a server. Pure shell against a temp dir; no server is contacted.
+run_check "deploy_no_fleet_secrets" bash scripts/test-deploy-no-fleet-secrets.sh
 
 # deploy.sh called a crash-looping node "✅ deployed" and let tagged images fill qld's disk (2026-09-19).
 # Its health wait and disk preflight live in scripts/deploy-lib.sh; this runs them against a URL nothing
@@ -368,16 +375,20 @@ run_federation_suites() {
       test-open-join-failover
       test-standby-visitor-marks
       test-standby-owner-deleted
+      test-delete-scrubs-posts
       test-standby-board-standing
       test-place-watch-failover
       test-standby-rekey
       test-takeover-parity
       test-replication-manifest
       test-standby-ledger-copy
+      test-standby-ledger-gate
       test-standby-community-settings
       test-standby-listings-verbatim
       test-standby-standing
       test-standby-health
+      test-address-retention
+      test-standby-in-flight
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed
@@ -417,6 +428,8 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-tunnel-connector
+      test-no-docker-socket
       test-node-config-public
       test-registrar-contract
       test-invite-trampoline
@@ -517,6 +530,7 @@ run_federation_suites() {
       test-groups-sync-and-removal
       test-groups-chat
       test-chat-parity
+      test-dm-never-plaintext
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession

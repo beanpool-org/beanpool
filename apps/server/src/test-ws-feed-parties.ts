@@ -25,6 +25,7 @@ delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -96,11 +97,14 @@ async function main() {
     // ── 1. A DM between A and B ──
     console.log('— a DM —');
     const conv = se.createConversation('dm', [A.pubKeyHex, B.pubKeyHex], A.pubKeyHex)!;
-    const CT = 'dm-ct-' + crypto.randomBytes(4).toString('hex');
-    const msg = se.sendMessage(conv.id, A.pubKeyHex, CT, 'nonce-1')!;
+    // A DM line and its edit are in the encrypted form; each random ciphertext is the marker the checks look for.
+    const sent = lockedDm();
+    const CT = sent.ciphertext;
+    const msg = se.sendMessage(conv.id, A.pubKeyHex, CT, sent.nonce)!;
     se.toggleMessageReaction(msg.id, B.pubKeyHex, '👍');
-    const CT2 = 'dm-ct-edited-' + crypto.randomBytes(4).toString('hex');
-    se.editMessage(msg.id, A.pubKeyHex, CT2, 'nonce-2');
+    const edit = lockedDm();
+    const CT2 = edit.ciphertext;
+    se.editMessage(msg.id, A.pubKeyHex, CT2, edit.nonce);
     await sleep(300);
     const DM_TYPES = ['conversation_created', 'new_message', 'message_reaction', 'message_edited'];
     for (const [name, s] of [['A', aWs], ['B', bWs]] as const) {

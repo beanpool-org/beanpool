@@ -7,8 +7,40 @@
  * unchanged and logger.ts still re-exports it, so every existing caller and its test are untouched.
  */
 
+import net from 'node:net';
+
 /**
- * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics).
+ * Internet addresses. A candidate is kept only when node:net reads it as an address, so a time (10:22:33), a MAC
+ * address, `std::` or a version number (v1.2.3.4) is left alone. A trailing full stop ends an address ("from
+ * 203.0.113.7."); a dot followed by a digit does not. An IPv6 one starts where a word does, or just after a label's
+ * colon: main's limiters logged their key, `ip:2001:db8::1`.
+ */
+const IPV6_CANDIDATE = /(?:(?<![0-9A-Za-z:.])|(?<=[A-Za-z]:))(?:[0-9A-Fa-f]{0,4}:){2,7}(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9A-Fa-f]{0,4})(?:%[0-9A-Za-z_-]+)?(?![0-9A-Za-z:]|\.\d)/g;
+const IPV4_CANDIDATE = /(?<![0-9A-Za-z.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g;
+
+/**
+ * Loopback and unspecified addresses name no one, and an operator needs them in config warnings ("the bare ::1 is
+ * left out"), so they stay. Every spelling counts: 0:0:0:0:0:0:0:1, ::ffff:127.0.0.1 and ::ffff:7f00:1 too.
+ */
+const NAMES_NO_ONE = new net.BlockList();
+NAMES_NO_ONE.addSubnet('127.0.0.0', 8, 'ipv4');
+NAMES_NO_ONE.addAddress('0.0.0.0', 'ipv4');
+NAMES_NO_ONE.addAddress('::1', 'ipv6');
+NAMES_NO_ONE.addAddress('::', 'ipv6');
+NAMES_NO_ONE.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
+/** `text` with every internet address in it replaced, IPv6 first (its dotted IPv4 tail too), then IPv4. */
+export function redactAddresses(text: string): string {
+    return text
+        .replace(IPV6_CANDIDATE, (m) => {
+            const address = m.split('%')[0];
+            return /[0-9a-f]/i.test(m) && net.isIPv6(address) && !NAMES_NO_ONE.check(address, 'ipv6') ? '[REDACTED_ADDRESS]' : m;
+        })
+        .replace(IPV4_CANDIDATE, (m) => (net.isIPv4(m) && !NAMES_NO_ONE.check(m, 'ipv4') ? '[REDACTED_ADDRESS]' : m));
+}
+
+/**
+ * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics, internet addresses).
  */
 export function sanitizeMessage(msg: string): string {
     if (!msg) return '';
@@ -27,6 +59,11 @@ export function sanitizeMessage(msg: string): string {
     // 4. Standalone Hex seed strings / keys (64 or 128 hex chars)
     sanitized = sanitized.replace(/\b[0-9a-fA-F]{64}\b/gi, '[REDACTED_HEX_KEY_64]');
     sanitized = sanitized.replace(/\b[0-9a-fA-F]{128}\b/gi, '[REDACTED_HEX_KEY_128]');
+
+    // 5. Internet addresses. A community server's logs never record one: a line that has to tell sources apart names
+    // them by a daily keyed hash (log-address.ts). This is the net for any text that reaches a log with an address in
+    // it anyway, an error message included.
+    sanitized = redactAddresses(sanitized);
 
     return sanitized;
 }

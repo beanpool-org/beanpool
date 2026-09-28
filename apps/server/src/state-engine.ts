@@ -16,7 +16,7 @@ import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -2930,6 +2930,18 @@ function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): n
     return Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
 }
 
+/**
+ * A keeper's pledge makes its enterprise's credit floor (engine trust.ts), so a standby writes none of its own, as it makes
+ * no Bean move (config/node-role.ts assertLedgerWritable, director 2026-09-28): its pledges are its main server's, which
+ * its import alone writes (engine/sync.ts mergeEnterprisePledges). Every pledge writer calls this before it writes: a pledge,
+ * its release (whole, or partial with the rest pledged again under a new id), a keeper's binding with a pledge and an
+ * unbinding that settles one; the wind-up's release is inside conservingTransaction, which refuses first. The routes that
+ * only write a pledge answer the same refusal before their handler runs (routes/standby-ledger-gate.ts).
+ */
+function assertPledgeWritable(): void {
+    assertLedgerWritable();
+}
+
 function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number {
     const row = db.prepare(
         "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
@@ -2944,6 +2956,10 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
  * Otherwise: the part of the pledge the deficit still needs stays locked, the rest is released (Rule 3).
  */
 function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
+    // Their pledge is settled below, a write of the enterprise's credit floor: never on a standby (assertPledgeWritable),
+    // and refused before the binding goes, so the caller's transaction writes nothing.
+    const keeperPledge = activePledgeTotal(treasuryPubkey, memberPubkey);
+    if (keeperPledge > 0) assertPledgeWritable();
     const unbound = db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .run(treasuryPubkey, memberPubkey);
     if (unbound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
@@ -2951,7 +2967,6 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
         .get(memberPubkey) as any;
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
 
-    const keeperPledge = activePledgeTotal(treasuryPubkey, memberPubkey);
     if (keeperPledge > 0) {
         const deficit = Math.max(0, -getBalance(treasuryPubkey).balance);
         const otherAllowance = allowanceWithoutKeeper(treasuryPubkey, memberPubkey);
@@ -3120,6 +3135,7 @@ export function pledgeEnterpriseBacking(
     keeperPubkey: string,
     amount: number
 ): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
+    assertPledgeWritable();
     const res = db.transaction(() => {
         const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
         if (!t?.is_treasury) throw new Error('Not an enterprise');
@@ -3201,6 +3217,7 @@ export function releaseEnterpriseBacking(
     keeperPubkey: string,
     amountToRelease?: number
 ): { releasedAmount: number; remainingPledge: number } {
+    assertPledgeWritable();
     const res = db.transaction(() => {
         const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
         if (!t?.is_treasury) throw new Error('Not an enterprise');
@@ -3477,6 +3494,8 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
 }
 
 function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pledged: number, grantedBy: string): void {
+    // With a pledge, never on a standby, and before the binding is written (assertPledgeWritable).
+    if (pledged > 0) assertPledgeWritable();
     // The operator switch is raised only for a first binding. For anyone who already keeps an
     // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
     const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(memberPubkey);
@@ -5692,12 +5711,12 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
+ * which recovery copies and which keepers' pledges the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
  * copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
  */
 export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum })
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
@@ -6629,6 +6648,7 @@ export function createTreasury(
     const purpose = opts.purpose || '';
     const lifecycle = opts.lifecycle || 'ongoing';
     const goalAmount = opts.goalAmount != null ? Number(opts.goalAmount) : null;
+    if (!isAcceptableGoal(goalAmount)) throw new Error(GOAL_AMOUNT_ERROR);
     const deadlineAt = opts.deadlineAt || null;
     const paused = opts.paused ? 1 : 0;
 
@@ -7703,7 +7723,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
  * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
  */
-export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean } = {}): void {
+export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
     const tables = [
         'members', 'posts', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
@@ -7713,6 +7733,9 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
         // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
         // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
         ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
+        // Only when the incoming copy carries the members' preferences, keepers and pledges (`opts.standing`, engine/sync.ts
+        // importRemoteState): from a main server that predates them, this node's are the only ones it has.
+        ...(opts.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
@@ -7945,6 +7968,9 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
                 if (key === 'eventReminderOffsets') continue;
                 stmt.run(publicKey, key, String(value));
             }
+            // A preference is on no column of the member's row, so the row is stamped here, as setHolidayMode does: delta
+            // sync carries a member's preferences with their row, to a standby (engine sync.ts exportSyncState).
+            db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
             if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();

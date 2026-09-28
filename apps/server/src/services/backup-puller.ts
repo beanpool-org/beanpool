@@ -49,7 +49,7 @@ import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
-import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, heldLedgerSum, clearForResync } from '../engine/sync.js';
+import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, heldLedgerSum, clearForResync, valueLeftOutName, type ValueLeftOut } from '../engine/sync.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -180,6 +180,7 @@ function summarize(r: ImportResult): string {
     if (r.newMessages) parts.push(`msgs+${r.newMessages}`);
     if (r.tombstonesApplied) parts.push(`deletes-${r.tombstonesApplied}`);
     if (r.conflictsSkipped) parts.push(`skipped:${r.conflictsSkipped}`);
+    if (r.valuesLeftOut?.length) parts.push(`values left out:${r.valuesLeftOut.length}`);
     return parts.length === 0 ? 'no changes' : parts.join(', ');
 }
 
@@ -318,7 +319,11 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // deletes a row). One from a main server older than that sends none, and this standby keeps its own. With the
             // clear, in its transaction, what the copy is held to: nothing for a seed, and the ledger's total now for the
             // resync after a copy that didn't match.
-            heldToSum = clearForResync(seed, () => clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) }));
+            // And the members' preferences, keepers and pledges, when this copy carries them (every copy of a main server
+            // that sends its keepers does, the whole set).
+            heldToSum = clearForResync(seed, () => clearReplicatedTables(keepPhotos, {
+                invalidatedKeys: Array.isArray(payload.invalidatedKeys), standing: Array.isArray(payload.treasuryOperators),
+            }));
             // The format re-seed is used up once a resync has cleared, and not before: one whose fetch failed is asked for
             // again on the next tick. One whose import fails is used up all the same, so a failing import can't clear this
             // standby on every tick; its next pull, a whole copy onto a standby with no copy it landed, is a seed anyway.
@@ -400,7 +405,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // Verify the replica matches what the primary sent. Never let a
             // consistency-check error mask an otherwise-successful pull.
             try {
-                checkWholeCopy(payload);
+                checkWholeCopy(payload, result.valuesLeftOut);
             } catch (e: any) {
                 logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
             }
@@ -443,10 +448,21 @@ function recordQuietly(write: () => void): void {
  * recorded in node_config `replica_ledger_mismatch`. That force-resync is not a seed: a main server can send a copy that
  * fails this check, so its import is held to the total this standby's ledger had before its clear (ResyncKind). An entry
  * of the copy with no key this server can store or no number for a balance is recorded and asks for none: a force-resync
- * would read the same entry. Exported so a suite can run it on a copy it fetched.
+ * would read the same entry.
+ * `valuesLeftOut`: the values of this copy's members rows the import left out because this standby's table refuses them
+ * (engine/sync.ts writeMemberStanding): any makes the copy not exact (recorded as `members` differing), and is logged,
+ * but asks for no force-resync (one would leave the same values out); the main servers' own boot clean-up (db.ts)
+ * brings such rows into the table's rules, and the next whole copy is exact again. The members table's content is
+ * compared with those values read as the copy names them, so it differs only where the import copied a row other than
+ * verbatim, which a force-resync mends.
+ * Exported so a suite can run it on a copy it fetched.
  */
-export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
+export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly ValueLeftOut[] = []): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
+    if (valuesLeftOut.length > 0) {
+        c.valuesLeftOut = { count: valuesLeftOut.length, examples: valuesLeftOut.slice(0, 5).map(valueLeftOutName) };
+        c.ok = false;
+    }
     lastConsistency = c;
     // Each table's content, when the main server sent its hashes with this copy (it sends none with one written to while
     // it was being made). The listing photos the main server could not read from its own storage are not in the copy,
@@ -454,7 +470,20 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     // too, and never read as a copy gone wrong that a force-resync would mend (review 4118340860).
     const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
     const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
-    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut }) : null;
+    // The members values the import left out, as the copy names them: the main server's hash has them, this standby's row
+    // can't, and they are reported on their own (valuesLeftOut above), never as a difference a force-resync would mend.
+    const membersLeftOut = new Map<string, Record<string, unknown>>();
+    if (valuesLeftOut.length > 0) {
+        const standingOf = new Map((Array.isArray(payload.members) ? payload.members : []).map((m) => [m?.publicKey, m?.standing]));
+        for (const v of valuesLeftOut) {
+            const standing = standingOf.get(v.publicKey);
+            if (!standing || typeof standing !== 'object' || !Object.hasOwn(standing, v.column)) continue;
+            const cells = membersLeftOut.get(v.publicKey) ?? {};
+            cells[v.column] = standing[v.column];
+            membersLeftOut.set(v.publicKey, cells);
+        }
+    }
+    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut, membersLeftOut }) : null;
     // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
     // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
     // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it
@@ -479,6 +508,9 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     if (ledgerDiffering > 0) differs.add(LEDGER_DIFFERS.ledger);
     // Everything in it is something a force-resync can mend.
     const wrong = differs.size > 0;
+    // Values of this copy's members rows this standby's table refuses, left out by the import (#1276): the copy isn't the
+    // main server's, so never exact, but no force-resync mends it (one would leave the same values out): after `wrong`.
+    if (c.valuesLeftOut) differs.add('members');
     // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
     // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
     // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
@@ -490,6 +522,7 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
         for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
+        if (c.valuesLeftOut) bad.push(`${c.valuesLeftOut.count} members value(s) this server's table refuses, left out (${c.valuesLeftOut.examples.join(', ')})`);
         logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
     }
     const now = Date.now();

@@ -55,9 +55,10 @@
  *     own account (the review's sequence, 4117546944), a send, a trade's approval and a new request, and a payment from
  *     the Commons are each refused, by its routes (409 standby) and by its engine under them, with nothing written: its
  *     rows still sum to its main server's, and so after a read that applies demurrage, two moves and its own flush. Every
- *     route that moves Beans or steps a trade answers the same; a read still answers. Its next copy lands. The same moves
- *     on the main server work, and the copy carrying them lands with no trade of the standby's own (before, the delete
- *     left the standby's rows 2,102.34 Beans over its main server's and every copy after it was refused).
+ *     route that moves Beans or steps a trade, or pledges or releases a keeper's backing, answers the same; a read still
+ *     answers. Its next copy lands. The same moves on the main server work, and the copy carrying them lands with no trade
+ *     of the standby's own (before, the delete left the standby's rows 2,102.34 Beans over its main server's and every
+ *     copy after it was refused).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -365,7 +366,7 @@ function newId(name: string): Id {
 interface Answer { status: number; body: any }
 
 /** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -1129,11 +1130,20 @@ async function main(): Promise<void> {
             [yan2, '/api/federation/purchase'], ['admin', `/api/local/admin/posts/${figs.id}/delete`], ['admin', '/api/local/admin/disputes/x/resolve'],
             ['admin', `/api/local/admin/branches/${zed.pk}/prune`], ['admin', '/api/local/admin/reports/x/action'],
             ['admin', '/api/local/admin/decisions/x/halt'], ['admin', '/api/local/admin/decisions/x/accelerate'],
+            // A keeper's backing pledged or released, by every alias: a pledge makes an enterprise's credit floor (#1276 review
+            // 4118882837).
+            [yan2, `/api/treasury/${gwen0.pk}/backing`], [yan2, `/api/enterprise/${gwen0.pk}/backing`],
+            [yan2, `/api/treasury/${gwen0.pk}/release`], [yan2, `/api/enterprise/${gwen0.pk}/release`],
+            [yan2, `/api/treasury/${gwen0.pk}/pledge/release`], [yan2, `/api/enterprise/${gwen0.pk}/backing/release`],
         ];
         const notRefused: string[] = [];
         for (const [who, route] of moneyRoutes) {
             const r = who === 'admin' ? await api(f, 'POST', route, { admin: PW_STANDBY, body: {} }) : await F_(who, route, {});
             if (!standbyRefusal(r)) notRefused.push(`${route} ${brief(r)}`);
+        }
+        for (const route of [`/api/treasury/${gwen0.pk}/pledge`, `/api/enterprise/${gwen0.pk}/backing`]) {
+            const r = await api(f, 'DELETE', route, { as: yan2, body: {} });
+            if (!standbyRefusal(r)) notRefused.push(`DELETE ${route} ${brief(r)}`);
         }
         assert(notRefused.length === 0, `every route that moves Beans or steps a trade answers 409 standby on S0 (${notRefused.length} did not: ${notRefused.join(' | ') || 'none'})`);
         const read17 = await api(f, 'GET', `/api/ledger/balance/${yan2.pk}`, { as: yan2 });

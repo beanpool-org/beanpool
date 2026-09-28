@@ -31,6 +31,8 @@ export interface AuditSyncPayload {
     moderationNotices?: any[];
     memberBlocks?: any[];
     invalidatedKeys?: any[];
+    treasuryOperators?: unknown[];
+    enterprisePledges?: unknown[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -49,6 +51,12 @@ export interface ReplicaConsistency {
      * no account: an empty set, or one whose every entry has no key it can store.
      */
     ledger: { compared: number; differing: number; unreadable: number; examples: string[]; match: boolean } | null;
+    /**
+     * Set by the standby's whole-copy check (apps/server services/backup-puller.ts checkWholeCopy), not here: the values of
+     * the copy's members rows its own table's rules refuse (a goal below 0 from a main server whose column has no CHECK),
+     * which its import left out (`<member key>.<column>`, the first few in `examples`). Any makes the copy not exact.
+     */
+    valuesLeftOut?: { count: number; examples: string[] } | null;
     ok: boolean;
 }
 
@@ -234,6 +242,28 @@ export function computeWashSybilMetrics(db: Db): { totalNegative: number; accoun
     return { totalNegative, accountsNearFloor, delinquentCount, cohortAnomalies };
 }
 
+/** A member's preferences as the copy carries them (`preferences`, an object), or undefined. */
+function preferencesOf(member: unknown): Record<string, unknown> | undefined {
+    const prefs = (member as { preferences?: unknown } | null)?.preferences;
+    return isPreferenceMap(prefs) ? prefs : undefined;
+}
+
+/** A copy whose members carry their preferences: every one does, from a main server that sends them. */
+function membersCarryPreferences(members: unknown): boolean {
+    return Array.isArray(members) && members.some((m) => preferencesOf(m) !== undefined);
+}
+
+function isPreferenceMap(v: unknown): v is Record<string, unknown> {
+    return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** The preference rows the copy's members name, one per key. */
+function preferenceCount(members: readonly unknown[]): number {
+    let n = 0;
+    for (const m of members) n += Object.keys(preferencesOf(m) ?? {}).length;
+    return n;
+}
+
 /**
  * Replica-fidelity check (backup side).
  * Compares the primary's sync payload statistics against local DB rows.
@@ -284,6 +314,14 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // The keys the main server replaced. A key the replica lost is a lost phone's key let back in after a take-over.
         // Only when the copy carries them: a main server that predates them sends none, and its standby keeps its own.
         ...(Array.isArray(payload.invalidatedKeys) ? [['invalidated_keys', payload.invalidatedKeys.length] as [string, number]] : []),
+        // Who keeps each enterprise, and the keepers' pledges, which make its credit floor (design G2c). A pledge the replica
+        // holds and the main server doesn't is an enterprise that could run deeper into debt after a take-over than its
+        // keepers ever backed. Only when the copy carries them: a main server that predates them sends neither.
+        ...(Array.isArray(payload.treasuryOperators) ? [['treasury_operators', payload.treasuryOperators.length] as [string, number]] : []),
+        ...(Array.isArray(payload.enterprisePledges) ? [['enterprise_pledges', payload.enterprisePledges.length] as [string, number]] : []),
+        // Each member's preferences, which travel with their row (design G2b): holiday, notification opt-outs. Only when the
+        // copy carries them.
+        ...(membersCarryPreferences(payload.members) ? [['member_preferences', preferenceCount(payload.members ?? [])] as [string, number]] : []),
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

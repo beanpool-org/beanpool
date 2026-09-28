@@ -66,9 +66,9 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * its lines. Where a difference has more than one cause (a behaviour read), `gap` names each: a fix PR takes its id out,
  * and the last one deletes the line, which the suite then requires.
  *
- * G0 (the ledger), G1 (listings another community's), G5 (the community's own settings) and G9 (a new standby's first
- * pull, which this suite found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any
- * of them is new.
+ * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
+ * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this suite
+ * found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any of them is new.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
@@ -76,54 +76,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:conversations.name', gap: 'G1b', why: "a renamed group's chat keeps its old name until a whole copy (a rename moves no stamp; a delta picks conversations by created_at)" },
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
-
-    // G2a: the members row's other columns.
-    { key: 'db:members.is_treasury', gap: 'G2a', why: 'every enterprise is a plain member' },
-    { key: 'db:members.paused', gap: 'G2a', why: "a paused enterprise's listings come back" },
-    { key: 'db:members.paused_at', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.paused_by', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.paused_floor_snapshot', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.wind_up_initiated_at', gap: 'G2a', why: 'a winding-up enterprise is not winding up' },
-    { key: 'db:members.wind_up_initiated_by', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.purpose', gap: 'G2a', why: "an enterprise's purpose reads as none" },
-    { key: 'db:members.lifecycle', gap: 'G2a', why: "a project's bounded lifecycle reads as ongoing" },
-    { key: 'db:members.goal_amount', gap: 'G2a', why: "a project's goal reads as none (before G1b's fix the standby's boot migrated the project again, which wrote it back)" },
-    { key: 'db:members.lat', gap: 'G2a', why: "an enterprise's map pin disappears" },
-    { key: 'db:members.lng', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.location_auth_signer', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.location_updated_at', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.auth_signer', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.can_vouch', gap: 'G2a', why: "an appointed voucher can't vouch" },
-    { key: 'db:members.vouch_credit', gap: 'G2a', why: 'a vouched member drops to no vouch floor' },
-    { key: 'db:members.credit_frozen', gap: 'G2a', why: 'a frozen member is unfrozen' },
-    { key: 'db:members.earned_credit', gap: 'G2a', why: 'granted credit (an Elder) is lost' },
-    { key: 'db:members.can_operate', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.profile_updated_at', gap: 'G2a', why: 'not copied' },
-    { key: 'db:members.elder_vouched_by', gap: 'G2a', why: 'a withdrawn vouch stays on the standby (the import keeps the first voucher it copied), and with it the vouch floor' },
-    { key: 'db:members.avatar_url', gap: 'G2a', why: "an enterprise's empty avatar is copied as null (the row is not copied verbatim)" },
-    { key: 'db:members.bio', gap: 'G2a', why: 'a cleared bio is copied as null' },
-    { key: 'db:members.archetype', gap: 'G2a', why: 'an empty archetype is copied as null' },
-    { key: 'db:members.updated_at', gap: 'G2a', why: "members rows restamped with the standby's clock (its own writes for the standing it lacks)" },
-    { key: 'db:members.callsign', gap: 'G2a', why: "the copied BeanPool is no enterprise there, so the standby's boot renames it and makes its own" },
-    { key: 'db:members rows extra', gap: 'G2a', why: "the standby's own BeanPool enterprise" },
-    { key: 'db:accounts rows extra', gap: 'G2a', why: "that BeanPool's account" },
-    { key: 'db:conversations rows extra', gap: 'G2a', why: "its enterprise thread" },
-    { key: 'db:creator_channels.owner_pubkey', gap: 'G2a', why: "the curated learn channel moves to the standby's own BeanPool" },
-    { key: 'db:pulse_items.owner_pubkey', gap: 'G2a', why: 'and its items' },
-    { key: "http:the enterprise's page", gap: 'G2a', why: '404 "Not a treasury"' },
-    { key: 'http:a vouch by the voucher', gap: 'G2a', why: '"Only appointed vouchers can vouch for members"' },
-    { key: "http:a frozen member's poll", gap: 'G2a', why: 'a frozen member can post a poll' },
-    { key: 'http:a keeper posts for the enterprise', gap: 'G2a, G2c', why: '404 "Not a treasury" where the main server says the enterprise is paused' },
-    { key: 'http:approve the pending request', gap: 'G2a', why: 'the buyer is an Elder whose granted credit is lost: "Buyer has insufficient balance to cover escrow" (before G1\'s fix, "belongs to another community")' },
-    { key: 'http:every balance', gap: 'G2a', why: "floors and tiers from granted credit and vouches lost (an Elder in debt is frozen below a floor of 0), and a withdrawn vouch's floor back" },
-
-    // G2b: member_preferences.
-    { key: 'db:member_preferences (not copied)', gap: 'G2b', why: 'holiday and notification opt-outs are forgotten' },
-    { key: "http:request a holiday member's listing", gap: 'G2b', why: 'the promoted server lets it through where the main server says the member is away' },
-
-    // G2c: keepers and pledges.
-    { key: 'db:treasury_operators (not copied)', gap: 'G2c', why: 'no keeper can act for any enterprise' },
-    { key: 'db:enterprise_pledges (not copied)', gap: 'G2c', why: "keepers' pledges vanish" },
 
     // G3: in-flight money and governance.
     { key: 'db:deferred_wage_claims (not copied)', gap: 'G3', why: "a keeper's unpaid wage vanishes" },
@@ -133,23 +85,15 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:rekey_requests (not copied)', gap: 'G3', why: 'an unused re-key code is refused' },
     { key: 'http:redeem the unused invite', gap: 'G3', why: '"Invalid invite code"' },
     { key: 'http:the Decision sweep, eight days on', gap: 'G3', why: 'the removal never completes and the open Decision never closes' },
+    { key: "http:the enterprise's page", gap: 'G3', why: "a keeper's unpaid wage is not on it (before G2's fix, 404 \"Not a treasury\")" },
 
     // G4: members' devices and conveniences.
     { key: 'db:push_tokens (not copied)', gap: 'G4', why: 'no push reaches anyone' },
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
     { key: 'db:activity_feed (not copied)', gap: 'G4', why: 'the activity waterfall starts empty' },
     { key: 'db:pricing_guide_items (not copied)', gap: 'G4', why: 'each server seeds its own guide at its first boot' },
-    { key: 'http:the pricing guide', gap: 'G4, G2a, G2b', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices (G4); a paused enterprise's and a holiday member's listings count as active there (G2a, G2b)" },
-    { key: 'http:a push of each category', gap: 'G4, G2b', why: 'no phone to push to (G4); behind it, a notification opt-out is forgotten (G2b)' },
-
-    { key: 'http:the community, as the directory and apps see it', gap: 'G2a', why: 'one more member, its own BeanPool' },
-
-    // Reads that several gaps change at once.
-    { key: 'http:the board, as a guest', gap: 'G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, authors' standing lost" },
-    { key: 'http:the board, as a member', gap: 'G2a, G2b', why: 'as the guest board' },
-    { key: 'http:the board, as a keeper', gap: 'G2a, G2b', why: 'as the guest board' },
-    { key: "http:a phone's full sync", gap: 'G2a, G2b', why: "a paused enterprise's and a holiday member's listings active, authors' standing lost" },
-    { key: "http:a phone's delta from before the take-over", gap: 'G2a', why: "each listing changed since has its author's standing lost" },
+    { key: 'http:the pricing guide', gap: 'G4', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices" },
+    { key: 'http:a push of each category', gap: 'G4', why: 'no phone to push to' },
 ];
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────

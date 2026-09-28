@@ -634,12 +634,13 @@ async function run() {
         const back = db.prepare('SELECT joined_at, last_active_at FROM members WHERE public_key = ?').get(restored) as any;
         assert(back?.joined_at === '2026-01-02T03:04:05.678Z', `a restored member keeps their joined_at (got ${back?.joined_at})`);
         assert(!!back?.last_active_at, 'and their last activity');
-        // The update path (a newer copy of an existing row) never rewrites joined_at: change it locally, make the
-        // local row older than the snapshot's, re-import — the snapshot's joinedAt does not overwrite it.
+        // The update path (a newer copy of an existing row) writes the main server's joined_at, whatever the standby had
+        // (#1276: a standby's members rows are the main server's, verbatim, and only its pinned mirror's signed copy reaches
+        // this import): change it locally, make the local row older than the snapshot's, re-import — the copy's wins.
         db.prepare("UPDATE members SET joined_at = '2025-05-05T05:05:05.000Z', updated_at = '2000-01-01T00:00:00.000Z' WHERE public_key = ?").run(restored);
         await importRemoteState(snapshot);
         const afterUpdate = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(restored) as any;
-        assert(afterUpdate?.joined_at === '2025-05-05T05:05:05.000Z', `the update path never rewrites joined_at (got ${afterUpdate?.joined_at})`);
+        assert(afterUpdate?.joined_at === '2026-01-02T03:04:05.678Z', `the update path writes the main server's joined_at, not the standby's own (got ${afterUpdate?.joined_at})`);
         db.prepare("UPDATE members SET joined_at = '2026-01-02T03:04:05.678Z' WHERE public_key = ?").run(restored);
         const restoredDecision = createDecision({ authorPubkey: voters[0], title: 'Freeze after restore', description: 'Restored member votes', touches: 'member', effect: 'freeze_credit', subject: troll2 });
         assert(castDecisionVote(restoredDecision.id, restored, true).success, 'the restored member can vote (joined before it opened)');

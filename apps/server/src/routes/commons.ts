@@ -21,6 +21,7 @@ import {
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
     isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, isMemberActive, INACTIVE_MEMBER_CREATE_ERROR,
+    isAcceptableGoal, GOAL_AMOUNT_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -315,6 +316,11 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     if (respondIfMuted(ctx, actor)) return;
+    if (!isAcceptableGoal(Number(goalAmount))) {
+        ctx.status = 400;
+        ctx.body = { error: GOAL_AMOUNT_ERROR };
+        return;
+    }
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });

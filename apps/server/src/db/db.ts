@@ -9,6 +9,7 @@ import { isSelfAvatarUrl } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { createTableText, checkRules } from './table-rules.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -307,6 +308,46 @@ function backfillBoardStanding(): void {
         // Nothing is filled and the marker isn't written, so the next boot tries again. Until then the delta carries no
         // author for their standing, and their listings reach a phone only when they change themselves.
         console.error('[DB] ❌ Could not fill board standing:', e);
+    }
+}
+
+/** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
+const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
+
+/**
+ * Brings this node's members rows into the rules a fresh install's table has (schema.sql's CHECKs on members, read from its
+ * text, db/table-rules.ts), once: the first boot with this pass (node_config `migration_members_schema_rules_v1`, written
+ * in the same transaction). A node whose members table predates a column got it from an ALTER above with no CHECK
+ * (`goal_amount`, `lifecycle`, `paused`: Slice 3's), so its rows can hold what a fresh table refuses: a goal below 0 was
+ * accepted by `POST /api/treasury` until it refused one. Such a value is set to the column's default (a goal to none,
+ * `lifecycle` to 'ongoing', `paused` to 0), as a new row would hold it; a rule over several columns (the pin's latitude
+ * and longitude) sets each it names. The touch triggers stamp each changed row, so a delta takes it to a standby, whose
+ * table refuses the old value (engine/sync.ts writeMemberStanding leaves it out and the whole-copy check reports it).
+ * A fresh install changes nothing and writes the marker. Never on a standby: its rows are its main server's, which its
+ * import alone writes; it writes no marker either, so once promoted it runs this at its first boot as the main server.
+ */
+function bringMembersToSchemaRules(schemaSql: string): void {
+    try {
+        if (getNodeRole() === 'backup') return;
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(MEMBERS_SCHEMA_RULES)) return;
+        const fresh = createTableText(schemaSql, 'members');
+        if (!fresh) throw new Error('schema.sql declares no members table');
+        const info = db.prepare('SELECT name, dflt_value FROM pragma_table_info(?)').all('members') as { name: string; dflt_value: string | null }[];
+        const defaults = new Map(info.map((c) => [c.name, c.dflt_value ?? 'NULL']));
+        const rules = checkRules(fresh, info.map((c) => c.name));
+        const changed: string[] = [];
+        db.transaction(() => {
+            for (const rule of rules) {
+                const set = rule.columns.map((c) => `"${c}" = ${defaults.get(c)}`).join(', ');
+                const n = db.prepare(`UPDATE members SET ${set} WHERE CAST((${rule.expr}) AS NUMERIC) = 0`).run().changes;
+                if (n > 0) changed.push(`${n} × ${rule.columns.join('/')}`);
+            }
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(MEMBERS_SCHEMA_RULES);
+        })();
+        if (changed.length > 0) console.log(`[DB] Members rows brought into the schema's rules (set to the column's default): ${changed.join(', ')}`);
+    } catch (e) {
+        // Nothing is changed and the marker isn't written, so the next boot tries again. A standby leaves such a value out.
+        console.error('[DB] ❌ Could not bring members rows into the schema\'s rules:', e);
     }
 }
 
@@ -921,6 +962,7 @@ export function initSchema() {
 
     markExistingVisitors();
     backfillBoardStanding();
+    bringMembersToSchemaRules(schemaSql);
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only
@@ -1637,6 +1679,16 @@ export function isOperatorSwitchedOff(memberPubkey: string): boolean {
 
 export const INACTIVE_MEMBER_CREATE_ERROR = 'Only active community members can create an enterprise or a project';
 
+/**
+ * A goal a fresh members table holds (its CHECK: `goal_amount IS NULL OR goal_amount >= 0`): none, or a finite number of
+ * Beans, 0 or more. Asked by every writer of a goal, because a node whose table got the column from an ALTER has no such
+ * CHECK, and a goal below 0 there is one its standby's table refuses (bringMembersToSchemaRules).
+ */
+export const GOAL_AMOUNT_ERROR = 'The goal must be a number of Beans, 0 or more';
+export function isAcceptableGoal(goal: number | null): boolean {
+    return goal === null || (Number.isFinite(goal) && goal >= 0);
+}
+
 /** Is this member's account active? Missing rows and every other status (disabled, suspended, pruned) are not. */
 /** An active member's row: not a visitor's (members.is_visitor), which starts nothing, as a key with no row starts nothing. */
 export function isMemberActive(memberPubkey: string): boolean {
@@ -1670,6 +1722,7 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
@@ -1725,6 +1778,7 @@ export function updateCrowdfundProject(
     goal_amount: number,
     deadline_at?: string | null
 ) {
+    if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");

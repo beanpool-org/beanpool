@@ -126,11 +126,17 @@ export function getMemberDefaultReminderOffsets(memberPubkey: string): number[] 
     return readStoredOffsets(row.pref_value) ?? [...DEFAULT_EVENT_REMINDER_OFFSETS];
 }
 
-/** Store a member's own default. Validated by the caller through `parseReminderOffsets`. */
+/**
+ * Store a member's own default. Validated by the caller through `parseReminderOffsets`. The member's row is stamped with
+ * it, so delta sync carries their preferences with the row to a standby (engine sync.ts exportSyncState).
+ */
 export function setMemberDefaultReminderOffsets(memberPubkey: string, offsets: number[]): void {
-    db.prepare(
-        `INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`
-    ).run(memberPubkey, EVENT_REMINDER_PREF_KEY, JSON.stringify(offsets));
+    db.transaction(() => {
+        db.prepare(
+            `INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`
+        ).run(memberPubkey, EVENT_REMINDER_PREF_KEY, JSON.stringify(offsets));
+        db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(memberPubkey);
+    })();
 }
 
 /** Refused when the signer has no RSVP on the event. The route turns this into a 403. */

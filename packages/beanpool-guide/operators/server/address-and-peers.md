@@ -41,7 +41,9 @@ A confirmed address travels with the take-over keys, so a standby that takes ove
 
 ![Node Identity and directory settings in Settings](images/appliance-identity.webp)
 
-By default your server tells the BeanPool directory about itself every 12 hours: the community's name, the area it serves, how many members it has, and the contact email and phone if you filled them in. That is how new people find you. Each part can be switched off here, and so can the whole thing. Your members' names and posts are never sent.
+By default your server tells the BeanPool directory about itself every 12 hours: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it.
+
+The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before. The area, the member count and the health report can each be switched off here, and so can the whole thing. Your members' names and posts are never sent.
 
 ## Gateway
 

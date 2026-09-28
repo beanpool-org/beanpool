@@ -24,6 +24,8 @@ const node = vi.hoisted(() => ({
     back: {} as Record<string, number>,
     /** Per kind, the next call's `back` wait pops from here first, before falling back to `back`/`hop`. */
     backQueue: {} as Record<string, number[]>,
+    /** Per kind, the next call's `there` wait pops from here first, before falling back to `there`/`hop`. */
+    thereQueue: {} as Record<string, number[]>,
     /** The socket: the doorbell rings this long after each change the node takes; null while the socket is down. */
     ringAfter: 10 as number | null,
     /** How many of the next lists of keys (the one-time move) are lost on the way, as in a network blip. */
@@ -55,7 +57,8 @@ vi.mock('./api', async () => {
     async function request<T>(kind: string, keys: string | string[] | null, act: (as: string) => T): Promise<T> {
         const as = node.signedIn;
         node.sent.push([kind, ...(keys === null ? [] : [String(keys)]), ...(as === 'me' ? [] : [`as ${as}`])].join(' '));
-        await wait(node.there[kind] ?? node.hop);
+        const going = node.thereQueue[kind];
+        await wait(going && going.length > 0 ? going.shift()! : (node.there[kind] ?? node.hop));
         if (node.arrive?.(kind, keys)) throw new TypeError('Failed to fetch');
         const res = act(as);
         const queued = node.backQueue[kind];
@@ -180,6 +183,7 @@ describe('two tabs, and a node that takes time to answer', () => {
         node.there = {};
         node.back = {};
         node.backQueue = {};
+        node.thereQueue = {};
         node.ringAfter = 10;
         node.dropListAdds = 0;
         node.sent = [];
@@ -706,5 +710,120 @@ describe('two tabs, and a node that takes time to answer', () => {
             expect(T.getBlockedUsers()).toEqual([K1, K2]);
             expect(node.sent.filter(c => c === `remove ${K1}`)).toHaveLength(tries);
         });
+    });
+
+    // ── an answer older than one the page has taken never takes a block off the screens (#1269's review 5861163950) ──
+
+    /** One tab has read the node's list, `list`, with the socket up or down. The requests it sent so far are forgotten. */
+    async function oneTabRead(list: string[], ringAfter: number | null): Promise<Tab> {
+        node.list = [...list];
+        node.ringAfter = ringAfter;
+        const T = await openTab();
+        vi.useFakeTimers();
+        stops.push(T.startBlocklist(ME));
+        await vi.advanceTimersByTimeAsync(500);
+        expect(T.getBlockedUsers()).toEqual(list);
+        node.sent = [];
+        return T;
+    }
+
+    const unblockK1OrAll = (T: Tab, how: 'unblock of K1' | 'Unblock All'): Promise<unknown> =>
+        how === 'Unblock All' ? T.clearBlocklist() : T.unblockUser(K1);
+
+    describe.each([
+        ['up', 10],
+        ['down', null],
+    ] as const)('the socket %s', (_, ringAfter) => {
+        it.each(['Unblock All', 'unblock of K1'] as const)('an %s answered slowly, with a block of K2 made and answered in between: K2 is shown blocked throughout', async how => {
+            const T = await oneTabRead([K1], ringAfter);
+            // The member's unblock reaches the node at 1 ms, and its answer (nobody blocked) comes back only at 201 ms. At
+            // 10 ms they block K2, which reaches the node at 11 ms and answers at 12 ms: K2 and not K1, the newer answer.
+            node.there = { remove: 1, clear: 1, add: 1 };
+            node.back = { remove: 200, clear: 200, add: 1 };
+            const unblocking = unblockK1OrAll(T, how);
+            await vi.advanceTimersByTimeAsync(10);
+            expect(node.list).toEqual([]);
+            const blocking = T.blockUser(K2);
+            await vi.advanceTimersByTimeAsync(5);
+            await expect(blocking).resolves.toBe(true);
+            expect(T.getBlockedUsers()).toEqual([K2]);
+            const w = watch(() => [K2], () => [K1]);
+            w.add('T', T);
+            await w.run(3000);
+            w.stop();
+            await expect(unblocking).resolves.toBe(how === 'Unblock All' ? undefined : true);
+            expect(w.gaps).toEqual([]);
+            expect(node.list).toEqual([K2]);
+            expect(T.getBlockedUsers()).toEqual([K2]);
+        });
+
+        it('a block whose request reaches the node after a later one\'s shows once it answers, though that later answer came back first', async () => {
+            const T = await oneTabRead([], ringAfter);
+            // The block of K1 is slow on its way and reaches the node at 100 ms. The block of K2, made at 10 ms, reaches it at
+            // 11 ms and answers at 12 ms without K1. K1's answer was asked for first, but it is the node's newest.
+            node.thereQueue = { add: [100, 1] };
+            node.back = { add: 1 };
+            const first = T.blockUser(K1);
+            await vi.advanceTimersByTimeAsync(10);
+            const second = T.blockUser(K2);
+            await vi.advanceTimersByTimeAsync(5);
+            await expect(second).resolves.toBe(true);
+            expect(T.getBlockedUsers()).toEqual([K2]);
+            let firstDone = false;
+            let shownThen: string[] = [];
+            void first.then(() => { firstDone = true; shownThen = [...T.getBlockedUsers()]; });
+            const w = watch(() => (firstDone ? [K1, K2] : [K2]));
+            w.add('T', T);
+            await w.run(3000);
+            w.stop();
+            await expect(first).resolves.toBe(true);
+            expect([...shownThen].sort()).toEqual([K1, K2].sort());
+            expect(w.gaps).toEqual([]);
+            expect(node.list).toEqual([K2, K1]);
+            expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2].sort());
+        });
+    });
+
+    it.each(['Unblock All', 'unblock of K1'] as const)('an %s asked after a block of K2 is the newer answer, and applies as it comes back last', async how => {
+        const T = await oneTabRead([K1], null);
+        // The block goes first and answers at 2 ms; the member's unblock goes at 10 ms, and its answer comes back at 211 ms.
+        node.there = { remove: 1, clear: 1, add: 1 };
+        node.back = { remove: 200, clear: 200, add: 1 };
+        const blocking = T.blockUser(K2);
+        await vi.advanceTimersByTimeAsync(10);
+        await expect(blocking).resolves.toBe(true);
+        expect(T.getBlockedUsers()).toEqual([K1, K2]);
+        const ends = how === 'Unblock All' ? [] : [K2];
+        let shownThen: string[] | null = null;
+        const unblocking = unblockK1OrAll(T, how).then(() => { shownThen = [...T.getBlockedUsers()]; });
+        await vi.advanceTimersByTimeAsync(3000);
+        await unblocking;
+        expect(shownThen).toEqual(ends);
+        expect(node.list).toEqual(ends);
+        expect(T.getBlockedUsers()).toEqual(ends);
+        // Taken as it came back: no read was needed for it.
+        expect(node.sent).toEqual([`add ${K2}`, how === 'Unblock All' ? 'clear' : `remove ${K1}`]);
+    });
+
+    it('an older answer never shows again a block the member lifted here since: an unblock of K1 answered slowly, then Unblock All', async () => {
+        const T = await oneTabRead([K1, K2], null);
+        // The unblock of K1 reaches the node at 1 ms, and its answer (K2 blocked) comes back at 201 ms. At 10 ms the member
+        // presses Unblock All, which K2 is shown in, and it answers at 12 ms: nobody blocked.
+        node.there = { remove: 1, clear: 1 };
+        node.back = { remove: 200, clear: 1 };
+        const unblocking = T.unblockUser(K1);
+        await vi.advanceTimersByTimeAsync(10);
+        const clearing = T.clearBlocklist();
+        await vi.advanceTimersByTimeAsync(5);
+        await clearing;
+        expect(T.getBlockedUsers()).toEqual([]);
+        const w = watch(() => [], () => [K1, K2]);
+        w.add('T', T);
+        await w.run(3000);
+        w.stop();
+        await expect(unblocking).resolves.toBe(true);
+        expect(w.gaps).toEqual([]);
+        expect(node.list).toEqual([]);
+        expect(T.getBlockedUsers()).toEqual([]);
     });
 });

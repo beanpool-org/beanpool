@@ -10,7 +10,7 @@
  * - **The statement.** `GET /api/node/identity-epoch` (public) answers the epoch, signed with the node key. Only a
  *   holder of the node key can make one, and only a take-over raises the number.
  * - **The check.** A main server, at boot and every hour, asks ITS OWN public address (the registrar's hostname,
- *   else CF_RECORD_NAME) for the statement. If it sees a HIGHER epoch signed by its own node key, another server has
+ *   else CF_RECORD_NAME; never a name another community holds, services/registrar-name-watch.ts) for the statement. If it sees a HIGHER epoch signed by its own node key, another server has
  *   taken over from it and the address now leads there: it goes read-only (members' writes refused, the reason in
  *   Settings and the log) and remembers it across restarts. It never refuses to boot.
  * - **What it ignores.** An address it cannot reach, an old server with no such route, and anything not signed by
@@ -27,7 +27,8 @@ import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import type Koa from 'koa';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
-import { getNodeRole, getNodeConfig } from '../state-engine.js';
+import { audienceOf } from '@beanpool/core';
+import { getNodeRole, getNodeConfig, lostRegistrarHosts } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { readNodeIdentity, type NodeIdentity } from './takeover-envelope.js';
 
@@ -154,11 +155,15 @@ export function ownPublicEpochUrl(): string | null {
     const test = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL;
     if (test) return test;
     let host: string | null = null;
+    // A name another community holds (services/registrar-name-watch.ts) leads to that community: never asked.
+    let lost = new Set<string>();
     try {
-        const pa = (getNodeConfig() as any)?.publicAddress;
-        if (pa && typeof pa.hostname === 'string' && pa.hostname.trim()) host = pa.hostname.trim();
+        const config = getNodeConfig();
+        lost = lostRegistrarHosts(config);
+        const pa = (config as any)?.publicAddress;
+        if (pa && typeof pa.hostname === 'string' && pa.hostname.trim() && !lost.has(audienceOf(pa.hostname.trim()) ?? '')) host = pa.hostname.trim();
     } catch { /* no node_config yet */ }
-    if (!host && process.env.CF_RECORD_NAME) host = process.env.CF_RECORD_NAME.trim();
+    if (!host && process.env.CF_RECORD_NAME && !lost.has(audienceOf(process.env.CF_RECORD_NAME.trim()) ?? '')) host = process.env.CF_RECORD_NAME.trim();
     if (!host) return null;
     return `https://${host.replace(/^https?:\/\//, '').replace(/\/+$/, '')}${IDENTITY_EPOCH_PATH}`;
 }

@@ -401,6 +401,7 @@ run_federation_suites() {
       test-never-forget-registrar-name
       test-former-address
       test-registrar-names-record
+      test-registrar-name-watch
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility

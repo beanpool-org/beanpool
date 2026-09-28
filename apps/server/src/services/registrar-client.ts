@@ -141,7 +141,9 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
     }
 }
 
-async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Promise<any> {
+// A signed request, retried once under a protocol both sides speak after a 401 that lists them. Its answer as it came,
+// whatever its status; throws only when nothing answered (a timeout, a network error).
+async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any }> {
     const bodyText = body ? JSON.stringify(body) : '';
     let res = await sendSigned(method, path, bodyText, SEND_PROTO);
     const retry = res.status === 401 ? retryProto(SEND_PROTO, res.data?.accepted_proto, Object.keys(PROTOCOLS) as Proto[]) : null;
@@ -150,6 +152,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
         console.warn(`[registrar] ${who} (it accepts ${res.data.accepted_proto.join(', ')}, not ${SEND_PROTO}); still working on ${retry}`);
         res = await sendSigned(method, path, bodyText, retry);
     }
+    return res;
+}
+
+async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Promise<any> {
+    const res = await signedAnswer(method, path, body);
     const data = res.data;
     if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
     return data;
@@ -161,3 +168,12 @@ export const updateAddressMetadata = (communityName?: string, contact?: string) 
     signedFetch('POST', '/api/registrar/update', { community_name: communityName, contact });
 export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
 export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});
+
+/**
+ * Who holds `name` (a bare label: `bname`, not `bname.beanpool.org`)? The registrar's answer (design
+ * scratch/registrar/DESIGN-lost-name-audience-opus.md §5.1): `{ name, held: 'you'|'other'|'free'|'reserved',
+ * holder_key?, state?, since?, held_until? }`, with its HTTP status as it came: an older registrar answers 404, and
+ * services/registrar-name-watch.ts reads that as no answer. A POST, so the name is inside the signed bytes (the signature
+ * covers the path, not the query). Throws only when nothing answered.
+ */
+export const askNameHolder = (name: string) => signedAnswer('POST', '/api/registrar/holder', { name });

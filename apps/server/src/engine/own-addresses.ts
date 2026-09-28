@@ -13,17 +13,28 @@
  *      (node_config `registrarNames`, engine/registrar-names.ts; carried in the take-over envelope too). No registrar
  *      answer takes one away: not `none` (a registrar that lost its data answers that to every key), not `released`,
  *      `revoked`, `blocked` or `paused`, not a live answer naming another name (the old one is kept as former), and not
- *      this node's own Take offline (the registrar holds the name for this key 30 days, and it routes nowhere; whether
- *      it stops counting after that is decision D-B, and needs a timer this node doesn't have yet). A community never
- *      loses its own name through a check, a bug or a stale registrar (Marty, 2026-09-24). A former name counts as one
- *      of 1–4, so a node whose only name went former is never `unconfigured`. Only the current one is published: a
- *      former name is accepted, never advertised;
+ *      this node's own Take offline during the hold. A community never loses its own name through a check, a bug or a
+ *      stale registrar (Marty, 2026-09-24). A former name counts as one of 1–4, so a node whose only name went former
+ *      is never `unconfigured`. Only the current one is published: a former name is accepted, never advertised;
  *      `/api/community/info` lists former names apart (formerAddresses), with where the community lives now
  *      (primaryAddress), so the web app opened at one can say it has moved (lost-name L4);
  *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
  *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node). A loopback name the
  *      operator listed in 2 doesn't count as one of 1–4 here: it names no community, only whichever machine an app
  *      runs on.
+ *
+ * A LOST name is refused, whichever of 1–4 it comes from (the mark is per host), and never published, but it still counts
+ * as one of 1–4: a node whose only name was lost is never `unconfigured` (which would accept any host until the switch).
+ * Only services/registrar-name-watch.ts marks a name lost (engine/registrar-names.ts `lost`), and only on:
+ *   - proof: the registrar names another key as the name's holder AND an origin reached through the name answers as
+ *     someone other than this server, on every counting round of a confirmation period (minutes when both name the same
+ *     key, a full day otherwise), with this server's own key never answering there in between. Never on the
+ *     registrar's word alone, never on silence, never while the name still leads here (Marty, 2026-09-28, answer 1);
+ *   - this node's own release: 30 days after Take offline (or a longer recorded hold), once the registrar no longer
+ *     holds it for this key (answer 2).
+ * Only registrar names can be marked: the fleet's names (CF_RECORD_NAME) are `reserved` at the registrar and custom
+ * domains unknown to it, so neither is ever lost. This server's own key answering at the name, or the registrar giving
+ * it to this key again, clears the mark.
  *
  * A node with any of 1–4 treats a signature for loopback as it treats any other host's: another community's (421).
  * Loopback was once this community's on every node, so a signature for 127.0.0.1 was good at every community in the
@@ -59,6 +70,8 @@ export interface OwnAddress {
     source: AddressSource;
     /** A registrar name this key held before (4): accepted, never published. */
     former?: true;
+    /** Lost (see above): refused and never published, still one of this community's names. */
+    lost?: true;
 }
 
 /** How a host a request was signed for stands here. */
@@ -135,15 +148,19 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     const version = registrarNamesVersion();
     if (cache && cache.version === version && now - cache.at < CACHE_MS) return cache.list;
     const list: OwnAddress[] = [];
-    const add = (address: string | null, source: AddressSource, former = false) => {
-        if (address && !list.some((a) => a.address === address)) list.push({ address, source, ...(former ? { former: true as const } : {}) });
-    };
     const config = getNodeConfig();
+    const names = registrarNames(config);
+    // Per host, whichever source names it.
+    const lost = new Set(names.filter((r) => r.lost).map((r) => r.address));
+    const add = (address: string | null, source: AddressSource, former = false) => {
+        if (!address || list.some((a) => a.address === address)) return;
+        list.push({ address, source, ...(former ? { former: true as const } : {}), ...(lost.has(address) ? { lost: true as const } : {}) });
+    };
     const url = resolvePublicNodeUrl(config);
     add(url ? normalizeAddress(url) : null, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
-    for (const r of registrarNames(config)) add(r.address, 'registrar', r.role === 'former');
+    for (const r of names) add(r.address, 'registrar', r.role === 'former');
     cache = { at: now, version, list };
     return list;
 }
@@ -169,7 +186,7 @@ const namesThisCommunity = (a: OwnAddress) => !isLoopbackHost(a.address);
 
 /**
  * Whether this node knows any of its names. A loopback name listed in BEANPOOL_ADDRESSES doesn't count (5): with only
- * that, the node is still `unconfigured`, and Settings offers the addresses apps reached it at.
+ * that, the node is still `unconfigured`, and Settings offers the addresses apps reached it at. A lost name counts.
  */
 export function knowsItsNames(): boolean {
     return configuredAddresses().some(namesThisCommunity);
@@ -192,13 +209,13 @@ export function isLocalNetworkHost(host: string): boolean {
 /**
  * Whether a request signed for `host` is for this community: `own` for one of its names, or on a node that knows none
  * of them for a host on this machine or its network; `unconfigured` for any other host on such a node; `foreign`
- * otherwise, loopback included on a node with a name.
+ * otherwise, loopback included on a node with a name, and a lost name (isLostAddress says which).
  */
 export function audienceStanding(host: string): AudienceStanding {
     // Only a host in the one form apps sign (audienceOf: lower case, no port, no trailing dot) can be anyone's name.
     if (normalizeAddress(host) !== host) return 'foreign';
     const configured = configuredAddresses();
-    if (configured.some((a) => a.address === host)) return 'own';
+    if (configured.some((a) => a.address === host && !a.lost)) return 'own';
     if (configured.some(namesThisCommunity)) return 'foreign';
     return isLocalNetworkHost(host) ? 'own' : 'unconfigured';
 }
@@ -207,10 +224,15 @@ export function audienceStanding(host: string): AudienceStanding {
  * The names this community goes by, for `/api/community/info`. Public by nature. A loopback name the operator listed
  * (BEANPOOL_ADDRESSES=localhost, for an SSH tunnel) is accepted here but left out: it names no community, only
  * whichever machine an app runs on. So is a former registrar name (4): members' apps that still use it are accepted,
- * but no app is sent to it. Settings' list shows both, with their source.
+ * but no app is sent to it. So is a lost name. Settings' list shows all three, with their source.
  */
 export function publishedAddresses(): string[] {
-    return configuredAddresses().filter((a) => namesThisCommunity(a) && !a.former).map((a) => a.address);
+    return configuredAddresses().filter((a) => namesThisCommunity(a) && !a.former && !a.lost).map((a) => a.address);
+}
+
+/** Whether `host` is one of this community's names that is lost (above): refused, and counted as such (member-signature.ts). */
+export function isLostAddress(host: string): boolean {
+    return configuredAddresses().some((a) => a.address === host && a.lost);
 }
 
 /**

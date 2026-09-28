@@ -73,6 +73,7 @@ import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
+import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
@@ -141,7 +142,7 @@ async function main() {
     startDnsShim();
 
     // Step 5: HTTP server (Trust Bootstrap or redirect)
-    await startHttpServer(PORT_HTTP);
+    const httpPort = await startHttpServer(PORT_HTTP);
 
     // Step 6: HTTPS server (PWA + Settings API)
     await startHttpsServer(PORT_HTTPS);
@@ -162,6 +163,12 @@ async function main() {
     // hourly, whether another server has taken over its identity; if so it refuses members' writes. Not awaited:
     // the boot never waits on the network, and an unreachable address changes nothing.
     void startIdentityEpochWatch();
+
+    // Step 7.4: the registrar name watch (services/registrar-name-watch.ts, lost-name L3). A registrar name another
+    // community holds and answers at stops counting here; this server's own key answering there brings it back. Set
+    // on every node: each tick reads the role, so only the main server asks, and only about names it has held. Its own
+    // /api/attest over loopback is the plain-HTTP listener's, which serves /api as the tunnel reaches it.
+    startRegistrarNameWatch({ loopbackOrigin: `http://127.0.0.1:${httpPort}` });
 
     // Step 8: Connector manager + Handshake + Federation protocols
     initConnectorManager(p2pNode);

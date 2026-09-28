@@ -341,7 +341,12 @@ export class Keyholder {
             fail('bad_share', 'The share did not open with this boot\'s hello key, or is not a SLIP-0039 share.');
         }
         if (this.collecting && (this.collecting.purpose !== sub.purpose || this.collecting.proposal !== proposal)) {
-            fail('proposal_mismatch', 'Another custodian started a different ceremony. Finish or restart that one first.');
+            // A custodian whose share is the only one in may change their mind (a typo in the new custodian list);
+            // a proposal another custodian has already joined can't be swapped under them.
+            if (this.collected.size !== 1 || !this.collected.has(custodian)) {
+                fail('proposal_mismatch', 'Another custodian started a different ceremony. Finish or restart that one first.');
+            }
+            this.dropCollected();
         }
         this.collecting = { purpose: sub.purpose, proposal, newCustodians };
         this.collected.set(custodian, words);

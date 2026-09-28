@@ -109,6 +109,19 @@ describe('reshare', () => {
         await expectCopy(newRestore, 'github', '4040', m2);
     });
 
+    it('the first custodian may correct their proposal before anyone joins it', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const typo = [c1.publicKey, c2.publicKey, custodianKey(crypto.randomBytes(32)).publicKey];
+        const meant = [c1.publicKey, c2.publicKey, c4.publicKey];
+        expect((await present(v, c1, g.shares[0], { purpose: 'reshare', newCustodians: typo })).body.sharesPresent).toBe(1);
+        expect((await present(v, c1, g.shares[0], { purpose: 'reshare', newCustodians: meant })).body.sharesPresent).toBe(1);
+        const done = await present(v, c2, g.shares[1], { purpose: 'reshare', newCustodians: meant });
+        expect((done.body.custodianShares as CustodianShare[]).map(s => s.custodian)).toEqual(meant);
+    });
+
     it('a reshare needs the vault open and two current shares', async () => {
         const v = await vault();
         const g = await doGenesis(v);

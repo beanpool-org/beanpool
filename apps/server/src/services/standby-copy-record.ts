@@ -29,6 +29,11 @@ export interface WholeCopyCheck {
     ledgerDiffering: number;
     /** Whether each table's content was compared (the main server sent its hashes), not only the counts. */
     hashed: boolean;
+    /**
+     * Listing photos the main server could not read from its own storage, left out of the check (the copy's
+     * `photosOmitted`): no copy brings them, so they are said as such, never as a difference.
+     */
+    photosLeftOut: number;
     snapshotGeneratedAt: string | null;
 }
 
@@ -44,6 +49,7 @@ export interface UncomparedCheck {
      * names one twice, or names none while this server holds some).
      */
     notCompared: ('content' | 'ledger')[];
+    photosLeftOut: number;
     snapshotGeneratedAt: string | null;
 }
 
@@ -70,6 +76,7 @@ function fresh(): CopyRecord {
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const count = (v: unknown): number => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : 0);
 
 export function readCopyRecord(): CopyRecord {
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(KEY) as { value: string } | undefined;
@@ -89,11 +96,13 @@ export function readCopyRecord(): CopyRecord {
             lastWhole: w && typeof w === 'object' && num(w.at) !== null && typeof w.exact === 'boolean' ? {
                 at: w.at, exact: w.exact, differs: Array.isArray(w.differs) ? w.differs.filter((d: unknown) => typeof d === 'string') : [],
                 ledgerDiffering: Number.isInteger(w.ledgerDiffering) ? w.ledgerDiffering : 0, hashed: w.hashed === true,
+                photosLeftOut: count(w.photosLeftOut),
                 snapshotGeneratedAt: typeof w.snapshotGeneratedAt === 'string' ? w.snapshotGeneratedAt : null,
             } : null,
             lastUncompared: u && typeof u === 'object' && num(u.at) !== null ? {
                 at: u.at,
                 notCompared: Array.isArray(u.notCompared) ? u.notCompared.filter((n: unknown) => n === 'content' || n === 'ledger') : [],
+                photosLeftOut: count(u.photosLeftOut),
                 snapshotGeneratedAt: typeof u.snapshotGeneratedAt === 'string' ? u.snapshotGeneratedAt : null,
             } : null,
             lastExactAt: num(r?.lastExactAt),
@@ -209,6 +218,13 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
     }
     // A later whole copy that could not be compared in full: said as such, and the last exact copy's time stays the older one.
     if (u) lines.push(`Its last whole copy of the main server, at ${timeInWords(u.at)}, could not be compared with it in full: ${notComparedInWords(u.notCompared)}.`);
+    // Photos the main server can't read itself: said as such, never as a difference, and no warning (a take-over from here
+    // loses nothing the main server could still show).
+    const photos = (u ?? w)?.photosLeftOut ?? 0;
+    if (photos > 0) {
+        lines.push(`The main server could not read ${photos} listing photo${photos === 1 ? '' : 's'} from its own storage, so `
+            + `${photos === 1 ? 'it was' : 'they were'} left out of that check: no copy can bring ${photos === 1 ? 'it' : 'them'} here.`);
+    }
     if (r.failedImportsInARow > 0) {
         warning = true;
         lines.push(`Its last ${r.failedImportsInARow === 1 ? 'copy was' : `${r.failedImportsInARow} copies were`} refused: ${whyInWords(r.lastWhy)}.`);

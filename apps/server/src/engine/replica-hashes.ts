@@ -50,6 +50,17 @@ export const COLUMNS_NOT_HASHED: Record<string, Record<string, string>> = {
 
 const q = (n: string) => `"${n.replace(/"/g, '""')}"`;
 
+export interface HashOptions {
+    /** Only these tables. */
+    only?: readonly string[];
+    /**
+     * Listing photos left out of `post_photos`, as `post_id|order_num`: the ones the main server could not read from its own
+     * storage, which its copy leaves out and names (SyncPayload `photosOmitted`, engine/sync.ts restoreInlinePhotos). No
+     * copy brings them, and a standby may or may not hold its own, so both servers hash the rest without them.
+     */
+    photosLeftOut?: ReadonlySet<string>;
+}
+
 /** Every copied table this server has, with the columns hashed and the order its rows are hashed in. */
 function hashedTables(): { table: string; columns: string[]; order: string[] }[] {
     const out: { table: string; columns: string[]; order: string[] }[] = [];
@@ -73,9 +84,12 @@ function hashedTables(): { table: string; columns: string[]; order: string[] }[]
  * every server writes it again at its own boot) is hashed as a placeholder. Only reads, and nothing else runs between
  * them: better-sqlite3 is synchronous.
  */
-export function tableContentHashes(): TableHashes {
+export function tableContentHashes(opts: HashOptions = {}): TableHashes {
     const tables: Record<string, TableHash> = {};
     for (const { table, columns, order } of hashedTables()) {
+        if (opts.only && !opts.only.includes(table)) continue;
+        const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
+        const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
         const select = columns.map((c) => {
             const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
             return stamped.length === 0 ? q(c)
@@ -84,6 +98,7 @@ export function tableContentHashes(): TableHashes {
         const h = crypto.createHash('sha256');
         let rows = 0;
         for (const row of db.prepare(`SELECT ${select} FROM ${q(table)} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
+            if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) continue;
             h.update(JSON.stringify(row.map((v) => (Buffer.isBuffer(v) ? `x'${v.toString('hex')}'` : typeof v === 'bigint' ? v.toString() : v))));
             h.update('\n');
             rows++;
@@ -109,10 +124,13 @@ export function readTableHashes(raw: unknown): Record<string, TableHash> | null 
 
 /**
  * This server's copied tables against the main server's: the tables both hash, and those whose count or hash differs.
- * A table only one side hashes (another version's manifest) is not compared.
+ * A table only one side hashes (another version's manifest) is not compared. `photosLeftOut`: the photos the main server
+ * left out of its hash (the copy's `photosOmitted`), left out of this server's too.
  */
-export function compareTableHashes(theirs: Record<string, TableHash>): { compared: string[]; differing: { table: string; rows: number; theirRows: number }[] } {
-    const mine = tableContentHashes().tables;
+export function compareTableHashes(
+    theirs: Record<string, TableHash>, opts: Pick<HashOptions, 'photosLeftOut'> = {},
+): { compared: string[]; differing: { table: string; rows: number; theirRows: number }[] } {
+    const mine = tableContentHashes({ photosLeftOut: opts.photosLeftOut }).tables;
     const compared: string[] = [];
     const differing: { table: string; rows: number; theirRows: number }[] = [];
     for (const [table, t] of Object.entries(theirs)) {

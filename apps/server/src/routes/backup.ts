@@ -1086,7 +1086,16 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
             ctx.body = { error: 'Snapshot unavailable: node signing identity not ready' };
             return;
         }
-        if (writesSoFar() === writesBefore) payload = await withTableHashes(payload, hashes);
+        if (writesSoFar() === writesBefore) {
+            // The listing photos this server could not read from its own storage are not in the copy, which names them
+            // (engine/sync.ts photosOmitted): hashed again without them, as the standby hashes its own, so the rest of
+            // that table is still compared row for row and they never read as a copy gone wrong. Nothing was written
+            // since the export's reads, so the rows are the ones hashed above.
+            const omitted = Array.isArray(payload.photosOmitted) ? payload.photosOmitted.filter((k): k is string => typeof k === 'string') : [];
+            const photos = omitted.length > 0 ? tableContentHashes({ only: ['post_photos'], photosLeftOut: new Set(omitted) }).tables.post_photos : undefined;
+            if (photos) hashes.tables.post_photos = photos;
+            payload = await withTableHashes(payload, hashes);
+        }
         if (payload.generatedAt) {
             lastSnapshotExport = { generatedAt: payload.generatedAt, dataVersion: dataVersionNow };
         }

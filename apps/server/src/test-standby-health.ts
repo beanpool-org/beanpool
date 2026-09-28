@@ -14,6 +14,8 @@
  *     (signed with the rest), the standby finds every table and every account equal, and reports it. No incident, no push,
  *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>".
  *     A whole copy whose every account entry has no key a server can hold (#1268's case): no force-resync, no verdict.
+ *     A listing photo the main server can't read from its own storage: left out of both servers' hashes and said as such,
+ *     never a difference and never a force-resync.
  *  2. The standby stops for an hour (the main server's clock): one incident, one push, to the owner's phone only (not the
  *     admin's, the moderator's or a member's); the owner's admin queue and Settings banner show it, an admin's and a
  *     moderator's queue don't. A second check pushes nothing more. The standby pulls again: the incident ends.
@@ -168,6 +170,15 @@ async function child(): Promise<void> {
             payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             payload.generatedAt = new Date().toISOString();
             return signSyncPayload(payload);
+        },
+        /** A listing of M's whose photo M's own image store doesn't have: its copies leave the photo's row out and name it. */
+        'photo-main-cannot-read': async (a: { author: string }) => {
+            const { db } = await import('./db/db.js');
+            const at = new Date().toISOString();
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, created_at, updated_at)
+                VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 2, ?, 'active', ?, ?)`).run(a.author, at, at);
+            return db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, mime)
+                VALUES ('plums-lost-photo', NULL, 0, ?, 'photos/lost-on-the-main-server.webp', 'image/webp')`).run(at).changes;
         },
         /** A whole copy M signs whose every account entry has no key a server can hold (none, half a surrogate pair). */
         'forge-unreadable-accounts': async () => {
@@ -427,6 +438,23 @@ async function main(): Promise<void> {
             && words.lines[0] === `Last exact copy of the main server: ${inWords(exactBefore?.lastExactAt)}.`
             && words.lines.some((l: string) => /could not be compared with it in full: .*its ledger could not be compared account by account\.$/.test(l)),
             `no incident, and the preview names the last exact copy and says the later one could not be compared in full: ${brief(words?.lines)}`);
+
+        // A listing photo M can't read from its own storage: M's copies leave its row out and name it (photosOmitted), and S,
+        // new since, never had it. No copy can bring it, so it is said as such, never as a copy gone wrong that asks for a
+        // force-resync every six hours (review 4118340860).
+        require_(await main.send('photo-main-cannot-read', { author: gwen.pk }) === 1, 'M holds a listing whose photo its own storage has lost');
+        const withLostPhoto = await pull(true);
+        const afterLostPhoto = await pull();
+        rec = await standby.send('record');
+        assert(withLostPhoto.ok && withLostPhoto.whole && rec?.lastWhole?.exact === true && rec.lastWhole.hashed === true
+            && rec.lastWhole.photosLeftOut === 1 && rec.lastWhole.differs.length === 0 && rec.lastUncompared === null,
+            `S's whole copy is exact, the photo M can't read left out of both sides' hashes and named (${brief(rec?.lastWhole)})`);
+        assert(afterLostPhoto.ok && afterLostPhoto.mode === 'delta', `no force-resync: the next pull is a delta (${afterLostPhoto.mode})`);
+        words = await standby.send('preview-words', {});
+        health = await main.send('health');
+        assert(health?.state.incident === null && words?.warning === false && /^Last exact copy of the main server: /.test(words.lines[0] ?? '')
+            && words.lines.includes('The main server could not read 1 listing photo from its own storage, so it was left out of that check: no copy can bring it here.'),
+            `no incident, and the preview says so in plain words: ${brief(words?.lines)}`);
 
         // ── 2. Stopped for an hour ──
         console.log('\n— 2. the standby stops for an hour —');

@@ -432,9 +432,12 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
     lastConsistency = c;
     // Each table's content, when the main server sent its hashes with this copy (it sends none with one written to while
-    // it was being made).
+    // it was being made). The listing photos the main server could not read from its own storage are not in the copy,
+    // which names them, nor in its hash of that table (routes/backup.ts): no copy brings them, so they are left out here
+    // too, and never read as a copy gone wrong that a force-resync would mend (review 4118340860).
     const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
-    const contents = theirs ? compareTableHashes(theirs) : null;
+    const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
+    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut }) : null;
     // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
     // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
     // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it
@@ -482,10 +485,10 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
         logger.info('P2P', `[Backup] This whole copy could not be compared in full (${notCompared.map((n) => (n === 'content'
             ? 'no table hashes: the main server was written to while making it' : 'accounts this server cannot hold')).join('; ')}); `
             + 'nothing compared differs. No verdict.');
-        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared, snapshotGeneratedAt: c.snapshotGeneratedAt }));
+        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared, photosLeftOut: photosLeftOut.size, snapshotGeneratedAt: c.snapshotGeneratedAt }));
     } else {
         recordQuietly(() => noteWholeCopyCheck({
-            at: now, exact, differs: [...differs].sort(), ledgerDiffering, hashed: !!contents,
+            at: now, exact, differs: [...differs].sort(), ledgerDiffering, hashed: !!contents, photosLeftOut: photosLeftOut.size,
             snapshotGeneratedAt: c.snapshotGeneratedAt,
         }));
     }

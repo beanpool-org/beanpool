@@ -46,9 +46,10 @@
  * community the old main server first saw after the standby's last copy (a pull a minute) is new again to the new one,
  * so a watcher it reaches can hear about it a second time, once.
  *
- * Push tokens don't travel (each server holds its own), and a take-over restarts the server, so its first mirror run,
- * 10 s after boot, finds no phone registered and usually no socket open: it tells nobody and stamps nothing. Each
- * watcher is told when their phone registers its token here (the app does when it starts), or at the first run after.
+ * Members' phones travel too (push_tokens, design G4), and a take-over restarts the server, so its first mirror run, 10 s
+ * after boot, reaches every watcher whose phone the old main server had and tells them what they are owed (tellOwed),
+ * stamping each notice it sends. A watcher with no phone there is told when their phone registers its token here (the
+ * app does when it starts), or at the first run after.
  *
  * ## The registry is open, so a notice is plain and rare
  *

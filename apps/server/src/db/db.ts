@@ -246,15 +246,14 @@ export function noteWholeCopyOfVisitorMarks(): void {
  * still hold their account, Beans and history, and joining with an invite makes the same row a member's again. Each
  * marked row's updated_at is stamped, so delta sync takes the mark to a standby.
  *
- * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks some of what the rule reads (profile_updated_at isn't
- * imported; invite_codes, node_roles and the activity feed don't replicate), and its stamp would outlive its main
- * server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
+ * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks the node roles the rule reads (the take-over bundle
+ * brings them, sealed), and its stamp would outlive its main server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
  * that they are made (noteVisitorsMarkedByMainServer), then one whole copy for the rows it copied before it had the
  * column (visitorMarksWantWholeCopy); promoted before that whole copy, it logs so at boot. A standby promoted without
  * that word (its main server predates the column, so nobody ever marked) runs the pass at its first boot as the main
- * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: the members' own columns
- * (inviter, code, photo, bio, contact), the open door's record and, after a take-over, the node roles it brings; not
- * profile edits, invites made or used, or the activity feed.
+ * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: what that older main server
+ * copied of the members' rows, the open door's record, invites and the activity feed (a main server copies them all
+ * since designs G2a, G3 and G4, which came after the column), and, after a take-over, the node roles it brings.
  */
 export function markExistingVisitors(): void {
     try {

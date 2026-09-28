@@ -230,6 +230,11 @@ async function child(): Promise<void> {
             db.pragma('wal_checkpoint(TRUNCATE)');
             return true;
         },
+        /** The database's write-ahead log, in bytes (design §4.3: a force-resync writes every row twice into it). */
+        'wal-bytes': async () => {
+            const file = path.join(process.env.BEANPOOL_DATA_DIR!, 'state.db-wal');
+            return { wal: fs.existsSync(file) ? fs.statSync(file).size : 0, db: fs.statSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'state.db')).size };
+        },
         fetches: async () => fetches,
     });
 }
@@ -572,7 +577,10 @@ async function main(): Promise<void> {
         console.log('\n— 8. the flood gone from M: the re-seed lands, exact —');
         await main.send('unflood');
         await sleep(RETRY_MS + 300);
+        await standby.send('checkpoint');
         const land8 = await standby.send('pull', {});
+        // Recorded, not held to a number (design §4.3): the clear and the copy in one transaction write each row twice.
+        console.log(`  (the write-ahead log after this force-resync, from empty: ${JSON.stringify(await standby.send('wal-bytes'))} bytes)`);
         const s8: Snap = await standby.send('snapshot', { tables: HASHED });
         const m8: Snap = await main.send('snapshot', { tables: HASHED });
         const r8 = await standby.send('record');

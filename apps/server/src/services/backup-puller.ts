@@ -197,6 +197,7 @@ function summarize(r: ImportResult): string {
     if (r.plainTablesLeftOut?.length) parts.push(`in-flight left out:${r.plainTablesLeftOut.length}`);
     if (r.conflictsSkipped) parts.push(`skipped:${r.conflictsSkipped}`);
     if (r.valuesLeftOut?.length) parts.push(`values left out:${r.valuesLeftOut.length}`);
+    if (r.tablesLeftOut?.length) parts.push(`tables left out (over the row cap): ${r.tablesLeftOut.join(', ')}`);
     return parts.length === 0 ? 'no changes' : parts.join(', ');
 }
 
@@ -456,7 +457,10 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
             logger.security('P2P', `[Backup] ❌ ${isDelta ? 'Delta' : 'Snapshot'} REJECTED by import guard: ${msg}`);
         } else {
-            logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${isDelta ? 'delta' : 'full'}) failed: ${msg} (will retry in interval)`);
+            const next = stage === 'import' && !isDelta
+                ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}`
+                : 'will retry in interval';
+            logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${fresh ? 'resync' : isDelta ? 'delta' : 'full'}) failed: ${msg} (${next})`);
         }
         return { ok: false, error: msg };
     } finally {

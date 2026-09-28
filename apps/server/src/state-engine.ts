@@ -7735,8 +7735,10 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * next full snapshot import rebuilds an exact 1:1 copy with no orphan rows. The
  * upsert+tombstone importer never deletes "rows not in the snapshot", so a row the
  * primary hard-deleted without a tombstone would otherwise linger forever. Only
- * the tables exportSyncState dumps are cleared — node-local tables (push_tokens,
- * invite_codes, message_attachments, sync_cursors, node_config, …) are untouched.
+ * the tables exportSyncState dumps are cleared — node-local tables (message_attachments,
+ * sync_cursors, node_config, …) are untouched, and so are the plain tables (push tokens,
+ * invites and the rest, engine/replication-manifest.ts), whose whole copy deletes every
+ * row it doesn't name (engine/plain-tables.ts).
  *
  * ## One exception, and it is the whole reason the primary says anything
  *

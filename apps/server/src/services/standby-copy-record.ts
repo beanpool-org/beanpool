@@ -96,10 +96,11 @@ export interface CopyRecord {
      */
     lastLeftOut: TablesNamed | null;
     /**
-     * The tables of the ledger set the last copy refused over (engine/sync.ts OversizedCopyError), until a whole copy lands:
-     * deltas can land meanwhile, while every whole copy is refused.
+     * The tables of the ledger set a copy was refused over (engine/sync.ts OversizedCopyError), until a copy of the kind
+     * refused lands (`whole`: a whole copy was; then only a whole copy clears it, since deltas can land meanwhile while
+     * every whole copy is refused), or any whole copy.
      */
-    lastOversized: TablesNamed | null;
+    lastOversized: (TablesNamed & { whole: boolean }) | null;
 }
 
 /** Tables named by the manifest's names: since when, and the last time a copy named them. */
@@ -166,7 +167,7 @@ export function readCopyRecord(): CopyRecord {
             lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
             lastMismatchResyncTakenAt: num(r?.lastMismatchResyncTakenAt),
             lastLeftOut: tablesNamed(r?.lastLeftOut),
-            lastOversized: tablesNamed(r?.lastOversized),
+            lastOversized: ((o) => (o ? { ...o, whole: r?.lastOversized?.whole === true } : null))(tablesNamed(r?.lastOversized)),
         };
     } catch {
         return fresh();
@@ -187,21 +188,24 @@ export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOu
     write({
         ...r, lastPullAt: now, lastOutcome: 'ok', lastWhy: null, failedImportsInARow: 0, lastOkAt: now,
         lastLeftOut: copy ? (copy.whole || copy.leftOut.length > 0 ? named(r.lastLeftOut, copy.leftOut, now, !copy.whole) : r.lastLeftOut) : r.lastLeftOut,
-        lastOversized: copy?.whole ? null : r.lastOversized,
+        lastOversized: copy && (copy.whole || r.lastOversized?.whole === false) ? null : r.lastOversized,
     });
 }
 
 /**
  * A pull that failed: `refused` when the copy came and was not imported, `fetch-failed` when none came. `oversized`: the
- * tables of the ledger set it was refused over (why `oversized`).
+ * tables of the ledger set it was refused over (why `oversized`), and whether that copy was a whole one.
  */
-export function noteCopyFailed(outcome: Exclude<PullOutcome, 'ok'>, why: WhyCode, now = Date.now(), oversized: readonly string[] = []): void {
+export function noteCopyFailed(
+    outcome: Exclude<PullOutcome, 'ok'>, why: WhyCode, now = Date.now(), oversized: readonly string[] = [], whole = false,
+): void {
     const r = readCopyRecord();
+    const named1 = why === 'oversized' && oversized.length > 0 ? named(r.lastOversized, oversized, now, false) : null;
     write({
         ...r, lastPullAt: now, lastOutcome: outcome, lastWhy: why,
         // Only copies that came count: a main server that can't be reached is the main server's "no pull for an hour".
         failedImportsInARow: outcome === 'refused' ? r.failedImportsInARow + 1 : r.failedImportsInARow,
-        lastOversized: why === 'oversized' && oversized.length > 0 ? named(r.lastOversized, oversized, now, false) : r.lastOversized,
+        lastOversized: named1 ? { ...named1, whole: whole || r.lastOversized?.whole === true } : r.lastOversized,
     });
 }
 

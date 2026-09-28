@@ -442,7 +442,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     } catch (e: any) {
         consecutiveFailures++;
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
-        recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyOf(stage, e), Date.now(), oversized));
+        recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyOf(stage, e), Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and
         // its cursor stays where the last copy that landed put it.

@@ -17,7 +17,9 @@
  *     owners are told which tables, and not to run a force-resync. The flood gone from M, the next whole copy is exact.
  *     (Before: every copy refused, and the force-resync left S with 0 members, 0 listings and 0 accounts.)
  *  3. A table of the ledger set on the generic path (keepers' wages owed) over the cap: S's delta is refused, naming it, S is
- *     unchanged, and the next delta lands once M holds fewer.
+ *     unchanged, and the next delta lands once M holds fewer, which clears it. Members over the cap in whole copies only
+ *     (stamped long ago, as years of growth): deltas land, whole copies are refused, and S (and M's owners) keep saying so
+ *     until a whole copy lands.
  *  4. Members over the cap (the ledger set): S's delta is refused, with why `oversized` naming `members`, and S is
  *     unchanged, row for row, its cursor too. Five pulls inside one reconcile interval ask M for one whole copy (before:
  *     five).
@@ -162,9 +164,10 @@ async function child(): Promise<void> {
             return db.prepare(a.sql).run(...(a.args ?? [])).changes;
         },
         /** `n` rows of a table, written in one go behind the routes, each a new key starting `flood-`. */
-        flood: async (a: { kind: 'messages' | 'invites' | 'members' | 'wages' | 'tombstones'; n: number; conversationId?: string; author?: string }) => {
+        flood: async (a: { kind: 'messages' | 'invites' | 'members' | 'wages' | 'tombstones'; n: number; conversationId?: string; author?: string; old?: boolean }) => {
             const { db } = await import('./db/db.js');
-            const now = () => new Date().toISOString();
+            // `old`: stamped long ago, so no delta carries the rows and only a whole copy does (as years of real growth).
+            const now = () => (a.old ? '2000-01-01T00:00:00.000Z' : new Date().toISOString());
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
                     const id = `flood-${crypto.randomUUID()}`;
@@ -427,7 +430,32 @@ async function main(): Promise<void> {
         assert(snapDiff(s3a, s3).length === 0, `and S is unchanged, row for row, cursor and format too (differences ${first(snapDiff(s3a, s3))})`);
         await main.send('unflood');
         const after3 = await standby.send('pull', {});
-        assert(after3.ok === true && after3.mode === 'delta', `the next delta lands once M holds fewer (${JSON.stringify(after3)})`);
+        const r3b = await standby.send('record');
+        assert(after3.ok === true && after3.mode === 'delta' && r3b.lastOversized === null && JSON.stringify(r3b.report.oversized) === '[]',
+            `the next delta lands once M holds fewer, and S says nothing is over the cap any more (${JSON.stringify({ pull: after3, oversized: r3b.lastOversized, report: r3b.report.oversized })})`);
+        // Members over the cap in whole copies only (rows stamped long ago, as years of growth would be): every delta lands,
+        // and every whole copy is refused. S says so until a whole copy lands. The routine whole copy every 2.5 s, so each is
+        // due after a short wait, and a refused one holds the next back for that long.
+        await main.send('flood', { kind: 'members', n: FLOOD, old: true });
+        await standby.send('set-reconcile-ms', { ms: 2500 });
+        await sleep(2700);
+        const wholeOld = await standby.send('pull', {});
+        const deltaOld = await standby.send('pull', {});
+        const deltaOld2 = await standby.send('pull', {}); // carries the report of a delta that landed
+        const r3c = await standby.send('record');
+        assert(wholeOld.ok === false && wholeOld.mode === 'full' && /members/.test(wholeOld.error ?? '') && deltaOld.ok === true && deltaOld.mode === 'delta'
+            && deltaOld2.ok === true && r3c.lastOversized?.whole === true && JSON.stringify(r3c.report.oversized) === JSON.stringify(['members']) && r3c.fails === 0,
+            `with members over the cap in whole copies only, the whole copy is refused, deltas land, and S keeps saying so after they do (${JSON.stringify({ whole: [wholeOld.mode, wholeOld.error?.slice(0, 60)], delta: [deltaOld.mode, deltaOld.ok], oversized: r3c.lastOversized, report: r3c.report.oversized })})`);
+        const banner3 = await main.send('health');
+        assert((banner3.incident?.lines ?? []).some((l: string) => /refuses whole copies of this server: this server holds more rows of members/.test(l) && /Changes still reach it one by one/.test(l)),
+            `M's owners are told its whole copies are refused over members, and that changes still reach it (${JSON.stringify(banner3.incident?.lines)})`);
+        await main.send('unflood');
+        await sleep(2700);
+        const wholeBack = await standby.send('pull', {});
+        const r3d = await standby.send('record');
+        await standby.send('set-reconcile-ms', { ms: 86400000 });
+        assert(wholeBack.ok === true && wholeBack.mode === 'full' && r3d.lastOversized === null && r3d.lastWhole?.exact === true,
+            `the rows gone from M, the next whole copy lands exact, and nothing is over the cap any more (${JSON.stringify({ pull: wholeBack, oversized: r3d.lastOversized, exact: r3d.lastWhole?.exact })})`);
 
         // ── 4. Members over the cap ──
         console.log('\n— 4. members over the cap: every copy refused, and S keeps everything —');

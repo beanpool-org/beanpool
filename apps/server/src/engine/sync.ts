@@ -107,9 +107,6 @@ const IMPORT_CATEGORIES = {
     treasuryOperators: 'treasury_operators', enterprisePledges: 'enterprise_pledges', tombstones: 'tombstones',
 } as const satisfies Partial<Record<keyof SyncPayload, string>>;
 
-/** For a suite: each payload category the importer caps, and its table. */
-export const IMPORT_CATEGORY_TABLES: Readonly<Record<string, string>> = IMPORT_CATEGORIES;
-
 /**
  * The tables a copy is refused over rather than left out of (design §5): the ledger and what a take-over's money needs
  * whole and consistent with it. A copy with the accounts and not the trades, or the trades and not the keys they name, can

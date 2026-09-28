@@ -653,24 +653,30 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         });
     });
 
+    /**
+     * The release, sealed to the key that started the restore. That device may collect again (its answer may have been
+     * lost) until the hold is pruned: a fresh seal to the same key gives nobody anything new. The release is recorded,
+     * and the member's devices told, once.
+     */
     route('POST', '/v1/restore/collect', 'signed', false, async ctx => {
         const database = await ensureDb();
         return withWriteLock(async () => {
             const hold = typeof ctx.body.holdId === 'string' ? database.holdById(ctx.body.holdId) : undefined;
             if (!hold || hold.requester_key !== ctx.key) throw new HttpError(404, 'no_hold', 'There is no restore waiting for this device.');
             if (hold.cancelled_at !== null) return json(200, { status: 'stopped' });
-            if (hold.released_at !== null) throw new HttpError(410, 'collected', 'This restore was already collected.');
             if (ctx.now < hold.release_at) return json(200, { status: 'held', until: hold.release_at });
             const row = database.copyById(hold.copy_id);
             if (!row) throw new HttpError(404, 'no_copy', 'The copy this restore was for is no longer kept.');
             const { release } = await call<{ release: unknown }>('release', { row: rowRef(row), requesterKey: ctx.key });
-            const updated = await call<{ envelope: string }>('updateMeta', { row: rowRef(row), lastReleasedAt: ctx.now });
-            database.transaction(() => {
-                database.updateEnvelope(row.id, b64Bytes(updated.envelope));
-                database.markReleased(hold.id, ctx.now);
-            });
-            counters.counts.releases++;
-            notify(await memberTokens(database, row.pk_index), 'vault-released', hold.provider);
+            if (hold.released_at === null) {
+                const updated = await call<{ envelope: string }>('updateMeta', { row: rowRef(row), lastReleasedAt: ctx.now });
+                database.transaction(() => {
+                    database.updateEnvelope(row.id, b64Bytes(updated.envelope));
+                    database.markReleased(hold.id, ctx.now);
+                });
+                counters.counts.releases++;
+                notify(await memberTokens(database, row.pk_index), 'vault-released', hold.provider);
+            }
             return json(200, { status: 'released', release });
         });
     });

@@ -76,13 +76,26 @@ describe('every sign-in restore waits 24 hours (D2)', () => {
             expect(v.stub.pushes.flatMap(p => p.messages).map(m => m.data.type)).toEqual(['vault-hold', 'vault-released']);
             expectPushesCarryNothing(member, e, provider, [holdId]);
 
-            // Once.
+            // Again, as a device whose answer was lost would: a fresh seal to the same key, recorded and pushed once.
+            const releasedAt = v.clock.now();
+            v.clock.advance(60 * 60 * 1000);
             const twice = await collect(e, holdId);
-            expect(twice.body).toMatchObject({ code: "collected" });
-            expect(twice.status).toBe(410);
+            expect(twice.status).toBe(200);
+            expect(twice.body.status).toBe('released');
+            expect(twice.body.release).not.toEqual(released.body.release);
+            const again = openVaultRelease(twice.body.release, e);
+            expect(Buffer.from((await openSeedFromSso(again.clientCopy, provider, SUBS[provider])).seed).equals(Buffer.from(member.seed))).toBe(true);
+            expect(() => openVaultRelease(twice.body.release, member.seed)).toThrow();
+            await v.api.idle();
+            expect(v.stub.pushes.flatMap(p => p.messages).map(m => m.data.type)).toEqual(['vault-hold', 'vault-released']);
             const after = await signed(v, '/v1/copies/status', {}, member.seed);
             expect(after.body.holds).toEqual([]);
-            expect(after.body.copies[0].lastReleasedAt).toBe(v.clock.now());
+            expect(after.body.copies[0].lastReleasedAt).toBe(releasedAt);
+
+            // Until the hold is pruned, 7 days after its release.
+            v.clock.advance(7 * 24 * 60 * 60 * 1000);
+            await v.api.maintenance();
+            expect((await collect(e, holdId)).body.code).toBe('no_hold');
         });
     }
 });

@@ -278,8 +278,8 @@ describe('TakeoverPanel', () => {
         stubFetch({ '/api/local/admin/takeover/progress': () => 'network' });
         render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
-        expect(screen.getByText('invites')).toBeInTheDocument();
-        expect(screen.getByText('Decisions and their votes')).toBeInTheDocument();
+        expect(screen.getByText('photos sent in chats')).toBeInTheDocument();
+        expect(screen.getByText('Commons project proposals still waiting for a decision')).toBeInTheDocument();
     });
 });
 

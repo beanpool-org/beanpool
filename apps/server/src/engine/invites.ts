@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts to separate invite code database side-effects.
 
 import { db } from '../db/db.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -38,6 +39,7 @@ const INVITER_GONE = 'The member who made this invite is no longer in this commu
  * Creates standard online invite code for an active member.
  */
 export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
+    assertPlainTablesWritable();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
 
@@ -63,6 +65,7 @@ export function adminGenerateInvite(
     intendedFor?: string,
     issuedBy?: string
 ): InviteCode | null {
+    assertPlainTablesWritable();
     // `adminPubkey` is the member the code hangs off in the invite tree (the genesis member, routes/community.ts), not
     // the admin: the admin is `issuedBy`, already checked by the route (checkAdminAuth and a node role, which a prune
     // takes away). Held to the same rule, or the code would never redeem.
@@ -127,6 +130,7 @@ export function redeemInvite(
     callsign: string,
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    assertPlainTablesWritable();
     // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
     // key, and no second member. The route takes the key that way first (routes/community.ts redeemKey).
     if (!isMemberKeySpelling(publicKey)) return { success: false, error: BAD_KEY_ERROR };
@@ -228,6 +232,7 @@ export function redeemOfflineTicket(
     callsign: string,
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    assertPlainTablesWritable();
     // One key, one spelling, as in redeemInvite.
     if (!isMemberKeySpelling(joinerPublicKey)) return { success: false, error: BAD_KEY_ERROR };
 

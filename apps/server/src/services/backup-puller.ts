@@ -179,6 +179,8 @@ function summarize(r: ImportResult): string {
     if (r.marketplaceTxns) parts.push(`escrow~${r.marketplaceTxns}`);
     if (r.newMessages) parts.push(`msgs+${r.newMessages}`);
     if (r.tombstonesApplied) parts.push(`deletes-${r.tombstonesApplied}`);
+    if (r.plainChanges) parts.push(`in-flight~${r.plainChanges}`);
+    if (r.plainTablesLeftOut?.length) parts.push(`in-flight left out:${r.plainTablesLeftOut.length}`);
     if (r.conflictsSkipped) parts.push(`skipped:${r.conflictsSkipped}`);
     if (r.valuesLeftOut?.length) parts.push(`values left out:${r.valuesLeftOut.length}`);
     return parts.length === 0 ? 'no changes' : parts.join(', ');

@@ -30,7 +30,7 @@ import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
-import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
+import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
@@ -916,6 +916,11 @@ export default function SettingsScreen() {
     }, []);
 
     const handleToggleAppLock = async () => {
+        // With no screen lock, "App Lock enabled" would ask nothing at the next launch. Turning it off never waits on this.
+        if (!appLockEnabled && (await getScreenLock()) === 'none') {
+            Alert.alert('Set a screen lock first', APP_LOCK_NEEDS_SCREEN_LOCK);
+            return;
+        }
         const success = await authenticateUser(appLockEnabled ? 'Confirm your security to disable App Lock.' : 'Confirm your security to enable App Lock.');
         if (success) {
             const newValue = !appLockEnabled;
@@ -1678,7 +1683,7 @@ export default function SettingsScreen() {
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>App Lock</Text>
-                            <Text style={styles.menuSub}>Require security passcode on app launch</Text>
+                            <Text style={styles.menuSub}>Asks for your phone's screen lock when BeanPool opens</Text>
                         </View>
                         <Pressable 
                             style={[styles.toggle, appLockEnabled && styles.toggleOn]} 

@@ -642,6 +642,9 @@ async function run() {
         const afterUpdate = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(restored) as any;
         assert(afterUpdate?.joined_at === '2026-01-02T03:04:05.678Z', `the update path writes the main server's joined_at, not the standby's own (got ${afterUpdate?.joined_at})`);
         db.prepare("UPDATE members SET joined_at = '2026-01-02T03:04:05.678Z' WHERE public_key = ?").run(restored);
+        // Voting is the restored node's as a main server: a standby writes no Decision or ballot of its own
+        // (config/node-role.ts assertPlainTablesWritable), so the role is only a standby's for the imports.
+        setNodeRole('primary');
         const restoredDecision = createDecision({ authorPubkey: voters[0], title: 'Freeze after restore', description: 'Restored member votes', touches: 'member', effect: 'freeze_credit', subject: troll2 });
         assert(castDecisionVote(restoredDecision.id, restored, true).success, 'the restored member can vote (joined before it opened)');
     } finally {

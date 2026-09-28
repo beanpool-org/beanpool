@@ -15,6 +15,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/beanpool-core/package.json ./packages/beanpool-core/
 COPY packages/beanpool-engine/package.json ./packages/beanpool-engine/
+COPY packages/beanpool-signin/package.json ./packages/beanpool-signin/
 COPY apps/pwa/package.json ./apps/pwa/
 COPY apps/manager/package.json ./apps/manager/
 COPY apps/server/package.json ./apps/server/
@@ -31,11 +32,13 @@ COPY . .
 # Build in dependency order:
 #   1. Core protocol library (shared by both PWA and server)
 #   2. Engine (db-backed shared node logic; depends on core, used by server)
-#   3. PWA (Vite → outputs to apps/server/public/)
-#   4. Manager (Vite → outputs to apps/server/public/manager/)
-#   5. Server (tsc → outputs to apps/server/dist/)
+#   3. Sign-in checks (@beanpool/signin; no workspace deps, used by server and the key vault)
+#   4. PWA (Vite → outputs to apps/server/public/)
+#   5. Manager (Vite → outputs to apps/server/public/manager/)
+#   6. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
 RUN cd packages/beanpool-engine && pnpm run build
+RUN cd packages/beanpool-signin && pnpm run build
 # Accept version from CI build args (from git tag) so the frontend build inherits it.
 # Declared HERE, not at the top of the stage: an ENV that changes on every release tag
 # invalidates every layer below it, so up there it would bust the `pnpm install` cache
@@ -100,6 +103,11 @@ COPY --from=builder /app/packages/beanpool-core/node_modules ./packages/beanpool
 COPY --from=builder /app/packages/beanpool-engine/dist ./packages/beanpool-engine/dist
 COPY --from=builder /app/packages/beanpool-engine/package.json ./packages/beanpool-engine/package.json
 COPY --from=builder /app/packages/beanpool-engine/node_modules ./packages/beanpool-engine/node_modules
+
+# Copy compiled sign-in checks (the server's sso.ts and engine/github-device.ts run on them)
+COPY --from=builder /app/packages/beanpool-signin/dist ./packages/beanpool-signin/dist
+COPY --from=builder /app/packages/beanpool-signin/package.json ./packages/beanpool-signin/package.json
+COPY --from=builder /app/packages/beanpool-signin/node_modules ./packages/beanpool-signin/node_modules
 
 # Copy root workspace config for pnpm resolution
 COPY --from=builder /app/package.json ./package.json

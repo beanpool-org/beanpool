@@ -23,9 +23,12 @@ process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, createTreasury } from './state-engine.js';
-import { startHttpsServer } from './https-server.js';
+import { initStateEngine, createTreasury, seedGenesisMember } from './state-engine.js';
+import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { pruneAuthAttempts } from './auth-rate-limit.js';
+import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { loadConnectors } from './connector-manager.js';
@@ -41,8 +44,9 @@ const PW = 'TestAdmin123!';
 
 const PEER_ID = '12D3KooWEastGippyLinkTestPeer00000000000000';
 const ADDRESS = `/ip4/172.18.0.4/tcp/4001/p2p/${PEER_ID}`;
-// A second peer whose operator chose the SAME callsign, to prove a name collision cannot block a link.
-const PEER_ID_2 = '12D3KooWSecondPeerSameCallsign000000000000';
+// A second peer whose operator chose the SAME callsign, to prove a name collision cannot block a link. Its id ends
+// unlike the first's, so each one's suffixed name is its own (step 12's two peers with one callsign).
+const PEER_ID_2 = '12D3KooWSecondPeerSameCallsign000000bbbbbb';
 const ADDRESS_2 = `/ip4/172.18.0.9/tcp/4001/p2p/${PEER_ID_2}`;
 
 let run = 0, passed = 0;
@@ -61,6 +65,28 @@ async function post(path: string, body: unknown): Promise<{ status: number; json
 }
 async function get(path: string): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}${path}`);
+    let json: any = null;
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, json };
+}
+
+/** A member's request, signed with her key as the apps sign one. */
+async function signedPost(signer: { pk: string; priv: crypto.KeyObject }, route: string, body: unknown): Promise<{ status: number; json: any }> {
+    resetGatewayRateLimit();
+    const raw = JSON.stringify(body);
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const res = await fetch(`${BASE}${route}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Public-Key': signer.pk,
+            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        },
+        body: raw,
+    });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
     return { status: res.status, json };
@@ -308,8 +334,109 @@ async function main() {
     assert(db.prepare("SELECT 1 FROM members WHERE callsign = 'Rollback Link'").get() === undefined,
         '11d. by name too, so a retry is not blocked by the corpse of the last attempt');
 
+    // ── 12. A link's treasury is found again only by its marker (review 4122266160) ──────────────────────────
+    // A treasury no link row names becomes a link only when ensureFederationLink marked it as made for THAT peer
+    // (federation_link_treasuries). Before, a name and no photo were the evidence, and a member's own enterprise
+    // with no photo has both: she became the one keeper of a link that commissions against the Commons pot.
+    const operator = { pk: '', priv: null as unknown as crypto.KeyObject };
+    {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        operator.pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+        operator.priv = privateKey;
+        seedGenesisMember(operator.pk, 'Opal');
+    }
+    const markerOf = (treasury: string) =>
+        (db.prepare('SELECT peer_id FROM federation_link_treasuries WHERE treasury_pubkey = ?').get(treasury) as { peer_id: string } | undefined)?.peer_id ?? null;
+    const keepersOf = (treasury: string) =>
+        db.prepare('SELECT member_pubkey, role, granted_by FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY member_pubkey').all(treasury) as any[];
+    const treasuryCount = () => (db.prepare('SELECT COUNT(*) AS n FROM members WHERE is_treasury = 1').get() as any).n as number;
+
+    assert(markerOf(link!.treasuryPubkey) === PEER_ID && markerOf(second!.treasuryPubkey) === PEER_ID_2,
+        '12a. each link made here marks its treasury with its own peer');
+    assert(markerOf(ordinary.publicKey) === null, '12b. and an ordinary enterprise carries no marker');
+
+    // (a) A member makes an enterprise named "<peer> Link", with no photo, as the app's route makes one; then the
+    // operator caps that NEW peer.
+    const RIVER = '12D3KooWRiverbendNewPeerMemberNamed000000000';
+    const RIVER_ADDR = `/ip4/172.18.0.31/tcp/4001/p2p/${RIVER}`;
+    const her = { pk: '', priv: null as unknown as crypto.KeyObject };
+    {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        her.pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+        her.priv = privateKey;
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+                    VALUES (?, 'Rhea', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), ?, 'TEST', 'https://example.com/r.jpg', 'active')`).run(her.pk, operator.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(her.pk);
+    }
+    const made = await signedPost(her, '/api/enterprise', { name: 'riverbend Link', purpose: 'Our own enterprise' });
+    const hers = made.json?.publicKey as string;
+    assert(made.status === 200 && !!hers, `12c. setup: Rhea makes "riverbend Link" with no photo through the route (got ${made.status} ${made.json?.error ?? ''})`);
+    const herKeepers = keepersOf(hers);
+    const herRow = db.prepare('SELECT callsign, avatar_url FROM members WHERE public_key = ?').get(hers) as any;
+    assert(herRow?.avatar_url === '' && herKeepers.length === 1 && herKeepers[0].member_pubkey === her.pk && herKeepers[0].role === 'lead',
+        `12d. setup: it holds no photo and she is its lead keeper, what the old fallback took for a link (${JSON.stringify(herRow)}, ${JSON.stringify(herKeepers)})`);
+    // This suite's admin calls so far fill the admin routes' limits for the minute (auth-rate-limit.ts: every window that
+    // has closed a minute from now, which is all of them).
+    resetAdminRateLimit();
+    pruneAuthAttempts(Date.now() + 61_000);
+    const riverAdded = await post('/api/local/connectors', { password: PW, address: RIVER_ADDR, trustLevel: 'peer', callsign: 'riverbend', enabled: false });
+    const treasuriesBeforeRiver = treasuryCount();
+    const riverCap = await setCap({ password: PW, address: RIVER_ADDR, cap: 40 });
+    const river = getFederationLink(RIVER);
+    assert(riverAdded.status === 200 && riverCap.status === 200 && !!river && river.treasuryPubkey !== hers,
+        `12e. THE POINT: capping the new peer makes a NEW link treasury, not Rhea's enterprise (${riverAdded.status} ${riverAdded.json?.error ?? ''}, ${riverCap.status} ${riverCap.json?.error ?? ''}; got ${river?.treasuryPubkey?.slice(0, 12)} vs hers ${hers?.slice(0, 12)})`);
+    assert(river?.name === `riverbend Link (${RIVER.slice(-6)})` && treasuryCount() === treasuriesBeforeRiver + 1,
+        `12f. named with the peer's suffix, her name being taken, and exactly one treasury more (got "${river?.name}")`);
+    const riverKeepers = keepersOf(river!.treasuryPubkey);
+    const riverRow = db.prepare('SELECT is_treasury, earned_credit FROM members WHERE public_key = ?').get(river!.treasuryPubkey) as any;
+    assert(riverRow?.is_treasury === 1 && riverRow?.earned_credit === 0 && riverKeepers.length === 1
+        && riverKeepers[0].member_pubkey === operator.pk && riverKeepers[0].role === 'keeper' && riverKeepers[0].granted_by === 'system',
+        `12g. system-made, no credit line, its one keeper the default operator, granted by the system (${JSON.stringify(riverKeepers)})`);
+    assert(markerOf(river!.treasuryPubkey) === RIVER, '12h. and marked as made for this peer');
+    assert(getLinkByTreasury(hers) === null && markerOf(hers) === null && JSON.stringify(keepersOf(hers)) === JSON.stringify(herKeepers)
+        && (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(hers) as any)?.callsign === 'riverbend Link',
+        '12i. her enterprise is untouched: no link, no marker, her keepers and her name as they were');
+    db.prepare('DELETE FROM federation_links WHERE peer_id = ?').run(RIVER);
+    const riverAgain = ensureFederationLink(RIVER, 'riverbend', createTreasury);
+    assert(riverAgain?.treasuryPubkey === river!.treasuryPubkey && getLinkByTreasury(hers) === null,
+        '12j. and with the link row lost, the link finds its own treasury again, never hers');
+
+    // (b) Two peers with one callsign, both link rows lost, the SECOND peer reconciled first. By name, it took the
+    // first peer's "eastgippy Link" and the first peer got a brand-new third treasury, the second's own stranded.
+    const MOVED = 7;
+    db.transaction(() => {
+        db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
+        db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
+    })();
+    const treasuriesBeforeLoss = treasuryCount();
+    db.prepare('DELETE FROM federation_links WHERE peer_id IN (?, ?)').run(PEER_ID, PEER_ID_2);
+    const secondAgain = ensureFederationLink(PEER_ID_2, 'eastgippy', createTreasury);
+    const firstAgain = ensureFederationLink(PEER_ID, 'eastgippy', createTreasury);
+    assert(secondAgain?.treasuryPubkey === second!.treasuryPubkey,
+        `12k. the second peer, reconciled first, takes back its OWN treasury ("${secondAgain?.name}"), not the first peer's`);
+    assert(firstAgain?.treasuryPubkey === link!.treasuryPubkey && firstAgain?.treasuryBalance === MOVED,
+        `12l. the first peer takes back its own, with its ${MOVED} Beans (got "${firstAgain?.name}", ${firstAgain?.treasuryBalance})`);
+    assert(treasuryCount() === treasuriesBeforeLoss,
+        `12m. and no treasury was made: nothing stranded, nothing duplicated (${treasuriesBeforeLoss} → ${treasuryCount()})`);
+
+    // (c) The loss the fallback exists for, on the boot path: one link row gone, the peer still capped.
+    resetAdminRateLimit();
+    pruneAuthAttempts(Date.now() + 61_000);
+    await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 20 });
+    db.prepare('DELETE FROM federation_links WHERE peer_id = ?').run(PEER_ID);
+    const treasuriesBeforeBoot = treasuryCount();
+    reconcileFederationLinks(createTreasury);
+    const rebooted = getFederationLink(PEER_ID);
+    assert(rebooted?.treasuryPubkey === link!.treasuryPubkey && rebooted?.treasuryBalance === MOVED && treasuryCount() === treasuriesBeforeBoot,
+        `12n. the boot's reconcile finds the link's treasury again by its marker, its Beans with it, and makes none (${rebooted?.name}, ${rebooted?.treasuryBalance})`);
+    assert(rebooted?.commissionCeiling === 0, '12o. its ceiling starts at 0 again, as a new link\'s does');
+    db.transaction(() => {
+        db.prepare('UPDATE accounts SET balance = balance - ? WHERE public_key = ?').run(MOVED, link!.treasuryPubkey);
+        db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(MOVED, 'COMMONS_POOL');
+    })();
+
     assert(nodeTotal() === baseline,
-        `12. FINALLY: across every link created here the ledger is unchanged (${baseline} → ${nodeTotal()}) — links account, they do not mint`);
+        `13. FINALLY: across every link created here the ledger is unchanged (${baseline} → ${nodeTotal()}) — links account, they do not mint`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

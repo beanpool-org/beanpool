@@ -99,15 +99,20 @@ function writeAtomic(file: string, data: string | Buffer, mode: number): void {
 
 // ── What a take-over will not have (§5.5; the standby's list, #958) ─────────────────────────
 
-/** What a standby does not copy, so a take-over from it does not have. Roles are not here: the bundle carries them. */
+/**
+ * What a standby does not copy (engine/replication-manifest.ts: the tables and settings not yet copied), so a take-over
+ * from it does not have, however recent its last copy. Roles are not here: the bundle carries them. Enterprises, their
+ * keepers and pledges, and members' holiday and notification settings, vouches, granted credit and freezes are copied
+ * (design G2); so are Decisions and their votes, keepers' wages owed, keeper and succession votes, invites, re-key codes,
+ * recovery releases and links with other communities (G3). The last line is the one thing a fresher copy changes.
+ */
 export const WHAT_WILL_BE_MISSING: readonly string[] = [
-    'Decisions and their votes',
-    'enterprise pledges and keeper changes',
-    'invites',
-    "members' notification settings",
+    'the phones members get notifications on: nobody gets one until they open the app again',
+    'photos sent in chats',
+    "muted chats, what members have read in enterprise threads, the activity list, event reminders already sent, and the pricing guide's own prices and members' price reports",
     'Commons project proposals still waiting for a decision',
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
-    'anything that changed on the main server after this standby last copied it',
+    'and, on top of everything above, whatever changed on the main server after this standby last copied it',
 ];
 
 /** What the people running the community do afterwards. Shown with the result. */

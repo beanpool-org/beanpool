@@ -43,9 +43,19 @@ Whoever holds the database and that key can open a member's copy, though, with t
 
 ## What admins see in Settings
 
-- The logs, with passwords, keys and 12-word phrases removed before they are written.
-- The list of devices connected right now, with their internet address, device type and member name.
+- The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written.
+- The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.
 - Reports, and the people they are about.
+
+## Internet addresses
+
+Your server keeps no one's internet address for more than 7 days, and its logs never record one.
+
+- **Replication Access** shows the address each standby copy came from, and each refused try, so you can tell your standby from a stranger. It keeps each address for 7 days, then shows "address no longer kept" with the time and the outcome. The standby watch and the list of which standby holds which take-over keys do the same.
+- A log line that has to tell one address from another (wrong admin passwords, a proxy missing from TRUSTED_PROXIES, the gateway's limit) names it by a code such as ip#k3Jx9QaB7d. The code is the address scrambled with a key that changes every day, is never saved, and is new after a restart. So the same address has the same code all day, and nobody can turn a code back into the address.
+- The rate limits and the password brake count addresses in memory only. Joining with a sign-in and requests to join keep a scrambled address for a day, to limit how many come from one place.
+- Snapshots and backups hold no addresses, and a standby's copy never has them.
+- A server updated to this version clears older addresses when it starts, including those in older log lines. Docker's own log of the server keeps what was printed before the update until Docker replaces it. The tunnel helper (cloudflared) keeps its own log.
 
 ![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
 

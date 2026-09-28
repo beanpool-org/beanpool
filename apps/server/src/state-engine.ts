@@ -40,6 +40,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -587,6 +588,10 @@ export function initStateEngine(): void {
     // Recovery copies whose deletion this database recorded without applying it (a standby on a version from before
     // recovery tombstones), deleted now (engine/recovery-shares.ts). Never throws.
     applyRecordedRecoveryTombstones();
+    // GitHub is no longer a sign-in: its recovery copies, their released copies and its open-door records go
+    // (engine/github-sign-in-removal.ts; a standby removes its open-door records only). After the seal is installed, so
+    // a released copy can be opened to tell whether it holds a GitHub copy. Never throws.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
     // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied

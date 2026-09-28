@@ -630,7 +630,7 @@ async function main(): Promise<void> {
             put.run(o, ref, c.encryptedShare, c.shareIv, c.shareTag, crypto.randomBytes(16).toString('hex'), c.kdfParams, generation);
         const held = fakeCopy(), deleted = fakeCopy(), otherSignIn = fakeCopy();
         add(owner, 'google', 2, held);          // still held by the main server in the old form (one rolled back, say)
-        add(owner, 'github', 2, otherSignIn);   // same owner and generation, a sign-in the main server no longer holds
+        add(owner, 'apple', 2, otherSignIn);    // same owner and generation, a sign-in the main server no longer holds
         add(other, 'google', 1, deleted);       // deleted there before the seal
         add(other, 'facebook', 1, seal.sealRecoveryFields(fakeCopy(), seal.shareRowAad(other, 'sso')));  // deleted there after it: wrapped
         const count = () => db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get() as number;
@@ -642,7 +642,7 @@ async function main(): Promise<void> {
             `after a delta nothing is removed, and the puller is asked once for a whole copy (${before - count()} removed)`);
 
         const wholeCopy = (db.prepare('SELECT owner_pubkey, generation, holder_type, holder_ref FROM recovery_shares').all() as any[])
-            .filter(r => !(r.owner_pubkey === other || (r.owner_pubkey === owner && r.holder_ref === 'github')))
+            .filter(r => !(r.owner_pubkey === other || (r.owner_pubkey === owner && r.holder_ref === 'apple')))
             .map(r => ({ ownerPubkey: r.owner_pubkey, generation: r.generation, holderType: r.holder_type, holderRef: r.holder_ref }));
         seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy });
         check(count() === before - 2 && JSON.stringify(refsOf(owner)) === '["google"]' && JSON.stringify(refsOf(other)) === '["facebook"]',

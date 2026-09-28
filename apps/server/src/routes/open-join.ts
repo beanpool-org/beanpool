@@ -1,20 +1,13 @@
 /**
  * The open door (global profile, design §2.2): join with a one-time sign-in instead of an invite.
  *
- *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, githubFlow, clientIds }   (the same shape as /api/recovery/sso-nonce)
- *   POST /api/join/github/start  → { sessionId, userCode, verificationUri, expiresInSeconds, intervalSeconds }
- *   POST /api/join/github/poll   { sessionId } → { status: pending | ok | denied | expired, … }
+ *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, clientIds }   (the same shape as /api/recovery/sso-nonce)
  *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares } }
- *                                GitHub: { callsign, provider: 'github', proof: { sessionId }, recovery? }
  *
- * All four answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
+ * Both answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
  * profile.ts): off on every local node, on by default on the global one, and never on a node whose ledger has moved,
  * whatever the profile or an override says, so open sign-up never meets a live credit system. Read per request, so an
  * operator's override takes effect without a restart, and the first Bean that moves shuts the door.
- *
- * GitHub is run by this node (engine/github-device.ts): a GitHub token handed in proves nothing, so the joiner
- * types a code at GitHub, the node collects the answer, and the join carries the session id. The session is bound
- * to `open-join:<key>` exactly as a join nonce is, with the same consequences below.
  *
  * ## Signed by the joiner's new key, both of them
  *
@@ -41,7 +34,7 @@
  * The middleware verifies `X-Public-Key` by decoding its hex, which forgives case, so one keypair signs as `ab12…`
  * and as `AB12…`. Taken as sent, those were two keys here: one keypair joined twice, with two sign-in accounts.
  * So every door route takes the signer's key in the one spelling the member table keeps, 64 lower-case hex
- * characters (`canonicalKey`), before any check or write: the nonce and the GitHub session are bound to it, the
+ * characters (`canonicalKey`), before any check or write: the nonce is bound to it, the
  * member and the `open_joins` row are written under it, and an upper-case spelling of a member's key is that
  * member (409 `already_member`). A spelling with anything else in it, which the decoder would skip, is refused
  * (400 `bad_key`).
@@ -57,9 +50,8 @@
  *
  * ## Limits
  *
- * The auth limiter (15 a minute per address) on the nonce, the GitHub start and the join; the GitHub poll on its own
- * per-address bucket instead (github-poll-rate-limit.ts), so a phone waiting on its code does not spend its
- * neighbours' auth limiter; the gateway limiter in front of everything, and on the join itself 5 new accounts an
+ * The auth limiter (15 a minute per address) on the nonce and the join; the gateway limiter in front of everything,
+ * and on the join itself 5 new accounts an
  * hour and 20 a day per address (engine/open-join.ts). An address over its limit is told before the sign-in is
  * checked, so the nonce survives for later.
  */
@@ -82,8 +74,6 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '../sso.js';
-import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
-import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import { recordFunnelEvent } from '../engine/funnel.js';
 import {
     forgetOldJoinAddresses,
@@ -185,18 +175,16 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
     /**
      * The key asking to start a sign-in at the door, in the member table's spelling (`canonicalKey`), or null once
-     * the refusal is written: the door shut, unsigned, not a key's spelling, over `limit`, already a member, or a key
-     * a re-key replaced. `limit` is the auth limiter, except
-     * for the GitHub poll, which is on its own per-address bucket (github-poll-rate-limit.ts): a phone polls there
-     * for up to 15 minutes, and must not spend the auth limiter its neighbours on the same address sign up with.
+     * the refusal is written: the door shut, unsigned, not a key's spelling, over the auth limiter, already a member,
+     * or a key a re-key replaced.
      */
-    function joiningKey(ctx: any, limit: (ctx: any) => boolean = rateLimit): string | null {
+    function joiningKey(ctx: any): string | null {
         if (!doorOpen()) { inviteOnly(ctx); return null; }
         const signer = ctx.state?.actor as string | undefined;
         if (!signer) { unsigned(ctx); return null; }
         const actor = canonicalKey(signer);
         if (!actor) { badKey(ctx); return null; }
-        if (!limit(ctx)) return null;
+        if (!rateLimit(ctx)) return null;
         // A visitor's row hasn't joined: it may join here, and the join makes that row a member's.
         if (alreadyJoined(actor)) {
             ctx.status = 409;
@@ -211,17 +199,6 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         return actor;
     }
 
-    /** A GitHub start or poll at the door that did not work, in the door's own answer shape. */
-    function githubFailure(ctx: any, e: unknown): void {
-        if (e instanceof SsoProviderUnavailableError) {
-            ctx.status = 503;
-            ctx.body = { error: e.message, code: 'sign_in_unavailable' };
-            return;
-        }
-        if (e instanceof SsoVerificationError) return badRequest(ctx, e.message, 'sign_in');
-        throw e;
-    }
-
     router.post('/api/join/sso-nonce', async (ctx) => {
         const actor = joiningKey(ctx);
         if (!actor) return;
@@ -230,31 +207,9 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             nonce: issueNonce(joinNonceSubject(actor)),
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
-            githubFlow: GITHUB_FLOW,
             // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
             clientIds: webClientIds(),
         };
-    });
-
-    router.post('/api/join/github/start', async (ctx) => {
-        const actor = joiningKey(ctx);
-        if (!actor) return;
-        try {
-            const started = await startGithubSession(joinNonceSubject(actor));
-            ctx.status = 200;
-            ctx.body = started;
-        } catch (e) { return githubFailure(ctx, e); }
-    });
-
-    router.post('/api/join/github/poll', async (ctx) => {
-        const actor = joiningKey(ctx, githubPollRateLimit);
-        if (!actor) return;
-        const sessionId = (ctx as any).requestBody?.sessionId;
-        try {
-            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', joinNonceSubject(actor));
-            ctx.status = 200;
-            ctx.body = polled;
-        } catch (e) { return githubFailure(ctx, e); }
     });
 
     router.post('/api/join', async (ctx) => {
@@ -273,13 +228,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         }
         const credential = signInCredentialFrom(body);
         const nonce = typeof body.nonce === 'string' ? body.nonce : '';
-        if (provider === 'github') {
-            // The session this node ran; a GitHub token, if that is what came, is refused by verifySignIn.
-            if (!credential.sessionId && !credential.idToken) return badRequest(ctx, "'proof.sessionId' is required for GitHub.");
-        } else {
-            if (!credential.idToken) return badRequest(ctx, "'idToken' is required.");
-            if (!nonce) return badRequest(ctx, "'nonce' is required.");
-        }
+        if (!credential.idToken) return badRequest(ctx, "'idToken' is required.");
+        if (!nonce) return badRequest(ctx, "'nonce' is required.");
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, 'Please choose a name of at least 2 characters.');
 
@@ -324,8 +274,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
                 ctx.body = { error: e.message, code: 'sign_in' };
                 return;
             }
-            // Not the member's sign-in: the provider could not be asked (its keys or its user endpoint failed,
-            // came back unusable, or timed out). The nonce was not spent, so the same sign-in can try again.
+            // Not the member's sign-in: the provider could not be asked (its keys failed, came back unusable,
+            // or timed out). The nonce was not spent, so the same sign-in can try again.
             console.warn('[OpenJoin] sign-in could not be checked:', (e as Error)?.message || e);
             recordFunnelEvent('open_join_failed', 'sign_in_unavailable');
             ctx.status = 503;

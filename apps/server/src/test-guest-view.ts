@@ -975,11 +975,10 @@ async function main(): Promise<void> {
         const { resetChatRateLimit } = await import('./chat-rate-limit.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
         const { resetPasswordBrake } = await import('./password-brake.js');
-        const { pruneGithubPolls } = await import('./github-poll-rate-limit.js');
         const earlier = beforeCall;
         beforeCall = () => {
             earlier();
-            resetAdminRateLimit?.(); resetChatRateLimit(); resetAdminAuthTarpit(); resetPasswordBrake(); pruneGithubPolls(Date.now() + 3_600_000);
+            resetAdminRateLimit?.(); resetChatRateLimit(); resetAdminAuthTarpit(); resetPasswordBrake();
         };
         // The admin tarpit (admin-auth.ts) sleeps before it refuses: 250 ms even from the floor resetAdminAuthTarpit leaves
         // it at, on each of the ~180 admin reads, writes and HEADs a caller sends here. That was about 400 s of this suite's
@@ -1196,7 +1195,7 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
-            'POST /api/join', 'POST /api/join/github/poll', 'POST /api/join/github/start', 'POST /api/join/knock',
+            'POST /api/join', 'POST /api/join/knock',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
             'POST /api/join/sso-nonce',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
@@ -1293,12 +1292,11 @@ async function main(): Promise<void> {
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
-            'POST /api/recovery/collect/github/poll', 'POST /api/recovery/collect/github/start', 'POST /api/recovery/collect/hub',
+            'POST /api/recovery/collect/hub',
             'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
-            'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce', 'POST /api/recovery/sso/github/poll',
-            'POST /api/recovery/sso/github/start',
+            'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
             'POST /api/reports',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',

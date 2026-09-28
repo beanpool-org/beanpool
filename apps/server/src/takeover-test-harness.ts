@@ -135,6 +135,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
     const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
+    const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
     initAdminPassword();
@@ -146,8 +147,9 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
         initSnapshotScheduler();
     }
     const boot = resumeTakeoverAtBoot();
-    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
+    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot), and GitHub's rows.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });

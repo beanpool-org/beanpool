@@ -12,7 +12,7 @@
  *      stored in lower case; a spelling with extra characters the decoder skips is refused (400 bad_key).
  *   2. A local node whose operator opened the door (`nodeProfile.openJoin=true`), Beans on: open while nothing has
  *      moved, and SHUT, with no restart, the moment the first Bean moves (a Commons grant). Every door route (the
- *      nonce, the join, and the GitHub start and poll) answers 404 invite_only, /api/community/info says openJoin false.
+ *      nonce and the join) answers 404 invite_only, /api/community/info says openJoin false.
  *   3. That live community switched to the global profile (the finding): money stays on (G1), and the door stays
  *      shut. At runtime first, then at boot, where a loud line says why; every door route is 404, openJoin false.
  *   4. What travels (engine/open-join.ts; test-open-join-failover runs it across processes): a release and a re-key
@@ -32,8 +32,7 @@ delete process.env.GOOGLE_CLIENT_IDS;
 import crypto from 'node:crypto';
 
 // Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
-// should be shut (the GitHub start would then ask github.com for a device code): every request that is not to this
-// machine fails as unreachable, which the sign-in code answers with 503.
+// should be shut: every request that is not to this machine fails as unreachable, which the sign-in code answers with 503.
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
@@ -116,11 +115,9 @@ async function doorRoutesShut(label: string): Promise<void> {
     const stranger = newId();
     const nonce = await call('POST', stranger, '/api/join/sso-nonce', {});
     const joined = await call('POST', stranger, '/api/join', { callsign: 'Stranger', provider: 'google', idToken: mintGoogle('door-shut-sub', 'x'), nonce: 'x' });
-    const ghStart = await call('POST', stranger, '/api/join/github/start', {});
-    const ghPoll = await call('POST', stranger, '/api/join/github/poll', { sessionId: 'nothing' });
-    const all = [nonce, joined, ghStart, ghPoll];
+    const all = [nonce, joined];
     assert(all.every(r => r.status === 404 && r.body?.code === 'invite_only'),
-        `${label}: the nonce, the join, and the GitHub start and poll all answer 404 invite_only (got ${all.map(r => `${r.status} ${r.body?.code}`).join(', ')})`);
+        `${label}: the nonce and the join both answer 404 invite_only (got ${all.map(r => `${r.status} ${r.body?.code}`).join(', ')})`);
     const { db } = await import('./db/db.js');
     assert(!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(stranger.pk), `${label}: nobody joined`);
 }

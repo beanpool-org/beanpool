@@ -145,7 +145,6 @@ import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
-import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
@@ -1115,7 +1114,6 @@ export async function startHttpsServer(port: number): Promise<number> {
             else adminRateLimits.set(ip, valid);
         }
         pruneAuthAttempts(now);
-        pruneGithubPolls(now);
         pruneChatLines(now);
         requestNonces.prune(now);
     }, 60 * 1000);

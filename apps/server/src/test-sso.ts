@@ -19,8 +19,8 @@
  *
  * NETWORK: none, enforced. `fetch` is stubbed for the whole run (see below) and every cache is
  * primed before use. The "unknown key id" cases exercise the refetch-once path, meet a provider
- * that answers 503, and must fail closed after exactly one request. Until S1 those cases, GitHub's,
- * and Facebook's Graph fallback reached the real providers. The JWKS URLs themselves were checked by
+ * that answers 503, and must fail closed after exactly one request. Until S1 those cases, and
+ * Facebook's Graph fallback, reached the real providers. The JWKS URLs themselves were checked by
  * hand against Google and Apple on 2026-08-07; a test cannot tell "wrong URL" from "no network", so
  * it does not pretend to.
  *
@@ -116,7 +116,7 @@ function makeFixture(
     const jwk = { ...publicKey.export({ format: 'jwk' }), kid: KID, alg: 'RS256', use: 'sig' } as any;
     const f: Fixture = {
         provider,
-        label: { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' }[provider],
+        label: { google: 'Google', apple: 'Apple', facebook: 'Facebook' }[provider],
         iss: opts.iss,
         aud: opts.aud,
         otherAud: opts.otherAud,
@@ -169,14 +169,6 @@ const FACEBOOK = makeFixture('facebook', {
     otherAud: '987654321098765',
     sub: '100084729103847',
     extraClaims: { email: 'someone@example.com', email_verified: true },
-});
-
-const GITHUB = makeFixture('github', {
-    iss: 'https://github.com',
-    aud: 'beanpool_gh_client',
-    otherAud: 'someone_else_client',
-    sub: '98765432',
-    extraClaims: { email: 'developer@github.com', email_verified: true },
 });
 
 const FIXTURES = [GOOGLE, APPLE, FACEBOOK];
@@ -447,30 +439,33 @@ async function main(): Promise<void> {
     nonce = issueNonce(SUBJECT);
     await rejects(() => verifyIdToken('twitter' as SsoProvider, GOOGLE.mint({ nonce }), [GOOGLE.aud], nonce, SUBJECT),
         'a provider this node does not support is refused rather than defaulted');
-    assert(isSsoProvider('google') && isSsoProvider('apple') && isSsoProvider('facebook') && isSsoProvider('github'),
-        'google, apple, facebook, and github are recognised providers');
+    assert(isSsoProvider('google') && isSsoProvider('apple') && isSsoProvider('facebook'),
+        'google, apple and facebook are recognised providers');
     assert(!isSsoProvider('twitter') && !isSsoProvider('') && !isSsoProvider(undefined)
-        && !isSsoProvider('constructor'),
-        'and twitter, empty and Object.prototype keys are not');
+        && !isSsoProvider('constructor') && !isSsoProvider('github'),
+        'and twitter, empty, Object.prototype keys and github are not');
 
-    // GitHub has no token this node can check: the node runs the sign-in itself (engine/github-device.ts,
-    // test-github-device.ts). Anything handed in as a GitHub token is refused before any request.
+    // GitHub is not a sign-in (its `sub` is the account's public user id): anything handed in as a GitHub sign-in, a
+    // token Google signed included, is refused by name before any request.
     nonce = issueNonce(SUBJECT);
-    const unverifiedGithubJwt = GITHUB.mint({ nonce });
     fetchCalls = [];
-    await rejects(() => verifyIdToken('github', unverifiedGithubJwt, [GITHUB.aud], nonce, SUBJECT),
-        'an unverified pseudo-JWT for GitHub is refused');
-    await rejects(() => verifyIdToken('github', 'ghp_' + 'x'.repeat(36), [GITHUB.aud], nonce, SUBJECT),
+    let githubRefusal = '';
+    try {
+        await verifyIdToken('github' as SsoProvider, GOOGLE.mint({ nonce }), [GOOGLE.aud], nonce, SUBJECT);
+    } catch (e) {
+        githubRefusal = e instanceof SsoVerificationError ? e.message : `the wrong error: ${(e as Error).message}`;
+    }
+    assert(githubRefusal === "Unknown sign-in provider 'github'.", `a GitHub sign-in is refused as a provider this node does not know (${githubRefusal})`);
+    await rejects(() => verifyIdToken('github' as SsoProvider, 'ghp_' + 'x'.repeat(36), [GOOGLE.aud], nonce, SUBJECT),
         'and so is a personal access token');
-    assert(fetchCalls.length === 0, `...without a request to GitHub or anywhere else (${fetchCalls.length} request(s))`);
+    assert(fetchCalls.length === 0, `...without a request to anywhere (${fetchCalls.length} request(s))`);
 
     // The exported list must BE the table, not a copy of it that drifts (CR). Checked against
     // isSsoProvider in both directions so neither can gain an entry the other lacks.
-    assert(SSO_PROVIDERS.length === 4 && SSO_PROVIDERS.every(isSsoProvider),
+    assert(SSO_PROVIDERS.length === 3 && SSO_PROVIDERS.every(isSsoProvider),
         'SSO_PROVIDERS lists exactly the providers isSsoProvider accepts');
-    assert(SSO_PROVIDERS.includes('google') && SSO_PROVIDERS.includes('apple')
-        && SSO_PROVIDERS.includes('facebook') && SSO_PROVIDERS.includes('github'),
-        'and names all four of them, so a message built from it cannot go stale');
+    assert(SSO_PROVIDERS.includes('google') && SSO_PROVIDERS.includes('apple') && SSO_PROVIDERS.includes('facebook'),
+        'and names all three of them, so a message built from it cannot go stale');
 
     // ── Apple's quirks ────────────────────────────────────────────────────────────────────────
     console.log('\n── Apple specifics ──────────────────────────────────────');

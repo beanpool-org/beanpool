@@ -193,10 +193,10 @@ async function main(): Promise<void> {
     const n = await joinNonce(ada);
     const nonceBody = await call(ada, '/api/join/sso-nonce', {});
     assert(nonceBody.status === 200 && nonceBody.body.expiresInSeconds === 600
-        && JSON.stringify(nonceBody.body.providers) === JSON.stringify(['google', 'apple', 'facebook', 'github']),
-        'global: the nonce answer has the recovery nonce shape (nonce, expiresInSeconds, providers)');
+        && JSON.stringify(nonceBody.body.providers) === JSON.stringify(['google', 'apple', 'facebook']) && !('githubFlow' in nonceBody.body),
+        'global: the nonce answer has the recovery nonce shape (nonce, expiresInSeconds, providers), and offers no GitHub');
     assert(sameIds(nonceBody.body.clientIds, WEB_CLIENT_IDS),
-        `the nonce answer names the id a browser puts in its request: Google's Web client, Apple's Services ID, the Facebook app id, and none for GitHub (got ${JSON.stringify(nonceBody.body.clientIds)})`);
+        `the nonce answer names the id a browser puts in its request: Google's Web client, Apple's Services ID and the Facebook app id (got ${JSON.stringify(nonceBody.body.clientIds)})`);
 
     // An operator's own ids are what their node tells a browser, so a self-hosted node serves web sign-in with no
     // web app build of its own. Their Google list names their web client first; their Services ID is Apple's.

@@ -54,7 +54,7 @@ interface Browser {
 }
 
 /** The pages that keep the older header: their inline script must still run. */
-const OLDER_HEADER_PAGES = ['/settings', '/settings/members', '/manager', '/auth/github.html'];
+const OLDER_HEADER_PAGES = ['/settings', '/settings/members', '/manager', '/auth/facebook.html'];
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(publicDir, 'index.html'), '<!doctype html><title>BeanPool</title><div id="root">the web app</div>'
         + '<script src="/assets/probe.js"></script><script>window.inlineRan = true</script>');
     fs.writeFileSync(path.join(publicDir, 'assets', 'probe.js'), 'window.externalRan = true;');
-    for (const [file, title] of [['settings/index.html', 'Settings'], ['manager/index.html', 'Manager'], ['auth/github.html', 'GitHub return']]) {
+    for (const [file, title] of [['settings/index.html', 'Settings'], ['manager/index.html', 'Manager'], ['auth/facebook.html', 'Facebook return']]) {
         fs.writeFileSync(path.join(publicDir, file), `<!doctype html><title>${title}</title><script>window.inlineRan = true</script>`);
     }
     process.chdir(webRoot);

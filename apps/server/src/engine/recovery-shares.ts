@@ -591,6 +591,51 @@ export function deleteAllShares(ownerPubkey: string): number {
 }
 
 /**
+ * A member's sign-in copies for `provider` removed, as a disconnect of that provider removes them (DELETE
+ * /api/recovery/shares/sso/:provider in routes/keepers.ts), but without opening any copy: for a provider that is no
+ * longer a sign-in (engine/github-sign-in-removal.ts), at a server's start, where a missing key must not keep the rows.
+ *
+ * With another sign-in copy left, every other copy of the current generation goes into the next one as it lies: the
+ * same stored bytes, index and lookup hash. A stored copy's wrap is bound to its owner and holder type, never its
+ * generation (services/recovery-seal-key.ts), so it opens there as it did. The new generation is numbered as
+ * putShareGeneration numbers one and drops every older one, so a standby takes it the same way (engine/sync.ts). With
+ * none left, every copy goes, hub piece included, with the tombstone ({@link deleteAllShares}), as a disconnect of the
+ * last sign-in does. Returns how many of `provider`'s copies went and whether the member still has a sign-in copy;
+ * nothing is written when the current generation holds none of them.
+ */
+export function removeSignInCopiesAsStored(ownerPubkey: string, provider: string): { removed: number; signInLeft: boolean } {
+    return db.transaction(() => {
+        const generation = getCurrentGeneration(ownerPubkey);
+        const current = db.prepare('SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND generation = ? ORDER BY id')
+            .all(ownerPubkey, generation) as Record<string, unknown>[];
+        const isTheirs = (r: Record<string, unknown>) => r.holder_type === 'sso' && r.holder_ref === provider;
+        const removed = current.filter(isTheirs).length;
+        const rest = current.filter(r => !isTheirs(r));
+        const signInLeft = rest.some(r => r.holder_type === 'sso');
+        if (removed === 0) return { removed, signInLeft };
+        if (!signInLeft) {
+            deleteAllShares(ownerPubkey);
+            return { removed, signInLeft };
+        }
+        const nextGeneration = Math.max(generation, deletedGeneration(ownerPubkey)) + 1;
+        // Older rows first: a carried copy keeps its lookup hash, which is unique.
+        db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?').run(ownerPubkey, nextGeneration);
+        const insert = db.prepare(`
+            INSERT INTO recovery_shares (
+                owner_pubkey, holder_type, holder_ref, share_index,
+                encrypted_share, share_iv, share_tag,
+                ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt, kdf_params, generation
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const r of rest) {
+            insert.run(ownerPubkey, r.holder_type, r.holder_ref, r.share_index, r.encrypted_share, r.share_iv, r.share_tag,
+                r.ephemeral_pubkey ?? null, r.sso_lookup_hash ?? null, r.sso_lookup_salt ?? null, r.kdf_params ?? null, nextGeneration);
+        }
+        return { removed, signInLeft };
+    })();
+}
+
+/**
  * A member moved to a new key (the re-key wizard, engine/member-wizards.ts): the rows they own belong to the new key,
  * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
  * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are

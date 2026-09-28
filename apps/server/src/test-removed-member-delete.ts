@@ -89,7 +89,7 @@ function makeMember(name: string, beans = 40): Id {
 function giveFriendsAndCopies(m: Id, friend: Id): void {
     db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(m.pk, friend.pk);
     db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(friend.pk, m.pk);
-    for (const [i, provider] of [[1, 'google'], [2, 'github']] as const) {
+    for (const [i, provider] of [[1, 'google'], [2, 'apple']] as const) {
         db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, sso_lookup_hash, sso_lookup_salt)
                     VALUES (?, 'sso', ?, ?, 'c2hhcmU=', 'aXY=', 'dGFn', ?, 'c2FsdA==')`).run(m.pk, provider, i, `hash-${m.name}-${provider}`);
     }

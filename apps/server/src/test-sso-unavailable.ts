@@ -5,8 +5,7 @@
  *
  * No provider is contacted. `fetch` is stubbed for the whole run: requests to this test's own server go through,
  * Google's key endpoint is answered by the outage under test (between outages its keys are primed into sso.ts's
- * cache, so it is not asked at all), GitHub's device-code endpoint is answered by an outage, `exp.host` (push) is
- * recorded, and anything else is recorded and refused.
+ * cache, so it is not asked at all), `exp.host` (push) is recorded, and anything else is recorded and refused.
  *
  *   1. POST /api/recovery/shares/sso, the member's keeper deposit: Google's key endpoint answering 503, answering
  *      with no usable keys, answering something that is not JSON, or unreachable → 503 sign_in_unavailable, and
@@ -15,9 +14,6 @@
  *   2. POST /api/recovery/collect/sso, the recovering device: the same four outages → 503 sign_in_unavailable, and
  *      nothing released. A forged token → 400 { error } as before. The same token and nonce then release the
  *      fragment. The session's other refusals (asking for a hub a single-blob keeper does not have) still answer 400.
- *   3. The GitHub start routes, the member's and the recovering device's: GitHub answering 5xx, or unreachable →
- *      503 sign_in_unavailable. The deposit and collect routes never ask GitHub themselves: they spend a sign-in
- *      this node already finished (consumeGithubSession), so a GitHub outage can only surface at start and poll.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sso-unavailable.ts
  */
@@ -25,8 +21,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.GOOGLE_CLIENT_IDS;
-delete process.env.GITHUB_CLIENT_IDS;
-delete process.env.GITHUB_CLIENT_ID;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -36,9 +30,7 @@ import { db } from './db/db.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { countCurrentShares } from './engine/recovery-shares.js';
 import { listReleases } from './engine/recovery-release.js';
-import { _clearGithubSessionsForTests } from './engine/github-device.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { sealSeedToSso } from '@beanpool/core';
 
@@ -86,8 +78,6 @@ const KEY_OUTAGES: Array<[KeyOutage, string]> = [
     ['unreachable', 'Google\'s key endpoint unreachable'],
 ];
 let googleKeys: KeyOutage = '503';
-/** How GitHub answers: every GitHub request in this suite meets an outage. */
-let githubDown: '5xx' | 'unreachable' = '5xx';
 
 const realFetch = globalThis.fetch;
 /** Every request that left for somewhere other than this test's own server. */
@@ -102,10 +92,6 @@ globalThis.fetch = (async (input: any, init?: any) => {
         if (googleKeys === 'no-keys') return json({ keys: [] });
         if (googleKeys === 'not-json') return new Response('<html>Service Unavailable</html>', { status: 200 });
         return new Response('unavailable', { status: 503 });
-    }
-    if (url.startsWith('https://github.com/') || url.startsWith('https://api.github.com/')) {
-        if (githubDown === 'unreachable') throw new TypeError('fetch failed');
-        return new Response('unavailable', { status: 502 });
     }
     return new Response('stubbed: test-sso-unavailable contacts nobody', { status: 503 });
 }) as typeof fetch;
@@ -130,7 +116,6 @@ function newMember(): Id & { callsign: string } {
 async function call(id: Id, path: string, body: unknown): Promise<{ status: number; body: any; raw: string }> {
     // Fresh limiter windows, so the suite's own request count never decides a result it isn't testing.
     pruneAuthAttempts(Date.now() + 120_000);
-    pruneGithubPolls(Date.now() + 120_000);
     resetGatewayRateLimit();
     const raw = JSON.stringify(body ?? {});
     const ts = Date.now();
@@ -178,7 +163,6 @@ async function main(): Promise<void> {
     await startHttpsServer(PORT);
     _resetJwksCacheForTests();
     _clearNoncesForTests();
-    _clearGithubSessionsForTests();
     primeGoogle();
 
     // ── 1. the keeper deposit ────────────────────────────────────────────────────────────────────
@@ -240,24 +224,7 @@ async function main(): Promise<void> {
     const coldHub = await call(otherDevice, '/api/recovery/collect/hub', { collectionId: coldOpen.body?.collectionId });
     assert(refusedAsBefore(coldHub), `the session's own refusals are unchanged: a hub this account does not have → 400 { error } (got ${coldHub.status} ${coldHub.raw})`);
 
-    // ── 3. GitHub, where it is asked ─────────────────────────────────────────────────────────────
-    console.log('\n── 3. the GitHub start routes ──');
-    const bea = newMember();
-    const beaDevice = newId();
-    const beaOpened = await call(beaDevice, '/api/recovery/collect', { callsign: ada.callsign });
-    const starts: Array<[string, () => Promise<{ status: number; body: any; raw: string }>]> = [
-        ['a member\'s GitHub start', () => call(bea, '/api/recovery/sso/github/start', {})],
-        ['a recovering device\'s GitHub start', () => call(beaDevice, '/api/recovery/collect/github/start', { collectionId: beaOpened.body?.collectionId })],
-    ];
-    for (const [label, start] of starts) {
-        for (const down of ['5xx', 'unreachable'] as const) {
-            githubDown = down;
-            const r = await start();
-            assert(unavailable(r), `${label} with GitHub ${down === '5xx' ? 'answering 502' : 'unreachable'} → 503 sign_in_unavailable (got ${r.status} ${r.raw})`);
-        }
-    }
-
-    const strays = outbound.filter(u => !/^https:\/\/(www\.googleapis\.com|github\.com|api\.github\.com|exp\.host)\//.test(u));
+    const strays = outbound.filter(u => !/^https:\/\/(www\.googleapis\.com|exp\.host)\//.test(u));
     assert(strays.length === 0, `nothing else was contacted (${strays.join(', ') || 'none'})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

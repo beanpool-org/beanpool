@@ -1017,7 +1017,7 @@ async function main(): Promise<void> {
             // Deleting its own row (the director's call on Marty's card removed-member-delete, 2026-09-27).
             'POST /api/member/purge',
             // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
-            'POST /api/join', 'POST /api/join/sso-nonce', 'POST /api/join/github/start', 'POST /api/join/github/poll', 'POST /api/join/knock',
+            'POST /api/join', 'POST /api/join/sso-nonce', 'POST /api/join/knock',
             // What anyone may do, signed or not.
             'POST /api/pricing-guide/report',
         ].sort();

@@ -77,8 +77,6 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
     // The join doors, signed by the key that joins; each makes its row a member's.
     { method: 'POST', path: '/api/join', why: 'the open door' },
     { method: 'POST', path: '/api/join/sso-nonce', why: "the open door's sign-in" },
-    { method: 'POST', path: '/api/join/github/start', why: "the open door's GitHub sign-in" },
-    { method: 'POST', path: '/api/join/github/poll', why: "the open door's GitHub sign-in" },
     { method: 'POST', path: '/api/join/knock', why: 'a knock (its status is a public read)' },
     // What anyone may do, signed or not.
     { method: 'POST', path: '/api/pricing-guide/report', why: 'a price report, which may be anonymous; signed, it only names the reporter' },

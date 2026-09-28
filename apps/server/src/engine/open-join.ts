@@ -37,7 +37,7 @@ import crypto from 'node:crypto';
 import { db, afterTransactionCommit } from '../db/db.js';
 import { alreadyJoined, type Member, type SyncOpenJoin } from '@beanpool/engine';
 import { registerMemberInternal } from './members.js';
-import type { SsoProvider } from '../sso.js';
+import { isSsoProvider, type SsoProvider } from '../sso.js';
 
 /** Sign-ups through the open door per address (design §2.5). Sliding windows over `open_joins`. */
 export const OPEN_JOIN_LIMITS = { perHour: 5, perDay: 20 } as const;
@@ -276,7 +276,7 @@ export interface OpenJoinMerge {
     kept: number;
     /** Rows whose member is not in this database. */
     skipped: number;
-    /** Rows that were not rows (a field missing or not a string). */
+    /** Rows that were not rows (a field missing or not a string), or name a sign-in this server has not got. */
     invalid: number;
 }
 
@@ -288,7 +288,9 @@ const isText = (v: unknown, max: number): v is string => typeof v === 'string' &
  * replaces it, as the main server's is the one every hash was made with. Each row is kept only when newer than the
  * copy here, and only for a member this database has. `join_hash` is unique here as on the main server, whose rows
  * never share one: a row here with the same hash under another key is the one a re-key has since moved, so when
- * the incoming row is newer it goes, and when it is older the incoming row is the stale one.
+ * the incoming row is newer it goes, and when it is older the incoming row is the stale one. A row naming a provider
+ * that is not a sign-in here (GitHub, which no longer is one: engine/github-sign-in-removal.ts) is not stored, so no
+ * copy of an older server's record brings one back.
  */
 export function writeOpenJoinRecord(salt: unknown, joins: unknown): OpenJoinMerge {
     const merge: OpenJoinMerge = { saltWritten: false, written: 0, kept: 0, skipped: 0, invalid: 0 };
@@ -309,7 +311,7 @@ export function writeOpenJoinRecord(salt: unknown, joins: unknown): OpenJoinMerg
         }
         for (const raw of Array.isArray(joins) ? joins : []) {
             const r = raw as Partial<SyncOpenJoin> | null;
-            if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !isText(r.joinHash, 128)
+            if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !isSsoProvider(r.provider) || !isText(r.joinHash, 128)
                 || !isText(r.joinedAt, 40) || !isText(r.updatedAt, 40)) {
                 merge.invalid++;
                 continue;

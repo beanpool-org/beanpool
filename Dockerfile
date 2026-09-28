@@ -15,6 +15,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/beanpool-core/package.json ./packages/beanpool-core/
 COPY packages/beanpool-engine/package.json ./packages/beanpool-engine/
+COPY packages/beanpool-signin/package.json ./packages/beanpool-signin/
 COPY apps/pwa/package.json ./apps/pwa/
 COPY apps/manager/package.json ./apps/manager/
 COPY apps/server/package.json ./apps/server/
@@ -31,11 +32,13 @@ COPY . .
 # Build in dependency order:
 #   1. Core protocol library (shared by both PWA and server)
 #   2. Engine (db-backed shared node logic; depends on core, used by server)
-#   3. PWA (Vite → outputs to apps/server/public/)
-#   4. Manager (Vite → outputs to apps/server/public/manager/)
-#   5. Server (tsc → outputs to apps/server/dist/)
+#   3. Sign-in checks (@beanpool/signin; no workspace deps, used by server and the key vault)
+#   4. PWA (Vite → outputs to apps/server/public/)
+#   5. Manager (Vite → outputs to apps/server/public/manager/)
+#   6. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
 RUN cd packages/beanpool-engine && pnpm run build
+RUN cd packages/beanpool-signin && pnpm run build
 # Accept version from CI build args (from git tag) so the frontend build inherits it.
 # Declared HERE, not at the top of the stage: an ENV that changes on every release tag
 # invalidates every layer below it, so up there it would bust the `pnpm install` cache
@@ -51,6 +54,21 @@ RUN cd apps/manager && pnpm run build
 RUN cd apps/server && pnpm run build
 
 # Multi-stage Docker build for BeanPool node
+
+# =============================================================================
+# cloudflared — the Cloudflare tunnel connector the server runs for its <name>.beanpool.org address
+# (apps/server/src/services/tunnel-connector.ts). Only its static binary is copied into the runtime stage.
+# =============================================================================
+# Cloudflare's official image, pinned by version AND by the digest of its multi-arch index (linux/amd64 + linux/arm64),
+# so every build takes exactly the binary we reviewed, never whatever :latest is that day. A named stage, so a
+# dependency bot can bump it like any other FROM line.
+#
+# Cloudflare supports a cloudflared release for one year after its newest one, so bump this at least every few months:
+#   docker buildx imagetools inspect cloudflare/cloudflared:<new version>
+# and put that version and the "Digest:" it prints for the index (the first one, not a per-platform one) here. The
+# `cloudflared --version` below fails the build for a platform whose binary doesn't run. Release notes:
+# https://github.com/cloudflare/cloudflared/releases
+FROM cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c AS cloudflared
 
 # =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run
@@ -86,6 +104,11 @@ COPY --from=builder /app/packages/beanpool-engine/dist ./packages/beanpool-engin
 COPY --from=builder /app/packages/beanpool-engine/package.json ./packages/beanpool-engine/package.json
 COPY --from=builder /app/packages/beanpool-engine/node_modules ./packages/beanpool-engine/node_modules
 
+# Copy compiled sign-in checks (the server's sso.ts and engine/github-device.ts run on them)
+COPY --from=builder /app/packages/beanpool-signin/dist ./packages/beanpool-signin/dist
+COPY --from=builder /app/packages/beanpool-signin/package.json ./packages/beanpool-signin/package.json
+COPY --from=builder /app/packages/beanpool-signin/node_modules ./packages/beanpool-signin/node_modules
+
 # Copy root workspace config for pnpm resolution
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
@@ -105,6 +128,11 @@ RUN (npm rebuild better-sqlite3 || npm rebuild better-sqlite3 --build-from-sourc
 
 # Install su-exec for dropping privileges
 RUN apk add --no-cache su-exec
+
+# The tunnel connector (the cloudflared stage above). A static Go binary, already mode 0755 in Cloudflare's image; owned by
+# root here so the server (uid 1000) can run it and never change it. The --version run fails the build if it can't run.
+COPY --from=cloudflared --chown=root:root /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+RUN cloudflared --version
 
 # Clean up build tools to reduce image size
 RUN apk del python3 make g++

@@ -226,3 +226,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-08 - Single-Pass Event RSVP Counting in getPosts Engine
 **Learning:** In `packages/beanpool-engine/src/posts.ts`, `getPosts` calculated `goingCount` and `interestedCount` for event posts by calling `rsvps.filter(...)` twice. For feeds and searches containing $E$ events and $R$ RSVPs, this performed $2 \times R$ array operations and generated two temporary array allocations per event post on hot query paths.
 **Action:** Refactored RSVP status counting into a single `for...of` loop pass over `rsvps`, computing both `goingCount` and `interestedCount` in $R$ iterations with zero intermediate array allocations.
+
+## 2026-10-09 - Batch Sybil Funnel Puppet Isolation Check in State Engine
+**Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` evaluated puppet isolation for Sybil funnel detection by running two SQL queries per invitee (`marketPartners` and `directPartners`) inside a `for...of` loop. For farmers with $N$ invitees, this caused $2N$ separate SQLite queries per farmer during health checks.
+**Action:** Replaced the per-invitee loop with a single batch query using `json_each(?)` that checks for outside marketplace and direct transaction partners across all invitees at once, reducing query overhead from $O(N)$ to $O(1)$ per farmer.

@@ -423,6 +423,9 @@ importers:
       '@beanpool/engine':
         specifier: workspace:*
         version: link:../../packages/beanpool-engine
+      '@beanpool/signin':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-signin
       '@koa/router':
         specifier: ^13.1.0
         version: 13.1.1
@@ -524,6 +527,37 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  apps/vault:
+    dependencies:
+      '@beanpool/core':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-core
+      '@beanpool/signin':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-signin
+      '@noble/ciphers':
+        specifier: ^2.1.1
+        version: 2.1.1
+      '@noble/curves':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.0.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.15
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+
   packages/beanpool-core:
     dependencies:
       '@libp2p/crypto':
@@ -590,6 +624,18 @@ importers:
         version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/beanpool-guide: {}
+
+  packages/beanpool-signin:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 

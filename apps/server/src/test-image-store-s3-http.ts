@@ -43,6 +43,7 @@ import zlib from 'node:zlib';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -317,21 +318,26 @@ async function main(): Promise<void> {
     const conv = createConversation('dm', [author, bob], author);
     if (!conv) throw new Error('setup: no conversation');
     const { sendMessage, deleteOwnMessage } = await import('./state-engine.js');
-    const cipher = crypto.randomBytes(900).toString('base64');
-    const msg = sendMessage(conv.id, author, 'encrypted-text', 'text-nonce', 'image', { data: cipher, nonce: 'att-nonce', mime: 'image/png' })!;
+    // A DM photo goes in encrypted: the caption and the photo each in the v2 form.
+    const caption = lockedDm();
+    const att = lockedDm(900);
+    const cipher = att.ciphertext;
+    const msg = sendMessage(conv.id, author, caption.ciphertext, caption.nonce, 'image', { data: cipher, nonce: att.nonce, mime: 'image/png' })!;
     const attRow = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg?.id) as any;
     assert(!!attRow && attRow.data === null && attRow.storage_key === `attachments/${msg.id}.bin`,
         'an attachment\'s ciphertext leaves the row for the bucket');
     assert((await fake.objects()).get(attRow.storage_key)?.bytes.toString('base64') === cipher, 'the bucket holds the ciphertext exactly');
     const attRes = await fetch(`${BASE}/api/messages/${msg.id}/attachment`);
     const attJson = await attRes.json() as any;
-    assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === 'att-nonce' && attJson.mime === 'image/png',
+    assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === att.nonce && attJson.mime === 'image/png',
         'the attachment route returns the ciphertext, nonce and mime unchanged');
 
     // Deleted for everyone WHILE it is being read. The read is async; the tombstone removes the row, then the
     // object after its commit. An attachment that no longer exists is a 404, not an outage.
-    const msg2 = sendMessage(conv.id, author, 'encrypted-text-2', 'text-nonce-2', 'image',
-        { data: crypto.randomBytes(900).toString('base64'), nonce: 'att-nonce-2', mime: 'image/png' })!;
+    const caption2 = lockedDm();
+    const att2 = lockedDm(900);
+    const msg2 = sendMessage(conv.id, author, caption2.ciphertext, caption2.nonce, 'image',
+        { data: att2.ciphertext, nonce: att2.nonce, mime: 'image/png' })!;
     const att2Row = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg2.id) as any;
     await fake.clearLog();
     await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${att2Row.storage_key}`, delayMs: 1_500, count: 1 });

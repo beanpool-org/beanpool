@@ -71,6 +71,7 @@ import { addConnector } from './connector-manager.js';
 import { originOfCachedPost } from './federation-commission.js';
 import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 import { knockRefusal } from './engine/probation.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -159,7 +160,7 @@ const report = (reporter: Id, postId: string, author: Id) =>
 async function dm(from: Id, to: Id): Promise<{ conv: Res; send: Res | null }> {
     const conv = await call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, to.pk], createdBy: from.pk });
     if (conv.status !== 200) return { conv, send: null };
-    const send = await call('POST', from, '/api/messages/send', { conversationId: conv.body.conversation.id, authorPubkey: from.pk, ciphertext: 'c2VjcmV0', nonce: 'bm9uY2U=' });
+    const send = await call('POST', from, '/api/messages/send', { conversationId: conv.body.conversation.id, authorPubkey: from.pk, ...lockedDm() });
     return { conv, send };
 }
 const hiddenAt = (postId: string) => attempt(() => (db.prepare('SELECT hidden_by_reports_at FROM posts WHERE id = ?').get(postId) as any)?.hidden_by_reports_at) ?? null;
@@ -592,7 +593,7 @@ async function main(): Promise<void> {
     // Opening a conversation reaches someone whether or not a message follows: it is a line in their inbox.
     const dee = member('Dee', 0);
     const open = (from: Id, to: Id) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, to.pk], createdBy: from.pk });
-    const line = (from: Id, conversationId: string) => call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const line = (from: Id, conversationId: string) => call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ...lockedDm() });
     const convs: string[] = [];
     for (const t of targets.slice(0, 10)) convs.push((await open(dee, t)).body?.conversation?.id);
     assert(convs.every(Boolean), 'a new member opens conversations with 10 new people, writing nothing');
@@ -656,7 +657,7 @@ async function main(): Promise<void> {
     const mutedDm = await dm(max, targets[0]);
     assert(mutedDm.conv.status === 403 && mutedDm.conv.body?.code === 'moderation_muted', `starting a conversation → 403 (got ${mutedDm.conv.status})`);
     const zedToMax = await dm(zed, max);
-    const mutedSend = await call('POST', max, '/api/messages/send', { conversationId: zedToMax.conv.body.conversation.id, authorPubkey: max.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const mutedSend = await call('POST', max, '/api/messages/send', { conversationId: zedToMax.conv.body.conversation.id, authorPubkey: max.pk, ...lockedDm() });
     assert(zedToMax.send?.status === 200 && mutedSend.status === 403 && mutedSend.body?.code === 'moderation_muted',
         `sending a DM, even a reply to someone who wrote first → 403 (got ${mutedSend.status})`);
     assert((await call('GET', max, '/api/marketplace/posts')).status === 200, 'a muted member still reads');
@@ -877,7 +878,7 @@ async function main(): Promise<void> {
     for (const t of targets.slice(0, 10)) tessOpens.push((await call('POST', tess, '/api/messages/conversation', { type: 'dm', participants: [tess.pk, t.pk], createdBy: tess.pk })).status);
     assert(tessTakes.status === 200 && tradeChat?.created_by === tess.pk && tessOpens.every(s => s === 200),
         `a new member takes an offer into escrow, which opens a chat with the seller in their name, and still opens conversations with 10 new people (${tessTakes.status} ${tessTakes.body?.error ?? ''}; ${tessOpens.join(',')})`);
-    const tessLine = await call('POST', tess, '/api/messages/send', { conversationId: tradeChat?.id, authorPubkey: tess.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const tessLine = await call('POST', tess, '/api/messages/send', { conversationId: tradeChat?.id, authorPubkey: tess.pk, ...lockedDm() });
     assert(tessLine.status === 429 && tessLine.body?.limit === 'new_dm_recipients',
         `their first line in the trade's chat is an 11th new person: 429, as before (got ${tessLine.status} ${tessLine.body?.error ?? ''})`);
 

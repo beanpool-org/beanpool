@@ -33,12 +33,12 @@ The owners and admins who run your community's server can still see what is stor
 
 - **Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See "Your profile".
 - **Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.
-- **App Lock:** asks for your phone's passcode or fingerprint each time the app opens.
+- **App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. It needs a screen lock on the phone: without one there is nothing for it to ask.
 - **Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See "Sharing your channels".
 
 ## Who else can see things
 
-- Chats between two people are usually end-to-end encrypted. See "Messages" for the one exception.
+- Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See "Messages".
 - Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See "The Pulse".
 - Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.
 

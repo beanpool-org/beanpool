@@ -34,6 +34,7 @@ if (!OPEN_FEED) delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -167,8 +168,10 @@ async function main() {
     console.log('\n— events —');
     const conv = se.createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: could not create the DM');
-    const DM_CIPHERTEXT = 'dm-ciphertext-' + crypto.randomBytes(4).toString('hex');
-    se.sendMessage(conv.id, alice.pubKeyHex, DM_CIPHERTEXT, 'nonce-1');
+    // A DM line in the encrypted form; its random ciphertext is the marker the checks look for.
+    const dmLine = lockedDm();
+    const DM_CIPHERTEXT = dmLine.ciphertext;
+    se.sendMessage(conv.id, alice.pubKeyHex, DM_CIPHERTEXT, dmLine.nonce);
     // A balance change, exactly as transfer() announces it (A2-20): scoped to its two parties.
     se.broadcast({ type: 'transaction', txn: { from: alice.pubKeyHex, to: bob.pubKeyHex, amount: 7, memo: 'rent' } }, [alice.pubKeyHex, bob.pubKeyHex]);
     // A trade request, as escrow announces it: to its two parties only (test-ws-feed-parties drives the real path).

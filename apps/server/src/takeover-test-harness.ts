@@ -10,6 +10,9 @@
  *
  * The orchestrator talks to a node over HTTP like Settings does, and over stdin for what only a test does (set up
  * members, pull now, look inside). Replies are `@@ {json}` lines on stdout.
+ *
+ * Every node's tunnel runs the fake cloudflared (tunnel-test-fake.ts), controlled from `<data dir>.cloudflared`: no suite
+ * starts the real one.
  */
 
 import fs from 'node:fs';
@@ -114,6 +117,9 @@ function reply(msg: Record<string, unknown>): void {
 export async function runNodeChild(commands: Record<string, (args: any) => Promise<unknown>> = {}): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     fs.mkdirSync(dataDir, { recursive: true });
+    // The tunnel inside the server (services/tunnel-connector.ts) runs the fake, from before anything can start it.
+    const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
+    await useFakeCloudflared(`${dataDir}.cloudflared`);
     const Koa = (await import('koa')).default;
     const { ensureGenesis } = await import('./genesis.js');
     const { initAdminPassword } = await import('./config/local-config.js');
@@ -146,6 +152,10 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });
     await finishTakeoverAfterBoot();
+    // index.ts step 10.4: the tunnel inside the server, on a main server with a tunnel address (a take-over's own step
+    // started it above when this start finished one).
+    const { initTunnelConnector } = await import('./services/tunnel-connector.js');
+    await initTunnelConnector();
     // As index.ts does, but awaited so a suite can see the first answer, and only when the suite says where this
     // node's "public address" is: the suites' main servers have real-looking hostnames that must never be asked.
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
@@ -302,6 +312,20 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
     const config = getLocalConfig();
     const status = await getTakeoverStatus();
     const tokenFile = path.join(dataDir, 'tunnel-token');
+    // The tunnel inside the server: what it wants, what it runs, and the token its child (the fake) was started with.
+    const { tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
+    const t = tunnelConnectorForTests();
+    const runsFile = path.join(`${dataDir}.cloudflared`, 'runs.jsonl');
+    const childRun = async () => {
+        for (let i = 0; i < 150 && t.pid !== null; i++) {
+            const runs = fs.existsSync(runsFile) ? fs.readFileSync(runsFile, 'utf-8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+            const mine = runs.find((r: any) => r.pid === t.pid);
+            if (mine) return mine;
+            await new Promise((r) => setTimeout(r, 20));
+        }
+        return null;
+    };
+    const run = await childRun();
     return {
         role: getNodeRole(),
         peerId: peerIdFromPrivateKey(getPrivateKey()).toString(),
@@ -315,6 +339,7 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         backupReplicationToken: config.backupReplicationToken ? 'set' : null,
         publicAddress: (getNodeConfig() as any).publicAddress ?? null,
         tunnelTokenFile: fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, 'utf-8') : null,
+        tunnel: { wantedToken: t.wantedToken, runningToken: t.runningToken, state: t.status.state, childToken: run?.env?.TUNNEL_TOKEN ?? null },
         heldDirExists: fs.existsSync(path.join(dataDir, 'held-takeover-envelopes')),
         bundleFileExists: fs.existsSync(path.join(dataDir, 'takeover-bundle.json')),
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),

@@ -4,6 +4,7 @@
 
 import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
 import { db, writeTombstone, afterTransactionCommit } from '../db/db.js';
+import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
@@ -32,6 +33,15 @@ import {
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
+
+/**
+ * A listing with a keeper's wage owed on it (deferred_wage_claims, pending): taking it down cancels the claim, a row a
+ * standby never writes (config/node-role.ts assertPlainTablesWritable), so there it is refused before anything is written.
+ */
+export function assertPostWagesWritable(postId: string): void {
+    if (getNodeRole() !== 'backup') return;
+    if (db.prepare("SELECT 1 FROM deferred_wage_claims WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId)) assertPlainTablesWritable();
+}
 
 /**
  * The post as the member who acted gets it back in the route's response. Each write below reads its post WITH the
@@ -564,6 +574,7 @@ export function isOwnListing(postId: unknown, publicKey: string): boolean {
 export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {
     const postRow = db.prepare("SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
     if (!postRow) return false;
+    assertPostWagesWritable(id);
 
     const isDirectAuthor = postRow.author_pubkey === callerPublicKey;
     const isTreasuryAuthor = !isDirectAuthor && !!db.prepare(

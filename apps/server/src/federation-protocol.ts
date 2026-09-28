@@ -15,6 +15,7 @@ import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federa
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './engine/member-key.js';
+import { MessagingError } from './engine/messaging.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
     PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
@@ -299,8 +300,19 @@ export function registerFederationHandler(node: Libp2p): void {
                         
                         const conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
                         if (conversation) {
-                            const message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata);
-                            if (message) {
+                            // A DM is stored encrypted or not at all (engine/messaging.ts): a peer relaying a readable
+                            // line is answered with the refusal, not left to time out.
+                            let message: ReturnType<typeof sendMessage> = null;
+                            let refusal: string | null = null;
+                            try {
+                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata);
+                            } catch (e: any) {
+                                if (!(e instanceof MessagingError)) throw e;
+                                refusal = e.message;
+                            }
+                            if (refusal) {
+                                response = { error: refusal };
+                            } else if (message) {
                                 console.log(`📨 Federation libp2p relay: ${senderCallsign || senderPublicKey.substring(0, 8)} → ${recipient.callsign}`);
                                 response = { success: true, conversationId: conversation.id, messageId: message.id };
                             } else {

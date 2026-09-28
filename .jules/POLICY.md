@@ -507,3 +507,13 @@ intentional; do not open PRs or issues attempting to alter them:
   PR the stray's. The scan it replaces runs only when the exact lookup misses. Bolt: in any lookup rewrite, an exact key
   must still win over a normalised one when two keys collide, and name the loop the lookup runs in and how large the
   list can grow (#1034).
+
+### 2026-09-29 — Vault: `credentials: 'same-origin'` on the manager's dispute helpers (#1294) — CLOSED, NO-OP
+- **Category:** PHANTOM VULNERABILITY, RECURRING (the earlier `deleteNodePost` filing in `.jules/vault.md` made the same claim)
+- **Claim:** `fetchEscrowDisputes` and `resolveEscrowDisputeApi` in `apps/manager/src/lib/node-client.ts` omit
+  `credentials: 'same-origin'`, so cookie-authenticated admin sessions get 401.
+- **Why not to re-file:** `'same-origin'` is the Fetch standard's DEFAULT credentials mode in every browser the manager
+  supports, and every manager call goes to a same-origin URL: either the node directly, or through the manager's proxy
+  when the node is elsewhere (`resolveNodeApiUrl`). The cookie is already sent, so there's no 401 to fix. Writing the
+  default out changes nothing. Vault: a missing `credentials` option is a defect only for a CROSS-origin call that needs
+  cookies (`'include'`). Show the request going cross-origin, and the 401 it gets, before filing one.

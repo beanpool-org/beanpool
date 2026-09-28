@@ -147,6 +147,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // dropMovedRecoveryCopies)
     move('recovery_collections', 'owner_pubkey');
     move('recovery_releases', 'released_by');
+    move('recovery_releases', 'owner_pubkey');
     // The sign-in account the member joined with through the open door (engine/open-join.ts). Left on the
     // invalidated key, deleting the account would free nothing and a removal would read as still joined.
     // Stamped on the main server, so the move replicates (engine/open-join.ts).
@@ -184,6 +185,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // cross-village trust validation and settlements will fail verification against the new key.
     // Trades with other villages will need re-linking on peer nodes.
     move('federation_links', 'treasury_pubkey');
+    move('federation_link_treasuries', 'treasury_pubkey');
 
     // (v) activity_feed
     move('activity_feed', 'actor_pubkey');

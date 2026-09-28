@@ -14,9 +14,9 @@ import { getMnemonic, type BeanPoolIdentity } from './identity';
  * and taking it off the phone (Sign Out, Purge, node-mismatch's delete, Replace Account). The sweep in
  * __tests__/words-behind-lock.test.ts lists every one.
  *
- * The check is LocalAuth.authenticateUser, as Settings has always asked it: the phone's biometric prompt with its
- * passcode as the fallback. A failed or cancelled prompt, or one that throws, reads nothing. A phone with no
- * biometric hardware or nothing enrolled (no passcode set) has nothing to ask with and is let through; that is
+ * The check is LocalAuth.authenticateUser, as Settings has always asked it: the phone's own prompt for whatever
+ * screen lock it has, a fingerprint or face or else its PIN, pattern or passcode. A failed or cancelled prompt, or one
+ * that throws, reads nothing. A phone with no screen lock at all has nothing to ask with and is let through; that is
  * authenticateUser's own rule, so a member is never locked out of their words by their phone.
  *
  * Returns the words, or null: a check that did not pass, or an account with no words on this phone.

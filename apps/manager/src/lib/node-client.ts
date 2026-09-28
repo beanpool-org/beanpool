@@ -1743,8 +1743,10 @@ export async function revokeRegistrarClaim(
 // ======================== REPLICATION TOKEN & ACCESS AUDIT ========================
 
 export interface ReplicationAccessEvent {
-    at: string;
-    ip: string;
+    /** Epoch milliseconds from the node (a string from older fixtures). */
+    at: string | number;
+    /** Null once the entry is 7 days old: the node keeps an address no longer (server services/address-retention.ts). */
+    ip: string | null;
     auth: string;
     reason?: string;
 }
@@ -1753,11 +1755,11 @@ export interface ReplicationAccessData {
     hasToken?: boolean;
     tokenOnly?: boolean;
     totalPulls?: number;
-    lastPullAt?: string | null;
+    lastPullAt?: string | number | null;
     lastPullIp?: string | null;
     lastPullAuth?: string | null;
     totalRejected?: number;
-    lastRejectedAt?: string | null;
+    lastRejectedAt?: string | number | null;
     lastRejectedIp?: string | null;
     recent?: ReplicationAccessEvent[];
     [key: string]: unknown;

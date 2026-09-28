@@ -520,8 +520,8 @@ const releaseFields = (r: ReleaseRow): RecoverySealFields =>
 
 /**
  * Rewrite every row one way, in one transaction, with secure_delete on so the old bytes are zeroed where they lay, then
- * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form); releases are
- * not replicated and keep their stamp.
+ * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form), and so are
+ * releases, by their touch trigger (a plain table, db.ts stampPlainTables).
  */
 function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields | null):
     { shares: number; releases: number } {

@@ -5,8 +5,10 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
 import { MemberAvatar } from '../components/MemberAvatar';

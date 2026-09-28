@@ -63,7 +63,9 @@ The manager offers a choice. The registrar **probes** the node's source IP on :4
 recommends, but the operator decides.
 
 ### 🛡️ Tunnel  (recommended default)
-Node runs a `cloudflared` sidecar that dials **outbound** to Cloudflare; we map the hostname to that tunnel.
+The node runs `cloudflared` inside its own container, as a child of the server, and it dials **outbound** to Cloudflare; we
+map the hostname to that tunnel. (Until 2026-09-28 it was a separate sidecar container, which the server restarted through
+Docker's control socket; see `apps/server/src/services/tunnel-connector.ts`.)
 
 - ✅ **Works anywhere** — behind home NAT / CGNAT, no port-forwarding, no router config.
 - ✅ **No public/static IP needed** — dynamic IP changes don't break it.
@@ -108,7 +110,7 @@ reachable → offer both, default Tunnel.
 ┌───────┴───────── community node (Docker) ─────────┐   ┌─┴──────────────┐
 │  manager "Public Address" tab  (apps/manager)      │   │ approval page  │
 │  node server  (apps/server) — HTTP listener :PORT  │   │ (in the tab or │
-│  cloudflared sidecar  (only in Tunnel mode)        │   │  a mini admin) │
+│  cloudflared, the server's child (Tunnel mode)     │   │  a mini admin) │
 └────────────────────────────────────────────────────┘   └────────────────┘
 ```
 
@@ -118,8 +120,9 @@ reachable → offer both, default Tunnel.
 - **Manager tab** — a "Public Address" section in `apps/manager` (served at `/gateway`, admin-password
   gated), talking to *its own* node via the existing `node-client.ts` pattern; the node relays to the
   registrar so the node's identity key signs the claim.
-- **cloudflared sidecar** — one extra service in the node's `docker-compose.yml`, started only when a
-  tunnel token is present.
+- **cloudflared** — in the node's image (copied from Cloudflare's, pinned by version and digest in the `Dockerfile`), run
+  by the server as its own child only on the main server with a live tunnel address, on the token in its settings
+  (`services/tunnel-connector.ts`). No second container, no compose profile, no Docker socket.
 
 ---
 
@@ -198,10 +201,11 @@ lookup and a Cloudflare-API zone check are only belt-and-suspenders at mint time
 | `GET  /api/registrar/status` | (signed) | Node polls: `pending` / `live` (+ `tunnelToken`, `hostname`) / `revoked`. |
 | `POST /api/registrar/offline` | (signed) | Operator tears their own name down. |
 
-`origin` is where Cloudflare/cloudflared should send traffic — for a sidecar on the compose network,
-`http://node:PORT` (the node's plain HTTP listener, `app.listen(port)` in
-[http-server.ts:144](../apps/server/src/http-server.ts)); TLS is terminated at the edge so the origin
-hop is plain HTTP on the private network.
+`origin` is where Cloudflare/cloudflared should send traffic: the node's own loopback, `http://127.0.0.1:PORT` (its plain
+HTTP listener, [http-server.ts](../apps/server/src/http-server.ts)), since cloudflared runs inside the node's container.
+TLS is terminated at the edge, so the origin hop is plain HTTP inside the container. A node whose tunnel was set up
+before 2026-09-28 (origin `http://beanpool-node:8080`, for the old sidecar) claims its own name again once with its
+loopback, which is a heal that moves the ingress; meanwhile its compose file pins `beanpool-node` to 127.0.0.1.
 
 ### Admin-facing (`checkAdminAuth` — your password)
 
@@ -273,17 +277,17 @@ NETWORKING ▸ Public Address
 ```
 
 **Handshake:** the node stores the chosen name/mode, calls `claim`, then polls `status`. On `live` in
-tunnel mode it receives the token, writes it to its data dir, and starts/refreshes the `cloudflared`
-sidecar **automatically**. The token is *also* surfaced in this admin-only tab (masked, with
-reveal/copy/rotate) so a self-hoster can run or debug the connector themselves — auto-assigned *and*
-visible.
+tunnel mode it receives the token, saves it in its settings (node_config, never a file), and starts or restarts its own
+`cloudflared` child **automatically**. When the tunnel is refused ("Unauthorized") for 2 minutes it asks the registrar
+and runs a new token, or claims its own name again to have the tunnel re-made. The token is *also* surfaced in this
+admin-only tab (masked, with reveal/copy) so a self-hoster can debug the connector — auto-assigned *and* visible. The tab
+shows the tunnel's state (connected, retrying and why, not running) and has **Restart tunnel**.
 
 **Config surface (node):** `COMMUNITY_NAME` (or set via the tab), `REGISTRAR_URL`
-(default `https://beanpool.org`), plus a stored `TUNNEL_TOKEN` the node manages itself.
+(default `https://beanpool.org`); the tunnel token the node manages itself, in node_config.
 
-**Docker compose (tunnel mode):** add a `cloudflared` service —
-`cloudflared tunnel run --token ${TUNNEL_TOKEN}` — on the same network as the node; ingress `origin`
-points at the node's service name. Started only when a token exists.
+**Docker compose (tunnel mode):** nothing to add. The tunnel runs inside the node's container on a plain
+`docker compose up`; the compose file mounts no Docker socket and has no `cloudflared` service or profile.
 
 ---
 
@@ -387,7 +391,7 @@ All three: name claimed in the registrar's table (auto/gated/blocked), invites r
   `151a28c4…`, zone `060a99ae…`) on one throwaway name, to lock the exact API shapes before coding.
 - **Phase 1 — MVP (Case A):** registrar Worker (D1: `name_allocations` + `name_policy`; signed
   claim/status/offline; admin pending/approve/revoke; CF client tunnel path) · **attestation loop** ·
-  manager "Public Address" tab · `cloudflared` compose sidecar · node `/api/attest` endpoint ·
+  manager "Public Address" tab · `cloudflared` compose sidecar (moved inside the node 2026-09-28) · node `/api/attest` endpoint ·
   **switchboard** `beanpool.org/i/<code>` + app handler. Approval manual.
 - **Phase 2 — breadth:** Case B (Direct/A-record + reachability probe) · Case C (BYO-domain wired to the
   switchboard) · auto-approve for the `auto` tier · public community directory · isolation decision.

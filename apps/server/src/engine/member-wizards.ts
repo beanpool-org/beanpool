@@ -23,6 +23,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
     moveToCommons,
@@ -172,6 +173,7 @@ export function issueRekeyCode(
     operatorPubkey: string,
     opts?: { ttlMs?: number }
 ): { code: string; oldPubkey: string; callsign: string; expiresAt: string } {
+    assertPlainTablesWritable();
     assertNotMisspeltRow(oldPublicKey);
     const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
     const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
@@ -260,6 +262,7 @@ export function completeRekey(
     code: string,
     operatorPubkey: string
 ): { success: boolean; oldPubkey: string; newPubkey: string; callsign: string } {
+    assertPlainTablesWritable();
     const cleanOld = oldPublicKey.trim().toLowerCase();
     const cleanNew = newPublicKey.trim().toLowerCase();
 
@@ -420,7 +423,9 @@ export function getRekeyStatus(publicKey: string): {
     ).get(cleanPub) as RekeyRequestRow | undefined) || null;
 
     if (pendingRequest && new Date(pendingRequest.expires_at).getTime() < Date.now()) {
-        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
+        // Marked on a main server. A standby's codes are its main server's (config/node-role.ts assertPlainTablesWritable):
+        // it answers one past its time as none, and writes nothing.
+        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
         pendingRequest = null;
     }
 

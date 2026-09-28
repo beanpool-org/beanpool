@@ -40,9 +40,10 @@
 
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
-import { db } from './db/db.js';
+import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
 import {
@@ -659,6 +660,7 @@ export interface CreateDecisionOptions {
  * - Fixed 7-day duration (closes on tick).
  */
 export function createDecision(opts: CreateDecisionOptions): Decision {
+    assertPlainTablesWritable();
     // First: a node with formal Decisions off opens none, whatever the effect (an unknown one included). Then a
     // Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls through
     // to the checks below as before.
@@ -768,6 +770,7 @@ export function castDecisionVote(
     voteCount = 1,
     signature?: string
 ): { success: boolean; creditsUsed: number; error?: string; code?: typeof FEATURE_OFF } {
+    assertPlainTablesWritable();
     // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
@@ -1027,6 +1030,7 @@ export function preflightAssert(decision: Decision): {
  * Destructive removal sets 7-day grace period and suspends member.
  */
 export function executeDecision(decisionId: string): { success: boolean; status: DecisionStatus; error?: string } {
+    assertPlainTablesWritable();
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, status: 'execution_blocked', error: 'Decision not found' };
 
@@ -1188,7 +1192,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'keep_suspension': {
                     // The admin's emergency suspension is already in force; passing keeps it. The node role it
                     // held aside is gone for good — the community kept the suspension.
-                    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+                    dropSuspendedNodeRole(decision.id);
                     break;
                 }
                 case 'remove_lead_keeper': {
@@ -1340,6 +1344,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
  * Requires an authenticated admin pubkey and a signed, public reason (§3.7).
  */
 export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to halt decision' };
     }
@@ -1399,6 +1404,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
  * Admin accelerate: fires a pending grace removal immediately (§3.7).
  */
 export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
     }
@@ -1473,6 +1479,16 @@ function roleRestoreRefusal(role: 'owner' | 'admin'): string {
 }
 
 /**
+ * A role a Decision held aside, no longer held: its row goes, and its tombstone takes the delete to a standby
+ * (suspended_node_roles is a plain table, engine/replication-manifest.ts).
+ */
+function dropSuspendedNodeRole(decisionId: string): void {
+    if (db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decisionId).changes > 0) {
+        writeTombstone('suspended_node_roles', decisionId);
+    }
+}
+
+/**
  * Give back the node role a suspension (emergency, or a removal's grace window) held aside — the same role, grant record and break-glass
  * hash. The session epoch moves on by one, so admin sessions opened before the suspension stay dead and the
  * member signs in again. Call inside a transaction, after the member is active again.
@@ -1482,7 +1498,7 @@ function restoreSuspendedNodeRole(decisionId: string): void {
         member_pubkey: string; role: string; granted_at: string | null; granted_by: string | null;
         session_epoch: number; break_glass_hash: string | null;
     } | undefined;
-    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decisionId);
+    dropSuspendedNodeRole(decisionId);
     if (!held) return;
     db.prepare(`
         INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
@@ -1520,9 +1536,11 @@ function liftEmergencySuspensionRow(decision: Decision): boolean {
         const removalHolds = pendingRemoval
             && db.prepare('SELECT 1 FROM suspended_node_roles WHERE decision_id = ?').get(pendingRemoval.id);
         if (pendingRemoval && !removalHolds) {
-            db.prepare('UPDATE suspended_node_roles SET decision_id = ? WHERE decision_id = ?').run(pendingRemoval.id, decision.id);
+            // The row's key moves, so the old key's row goes on a standby with a tombstone (a plain table).
+            const moved = db.prepare('UPDATE suspended_node_roles SET decision_id = ? WHERE decision_id = ?').run(pendingRemoval.id, decision.id);
+            if (moved.changes > 0) writeTombstone('suspended_node_roles', decision.id);
         } else {
-            db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+            dropSuspendedNodeRole(decision.id);
         }
         return false;
     }
@@ -1568,6 +1586,7 @@ export interface EmergencySuspendResult {
  * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
+    assertPlainTablesWritable();
     // Guards first, outside any transaction.
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can suspend a member' };
     const cleanReason = String(reason || '').trim();
@@ -1641,6 +1660,7 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
  * decide, so it closes as halted, with the lift recorded as the reason.
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
@@ -1688,6 +1708,7 @@ export function tickDecisions(asOfTime?: number): {
     graceExpired: number;
     queuedEvaluated: number;
 } {
+    assertPlainTablesWritable();
     const nowIso = asOfTime ? new Date(asOfTime).toISOString() : new Date().toISOString();
     let evaluated = 0;
     let executed = 0;

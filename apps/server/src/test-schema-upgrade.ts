@@ -1148,6 +1148,141 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 20. The plain tables' watermark (in-flight money and governance on a standby, design G3) ─────────────────────────
+    // A node from before it has no updated_at on most of the plain tables (engine/replication-manifest.ts) and no triggers
+    // stamping it. The upgrade adds the column before the schema, stamps each row it holds once, and makes both triggers
+    // (db.ts stampPlainTables); the old deferred_wage_claims, which a rebuild after the schema replaces (its table-wide
+    // UNIQUE), keeps the column through it and gets its triggers again.
+    console.log('\n--- 20. The plain tables gain their watermark ---');
+    {
+        const dir = tmp('legacy-plain-tables');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const triggersOn = (d: Database.Database, t: string) =>
+            (d.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? ORDER BY name`).all(t) as any[]).map((r) => r.name);
+        const d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF'); // as db.ts runs it
+        const freshTriggers = [...triggersOn(d, 'invite_codes'), ...triggersOn(d, 'deferred_wage_claims')];
+        assert(freshTriggers.length === 4 && columns(d, 'invite_codes').includes('updated_at'),
+            `a fresh install stamps both tables' writes (${freshTriggers.join(', ')})`);
+        d.exec(`DROP TABLE invite_codes; ${legacyDdl('invite_codes', ['updated_at'])}`);
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('OLD-CODE', 'x', '2025-01-01T00:00:00.000Z')`).run();
+        d.exec(`DROP TABLE deferred_wage_claims;
+                CREATE TABLE deferred_wage_claims (id TEXT PRIMARY KEY, enterprise_pubkey TEXT NOT NULL, keeper_pubkey TEXT NOT NULL,
+                    post_id TEXT, transaction_id TEXT UNIQUE, amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+                    created_at DATETIME, paid_at DATETIME);`);
+        d.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, transaction_id, amount, created_at)
+                   VALUES ('w1', 'e', 'k', 't1', 2, '2025-01-01T00:00:00.000Z')`).run();
+        assert(!columns(d, 'invite_codes').includes('updated_at') && !columns(d, 'deferred_wage_claims').includes('updated_at')
+            && triggersOn(d, 'invite_codes').length === 0, 'the fixture genuinely lacks the column and the triggers');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the older node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        after.pragma('foreign_keys = OFF');
+        const wages = (after.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deferred_wage_claims'`).get() as any).sql as string;
+        assert(!/transaction_id\s+TEXT UNIQUE/.test(wages) && columns(after, 'deferred_wage_claims').includes('updated_at'),
+            'the old wage claims table is rebuilt, and keeps the column');
+        assert(JSON.stringify([...triggersOn(after, 'invite_codes'), ...triggersOn(after, 'deferred_wage_claims')]) === JSON.stringify(freshTriggers),
+            `both tables have both triggers, the rebuilt one too (${[...triggersOn(after, 'invite_codes'), ...triggersOn(after, 'deferred_wage_claims')].join(', ')})`);
+        const stamp = (t: string, key: string, v: string) => (after.prepare(`SELECT updated_at AS u FROM ${t} WHERE ${key} = ?`).get(v) as any)?.u as string | null;
+        const invited = stamp('invite_codes', 'code', 'OLD-CODE');
+        assert(!!invited && !!stamp('deferred_wage_claims', 'id', 'w1'), `each row held is stamped once (${invited})`);
+        after.prepare(`UPDATE invite_codes SET updated_at = '2025-01-02T00:00:00.000Z' WHERE code = 'OLD-CODE'`).run();
+        after.prepare(`UPDATE invite_codes SET used_by = 'y' WHERE code = 'OLD-CODE'`).run();
+        after.prepare(`INSERT INTO invite_codes (code, created_by, updated_at) VALUES ('NEW-CODE', 'x', NULL)`).run();
+        assert((stamp('invite_codes', 'code', 'OLD-CODE') ?? '') > '2025-01-02T00:00:00.000Z' && !!stamp('invite_codes', 'code', 'NEW-CODE'),
+            'a write moves the stamp, and a row inserted with none is stamped');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 21. A link's treasury carries its peer's marker (review 4122266160) ──────────────────────────────────────────────
+    // federation_link_treasuries is the only evidence a lost link row's treasury is found by (federation-link.ts
+    // findLinkTreasury). A link made before it gets the marker at boot, from its link row, on a main server; a standby
+    // writes none (its rows are its main server's), and a member's enterprise named like a link gets none.
+    console.log('\n--- 21. A link made before the marker gets it at boot, on a main server only ---');
+    {
+        const plant = (dir: string) => {
+            assert(bootInto(dir).ok, 'a fresh node boots');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.pragma('foreign_keys = OFF');
+            d.exec('DROP TABLE federation_link_treasuries');
+            for (const [key, name] of [['link-treasury', 'eastgippy Link'], ['her-enterprise', 'riverbend Link']]) {
+                d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, is_treasury)
+                           VALUES (?, ?, '2025-01-01T00:00:00.000Z', 'x', 'x', '', 'active', 1)`).run(key, name);
+            }
+            d.prepare(`INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES ('12D3KooWEastGippy', 'link-treasury')`).run();
+            d.close();
+        };
+        const marks = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            const rows = d.prepare('SELECT treasury_pubkey, peer_id, updated_at FROM federation_link_treasuries ORDER BY treasury_pubkey').all() as any[];
+            d.close();
+            return rows;
+        };
+        const mainDir = tmp('legacy-link-marker');
+        plant(mainDir);
+        assert(bootInto(mainDir).ok, 'a main server from before the marker boots');
+        const marked = marks(mainDir);
+        assert(marked.length === 1 && marked[0].treasury_pubkey === 'link-treasury' && marked[0].peer_id === '12D3KooWEastGippy' && !!marked[0].updated_at,
+            `its link's treasury is marked with the link's peer, stamped, and the enterprise no link names is not (${JSON.stringify(marked)})`);
+        assert(bootInto(mainDir).ok && JSON.stringify(marks(mainDir)) === JSON.stringify(marked), 'booting it again changes nothing');
+        fs.rmSync(mainDir, { recursive: true, force: true });
+
+        const standbyDir = tmp('legacy-link-marker-standby');
+        plant(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the marker boots');
+        assert(marks(standbyDir).length === 0, 'and marks nothing itself: its markers are its main server\'s, which its next copy brings');
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+    }
+
+    // ── 22. A recovery release names its owner (review 4122266731) ──────────────────────────────────────────────────────
+    // recovery_releases.owner_pubkey is what a member's own delete finds their releases by on a server that took over,
+    // which holds none of the main server's sessions. A release from before it gets its owner at boot from its session,
+    // where the session is here, on a main server; a standby fills none (its rows are its main server's).
+    console.log('\n--- 22. A release from before owner_pubkey names its owner at boot, where its session is here ---');
+    {
+        const plant = (dir: string) => {
+            assert(bootInto(dir).ok, 'a fresh node boots');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.pragma('foreign_keys = OFF');
+            d.exec(`DROP TABLE recovery_releases; ${legacyDdl('recovery_releases', ['owner_pubkey'])}`);
+            d.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, expires_at)
+                       VALUES ('here', 'owner-here', 1, 'eph', 'complete', '2025-01-04T00:00:00.000Z')`).run();
+            const release = d.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, released_at, updated_at)
+                                       VALUES (?, ?, 'hub', 1, 'p', 'iv', 'tag', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`);
+            release.run('here', 1);
+            release.run('elsewhere', 2); // a session another server holds
+            assert(!columns(d, 'recovery_releases').includes('owner_pubkey'), 'the fixture genuinely lacks the column');
+            d.close();
+        };
+        const rows = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            const out = d.prepare('SELECT collection_id, owner_pubkey, updated_at FROM recovery_releases ORDER BY collection_id').all() as any[];
+            d.close();
+            return out;
+        };
+        const mainDir = tmp('legacy-release-owner');
+        plant(mainDir);
+        assert(bootInto(mainDir).ok, 'a main server from before the column boots');
+        const filled = rows(mainDir);
+        const [elsewhere, here] = filled;
+        assert(here?.owner_pubkey === 'owner-here' && here.updated_at > '2025-01-01T00:00:00.000Z' && elsewhere?.owner_pubkey === null
+            && elsewhere.updated_at === '2025-01-01T00:00:00.000Z',
+            `the release whose session is here names its owner, stamped so the next copy carries it; the other is left alone (${JSON.stringify(filled)})`);
+        assert(bootInto(mainDir).ok && JSON.stringify(rows(mainDir)) === JSON.stringify(filled), 'booting it again changes nothing');
+        fs.rmSync(mainDir, { recursive: true, force: true });
+
+        const standbyDir = tmp('legacy-release-owner-standby');
+        plant(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the column boots');
+        assert(rows(standbyDir).every((r) => r.owner_pubkey === null), 'and fills no owner itself: its rows are its main server\'s, which its next copy brings');
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

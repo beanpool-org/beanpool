@@ -56,13 +56,14 @@ Owners and admins can:
 - **Grant Operator**: lets them act for enterprises they are a keeper of.
 - **Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.
 - **Offboard**: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.
-- **Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts, role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database.
+- **Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts come down, and their role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database, and so do the words, photos and places of their posts.
 - **Prune Branch**: removes them and everyone they invited, and everyone those people invited. You type their name to confirm.
 
 Only an owner can suspend an owner, or remove an owner or an admin. Nobody can remove the last owner.
 
 ## Things to know
 
+- A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as "Deleted post".
 - A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.
 - The trust score shown on a member's page is not calculated yet. Do not act on it.
 - Suspended members can still make invites from their app.

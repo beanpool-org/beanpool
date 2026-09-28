@@ -20,6 +20,10 @@
  *      before a statement of it has run — the crash-loop case, where no boot ever reaches the scrub;
  *   6. the reports ALREADY in the data dir, written before this existed, are scrubbed in place at install:
  *      atomically, idempotently, owner-only, and without deleting a single one of them;
+ *   6b. no report keeps an internet address: a crash while a member is connected (an accepted TCP socket
+ *      open) leaves a report whose sockets keep their ports and no address, ours at once and Node's own at
+ *      the next boot; an address in the exception's text is redacted; this machine's network interfaces
+ *      are not written; and a report already on disk loses the addresses it holds, worker sections too;
  *   7. the count, last time and last message reach the admin diagnostics response, a health flag appears,
  *      and the message carries no secrets.
  *
@@ -32,6 +36,7 @@ delete process.env.CF_RECORD_NAME;
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { installProcessHandlers, getUnhandledRejectionSummary, getUnhandledRejectionLogPath } from './process-handlers.js';
@@ -51,6 +56,10 @@ const SECRET_HEX = 'deadbeef'.repeat(8);
  * process, so a hit cannot be a coincidence.
  */
 const ENV_MARKER = 'BEANPOOL-ENV-MARKER-7f3a9c21-must-never-reach-a-report';
+/** The address at the far end of the member's connection in case 6b (loopback is the only one a test can open). */
+const MEMBER_ADDRESS = '127.0.0.1';
+/** An address in an exception's own text, as a failed outbound connection writes it. A documentation address. */
+const ADDRESS_IN_MESSAGE = '203.0.113.5';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -101,6 +110,16 @@ function runChild(mode: string): void {
             // Installs and does nothing else. What is under test is what INSTALLING did to the data dir.
             reportAndExit();
             break;
+        case 'socket-boom': {
+            // A member is connected when the node crashes: the report is written with the accepted socket open.
+            const server = net.createServer(() => {
+                setImmediate(() => { throw new Error(`connect ECONNREFUSED ${ADDRESS_IN_MESSAGE}:443 while a member was connected`); });
+            });
+            server.listen(0, MEMBER_ADDRESS, () => {
+                net.connect((server.address() as net.AddressInfo).port, MEMBER_ADDRESS);
+            });
+            break;
+        }
         default:
             console.error(`unknown child mode: ${mode}`);
             process.exit(2);
@@ -386,6 +405,103 @@ async function reportPrivacyTests(root: string): Promise<void> {
 }
 
 /**
+ * A report's `libuv` section lists every open socket with the address at each end. On a server in direct mode
+ * the far ends of the accepted sockets are the members connected at that moment, and reports are kept for
+ * good, while a community server keeps no one's address past 7 days (#1289's review, measured).
+ */
+async function reportAddressTests(root: string): Promise<void> {
+    console.log('\n— 6b. no report keeps an internet address —');
+
+    /** The TCP handles in a report, the worker sections' too. */
+    const tcpHandles = (report: any): any[] => [
+        ...(Array.isArray(report?.libuv) ? report.libuv.filter((h: any) => h?.type === 'tcp') : []),
+        ...(Array.isArray(report?.workers) ? report.workers.flatMap(tcpHandles) : []),
+    ];
+    const addressFree = (raw: string) => !raw.includes(MEMBER_ADDRESS) && !raw.includes(ADDRESS_IN_MESSAGE);
+    const portsOnly = (report: any) => {
+        const ends = tcpHandles(report).flatMap((h) => [h.localEndpoint, h.remoteEndpoint]).filter((e) => e && typeof e === 'object');
+        return ends.length > 0 && ends.every((e) => typeof e.port === 'number' && !('ip4' in e) && !('ip6' in e) && !('host' in e));
+    };
+
+    // Ours: written by the handler, and scrubbed the moment it is written.
+    const oursDir = path.join(root, 'report-address-ours');
+    const ours = await spawnChild('socket-boom', oursDir);
+    assert(ours.code !== 0, `the child crashes with a member connected (code ${ours.code})`);
+    const oursNames = reportFiles(oursDir);
+    assert(oursNames.length === 1 && oursNames[0].startsWith('report-uncaught-'), `our report was written (got ${JSON.stringify(oursNames)})`);
+    const oursRaw = fs.readFileSync(path.join(oursDir, oursNames[0] ?? 'missing.json'), 'utf8');
+    const oursReport = JSON.parse(oursRaw);
+    assert(tcpHandles(oursReport).some((h) => h.remoteEndpoint && typeof h.remoteEndpoint.port === 'number'),
+        'the report still lists the member\'s open connection, by its port');
+    assert(addressFree(oursRaw), `and no address is anywhere in the file: not the member's, not the one in the error (${[MEMBER_ADDRESS, ADDRESS_IN_MESSAGE].filter((a) => oursRaw.includes(a)).join(', ') || 'none'})`);
+    assert(portsOnly(oursReport), 'every socket end keeps its port and nothing else: no ip4, no ip6, no host');
+    assert(String(oursReport.javascriptStack?.message).includes('[REDACTED_ADDRESS]:443'), `the error's text says where it failed without the address ("${oursReport.javascriptStack?.message}")`);
+    assert(oursReport.header?.networkInterfaces === undefined, 'and this machine\'s network interfaces are not in it');
+
+    // Node's own (--report-uncaught-exception, as every compose node runs): written as the process dies, after
+    // anything of ours can touch it, so it is cleaned at the next boot.
+    const nodesDir = path.join(root, 'report-address-nodes-own');
+    fs.mkdirSync(nodesDir, { recursive: true });
+    const nodes = await spawnChild('socket-boom', nodesDir, {
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --report-uncaught-exception --report-directory=${nodesDir}`.trim(),
+    });
+    assert(nodes.code !== 0, `the child crashes the same way (code ${nodes.code})`);
+    const nodeNames = reportFiles(nodesDir);
+    assert(nodeNames.length === 1 && !nodeNames[0].startsWith('report-uncaught-'), `Node wrote its own report (got ${JSON.stringify(nodeNames)})`);
+    const nodePath = path.join(nodesDir, nodeNames[0] ?? 'missing.json');
+    const nodeRawBefore = fs.readFileSync(nodePath, 'utf8');
+    assert(nodeRawBefore.includes(MEMBER_ADDRESS), '(as Node wrote it, the member\'s address is in it: what the scrub is for)');
+    assert(JSON.parse(nodeRawBefore).header?.networkInterfaces === undefined,
+        'the network interfaces are not written even by Node\'s own report: the handlers set excludeNetwork');
+    const boot = await spawnChild('idle', nodesDir);
+    assert(boot.code === 0, `the node boots again (code ${boot.code})`);
+    const nodeRaw = fs.readFileSync(nodePath, 'utf8');
+    assert(addressFree(nodeRaw) && portsOnly(JSON.parse(nodeRaw)), 'after that boot no address is anywhere in Node\'s report either, and each socket keeps its port');
+
+    // A report already on disk, as a freeze capture wrote it before this: endpoints with addresses and a
+    // reverse-DNS name, the network interfaces, and a worker's section with its own sockets.
+    const oldDir = path.join(root, 'report-address-existing');
+    fs.mkdirSync(oldDir, { recursive: true });
+    const oldPath = path.join(oldDir, 'report.20260718.020000.1.0.001.json');
+    const fixture = {
+        header: {
+            event: 'Signal', trigger: 'SIGUSR2', processId: 1, nodejsVersion: 'v22.21.1',
+            componentVersions: { v8: '12.4.254.21-node.33', zlib: '1.3.0.1-motley' },
+            networkInterfaces: [{ name: 'eth0', internal: false, mac: '02:42:ac:11:00:02', address: '172.17.0.2', netmask: '255.255.0.0', family: 'IPv4' }],
+        },
+        javascriptStack: { message: 'No stack.', stack: ['Unavailable'] },
+        libuv: [
+            { type: 'tcp', is_active: true, localEndpoint: { host: '0.0.0.0', ip4: '0.0.0.0', port: 443 }, remoteEndpoint: null },
+            { type: 'tcp', is_active: true, localEndpoint: { host: '172.17.0.2', ip4: '172.17.0.2', port: 443 }, remoteEndpoint: { host: 'cpe-203-0-113-5.isp.example', ip4: ADDRESS_IN_MESSAGE, port: 51234 } },
+            { type: 'tcp', is_active: true, localEndpoint: { ip6: '2001:db8::1', port: 443 }, remoteEndpoint: { ip6: '2001:db8::77', port: 51999 } },
+        ],
+        sharedObjects: ['/usr/lib/libc.so'],
+        workers: [{
+            header: { threadId: 1 },
+            javascriptStack: { message: 'No stack.' },
+            libuv: [{ type: 'tcp', is_active: true, localEndpoint: { ip4: '127.0.0.1', port: 40000 }, remoteEndpoint: { ip4: '127.0.0.1', port: 40001 } }],
+        }],
+    };
+    fs.writeFileSync(oldPath, JSON.stringify(fixture, null, 2), { mode: 0o600 });
+    const first = await spawnChild('idle', oldDir);
+    assert(first.code === 0, `a boot with that report on disk exits cleanly (code ${first.code})`);
+    const scrubbedRaw = fs.readFileSync(oldPath, 'utf8');
+    const scrubbed = JSON.parse(scrubbedRaw);
+    const leftIn = ['172.17.0.2', ADDRESS_IN_MESSAGE, '0-113-5', '2001:db8', '127.0.0.1'].filter((a) => scrubbedRaw.includes(a));
+    assert(leftIn.length === 0, `the report already on disk holds no address any more, the worker's section included (${leftIn.join(', ') || 'none'})`);
+    assert(portsOnly(scrubbed) && JSON.stringify(tcpHandles(scrubbed).map((h) => h.remoteEndpoint?.port ?? null)) === '[null,51234,51999,40001]',
+        'each socket keeps its port, and the listener still has no far end');
+    assert(scrubbed.header?.networkInterfaces === undefined, 'the network interfaces are gone');
+    assert(JSON.stringify(scrubbed.header?.componentVersions) === JSON.stringify(fixture.header.componentVersions)
+        && scrubbed.header?.trigger === 'SIGUSR2' && JSON.stringify(scrubbed.sharedObjects) === JSON.stringify(fixture.sharedObjects),
+        'the rest is intact, version numbers that look like addresses included');
+    const mtime = fs.statSync(oldPath).mtimeMs;
+    const second = await spawnChild('idle', oldDir);
+    assert(second.code === 0 && fs.readFileSync(oldPath, 'utf8') === scrubbedRaw && fs.statSync(oldPath).mtimeMs === mtime,
+        'a second boot leaves it exactly as it is, unwritten');
+}
+
+/**
  * THE CASE THAT MOTIVATES report-privacy.ts, and the one every case above misses.
  *
  * Every child above installs the handlers and then does something. A real node does not get that far when
@@ -520,6 +636,7 @@ async function main(): Promise<void> {
     try {
         await childProcessTests(root);
         await reportPrivacyTests(root);
+        await reportAddressTests(root);
         await importCrashTests(root);
         await diagnosticsAndHealthTests();
     } finally {

@@ -24,9 +24,11 @@
  *  4. A whole copy that isn't the main server's (a planted change in a table, the ledger fine): recorded with what differed,
  *     and one force-resync asked for. That resync is held to the ledger (not a seed): a forged payload that makes Beans is
  *     refused, and the real copy after it lands and is exact. The standby mended it by itself, so nobody was told: no
- *     incident, no push (Marty's answer 2). Six hours on (a restart, the record's last resync moved back), planted again:
- *     the held resync lands a copy M signed whose members aren't M's, the check after it still differs, and that is when
- *     the incident opens, with one push. A restart then allows no sooner force-resync (the record keeps when the last was),
+ *     incident, no push (Marty's answer 2). Planted again, and the standby restarts between asking for its held resync and
+ *     taking it, M answering its first pull after with a 503: it still takes that resync, the copy heals, nobody is told,
+ *     and another restart takes it no more (review 4119011899). Six hours on (a restart, the record's last resync moved back), planted
+ *     again: the held resync lands a copy M signed whose members aren't M's, the check after it still differs, and that is
+ *     when the incident opens, with one push. A restart then allows no sooner force-resync (the record keeps when the last was),
  *     the incident stays, and the banner and the preview say what didn't match. Then a whole copy the main
  *     server sends without its hashes (as it does when written to while making one): recorded as not compared in full, it
  *     is no all-clear (review 4118340714): the incident stays open, and the preview still warns and names the older exact copy.
@@ -600,6 +602,45 @@ async function main(): Promise<void> {
         assert(health?.state.incident === null && health.state.lastIncident?.id === incident2?.id && pushes.length === 2,
             `a copy that heals itself pushes nobody: no incident at any point, and no push (${brief({ incident: health?.state.incident, pushes: pushes.length })})`);
 
+        // The review's case (4119011899): S restarts between asking for its held resync and taking it, as an update restarts
+        // both servers, and M's snapshot route answers S's first pull after that with a 503 (its signing identity not ready
+        // yet). That resync is still the next pull, and the one after the unanswered one: the copy heals by itself, and
+        // nobody is told. Once a copy came for it, it is taken: another restart asks for it no more.
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
+        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted before a restart' }) === 1, 'planted again');
+        await main.send('touch');
+        const askedBeforeRestart = await pull(true);
+        rec = await standby.send('record');
+        require_(askedBeforeRestart.ok && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === true,
+            `S's whole copy differs, and asks for its held force-resync (${brief(rec?.lastWhole)})`);
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        door.next({ status: 503, body: { error: 'Snapshot unavailable: node signing identity not ready' } });
+        const unanswered = await pull();
+        const takenAfterRestart = await pull();
+        rec = await standby.send('record');
+        assert(unanswered.mode === 'resync' && !unanswered.ok && /503/.test(unanswered.error ?? ''),
+            `S restarts before taking it: its first pull is that held force-resync, and M answers 503 (${unanswered.mode}: ${unanswered.error})`);
+        assert(takenAfterRestart.mode === 'resync' && takenAfterRestart.ok && rec?.lastWhole?.exact === true,
+            `the pull after is that force-resync again, and the copy it lands is exact (${takenAfterRestart.mode}; ${brief(rec?.lastWhole)})`);
+        await pull();
+        health = await main.send('health');
+        pushes = await pushesSoFar();
+        assert(health?.state.incident === null && health.state.lastIncident?.id === incident2?.id && pushes.length === 2,
+            `the copy healed by itself across the restart: no incident, no push (${brief({ incident: health?.state.incident, pushes: pushes.length })})`);
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        const afterTaken = await pull();
+        assert(afterTaken.ok && afterTaken.mode !== 'resync', `a resync taken is taken: S restarts again, and its next pull is a ${afterTaken.mode}, not another`);
+
         // One the held resync doesn't cure. Six hours on (S restarted, its record's last force-resync moved back past the
         // limit), a difference again; the resync it asks for is served a copy M signed whose members aren't M's (its ledger
         // M's), so the check after it still differs. That is when the owners are told.
@@ -639,8 +680,8 @@ async function main(): Promise<void> {
         rec = await standby.send('record');
         assert(afterRestart4.ok && afterRestart4.whole && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === false && next4.ok && next4.mode !== 'resync',
             `S restarts: its next whole copy still differs, and asks for no force-resync (the pull after is a ${next4.mode}; ${brief(rec?.lastWhole)})`);
-        assert(pulls.filter((p) => p.mode === 'resync').length === 3,
-            `force-resyncs in all: the new standby's first copy, and the two that copies that didn't match asked for, six hours apart (${pulls.map((p) => p.mode).join(',')})`);
+        assert(pulls.filter((p) => p.mode === 'resync').length === 5,
+            `force-resyncs in all: the new standby's first copy, and one for each of the three copies that didn't match, six hours apart, one of them tried twice (M answered its first with a 503) (${pulls.map((p) => p.mode).join(',')})`);
         health = await main.send('health');
         pushes = await pushesSoFar();
         assert(health?.state.incident?.id === incident3?.id && pushes.length === 3, `the incident stays open, and nothing is pushed again (${pushes.length})`);

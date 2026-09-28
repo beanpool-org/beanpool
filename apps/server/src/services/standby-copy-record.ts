@@ -82,12 +82,19 @@ export interface CopyRecord {
      * memory, so a restart allows no sooner one: at most one in six hours, and a difference no resync mends never loops.
      */
     lastMismatchResyncAt: number | null;
+    /**
+     * When a copy last came for the force-resync it asked for (services/backup-puller.ts). One asked for since, and not
+     * taken, is still due, across a restart too (review 4119011899): a standby restarted between asking and taking still
+     * takes it, once.
+     */
+    lastMismatchResyncTakenAt: number | null;
 }
 
 function fresh(): CopyRecord {
     return {
         id: crypto.randomBytes(16).toString('hex'), lastPullAt: null, lastOutcome: null, lastWhy: null,
         failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null, lastMismatchResyncAt: null,
+        lastMismatchResyncTakenAt: null,
     };
 }
 
@@ -123,6 +130,7 @@ export function readCopyRecord(): CopyRecord {
             } : null,
             lastExactAt: num(r?.lastExactAt),
             lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
+            lastMismatchResyncTakenAt: num(r?.lastMismatchResyncTakenAt),
         };
     } catch {
         return fresh();
@@ -161,6 +169,24 @@ export function noteWholeCopyCheck(check: WholeCopyCheck): void {
 /** When this standby last asked for a force-resync for a copy that didn't match, across restarts; 0 for never. */
 export function lastMismatchResyncAt(): number {
     return readCopyRecord().lastMismatchResyncAt ?? 0;
+}
+
+/** A copy came for the force-resync this standby asked for: it is taken, and no restart asks for it again. */
+export function noteMismatchResyncTaken(now = Date.now()): void {
+    const r = readCopyRecord();
+    write({ ...r, lastMismatchResyncTakenAt: now });
+}
+
+/**
+ * When this standby asked for the force-resync for a copy that didn't match that no copy has come for yet, or null: the
+ * puller's first pull after a restart takes it (services/backup-puller.ts nextMode). Only while the copy counts as mending
+ * itself (HEALING_MS): past that its main server tells the owners, and the next one waits for the six-hour slot.
+ */
+export function pendingMismatchResync(now = Date.now()): number | null {
+    const r = readCopyRecord();
+    const asked = r.lastMismatchResyncAt;
+    if (asked === null || (r.lastMismatchResyncTakenAt !== null && r.lastMismatchResyncTakenAt >= asked)) return null;
+    return now - asked < HEALING_MS ? asked : null;
 }
 
 /**

@@ -57,7 +57,8 @@ import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config
 import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import {
-    lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteUncomparedCheck, noteWholeCopyCheck, standbyReport, whyOf,
+    HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncTaken, noteUncomparedCheck,
+    noteWholeCopyCheck, pendingMismatchResync, standbyReport, whyOf,
 } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
@@ -141,8 +142,11 @@ let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 // The kind of the last pull tried: 'delta', 'full' or 'resync'.
 let lastPullMode: PullMode | null = null;
-// A whole copy found this standby's copy isn't its main server's (checkWholeCopy): the next pull is a force-resync.
-let ledgerResyncDue = false;
+// A whole copy found this standby's copy isn't its main server's (checkWholeCopy), at this time: the next pull is a
+// force-resync, until a copy comes for it (pullOnce), for up to HEALING_MS. The standby's record keeps it too, so a
+// restart before then still takes it (nextMode reads it once a process; review 4119011899).
+let ledgerResyncAskedAt: number | null = null;
+let ledgerResyncRestored = false;
 // When this process last asked for one; the standby's record keeps it across restarts (standby-copy-record.ts).
 let lastLedgerResyncAt = 0;
 // At most one force-resync for a copy that doesn't match in this long: one a resync doesn't cure must not clear this
@@ -303,6 +307,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                     + 'of its own, so this payload does not carry those rows. Keeping this replica\'s copies of them — '
                     + 'they may be the only readable ones left.');
             }
+            // The force-resync a copy that didn't match asked for is taken once a copy came for it, in this process and in
+            // the standby's record, whatever its import does: one whose fetch failed (a main server restarting with the
+            // same update) is asked for again on the next pull, and none is taken twice.
+            if (why === 'mismatch') {
+                ledgerResyncAskedAt = null;
+                recordQuietly(() => noteMismatchResyncTaken());
+            }
             // The replaced keys too, when this copy carries the main server's (it sends every one it has: it never
             // deletes a row). One from a main server older than that sends none, and this standby keeps its own. With the
             // clear, in its transaction, what the copy is held to: nothing for a seed, and the ledger's total now for the
@@ -426,7 +437,8 @@ function recordQuietly(write: () => void): void {
  * it isn't exact (design G8), and the take-over preview reads it.
  *
  * A copy that isn't the main server's asks for one force-resync, at most one every six hours, restarts included (the
- * standby's record keeps when it last asked); while it takes that resync, its main server tells nobody, and the check
+ * standby's record keeps when it last asked, and whether a copy has come for it since, so a restart before the resync
+ * still takes it); while it takes that resync, its main server tells nobody, and the check
  * after it says whether it cured the copy (standby-copy-record.ts HEALING_MS). A ledger that isn't is also
  * recorded in node_config `replica_ledger_mismatch`. That force-resync is not a seed: a main server can send a copy that
  * fails this check, so its import is held to the total this standby's ledger had before its clear (ResyncKind). An entry
@@ -487,7 +499,7 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     try { lastResyncAt = Math.max(lastResyncAt, lastMismatchResyncAt()); } catch { /* the floor */ }
     const resync = wrong && now - lastResyncAt >= LEDGER_RESYNC_EVERY_MS;
     if (resync) {
-        ledgerResyncDue = true;
+        ledgerResyncAskedAt = now;
         lastLedgerResyncAt = now;
         lastResyncAt = now;
     }
@@ -570,9 +582,23 @@ function nextMode(): PullMode | ResyncKind {
         return 'format';
     }
     // The last whole copy found a copy that isn't the main server's, its ledger or any table (checkWholeCopy): not a seed.
-    if (ledgerResyncDue) {
-        ledgerResyncDue = false;
-        return 'mismatch';
+    // Taken once a copy comes for it (pullOnce); while none does, only for as long as the copy counts as mending itself.
+    // Once a process, the one asked for before this restart that no copy came for yet, from the standby's record.
+    if (!ledgerResyncRestored) {
+        ledgerResyncRestored = true;
+        try {
+            const asked = pendingMismatchResync();
+            if (asked !== null && ledgerResyncAskedAt === null) {
+                ledgerResyncAskedAt = asked;
+                logger.info('P2P', '[Backup] Taking the force-resync a whole copy that did not match asked for before this restart');
+            }
+        } catch { /* the record unreadable: none is asked for from it */ }
+    }
+    if (ledgerResyncAskedAt !== null) {
+        if (Date.now() - ledgerResyncAskedAt < HEALING_MS) return 'mismatch';
+        logger.warn('P2P', '[Backup] The force-resync asked for a copy that did not match got no copy from the main server in an hour: '
+            + 'dropped. The main server tells its owners; the next one waits for the six-hour limit.');
+        ledgerResyncAskedAt = null;
     }
     if (!lastImportedCursor) return 'full'; // seed
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats

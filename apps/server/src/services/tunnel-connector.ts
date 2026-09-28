@@ -216,12 +216,14 @@ function onLine(raw: string): void {
     forward(level === 'warn' ? 'warn' : 'error', scrub(error && message ? `${message}: ${error}` : reason));
     lastError = reason;
     if (/unauthorized/i.test(reason) && unauthorizedSince === null) unauthorizedSince = Date.now();
-    if (status.state !== 'connected' && running) {
-        // A child started after crashes says so too: the newest line alone would hide that it keeps stopping.
-        const streak = crashes > 0 && Date.now() - running.startedAt < opts.backoffResetMs;
-        setStatus('retrying', streak ? `${reason} (cloudflared has stopped ${crashes} time${crashes === 1 ? '' : 's'} in a row)` : reason);
-    }
+    if (status.state !== 'connected' && running) setRetrying(reason);
     maybeHeal();
+}
+
+/** Not connected, and why. A child started after crashes says so too: its newest line alone would hide that it keeps stopping. */
+function setRetrying(reason: string): void {
+    const streak = !!running && crashes > 0 && Date.now() - running.startedAt < opts.backoffResetMs;
+    setStatus('retrying', streak ? `${reason} (cloudflared has stopped ${crashes} time${crashes === 1 ? '' : 's'} in a row)` : reason);
 }
 
 // ── The child ────────────────────────────────────────────────────────────────────────────────
@@ -404,10 +406,10 @@ async function poll(): Promise<void> {
         setStatus('connected', null, n);
         maybeMoveOrigin();
     } else if (status.state === 'connected') {
-        setStatus('retrying', lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
+        setRetrying(lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
         say('warn', `no longer connected to Cloudflare (${status.reason})`);
     } else if (lastError) {
-        setStatus('retrying', lastError);
+        setRetrying(lastError);
     }
     flushRepeats();
     maybeHeal();
@@ -460,7 +462,8 @@ async function reclaimSaved(pa: any, why: string): Promise<boolean> {
     say('info', `${why}: asking the address service to re-make ${pa.hostname || pa.name} (a heal of this server's own name)`);
     const res = await claimAddress(pa.name, 'tunnel', LOOPBACK_ORIGIN);
     if (res?.status === 'live') {
-        await persistAddress({ ...pa, ...res, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+        const { changed: _changed, ...answer } = res;
+        await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
         return true;
     }
     recordRegistrarAnswer({ name: pa.name, hostname: pa.hostname, ...res }, 'status');

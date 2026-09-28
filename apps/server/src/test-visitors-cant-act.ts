@@ -1224,11 +1224,21 @@ async function main(): Promise<void> {
 
         // 4111438819: which of its pushes reach its phone, and nothing more. The push settings the apps send are hers to set.
         const pushSettings = { notify_chat: true, notify_marketplace: false, notify_escrow: true, notify_recovery: true, eventReminderOffsets: [60] };
+        // A preference save also stamps her own members row's updated_at, so a standby's delta carries it (#1276, G2b):
+        // that, and nothing else in members, may change.
+        const membersRows = () => db.prepare('SELECT * FROM members ORDER BY public_key').all() as Record<string, unknown>[];
+        const membersBefore = membersRows();
         const set = await measured(() => call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: pushSettings }));
+        const membersAfter = membersRows();
+        const memberDiffs = membersAfter.flatMap((row, i) => Object.keys(row)
+            .filter(k => JSON.stringify(row[k]) !== JSON.stringify(membersBefore[i]?.[k]))
+            .map(k => `${row.public_key === vera.pk ? 'hers' : String(row.public_key).slice(0, 8)}.${k}`));
         const hers = getMemberPreferences(vera.pk);
         assert(set.r.status === 200 && set.r.body?.success === true && hers.notify_marketplace === 'false' && hers.notify_chat === 'true'
-            && JSON.stringify(hers.eventReminderOffsets) === '[60]' && set.changed.join() === 'member_preferences',
-            `she sets which of her pushes reach her phone: chat, marketplace, escrow, recovery and her event reminders (${told(set)})`);
+            && JSON.stringify(hers.eventReminderOffsets) === '[60]'
+            && ['member_preferences', 'member_preferences,members'].includes(set.changed.join())
+            && membersAfter.length === membersBefore.length && memberDiffs.every(d => d === 'hers.updated_at'),
+            `she sets which of her pushes reach her phone: chat, marketplace, escrow, recovery and her event reminders; in members only her own updated_at moves (${told(set)}; members: ${memberDiffs.join(', ') || 'none'})`);
         const fiftyMadeUp = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`made_up_${i}`, true]));
         const notPushSettings: [string, unknown][] = [
             ['holiday mode', { holiday_mode: true }],

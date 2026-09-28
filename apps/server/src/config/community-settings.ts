@@ -280,7 +280,8 @@ export type InstallOutcome = { installed: true; detail: string } | { installed: 
 /**
  * Install the kept record: every community setting it names becomes this server's, as the main server had it, and no
  * other setting is touched. Safe to run again (the same record writes the same values). A field the record leaves out
- * keeps this server's own.
+ * keeps this server's own. Throws, with nothing marked installed, when local-config.json can't be written: the next run
+ * (the take-over's step again, or the next start) installs it.
  */
 export function installCommunitySettings(): InstallOutcome {
     const kept = keptCommunitySettings();
@@ -323,6 +324,13 @@ export function installCommunitySettings(): InstallOutcome {
     const installedAt = new Date().toISOString();
     // The file first: a crash before the rows below leaves the record not installed, and it is installed again.
     updateLocalConfig(updates);
+    // saveLocalConfig logs a failed write (a full disk, a file it may not write) and carries on. Read back: a record marked
+    // installed over a file that doesn't hold it would never be installed again, and the take-over would say it was.
+    const saved = getLocalConfig() as unknown as Record<string, unknown>;
+    const unsaved = Object.keys(updates).filter((f) => JSON.stringify(saved[f]) !== JSON.stringify((updates as Record<string, unknown>)[f]));
+    if (unsaved.length > 0) {
+        throw new Error(`local-config.json could not be written (${unsaved.join(', ')} not saved), so the community's settings are not installed yet`);
+    }
     db.transaction(() => {
         for (const key of COMMUNITY_NODE_CONFIG_KEYS) {
             if (!(key in nc)) continue;

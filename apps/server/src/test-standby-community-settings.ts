@@ -19,6 +19,8 @@
  *     record, applied to nothing.
  *  4. A standby S2 promoted by hand (its role changed in .env, no take-over) installs M's settings at its first boot as
  *     a main server, and its ledger audit holds the ledger to M's baseline; installed once: a later change on S2 stays.
+ *     Before that, an install whose write of local-config.json fails (a full disk) stops with nothing of it applied or
+ *     marked installed, so that first boot installs it.
  *  5. A record signed by M that names settings of one server (the admin password, the replication token and main
  *     server, the role, the identity epoch, the web address, the importer's format, an avatar key, a profile switch, an
  *     admin IP allowlist) and a value the standby can't take: kept without any of them, and S's own settings unchanged.
@@ -66,6 +68,23 @@ function guardFetch(): { blocked: string[] } {
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
     return seen;
+}
+
+/** The settings as this server uses them, the record it keeps, and what it would tell the directory. */
+async function readSettings() {
+    const { db } = await import('./db/db.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
+    const { getNodeConfig, getDirectoryInfo } = await import('./state-engine.js');
+    // A server from before the record has no module for it: it keeps nothing.
+    const settings: any = await import('./config/community-settings.js').catch(() => ({}));
+    const rows = db.prepare('SELECT key, value FROM node_config ORDER BY key').all() as { key: string; value: string }[];
+    return {
+        localConfig: getLocalConfig(),
+        rows: Object.fromEntries(rows.map((r) => [r.key, r.value])),
+        blob: getNodeConfig(),
+        kept: typeof settings.keptCommunitySettings === 'function' ? settings.keptCommunitySettings() : null,
+        directory: getDirectoryInfo(),
+    };
 }
 
 async function child(): Promise<void> {
@@ -118,21 +137,27 @@ async function child(): Promise<void> {
             const envelope = await pullTakeoverEnvelopeNow();
             return { ...result, envelope };
         },
-        /** The settings as this server uses them, the record it keeps, and what it would tell the directory. */
-        settings: async () => {
-            const { db } = await import('./db/db.js');
-            const { getLocalConfig } = await import('./config/local-config.js');
-            const { getNodeConfig, getDirectoryInfo } = await import('./state-engine.js');
-            // A server from before the record has no module for it: it keeps nothing.
-            const settings: any = await import('./config/community-settings.js').catch(() => ({}));
-            const rows = db.prepare('SELECT key, value FROM node_config ORDER BY key').all() as { key: string; value: string }[];
-            return {
-                localConfig: getLocalConfig(),
-                rows: Object.fromEntries(rows.map((r) => [r.key, r.value])),
-                blob: getNodeConfig(),
-                kept: typeof settings.keptCommunitySettings === 'function' ? settings.keptCommunitySettings() : null,
-                directory: getDirectoryInfo(),
+        settings: readSettings,
+        /**
+         * The install, with every write of local-config.json failing as on a full disk (saveLocalConfig logs it and
+         * carries on): what it threw, and the settings after.
+         */
+        'install-with-a-failed-write': async () => {
+            const { installCommunitySettings } = await import('./config/community-settings.js');
+            const realWrite = fs.writeFileSync;
+            (fs as any).writeFileSync = (file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                if (String(file).endsWith('local-config.json')) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+                return (realWrite as (...args: unknown[]) => void)(file, ...rest);
             };
+            let threw: string | null = null;
+            try {
+                installCommunitySettings();
+            } catch (e: any) {
+                threw = e?.message || String(e);
+            } finally {
+                (fs as any).writeFileSync = realWrite;
+            }
+            return { threw, ...(await readSettings()) };
         },
         /** Whether a password is this server's admin password now. */
         'admin-password-is': async (a: { password: string }) => {
@@ -454,6 +479,11 @@ async function main(): Promise<void> {
         const s2Pull = await standby2.send('pull');
         require_(s2Pull.ok === true, `S2's first copy lands (${s2Pull.ok ? 'imported' : s2Pull.error})`);
         assert(differing(s2Own, communitySettings(await standby2.send('settings'))).length === 0, 'S2 keeps its own settings while a standby');
+        // saveLocalConfig logs a failed write and carries on. An install that went on would mark the record installed over
+        // a file that doesn't hold it: never installed again, and a take-over's step would say it was.
+        const failed = await standby2.send('install-with-a-failed-write');
+        assert(failed.threw && failed.kept?.installedAt === null && differing(s2Own, communitySettings(failed)).length === 0,
+            `an install whose write of local-config.json fails (a full disk) stops: not marked installed, nothing of it applied (${j({ threw: failed.threw, installedAt: failed.kept?.installedAt, applied: first(differing(s2Own, communitySettings(failed))) })})`);
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
         standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary'));

@@ -829,6 +829,9 @@ async function main(): Promise<void> {
             return id;
         };
         const hive = groupHers('Bee club VA');
+        // Cody and Dan have been in it since before she went quiet: only they may vote on a new lead
+        // (test-groups-succession-electorate.ts).
+        db.prepare('UPDATE group_members SET joined_at = ?, role_since = ? WHERE group_id = ?').run(ago(60 * DAY), ago(60 * DAY), hive);
         quiet();
         const groupPropose = await call('POST', cody, `/api/groups/${hive}/succession/propose`, { candidatePubkey: dan.pk });
         const groupProposal = groupPropose.body?.proposal;

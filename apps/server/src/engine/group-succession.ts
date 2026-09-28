@@ -158,11 +158,6 @@ function electorateOf(groupId: string, leadPubkey: string | null): Electorate {
     return { kind: 'members', voters: holdersOf(groupId, leadPubkey, 'member', cutoff), joinedBy };
 }
 
-/** Who votes on replacing this lead: their fellow convenors, or the members when the lead is the only convenor. */
-export function electorateKind(groupId: string, leadPubkey: string): 'convenors' | 'members' {
-    return electorateOf(groupId, leadPubkey).kind;
-}
-
 export function getConvenorSilence(groupId: string, nowMs = Date.now()): ConvenorSilence {
     const lead = getGroupLead(db, groupId);
     if (!lead) {
@@ -438,9 +433,11 @@ export function proposeGroupConvenor(
     const who = proposerPubkey === candidatePubkey
         ? `${callsignOf(proposerPubkey)} offered to be lead convenor`
         : `${callsignOf(proposerPubkey)} proposed ${callsignOf(candidatePubkey)} as lead convenor`;
+    // "The other convenors appointed by 3 Sep 2026" or "Members who joined by 3 Sep 2026": who votes, as the rule has it.
+    const whoVotes = electorateWords(elect);
     postGroupSystemLine(cb, groupId, GroupSystemType.CONVENOR_VOTE_OPENED,
         `${who}, because ${callsignOf(silence.convenorPubkey)} has not been active for 30 days. `
-        + `${elect.kind === 'convenors' ? 'The other c' : 'M'}${electorateWords(elect).slice(1)} have 14 days to vote.`,
+        + `${elect.kind === 'convenors' ? `The other ${whoVotes}` : whoVotes.charAt(0).toUpperCase() + whoVotes.slice(1)} have 14 days to vote.`,
         { proposalId: id, candidatePubkey, proposerPubkey, deadlineAt, electorate: silence.electorate });
 
     const row = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;

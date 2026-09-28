@@ -771,6 +771,11 @@ export function initSchema() {
     // so anything the exec re-creates already sees the column. The backfill is further down, behind a marker.
     try { db.prepare(`ALTER TABLE groups ADD COLUMN lead_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
 
+    // group_members.role_since: when a row took the role it holds, so a vote on a silent lead counts only convenors
+    // appointed before the lead went quiet (2026-09-28). After the 'removed' rebuild above, which lists its columns.
+    // No backfill: the reader takes joined_at for a row that has none.
+    try { db.prepare(`ALTER TABLE group_members ADD COLUMN role_since DATETIME`).run(); } catch { }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }

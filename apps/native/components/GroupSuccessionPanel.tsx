@@ -215,6 +215,8 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             <Text style={styles.heading}>Choosing a new lead convenor</Text>
 
             {view.silenceLine ? <Text style={styles.body}>{view.silenceLine}</Text> : null}
+            {/* Who takes part: only people in the group before the lead went quiet. Anyone offered no button reads why. */}
+            {view.whoVotesLine ? <Text style={styles.body}>{view.whoVotesLine}</Text> : null}
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

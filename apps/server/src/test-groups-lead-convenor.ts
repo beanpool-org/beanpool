@@ -61,10 +61,17 @@ function makeMember(callsign: string): string {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
-/** Make a member look silent: no activity (and no joining) for `days` days. */
+/**
+ * Make a member look silent: no activity (and no joining) for `days` days. Everyone in the groups they lead has been
+ * there, in the roles they hold, since before that: only people in a group before its lead went quiet vote on a new
+ * lead (test-groups-succession-electorate.ts covers the ones who came after).
+ */
 function silence(pub: string, days = 31): void {
     const then = new Date(Date.now() - days * DAY).toISOString();
     db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(then, then, pub);
+    const before = new Date(Date.now() - (days + 30) * DAY).toISOString();
+    db.prepare('UPDATE group_members SET joined_at = ?, role_since = ? WHERE group_id IN (SELECT id FROM groups WHERE lead_pubkey = ?)')
+        .run(before, before, pub);
 }
 const role = (g: string, pk: string) =>
     (db.prepare('SELECT role FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, pk) as any)?.role;

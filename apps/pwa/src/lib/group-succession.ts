@@ -14,7 +14,7 @@
 import { timeLeftText } from './keeper-governance';
 import type { GroupMember } from './api';
 
-export type GroupSuccessionClosedReason = 'rejected' | 'convenor_returned' | 'candidate_gone' | 'no_longer_needed';
+export type GroupSuccessionClosedReason = 'rejected' | 'convenor_returned' | 'candidate_gone' | 'candidate_ineligible' | 'no_longer_needed';
 
 /** The lead the vote is about, and whether one can open at all. Straight from the server. */
 export interface GroupSilence {
@@ -31,6 +31,11 @@ export interface GroupSilence {
     isEligible: boolean;
     /** Who votes: the lead's fellow convenors, or the members when the lead is the only convenor. */
     electorate: 'convenors' | 'members';
+    /**
+     * Only people in the group by this UTC day (its midnight, ISO) take part — for the convenors' vote, people who
+     * were convenors by then: the day the lead was last active (2026-09-28). Absent from a node older than that rule.
+     */
+    votersJoinedBy?: string | null;
 }
 
 /**
@@ -63,6 +68,8 @@ export interface GroupSuccessionData {
     silence: GroupSilence;
     proposals: GroupSuccessionProposal[];
     canPropose: boolean;
+    /** Who may propose, stand and vote right now, while the lead is silent. Absent from a node older than the rule. */
+    voters?: string[];
 }
 
 export interface GroupSuccessionView {
@@ -73,8 +80,13 @@ export interface GroupSuccessionView {
     show: boolean;
     /** The vote that is running, or null. */
     openProposal: GroupSuccessionProposal | null;
-    /** "<lead> hasn't been active for 34 days. The group can choose a new lead." */
+    /**
+     * "<lead> hasn't been active for 34 days. The group can choose a new lead." — or, when nobody who may vote is left,
+     * why no vote can open.
+     */
     silenceLine: string | null;
+    /** "Only members who joined by 19 Aug 2026 can vote." Who takes part, while a vote can run or is running. */
+    whoVotesLine: string | null;
     /** Offer the Propose action and its picker. False unless the SERVER says this viewer may propose. */
     canPropose: boolean;
     /** Who the picker offers, in roster order, the viewer included. */
@@ -118,12 +130,38 @@ export function tallyLineText(p: GroupSuccessionProposal): string {
     return `${p.yesCount} yes, ${p.noCount} no, of ${can} who can vote.`;
 }
 
-/** Why the lead can be replaced, in the group's own words. */
+/**
+ * Who takes part, in the server's own terms: "members who joined by 19 Aug 2026", or "convenors appointed by …" when
+ * the convenors vote. Null from a node older than the rule, which sends no day.
+ */
+export function electorateText(s: GroupSilence): string | null {
+    const by = s.votersJoinedBy ? closingDateText(s.votersJoinedBy) : null;
+    if (!by) return null;
+    return s.electorate === 'convenors' ? `convenors appointed by ${by}` : `members who joined by ${by}`;
+}
+
+/** "Only members who joined by 19 Aug 2026 can vote." */
+export function whoVotesLineText(s: GroupSilence): string | null {
+    const who = electorateText(s);
+    return who ? `Only ${who} can vote.` : null;
+}
+
+/**
+ * The lead is quiet, but nobody who may vote is left — everyone came after the lead went quiet. No vote can ever
+ * open, so the group is told why rather than shown nothing (or a button that is refused).
+ */
+export function nobodyCanVote(s: GroupSilence): boolean {
+    return !!s.convenorPubkey && s.isSilent && !s.isEligible && electorateText(s) !== null;
+}
+
+/** Why the lead can be replaced, in the group's own words — or why, although quiet, they can't be. */
 export function silenceLineText(s: GroupSilence): string | null {
-    if (!s.isEligible) return null;
     const who = s.convenorCallsign || 'The lead convenor';
     const days = Math.floor(s.daysInactive);
-    return `${who} hasn't been active for ${days} ${days === 1 ? 'day' : 'days'}. The group can choose a new lead.`;
+    const quiet = `${who} hasn't been active for ${days} ${days === 1 ? 'day' : 'days'}.`;
+    if (nobodyCanVote(s)) return `${quiet} Only ${electorateText(s)} can choose a new lead, and there are none, so no vote can open.`;
+    if (!s.isEligible) return null;
+    return `${quiet} The group can choose a new lead.`;
 }
 
 /**
@@ -168,6 +206,8 @@ export function outcomeLineText(p: GroupSuccessionProposal | null | undefined): 
             return `${p.convenorCallsign || 'The lead'} came back, so the vote closed.`;
         case 'candidate_gone':
             return `${who} is no longer in the group, so the vote closed.`;
+        case 'candidate_ineligible':
+            return `${who} can't be chosen as lead, so the vote closed.`;
         case 'no_longer_needed':
             return 'The group has another lead now, so the vote closed.';
         default:
@@ -180,10 +220,14 @@ export function outcomeLineText(p: GroupSuccessionProposal | null | undefined): 
  * `silence.electorate`, and this reads that rather than working out a rule of its own. The viewer is in the list
  * on purpose — proposing yourself is allowed — and a refusal from the server is still what has the last word.
  */
-export function proposalCandidates(silence: GroupSilence, members: GroupMember[]): GroupMember[] {
+export function proposalCandidates(silence: GroupSilence, members: GroupMember[], voters?: string[]): GroupMember[] {
     const lead = silence.convenorPubkey;
     const wanted = silence.electorate === 'convenors' ? 'convenor' : 'member';
-    return members.filter(m => m.status === 'active' && m.role === wanted && m.memberPubkey !== lead);
+    // A node with the "there before the lead went quiet" rule names who may stand: offer exactly them, never someone
+    // who joined (or was made a convenor) since and would only be refused.
+    const eligible = Array.isArray(voters) ? new Set(voters) : null;
+    return members.filter(m => m.status === 'active' && m.role === wanted && m.memberPubkey !== lead
+        && (!eligible || eligible.has(m.memberPubkey)));
 }
 
 /**
@@ -198,7 +242,7 @@ export function buildSuccessionView(
     now = Date.now(),
 ): GroupSuccessionView {
     const hidden: GroupSuccessionView = {
-        show: false, openProposal: null, silenceLine: null, canPropose: false, candidates: [],
+        show: false, openProposal: null, silenceLine: null, whoVotesLine: null, canPropose: false, candidates: [],
         canVote: false, myVote: null, tallyLine: null, closingLine: null, outcomeLine: null, outcomeOnly: false,
     };
     if (!data || !data.silence) return hidden;
@@ -212,20 +256,27 @@ export function buildSuccessionView(
     // Decision 2: nothing at all for a healthy group. The section exists while the lead can be replaced, while a
     // vote is running, and for a fortnight after one closed — long enough for the group to learn what happened,
     // and not a day longer. A group that settled the question a year ago sees no card at all.
-    if (!data.silence.isEligible && !openProposal && !isOutcomeRecent(latestClosed, now)) return hidden;
+    // A quiet lead nobody may vote on — everyone in the group came after they went quiet — is said out loud, so
+    // nobody is left wondering why there is nothing to press. Not to a lead alone in their group: there is nobody
+    // else to tell.
+    const lead = data.silence.convenorPubkey;
+    const nobody = !openProposal && nobodyCanVote(data.silence)
+        && members.some(m => m.status === 'active' && m.memberPubkey !== lead);
+    if (!data.silence.isEligible && !openProposal && !nobody && !isOutcomeRecent(latestClosed, now)) return hidden;
 
     // The whole section is one closed vote's outcome: the lead is active, nothing is running, and there is
     // nothing to offer — the server would refuse a proposal for a lead who is not silent.
-    const outcomeOnly = !data.silence.isEligible && !openProposal;
+    const outcomeOnly = !data.silence.isEligible && !openProposal && !nobody;
 
     return {
         show: true,
         openProposal,
         silenceLine: silenceLineText(data.silence),
+        whoVotesLine: outcomeOnly || nobody ? null : whoVotesLineText(data.silence),
         // Both halves of this are the server's: `canPropose` already goes false while a vote is open, and the
         // second only makes that impossible to get wrong on a stale read.
         canPropose: !!data.canPropose && !openProposal && !outcomeOnly,
-        candidates: proposalCandidates(data.silence, members),
+        candidates: proposalCandidates(data.silence, members, data.voters),
         canVote: !!openProposal?.canVote,
         myVote: openProposal?.myVote ?? null,
         tallyLine: openProposal ? tallyLineText(openProposal) : null,

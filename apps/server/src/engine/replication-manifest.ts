@@ -217,7 +217,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     group_members: {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
-        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at'),
+        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since'),
     },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',

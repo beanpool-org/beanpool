@@ -63,6 +63,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                 invited_by TEXT REFERENCES members(public_key),
                 updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                role_since DATETIME,
                 PRIMARY KEY (group_id, member_pubkey)
             );
 

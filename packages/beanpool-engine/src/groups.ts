@@ -147,9 +147,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
         // Creator is the initial convenor with active status
         db.prepare(`
-            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
-            VALUES (?, ?, 'convenor', 'active', ?, ?)
-        `).run(id, params.createdBy, now, now);
+            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
+            VALUES (?, ?, 'convenor', 'active', ?, ?, ?)
+        `).run(id, params.createdBy, now, now, now);
     })();
 
     const created = getGroup(db, id, params.createdBy);
@@ -478,8 +478,8 @@ export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, t
     const now = membershipWriteAt(db, groupId, targetPubkey);
     db.transaction(() => {
         if (target.role !== 'convenor') {
-            db.prepare("UPDATE group_members SET role = 'convenor', updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
-                .run(now, groupId, targetPubkey);
+            db.prepare("UPDATE group_members SET role = 'convenor', role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
+                .run(now, now, groupId, targetPubkey);
         }
         db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?')
             .run(targetPubkey, new Date().toISOString(), groupId);
@@ -564,23 +564,24 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             // Without it, a group whose lead_pubkey is NULL hands the lead to whoever the fallback prefers among
             // the convenors it can now see: the group's creator accepting a re-invitation, or an older joined_at.
             reconcileGroupLead(db, groupId);
+            // The membership begins now, not when the invitation was sent (joined_at, role_since: db/schema.sql).
             db.prepare(
-                "UPDATE group_members SET status = 'active', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-            ).run(now, groupId, memberPubkey);
+                "UPDATE group_members SET status = 'active', joined_at = ?, role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+            ).run(now, now, now, groupId, memberPubkey);
             return getGroupMember(db, groupId, memberPubkey)!;
         }
     }
 
     if (group.join_policy === 'open') {
         db.prepare(`
-            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
-            VALUES (?, ?, 'member', 'active', ?, ?)
-        `).run(groupId, memberPubkey, now, now);
+            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
+            VALUES (?, ?, 'member', 'active', ?, ?, ?)
+        `).run(groupId, memberPubkey, now, now, now);
     } else if (group.join_policy === 'request_to_join') {
         db.prepare(`
-            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
-            VALUES (?, ?, 'member', 'pending_approval', ?, ?)
-        `).run(groupId, memberPubkey, now, now);
+            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
+            VALUES (?, ?, 'member', 'pending_approval', ?, ?, ?)
+        `).run(groupId, memberPubkey, now, now, now);
     } else if (group.join_policy === 'invite_only') {
         throw new Error('This group is invite only. You must be invited by a convenor.');
     } else {
@@ -638,9 +639,10 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
     // group's creator, moved the lead to them — the convenor doing the promoting lost the lead by promoting.
     const now = membershipWriteAt(db, groupId, targetPubkey);
     reconcileGroupLead(db, groupId);
+    // role_since moves only with the role: making a convenor a convenor again is no new appointment.
     db.prepare(
-        "UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-    ).run(newRole, now, groupId, targetPubkey);
+        "UPDATE group_members SET role = ?, role_since = CASE WHEN role = ? THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+    ).run(newRole, newRole, now, now, groupId, targetPubkey);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }
@@ -714,8 +716,8 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     // and only a convenor can re-admit them (invite or approve). The role drops to member so re-admission never
     // quietly restores convenor powers.
     const res = db.prepare(
-        "UPDATE group_members SET status = 'removed', role = 'member', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-    ).run(now, groupId, targetPubkey);
+        "UPDATE group_members SET status = 'removed', role = 'member', role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+    ).run(now, now, groupId, targetPubkey);
     if (res.changes > 0) reconcileGroupLead(db, groupId);
     return res.changes > 0;
 }
@@ -814,9 +816,10 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
     }
 
     const now = membershipWriteAt(db, groupId, targetPubkey);
+    // The membership begins now, not when the request was made (joined_at, role_since: db/schema.sql).
     db.prepare(
-        "UPDATE group_members SET status = 'active', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-    ).run(now, groupId, targetPubkey);
+        "UPDATE group_members SET status = 'active', joined_at = ?, role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+    ).run(now, now, now, groupId, targetPubkey);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }
@@ -845,8 +848,8 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
             // setMemberRole does — otherwise the convenor approving an older request loses the lead to them.
             reconcileGroupLead(db, groupId);
             db.prepare(
-                "UPDATE group_members SET status = 'active', role = ?, invited_by = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-            ).run(role, convenorPubkey, now, groupId, targetPubkey);
+                "UPDATE group_members SET status = 'active', role = ?, invited_by = ?, joined_at = ?, role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+            ).run(role, convenorPubkey, now, now, now, groupId, targetPubkey);
             return getGroupMember(db, groupId, targetPubkey)!;
         }
         if (existing.status === 'invited') {
@@ -855,16 +858,16 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
         if (existing.status === 'removed') {
             // Re-admission: an invitation they still have to accept, like any other.
             db.prepare(
-                "UPDATE group_members SET status = 'invited', role = ?, invited_by = ?, joined_at = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
-            ).run(role, convenorPubkey, now, now, groupId, targetPubkey);
+                "UPDATE group_members SET status = 'invited', role = ?, invited_by = ?, joined_at = ?, role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+            ).run(role, convenorPubkey, now, now, now, groupId, targetPubkey);
             return getGroupMember(db, groupId, targetPubkey)!;
         }
     }
 
     db.prepare(`
-        INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at)
-        VALUES (?, ?, ?, 'invited', ?, ?, ?)
-    `).run(groupId, targetPubkey, role, now, convenorPubkey, now);
+        INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at, role_since)
+        VALUES (?, ?, ?, 'invited', ?, ?, ?, ?)
+    `).run(groupId, targetPubkey, role, now, convenorPubkey, now, now);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }

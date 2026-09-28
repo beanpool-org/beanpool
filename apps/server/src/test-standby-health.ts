@@ -15,7 +15,7 @@
  *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>".
  *     A whole copy whose every account entry has no key a server can hold (#1268's case): no force-resync, no verdict.
  *     A listing photo the main server can't read from its own storage: left out of both servers' hashes and said as such,
- *     never a difference and never a force-resync.
+ *     never a difference and never a force-resync; and still so when the standby holds its own row for it (review 4119011972).
  *  2. The standby stops for an hour (the main server's clock): one incident, one push, to the owner's phone only (not the
  *     admin's, the moderator's or a member's); the owner's admin queue and Settings banner show it, an admin's and a
  *     moderator's queue don't. A second check pushes nothing more. The standby pulls again: the incident ends.
@@ -156,6 +156,12 @@ async function child(): Promise<void> {
             r.lastMismatchResyncAt = Date.now() - a.agoMs;
             db.prepare("UPDATE node_config SET value = ? WHERE key = 'standby_copy_record'").run(JSON.stringify(r));
             return true;
+        },
+        /** The standby's own row for the listing photo M can't read (it copied the row before M lost the object). */
+        'keep-lost-photo': async () => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, mime)
+                VALUES ('plums-lost-photo', NULL, 0, ?, 'photos/lost-on-the-main-server.webp', 'image/webp')`).run(new Date().toISOString()).changes;
         },
         /** A change in a copied table, made on the standby alone, as a bug would make it: the ledger untouched. */
         plant: async (a: { publicKey: string; value: string }) => {
@@ -489,6 +495,19 @@ async function main(): Promise<void> {
         assert(health?.state.incident === null && words?.warning === false && /^Last exact copy of the main server: /.test(words.lines[0] ?? '')
             && words.lines.includes('The main server could not read 1 listing photo from its own storage, so it was left out of that check: no copy can bring it here.'),
             `no incident, and the preview says so in plain words: ${brief(words?.lines)}`);
+        // The common case (review 4119011972): S copied that photo's row before M lost its object. A whole copy keeps S's row
+        // (what it does not receive it keeps), so S's own hash leaves it out too, as M's does, or the copy reads as gone wrong.
+        require_(await standby.send('keep-lost-photo') === 1, "S holds its own row for the photo M can't read, copied before M lost it");
+        await main.send('touch');
+        const keptPhoto = await pull(true);
+        const afterKeptPhoto = await pull();
+        rec = await standby.send('record');
+        assert(keptPhoto.ok && keptPhoto.whole && rec?.lastWhole?.exact === true && rec.lastWhole.hashed === true
+            && rec.lastWhole.photosLeftOut === 1 && rec.lastWhole.differs.length === 0 && rec.lastUncompared === null,
+            `S's next whole copy is still exact: its own row for that photo is left out of its hash too (${brief(rec?.lastWhole)})`);
+        health = await main.send('health');
+        assert(afterKeptPhoto.ok && afterKeptPhoto.mode === 'delta' && health?.state.incident === null,
+            `no force-resync (the next pull is a ${afterKeptPhoto.mode}) and no incident`);
 
         // ── 2. Stopped for an hour ──
         console.log('\n— 2. the standby stops for an hour —');

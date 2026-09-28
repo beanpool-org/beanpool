@@ -7101,7 +7101,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
         try {
-            deleteReplicatedRows('recovery_releases', 'id', 'collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey);
+            // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
+            // by their sessions here, for a row made before rows named their owner.
+            deleteReplicatedRows('recovery_releases', 'id', 'owner_pubkey = ? OR collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey, publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         // A member who deletes their own account frees the sign-in account they joined with through the open door,

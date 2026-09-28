@@ -403,6 +403,8 @@ function hubShareFor(collection: Collection): Record<string, unknown> {
 
 function recordRelease(args: {
     collectionId: string;
+    /** The collection's owner, whose account the fragment is of: the row names them (recovery_releases.owner_pubkey). */
+    ownerPubkey: string;
     shareId: number;
     holderType: KeeperType;
     shareIndex: number;
@@ -427,12 +429,12 @@ function recordRelease(args: {
     db.prepare(`
         INSERT OR IGNORE INTO recovery_releases
             (collection_id, share_id, holder_type, share_index,
-             payload, payload_iv, payload_tag, ephemeral_pubkey, kdf_params, released_by, released_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             payload, payload_iv, payload_tag, ephemeral_pubkey, kdf_params, released_by, released_at, owner_pubkey)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         args.collectionId, args.shareId, args.holderType, args.shareIndex,
         sealed.encryptedShare, sealed.shareIv, sealed.shareTag,
-        args.ephemeralPubkey, sealed.kdfParams, args.releasedBy, nowIso(),
+        args.ephemeralPubkey, sealed.kdfParams, args.releasedBy, nowIso(), args.ownerPubkey,
     );
 
     const released = listReleases(args.collectionId).find(r => r.shareId === args.shareId);
@@ -520,6 +522,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
     const copy = openShareRow(share);
     return recordRelease({
         collectionId,
+        ownerPubkey: collection.ownerPubkey,
         shareId: copy.id,
         holderType: 'sso',
         shareIndex: copy.shareIndex,
@@ -570,6 +573,7 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
     const copy = openShareRow(share);
     return recordRelease({
         collectionId,
+        ownerPubkey: collection.ownerPubkey,
         shareId: copy.id,
         holderType: 'hub',
         shareIndex: copy.shareIndex,

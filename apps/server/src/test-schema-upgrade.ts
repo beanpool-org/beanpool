@@ -1239,6 +1239,50 @@ END`;
         fs.rmSync(standbyDir, { recursive: true, force: true });
     }
 
+    // ── 22. A recovery release names its owner (review 4122266731) ──────────────────────────────────────────────────────
+    // recovery_releases.owner_pubkey is what a member's own delete finds their releases by on a server that took over,
+    // which holds none of the main server's sessions. A release from before it gets its owner at boot from its session,
+    // where the session is here, on a main server; a standby fills none (its rows are its main server's).
+    console.log('\n--- 22. A release from before owner_pubkey names its owner at boot, where its session is here ---');
+    {
+        const plant = (dir: string) => {
+            assert(bootInto(dir).ok, 'a fresh node boots');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.pragma('foreign_keys = OFF');
+            d.exec(`DROP TABLE recovery_releases; ${legacyDdl('recovery_releases', ['owner_pubkey'])}`);
+            d.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, expires_at)
+                       VALUES ('here', 'owner-here', 1, 'eph', 'complete', '2025-01-04T00:00:00.000Z')`).run();
+            const release = d.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, released_at, updated_at)
+                                       VALUES (?, ?, 'hub', 1, 'p', 'iv', 'tag', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`);
+            release.run('here', 1);
+            release.run('elsewhere', 2); // a session another server holds
+            assert(!columns(d, 'recovery_releases').includes('owner_pubkey'), 'the fixture genuinely lacks the column');
+            d.close();
+        };
+        const rows = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            const out = d.prepare('SELECT collection_id, owner_pubkey, updated_at FROM recovery_releases ORDER BY collection_id').all() as any[];
+            d.close();
+            return out;
+        };
+        const mainDir = tmp('legacy-release-owner');
+        plant(mainDir);
+        assert(bootInto(mainDir).ok, 'a main server from before the column boots');
+        const filled = rows(mainDir);
+        const [elsewhere, here] = filled;
+        assert(here?.owner_pubkey === 'owner-here' && here.updated_at > '2025-01-01T00:00:00.000Z' && elsewhere?.owner_pubkey === null
+            && elsewhere.updated_at === '2025-01-01T00:00:00.000Z',
+            `the release whose session is here names its owner, stamped so the next copy carries it; the other is left alone (${JSON.stringify(filled)})`);
+        assert(bootInto(mainDir).ok && JSON.stringify(rows(mainDir)) === JSON.stringify(filled), 'booting it again changes nothing');
+        fs.rmSync(mainDir, { recursive: true, force: true });
+
+        const standbyDir = tmp('legacy-release-owner-standby');
+        plant(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the column boots');
+        assert(rows(standbyDir).every((r) => r.owner_pubkey === null), 'and fills no owner itself: its rows are its main server\'s, which its next copy brings');
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

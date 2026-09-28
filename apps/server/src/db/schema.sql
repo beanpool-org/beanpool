@@ -693,9 +693,15 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     released_by TEXT,
     released_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose account the fragment is of: the collection's owner, written with the release (engine/recovery-release.ts
+    -- recordRelease) and copied to a standby with the row. The sessions (recovery_collections) stay each server's own, so
+    -- on a server that took over this is the only thing naming the owner, and the owner's own account delete finds
+    -- their releases by it (state-engine.ts purgeMemberSelf). db.ts fills it at boot for a release whose session is here.
+    owner_pubkey TEXT,
     UNIQUE(collection_id, share_id)
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_releases_owner ON recovery_releases(owner_pubkey);
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
 
 -- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.

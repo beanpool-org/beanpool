@@ -18,7 +18,8 @@
  *     window; a lead succession vote and a convenor vote, open; a Decision open with three ballots and a removal passed
  *     into its grace period; an owner suspended by an admin (a Decision, her role held aside); a moderator suspended and
  *     lifted again (a role held aside, then deleted, which travels as a tombstone); an unused invite and an unused re-key
- *     code; two recovery releases; a link with another community, with Beans in its treasury.
+ *     code; two recovery releases; Moe's account recovered through M (a sign-in and the hub released, as recordRelease
+ *     writes them); a link with another community, with Beans in its treasury.
  *  4. On S, every writer of these tables refuses (the routes with 409 `standby`, the engine's functions before they
  *     write), the reads that close what is due write nothing there, and it makes no link at boot: its plain tables are
  *     exactly as before.
@@ -33,7 +34,9 @@
  *     and passes at its deadline; the open Decision counts M's three ballots and a new one, passes and is carried out;
  *     the removal is carried out after its grace; the unkept suspension ends and the owner has her role back; the
  *     keeper's wage is paid, once; the unused invite and the re-key code work; the releases are M's; no second link
- *     treasury, and a link row lost finds its treasury again, by the marker M made with it and S copied (never by name).
+ *     treasury, and a link row lost finds its treasury again, by the marker M made with it and S copied (never by name);
+ *     Moe deletes his account on the promoted server, which holds none of M's recovery sessions, and no release of his
+ *     remains, each deleted with a tombstone.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-in-flight.ts
@@ -204,7 +207,7 @@ async function child(): Promise<void> {
          * A recovery fragment released, as recordRelease writes it (engine/recovery-release.ts): locked with this server's
          * seal key to the release, the log and not its session (no route makes one without a member's recovery).
          */
-        'record-release': async (a: { collectionId: string; shareId: number; releasedBy: string | null }) => {
+        'record-release': async (a: { collectionId: string; shareId: number; releasedBy: string | null; owner: string }) => {
             const { db } = await import('./db/db.js');
             const { sealRecoveryFields, releaseRowAad } = await import('./services/recovery-seal-key.js');
             const sealed = sealRecoveryFields({
@@ -212,15 +215,49 @@ async function child(): Promise<void> {
                 shareTag: crypto.randomBytes(16).toString('base64'), kdfParams: null,
             }, releaseRowAad(a.collectionId, a.shareId, 'hub'));
             db.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag,
-                        ephemeral_pubkey, kdf_params, released_by, released_at)
-                        VALUES (?, ?, 'hub', 1, ?, ?, ?, NULL, ?, ?, ?)`)
-                .run(a.collectionId, a.shareId, sealed.encryptedShare, sealed.shareIv, sealed.shareTag, sealed.kdfParams, a.releasedBy, new Date().toISOString());
+                        ephemeral_pubkey, kdf_params, released_by, released_at, owner_pubkey)
+                        VALUES (?, ?, 'hub', 1, ?, ?, ?, NULL, ?, ?, ?, ?)`)
+                .run(a.collectionId, a.shareId, sealed.encryptedShare, sealed.shareIv, sealed.shareTag, sealed.kdfParams, a.releasedBy, new Date().toISOString(), a.owner);
             return true;
         },
-        /** A row gone from a plain table with no tombstone: a delete an older version made, or one by hand. */
-        'forget-release': async (a: { shareId: number }) => {
+        /**
+         * A member's account recovered through this server, by the engine's own path: their split stored (the hub and a
+         * sign-in), a session opened for a recovering device, the sign-in's fragment released (a verified provider login
+         * ends in releaseSsoFragment) and the hub's with it. Answers the session and the releases' ids.
+         */
+        recover: async (a: { owner: string }) => {
+            const { putShareGeneration } = await import('./engine/recovery-shares.js');
+            const { openCollection, releaseSsoFragment, releaseHubFragment } = await import('./engine/recovery-release.js');
+            const frag = (i: number) => ({
+                shareIndex: i, encryptedShare: crypto.randomBytes(32).toString('base64'),
+                shareIv: crypto.randomBytes(12).toString('base64'), shareTag: crypto.randomBytes(16).toString('base64'),
+            });
+            const ssoHash = crypto.randomBytes(32).toString('hex');
+            putShareGeneration(a.owner, [
+                { holderType: 'hub', holderRef: 'node', ...frag(1) },
+                { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash, ssoLookupSalt: 'c2FsdA', ...frag(2) },
+            ]);
+            const session = openCollection(a.owner, crypto.randomBytes(32).toString('base64url'));
+            releaseSsoFragment(session.id, ssoHash);
+            releaseHubFragment(session.id);
             const { db } = await import('./db/db.js');
-            return db.prepare('DELETE FROM recovery_releases WHERE share_id = ?').run(a.shareId).changes;
+            const ids = (db.prepare('SELECT id FROM recovery_releases WHERE collection_id = ? ORDER BY id').all(session.id) as { id: number }[]).map((r) => r.id);
+            return { session: session.id, ids };
+        },
+        /** The release rows with these ids, their tombstones, and the recovery sessions of `owner` this server holds. */
+        'release-rows': async (a: { ids: number[]; owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const marks = a.ids.map(() => '?').join(', ');
+            return {
+                rows: db.prepare(`SELECT id FROM recovery_releases WHERE id IN (${marks})`).all(...a.ids).length,
+                tombstones: db.prepare(`SELECT row_key FROM tombstones WHERE table_name = 'recovery_releases' AND row_key IN (${marks})`).all(...a.ids.map(String)).length,
+                sessions: db.prepare('SELECT id FROM recovery_collections WHERE owner_pubkey = ?').all(a.owner).length,
+            };
+        },
+        /** A row gone from a plain table with no tombstone: a delete an older version made, or one by hand. */
+        'forget-release': async (a: { collectionId: string; shareId: number }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('DELETE FROM recovery_releases WHERE collection_id = ? AND share_id = ?').run(a.collectionId, a.shareId).changes;
         },
         /**
          * M's whole copy, signed with its own key, with a value no table here takes (a keeper request's status its CHECK
@@ -560,8 +597,10 @@ async function main(): Promise<void> {
         const rekey = built('the admin issues Pam a re-key code she hasn\'t used', await A(`/api/local/admin/members/${pam.pk}/rekey/issue-code`, {}));
         const rekeyCode = (rekey.code ?? rekey.request?.code ?? rekey.rekeyCode) as string;
         require_(typeof rekeyCode === 'string' && rekeyCode.length > 0, `M: the code (${JSON.stringify(rekey).slice(0, 120)})`);
-        await main.send('record-release', { collectionId: 'collection-1', shareId: 1, releasedBy: null });
-        await main.send('record-release', { collectionId: 'collection-1', shareId: 2, releasedBy: bo.pk });
+        await main.send('record-release', { collectionId: 'collection-1', shareId: 1, releasedBy: null, owner: gwen.pk });
+        await main.send('record-release', { collectionId: 'collection-1', shareId: 2, releasedBy: bo.pk, owner: gwen.pk });
+        const recovered: { session: string; ids: number[] } = await main.send('recover', { owner: moe.pk });
+        require_(recovered.ids.length === 2, `M: Moe's account recovered through M, a sign-in and the hub released (${JSON.stringify(recovered.ids)})`);
         const linked = await main.send('link-peer', { cap: 50 });
         require_(linked.created === 1 && !!linked.link?.treasuryPubkey, `M: a link with Eastgippy, and its treasury (${JSON.stringify(linked).slice(0, 160)})`);
         built('Kip puts 3 Beans in the link\'s treasury', await S_(kip, '/api/ledger/transfer', { to: linked.link.treasuryPubkey, amount: 3, memo: 'for favours' }));
@@ -622,12 +661,13 @@ async function main(): Promise<void> {
         s = await standby.send('rows');
         assert(s.tables.enterprise_keeper_requests.find((r) => r.id === requestId)?.status === 'pending' && !s.tables.decisions.some((d) => String(d.id).startsWith('forged-')),
             'S keeps the request\'s status it had, and writes no second open Decision');
-        await main.send('forget-release', { shareId: 2 });
+        await main.send('forget-release', { collectionId: 'collection-1', shareId: 2 });
         const whole = await standby.send('pull', { whole: true });
         require_(whole.ok === true && whole.whole === true, `S: a whole copy (${whole.ok ? whole.mode : whole.error})`);
         const m5: Tables = (await main.send('rows')).tables;
         s = await standby.send('rows');
-        assert(m5.recovery_releases.length === 1 && tablesDiff(m5, s.tables).length === 0,
+        assert(m5.recovery_releases.length === 3 && !m5.recovery_releases.some((r) => r.collection_id === 'collection-1' && r.share_id === 2)
+            && tablesDiff(m5, s.tables).length === 0,
             `and S is M's again: the release M no longer holds is gone, and the rest is M's (differences ${first(tablesDiff(m5, s.tables))})`);
         refused.push(...(await standby.send('fetches')).blocked);
         await standby.kill('SIGTERM');
@@ -747,6 +787,14 @@ async function main(): Promise<void> {
             `a link row lost finds its treasury again, not a second one (${JSON.stringify(relinked).slice(0, 200)})`);
         assert(JSON.stringify(relinked.markers) === JSON.stringify(onMain.federation_link_treasuries.map((r) => ({ treasury_pubkey: r.treasury_pubkey, peer_id: r.peer_id, created_at: r.created_at }))),
             `found by the marker M made with it, which S copied: the only one, unchanged (${JSON.stringify(relinked.markers).slice(0, 200)})`);
+        // Moe deletes his own account on the promoted server. His recovery session was M's and stays M's (a server's own),
+        // so only the owner each release names finds them here.
+        const moeBefore = await standby.send('release-rows', { ids: recovered.ids, owner: moe.pk });
+        require_(moeBefore.rows === 2 && moeBefore.sessions === 0, `S: Moe's two releases, copied, and none of M's sessions (${JSON.stringify(moeBefore)})`);
+        const purged = await P_(moe, '/api/member/purge');
+        const moeAfter = await standby.send('release-rows', { ids: recovered.ids, owner: moe.pk });
+        assert(purged.status === 200 && moeAfter.rows === 0 && moeAfter.tombstones === 2,
+            `Moe deletes his account on the promoted server: no release of his remains, each deleted with a tombstone (${brief(purged)}; ${JSON.stringify(moeAfter)})`);
         refused.push(...(await standby.send('fetches')).blocked);
         assert(refused.length === 0, `nothing reached off this machine (refused: ${refused.join(', ') || 'none'})`);
     } finally {

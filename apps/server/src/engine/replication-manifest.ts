@@ -315,9 +315,10 @@ export const TABLES: Record<string, TableEntry> = {
     invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
-    // The log of which recovery fragments left the node (a member's own delete deletes theirs, with tombstones). Its
-    // sessions (recovery_collections) stay each server's own.
-    recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at'),
+    // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
+    // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
+    // server that made them and on one that took over.
+    recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at owner_pubkey'),
     // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
     federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
     // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find

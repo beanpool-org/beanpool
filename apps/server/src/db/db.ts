@@ -869,6 +869,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_keeper_changes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // Whose account a recovery release is of (review 4122266731): filled for the rows here by fillReleaseOwners.
+    try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN owner_pubkey TEXT`).run(); } catch { }
 
     // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
     // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
@@ -1247,6 +1249,25 @@ export function initSchema() {
     // Last: a rebuild above (deferred_wage_claims' unique index, ripOutLegacyVoting's decisions) drops a table's triggers.
     stampPlainTables();
     markLinkTreasuries();
+    fillReleaseOwners();
+}
+
+/**
+ * A recovery release made before its row named its owner (recovery_releases.owner_pubkey) gets the owner from its
+ * session, where the session is on this server; on a main server only (a standby's rows are its main server's, and its
+ * import alone writes them). The touch trigger stamps each row filled, so the next copy carries the owner to the standbys.
+ * Idempotent: a row that names its owner, or whose session isn't here, is left alone.
+ */
+function fillReleaseOwners(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        const filled = db.prepare(`UPDATE recovery_releases
+                                   SET owner_pubkey = (SELECT c.owner_pubkey FROM recovery_collections c WHERE c.id = recovery_releases.collection_id)
+                                   WHERE owner_pubkey IS NULL AND collection_id IN (SELECT id FROM recovery_collections)`).run().changes;
+        if (filled > 0) console.log(`[DB] ${filled} recovery release(s) now name their owner`);
+    } catch (e) {
+        console.error("[DB] ❌ Could not fill the recovery releases' owners:", e);
+    }
 }
 
 /**

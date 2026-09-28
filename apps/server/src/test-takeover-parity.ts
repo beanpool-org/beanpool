@@ -17,9 +17,9 @@
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a message with empty
- *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed) and a last
- *     delta, and the pricing guide's hourly cycle on M (the nodes' own timer for it is off: it fired or not by the
- *     runner's speed).
+ *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed), the pricing
+ *     guide's hourly cycle on M (the nodes' own timer for it is off: it fired or not by the runner's speed), and a last
+ *     delta.
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
@@ -68,8 +68,9 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  *
  * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
  * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this
- * suite found) are closed, and so are G1b's listing, deal, photo and project columns and G3's tables (in-flight money and
- * governance, on the plain-table path): a difference in any of them is new. G3 is not closed whole: its one setting, the
+ * suite found) are closed, and so are G1b's listing, deal, photo and project columns, G3's tables (in-flight money and
+ * governance, on the plain-table path) and G4's but chat photos (members' phones, mutes, read marks, reminders sent, the
+ * activity list and the pricing guide, on the same path): a difference in any of them is new. G3 is not closed whole: its one setting, the
  * Commons project proposals still waiting for a decision (node_config `commons_projects`, a `community` gap in
  * engine/replication-manifest.ts NODE_CONFIG_KEYS), stays behind on a take-over, and the preview names it. This scenario
  * makes no such proposal, so nothing here differs by it; one that did would need its line here.
@@ -81,14 +82,9 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
-
-    // G4: members' devices and conveniences.
-    { key: 'db:push_tokens (not copied)', gap: 'G4', why: 'no push reaches anyone' },
+    // G4: chat photos (PR 8). The phones, mutes, read marks, reminders sent, the activity list and the pricing guide are
+    // copied on the plain-table path.
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
-    { key: 'db:activity_feed (not copied)', gap: 'G4', why: 'the activity waterfall starts empty' },
-    { key: 'db:pricing_guide_items (not copied)', gap: 'G4', why: 'each server seeds its own guide at its first boot' },
-    { key: 'http:the pricing guide', gap: 'G4', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices" },
-    { key: 'http:a push of each category', gap: 'G4', why: 'no phone to push to' },
 ];
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -504,10 +500,11 @@ async function main(): Promise<void> {
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
         built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
         built('Ann renames Gardeners, which the whole copy copied', await api(m, 'PATCH', `/api/groups/${groupId}`, { as: ann, body: { name: 'Growers' } }));
-        await pull('the last delta');
-        // A main server that has been up an hour has priced its guide from its community's listings.
+        // A main server that has been up an hour has priced its guide from its community's listings. Before the last
+        // delta, as every write here is: the twin is M as it was at S's last copy, and the guide is copied (G4).
         const priced = await main.send('pricing-cycle');
         require_(priced.updatedCount > 0, `M: the pricing guide's hourly cycle prices items from the community's listings (${JSON.stringify(priced)})`);
+        await pull('the last delta');
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');

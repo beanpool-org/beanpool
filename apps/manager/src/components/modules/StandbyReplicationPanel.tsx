@@ -429,7 +429,7 @@ export function StandbyReplicationPanel({
                                 Rebuild replica tables from primary snapshot?
                             </p>
                             <p className="m-0 text-[11px] text-nature-300">
-                                This will clear local replica tables and reconstruct the full state from the primary node&apos;s signed snapshot. Any unmerged local divergence will be discarded.
+                                This rebuilds the replica tables from the primary node&apos;s signed snapshot. They are replaced only if that copy is accepted: if it is refused, this server keeps the copy it has. Any unmerged local divergence will be discarded.
                             </p>
                         </div>
 

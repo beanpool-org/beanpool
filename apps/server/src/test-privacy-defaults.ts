@@ -21,6 +21,9 @@
  *      author and the voter included, on a read or on the live feed, which no longer carries the voter's own choice
  *      either. An open vote gives members its voters, and a suspended member none. The choice can change until the
  *      first vote, and never after.
+ *   8. The landing card (/api/global/home), where an operator keeps the directory on a local node: a member's count of
+ *      the listings near a point is from their places, anyone else's from their areas (as the visitors' view is), a
+ *      suspended member's and a visitor's included.
  *
  * The real server, every request over TLS through the signature middleware, with every ENFORCE_* variable removed
  * (the fresh-download default) on a local node (NODE_PROFILE unset). The global node's guest view is the business of
@@ -119,7 +122,7 @@ async function main() {
     const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
     const { db } = await import('./db/db.js');
     const { recordActivity } = await import('./db/activity-feed-db.js');
-    const { getProfileSwitches } = await import('./config/node-profile.js');
+    const { getProfileSwitches, setSwitchOverride } = await import('./config/node-profile.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -511,6 +514,29 @@ async function main() {
         const exported = (payload.posts ?? []).filter((p: any) => p.id === openId || p.id === anonId);
         assert(exported.find((p: any) => p.id === openId)?.pollOpenVote === true && exported.find((p: any) => p.id === anonId)?.pollOpenVote === false,
             'and replicates with it');
+    }
+
+    // ── 8. the landing card ────────────────────────────────────────────────────────────────────
+    console.log("\n── 8. where a local node keeps the directory, the landing card's count is exact for members only ──");
+    {
+        // A lone listing 0.04° (4.45 km) south of its area's centre, and a point 49.9 km further south: within the card's
+        // 50 km of the listing, 54.35 km from its area's centre. A stranger's exact count here would find the listing to
+        // the metre by bisection (#1159); the deciding review of #1286 found this count was the one public way left to.
+        const lone = se.createPost('offer', 'other', 'Sentinel lone offer', 'Far from the rest', 0, 'fixed', alice.pk, -35.04, 140.6);
+        assert(!!lone?.id, 'setup: Alice lists a lone offer');
+        setSwitchOverride('directoryMirror', true);
+        const q = { lat: -35.04 - 49.9 / (6371 * Math.PI / 180), lng: 140.6 };
+        const count = async (id?: Id) => {
+            const r = await get(`/api/global/home?lat=${q.lat}&lng=${q.lng}`, id);
+            return r.status === 200 ? r.body?.nearbyPosts?.count : -r.status;
+        };
+        const memberCount = await count(carol);
+        assert(memberCount === 1, `a member's count is of the listings within 50 km of the point, the lone one among them (got ${memberCount})`);
+        for (const [who, id] of [['a stranger (unsigned)', undefined], ['a key that is no member here', outsider], ["a visitor's row", vera], ['a suspended member', sam]] as const) {
+            const n = await count(id);
+            assert(n === 0, `${who}: the count is from each listing's area, whose centre is 54 km away, so the lone listing is not counted (got ${n})`);
+        }
+        setSwitchOverride('directoryMirror', false);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

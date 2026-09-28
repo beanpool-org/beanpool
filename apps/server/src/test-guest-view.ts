@@ -40,7 +40,8 @@
  *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
  *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
  *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
- *      the landing card's count is from each listing's place, as the listing shows it; a non-member signer reads a trust
+ *      the landing card's count is a member's from each listing's place and anyone else's from its area, so bisecting
+ *      it finds the area; a non-member signer reads a trust
  *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
  *      as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
@@ -1611,21 +1612,31 @@ async function main(): Promise<void> {
         }
         assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
 
-        // The landing card (G5), where an operator keeps the directory on a local node: the count is from each listing's
-        // place, for anyone, as before G9a. The listing shows every reader that place anyway.
+        // The landing card (G5), where an operator keeps the directory on a local node. Its listings are its members'
+        // (2026-09-28), and this public count was the one way left to find them (#1286's deciding review, 4125322427): a
+        // member's count is from each listing's place, as their Market shows it; anyone else's from its area, as on global.
         db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.directoryMirror', 'true');
-        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+        const cell = cellOf(LONE_AT);
+        const countsAround = async (id: Id | null, from: Place) => {
             const counts: unknown[] = [];
             for (const d of [NEARBY_KM - 0.01, NEARBY_KM + 0.01]) {
-                const q = destination(LONE_AT, d, 0);
+                const q = destination(from, d, 0);
                 counts.push((await call('GET', id, `/api/global/home?lat=${q.lat}&lng=${q.lng}`)).body?.nearbyPosts?.count);
             }
-            assert(counts[0] === 1 && counts[1] === 0, `${who}: the card counts the lone listing 10 m inside its own 50 km, not 10 m outside (${counts.join(', ')})`);
+            return counts;
+        };
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+            const byArea = await countsAround(id, cell);
+            assert(byArea[0] === 1 && byArea[1] === 0, `${who}: the card counts the lone listing 10 m inside its area's 50 km, not 10 m outside (${byArea.join(', ')})`);
         }
-        const attack = await bisectHome(cellOf(LONE_AT));
+        const byPlace = await countsAround(bob, LONE_AT);
+        assert(byPlace[0] === 1 && byPlace[1] === 0, `a member: the card counts it 10 m inside its own 50 km, not 10 m outside (${byPlace.join(', ')})`);
+        const attack = await bisectHome(cell);
+        const fromCell = attack.drops.map(d => km(d, cell));
         const fromPlace = attack.drops.map(d => km(d, LONE_AT));
-        assert(attack.ok && fromPlace.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, LONE_AT) < 0.005,
-            `so the bisection finds the listing's place (drops ${span(fromPlace)} from it, the fit ${(km(attack.centre, LONE_AT) * 1000).toFixed(1)} m away), as before`);
+        assert(attack.ok && fromCell.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, cell) < 0.005 && km(attack.centre, LONE_AT) > 5,
+            `so the unsigned bisection finds the area's centre (drops ${span(fromCell)} from it, the fit ${(km(attack.centre, cell) * 1000).toFixed(1)} m away), `
+            + `never the listing (${span(fromPlace)} from it)`);
         db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.directoryMirror');
     }
 }

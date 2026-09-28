@@ -405,6 +405,7 @@ run_federation_suites() {
       test-registrar-names-record
       test-registrar-name-watch
       test-read-auth-default
+      test-privacy-defaults
       test-activity-feed-members-only
       test-members-contact-visibility
       test-contact-trade-partners

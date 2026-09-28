@@ -35,7 +35,8 @@ type BroadcastFn = (event: any, recipients?: string[]) => void;
 
 /**
  * The post as the member who acted gets it back in the route's response. Each write below reads its post WITH the
- * voters, because the broadcast goes to member sockets (deliverBroadcast takes them off for any other socket); the one
+ * voters of an open-vote poll (an anonymous poll never carries them, getPosts), because the broadcast goes to member
+ * sockets (deliverBroadcast takes them off for any other socket); the one
  * who acted keeps them only if they read as a member of this node (readsAsMember) — a pruned author can still sign a
  * close, and a suspended one or a visitor can still vote, close or edit.
  */

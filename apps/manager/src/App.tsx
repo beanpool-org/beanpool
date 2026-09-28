@@ -29,6 +29,7 @@ import {
     seedTreasuryOffer,
     loginToNode,
     acknowledgeShutdownStatus,
+    forgetStandby,
     resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
@@ -1413,6 +1414,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             onAcknowledgeShutdown={async () => {
                                                 if (activeNode) {
                                                     await acknowledgeShutdownStatus(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
+                                                    await refreshFleetDiagnostics({ manual: true });
+                                                }
+                                            }}
+                                            onForgetStandby={async (id) => {
+                                                if (activeNode) {
+                                                    await forgetStandby(activeNode.url, id, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
                                                     await refreshFleetDiagnostics({ manual: true });
                                                 }
                                             }}

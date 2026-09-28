@@ -71,6 +71,7 @@ import {
     type OffboardOptions,
 } from '../engine/member-wizards.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
+import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 
@@ -803,6 +804,10 @@ const getDiagnosticsHandler = async (ctx: any) => {
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
             shutdownStatus: getShutdownStatus(),
+            // The Settings banner when this server's standby needs its owners (services/standby-health.ts): the
+            // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or
+            // was, until another took it over).
+            standbyHealth: ctx.state?.adminRole === 'owner' && watchesStandbys() ? getStandbyHealthBanner() : null,
             diskHealth: getCachedDiskHealth(),
             // Stray rejected promises the process-level net caught and kept serving through. The error
             // text only — no request body, no parameter, no key — and already redacted on the way in.

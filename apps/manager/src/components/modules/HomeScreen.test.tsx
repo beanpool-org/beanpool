@@ -142,5 +142,37 @@ describe('HomeScreen Component', () => {
         rerender(<HomeScreen {...defaultProps} communityName="Node Beta" diag={mockDiag1} />);
         expect(screen.getByTestId('unclean-shutdown-reassurance')).toBeInTheDocument();
     });
+
+    it("shows the owners' banner while the standby needs them, and lets an owner stop watching one gone for good", async () => {
+        const standbyHealth = {
+            incident: {
+                id: 'inc1', startedAt: Date.now(), pushed: true,
+                lines: ['The standby at 203.0.113.9 has not made a copy of this server since 2026-09-28 01:34 UTC.'],
+                whatToDo: ['Check the standby server is running and can reach this one.'],
+            },
+            standbys: [
+                { id: 'a'.repeat(32), label: 'The standby at 203.0.113.9', lastPullAt: 1, lastCopyAt: 1, lastExactAt: 1, healthy: false },
+                { id: 'b'.repeat(32), label: 'The standby at 203.0.113.10', lastPullAt: 1, lastCopyAt: 1, lastExactAt: 1, healthy: true },
+            ],
+        };
+        const onForgetStandby = vi.fn().mockResolvedValue(undefined);
+        const { rerender } = render(<HomeScreen {...defaultProps} diag={{ standbyHealth } as any} onForgetStandby={onForgetStandby} />);
+        const banner = screen.getByTestId('standby-health-banner');
+        expect(banner).toHaveTextContent('Your standby server needs attention');
+        expect(banner).toHaveTextContent(standbyHealth.incident.lines[0]);
+        expect(banner).toHaveTextContent(standbyHealth.incident.whatToDo[0]);
+        // Only the standby that needs them can be let go from here.
+        expect(screen.queryByRole('button', { name: /203\.0\.113\.10/ })).toBeNull();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'The standby at 203.0.113.9 is gone for good: stop watching it' }));
+        });
+        expect(onForgetStandby).toHaveBeenCalledWith('a'.repeat(32));
+
+        // No incident (or a server before the watch, or someone not an owner): no banner.
+        rerender(<HomeScreen {...defaultProps} diag={{ standbyHealth: { ...standbyHealth, incident: null } } as any} onForgetStandby={onForgetStandby} />);
+        expect(screen.queryByTestId('standby-health-banner')).toBeNull();
+        rerender(<HomeScreen {...defaultProps} diag={{ standbyHealth: null } as any} />);
+        expect(screen.queryByTestId('standby-health-banner')).toBeNull();
+    });
 });
 

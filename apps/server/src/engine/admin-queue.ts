@@ -11,6 +11,7 @@
 import { db } from '../db/db.js';
 import { getShutdownStatus } from './shutdown-recovery.js';
 import { decisionsOn } from '../decisions-engine.js';
+import { standbyIncidentOpen } from '../services/standby-health.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -19,7 +20,7 @@ import { decisionsOn } from '../decisions-engine.js';
 export const ADMIN_SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decisions'] as const;
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];
 
-export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown';
+export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby';
 
 export interface AdminQueueItem {
     kind: AdminQueueKind;
@@ -48,8 +49,14 @@ function count(sql: string, ...params: unknown[]): number {
 /** The only kind of queued work a moderator handles: reports (admin-auth.ts, MODERATOR_ROUTES). */
 const MODERATOR_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['reports']);
 
-/** `forModerator`: only what a moderator can act on, so their badge never counts work they cannot open. */
-export function getAdminQueue(opts: { forModerator?: boolean } = {}): AdminQueue {
+/** Told to the community's owners only (design G8, Marty's answer 3: "nobody else is told"). */
+const OWNER_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['standby']);
+
+/**
+ * `forModerator`: only what a moderator can act on, so their badge never counts work they cannot open. `forOwner`: the
+ * asker is an owner, who alone is told when the standby needs them (services/standby-health.ts).
+ */
+export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean } = {}): AdminQueue {
     const shutdown = getShutdownStatus();
     const raw: Array<Omit<AdminQueueItem, 'settingsPath'>> = [
         {
@@ -88,9 +95,17 @@ export function getAdminQueue(opts: { forModerator?: boolean } = {}): AdminQueue
             label: 'The node restarted after an unclean shutdown',
             section: 'home',
         },
+        {
+            kind: 'standby',
+            // One while an incident is open: its standby stopped copying this server, or copies it wrongly.
+            count: opts.forOwner && standbyIncidentOpen() ? 1 : 0,
+            label: 'Your standby server needs attention',
+            section: 'home',
+        },
     ];
     const items = raw
         .filter(i => i.count > 0 && (!opts.forModerator || MODERATOR_QUEUE_KINDS.has(i.kind)))
+        .filter(i => opts.forOwner || !OWNER_QUEUE_KINDS.has(i.kind))
         .map(i => ({ ...i, settingsPath: settingsPathFor(i.section) }));
     return { total: items.reduce((n, i) => n + i.count, 0), items };
 }

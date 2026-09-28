@@ -1,8 +1,13 @@
 /**
  * Pricing Guide DB Access & Operations (#206).
+ *
+ * The guide and its reports are copied to a standby verbatim (plain tables, design G4): the main server alone writes
+ * them, every writer here refuses on a standby first (config/node-role.ts assertPlainTablesWritable), and a delete writes
+ * a tombstone so a standby drops the row too.
  */
 
-import { db } from './db.js';
+import { db, deletePlainRows } from './db.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import {
     DEFAULT_PRICING_CATALOG,
@@ -15,19 +20,24 @@ import {
 import crypto from 'node:crypto';
 
 /**
- * Seeds the default catalog if the pricing_guide_items table is empty.
- * If forceReset is true, clears all existing items and re-seeds defaults.
+ * Seeds the default catalog if the pricing_guide_items table is empty (db.ts, on a main server's boot).
+ * If forceReset is true, clears all existing items and re-seeds defaults: every report and every item that isn't a
+ * default goes with a tombstone, and each default item is written back over its row, which moves its stamp. A default
+ * item deleted and written in again could share the millisecond with its tombstone, and a standby applying that
+ * tombstone after the row would lose the item.
  */
 export function seedPricingGuideIfEmpty(forceReset: boolean = false, dbHandle?: import('better-sqlite3').Database): void {
     const activeDb = dbHandle || db;
     if (forceReset) {
+        assertPlainTablesWritable();
         // Delete child reports before parent items to preserve FK constraints
-        activeDb.prepare('DELETE FROM pricing_reports').run();
-        activeDb.prepare('DELETE FROM pricing_guide_items').run();
+        deletePlainRows('pricing_reports', '1 = 1');
+        deletePlainRows('pricing_guide_items', 'id NOT IN (SELECT value FROM json_each(?))',
+            JSON.stringify(DEFAULT_PRICING_CATALOG.map((item) => item.id)));
     }
 
     const insert = activeDb.prepare(`
-        INSERT OR IGNORE INTO pricing_guide_items (
+        INSERT OR ${forceReset ? 'REPLACE' : 'IGNORE'} INTO pricing_guide_items (
             id, category, emoji, name, description, price_beans, unit,
             is_pinned, confidence_count, trend, seasonality_hint, thumbnail_url, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -122,6 +132,7 @@ export function savePricingGuideItem(item: {
     seasonalityHint?: string;
     thumbnailUrl?: string;
 }): PricingGuideItem {
+    assertPlainTablesWritable();
     const id = item.id || `custom-${crypto.randomBytes(6).toString('hex')}`;
     const existing = getPricingGuideItem(id);
     // An operator's thumbnail is any string, a photo's data URL included, and the guide is read by every member:
@@ -178,15 +189,16 @@ export function savePricingGuideItem(item: {
 }
 
 export function deletePricingGuideItem(id: string): boolean {
+    assertPlainTablesWritable();
     const tx = db.transaction(() => {
-        db.prepare('DELETE FROM pricing_reports WHERE item_id = ?').run(id);
-        const res = db.prepare('DELETE FROM pricing_guide_items WHERE id = ?').run(id);
-        return res.changes > 0;
+        deletePlainRows('pricing_reports', 'item_id = ?', id);
+        return deletePlainRows('pricing_guide_items', 'id = ?', id) > 0;
     });
     return tx();
 }
 
 export function pinPricingGuideItem(id: string, isPinned: boolean): boolean {
+    assertPlainTablesWritable();
     const res = db.prepare(`
         UPDATE pricing_guide_items
         SET is_pinned = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -201,6 +213,7 @@ export function submitPricingReport(
     comment?: string,
     reporterPubkey?: string
 ): string {
+    assertPlainTablesWritable();
     const id = `rep-${crypto.randomBytes(8).toString('hex')}`;
     db.prepare(`
         INSERT INTO pricing_reports (id, item_id, reporter_pubkey, report_type, comment, status, created_at)
@@ -232,6 +245,7 @@ export function getPricingReports(status: string = 'pending'): (PricingReport & 
 }
 
 export function updatePricingReportStatus(id: string, status: 'accepted' | 'dismissed'): boolean {
+    assertPlainTablesWritable();
     const res = db.prepare('UPDATE pricing_reports SET status = ? WHERE id = ?').run(status, id);
     return res.changes > 0;
 }

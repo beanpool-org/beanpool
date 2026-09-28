@@ -384,7 +384,13 @@ router.post('/api/messages/mark-read', async (ctx) => {
             ctx.body = { error: 'Only the keepers of this enterprise have a read marker on its thread' };
             return;
         }
-        markKeeperThreadRead(conversationId, actor);
+        // On a standby, 409 `standby`: the read marks are the main server's (a plain table, design G4).
+        try {
+            markKeeperThreadRead(conversationId, actor);
+        } catch (e) {
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
         ctx.body = { success: true };
         return;
     } else if (!conv.participants.includes(actor)) {

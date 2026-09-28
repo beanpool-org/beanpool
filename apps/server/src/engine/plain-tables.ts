@@ -1,6 +1,6 @@
 /**
- * The plain tables on a standby: in-flight money and governance, its main server's rows verbatim (design
- * scratch/global-node/DESIGN-standby-takeover-gaps-opus.md G3, §4.1, §4.2; engine/replication-manifest.ts
+ * The plain tables on a standby: in-flight money and governance, and members' devices and conveniences, its main server's
+ * rows verbatim (design scratch/global-node/DESIGN-standby-takeover-gaps-opus.md G3, G4, §4.1, §4.2; engine/replication-manifest.ts
  * PLAIN_TABLES_PAYLOAD). One generic path for every table the manifest marks `plain`, so the next table is one line there.
  *
  * The main server sends each table's rows `SELECT *` (engine sync.ts exportPlainTables): a delta the rows its watermark

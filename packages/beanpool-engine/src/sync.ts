@@ -606,9 +606,11 @@ export interface SyncPayload {
     /**
      * The plain tables (apps/server engine/replication-manifest.ts PLAIN_TABLES_PAYLOAD): in-flight money and governance
      * (keepers' wages owed, Decisions and their ballots, keeper and succession votes, invites, re-key codes, recovery
-     * releases, links with other communities), each under its table's name as the main server holds its rows, every
-     * column but the ones the manifest leaves out (exportPlainTables). The ballots go to a standby only: this payload is
-     * served to a standby's replication token alone. A table absent here is one the main server doesn't send (older
+     * releases, links with other communities) and members' devices and conveniences (push tokens and leave statements,
+     * chat mutes, enterprise thread read marks, event reminders sent, the activity list, the pricing guide and its
+     * reports), each under its table's name as the main server holds its rows, every column but the ones the manifest
+     * leaves out (exportPlainTables). The ballots and the push tokens go to a standby only: this payload is served to a
+     * standby's replication token alone. A table absent here is one the main server doesn't send (older
      * than its line in the manifest): a standby keeps its own rows of it. Signed with the rest.
      */
     plainTables?: PlainTableRows;

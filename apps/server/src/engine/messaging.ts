@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount } from '@beanpool/core';
-import { db, afterTransactionCommit } from '../db/db.js';
+import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-columns.js';
@@ -741,7 +741,7 @@ export function removeOldChatGroups(): number {
             if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
             db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
-            db.prepare('DELETE FROM chat_mutes WHERE conversation_id = ?').run(id);
+            deletePlainRows('chat_mutes', 'conversation_id = ?', id);
             db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
             for (const p of parts) writeTombstone('conversation_participants', `${id}|${p.public_key}`);
             writeTombstone('conversations', id);

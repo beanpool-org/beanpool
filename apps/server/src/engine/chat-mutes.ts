@@ -4,8 +4,11 @@
 // 8 hours, a week, or always; an @mention of them still gets through. The mute is stored on the node so
 // it follows the member across devices and applies where pushes are decided — here, not in the app.
 // A mute only silences pushes. Unread counts, the Talk list and live updates are unchanged.
+// Copied to a standby verbatim (a plain table, design G4): the main server alone writes it, and a mute lifted there goes
+// from the standby by its tombstone.
 
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 
 export type ChatMuteDuration = '8h' | '1w' | 'always';
 
@@ -28,6 +31,7 @@ export function isChatMuteDuration(v: unknown): v is ChatMuteDuration {
 }
 
 export function setChatMute(conversationId: string, memberPubkey: string, duration: ChatMuteDuration, nowMs = Date.now()): ChatMute {
+    assertPlainTablesWritable();
     if (!isChatMuteDuration(duration)) throw new Error("duration must be '8h', '1w' or 'always'");
     const mutedUntil = duration === 'always' ? null : new Date(nowMs + DURATION_MS[duration]).toISOString();
     db.prepare(`
@@ -39,8 +43,8 @@ export function setChatMute(conversationId: string, memberPubkey: string, durati
 }
 
 export function clearChatMute(conversationId: string, memberPubkey: string): boolean {
-    return db.prepare('DELETE FROM chat_mutes WHERE conversation_id = ? AND member_pubkey = ?')
-        .run(conversationId, memberPubkey).changes > 0;
+    assertPlainTablesWritable();
+    return deletePlainRows('chat_mutes', 'conversation_id = ? AND member_pubkey = ?', conversationId, memberPubkey) > 0;
 }
 
 /** The member's mute on one chat, or null when it is not muted (an expired timed mute counts as none). */

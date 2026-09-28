@@ -7,6 +7,7 @@
  */
 
 import { db } from './db/db.js';
+import { standbyWritesNothing } from './config/node-role.js';
 import { aggregateObservedPrice, normalizeCategory, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
@@ -24,12 +25,14 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Runs one cycle of the auto-pricing feedback loop.
+ * Runs one cycle of the auto-pricing feedback loop. On a standby, none: its guide is its main server's, priced there and
+ * copied (a plain table, design G4).
  */
 export function runPricingAggregationCycle(): {
     updatedCount: number;
     totalEvaluated: number;
 } {
+    if (standbyWritesNothing()) return { updatedCount: 0, totalEvaluated: 0 };
     const config = getPricingConfig();
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };

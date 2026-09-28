@@ -22,7 +22,7 @@
  */
 
 import crypto from 'node:crypto';
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
@@ -671,9 +671,10 @@ export function executeOffboard(
         // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned)
         adminPruneUser(cleanPub, cleanOperator);
 
-        // Purge device push tokens to prevent leaked notifications
+        // Purge device push tokens to prevent leaked notifications, with a tombstone each so a standby drops them too
+        // (a plain table, design G4)
         try {
-            db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(cleanPub);
+            deletePlainRows('push_tokens', 'public_key = ?', cleanPub);
         } catch {
             // Non-blocking
         }

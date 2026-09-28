@@ -70,8 +70,13 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     requests and changes, succession and convenor votes, invites, re-key codes, recovery releases and links with other
  *     communities. A copy made by format 4 or older holds none of them, or rows this standby wrote itself (an invite it
  *     made, a link it created at boot), which no copy names.
+ *  6. Members' devices and conveniences are the main server's (G4), on the same path: the phones they get pushes on and
+ *     their leave statements, chat mutes, what keepers have read of their enterprise's thread, event reminders already
+ *     sent, the activity list, and the pricing guide as the main server priced and edited it, with members' price
+ *     reports. A copy made by format 5 or older holds none of them, or rows this standby wrote itself (the pricing guide
+ *     it seeded at boot, an activity line for a listing made on it, a phone that registered with it).
  */
-export const REPLICA_FORMAT = 5;
+export const REPLICA_FORMAT = 6;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -600,6 +605,10 @@ const MEMBER_KEY_PARTS: Record<string, number[]> = {
     event_rsvps: [1],
     conversation_participants: [1],
     group_members: [1],
+    // Plain tables keyed by a member (design G4): a phone's row, a chat mute, a keeper's read mark.
+    push_tokens: [0],
+    chat_mutes: [1],
+    thread_read_cursors: [1],
     // The owner (engine/recovery-shares.ts recoveryTombstoneKey). Its copies stay under the old key when this standby
     // follows (dropMovedRecoveryCopies goes by the main server's), so either order ends the same; this keeps the main
     // server's.

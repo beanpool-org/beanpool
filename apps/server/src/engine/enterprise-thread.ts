@@ -5,6 +5,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
@@ -58,14 +59,18 @@ export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: stri
 /**
  * A keeper's read cursor on the thread, kept in thread_read_cursors and never in conversation_participants: a
  * participant row is what the generic send and react routes take as the right to write (PR #924 review, B1).
- * Made read-up-to-now the first time, so a new keeper is not handed the thread's whole history as unread.
+ * Made read-up-to-now the first time, so a new keeper is not handed the thread's whole history as unread. The cursors
+ * are copied to a standby (a plain table, design G4), where this read writes none of its own.
  */
 export function ensureKeeperReadCursor(enterprisePubkey: string, keeperPubkey: string): void {
+    if (standbyWritesNothing()) return;
     db.prepare('INSERT OR IGNORE INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)')
         .run(enterprisePubkey, keeperPubkey, new Date().toISOString());
 }
 
+/** THROWS on a standby (config/node-role.ts assertPlainTablesWritable): the keeper marks the thread read on the main server. */
 export function markKeeperThreadRead(enterprisePubkey: string, keeperPubkey: string): void {
+    assertPlainTablesWritable();
     db.prepare(`INSERT INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)
                 ON CONFLICT(conversation_id, member_pubkey) DO UPDATE SET last_read_at = excluded.last_read_at`)
         .run(enterprisePubkey, keeperPubkey, new Date().toISOString());

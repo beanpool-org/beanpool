@@ -72,7 +72,7 @@ export const WHOLE_SET = 'whole set';
 const cols = (names: string): string[] => names.trim().split(/\s+/);
 
 /**
- * The SyncPayload key of the plain tables (`plain: true`, design G3 and §4.2): one generic path carries each, under its
+ * The SyncPayload key of the plain tables (`plain: true`, design G3, G4 and §4.2): one generic path carries each, under its
  * own name. The main server exports its rows `SELECT *` by the watermark, in the watermark's order (engine sync.ts
  * exportPlainTables; a whole copy: every row; never an `except` column); a standby writes each row as it is, the main
  * server's stamp included, checked against its own columns and rules, and a whole copy deletes the rows it doesn't name
@@ -325,22 +325,36 @@ export const TABLES: Record<string, TableEntry> = {
     // its treasury again, never a member's enterprise of the same name.
     federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
 
+    // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
+    // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
+    // (state-engine.ts dispatchPushNotification). A re-key's moves and deletes of these rows are followed on the standby
+    // itself (engine/key-move.ts moveMemberKeyRows), as for G3's tables; every other delete writes a tombstone
+    // (db.ts deletePlainRows).
+    // Every phone a member registered, as the main server holds it, so a server that takes over reaches them at once. The
+    // rows are the main server's verbatim: a key registers and removes only its own (#1184), and `registered_at` is the
+    // phone's stamp a leave statement is judged by (#1258). Tokens go to a standby only: this payload is served to a
+    // standby's replication token, or the community's own admin password, and nothing else (routes/backup.ts), with the
+    // messages and recovery copies a standby already holds.
+    push_tokens: plain('public_key token platform created_at registered_at updated_at'),
+    // A day's leave statements applied, so a registration the phone sent before one, delivered late to a server that took
+    // over, is refused there too (state-engine.ts registerPushToken). Its day-old rows go with tombstones.
+    push_token_leaves: plain('public_key token left_at applied_at updated_at'),
+    chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
+    // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
+    thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
+    // Every event reminder the main server sent, so one is never sent twice (engine/event-reminders.ts).
+    event_reminders_sent: plain('post_id member_pubkey offset_min sent_at updated_at'),
+    // The activity list, ids included: a server that takes over numbers its next line after the last one it copied.
+    activity_feed: plain('id event_type actor_pubkey target_pubkey metadata created_at updated_at'),
+    // The pricing guide as the main server priced and edited it; a standby seeds none of its own (db.ts).
+    pricing_guide_items: plain('id category emoji name description price_beans unit is_pinned confidence_count trend seasonality_hint thumbnail_url updated_at'),
+    pricing_reports: plain('id item_id reporter_pubkey report_type comment status created_at updated_at'),
+
     // ── Not copied today, and the design says they should be ──
-    push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
-    chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    thread_read_cursors: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    event_reminders_sent: { kind: 'local', gap: 'G4', reason: 'not in the payload: a reminder can be sent twice' },
-    activity_feed: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    pricing_guide_items: { kind: 'local', gap: 'G4', reason: "not in the payload: each server seeds its own at boot, and the admin's edits are lost" },
-    pricing_reports: { kind: 'local', gap: 'G4', reason: "not in the payload: members' price reports" },
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
-    push_token_leaves: {
-        kind: 'local',
-        reason: "a day's record of leave statements applied here, only for a registration delivered late; the fix for G4 carries it with push_tokens",
-    },
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },
@@ -351,7 +365,6 @@ export const TABLES: Record<string, TableEntry> = {
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
-    invite_links: { kind: 'local', reason: 'nothing reads or writes it (the design: delete it, day zero)' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
 };
 

@@ -153,6 +153,20 @@ export function writeTombstone(tableName: string, rowKey: string): void {
 }
 
 /**
+ * Deletes the rows of a plain table (engine/replication-manifest.ts PLAIN_TABLES) that `where` matches, each with a
+ * tombstone keyed by its primary key's values joined with `|` (engine/plain-tables.ts plainRowKey), so a standby deletes
+ * them too: a delta carries a delete only as its tombstone. `table` and `where` are the caller's own SQL, never a value;
+ * `args` fill the `where`. Returns how many rows went.
+ */
+export function deletePlainRows(table: string, where: string, ...args: unknown[]): number {
+    const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk').all(table) as { name: string }[]).map((c) => c.name);
+    if (!PLAIN_TABLES.some((t) => t.table === table) || key.length === 0) throw new Error(`${table} is no plain table with a key`);
+    const gone = db.prepare(`DELETE FROM ${table} WHERE ${where} RETURNING ${key.join(', ')}`).raw().all(...args) as unknown[][];
+    for (const values of gone) writeTombstone(table, values.map((v) => String(v)).join('|'));
+    return gone.length;
+}
+
+/**
  * A person's row with no record of joining (members.is_visitor, markExistingVisitors). Every way in writes one: an
  * invite and an offline ticket write the inviter's key into `invited_by` and the code into `invite_code` (and use the
  * code, `invite_codes.used_by`), the open door `open:<provider>` and an `open_joins` row, the genesis member `genesis`,
@@ -871,6 +885,17 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE enterprise_keeper_changes ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Whose account a recovery release is of (review 4122266731): filled for the rows here by fillReleaseOwners.
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN owner_pubkey TEXT`).run(); } catch { }
+    // Members' devices and conveniences replicate to a standby as plain tables too (design G4), the same way.
+    // pricing_guide_items has always had it.
+    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE push_token_leaves ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE chat_mutes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE thread_read_cursors ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_reminders_sent ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE activity_feed ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE pricing_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // A deep-link shortener's table nothing ever read or wrote (design G4, day zero).
+    try { db.prepare(`DROP TABLE IF EXISTS invite_links`).run(); } catch { }
 
     // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
     // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
@@ -1234,10 +1259,14 @@ export function initSchema() {
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
 
-    try {
-        seedPricingGuideIfEmpty(false, db);
-    } catch (err) {
-        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    // On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
+    // takes over boots as a main server, which seeds one if the copy brought none.
+    if (getNodeRole() !== 'backup') {
+        try {
+            seedPricingGuideIfEmpty(false, db);
+        } catch (err) {
+            console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+        }
     }
 
     try {

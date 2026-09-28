@@ -16,7 +16,7 @@ import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -935,6 +935,8 @@ const REQUEST_TTL_DAYS = 7;
 const ESCROW_NUDGE_DAYS = 7;
 
 export function runMarketplaceHygiene(): void {
+    // A main server's alone (its timer starts only there, initStateEngine): it writes deals and the activity list, and pushes.
+    if (getNodeRole() === 'backup') return;
     // 1. Expire 'requested' transactions that nobody answered. No funds are locked
     // at the 'requested' stage, so expiry is purely a bookkeeping cleanup.
     const stale = db.prepare(`SELECT * FROM marketplace_transactions WHERE status='requested' AND created_at < datetime('now', ?)`)
@@ -6913,8 +6915,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
-        deleteReplicatedRows('suspended_node_roles', 'decision_id', 'member_pubkey = ?', publicKey);
-        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their phones, with a tombstone each, so a standby drops them too (a plain table, design G4).
+        deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
@@ -6930,17 +6933,6 @@ export function adminPruneUser(publicKey: string, actor: string) {
     broadcast({ type: 'user_pruned', publicKey });
     // Their listings, cancelled above, leave the board. A community removal (decisions-engine tickDecisions) comes here.
     ringListingDoorbell('post_removed');
-}
-
-/**
- * Deletes the rows of a plain table (engine/replication-manifest.ts) that `where` matches, each with a tombstone keyed by
- * `key` (its primary key), so a standby deletes them too: a delta carries a delete only as its tombstone.
- */
-function deleteReplicatedRows(table: 'suspended_node_roles' | 'recovery_releases', key: 'decision_id' | 'id', where: string, ...args: unknown[]): void {
-    for (const r of db.prepare(`SELECT ${key} AS k FROM ${table} WHERE ${where}`).all(...args) as { k: string | number }[]) {
-        writeTombstone(table, String(r.k));
-    }
-    db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...args);
 }
 
 /**
@@ -7080,16 +7072,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
 
-        // 6. Purge private device tokens, communication links, and recovery metadata
-        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
+        // with a tombstone each, so a standby drops them too.
+        deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         dropKeptNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
+        deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
+        deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
         // Channels are tombstoned rather than deleted, and their links are cleared with them: the
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
@@ -7103,7 +7096,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try {
             // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
             // by their sessions here, for a row made before rows named their owner.
-            deleteReplicatedRows('recovery_releases', 'id', 'owner_pubkey = ? OR collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey, publicKey);
+            deletePlainRows('recovery_releases', 'owner_pubkey = ? OR collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey, publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         // A member who deletes their own account frees the sign-in account they joined with through the open door,
@@ -7149,7 +7142,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // anonymized and can never be reinstated: `nodeHasOwner()` would report an owner forever on a
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
-        deleteReplicatedRows('suspended_node_roles', 'decision_id', 'member_pubkey = ?', publicKey);
+        deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
     });
     noteTakeoverInputsChanged('member purged their account');
 
@@ -7846,6 +7839,8 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
 export function registerPushToken(
     publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null,
 ): PushRegistration {
+    // A standby's tokens are its main server's (a plain table, design G4): the phone registers there.
+    assertPlainTablesWritable();
     try {
         return db.transaction((): PushRegistration => {
             if (registeredAt !== null) {
@@ -7876,11 +7871,14 @@ export type PushRegistration = 'registered' | 'left' | 'failed';
 /** How long a leave statement applied here refuses a registration the phone sent before it (SQLite date modifier). */
 const PUSH_LEAVE_REMEMBERED = '-1 day';
 
+/** The leaves applied longer ago than `?` (PUSH_LEAVE_REMEMBERED), which the next leave applied clears. */
+const PUSH_LEAVE_PRUNE_WHERE = `applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+
 /**
  * Clears the leaves applied more than a day ago, on every leave applied. Keys with no row here can add leaves too, so
  * this reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
  */
-export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE ${PUSH_LEAVE_PRUNE_WHERE}`;
 
 /**
  * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
@@ -7890,10 +7888,12 @@ export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied
  * and token stamped no later than `leftAt` is refused ({@link registerPushToken}). Returns how many rows went (0 or 1).
  */
 export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
+    assertPlainTablesWritable();
     return db.transaction((): number => {
-        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED);
-        const removed = db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)`)
-            .run(publicKey, token, leftAt).changes;
+        // Both deletes with tombstones, so a standby's copy drops the same rows (plain tables, design G4).
+        deletePlainRows('push_token_leaves', PUSH_LEAVE_PRUNE_WHERE, PUSH_LEAVE_REMEMBERED);
+        const removed = deletePlainRows('push_tokens', 'public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)',
+            publicKey, token, leftAt);
         db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)
             ON CONFLICT (public_key, token) DO UPDATE SET
                 left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, token, leftAt);
@@ -7903,12 +7903,13 @@ export function applyPushLeave(publicKey: string, token: string, leftAt: number)
 }
 
 export function removePushToken(publicKey: string, token?: string): boolean {
+    assertPlainTablesWritable();
     try {
         if (token) {
-            db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ?`).run(publicKey, token);
+            deletePlainRows('push_tokens', 'public_key = ? AND token = ?', publicKey, token);
         } else {
             // Remove all tokens for this user (logout from all devices)
-            db.prepare(`DELETE FROM push_tokens WHERE public_key = ?`).run(publicKey);
+            deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         }
         console.log(`[Push] Removed token(s) for ${publicKey.slice(0, 8)}`);
         return true;
@@ -8082,6 +8083,11 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
  * app icon badge counts, iOS threadId grouping, and Android channelId routing.
  * Fire-and-forget pattern. Returns how many notifications it handed to the push service
  * (one per registered phone of each recipient who has this category on).
+ *
+ * The only way a push leaves this server: every sender comes here, and nothing else calls the push service. On a
+ * standby, nothing is sent and it answers 0 (design G4): the tokens it holds are its main server's, copied so a server
+ * that takes over reaches every phone at once, and every push a member is owed is the main server's to send. A standby
+ * that sent its own would double it, or send one about something only the standby did.
  */
 export function dispatchPushNotification(
     targetPubkeys: string[],
@@ -8091,6 +8097,7 @@ export function dispatchPushNotification(
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
 ): number {
+    if (getNodeRole() === 'backup') return 0;
     // Filter out the actor and SYSTEM from targets
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
     if (recipients.length === 0) return 0;

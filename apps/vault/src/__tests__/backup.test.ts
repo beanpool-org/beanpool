@@ -285,9 +285,11 @@ describe('a restore from backup is finished before anything sees it', () => {
         }));
         await unlockWith(b, g.shares, [0]);
         const [unlocked] = await unlockWith(b, g.shares, [1]);
-        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring', locked: true } });
+        // The custodians are told why; any other caller only that it is being finished.
+        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring', locked: true, reason: 'the store timed out' } });
         const { reply } = await startRestore(b, 'google', 'deleted-later');
         expect(reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        expect(JSON.stringify(reply.body)).not.toContain('timed out');
         expect((await get(b, '/v1/health')).body.state).toBe('locked');
         expect(readdirSync(b.dataDir)).toContain('restore-pending.bin');
         expect(b.keyholder().status().restorePending).toBe(true);

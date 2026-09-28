@@ -279,9 +279,11 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     // ─── The database, a restore in progress, and re-wrapping ───────────────────────────────
 
     let restoreRetryAt = 0;
+    /** Why the last try failed: for the custodians' unlock answer and the host's log, never for every caller. */
+    let restoreFailure: string | null = null;
 
-    function restoreWaiting(why: string): HttpError {
-        return new HttpError(503, 'restoring', `The key vault is finishing a restore from backup: ${why}. It will try again.`, { locked: true });
+    function restoreWaiting(): HttpError {
+        return new HttpError(503, 'restoring', 'The key vault is finishing a restore from backup. It will try again shortly.', { locked: true });
     }
 
     /**
@@ -299,14 +301,20 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             if (status.restorePending) {
                 // A crash after the keyholder took the backup's state but before the file got its name.
                 if (!existsSync(pendingPath) && existsSync(`${pendingPath}.part`)) renameSync(`${pendingPath}.part`, pendingPath);
-                if (!existsSync(pendingPath)) throw restoreWaiting('the backup it was started from is missing from the data directory');
-                if (clock() < restoreRetryAt) throw restoreWaiting('the last try failed');
+                if (!existsSync(pendingPath)) {
+                    restoreFailure = 'the backup it was started from is missing from the data directory';
+                    throw restoreWaiting();
+                }
+                if (clock() < restoreRetryAt) throw restoreWaiting();
                 try {
                     db = await completeRestore();
+                    restoreFailure = null;
                 } catch (e) {
                     restoreRetryAt = clock() + RESTORE_RETRY_MS;
+                    restoreFailure = (e instanceof Error ? e.message : String(e)).slice(0, 200);
                     counters.counts.errors++;
-                    throw restoreWaiting(e instanceof KeyholderCallError || e instanceof Error ? e.message.slice(0, 200) : 'it failed');
+                    console.error(`vault-api: the restore from backup is not finished: ${restoreFailure}`);
+                    throw restoreWaiting();
                 }
             } else {
                 // No restore, or one that finished (the keyholder forgot its backup) and stopped before tidying up.
@@ -774,9 +782,17 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return json(200, await call('genesis', { custodian: ctx.key, sig: ctx.body.sig }));
     });
 
-    /** The vault is open once the keyholder is; a restart that cut a re-wrap short is picked up here. */
+    /**
+     * The vault is open once the keyholder is; a restart that cut a re-wrap short is picked up here. A restore from
+     * backup that can't finish yet is told to the custodians who unlocked, with why.
+     */
     async function unlocked(): Promise<void> {
-        await ensureDb();
+        try {
+            await ensureDb();
+        } catch (e) {
+            if (e instanceof HttpError && e.code === 'restoring') throw new HttpError(503, 'restoring', e.message, { ...e.extra, reason: restoreFailure });
+            throw e;
+        }
         track(rewrapAll());
     }
 

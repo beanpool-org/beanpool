@@ -113,6 +113,7 @@ export const WHAT_WILL_BE_MISSING: readonly string[] = [
 export const AFTER_A_TAKEOVER: readonly string[] = [
     "Sign in to this server's Settings with the community's admin password or an owner's key. This standby's own admin password no longer works.",
     'Make a new recovery code: the one you typed is now spent.',
+    "If the community's Settings answered only certain internet addresses (the admin IP allowlist, under Gateway & Peers), set it again here: a take-over keeps this server's own allowlist, not the main server's.",
     "Don't start the old main server again. It has the same identity as this one and would compete with it.",
     'Other standbys keep their locked keys and trust this server already (it has the same key), but they need a new replication token from this server before they can copy again.',
     'Keep making file backups: a standby is not a complete copy.',

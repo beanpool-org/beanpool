@@ -3,6 +3,8 @@
  * last pull went and why, how many copies in a row were refused, when its last copy landed, and its last whole copy's
  * check (services/backup-puller.ts checkWholeCopy): exact, or what differed, and when the last exact one was. A check that
  * could not compare everything gives no verdict: it is kept beside the last one that did, and changes nothing it says.
+ * And the tables its copies leave out, or are refused over, because the main server holds more rows of them than one copy
+ * carries (scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2 N4, §5).
  *
  * Kept in node_config (`standby_copy_record`), so it outlives a restart: a standby restarted after its main server died
  * still says, in the take-over preview, when its last exact copy was. Sent to the main server with each pull
@@ -12,7 +14,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import {
-    type PullOutcome, type StandbyReport, type WhyCode, differsInWords, timeInWords, whyInWords,
+    type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, timeInWords, whyInWords,
 } from './standby-report.js';
 
 const KEY = 'standby_copy_record';
@@ -88,14 +90,46 @@ export interface CopyRecord {
      * takes it, once.
      */
     lastMismatchResyncTakenAt: number | null;
+    /**
+     * The tables the copies that landed left out (engine/sync.ts ImportResult.tablesLeftOut): each is stale here, from
+     * `since` on, until a whole copy carries it. A delta adds to them; a whole copy that lands says which it left out.
+     */
+    lastLeftOut: TablesNamed | null;
+    /**
+     * The tables of the ledger set the last copy refused over (engine/sync.ts OversizedCopyError), until a whole copy lands:
+     * deltas can land meanwhile, while every whole copy is refused.
+     */
+    lastOversized: TablesNamed | null;
+}
+
+/** Tables named by the manifest's names: since when, and the last time a copy named them. */
+export interface TablesNamed {
+    since: number;
+    at: number;
+    tables: string[];
 }
 
 function fresh(): CopyRecord {
     return {
         id: crypto.randomBytes(16).toString('hex'), lastPullAt: null, lastOutcome: null, lastWhy: null,
         failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null, lastMismatchResyncAt: null,
-        lastMismatchResyncTakenAt: null,
+        lastMismatchResyncTakenAt: null, lastLeftOut: null, lastOversized: null,
     };
+}
+
+function tablesNamed(v: unknown): TablesNamed | null {
+    const t = v as Partial<TablesNamed> | null | undefined;
+    if (!t || typeof t !== 'object' || num(t.at) === null || num(t.since) === null || !Array.isArray(t.tables)) return null;
+    const tables = t.tables.filter((x): x is string => typeof x === 'string').slice(0, MAX_TABLES_NAMED);
+    return tables.length > 0 ? { since: t.since as number, at: t.at as number, tables } : null;
+}
+
+/** Named since the first time, now too: `tables` with any named before kept (a delta's), or `tables` alone (a whole copy's). */
+function named(prev: TablesNamed | null, tables: readonly string[], now: number, keep: boolean): TablesNamed | null {
+    const all = [...new Set([...(keep && prev ? prev.tables : []), ...tables])].sort().slice(0, MAX_TABLES_NAMED);
+    if (all.length === 0) return null;
+    const still = !!prev && prev.tables.some((t) => all.includes(t));
+    return { since: still ? prev!.since : now, at: now, tables: all };
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -131,6 +165,8 @@ export function readCopyRecord(): CopyRecord {
             lastExactAt: num(r?.lastExactAt),
             lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
             lastMismatchResyncTakenAt: num(r?.lastMismatchResyncTakenAt),
+            lastLeftOut: tablesNamed(r?.lastLeftOut),
+            lastOversized: tablesNamed(r?.lastOversized),
         };
     } catch {
         return fresh();
@@ -141,19 +177,31 @@ function write(r: CopyRecord): void {
     db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(KEY, JSON.stringify(r));
 }
 
-/** A pull whose copy landed (or the main server said nothing changed since the last one). */
-export function noteCopyLanded(now = Date.now()): void {
+/**
+ * A pull whose copy landed (or the main server said nothing changed since the last one: no `copy`). `copy.leftOut`: the
+ * tables it left out. A whole copy's are the whole story (any it carried is current again, and so is the ledger set); a
+ * delta's add to the ones already stale, which only a whole copy brings back.
+ */
+export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOut: readonly string[] }): void {
     const r = readCopyRecord();
-    write({ ...r, lastPullAt: now, lastOutcome: 'ok', lastWhy: null, failedImportsInARow: 0, lastOkAt: now });
+    write({
+        ...r, lastPullAt: now, lastOutcome: 'ok', lastWhy: null, failedImportsInARow: 0, lastOkAt: now,
+        lastLeftOut: copy ? (copy.whole || copy.leftOut.length > 0 ? named(r.lastLeftOut, copy.leftOut, now, !copy.whole) : r.lastLeftOut) : r.lastLeftOut,
+        lastOversized: copy?.whole ? null : r.lastOversized,
+    });
 }
 
-/** A pull that failed: `refused` when the copy came and was not imported, `fetch-failed` when none came. */
-export function noteCopyFailed(outcome: Exclude<PullOutcome, 'ok'>, why: WhyCode, now = Date.now()): void {
+/**
+ * A pull that failed: `refused` when the copy came and was not imported, `fetch-failed` when none came. `oversized`: the
+ * tables of the ledger set it was refused over (why `oversized`).
+ */
+export function noteCopyFailed(outcome: Exclude<PullOutcome, 'ok'>, why: WhyCode, now = Date.now(), oversized: readonly string[] = []): void {
     const r = readCopyRecord();
     write({
         ...r, lastPullAt: now, lastOutcome: outcome, lastWhy: why,
         // Only copies that came count: a main server that can't be reached is the main server's "no pull for an hour".
         failedImportsInARow: outcome === 'refused' ? r.failedImportsInARow + 1 : r.failedImportsInARow,
+        lastOversized: why === 'oversized' && oversized.length > 0 ? named(r.lastOversized, oversized, now, false) : r.lastOversized,
     });
 }
 
@@ -169,6 +217,15 @@ export function noteWholeCopyCheck(check: WholeCopyCheck): void {
 /** When this standby last asked for a force-resync for a copy that didn't match, across restarts; 0 for never. */
 export function lastMismatchResyncAt(): number {
     return readCopyRecord().lastMismatchResyncAt ?? 0;
+}
+
+/**
+ * This standby asked for the held force-resync outside a whole copy's check: a delta left the main server's deletions out
+ * (services/backup-puller.ts). Kept, as the check's is, so a restart allows no sooner one and still takes this one.
+ */
+export function noteMismatchResyncAsked(at: number): void {
+    const r = readCopyRecord();
+    write({ ...r, lastMismatchResyncAt: at });
 }
 
 /** A copy came for the force-resync this standby asked for: it is taken, and no restart asks for it again. */
@@ -211,6 +268,8 @@ export function whyOf(stage: 'fetch' | 'import', e: unknown): WhyCode {
     const err = e as { message?: unknown; name?: unknown } | null | undefined;
     const msg = String(err?.message || e || '');
     if (stage === 'import') {
+        // engine/sync.ts OversizedCopyError: a table the ledger needs whole has more rows than one copy carries.
+        if (err?.name === 'OversizedCopyError') return 'oversized';
         if (/conservation/i.test(msg)) return 'conservation';
         if (/signature|untrusted|mirror/i.test(msg)) return 'signature';
         return 'import-error';
@@ -233,6 +292,9 @@ export function standbyReport(now = Date.now()): StandbyReport {
         okAgo: ago(r.lastOkAt), wholeAgo: ago(r.lastWhole?.at ?? null), exact: r.lastWhole ? r.lastWhole.exact : null,
         exactAgo: ago(r.lastExactAt), differs: r.lastWhole && !r.lastWhole.exact ? r.lastWhole.differs.slice(0, 40) : [],
         hashed: r.lastWhole?.hashed ?? false, healing: mending(r.lastWhole, now),
+        // The deletions left out mend themselves: this standby takes a force-resync for them (services/backup-puller.ts).
+        leftOut: (r.lastLeftOut?.tables ?? []).filter((t) => t !== 'tombstones'),
+        oversized: r.lastOversized?.tables ?? [],
     };
 }
 
@@ -262,10 +324,13 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
         lines.push(`Last exact copy of the main server: ${timeInWords(r.lastExactAt)}.`);
     } else if (w) {
         warning = true;
-        const what = w.differs.includes('ledger') && w.ledgerDiffering > 0
-            ? differsInWords(w.differs).replace("members' balances", `${w.ledgerDiffering} account${w.ledgerDiffering === 1 ? "'s balance" : "s' balances"}`)
-            : differsInWords(w.differs);
-        lines.push(`This server's last whole copy of the main server${u ? ' that could be compared with it' : ''}, at ${timeInWords(w.at)}, did not match it: ${what} differed.`);
+        // A whole copy that left tables out and found nothing else different: the tables are said below.
+        if (w.differs.length > 0) {
+            const what = w.differs.includes('ledger') && w.ledgerDiffering > 0
+                ? differsInWords(w.differs).replace("members' balances", `${w.ledgerDiffering} account${w.ledgerDiffering === 1 ? "'s balance" : "s' balances"}`)
+                : differsInWords(w.differs);
+            lines.push(`This server's last whole copy of the main server${u ? ' that could be compared with it' : ''}, at ${timeInWords(w.at)}, did not match it: ${what} differed.`);
+        }
         lines.push(r.lastExactAt !== null
             ? `Last exact copy of the main server: ${timeInWords(r.lastExactAt)}.`
             : 'This server has no exact copy of the main server on record.');
@@ -284,9 +349,24 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
         lines.push(`The main server could not read ${photos} listing photo${photos === 1 ? '' : 's'} from its own storage, so `
             + `${photos === 1 ? 'it was' : 'they were'} left out of that check: no copy can bring ${photos === 1 ? 'it' : 'them'} here.`);
     }
+    // Tables the copies leave out (design §5, D): stale here, the rest current.
+    const out = r.lastLeftOut;
+    if (out) {
+        warning = true;
+        lines.push(`Its copies of the main server leave out ${differsInWords(out.tables)}: the main server holds more rows of `
+            + `${out.tables.length === 1 ? 'it' : 'them'} than one copy carries. What this server has of ${out.tables.length === 1 ? 'it' : 'them'} `
+            + `is from before ${timeInWords(out.since)}; everything else was copied.`);
+    }
     if (r.failedImportsInARow > 0) {
         warning = true;
-        lines.push(`Its last ${r.failedImportsInARow === 1 ? 'copy was' : `${r.failedImportsInARow} copies were`} refused: ${whyInWords(r.lastWhy)}.`);
+        lines.push(`Its last ${r.failedImportsInARow === 1 ? 'copy was' : `${r.failedImportsInARow} copies were`} refused: ${r.lastWhy === 'oversized' && r.lastOversized
+            ? `the main server holds more rows of ${differsInWords(r.lastOversized.tables)} than one copy carries, and the ledger needs ${r.lastOversized.tables.length === 1 ? 'it' : 'them'} whole`
+            : whyInWords(r.lastWhy)}. Nothing has landed since ${timeInWords(r.lastOkAt)}: this server holds the last copy that did, whole.`);
+    } else if (r.lastOversized) {
+        // Deltas land, and every whole copy is refused: this server's copy is current, and nothing can check it is exact.
+        warning = true;
+        lines.push(`Its whole copies of the main server are refused: the main server holds more rows of ${differsInWords(r.lastOversized.tables)} `
+            + `than one copy carries, since ${timeInWords(r.lastOversized.since)}. Changes still reach it one by one, but nothing checks its copy is exact.`);
     }
     if (lastCopyAt === null || now - lastCopyAt >= STALE_MS) {
         warning = true;

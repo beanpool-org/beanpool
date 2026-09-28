@@ -398,6 +398,7 @@ import {
     signSyncPayload as signSyncPayloadEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
+    clearReplicatedRows,
     writeSyncAuditLog,
     type ImportOptions,
     type ImportResult,
@@ -5734,21 +5735,23 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
  * which recovery copies, which keepers' pledges and which rows of the plain tables the main server no longer holds. `seed`
- * and `heldToSum`: what the puller decided about the copy's conservation guard (engine/sync.ts ImportOptions); left out,
- * the copy is held to the ledger here.
+ * and `clear`: what the puller decided about the copy's conservation guard and a force-resync's clear (engine/sync.ts
+ * ImportOptions); left out, the copy is held to the ledger here and clears nothing.
  */
 export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum, whole: opts.full === true })
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, clear: opts.clear, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
             // seal epoch from its main server, or copies sent in the client's form after it cleared), it clears again
-            // (services/recovery-seal-key.ts). Never throws.
+            // (services/recovery-seal-key.ts). Never throws. Copies this import left out (more than one import takes) were
+            // neither imported nor compared, and change nothing here.
+            const shares = Array.isArray(remote.recoveryShares) && !result.tablesLeftOut.includes('recovery_shares') ? remote.recoveryShares : null;
             clearCopiesDroppedBeforeSeal({
                 standby: getNodeRole() === 'backup',
-                wholeCopy: opts.full && Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
-                imported: Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
+                wholeCopy: opts.full ? shares : null,
+                imported: shares,
                 mainEpoch: remote.sealEpoch,
             });
             return result;
@@ -7735,93 +7738,18 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
 }
 
 /**
- * Force-resync support (backup side): wipe the locally-replicated tables so the
- * next full snapshot import rebuilds an exact 1:1 copy with no orphan rows. The
- * upsert+tombstone importer never deletes "rows not in the snapshot", so a row the
- * primary hard-deleted without a tombstone would otherwise linger forever. Only
- * the tables exportSyncState dumps are cleared — node-local tables (push_tokens,
- * invite_codes, message_attachments, sync_cursors, node_config, …) are untouched.
- *
- * ## One exception, and it is the whole reason the primary says anything
- *
- * `keepPhotoRows` names `post_id|order_num` rows the incoming payload deliberately does NOT carry: photos the
- * PRIMARY could not read out of its own image store (`SyncPayload.photosOmitted`). Clearing those would
- * destroy the only readable copy left — the replica's — and nothing would ever send them again, because the
- * omitted rows' `updated_at` never changed on the primary. The row survives, so its `storage_key` is still
- * referenced and the daily orphan sweep leaves the object alone too.
- *
- * Rows named here are kept AS THEY ARE. Any of them the payload turns out to carry after all is upserted by
- * the import that follows, exactly as it would have been. The list has no length limit.
- *
- * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
- * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
+ * A force-resync's clear on its own, committed: the replicated tables emptied, the photo rows named in `keepPhotoRows`
+ * kept (engine/sync.ts clearReplicatedRows, which says which tables and why). The suites start a copy from nothing with it.
+ * A force-resync never runs it: its import clears in the copy's own transaction, after every check, so a refused copy
+ * clears nothing (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2). THROWS if it cannot spare the named
+ * photo rows, leaving every table as it found them.
  */
 export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
-    const tables = [
-        'members', 'posts', 'projects', 'ratings', 'accounts',
-        'transactions', 'marketplace_transactions', 'friends', 'conversations',
-        'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'member_blocks', 'tombstones',
-        // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
-        // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
-        ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
-        // Only when the incoming copy carries the members' preferences, keepers and pledges (`opts.standing`, engine/sync.ts
-        // importRemoteState): from a main server that predates them, this node's are the only ones it has.
-        ...(opts.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
-    ];
-    // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
-    // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
-    const keep: { postId: string; orderNum: number }[] = [];
-    for (const rowKey of keepPhotoRows) {
-        const key = String(rowKey);
-        const cut = key.lastIndexOf('|');
-        if (cut <= 0) continue;
-        const postId = key.slice(0, cut);
-        const orderNum = Number(key.slice(cut + 1));
-        if (!postId || !Number.isInteger(orderNum)) continue;
-        keep.push({ postId, orderNum });
-    }
-    let kept = 0;
-    db.transaction(() => {
-        for (const t of tables) {
-            try { db.prepare(`DELETE FROM ${t}`).run(); }
-            catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
-        }
-        if (keep.length === 0) {
-            db.prepare(`DELETE FROM post_photos`).run();
-            return;
-        }
-        // The spared keys travel as ONE bound JSON array, matched through `json_each`, so the statement is
-        // the same size whether a single row is spared or fifty thousand. An `OR`-ed predicate per pair is
-        // the obvious spelling and a trap: SQLite parses it left-deep and throws "Expression tree is too
-        // large (maximum depth 1000)" from about 999 pairs on — and the case this argument exists for, a
-        // primary whose images directory is lost or unmounted, omits EVERY evacuated photo, which on a live
-        // node is thousands of rows. Values stay bound, never interpolated, exactly as before.
-        //
-        // Nothing here is caught. A clear that half-happened is the one outcome worse than a resync that
-        // failed: swallowing this let the transaction commit with `post_photos` not cleared at all, which
-        // left the orphan rows a resync exists to remove and reported "KEEPING 0" while doing it. Throwing
-        // rolls the whole clear back, so the replica keeps the data it had and the caller retries.
-        const keepJson = JSON.stringify(keep.map(k => `${k.postId}|${k.orderNum}`));
-        kept = (db.prepare(
-            `SELECT COUNT(*) AS n FROM post_photos WHERE (post_id || '|' || order_num) IN (SELECT value FROM json_each(?))`,
-        ).get(keepJson) as any)?.n || 0;
-        db.prepare(
-            `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
-        ).run(keepJson);
-    })();
+    db.transaction(() => clearReplicatedRows({
+        keepPhotoRows: [...keepPhotoRows], invalidatedKeys: opts.invalidatedKeys === true, standing: opts.standing === true,
+    }))();
     // The directory's listed communities are kept in memory for the reads; the table is empty now.
     forgetListedCommunities();
-    if (keep.length > 0) {
-        console.log(
-            `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `
-            + 'could not read out of its own store — this replica holds the only readable copy of those, and the '
-            + 'incoming payload does not carry them.',
-        );
-    } else {
-        console.log('🧹 [Resync] Cleared replicated tables — awaiting fresh snapshot import.');
-    }
 }
 
 // ===================== PUSH NOTIFICATIONS =====================

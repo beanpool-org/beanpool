@@ -8,7 +8,10 @@
  *   - three copies in a row came and were refused; or
  *   - its last whole copy wasn't this server's exactly, and the standby couldn't mend it by itself: its held force-resync
  *     (services/backup-puller.ts) didn't cure it, or it may take none for hours. A copy it mends by itself is told to
- *     nobody (Marty's answer 2: the standby re-seeds itself when it can; the common case heals without anyone).
+ *     nobody (Marty's answer 2: the standby re-seeds itself when it can; the common case heals without anyone);
+ *   - its copies leave a table out, or it refuses whole copies over a table the ledger needs whole, because this server
+ *     holds more rows of it than one copy carries (scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2 N4, §5).
+ *     The standby keeps what it had; a force-resync would read the same rows, so the words never advise one.
  * Then an incident opens: the community's owners get one push, and a banner in Settings and the app's admin queue
  * (engine/admin-queue.ts) until the standby is healthy again, which ends it; a later one is a new incident. Nobody else is
  * told, and nothing reaches anyone outside the community.
@@ -69,12 +72,19 @@ export interface StandbySeen {
     hashed: boolean;
     /** Its last whole copy didn't match, and it is mending it by itself (services/standby-report.ts `healing`). */
     healing: boolean;
+    /** Tables its copies leave out (services/standby-report.ts `leftOut`). */
+    leftOut: string[];
+    /** Tables the ledger needs whole it refuses whole copies over (services/standby-report.ts `oversized`). */
+    oversized: string[];
 }
 
 export type Problem =
     | { standby: string; kind: 'stopped'; since: number }
     | { standby: string; kind: 'refused'; count: number; why: WhyCode | null }
-    | { standby: string; kind: 'inexact'; at: number | null; differs: string[]; lastExactAt: number | null };
+    | { standby: string; kind: 'inexact'; at: number | null; differs: string[]; lastExactAt: number | null }
+    | { standby: string; kind: 'left-out'; tables: string[] }
+    /** `refusedInARow`: its copies of every kind refused (0: deltas still land, every whole copy is refused). */
+    | { standby: string; kind: 'oversized'; tables: string[]; lastCopyAt: number | null; refusedInARow: number };
 
 export interface Incident {
     id: string;
@@ -138,6 +148,7 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             seen = {
                 id: r.id, address: null, firstSeenAt: t, lastPullAt: t, lastOutcome: null, lastWhy: null, failedInARow: 0,
                 lastCopyAt: null, lastWholeAt: null, exact: null, lastExactAt: null, differs: [], hashed: false, healing: false,
+                leftOut: [], oversized: [],
             };
             s.standbys.push(seen);
             logger.info('P2P', `[StandbyHealth] Watching a new standby (${r.id.slice(0, 8)}) for this community's owners.`);
@@ -156,6 +167,8 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             differs: r.differs,
             hashed: r.hashed,
             healing: r.healing,
+            leftOut: r.leftOut,
+            oversized: r.oversized,
         });
         evaluate(s, t);
         return true;
@@ -178,9 +191,21 @@ function problemsOf(s: HealthState, t: number): Problem[] {
     for (const x of s.standbys) {
         const since = x.lastCopyAt ?? x.firstSeenAt;
         if (t - since >= STOPPED_AFTER_MS && (!justStarted || stillStopped.has(x.id))) out.push({ standby: x.id, kind: 'stopped', since });
-        if (x.failedInARow >= REFUSED_IN_A_ROW) out.push({ standby: x.id, kind: 'refused', count: x.failedInARow, why: x.lastWhy });
-        if (x.exact === false && (x.healing !== true || stillInexact.has(x.id))) {
-            out.push({ standby: x.id, kind: 'inexact', at: x.lastWholeAt, differs: x.differs, lastExactAt: x.lastExactAt });
+        // Refused over a table the ledger needs whole: its own words, which name the table, from the first whole copy
+        // refused (it can't mend itself: the same rows come in the next one). Three in a row of it are this, not 'refused'.
+        const oversized = Array.isArray(x.oversized) ? x.oversized : [];
+        if (oversized.length > 0) {
+            out.push({ standby: x.id, kind: 'oversized', tables: oversized, lastCopyAt: x.lastCopyAt, refusedInARow: x.lastWhy === 'oversized' ? x.failedInARow : 0 });
+        }
+        if (x.failedInARow >= REFUSED_IN_A_ROW && !(x.lastWhy === 'oversized' && oversized.length > 0)) {
+            out.push({ standby: x.id, kind: 'refused', count: x.failedInARow, why: x.lastWhy });
+        }
+        // A table its copies leave out is said as such, and never read as a difference a force-resync mends.
+        const leftOut = Array.isArray(x.leftOut) ? x.leftOut : [];
+        if (leftOut.length > 0) out.push({ standby: x.id, kind: 'left-out', tables: leftOut });
+        const differs = x.differs.filter((d) => !leftOut.includes(d));
+        if (x.exact === false && differs.length > 0 && (x.healing !== true || stillInexact.has(x.id))) {
+            out.push({ standby: x.id, kind: 'inexact', at: x.lastWholeAt, differs, lastExactAt: x.lastExactAt });
         }
     }
     return out;
@@ -305,6 +330,18 @@ function sentence(p: Problem, s: HealthState): string {
     const who = label(p.standby, s);
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
     if (p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${whyInWords(p.why)}.`;
+    const them = (tables: string[]) => (tables.length === 1 ? 'it' : 'them');
+    if (p.kind === 'oversized') {
+        return `${who} refuses ${p.refusedInARow > 0 ? 'its' : 'whole'} copies of this server: this server holds more rows of ${differsInWords(p.tables)} `
+            + `than one copy carries, and the ledger needs ${them(p.tables)} whole. `
+            + (p.refusedInARow > 0
+                ? `It still holds everything it copied up to ${timeInWords(p.lastCopyAt)}, and nothing after.`
+                : 'Changes still reach it one by one, but nothing can check its copy is exact.');
+    }
+    if (p.kind === 'left-out') {
+        return `${who}'s copies of this server leave out ${differsInWords(p.tables)}: this server holds more rows of ${them(p.tables)} than `
+            + `one copy carries. It keeps what it had of ${them(p.tables)}, and copies everything else.`;
+    }
     return `${who}'s last whole copy of this server${p.at !== null ? `, at ${timeInWords(p.at)},` : ''} did not match it: `
         + `${differsInWords(p.differs)} differed. Last exact copy: ${timeInWords(p.lastExactAt)}.`;
 }
@@ -312,16 +349,23 @@ function sentence(p: Problem, s: HealthState): string {
 function pushBody(problems: Problem[]): string {
     const kinds = new Set(problems.map((p) => p.kind));
     const what = kinds.has('stopped') ? 'It has stopped copying this server.'
-        : kinds.has('refused') ? 'Its copies of this server are being refused.'
-            : 'Its copy of this server does not match it.';
+        : kinds.has('refused') || kinds.has('oversized') ? 'Its copies of this server are being refused.'
+            : kinds.has('left-out') ? 'Its copies of this server leave something out.'
+                : 'Its copy of this server does not match it.';
     return `${what} If this server were lost, a take-over from it would miss what it has not copied. Open Settings to see what is wrong.`;
 }
+
+/** Too many rows for one copy: no force-resync mends it, and the standby keeps what it has. */
+const TOO_MANY_ROWS = 'A force-resync would not help: it would read the same rows. The rows here have to come down first, '
+    + "which for now is the BeanPool maintainers' job: tell them which table it names. The standby keeps everything it copied until then.";
 
 /** What to do, per kind, for the banner. */
 const WHAT_TO_DO: Record<Problem['kind'], string> = {
     stopped: 'Check the standby server is running and can reach this one, and that it still has the replication token (a new token from Replication Access replaces the old one).',
     refused: "Open the standby's own Settings, under Live Backup Server, for what it says; a force-resync there copies this server afresh.",
     inexact: "It copies this server afresh by itself, at most every six hours, and its copy still did not match after its last one. If this stays, run a force-resync from the standby's own Settings, under Live Backup Server.",
+    oversized: TOO_MANY_ROWS,
+    'left-out': TOO_MANY_ROWS,
 };
 
 export interface StandbyHealthBanner {

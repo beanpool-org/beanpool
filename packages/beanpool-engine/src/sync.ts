@@ -574,7 +574,7 @@ export interface SyncPayload {
      * The importer only upserts what it is given, so an omitted row is normally harmless — the replica keeps
      * its own copy. A FORCE-RESYNC is the exception: it clears `post_photos` before importing, so without
      * this list the one case the omission exists for (the replica holds the only readable copy) is the case
-     * the resync destroys. `clearReplicatedTables` keeps exactly these rows.
+     * the resync destroys. The resync's clear (apps/server engine/sync.ts `clearReplicatedRows`) keeps exactly these rows.
      */
     photosOmitted?: string[];
     /**

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 70,
-  "hash": "ca85d27d076cf022530bf8398dc9c795ce816c71138cd5896b28aca1178d95c5",
+  "version": 71,
+  "hash": "965b6edde881192d318e1855f08a1e97564704465d88aef8585894a9b8dfaa08",
   "sections": [
     {
       "id": "about",
@@ -400,7 +400,7 @@
         },
         {
           "type": "p",
-          "text": "Polls are different: a Poll is an open show of hands, and everyone can see who picked what."
+          "text": "Polls are anonymous too, unless the person who starts one makes it an **open vote**: then members can see who picked what. The poll says which it is."
         },
         {
           "type": "h2",
@@ -520,7 +520,8 @@
             "Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.",
             "You can have one open Poll at a time. Your community can have 5 open Polls at once.",
             "A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.",
-            "Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early."
+            "Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.",
+            "A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts and cannot change once anyone has voted."
           ]
         },
         {
@@ -654,7 +655,15 @@
         },
         {
           "type": "p",
-          "text": "On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. On a Poll: yes, everyone can see. Polls are an open show of hands."
+          "text": "On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. A Poll is anonymous in the same way, unless the person who started it made it an **open vote**: then members can see who chose what. The poll says which it is before you vote."
+        },
+        {
+          "type": "h2",
+          "text": "Can other members see my balance?"
+        },
+        {
+          "type": "p",
+          "text": "No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only."
         },
         {
           "type": "h2",
@@ -710,6 +719,23 @@
         "faq"
       ],
       "blocks": [
+        {
+          "type": "h2",
+          "text": "Privacy by default"
+        },
+        {
+          "type": "p",
+          "text": "These changes live on your community's server. You get them when your community's server is updated. The Poll choice needs an up-to-date app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your balance and trades are yours.** Nobody else in your community can read your balance or your history. A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.",
+            "**Listings are for members.** Someone who has not joined can't see your community's listings. They are shown the way to the global community instead, where anyone can look around.",
+            "**Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.",
+            "**Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see."
+          ]
+        },
         {
           "type": "h2",
           "text": "Version 1.2.38"
@@ -2058,7 +2084,7 @@
             "**Category:** pick the closest one.",
             "**Description:** what, when, where, anything people should know.",
             "**Photos:** at least one, up to five. Tap **Camera** or **Gallery**.",
-            "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
+            "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
             "**Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.",
             "Tap **Post Offer** or **Post Need**."
           ]
@@ -2470,7 +2496,7 @@
         },
         {
           "type": "p",
-          "text": "Anyone who opens your community's map can see the pin at that spot, to within about 10 metres. That includes people who have not joined. The app does not blur it for you."
+          "text": "Every member of your community can see the pin at that spot, to within about 10 metres. The app does not blur it for you. People who have not joined can't see your community's listings. On the global community they can, but only roughly where each one is, never the spot."
         },
         {
           "type": "p",
@@ -3590,6 +3616,7 @@
             "Add **Context / Notes** if it helps. This is optional.",
             "Write 2 to 4 **Options**. Tap **+ Add Option** for more.",
             "Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.",
+            "Choose whether it is an **Open vote**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can change this until someone votes, and never after.",
             "Tap **Create**."
           ]
         },
@@ -3613,8 +3640,23 @@
           ]
         },
         {
+          "type": "h2",
+          "text": "Who can see how you voted"
+        },
+        {
           "type": "p",
-          "text": "Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what. A member who is suspended sees only how many chose each answer, until the suspension ends."
+          "text": "Each poll says which kind it is, above the turnout:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Anonymous** (the usual kind): everyone sees only how many chose each answer. Nobody sees who chose what, the person who started it included.",
+            "**Open vote:** the person who started it chose to show the voters. Members can tap **View voters** (**Show Voters** in the web app) to see who chose what. A member who is suspended sees only the totals, until the suspension ends."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The owners and admins who run your community's server can still see every vote stored there."
         },
         {
           "type": "h2",
@@ -3826,7 +3868,7 @@
           "items": [
             "its **Purpose**;",
             "its **Balance**, credit line, live Offers and surplus;",
-            "**Income & Spend**: every bean in and out;",
+            "**Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;",
             "its keepers;",
             "its **Listings**, **Recent activity** and a **Discussion** you can write in."
           ]
@@ -3995,7 +4037,7 @@
         },
         {
           "type": "p",
-          "text": "**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. These accounts are open to every member."
+          "text": "**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. Every member sees the amounts; who paid or was paid, and the note, only its keepers and that member see."
         },
         {
           "type": "h2",
@@ -4058,6 +4100,10 @@
         {
           "type": "p",
           "text": "Every trade, gift and fee, newest first, with who it was with, a note, the time, and plus or minus. If a note mentions a post, tap **View Offer** to open it."
+        },
+        {
+          "type": "p",
+          "text": "Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file."
         },
         {
           "type": "p",
@@ -4456,13 +4502,35 @@
             "Your name, photo, bio, when you joined and when you were last active.",
             "Your trust badge, how many trades you have done, and your reviews.",
             "Your posts, and where their pins are. See \"Where your pin goes\".",
-            "How you voted on a **Poll**. Votes on **Decisions** are secret.",
-            "Your balance and your trades. The app does not show these to others, but a member who knows how can read them from your community's server."
+            "How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What only you can see"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.",
+            "If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only."
           ]
         },
         {
           "type": "p",
-          "text": "Your posts and their pins, and anything you share to the Pulse, can also be seen by people who have not joined."
+          "text": "The owners and admins who run your community's server can still see what is stored there. See \"Who else can see things\"."
+        },
+        {
+          "type": "h2",
+          "text": "People who have not joined"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**On your community:** nothing of your posts. Its listings are for its members. Someone who opens your community's address without joining is shown the way to the global community instead.",
+            "**On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.",
+            "Anything you share to the Pulse can be seen by anyone who opens it. See \"Sharing your channels\"."
+          ]
         },
         {
           "type": "h2",

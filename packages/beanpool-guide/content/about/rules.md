@@ -47,7 +47,7 @@ Any active member whose credit is not frozen, and who joined **before** the Deci
 
 The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. The owners and admins who run the server can take a copy of its files, and could look up your vote there.
 
-Polls are different: a Poll is an open show of hands, and everyone can see who picked what.
+Polls are anonymous too, unless the person who starts one makes it an **open vote**: then members can see who picked what. The poll says which it is.
 
 ## How long a vote runs
 
@@ -113,6 +113,7 @@ Your community's server has owners and admins. They look after it.
 - You can have one open Poll at a time. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
 - Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.
+- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts and cannot change once anyone has voted.
 
 ## Enterprises and keepers
 

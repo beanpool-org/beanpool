@@ -14,10 +14,20 @@ Tap the sliders button at the top right of the screen. Settings is not one of th
 - Your name, photo, bio, when you joined and when you were last active.
 - Your trust badge, how many trades you have done, and your reviews.
 - Your posts, and where their pins are. See "Where your pin goes".
-- How you voted on a **Poll**. Votes on **Decisions** are secret.
-- Your balance and your trades. The app does not show these to others, but a member who knows how can read them from your community's server.
+- How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret.
 
-Your posts and their pins, and anything you share to the Pulse, can also be seen by people who have not joined.
+## What only you can see
+
+- **Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.
+- If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only.
+
+The owners and admins who run your community's server can still see what is stored there. See "Who else can see things".
+
+## People who have not joined
+
+- **On your community:** nothing of your posts. Its listings are for its members. Someone who opens your community's address without joining is shown the way to the global community instead.
+- **On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.
+- Anything you share to the Pulse can be seen by anyone who opens it. See "Sharing your channels".
 
 ## What you control
 

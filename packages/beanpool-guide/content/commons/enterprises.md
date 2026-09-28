@@ -22,7 +22,7 @@ Every member can see:
 
 - its **Purpose**;
 - its **Balance**, credit line, live Offers and surplus;
-- **Income & Spend**: every bean in and out;
+- **Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;
 - its keepers;
 - its **Listings**, **Recent activity** and a **Discussion** you can write in.
 

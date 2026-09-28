@@ -21,7 +21,7 @@ You need a name and a profile photo. If one is missing, the app asks you to **Se
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera** or **Gallery**.
-- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
+- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
 - **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.
 

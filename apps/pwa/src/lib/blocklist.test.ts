@@ -92,8 +92,23 @@ import * as api from './api';
 
 const ME = 'a1'.repeat(32);
 const [K1, K2, K3, K4] = ['b2', 'c3', 'd4', 'e5'].map(p => p.repeat(32));
-/** Everything this browser keeps that is about blocks. */
-const storedAboutBlocks = () => Object.keys(localStorage).filter(k => /block|abuse/i.test(k));
+/**
+ * Everything this browser keeps that is about blocks: each item in localStorage or sessionStorage named for blocks or
+ * reports, or holding a member's key, whatever it is named. Read through the Storage interface (length, key, getItem), so
+ * it sees what is really kept: on setupTests' stand-in, Object.keys(localStorage) answers only its method names, and every
+ * check below that nothing is kept in the browser passed whatever was (#1266's review, 4117165893).
+ */
+const storedAboutBlocks = () => {
+    const found: string[] = [];
+    for (const [where, store] of [['localStorage', localStorage], ['sessionStorage', sessionStorage]] as const) {
+        for (let i = 0; i < store.length; i++) {
+            const key = store.key(i);
+            if (key === null) continue;
+            if (/block|abuse/i.test(key) || /[0-9a-f]{64}/i.test(store.getItem(key) ?? '')) found.push(`${where} ${key}`);
+        }
+    }
+    return found;
+};
 const settle = () => new Promise(r => setTimeout(r, 0));
 /** Until the stand-in node has heard nothing more for a while: every read a doorbell brought has ended. */
 async function quiet(): Promise<void> {
@@ -113,6 +128,7 @@ const X = 'f8'.repeat(32);
 describe('the block list the community keeps for the account', () => {
     beforeEach(() => {
         localStorage.clear();
+        sessionStorage.clear();
         resetBlocklistForTests();
         node.list = [];
         node.max = 500;
@@ -123,6 +139,17 @@ describe('the block list the community keeps for the account', () => {
         node.onAdd = null;
         node.rings = false;
         vi.clearAllMocks();
+    });
+
+    it('the check that nothing is kept in the browser sees what is really there', () => {
+        expect(storedAboutBlocks()).toEqual([]);
+        localStorage.setItem('bp_theme', 'dark');
+        sessionStorage.setItem('bp_tab', 'market');
+        expect(storedAboutBlocks()).toEqual([]);
+        localStorage.setItem('bp_moved_blocks', '[]');
+        localStorage.setItem('bp_seen', JSON.stringify([K1]));
+        sessionStorage.setItem('bp_marks', JSON.stringify({ [K2]: 1 }));
+        expect(storedAboutBlocks()).toEqual(['localStorage bp_moved_blocks', 'localStorage bp_seen', 'sessionStorage bp_marks']);
     });
 
     it('after signing in on a fresh browser, the list comes from the node, and nothing about it is kept in the browser', async () => {

@@ -191,9 +191,12 @@ export async function world({ migrations, env: extra } = {}) {
         heal: async (key, body = {}) => call(await signed('POST', '/api/registrar/heal', key, body)),
         release: async (key, body = {}, path = '/api/registrar/release') => call(await signed('POST', path, key, body)),
         status: async (key) => call(await signed('GET', '/api/registrar/status', key)),
+        holder: async (key, body) => call(await signed('POST', '/api/registrar/holder', key, body)),
         available: async (name) => call(new Request(`https://beanpool.org/api/registrar/available?name=${name}`)),
-        admin: async (name, action) => call(new Request(`https://beanpool.org/api/local/admin/registrar/${name}/${action}`, {
+        // `body`: the action's JSON body, when it takes one (release: { free_now: true }).
+        admin: async (name, action, body) => call(new Request(`https://beanpool.org/api/local/admin/registrar/${name}/${action}`, {
             method: 'POST', headers: { 'x-admin-secret': 'test-admin-secret' },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         })),
         invite: async (code) => (await worker.fetch(new Request(`https://beanpool.org/i/${code}`), env)).status,
         backdate: async (name, fields) => db.updateAllocation(env, name, fields),

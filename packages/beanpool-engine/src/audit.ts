@@ -31,6 +31,7 @@ export interface AuditSyncPayload {
     moderationNotices?: any[];
     memberBlocks?: any[];
     invalidatedKeys?: any[];
+    plainTables?: Record<string, unknown[]>;
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -284,6 +285,12 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // The keys the main server replaced. A key the replica lost is a lost phone's key let back in after a take-over.
         // Only when the copy carries them: a main server that predates them sends none, and its standby keeps its own.
         ...(Array.isArray(payload.invalidatedKeys) ? [['invalidated_keys', payload.invalidatedKeys.length] as [string, number]] : []),
+        // The plain tables (in-flight money and governance, sync.ts exportPlainTables), each one the copy carries: a row
+        // the import refused or couldn't write shows here, and so does one it left behind. Only by a name that is a plain
+        // identifier; a table this database doesn't have counts 0.
+        ...Object.entries(payload.plainTables ?? {})
+            .filter(([t, rows]) => Array.isArray(rows) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t))
+            .map(([t, rows]) => [t, rows.length] as [string, number]),
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

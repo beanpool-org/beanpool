@@ -7,7 +7,8 @@
  *  2. Every column (PRAGMA table_info) of a copied table is named once: copied, or not copied with the reason. Every
  *     column the manifest names exists.
  *  3. Every copied table has a watermark column, or is declared a whole set and a delta carries all of it (a row stamped
- *     long ago included); its payload key is in the sync payload. Every write to it moves the watermark: a touch trigger
+ *     long ago included); its payload key is in the sync payload, a plain table's under `plainTables` by its own name, and
+ *     a plain table has a key to match its rows by and both stamping triggers. Every write to it moves the watermark: a touch trigger
  *     stamps it, or each UPDATE and upsert in the source sets it, or writes only columns the table doesn't copy (a write
  *     that moves nothing reaches a standby only in a whole copy), or clears a column the standby clears itself when the
  *     named tombstone arrives (the importer is read for the clear).
@@ -295,7 +296,9 @@ async function main(): Promise<void> {
 
     console.log('\n— 3. watermarks and payload keys —');
     const { exportSyncState } = await import('@beanpool/engine');
-    const payload = exportSyncState(db as any, 'manifest-test', null, 0) as unknown as Record<string, unknown>;
+    const { PLAIN_TABLES, PLAIN_TABLES_PAYLOAD, plainTableTriggers } = manifest;
+    // The export as a main server makes it, with the plain tables the manifest names (engine/sync.ts exportSyncState).
+    const payload = exportSyncState(db as any, 'manifest-test', null, 0, PLAIN_TABLES) as unknown as Record<string, unknown>;
     // A whole-set table is carried whole by a delta too: a row stamped long ago, planted here, in a delta from now. A
     // whole-set table with no row to plant fails, so the next one gets its check.
     const WHOLE_SET_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
@@ -315,7 +318,17 @@ async function main(): Promise<void> {
         } else {
             assert(tables.includes(t) && columnsOf(t).includes(entry.watermark), `${t}: a delta finds a change by \`${entry.watermark}\``);
         }
-        assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
+        if (entry.plain) {
+            const carried = (payload[PLAIN_TABLES_PAYLOAD] ?? {}) as Record<string, unknown>;
+            assert(entry.payload === PLAIN_TABLES_PAYLOAD && Array.isArray(carried[t]), `${t}: travels as \`${PLAIN_TABLES_PAYLOAD}.${t}\` in the sync payload`);
+            const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0').all(t) as { name: string }[]).map((c) => c.name);
+            const { insert, touch } = plainTableTriggers({ table: t, watermark: entry.watermark, except: [] });
+            const made = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name IN (?, ?)`).all(insert, touch) as { name: string }[]).length;
+            assert(key.length > 0 && made === 2 && entry.watermark !== WHOLE_SET,
+                `${t}: a plain table has a key the generic path matches its rows by (${key.join(', ') || 'none'}) and both triggers that stamp \`${entry.watermark}\` (${made} of 2)`);
+        } else {
+            assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
+        }
     }
     db.prepare(`DELETE FROM accounts WHERE public_key = 'manifest-whole-set'`).run();
 

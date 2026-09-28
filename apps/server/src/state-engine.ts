@@ -6,7 +6,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { assertLedgerWritable } from './config/node-role.js';
+import { assertLedgerWritable, assertPlainTablesWritable } from './config/node-role.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
@@ -298,6 +298,7 @@ import {
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
+    assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
 import {
@@ -2986,6 +2987,7 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
  * inside the caller's transaction; the caller clears the floor cache and broadcasts.
  */
 function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    assertPlainTablesWritable();
     const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any)?.role === 'lead';
     unbindKeeper(enterprisePubkey, memberPubkey);
@@ -3002,6 +3004,7 @@ function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string
  * pauses (its next step is wind-up). Runs inside the caller's transaction; the caller broadcasts.
  */
 export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    assertPlainTablesWritable();
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(enterprisePubkey)) {
         return { promoted: null, paused: false };
     }
@@ -3303,6 +3306,7 @@ export function requestToJoinEnterprise(
     memberPubkey: string,
     pledgedBacking: number
 ): KeeperJoinRequest {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) {
         throw new Error('Not an enterprise');
@@ -3534,6 +3538,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
 export function approveKeeperRequest(requestId: string, actorPubkey: string): {
     ok: true; keeper: string; backing: number; applied: boolean; change: KeeperChangeInfo | null;
 } {
+    assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
     if (!req) throw new Error('Keeper request not found');
     if (req.status !== 'pending') throw new Error('Request is no longer pending');
@@ -3584,6 +3589,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
  * lead's hands: the other keepers object to it, or it lands.
  */
 export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
+    assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
     if (!req) throw new Error('Keeper request not found');
     if (req.status !== 'pending') throw new Error('Request is no longer pending');
@@ -3678,6 +3684,7 @@ export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChange
  * made it. Runs inside the caller's transaction.
  */
 export function closePendingKeeperChangesFor(enterprisePubkey: string, memberPubkey: string, reason: string): void {
+    assertPlainTablesWritable();
     const now = new Date().toISOString();
     const rows = db.prepare(`
         SELECT id, request_id FROM enterprise_keeper_changes
@@ -3702,6 +3709,7 @@ export function closePendingKeeperChangesFor(enterprisePubkey: string, memberPub
 export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: string, memberPubkey: string): {
     ok: true; applied: boolean; change: KeeperChangeInfo | null;
 } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
@@ -3747,6 +3755,7 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
  * for a removal, other than the keeper being removed — may object while the window is open. One objection cancels.
  */
 export function objectToKeeperChange(changeId: string, actorPubkey: string): { ok: true; change: KeeperChangeInfo } {
+    assertPlainTablesWritable();
     const c = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
     if (!c) throw new Error('Keeper change not found');
     applyDueKeeperChanges(c.enterprise_pubkey);
@@ -3841,6 +3850,7 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
 
 /** Apply every change whose objection window has ended (optionally for one enterprise). */
 export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: number): { applied: number; failed: number; retrying: number } {
+    assertPlainTablesWritable();
     const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
     const rows = (enterprisePubkey
         ? db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? AND enterprise_pubkey = ? ORDER BY applies_at ASC").all(nowIso, enterprisePubkey)
@@ -3867,6 +3877,7 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
 export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string): {
     ok: true; promoted: string | null; paused: boolean; releasedBacking: number;
 } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
@@ -4036,6 +4047,7 @@ function closeSuccession(prop: any, reason: SuccessionClosedReason): void {
 
 /** Close active proposals past their 14-day deadline (optionally for one enterprise). */
 export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: number): number {
+    assertPlainTablesWritable();
     const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
     const rows = (enterprisePubkey
         ? db.prepare("SELECT * FROM enterprise_succession_proposals WHERE status = 'active' AND deadline_at <= ? AND enterprise_pubkey = ?").all(nowIso, enterprisePubkey)
@@ -4049,7 +4061,8 @@ export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: 
  * An auto-promoted lead's activity cancels nothing (answer G), nor a visitor's row's (getLeadInactivity).
  */
 export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
-    if (isVisitorKey(leadPubkey)) return;
+    // A standby writes no vote of its own (config/node-role.ts assertPlainTablesWritable): the main server closes it.
+    if (isVisitorKey(leadPubkey) || getNodeRole() === 'backup') return;
     const activeProps = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
     ).all(leadPubkey) as any[];
@@ -4166,6 +4179,7 @@ export function proposeLeadSuccession(
     proposerPubkey: string,
     candidatePubkey: string
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Completed enterprise cannot have succession');
@@ -4252,6 +4266,7 @@ export function voteLeadSuccession(
     voterPubkey: string,
     choice: 'yes' | 'no' = 'yes'
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
     if (!prop) throw new Error('Succession proposal not found');
@@ -4304,14 +4319,17 @@ export function getSuccessionProposals(enterprisePubkey: string): {
     inactivity: ReturnType<typeof getLeadInactivity>;
     proposals: SuccessionProposalInfo[];
 } {
-    expireSuccessionProposals(enterprisePubkey);
+    // A read that closes what is due first, on a main server. A standby's votes are its main server's, which closes them
+    // (config/node-role.ts assertPlainTablesWritable): it answers them as they are.
+    const standby = getNodeRole() === 'backup';
+    if (!standby) expireSuccessionProposals(enterprisePubkey);
     const inactivity = getLeadInactivity(enterprisePubkey);
 
     // Cancel active proposal if lead returned
     const active = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
     ).get(enterprisePubkey) as any;
-    if (active && leadReturnedSince(active)) closeSuccession(active, 'lead_returned');
+    if (active && !standby && leadReturnedSince(active)) closeSuccession(active, 'lead_returned');
 
     const rows = db.prepare(`
         SELECT * FROM enterprise_succession_proposals
@@ -4325,6 +4343,7 @@ export function getSuccessionProposals(enterprisePubkey: string): {
 
 /** Scheduler hook: apply keeper changes whose objection window has ended; close expired succession proposals. */
 export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; failed: number; expired: number } {
+    assertPlainTablesWritable();
     const { applied, failed } = applyDueKeeperChanges(undefined, asOfTime);
     const expired = expireSuccessionProposals(undefined, asOfTime);
     return { applied, failed, expired };
@@ -4445,6 +4464,7 @@ function beansOffPrice(credits: unknown): number {
  * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
  */
 export function processDeferredWageClaims(enterprisePubkey: string): number {
+    assertPlainTablesWritable();
     const ent = db.prepare('SELECT paused, status FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
     if (ent?.paused === 1 || ent?.status === 'completed') {
         return 0; // While paused: no wage payments out
@@ -5692,12 +5712,12 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
+ * which recovery copies and which rows of the plain tables the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
  * copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
  */
 export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum })
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
@@ -6870,7 +6890,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
-        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
+        deleteReplicatedRows('suspended_node_roles', 'decision_id', 'member_pubkey = ?', publicKey);
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
         dropPlaceWatches(publicKey);
@@ -6887,6 +6907,17 @@ export function adminPruneUser(publicKey: string, actor: string) {
     broadcast({ type: 'user_pruned', publicKey });
     // Their listings, cancelled above, leave the board. A community removal (decisions-engine tickDecisions) comes here.
     ringListingDoorbell('post_removed');
+}
+
+/**
+ * Deletes the rows of a plain table (engine/replication-manifest.ts) that `where` matches, each with a tombstone keyed by
+ * `key` (its primary key), so a standby deletes them too: a delta carries a delete only as its tombstone.
+ */
+function deleteReplicatedRows(table: 'suspended_node_roles' | 'recovery_releases', key: 'decision_id' | 'id', where: string, ...args: unknown[]): void {
+    for (const r of db.prepare(`SELECT ${key} AS k FROM ${table} WHERE ${where}`).all(...args) as { k: string | number }[]) {
+        writeTombstone(table, String(r.k));
+    }
+    db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...args);
 }
 
 /**
@@ -7047,7 +7078,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
         try {
-            db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
+            deleteReplicatedRows('recovery_releases', 'id', 'collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         // A member who deletes their own account frees the sign-in account they joined with through the open door,
@@ -7093,7 +7124,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // anonymized and can never be reinstated: `nodeHasOwner()` would report an owner forever on a
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
-        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
+        deleteReplicatedRows('suspended_node_roles', 'decision_id', 'member_pubkey = ?', publicKey);
     });
     noteTakeoverInputsChanged('member purged their account');
 
@@ -8477,6 +8508,7 @@ export function listYourChats(pubkey: string) {
 
 export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {
     assertGroupActorIsMember(convenorPubkey);
+    assertPostWagesWritable(postId);
     const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
     if (res) {
         bumpPostsVersion();

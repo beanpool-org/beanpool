@@ -9,6 +9,7 @@ import { isSelfAvatarUrl } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -812,6 +813,22 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
     }
 
+    // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):
+    // each one's `updated_at` is its watermark. schema.sql declares it with its default for a new table; a table from
+    // before it gets the column here, NULL on every row, stamped after the exec by stampPlainTables. decisions,
+    // decision_votes and recovery_releases have always had it.
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE suspended_node_roles ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE deferred_wage_claims ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE federation_links ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_keeper_changes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+
     // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
     // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
     // it here and let schema.sql create the guarded one. Keyed on the trigger's own text, so this only ever
@@ -1114,9 +1131,10 @@ export function initSchema() {
                     amount            REAL NOT NULL,
                     status            TEXT NOT NULL DEFAULT 'pending',
                     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    paid_at           DATETIME
+                    paid_at           DATETIME,
+                    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );
-                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims;
+                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at, updated_at FROM deferred_wage_claims;
                 DROP TABLE deferred_wage_claims;
                 ALTER TABLE deferred_wage_claims_new RENAME TO deferred_wage_claims;
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
@@ -1182,6 +1200,52 @@ export function initSchema() {
         migrateProjectsAndCommonsToEnterprises(db);
     } catch (err) {
         console.error('[DB] ⚠️ Could not run unify projects migration:', err);
+    }
+
+    // Last: a rebuild above (deferred_wage_claims' unique index, ripOutLegacyVoting's decisions) drops a table's triggers.
+    stampPlainTables();
+}
+
+/**
+ * The watermark of every plain table (engine/replication-manifest.ts PLAIN_TABLES, design G3): a delta finds each write
+ * by it, so every write moves it. For each table, at every boot and after every rebuild above, the #878 drop-and-recreate
+ * pattern: its two triggers are dropped and made again from here, so the ones in force are always these (CREATE TRIGGER
+ * IF NOT EXISTS would keep an older shape). An insert that leaves the stamp NULL (a table whose column came from the
+ * ALTER above, which has no default) is stamped; an update that leaves it as it was is stamped, as the Phase 2 triggers
+ * do (schema.sql). A standby's import sets both aside while it writes its main server's rows, stamps and all
+ * (engine/sync.ts IMPORT_KEEPS_STAMPS). A row left NULL by the ALTER is stamped now, on a main server only: a standby's
+ * rows are its main server's, and its import alone writes them.
+ */
+function stampPlainTables(): void {
+    const now = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+    for (const t of PLAIN_TABLES) {
+        const { table, watermark } = t;
+        const { insert, touch } = plainTableTriggers(t);
+        try {
+            if (getNodeRole() !== 'backup') db.prepare(`UPDATE ${table} SET ${watermark} = ${now} WHERE ${watermark} IS NULL`).run();
+            db.exec(`
+                CREATE INDEX IF NOT EXISTS idx_${table}_${watermark} ON ${table}(${watermark});
+                DROP TRIGGER IF EXISTS ${insert};
+                CREATE TRIGGER ${insert}
+                AFTER INSERT ON ${table}
+                FOR EACH ROW
+                WHEN NEW.${watermark} IS NULL
+                BEGIN
+                    UPDATE ${table} SET ${watermark} = ${now} WHERE rowid = NEW.rowid;
+                END;
+                DROP TRIGGER IF EXISTS ${touch};
+                CREATE TRIGGER ${touch}
+                AFTER UPDATE ON ${table}
+                FOR EACH ROW
+                WHEN NEW.${watermark} IS OLD.${watermark}
+                BEGIN
+                    UPDATE ${table} SET ${watermark} = ${now} WHERE rowid = NEW.rowid;
+                END;
+            `);
+        } catch (e) {
+            // A delta would miss this table's writes until the next boot makes them; a whole copy still carries them.
+            console.error(`[DB] ❌ Could not stamp ${table}'s writes for its standbys:`, e);
+        }
     }
 }
 

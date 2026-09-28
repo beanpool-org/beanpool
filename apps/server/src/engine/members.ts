@@ -3,6 +3,7 @@
 // Bridges the database storage layer with server singletons and broadcasts.
 
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
@@ -18,8 +19,9 @@ import { isMemberKeySpelling, badKeyError } from './member-key.js';
 export function recordActivity(publicKey: string): void {
     db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
     // A visitor's row is no lead or convenor coming back: it acts for no enterprise and no group (the director's rule,
-    // 2026-09-26), so what it may still do (a reply in its own DM) cancels no vote to replace it (4111202724).
-    if (isVisitorKey(db, publicKey)) return;
+    // 2026-09-26), so what it may still do (a reply in its own DM) cancels no vote to replace it (4111202724). Nor does
+    // anything on a standby: its votes are its main server's (config/node-role.ts assertPlainTablesWritable), which closes them.
+    if (isVisitorKey(db, publicKey) || getNodeRole() === 'backup') return;
     try {
         const activeProps = db.prepare(
             "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"

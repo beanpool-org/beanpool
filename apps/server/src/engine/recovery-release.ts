@@ -46,6 +46,7 @@ import crypto from 'node:crypto';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
 import { db } from '../db/db.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getCurrentGeneration, openShareRow, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
 import {
@@ -497,6 +498,7 @@ export async function releaseSsoFragmentForIdentity(
 }
 
 export function releaseSsoFragment(collectionId: string, ssoLookupHash: string): ReleasedFragment {
+    assertPlainTablesWritable();
     const collection = requireLive(collectionId);
     if (!ssoLookupHash) throw new RecoveryReleaseError('No sign-in fragment was identified.');
 
@@ -546,6 +548,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
  * secrecy of this row.
  */
 export function releaseHubFragment(collectionId: string): ReleasedFragment {
+    assertPlainTablesWritable();
     const collection = requireLive(collectionId);
     // By holder_type, not by the literal 'node' (CR). putShareGeneration now pins the ref, but a
     // row written before that check existed would be invisible to a lookup keyed on the string —

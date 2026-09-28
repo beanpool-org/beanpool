@@ -31,6 +31,7 @@ import { db, raiseCreatorOperatorSwitch } from './db/db.js';
 import { bridgeAccountId, ensureBridgeAccount, getEnergyBalance } from './federation-bridge.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap } from './connector-manager.js';
 import { logger } from './logger.js';
+import { getNodeRole, assertPlainTablesWritable } from './config/node-role.js';
 
 export interface FederationLink {
     peerId: string;
@@ -85,6 +86,8 @@ export function ensureFederationLink(
     operatorPubkey?: string,
 ): FederationLink | null {
     if (!peerId) return null;
+    // A standby's links are its main server's (a plain table, engine/replication-manifest.ts): it makes none of its own.
+    assertPlainTablesWritable();
 
     const existing = getFederationLink(peerId);
     if (existing) {
@@ -102,6 +105,17 @@ export function ensureFederationLink(
             }
         }
         return existing;
+    }
+
+    // The link's treasury this community already has, with no link row naming it: a server that took over from a standby
+    // whose copy predates links travelling to standbys, or a row lost some other way. Its account holds the link's Beans,
+    // so it is the link again, not a second treasury beside it (named with the peer's suffix, the first one's balance
+    // stranded with nothing pointing at it). Its commissioning ceiling starts at 0 again, as a new link's does.
+    const adopted = findLinkTreasury(peerId, callsign);
+    if (adopted) {
+        db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)').run(peerId, adopted);
+        logger.info('P2P', `[Link] Found the link treasury for peer ${peerId.slice(-8)} (${adopted.slice(0, 12)}…) with no link naming it: it is the link again, ceiling 0`);
+        return ensureFederationLink(peerId, callsign, createTreasury, operatorPubkey);
     }
 
     // The bridge account may not exist yet — a cap can be set before the first trade. Create it now so
@@ -151,6 +165,20 @@ export function ensureFederationLink(
     logger.info('P2P', `[Link] Created "${name}" for peer ${peerId.slice(-8)} (treasury ${created.publicKey.slice(0, 12)}…, ceiling 0)`);
 
     return getFederationLink(peerId);
+}
+
+/**
+ * A treasury this code made as the link for this peer (ensureFederationLink below: named for the peer, its suffixed name
+ * when that was taken, and no photo, which every enterprise an operator makes has) that no link names. Null when none.
+ */
+function findLinkTreasury(peerId: string, callsign: string | undefined): string | null {
+    const name = linkNameFor(callsign, peerId);
+    const row = db.prepare(`SELECT public_key FROM members
+                            WHERE is_treasury = 1 AND COALESCE(avatar_url, '') = '' AND status NOT IN ('migrated', 'pruned')
+                              AND lower(callsign) IN (lower(?), lower(?))
+                              AND public_key NOT IN (SELECT treasury_pubkey FROM federation_links)
+                            ORDER BY rowid ASC LIMIT 1`).get(name, `${name} (${peerId.slice(-6)})`) as { public_key: string } | undefined;
+    return row?.public_key ?? null;
 }
 
 /** The link for a peer, or null. */
@@ -241,6 +269,7 @@ function balanceOf(publicKey: string): number {
  * is no "unlimited" value — an absent ceiling is 0, not infinity.
  */
 export function setCommissionCeiling(peerId: string, ceiling: number): FederationLink | null {
+    assertPlainTablesWritable();
     if (!Number.isFinite(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a non-negative number');
     const res = db.prepare('UPDATE federation_links SET commission_ceiling = ? WHERE peer_id = ?')
         .run(Math.round(ceiling * 100) / 100, peerId);
@@ -258,6 +287,9 @@ export function setCommissionCeiling(peerId: string, ceiling: number): Federatio
  * for; unwinding a live tab is open decision 2 and is deliberately not invented here.
  */
 export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): number {
+    // A standby's links are its main server's, which its copy brings (a plain table, engine/replication-manifest.ts): it
+    // makes none of its own, at boot or when a cap is set there. A take-over's first boot as the main server converges them.
+    if (getNodeRole() === 'backup') return 0;
     let created = 0;
     for (const connector of getConnectors()) {
         if (connector.trustLevel !== 'peer') continue;

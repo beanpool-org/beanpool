@@ -1148,6 +1148,57 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 20. The plain tables' watermark (in-flight money and governance on a standby, design G3) ─────────────────────────
+    // A node from before it has no updated_at on most of the plain tables (engine/replication-manifest.ts) and no triggers
+    // stamping it. The upgrade adds the column before the schema, stamps each row it holds once, and makes both triggers
+    // (db.ts stampPlainTables); the old deferred_wage_claims, which a rebuild after the schema replaces (its table-wide
+    // UNIQUE), keeps the column through it and gets its triggers again.
+    console.log('\n--- 20. The plain tables gain their watermark ---');
+    {
+        const dir = tmp('legacy-plain-tables');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const triggersOn = (d: Database.Database, t: string) =>
+            (d.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? ORDER BY name`).all(t) as any[]).map((r) => r.name);
+        const d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF'); // as db.ts runs it
+        const freshTriggers = [...triggersOn(d, 'invite_codes'), ...triggersOn(d, 'deferred_wage_claims')];
+        assert(freshTriggers.length === 4 && columns(d, 'invite_codes').includes('updated_at'),
+            `a fresh install stamps both tables' writes (${freshTriggers.join(', ')})`);
+        d.exec(`DROP TABLE invite_codes; ${legacyDdl('invite_codes', ['updated_at'])}`);
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('OLD-CODE', 'x', '2025-01-01T00:00:00.000Z')`).run();
+        d.exec(`DROP TABLE deferred_wage_claims;
+                CREATE TABLE deferred_wage_claims (id TEXT PRIMARY KEY, enterprise_pubkey TEXT NOT NULL, keeper_pubkey TEXT NOT NULL,
+                    post_id TEXT, transaction_id TEXT UNIQUE, amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+                    created_at DATETIME, paid_at DATETIME);`);
+        d.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, transaction_id, amount, created_at)
+                   VALUES ('w1', 'e', 'k', 't1', 2, '2025-01-01T00:00:00.000Z')`).run();
+        assert(!columns(d, 'invite_codes').includes('updated_at') && !columns(d, 'deferred_wage_claims').includes('updated_at')
+            && triggersOn(d, 'invite_codes').length === 0, 'the fixture genuinely lacks the column and the triggers');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the older node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        after.pragma('foreign_keys = OFF');
+        const wages = (after.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deferred_wage_claims'`).get() as any).sql as string;
+        assert(!/transaction_id\s+TEXT UNIQUE/.test(wages) && columns(after, 'deferred_wage_claims').includes('updated_at'),
+            'the old wage claims table is rebuilt, and keeps the column');
+        assert(JSON.stringify([...triggersOn(after, 'invite_codes'), ...triggersOn(after, 'deferred_wage_claims')]) === JSON.stringify(freshTriggers),
+            `both tables have both triggers, the rebuilt one too (${[...triggersOn(after, 'invite_codes'), ...triggersOn(after, 'deferred_wage_claims')].join(', ')})`);
+        const stamp = (t: string, key: string, v: string) => (after.prepare(`SELECT updated_at AS u FROM ${t} WHERE ${key} = ?`).get(v) as any)?.u as string | null;
+        const invited = stamp('invite_codes', 'code', 'OLD-CODE');
+        assert(!!invited && !!stamp('deferred_wage_claims', 'id', 'w1'), `each row held is stamped once (${invited})`);
+        after.prepare(`UPDATE invite_codes SET updated_at = '2025-01-02T00:00:00.000Z' WHERE code = 'OLD-CODE'`).run();
+        after.prepare(`UPDATE invite_codes SET used_by = 'y' WHERE code = 'OLD-CODE'`).run();
+        after.prepare(`INSERT INTO invite_codes (code, created_by, updated_at) VALUES ('NEW-CODE', 'x', NULL)`).run();
+        assert((stamp('invite_codes', 'code', 'OLD-CODE') ?? '') > '2025-01-02T00:00:00.000Z' && !!stamp('invite_codes', 'code', 'NEW-CODE'),
+            'a write moves the stamp, and a row inserted with none is stamped');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

@@ -104,12 +104,12 @@ function writeAtomic(file: string, data: string | Buffer, mode: number): void {
  * from it does not have, however recent its last copy. Roles are not here: the bundle carries them. Enterprises, their
  * keepers and pledges, and members' holiday and notification settings, vouches, granted credit and freezes are copied
  * (design G2); so are Decisions and their votes, keepers' wages owed, keeper and succession votes, invites, re-key codes,
- * recovery releases and links with other communities (G3). The last line is the one thing a fresher copy changes.
+ * recovery releases and links with other communities (G3); and the phones members get notifications on, muted chats,
+ * enterprise thread read marks, event reminders already sent, the activity list and the pricing guide with its reports
+ * (G4). The last line is the one thing a fresher copy changes.
  */
 export const WHAT_WILL_BE_MISSING: readonly string[] = [
-    'the phones members get notifications on: nobody gets one until they open the app again',
     'photos sent in chats',
-    "muted chats, what members have read in enterprise threads, the activity list, event reminders already sent, and the pricing guide's own prices and members' price reports",
     'Commons project proposals still waiting for a decision',
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
     'and, on top of everything above, whatever changed on the main server after this standby last copied it',

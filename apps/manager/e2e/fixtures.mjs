@@ -748,9 +748,7 @@ const BACKUP_STATUS = {
 };
 
 const TAKEOVER_MISSING = [
-    'the phones members get notifications on: nobody gets one until they open the app again',
     'photos sent in chats',
-    "muted chats, what members have read in enterprise threads, the activity list, event reminders already sent, and the pricing guide's own prices and members' price reports",
     'Commons project proposals still waiting for a decision',
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
     'and, on top of everything above, whatever changed on the main server after this standby last copied it',

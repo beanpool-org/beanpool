@@ -213,8 +213,8 @@ async function main(): Promise<void> {
         assert(anna.check.signer === 'pinned' && anna.check.stanza.callsign === 'Anna',
             "the phone finds @Anna's stanza, in a header signed by the community's own server (the pin)");
         assert(anna.described.takeover.mainServerAnswers === false && anna.described.takeover.missing.some((m: string) => /photos sent in chats/.test(m))
-            && !anna.described.takeover.missing.some((m: string) => /invites/.test(m)),
-            'the phone is told the main server does not answer, and what will be missing (no longer invites, which the standby copies)');
+            && !anna.described.takeover.missing.some((m: string) => /invites|notifications on|muted chats/.test(m)),
+            'the phone is told the main server does not answer, and what will be missing (no longer invites, the phones members get notifications on or muted chats, which the standby copies)');
         assert(!JSON.stringify(anna.request).includes(TUNNEL_TOKEN) && !/adminHash|libp2p_key/.test(JSON.stringify(anna.described)),
             'nothing from inside the keys reaches the phone, and the request carries none');
 

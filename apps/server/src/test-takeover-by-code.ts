@@ -328,7 +328,11 @@ async function main(): Promise<void> {
         assert(after.backupPrimaryUrl === null && after.backupReplicationToken === null, 'the pull settings are cleared');
         assert(after.publicAddress?.hostname === 'testtown.beanpool.org' && after.publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'the web address is back, with the tunnel token from the older envelope');
-        assert(after.tunnelTokenFile === TUNNEL_TOKEN, 'and the tunnel token is written for the cloudflared sidecar');
+        // Was: the token written to data/tunnel-token for a cloudflared sidecar. The tunnel now runs inside the server.
+        assert(after.tunnel.wantedToken === TUNNEL_TOKEN && after.tunnel.runningToken === TUNNEL_TOKEN && after.tunnel.childToken === TUNNEL_TOKEN
+            && ['starting', 'connected'].includes(after.tunnel.state),
+            `and the tunnel runs inside this server on that token (${after.tunnel.state})`);
+        assert(after.tunnelTokenFile === null, 'with no copy of it in data/tunnel-token');
         assert(after.envelope.state === 'sealed' && JSON.stringify(after.envelope.owners) === JSON.stringify(['Anna']) && JSON.stringify(after.envelope.codes) === '[1]'
             && after.envelope.envelopeId !== dropped.envelopeId,
             `the keys are locked again on this server, to @Anna and code #1 (${after.envelope.envelopeId?.slice(0, 8)})`);

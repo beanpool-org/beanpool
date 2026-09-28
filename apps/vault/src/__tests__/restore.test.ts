@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
-import { HOLD_MS } from '../api/server.js';
 import { deposit, doGenesis, newMember, signed, startRestore, startVault, type Genesis, type Member, type VaultUnderTest } from './harness.js';
 
 /**
@@ -44,11 +43,12 @@ describe('every sign-in restore waits 24 hours (D2)', () => {
         it(`${provider}: held, then released only sealed to the restoring key; opening it with that key and the sub gives the seed`, async () => {
             const member = newMember();
             expect((await deposit(v, g, member, provider, SUBS[provider], { pushToken: PHONE })).status).toBe(200);
-            const t0 = v.clock.now();
             const { e, reply } = await startRestore(v, provider, SUBS[provider]);
+            const heldAt = v.clock.now();
             expect(reply.status).toBe(200);
             expect(reply.body).toMatchObject({ status: 'held' });
-            expect(reply.body.until).toBe(v.clock.now() + HOLD_MS);
+            // D2's 24 hours, as a number: not the constant the code uses.
+            expect(reply.body.until).toBe(heldAt + 86_400_000);
             const holdId = reply.body.holdId as string;
 
             // The member's devices are told at once, and see the hold when the app opens.
@@ -61,7 +61,7 @@ describe('every sign-in restore waits 24 hours (D2)', () => {
             v.clock.advance(reply.body.until - v.clock.now() - 1);
             expect((await collect(e, holdId)).body.status).toBe('held');
             v.clock.advance(1);
-            expect(v.clock.now() - t0).toBeGreaterThanOrEqual(HOLD_MS);
+            expect(v.clock.now() - heldAt).toBe(86_400_000);
             const released = await collect(e, holdId);
             expect(released.body.status).toBe('released');
 
@@ -125,7 +125,7 @@ describe('the member\'s answer to a hold', () => {
         const holdId = reply.body.holdId as string;
         expect((await signed(v, '/v1/holds/cancel', { holdId }, newMember().seed)).status).toBe(404);
         expect((await signed(v, '/v1/holds/cancel', { holdId }, member.seed)).body).toEqual({ status: 'stopped' });
-        for (const wait of [0, HOLD_MS, 6 * 24 * 60 * 60 * 1000]) {
+        for (const wait of [0, 86_400_000, 6 * 24 * 60 * 60 * 1000]) {
             v.clock.advance(wait);
             const r = await collect(e, holdId);
             expect(r.body).toEqual({ status: 'stopped' });

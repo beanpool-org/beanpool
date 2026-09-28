@@ -348,6 +348,8 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
  */
 export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now()): number {
     if (!push) return 0;
+    // A standby claims none: its marks are its main server's, copied (a plain table, design G4), and it sends no push.
+    if (getNodeRole() === 'backup') return 0;
     const due = dueEventReminders(nowMs);
     if (due.length === 0) return 0;
 
@@ -396,8 +398,8 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
  * The scheduler, as one tick.
  *
  * Primary only, like every other background job here with a side effect out in the world: a backup node
- * holds the same RSVPs and the same push tokens by design, and a replica that reminded people on its own
- * would double every reminder the moment a mirror existed.
+ * holds the same RSVPs, the same push tokens and the same marks by design (design G4), and a replica that
+ * reminded people on its own would double every reminder the moment a mirror existed.
  */
 export function tickEventReminders(push: PushFn | undefined, nowMs = Date.now()): number {
     if (getNodeRole() !== 'primary') return 0;

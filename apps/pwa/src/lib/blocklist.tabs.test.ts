@@ -638,6 +638,20 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(node.list).toContain(K2);
     });
 
+    // #1269 review 4117583339: blockUser waits for a take-off-again of that key already on its way, or the block reaches the
+    // node first as a no-op (the move still holds the key) and the remove then takes it off.
+    it.each(['unblock', 'Unblock All'] as const)('a block made here while the take-off-again of that key is on its way stands (%s)', async (how) => {
+        const T = await oneTabMoving();
+        await unblockHere(T, how);
+        node.there = { ...node.there, remove: 60 }; // the take-off-again goes at 232 ms and lands at ~292 ms
+        await vi.advanceTimersByTimeAsync(225);
+        const blocking = T.blockUser(K1); // ~240 ms, while that remove is on its way
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(blocking).resolves.toBe(true);
+        expect(node.list).toContain(K1);
+        expect(T.getBlockedUsers()).toContain(K1);
+    });
+
     describe('a take-off-again that doesn\'t reach the node', () => {
         /** Each remove from here on is lost on the way, until `lossy` is false: the connection comes and goes. */
         let lossy = true;

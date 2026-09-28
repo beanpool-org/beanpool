@@ -115,6 +115,33 @@ export interface DiagnosticsResponse {
     callsign: string;
     shutdownStatus?: ShutdownStatus;
     diskHealth?: DiskHealth;
+    /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */
+    standbyHealth?: StandbyHealthBanner | null;
+}
+
+/** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
+export interface StandbyHealthBanner {
+    incident: { id: string; startedAt: number; pushed: boolean; lines: string[]; whatToDo: string[] } | null;
+    standbys: { id: string; label: string; lastPullAt: number; lastCopyAt: number | null; lastExactAt: number | null; healthy: boolean }[];
+}
+
+/** An owner's "this standby is gone for good": the node stops watching it until it reports again. */
+export async function forgetStandby(
+    nodeUrl: string,
+    id: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean } & StandbyHealthBanner> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/standby-health/forget');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword, id }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
 }
 
 export interface GatewayConfig {

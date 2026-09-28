@@ -358,7 +358,7 @@ async function main(): Promise<void> {
         const ownOrigins = [...new Set(s.posts.filter((p) => p.id !== cachedRow.id).map((p) => p.origin_node))];
         assert(ownOrigins.length === 1 && ownOrigins[0] === null, `a listing of M's own names no origin on S (${JSON.stringify(ownOrigins)})`);
         assert(s.posts.find((p) => p.id === cachedRow.id)?.origin_node === NEIGHBOUR_URL, 'the cached one names its community');
-        assert(s.format === '3', `the copy records the importer's format, 3 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's
+        assert(s.format === '4', `the copy records the importer's format, 4 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 in-flight money and governance's (G3)
 
         // ── 3. Changes after the first copy, then a delta ──
         console.log('\n— 3. after the first copy: the changes a delta must carry —');
@@ -433,7 +433,7 @@ async function main(): Promise<void> {
         const o5: Rows = await old.send('rows');
         assert(reseed.ok === true && reseed.mode === 'resync', `its next pull is one re-seed, and it lands (${JSON.stringify({ ok: reseed.ok, mode: reseed.mode, error: reseed.error })})`);
         assert(rowsDiff(m5, o5).length === 0, `it ends equal to M, every row and stamp (differences ${first(rowsDiff(m5, o5))})`);
-        assert(o5.format === '3', `and records format 3 (${o5.format})`);
+        assert(o5.format === '4', `and records format 4 (${o5.format})`);
         const after = await old.send('pull', {});
         assert(after.ok === true && after.mode === 'delta', `the pull after it is a delta, not a second re-seed (${JSON.stringify({ ok: after.ok, mode: after.mode, error: after.error })})`);
         // A main server whose older database holds a photo and a project unstamped: the copy stamps each from M's own rows,

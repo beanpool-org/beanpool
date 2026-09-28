@@ -377,6 +377,7 @@ run_federation_suites() {
       test-standby-community-settings
       test-standby-listings-verbatim
       test-standby-standing
+      test-standby-health
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

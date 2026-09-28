@@ -68,6 +68,7 @@ import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
+import { copyCheckForPreview } from './standby-copy-record.js';
 import { restartSidecar } from './public-address-agent.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
 import { getReplacedInfo, forgetSyncEpochHeaderValue, type ReplacedInfo } from './identity-epoch.js';
@@ -507,6 +508,13 @@ export interface TakeoverPreview {
     recoverySealKey: boolean;
     tunnel: TunnelOutcome;
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
+    /**
+     * This standby's copy of the main server (services/standby-copy-record.ts copyCheckForPreview): "Last exact copy of the
+     * main server: <time>", or in plain words what didn't match and when the last exact copy was, that its last copies
+     * were refused, or that its last copy is old. `warning` when any of those. It never stops the take-over (design G8,
+     * Marty's answer 4: a take-over from a copy known to be stale or wrong goes ahead, with a plain warning).
+     */
+    copy: ReturnType<typeof copyCheckForPreview>;
     missing: readonly string[];
     afterwards: readonly string[];
 }
@@ -555,7 +563,9 @@ async function startSession(
 
     const connectors = connectorsFrom(bundle);
     const main = await mainServerAnswers();
-    const lastCopyAt = getBackupStatus().lastSuccessAt;
+    // From this standby's record when the puller has none in memory: after a restart, its last copy is still known.
+    const copy = copyCheckForPreview(getBackupStatus().lastSuccessAt);
+    const lastCopyAt = copy.lastCopyAt;
     const pa: any = publicAddress;
     logger.warn('SYS', `[Takeover] ${describeAuthority(authorisedBy)} opened the take-over keys sealed ${candidate.header.createdAt}; waiting for the confirm`);
     return {
@@ -583,6 +593,7 @@ async function startSession(
                 ? 'The main server still answers. Take over only if it is really gone: two servers with one identity will compete, and the old one must never be started again.'
                 : null,
         },
+        copy,
         missing: [...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]), ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS])],
         afterwards: AFTER_A_TAKEOVER,
     };
@@ -605,7 +616,7 @@ const MISSING_SETTINGS = "the community's own settings (its name, place, contact
 /** Does the main server answer? For the page an owner's phone reads before it unlocks (§5.2 step 3). */
 export async function mainServerStatus(): Promise<{ answers: boolean | null; lastCopyAt: number | null }> {
     const main = await mainServerAnswers();
-    return { answers: main.answers, lastCopyAt: getBackupStatus().lastSuccessAt };
+    return { answers: main.answers, lastCopyAt: copyCheckForPreview(getBackupStatus().lastSuccessAt).lastCopyAt };
 }
 
 export function discardTakeoverSession(): void {

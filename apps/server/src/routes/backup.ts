@@ -8,10 +8,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import {
-    getNodeRole, exportSyncState,
+    getNodeRole, exportSyncState, signSyncPayload, type SyncPayload,
     getConversationsByMember, getConversationMessages,
     recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
+import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
+import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
@@ -35,6 +37,7 @@ import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
+import { requireAdminRole } from '../admin-auth.js';
 import {
     checkRecoveryCode, parseRecoveryCode, RecoveryCodeError, SealedEnvelopeError,
     type CodeStanza, type SealedEnvelopeHeader,
@@ -478,6 +481,25 @@ async function restoreFromTar(
     };
 }
 
+/** Rows this server has written since it opened its database: every write goes through the one connection. */
+function writesSoFar(): number {
+    return (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+}
+
+/**
+ * A whole copy with this server's table hashes in it (engine/replica-hashes.ts), signed again with them: the standby's
+ * import checks the signature over everything but the signature itself, so the hashes are the main server's word like
+ * the rest. A copy this server can't sign again goes as it was, without them.
+ */
+async function withTableHashes(payload: SyncPayload, hashes: TableHashes): Promise<SyncPayload> {
+    const unsigned: SyncPayload & { tableHashes?: TableHashes } = { ...payload };
+    delete unsigned.signature;
+    delete unsigned.publicKey;
+    unsigned.tableHashes = hashes;
+    const signed = await signSyncPayload(unsigned);
+    return signed.signature && signed.publicKey ? signed : payload;
+}
+
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth } = deps;
@@ -683,6 +705,26 @@ router.get('/api/local/admin/backup-enroll', async (ctx) => {
         ctx.status = 500;
         ctx.body = { error: 'Failed to build enrollment bundle' };
     }
+});
+
+// The main server's watch on its standbys (services/standby-health.ts): what the owners' Settings banner shows, and an
+// owner's "this standby is gone for good". The community's owners only: nobody else is told.
+router.post('/api/local/admin/standby-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx))) return;
+    if (!requireAdminRole(ctx, ['owner'], "Only an owner of this node is told about its standby")) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = getStandbyHealthBanner();
+});
+router.post('/api/local/admin/standby-health/forget', async (ctx) => {
+    if (!(await checkAdminAuth(ctx))) return;
+    if (!requireAdminRole(ctx, ['owner'], "Only an owner of this node can stop watching its standby")) return;
+    const id = (ctx as unknown as { requestBody?: { id?: unknown } }).requestBody?.id;
+    if (!forgetStandby(id)) {
+        ctx.status = 404;
+        ctx.body = { error: 'No standby with that id is watched here' };
+        return;
+    }
+    ctx.body = { success: true, ...getStandbyHealthBanner() };
 });
 
 // Live health tile for the Backup tab: this node's role + (if a backup) the
@@ -1005,6 +1047,10 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
         return;
     }
 
+    // How the standby's copies have gone, for this community's owners (services/standby-health.ts): only a standby's own
+    // channel, the replication token, is heard.
+    if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
+
     try {
         // Conditional pull: the mirror sends the generatedAt of its last successful
         // import. If the DB hasn't changed since we built that exact snapshot,
@@ -1028,12 +1074,27 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
         // data_version is read BEFORE the export: a write that lands mid-export
         // bumps it, so the next conditional check conservatively rebuilds rather
         // than ever serving a stale 304.
-        const payload = await exportSyncState(nodeId);
+        // Each copied table's row count and content hash, for the standby's whole-copy check (engine/replica-hashes.ts),
+        // read in the same synchronous step as the export's own table reads; nothing is sent with a copy written to
+        // while it was being made (this server's writes all go through one connection, so its count of changes says).
+        const writesBefore = writesSoFar();
+        const hashes = tableContentHashes();
+        let payload = await exportSyncState(nodeId);
         if (!payload.signature || !payload.publicKey) {
             // No libp2p identity loaded → the backup couldn't verify authorship.
             ctx.status = 503;
             ctx.body = { error: 'Snapshot unavailable: node signing identity not ready' };
             return;
+        }
+        if (writesSoFar() === writesBefore) {
+            // The listing photos this server could not read from its own storage are not in the copy, which names them
+            // (engine/sync.ts photosOmitted): hashed again without them, as the standby hashes its own, so the rest of
+            // that table is still compared row for row and they never read as a copy gone wrong. Nothing was written
+            // since the export's reads, so the rows are the ones hashed above.
+            const omitted = Array.isArray(payload.photosOmitted) ? payload.photosOmitted.filter((k): k is string => typeof k === 'string') : [];
+            const photos = omitted.length > 0 ? tableContentHashes({ only: ['post_photos'], photosLeftOut: new Set(omitted) }).tables.post_photos : undefined;
+            if (photos) hashes.tables.post_photos = photos;
+            payload = await withTableHashes(payload, hashes);
         }
         if (payload.generatedAt) {
             lastSnapshotExport = { generatedAt: payload.generatedAt, dataVersion: dataVersionNow };
@@ -1087,6 +1148,8 @@ router.get('/api/local/admin/sync-delta', async (ctx) => {
         ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
         return;
     }
+
+    if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
     try {
         const since = String(ctx.request.header['x-since-cursor'] || '');

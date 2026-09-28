@@ -25,7 +25,10 @@
  * Nothing leaves the screens before the node says so. A block another tab added to that list shows at once; one it took
  * off stays shown until the node answers a request this page made after seeing it go (that tab may have moved it up, and
  * the node's list this page holds is older). And a read that was on its way when the member blocked, unblocked or cleared
- * here drops its answer, which may be older than the node's answer to that change, and reads again.
+ * here drops its answer, which may be older than the node's answer to that change, and reads again. The answer to a change
+ * that comes back after the answer to a request made later is older too: the newer stands. Two requests on their way
+ * together may cross before they reach the node, so a block either answer holds stays shown until a read asked after both
+ * has answered, unless the member unblocked them here (takeNodeAnswer).
  *
  * An unblock or Unblock All the member makes in this page while the move is on its way stands, even when it reaches the
  * node before the move's list does: the move sends no key the member is unblocking here, and once one of its adds has
@@ -107,13 +110,26 @@ let localList: string[] | null | undefined;
  * node's answer takes one off the screens, so a block the node holds is never shown gone, even for a moment.
  */
 const leaving = new Map<string, number>();
-/** This page's clock: it ticks as a request to the node is made, and as blocks join `leaving`. */
+/** This page's clock: it ticks as a request to the node is made, as blocks join `leaving`, and as an answer is taken. */
 let ticks = 0;
 /**
  * How many answers from the node this page has taken: a read, a block, an unblock, Unblock All. A read during which this
  * moved may be older than what was taken meanwhile: it drops its answer, and one more read follows.
  */
 let answers = 0;
+/**
+ * The tick the newest answer this page has taken was asked at, and the tick it was taken at. The answer to a request made
+ * before it that comes back after it (that request was slower) is older, and is not taken over it; one to a request made
+ * before it came back was on its way with it (takeNodeAnswer).
+ */
+let takenAsked = 0;
+let takenAt = 0;
+/**
+ * Each key the member unblocked in this page (Unblock All: each key it lifted) and the node took, with the tick the latest
+ * such unblock was asked at: an older answer that still holds that key doesn't show it again (takeNodeAnswer). In this
+ * page's memory only.
+ */
+const unblockedHere = new Map<string, number>();
 /** What the screens see: the node's list, anything still waiting to move up, and anything `leaving`. */
 let current: string[] = [];
 
@@ -263,14 +279,66 @@ function emit(): void {
     }
 }
 
-/** The node's answer to a request made at tick `asked`: it settles every block that joined `leaving` before then. */
+/**
+ * The node's answer to a request made at tick `asked`, taken when that request was made after the one whose answer was
+ * taken last: it settles every block that joined `leaving` before then. When it was made before that answer came back,
+ * the two were on their way together and may have crossed, this one reaching the node first: a block the answer taken
+ * before holds that this one doesn't stays shown (`leaving`), unless this request was the member's unblock of it, and one
+ * more read settles which is right.
+ *
+ * An answer to a request made before that one, coming back after it (its request was slower), is older: the newer answer
+ * stands, and a block it holds is never taken off the screens by the older (#1269's review, 5861163950). The two requests
+ * may still have crossed on the way, the older reaching the node last, so a block the older answer holds that the newer
+ * doesn't stays shown (`leaving`), unless the member has unblocked that key here since (a block made here since shows
+ * through its own answer). When the older answer says anything else the newer doesn't, one more read, asked after both,
+ * settles which is right.
+ */
 function takeNodeAnswer(res: BlockList, asked: number): void {
-    nodeList = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
+    const keys = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
+    if (asked < takenAsked) {
+        const newer = new Set(nodeList);
+        const older = new Set(keys);
+        const tick = ++ticks;
+        let differs = false;
+        // What the older request itself added (the node's `added`): a block of a key the member unblocked here since that
+        // reached the node after the unblock, so the node holds it again and the page must say so (#1278 review 4119489106).
+        const added = (res as { added?: unknown })?.added;
+        const addedByIt = new Set(Array.isArray(added) ? added : []);
+        for (const k of older) {
+            if (newer.has(k)) continue;
+            if ((unblockedHere.get(k) ?? 0) > asked && !addedByIt.has(k)) continue;
+            leaving.set(k, tick);
+            differs = true;
+        }
+        for (const k of newer) if (!older.has(k)) differs = true;
+        if (differs) loadBlocklist().catch(() => { /* told through getBlocklistStatus */ });
+        return;
+    }
+    let readAfter = false;
+    if (asked < takenAt) {
+        const now = new Set(keys);
+        const tick = ++ticks;
+        for (const k of nodeList) {
+            if (now.has(k) || (unblockedHere.get(k) ?? 0) >= asked) continue;
+            leaving.set(k, tick);
+            readAfter = true;
+        }
+    }
+    nodeList = keys;
     nodeMax = typeof res?.max === 'number' ? res.max : 0;
     loaded = true;
     readError = null;
     answers++;
+    takenAsked = asked;
+    takenAt = ++ticks;
     for (const [k, left] of leaving) if (left < asked) leaving.delete(k);
+    // Asked once this answer is taken, so the read doesn't drop its own answer for it.
+    if (readAfter) loadBlocklist().catch(() => { /* told through getBlocklistStatus */ });
+}
+
+/** Notes the member's unblock of `k` here, asked at tick `asked`, once the node has taken it. */
+function noteUnblockedHere(k: string, asked: number): void {
+    if ((unblockedHere.get(k) ?? 0) < asked) unblockedHere.set(k, asked);
 }
 
 /** The keys this member has blocked, for the screens that hide them. */
@@ -509,6 +577,7 @@ export function startBlocklist(ownerPubkey: string): () => void {
         leaving.clear();
         // What the account before is owed is for its list, and every request now changes this one's.
         owed.clear();
+        unblockedHere.clear();
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
@@ -588,6 +657,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
         throw toBlocklistError(e, 'unblock');
     }
     settle(true);
+    noteUnblockedHere(targetPubkey, asked);
     // A block still waiting to move up from this browser goes too, or it would be moved up again; so do those the node now
     // holds. Whatever else is there stays, whoever wrote it.
     const held = heldBy(res);
@@ -613,6 +683,7 @@ export async function clearBlocklist(): Promise<void> {
         throw toBlocklistError(e, 'clear');
     }
     settle(true);
+    for (const k of shown) noteUnblockedHere(k, asked);
     const held = heldBy(res);
     keepStoredList(k => shown.has(k) || held.has(k));
     takeNodeAnswer(res, asked);
@@ -702,6 +773,9 @@ export function resetBlocklistForTests(): void {
     leaving.clear();
     ticks = 0;
     answers = 0;
+    takenAsked = 0;
+    takenAt = 0;
+    unblockedHere.clear();
     current = [];
     reading = null;
     readAgain = false;

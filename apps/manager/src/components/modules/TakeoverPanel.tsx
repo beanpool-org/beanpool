@@ -69,6 +69,12 @@ export interface TakeoverPreview {
     publicAddress: string | null;
     tunnel: { source: string; message: string };
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
+    /**
+     * This standby's copy of the main server, in the server's words: "Last exact copy of the main server: <time>", or what
+     * didn't match and when the last exact copy was, refused copies, an old last copy. `warning` when any of those; the
+     * take-over goes ahead either way. Absent on servers before the standby's copy was checked.
+     */
+    copy?: { warning: boolean; lines: string[] };
     missing: string[];
     afterwards: string[];
 }
@@ -532,6 +538,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                         ⚠️ {preview.mainServer.warning}
                                     </div>
                                 )}
+                                {preview.copy?.warning && (
+                                    <div id="takeover-copy-warning" className="p-3 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-200 space-y-1">
+                                        {preview.copy.lines.map((l, i) => <p key={l} className="m-0">{i === 0 ? '⚠️ ' : ''}{l}</p>)}
+                                    </div>
+                                )}
                                 <ul className="m-0 pl-5 space-y-1">
                                     <li>Keys locked {when(preview.envelope.sealedAt)}, opened {preview.openedBy && preview.envelope.codeId === null ? `by ${preview.openedBy}` : `with recovery code #${preview.envelope.codeId}`}.</li>
                                     <li>Identity kept: <span className="font-mono text-xs">{preview.peerId}</span></li>
@@ -542,6 +553,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                         The main server {preview.mainServer.answers === false ? 'does not answer' : preview.mainServer.answers ? 'still answers' : 'is not known to this standby'}.
                                         {' '}Last copied from it: {when(preview.mainServer.lastCopyAt)}.
                                     </li>
+                                    {preview.copy && !preview.copy.warning && preview.copy.lines.map((l) => <li key={l} id="takeover-copy-exact">{l}</li>)}
                                 </ul>
                                 <p className="m-0 font-bold text-white">It will not have:</p>
                                 <ul className="m-0 pl-5 space-y-1">

@@ -829,6 +829,15 @@ async function main(): Promise<void> {
         // ── 12. The force-resync a mismatch asks for is held to the ledger before its clear ──
         console.log('\n— 12. the force-resync after a copy that didn\'t match is not a seed —');
         copyDir(dir('audit'), dir('held'));
+        // Six hours on: S took the force-resync step 6's mismatch asked for, and its record keeps when, so a restart allows
+        // no sooner one (services/standby-copy-record.ts, where a server with that record has one): this copy's is past it.
+        withDb(dir('held'), (db) => {
+            const row = db.prepare("SELECT value FROM node_config WHERE key = 'standby_copy_record'").get() as { value: string } | undefined;
+            if (!row) return;
+            const r = JSON.parse(row.value);
+            r.lastMismatchResyncAt = Date.now() - 7 * 60 * 60_000;
+            db.prepare("UPDATE node_config SET value = ? WHERE key = 'standby_copy_record'").run(JSON.stringify(r));
+        });
         let heldS = await spawnNode(SCRIPT, dir('held'), env(PW_STANDBY, 'backup'));
         nodes.push(heldS);
         // It copies M's latest first. (Its boot's escrow sweep once deleted the empty escrow accounts M still holds; a

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApplianceSection } from './ApplianceSection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -214,6 +214,11 @@ describe('ApplianceSection Component', () => {
     });
 
     it('sends password and callsign in body when saving node identity in identity tab', async () => {
+        // The contacts come from the admin route; this node has none stored, so the empty boxes are what it has.
+        const generic = global.fetch as any;
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: unknown) => (String(url).includes('/api/local/admin/diagnostics')
+            ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ...mockDiag, contactEmail: null, contactPhone: null }) })
+            : generic(url, init))));
         await act(async () => {
             render(
                 <ApplianceSection
@@ -235,6 +240,7 @@ describe('ApplianceSection Component', () => {
                 />
             );
         });
+        await waitFor(() => expect(document.getElementById('contact-email')).not.toBeDisabled());
 
         const saveIdentityBtn = screen.getByRole('button', { name: /save identity/i });
         await act(async () => {

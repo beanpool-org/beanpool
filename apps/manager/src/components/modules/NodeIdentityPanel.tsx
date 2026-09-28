@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 
@@ -23,6 +23,9 @@ export function NodeIdentityPanel({
     const [communityName, setCommunityName] = useState(typeof diag?.communityName === 'string' ? diag.communityName : '');
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
+    // The contacts come from the admin route: the public community-info says each only when it is published. Until they
+    // load, or if they can't, the two boxes are closed and Save leaves both out, so it never erases what the node holds.
+    const [contacts, setContacts] = useState<'loading' | 'loaded' | 'failed'>('loading');
 
     // Coordinates & Service radius
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
@@ -88,12 +91,6 @@ export function NodeIdentityPanel({
                     if (data.communityName !== undefined) {
                         setCommunityName(typeof data.communityName === 'string' ? data.communityName : String(data.communityName ?? ''));
                     }
-                    if (data.contactEmail !== undefined) {
-                        setContactEmail(typeof data.contactEmail === 'string' ? data.contactEmail : String(data.contactEmail ?? ''));
-                    }
-                    if (data.contactPhone !== undefined) {
-                        setContactPhone(typeof data.contactPhone === 'string' ? data.contactPhone : String(data.contactPhone ?? ''));
-                    }
                     if (data.callsign !== undefined) {
                         setCallsign(typeof data.callsign === 'string' ? data.callsign : String(data.callsign ?? ''));
                     }
@@ -146,7 +143,29 @@ export function NodeIdentityPanel({
             }
         };
 
+        // The contacts, from the admin route (owner or admin), beside the reads above: a slow answer holds up nothing else.
+        // Each is text, or null for none stored; anything else, or no answer, is not the node's contacts.
+        const loadContacts = async () => {
+            try {
+                const admin = await fetchDiagnostics(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                const text = (v: unknown) => (typeof v === 'string' ? v : v === null ? '' : undefined);
+                const email = text(admin.contactEmail);
+                const phone = text(admin.contactPhone);
+                if (!mounted) return;
+                if (email === undefined || phone === undefined) {
+                    setContacts('failed');
+                    return;
+                }
+                setContactEmail(email);
+                setContactPhone(phone);
+                setContacts('loaded');
+            } catch {
+                if (mounted) setContacts('failed');
+            }
+        };
+
         loadData();
+        loadContacts();
 
         return () => {
             mounted = false;
@@ -350,8 +369,8 @@ export function NodeIdentityPanel({
                 password: activeNode.adminPassword,
                 callsign: callsign.trim(),
                 communityName: communityName.trim(),
-                contactEmail: contactEmail.trim(),
-                contactPhone: contactPhone.trim(),
+                // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
+                ...(contacts === 'loaded' ? { contactEmail: contactEmail.trim(), contactPhone: contactPhone.trim() } : {}),
             };
             if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
                 identityPayload.lat = lat;
@@ -774,8 +793,13 @@ export function NodeIdentityPanel({
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
-                            Public details displayed on your landing page. Helps new members find your community.
+                            The name is public. The email and phone stay private unless you turn each on under Directory Publishing; then anyone can read it.
                         </p>
+                        {contacts === 'failed' && (
+                            <p id="contacts-not-loaded" role="status" className="text-[11px] text-amber-300 mt-1 m-0 leading-normal">
+                                Couldn&apos;t load the contact email and phone from the node, so Save leaves them as they are. Reload to change them.
+                            </p>
+                        )}
                     </div>
 
                     <div>
@@ -803,8 +827,9 @@ export function NodeIdentityPanel({
                             maxLength={100}
                             value={contactEmail}
                             onChange={(e) => setContactEmail(e.target.value)}
+                            disabled={contacts !== 'loaded'}
                             placeholder="e.g. admin@mycommunity.org"
-                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
                         />
                     </div>
 
@@ -818,8 +843,9 @@ export function NodeIdentityPanel({
                             maxLength={30}
                             value={contactPhone}
                             onChange={(e) => setContactPhone(e.target.value)}
+                            disabled={contacts !== 'loaded'}
                             placeholder="e.g. +61 400 123 456"
-                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
                         />
                     </div>
                 </div>

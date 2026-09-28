@@ -839,14 +839,17 @@
                 <div class="field" style="margin-top:1.5rem; border-top: 1px solid #1e293b; padding-top: 1.5rem;">
                     <label>Community Contacts</label>
                     <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem; line-height: 1.4;">
-                        Public details displayed on your landing page. Helps new members find your community.
+                        The name is public. The email and phone stay private unless you turn each on under Directory Publishing; then anyone can read it.
+                    </p>
+                    <p id="contacts-not-loaded" style="display:none;font-size:0.8rem;color:#fbbf24;margin:0 0 1rem;line-height:1.4;">
+                        Couldn't load the contact email and phone from the node, so Save leaves them as they are. Reload to change them.
                     </p>
                     <label style="font-size:0.85rem;margin-top:0.5rem;display:block;">Community Name</label>
                     <input type="text" id="community-name" placeholder="e.g. Mullumbimby Community Exchange" maxlength="60" />
                     <label style="font-size:0.85rem;margin-top:0.75rem;display:block;">Contact Email</label>
-                    <input type="email" id="contact-email" placeholder="e.g. admin@mycommunity.org" maxlength="100" />
+                    <input type="email" id="contact-email" placeholder="e.g. admin@mycommunity.org" maxlength="100" disabled />
                     <label style="font-size:0.85rem;margin-top:0.75rem;display:block;">Contact Phone</label>
-                    <input type="tel" id="contact-phone" placeholder="e.g. +61 400 123 456" maxlength="30" />
+                    <input type="tel" id="contact-phone" placeholder="e.g. +61 400 123 456" maxlength="30" disabled />
                 </div>
 
                 <button class="btn btn-primary btn-full" id="save-identity-btn" style="margin-top:1rem;">Save Identity</button>

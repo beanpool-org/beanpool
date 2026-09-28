@@ -624,7 +624,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * A restore (D2): every one is held 24 hours, whichever provider, unless a device holding the account says "Yes,
      * it's me". The member's devices are told at once. A hold already open is answered with, not doubled: to the
      * device that opened it, its hold; to any other, that one is waiting (it can be collected only by the device
-     * that started it, whose key the release is sealed to).
+     * that started it, whose key the release is sealed to). Once that hold could have been collected and wasn't (its
+     * device may have lost its throwaway key), another device's restore takes its place with a fresh 24 hours, told
+     * and stoppable like any: never a release sooner than the old hold's.
      */
     route('POST', '/v1/restore', 'signed', false, async ctx => {
         const { provider, identity } = await checkSignIn(ctx, 'restore');
@@ -639,13 +641,18 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const open = database.openHoldForCopy(row.id);
             if (open) {
                 if (open.requester_key === ctx.key) return json(200, { status: 'held', holdId: open.id, until: open.release_at });
-                throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
+                if (ctx.now < open.release_at) {
+                    throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
+                }
             }
             const hold: HoldRow = {
                 id: newId(), copy_id: row.id, requester_key: ctx.key, provider, opened_at: ctx.now, release_at: ctx.now + HOLD_MS,
                 cancelled_at: null, released_at: null,
             };
-            database.insertHold(hold);
+            database.transaction(() => {
+                if (open) database.cancelHold(open.id, ctx.now);
+                database.insertHold(hold);
+            });
             counters.counts.restores[provider] = (counters.counts.restores[provider] ?? 0) + 1;
             counters.counts.holds++;
             notify(await memberTokens(database, row.pk_index), 'vault-hold', provider);

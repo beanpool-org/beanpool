@@ -148,6 +148,29 @@ describe('the member\'s answer to a hold', () => {
         expect(v.stub.pushes.flatMap(p => p.messages)).toHaveLength(1);
     });
 
+    it('a hold nobody collected once it could be gives way to another device, which waits its own 24 hours', async () => {
+        const member = newMember();
+        await deposit(v, g, member, 'google', SUBS.google, { pushToken: PHONE });
+        const first = await startRestore(v, 'google', SUBS.google);
+        const firstId = first.reply.body.holdId as string;
+        v.clock.advance(86_400_000 - 1);
+        expect((await startRestore(v, 'google', SUBS.google)).reply).toMatchObject({ status: 409, body: { code: 'hold_open' } });
+        v.clock.advance(1);
+
+        // The first device could collect now, and hasn't (it lost its key): a new one starts over.
+        const second = await startRestore(v, 'google', SUBS.google);
+        expect(second.reply.status).toBe(200);
+        expect(second.reply.body).toMatchObject({ status: 'held', until: v.clock.now() + 86_400_000 });
+        expect(second.reply.body.holdId).not.toBe(firstId);
+        expect((await collect(first.e, firstId)).body).toEqual({ status: 'stopped' });
+        expect((await collect(second.e, second.reply.body.holdId)).body.status).toBe('held');
+        await v.api.idle();
+        expect(v.stub.pushes.flatMap(p => p.messages).map(m => m.data.type)).toEqual(['vault-hold', 'vault-hold']);
+        expect((await signed(v, '/v1/holds/cancel', { holdId: second.reply.body.holdId }, member.seed)).body).toEqual({ status: 'stopped' });
+        v.clock.advance(86_400_000);
+        expect((await collect(second.e, second.reply.body.holdId)).body).toEqual({ status: 'stopped' });
+    });
+
     it('no copy for this sign-in account is said only after the sign-in checks out', async () => {
         const { reply } = await startRestore(v, 'google', 'never-deposited');
         expect(reply.status).toBe(404);

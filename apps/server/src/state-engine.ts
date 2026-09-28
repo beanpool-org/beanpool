@@ -6,6 +6,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
+import { assertLedgerWritable } from './config/node-role.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
@@ -992,6 +993,9 @@ export function runMarketplaceHygiene(): void {
 }
 
 function sweepSettledEscrowAccounts(): void {
+    // Not on a standby: it moves dust into the Commons and deletes accounts, and a standby's ledger is its main server's
+    // (config/node-role.ts), whose own sweep reaches it with the next copy.
+    if (getNodeRole() === 'backup') return;
     const DUST_THRESHOLD = 1e-6;
     // #160: Absorb floating-point dust (< 1e-6) on settled escrow accounts into COMMONS_POOL in SQLite & memory before sweeping.
     // Uses indexed NOT EXISTS query to avoid unindexed table scans.
@@ -1964,6 +1968,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
     // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
     assertBeansOn();
+    // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the visitor's or bridge's row
+    // below is written.
+    assertLedgerWritable();
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
@@ -2171,6 +2178,8 @@ export function settleDemurrage(publicKeys: string[]): void {
     // their own project both names are the same account.
     const accountIds = Array.from(new Set(publicKeys)).filter(Boolean);
     if (accountIds.length === 0) return;
+    // It writes the decay it collects: never on a standby (config/node-role.ts).
+    assertLedgerWritable();
 
     const persistAccount = db.prepare(`
         INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
@@ -2268,8 +2277,16 @@ export function settleDemurrage(publicKeys: string[]): void {
  * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
  * feature: #104's settlement writes, `adminPruneUser` and the treasury sweep hit it identically, and
  * anything else that composes several ledger moves under one transaction will too.
+ *
+ * NEVER ON A STANDBY (config/node-role.ts assertLedgerWritable). Its ledger is its main server's, and its flush writes
+ * nothing (engine/audit.ts persistDecayAndCommons), so a block here was a move whose Commons half no row held: a pot
+ * snapshot carrying demurrage a read applied in memory, put back by a failed block's resync, or a Commons payment that
+ * leaves its debit to that flush. Refused before anything else: no flush, no snapshot, no transaction to roll back or
+ * resync, so this is a plain throw, not one of the failures below. Every move composed under one of these (trades and
+ * escrow steps, settlements, prunes, a member's own delete, Decisions, wind-ups, the wizards) is refused with it.
  */
 export function conservingTransaction<T>(fn: () => T): T {
+    assertLedgerWritable();
     // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair — and a
     // DURABLE one: the decay debits and the Commons credit land in the same commit, or neither does.
     // Unconditional, including when nested — see NESTING above; skipping it here minted beans.
@@ -2386,6 +2403,7 @@ export function moveToCommons(
     }
     if (amount <= 0) return null;
     assertBeansOn();
+    assertLedgerWritable();
 
     return conservingTransaction(() => {
         // A bridge must be able to go negative (that negative IS the credit extended to a peer), so the
@@ -2444,6 +2462,10 @@ export function payFromCommons(
 ): Transaction | null {
     if (amount <= 0) return null;
     assertBeansOn();
+    // Before the pot is drawn down in memory. On a standby the flush below writes nothing (engine/audit.ts), so a payment
+    // there wrote its recipient's credit and not the pot's debit: a member in debt deleting their own account left the
+    // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
+    assertLedgerWritable();
     if (!ledger.deductFromCommons(amount)) {
         if (!opts?.allowDeficit) return null;
         setCommonsBalance(getCommonsBalanceExact() - amount);
@@ -5190,33 +5212,43 @@ function getEscrowCb() {
     };
 }
 
+// Every step of a trade refuses on a standby before anything else (config/node-role.ts): those that move Beans would
+// underneath (conservingTransaction), and the others would write a trade its main server never made. First, so the
+// refusal says why, not that a copied listing belongs to another community.
 export function requestPost(postId: string, requesterPublicKey: string, hours?: number): MarketplaceTransaction {
+    assertLedgerWritable();
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
 export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+    assertLedgerWritable();
     return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
+    assertLedgerWritable();
     return rejectPostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
 }
 
 export function cancelPostRequest(transactionId: string, requesterPublicKey: string): MarketplaceTransaction | null {
+    assertLedgerWritable();
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
 export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+    assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
 
 export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
+    assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
     return res;
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
+    assertLedgerWritable();
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
 }
 
@@ -5228,6 +5260,7 @@ export function resolveEscrowDispute(
     adminSigner: string,
     opts?: { reason?: string }
 ): MarketplaceTransaction {
+    assertLedgerWritable();
     const res = resolveEscrowDisputeEngine(getEscrowCb(), transactionId, action, adminSigner, opts);
     clearEnterpriseFloorCache();
     return res;

@@ -46,7 +46,7 @@ export interface ReplicaConsistency {
      * sums the same. `compared` accounts in either; `differing`, those whose balance differs or that only one side holds
      * (the first few in `examples`, by key); `unreadable`, the copy's entries with no key, a key SQLite would store as
      * another string (isWellFormedKey) or no number for a balance. Null when the copy carries no account set, or names
-     * no account.
+     * no account: an empty set, or one whose every entry has no key it can store.
      */
     ledger: { compared: number; differing: number; unreadable: number; examples: string[]; match: boolean } | null;
     ok: boolean;
@@ -59,6 +59,23 @@ export interface ReplicaConsistency {
  */
 export function isWellFormedKey(key: string): boolean {
     return !/\p{Surrogate}/u.test(key);
+}
+
+/**
+ * The sum of some balances, with each addition's rounding carried (Kahan-Babuska-Neumaier, as SQLite's SUM since 3.43). A
+ * running sum of doubles loses any value smaller than half a step of the running total: +1e20, 1000, -1e20 sums to 0.
+ * A sum that overflows is ±Infinity, as SQLite's is: the carried rounding is then Infinity - Infinity, NaN, and SQLite
+ * leaves out a carry that isn't finite (sumFinalize).
+ */
+export function compensatedSum(values: Iterable<number>): number {
+    let sum = 0;
+    let carried = 0;
+    for (const v of values) {
+        const t = sum + v;
+        carried += Math.abs(sum) >= Math.abs(v) ? (sum - t) + v : (v - t) + sum;
+        sum = t;
+    }
+    return Number.isFinite(carried) ? sum + carried : sum;
 }
 
 /** A ledger as a few figures and a fingerprint, to tell whether two servers hold the same one (summariseLedger). */
@@ -80,11 +97,11 @@ export interface LedgerSummary {
  */
 export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unknown }>): LedgerSummary {
     const held: string[] = [];
+    const balances: number[] = [];
     let holdings = 0;
-    let sum = 0;
     for (const r of rows) {
         const b = typeof r.balance === 'number' && Number.isFinite(r.balance) ? r.balance : 0;
-        sum += b;
+        balances.push(b);
         const cents = Math.round(b * 100);
         if (cents === 0) continue;
         holdings += Math.abs(cents);
@@ -94,7 +111,7 @@ export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unk
     return {
         accounts: held.length,
         holdings: holdings / 100,
-        sum: Math.round(sum * 10000) / 10000,
+        sum: Math.round(compensatedSum(balances) * 10000) / 10000,
         digest: crypto.createHash('sha256').update(held.join('\n')).digest('hex'),
     };
 }
@@ -273,7 +290,7 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         return { name, primary, backup, match: primary === backup };
     });
 
-    const primarySum = round2((payload.accounts ?? []).reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0));
+    const primarySum = round2(compensatedSum((payload.accounts ?? []).map((a) => (Number.isFinite(Number(a?.balance)) ? Number(a?.balance) : 0))));
     const backupSum = round2(Number((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s) || 0);
     const sumBalances = { primary: primarySum, backup: backupSum, match: Math.abs(primarySum - backupSum) < 0.01 };
 
@@ -287,19 +304,20 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
     // Every account (G0). The importer writes the copy's rows as they are and deletes the ones it doesn't carry, so after
     // a whole copy the two are equal, balance for balance; any difference is this standby's ledger not being its main
     // server's. Exact: both are the same doubles, the import writes the one it was sent.
-    // A copy that names no account carries no ledger, as the importer reads it (apps/server engine/sync.ts).
+    // A copy that names no account carries no ledger, as the importer reads it (apps/server engine/sync.ts): one with an
+    // empty set, or with no entry whose key this server can store.
     let ledger: ReplicaConsistency['ledger'] = null;
-    if (Array.isArray(payload.accounts) && payload.accounts.length > 0) {
-        const theirs = new Map<string, number | null>();
-        let unreadable = 0;
-        for (const a of payload.accounts) {
-            // A key SQLite would store as another string is one the importer never writes: unreadable, like an entry
-            // with no key, so it asks for no force-resync (a force-resync would read it the same way).
-            if (typeof a?.publicKey !== 'string' || !a.publicKey || !isWellFormedKey(a.publicKey)) { unreadable++; continue; }
-            const b = typeof a.balance === 'number' && Number.isFinite(a.balance) ? a.balance : null;
-            if (b === null) unreadable++;
-            theirs.set(a.publicKey, b);
-        }
+    const theirs = new Map<string, number | null>();
+    let unreadable = 0;
+    for (const a of Array.isArray(payload.accounts) ? payload.accounts : []) {
+        // A key SQLite would store as another string is one the importer never writes: unreadable, like an entry
+        // with no key, so it asks for no force-resync (a force-resync would read it the same way).
+        if (typeof a?.publicKey !== 'string' || !a.publicKey || !isWellFormedKey(a.publicKey)) { unreadable++; continue; }
+        const b = typeof a.balance === 'number' && Number.isFinite(a.balance) ? a.balance : null;
+        if (b === null) unreadable++;
+        theirs.set(a.publicKey, b);
+    }
+    if (theirs.size > 0) {
         const ours = new Map((db.prepare('SELECT public_key, balance FROM accounts').all() as { public_key: string; balance: number | null }[])
             .map((r) => [r.public_key, r.balance]));
         const differ: string[] = [];

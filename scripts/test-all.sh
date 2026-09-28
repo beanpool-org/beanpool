@@ -376,6 +376,7 @@ run_federation_suites() {
       test-standby-ledger-copy
       test-standby-community-settings
       test-standby-listings-verbatim
+      test-standby-in-flight
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

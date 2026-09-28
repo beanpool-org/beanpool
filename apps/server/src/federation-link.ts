@@ -306,7 +306,9 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
             continue;
         }
         try {
-            if (ensureFederationLink(peerId, connector.callsign, createTreasury)) created++;
+            // A treasury found again is no new one (ensureFederationLink): it isn't counted as made.
+            const foundAgain = findLinkTreasury(peerId, connector.callsign) !== null;
+            if (ensureFederationLink(peerId, connector.callsign, createTreasury) && !foundAgain) created++;
         } catch (e: any) {
             // One bad link must not stop the others, and must not stop boot. Logged loudly because a
             // peer with a cap and no link is a peer we will settle with that has no visible home.

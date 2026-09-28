@@ -382,6 +382,7 @@ run_federation_suites() {
       test-takeover-parity
       test-replication-manifest
       test-standby-ledger-copy
+      test-standby-ledger-gate
       test-standby-community-settings
       test-standby-listings-verbatim
       test-standby-standing
@@ -426,6 +427,8 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-tunnel-connector
+      test-no-docker-socket
       test-node-config-public
       test-registrar-contract
       test-invite-trampoline

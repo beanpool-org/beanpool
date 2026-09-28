@@ -9,7 +9,7 @@
 import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, nodePubkeyHex } from '../services/registrar-client.js';
-import { writeToken, removeToken, restartSidecar } from '../services/public-address-agent.js';
+import { syncTunnel, restartTunnel, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, updateNodeConfig } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import type { RouteDeps } from './types.js';
@@ -72,9 +72,20 @@ async function verifyEdgeStatus(hostname: string, target: 'live' | 'offline', ma
         }
         await new Promise(r => setTimeout(r, intervalMs));
     }
-    addProbeLog('4/4', `⏳ Timed out after ${totalSecs}s. Click ⚡ Reset Tunnel to retry.`, 'warning');
+    addProbeLog('4/4', `⏳ Timed out after ${totalSecs}s. Click ⚡ Restart tunnel to retry.`, 'warning');
     return false;
 }
+
+/** The tunnel inside this server, as one line for the probe log. */
+function describeTunnel(t: TunnelStatus): string {
+    if (t.state === 'connected') return `connected to Cloudflare (${t.connections})`;
+    if (t.state === 'starting') return 'starting';
+    if (t.state === 'off') return 'not running';
+    return `${t.state}${t.reason ? `: ${t.reason}` : ''}`;
+}
+
+/** What every status answer carries about this server: its tunnel, and whether Docker's socket is still mounted. */
+const serverSide = () => ({ tunnel: getTunnelStatus(), dockerSocket: dockerSocketMounted() });
 
 export function createPublicAddressRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -132,24 +143,28 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         try {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Requesting tunnel allocation for "${name}.beanpool.org"...`, 'info');
-            const origin = b.origin || process.env.PUBLIC_ADDRESS_ORIGIN || 'http://beanpool-node:8080';
+            // The tunnel runs inside this server, so it always leads to this server's own loopback.
             const communityName = b.communityName || b.community_name;
-            const result = await claimAddress(name, mode, origin, b.contact, communityName);
+            const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, b.contact, communityName);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
             // Recorded before the stored address changes: a name held until now is kept, as former.
             recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
-            updateNodeConfig({ publicAddress: { name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact } } as any);
+            updateNodeConfig({ publicAddress: {
+                name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact,
+                ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
+            } } as any);
+            if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
+            const tunnel = await syncTunnel();
             if (result.tunnelToken) {
-                addProbeLog('2/4', `🔒 Writing tunnel token...`, 'info');
-                await writeToken(result.tunnelToken);
-                addProbeLog('3/4', `⚡ Sidecar restarted`, 'success');
+                const ok = tunnel.state === 'starting' || tunnel.state === 'connected';
+                addProbeLog('3/4', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
                 // Run edge status probe asynchronously in background to prevent HTTP request timeouts
                 verifyEdgeStatus(result.hostname, 'live').catch(err => {
                     console.warn('[PublicAddr] Edge status probe error:', err?.message || err);
                 });
             }
-            ctx.body = { success: true, ...result };
+            ctx.body = { success: true, ...result, ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
             ctx.status = 400;
@@ -194,11 +209,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             if (result.status === 'live') {
                 recordRegistrarAnswer(result, 'stored');
                 const prev = (getNodeConfig() as any).publicAddress || {};
-                updateNodeConfig({ publicAddress: { ...prev, ...result } } as any);
-                if (result.tunnelToken) {
-                    await writeToken(result.tunnelToken);
-                }
-                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result };
+                // Where the tunnel leads is recorded for the name it was set for (tunnel-connector.ts moves an old one).
+                const origin = prev.origin && (!result.name || !prev.name || result.name === prev.name) ? { origin: prev.origin } : {};
+                const { origin: _dropped, ...kept } = prev;
+                updateNodeConfig({ publicAddress: { ...kept, ...origin, ...result } } as any);
+                await syncTunnel();
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result, ...serverSide() };
                 return;
             }
             // Any other answer is written on the name it concerns, and the name stays this community's. `none` above
@@ -210,6 +226,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = {
                 success: true, pubkey: nodePubkeyHex(), ...result,
                 ...(kept ? { kept: { hostname: kept.address, mode: localPa?.mode ?? null } } : {}),
+                ...serverSide(),
             };
         } catch (e: any) {
             if (localPa && (localPa.hostname || localPa.name)) {
@@ -218,7 +235,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                     pubkey: nodePubkeyHex(),
                     ...localPa,
                     cached: true,
-                    error: e.message
+                    error: e.message,
+                    ...serverSide(),
                 };
             } else {
                 ctx.status = 400;
@@ -227,15 +245,28 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         }
     });
 
-    router.post('/api/local/admin/public-address/restart-sidecar', async (ctx) => {
+    // The tunnel runs inside this server (services/tunnel-connector.ts): this restarts that child process.
+    router.post('/api/local/admin/public-address/restart-tunnel', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
         try {
-            addProbeLog('1/1', `⚡ Manual trigger: Force-restarting sidecar container (t=0)...`, 'info');
-            await restartSidecar();
-            addProbeLog('1/1', `✅ Sidecar container successfully restarted!`, 'success');
-            ctx.body = { success: true };
+            addProbeLog('1/1', `⚡ Restarting the tunnel inside this server...`, 'info');
+            const tunnel = await restartTunnel();
+            if (!tunnel) {
+                addProbeLog('1/1', `❌ This server runs no tunnel: it has no live tunnel address.`, 'error');
+                ctx.status = 409;
+                ctx.body = { error: 'This server runs no tunnel: it has no live tunnel address.', tunnel: getTunnelStatus() };
+                return;
+            }
+            const ok = tunnel.state === 'starting' || tunnel.state === 'connected';
+            addProbeLog('1/1', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
+            if (!ok) {
+                ctx.status = 500;
+                ctx.body = { error: `The tunnel did not start: ${tunnel.reason || tunnel.state}`, tunnel };
+                return;
+            }
+            ctx.body = { success: true, tunnel };
         } catch (e: any) {
-            addProbeLog('1/1', `❌ Sidecar restart failed: ${e.message}`, 'error');
+            addProbeLog('1/1', `❌ Tunnel restart failed: ${e.message}`, 'error');
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
@@ -255,9 +286,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
-            addProbeLog('2/4', `🔒 Overwriting tunnel token with empty state...`, 'info');
-            await removeToken();
-            addProbeLog('3/4', `⚡ Sidecar container force-restarted (t=0)`, 'success');
+            addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
+            const tunnel = await syncTunnel();
+            addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');
             if (hostname) {
                 verifyEdgeStatus(hostname, 'offline', 10).catch(err => {
                     console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);

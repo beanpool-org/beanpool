@@ -16,7 +16,8 @@
  * A standby taken out of service for good would keep an incident open: an owner stops watching it from the banner
  * (forgetStandby), and it is watched again from its next report.
  *
- * Kept in node_config `standby_health`, so a restart neither forgets an incident nor pushes it again.
+ * Kept in node_config `standby_health`, so a restart neither forgets an incident nor pushes it again. A standby's address
+ * is kept 7 days from its last pull, then forgotten (services/address-retention.ts), and never goes into a log line.
  */
 
 import crypto from 'node:crypto';
@@ -27,6 +28,7 @@ import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { dispatchPushNotification } from '../state-engine.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { errorMessage } from '../error-message.js';
+import { withoutOldAddresses } from './address-retention.js';
 import { differsInWords, parseStandbyReport, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
@@ -53,7 +55,10 @@ export function setStandbyHealthClockForTests(offsetMs: number): void {
 
 export interface StandbySeen {
     id: string;
-    /** The address its pulls come from, as this server sees it (client-ip.ts): how an owner tells one standby from another. */
+    /**
+     * The address its pulls come from, as this server sees it (client-ip.ts): how an owner tells one standby from another.
+     * Null once its last pull is 7 days old (services/address-retention.ts).
+     */
     address: string | null;
     firstSeenAt: number;
     lastPullAt: number;
@@ -97,17 +102,18 @@ function read(): HealthState {
     if (!row) return { standbys: [], incident: null, lastIncident: null };
     try {
         const s = JSON.parse(row.value);
-        return {
+        return withoutOldAddresses('standby_health', {
             standbys: Array.isArray(s?.standbys) ? s.standbys.filter((x: unknown) => typeof (x as StandbySeen | null)?.id === 'string') : [],
             incident: s?.incident && typeof s.incident.id === 'string' ? s.incident : null,
             lastIncident: s?.lastIncident && typeof s.lastIncident.id === 'string' ? s.lastIncident : null,
-        };
+        }, now());
     } catch {
         return { standbys: [], incident: null, lastIncident: null };
     }
 }
 
 function write(s: HealthState): void {
+    withoutOldAddresses('standby_health', s, now());
     db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(KEY, JSON.stringify(s));
 }
 
@@ -225,7 +231,8 @@ function evaluate(s: HealthState, t: number): void {
     const flapping = !!s.lastIncident && t - s.lastIncident.endedAt < PUSH_COOLDOWN_MS;
     // Written before the push: a push that throws never makes the next report push the same incident again.
     write(s);
-    logger.security('P2P', `[StandbyHealth] ⚠️ The standby needs this community's owners: ${problems.map((p) => sentence(p, s)).join(' ')}`);
+    // Named without its address: a log line never carries one.
+    logger.security('P2P', `[StandbyHealth] ⚠️ The standby needs this community's owners: ${problems.map((p) => sentence(p, s, false)).join(' ')}`);
     if (flapping) {
         logger.info('P2P', '[StandbyHealth] No push for this one: the last incident ended less than an hour ago. Settings shows it.');
         return;
@@ -294,15 +301,16 @@ export function standbyIncidentOpen(): boolean {
 
 const PUSH_TITLE = 'Your standby server needs attention';
 
-function label(id: string, s: HealthState): string {
+/** How the owner is told which standby. `withAddress` false for a log line, which never names an address. */
+function label(id: string, s: HealthState, withAddress = true): string {
     const x = s.standbys.find((y) => y.id === id);
     const others = s.standbys.length > 1;
-    if (x?.address) return `The standby at ${x.address}`;
+    if (withAddress && x?.address) return `The standby at ${x.address}`;
     return others ? `Standby ${id.slice(0, 6)}` : 'The standby';
 }
 
-function sentence(p: Problem, s: HealthState): string {
-    const who = label(p.standby, s);
+function sentence(p: Problem, s: HealthState, withAddress = true): string {
+    const who = label(p.standby, s, withAddress);
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
     if (p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${whyInWords(p.why)}.`;
     return `${who}'s last whole copy of this server${p.at !== null ? `, at ${timeInWords(p.at)},` : ''} did not match it: `

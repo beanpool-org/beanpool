@@ -18,6 +18,7 @@
 import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
 import { logger } from './logger.js';
+import { logAddressTag } from './log-address.js';
 
 export const SIGNED_CEILING_FACTOR = 10;
 const WINDOW_MS = 60_000;
@@ -50,8 +51,10 @@ function logTrip(key: string, now: number): void {
     const last = loggedTrips.get(key);
     if (last && now - last < WINDOW_MS) return;
     loggedTrips.set(key, now);
-    // Members are named by a key prefix only; an address is already in any access log.
-    const label = key.startsWith('m:') ? `member ${key.slice(2, 14)}…` : key;
+    // Members are named by a key prefix only, an address by its daily keyed hash only (log-address.ts): a log line never
+    // carries one.
+    const label = key.startsWith('m:') ? `member ${key.slice(2, 14)}…`
+        : `${key.startsWith('sig:') ? 'signed requests from ' : ''}${logAddressTag(key.slice(key.indexOf(':') + 1))}`;
     try { logger.warn('AUTH', `[gateway] rate limit reached for ${label}; answering 429 until the window resets`); } catch { /* logging never blocks a response */ }
 }
 

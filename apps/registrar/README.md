@@ -85,11 +85,15 @@ reads `admin-held-all` as an owner's release (held for that key, which could tak
 when the admin's release freed the name to any key at once, the blocked one first.
 
 **Who holds a name** — `POST /api/registrar/holder {name}`, signed like `status` (a POST, so the name is inside the
-signed bytes). It answers `{ name, held, holder_key?, state?, since?, held_until? }`: `held` is `you` (the asking key
-holds it: any state that holds a name, or its own release inside the hold), `other` (another key holds it on the same
-terms; `holder_key` names that key, the only answer that does), `reserved` (nobody holds it and policy keeps it from
-every claim; also what the key the admin stopped hears about its name inside an `admin-held-all` hold) or `free`. `state`, `since` (when the holder's tenure began) and, for a release inside its hold,
-`held_until` come with `you` and `other`. Read-only: it writes nothing, not even contact, and asks nothing of
+signed bytes). It answers `{ name, held, … }`: `held` is `you` (the asking key holds it: any state that holds a name,
+or its own release inside the hold), `other` (another key holds it on the same terms), `reserved` (nobody holds it and
+policy keeps it from every claim; also what the key the admin stopped hears about its name inside an `admin-held-all`
+hold) or `free`. `you` also carries `state`, `since` (when this key's tenure began) and, for its release inside the
+hold, `held_until`. `other` is exactly `{ name, held: 'other', holder_key }`: whose it is, and nothing about another
+community's row: not its state (so no admin block or pause shows), not when it claimed, not when its hold ends. Anyone
+can generate a key and ask, and the node's watcher (L3) needs only `held` and `holder_key` (r4117741404). The key of a
+name that routes is public already (its node's `/api/attest`); a gated claim still waiting for approval has its key
+named here too. Read-only: it writes nothing, not even contact, and asks nothing of
 Cloudflare or any node. A node uses it to tell whether a name it held has passed to another community
 (`scratch/registrar/DESIGN-lost-name-audience-opus.md` §5); an older Worker answers 404, and the node then drops nothing.
 

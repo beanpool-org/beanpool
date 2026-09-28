@@ -712,9 +712,12 @@ async function handleStatus(request, env) {
 //   'reserved' nobody holds it, and policy keeps it from every claim (our fleet's names); or, to the key the admin
 //              blocked (or paused) and then released, its old name while that release holds it from every key;
 //   'free'     nobody holds it: no row, a release past its hold or freed at once, abandoned.
-// With 'you' and 'other': `state` (the row's status), `since` (when that key's tenure began: its claim or its
-// take-back), and `held_until` for a release still inside its hold. A node's key is public already (its /api/attest
-// answers anyone), so naming the holder tells nobody anything new.
+// 'you' also says `state` (the row's status), `since` (when this key's tenure began: its claim or its take-back), and
+// `held_until` for its release still inside the hold. 'other' says only whose it is — { name, held, holder_key } —
+// never another community's moderation state (blocked, paused), when it claimed, or when its hold ends: the answer
+// goes to any key, and L3 needs no more (r4117741404). A key a name routes to is public already (its node's
+// /api/attest answers anyone); a gated claim's key still waiting for approval is not, and is named here all the same,
+// as L3's "another key holds it" needs it.
 // Signed like /status. A POST, so the name is inside the signed bytes (the signature covers the path, not the query).
 // Read-only: it writes nothing — not even the contact every other signed request records (the node's own /status
 // does that) — and asks nothing of Cloudflare or of any node. An older Worker answers 404: a node that gets that
@@ -730,10 +733,9 @@ async function handleHolder(request, env, bodyText) {
     // The key the admin blocked (or paused), its name released by the admin and held from it too: nobody it may claim.
     if (blockedOut(env, row, pubkey, now)) return json({ name, held: 'reserved' });
     if (holdsName(env, row, now)) {
-        const mine = isOwnRow(row, pubkey);
+        if (!isOwnRow(row, pubkey)) return json({ name, held: 'other', holder_key: row.node_pubkey });
         return json({
-            name, held: mine ? 'you' : 'other', ...(mine ? {} : { holder_key: row.node_pubkey }),
-            state: row.status, since: row.requested_at ?? null,
+            name, held: 'you', state: row.status, since: row.requested_at ?? null,
             ...(row.status === 'released' ? { held_until: (row.released_at || 0) + releaseCooloffS(env) } : {}),
         });
     }

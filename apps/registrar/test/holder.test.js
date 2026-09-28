@@ -40,26 +40,28 @@ test('holder: another key\'s live, paused, blocked or pending row is `other`, wi
         const [owner, asker, gated] = await Promise.all([makeKey(), makeKey(), makeKey()]);
         await liveName(w, 'riverside', owner);
         const { requested_at: since } = await w.row('riverside');
-        const theirs = (state) => ({ name: 'riverside', held: 'other', holder_key: owner.pubHex, state, since });
+        // Another community's row, in any state, says whose it is and nothing else: not its state (the admin's block
+        // or pause), not when it claimed, not when a hold ends (r4117741404).
+        const theirs = { name: 'riverside', held: 'other', holder_key: owner.pubHex };
         const mine = (state) => ({ name: 'riverside', held: 'you', state, since });
 
         const r = await w.holder(asker, { name: 'riverside' });
         assert.equal(r.status, 200, JSON.stringify(r.body));
-        assert.deepEqual(r.body, theirs('live'));
+        assert.deepEqual(r.body, theirs);
         assert.deepEqual((await w.holder(owner, { name: 'riverside' })).body, mine('live'), 'the owner hears its own name, and no key');
 
         // Paused, for every reason a pause has: the name is still its key's.
         assert.equal((await w.admin('riverside', 'pause')).body.status, 'paused');
         for (const reason of ['admin', 'impostor', 'unverified', 'incident-2026-09-24']) {
             await w.backdate('riverside', { pause_reason: reason });
-            assert.deepEqual((await w.holder(asker, { name: 'riverside' })).body, theirs('paused'), reason);
+            assert.deepEqual((await w.holder(asker, { name: 'riverside' })).body, theirs, reason);
             assert.deepEqual((await w.holder(owner, { name: 'riverside' })).body, mine('paused'), reason);
         }
         await w.backdate('riverside', { pause_reason: 'admin' });
 
         // Blocked: held, never free.
         assert.equal((await w.admin('riverside', 'block')).body.status, 'blocked');
-        assert.deepEqual((await w.holder(asker, { name: 'riverside' })).body, theirs('blocked'));
+        assert.deepEqual((await w.holder(asker, { name: 'riverside' })).body, theirs);
         assert.deepEqual((await w.holder(owner, { name: 'riverside' })).body, mine('blocked'));
 
         // Pending: a gated claim waiting for the admin already keeps the name from other keys (their claim is 409).
@@ -67,7 +69,7 @@ test('holder: another key\'s live, paused, blocked or pending row is `other`, wi
         const pending = await w.row('sydney');
         assert.equal((await w.claim(asker, { name: 'sydney' })).status, 409);
         assert.deepEqual((await w.holder(asker, { name: 'sydney' })).body,
-            { name: 'sydney', held: 'other', holder_key: gated.pubHex, state: 'pending', since: pending.requested_at });
+            { name: 'sydney', held: 'other', holder_key: gated.pubHex });
         assert.deepEqual((await w.holder(gated, { name: 'sydney' })).body,
             { name: 'sydney', held: 'you', state: 'pending', since: pending.requested_at });
 
@@ -94,7 +96,7 @@ test('holder: a released name is its key\'s through the hold; past it, abandoned
         assert.deepEqual((await w.holder(owner, { name: 'lakeside' })).body,
             { name: 'lakeside', held: 'you', state: 'released', since: row.requested_at, held_until: heldUntil });
         assert.deepEqual((await w.holder(asker, { name: 'lakeside' })).body,
-            { name: 'lakeside', held: 'other', holder_key: owner.pubHex, state: 'released', since: row.requested_at, held_until: heldUntil });
+            { name: 'lakeside', held: 'other', holder_key: owner.pubHex });
 
         // One minute short of 30 days, still held.
         await w.backdate('lakeside', { released_at: nowS() - COOLOFF + 60 });
@@ -142,7 +144,7 @@ test('holder: a policy-blocked name nobody holds is `reserved`; a row on one sti
         const { requested_at: since } = await w.row('hilltop');
         w.sqlite.prepare("INSERT INTO name_policy (pattern, tier) VALUES ('hilltop', 'blocked')").run();
         assert.deepEqual((await w.holder(owner, { name: 'hilltop' })).body, { name: 'hilltop', held: 'you', state: 'live', since });
-        assert.deepEqual((await w.holder(asker, { name: 'hilltop' })).body, { name: 'hilltop', held: 'other', holder_key: owner.pubHex, state: 'live', since });
+        assert.deepEqual((await w.holder(asker, { name: 'hilltop' })).body, { name: 'hilltop', held: 'other', holder_key: owner.pubHex });
 
         // Once nobody holds it, policy decides: reserved, to its old key too.
         await w.release(owner, { name: 'hilltop' });
@@ -269,7 +271,7 @@ test('D-C: the admin\'s release holds the name 30 days — another key can\'t cl
         assert.deepEqual(grab.body, { error: 'name taken', owner: 'other' });
         assert.equal((await w.row('meadow')).node_pubkey, owner.pubHex);
         assert.deepEqual((await w.holder(other, { name: 'meadow' })).body,
-            { name: 'meadow', held: 'other', holder_key: owner.pubHex, state: 'released', since: first.requested_at, held_until: row.released_at + COOLOFF });
+            { name: 'meadow', held: 'other', holder_key: owner.pubHex });
         assert.equal((await w.holder(owner, { name: 'meadow' })).body.held, 'you');
         // Its node hears the hold, as it does after its own release.
         const st = await w.status(owner);
@@ -418,9 +420,7 @@ async function nobodyMayClaim(w, name, blocked, other) {
     assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'nothing routed');
     // Who holds it: to the blocked key, nobody it may claim; to anyone else, the key of the row that holds it.
     assert.deepEqual((await w.holder(blocked, { name })).body, { name, held: 'reserved' });
-    const theirs = (await w.holder(other, { name })).body;
-    assert.equal(theirs.held, 'other');
-    assert.equal(theirs.holder_key, blocked.pubHex);
+    assert.deepEqual((await w.holder(other, { name })).body, { name, held: 'other', holder_key: blocked.pubHex });
 }
 
 test('a blocked name released without "free now" is held 30 days from EVERY key, the blocked one included; then it is free', async () => {

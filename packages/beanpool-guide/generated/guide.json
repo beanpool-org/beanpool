@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 68,
-  "hash": "aaf12ccc1e913aa8f75e33f655406653d00c88fa271b56133b53487b0f91269a",
+  "version": 70,
+  "hash": "ca85d27d076cf022530bf8398dc9c795ce816c71138cd5896b28aca1178d95c5",
   "sections": [
     {
       "id": "about",
@@ -564,7 +564,7 @@
             "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
             "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
-            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Only people who were already there on the day the lead was last active take part: members who joined the group by that day, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
+            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
             "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
         },
@@ -2925,7 +2925,7 @@
         },
         {
           "type": "p",
-          "text": "Who votes is the group's **other convenors** — or its **members**, if the lead is its only convenor. Any of them can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead."
+          "text": "Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead."
         },
         {
           "type": "p",

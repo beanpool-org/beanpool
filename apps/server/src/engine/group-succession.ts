@@ -9,9 +9,9 @@
 //
 //  - The subject: the group's lead convenor. (A group with no lead at all — no active convenor — has nobody to
 //    replace.)
-//  - The electorate: the group's OTHER active convenors, or its active members (role 'member') when the lead is
-//    its only convenor. Whoever they are, they propose, stand and vote; observers watch, and the silent lead has
-//    no vote on their own replacement. Proposing yourself is fine.
+//  - The electorate: the group's OTHER active convenors, or its active members (role 'member') when none of those
+//    convenors qualifies (next point). Whoever they are, they propose, stand and vote; observers watch, and the
+//    silent lead has no vote on their own replacement. Proposing yourself is fine.
 //  - Only people who were there before the lead went quiet (Marty, 2026-09-28, on every node): a member counts
 //    only if their membership began by the end of the UTC day of the lead's last activity, and a convenor only if
 //    they became one by then. Anyone who joined, or was made a convenor, after that has no part in the vote — they
@@ -30,9 +30,9 @@
 //  - The lead coming back — any signed activity on the node after the proposal opened — cancels it.
 //  - Passing makes the candidate a convenor and the group's lead. The silent lead keeps the convenor role when
 //    the other convenors were the ones who voted — they lost the lead, not the role, exactly as an enterprise
-//    lead keeper does. When the MEMBERS voted, because the lead was the group's only convenor, the silent lead
-//    becomes an ordinary member: a group that has just voted its only convenor out cannot be left with them
-//    still holding convenor powers.
+//    lead keeper does. When the MEMBERS voted, because no fellow convenor from before the silence was left, the
+//    silent lead becomes an ordinary member: a group whose members have just voted its lead out cannot be left
+//    with them still holding convenor powers.
 //
 // Every step writes a line into the group's chat. Ballots are secret, as for Decisions (answer I): members see
 // the totals and their own vote, never who voted how.
@@ -63,8 +63,8 @@ export interface ConvenorSilence {
     /** Silent AND somebody is left who may vote — only then can a proposal open. */
     isEligible: boolean;
     /**
-     * Who votes: the lead's fellow convenors, or the group's members when the lead is its only convenor (or its only
-     * one appointed before the lead went quiet).
+     * Who votes: the lead's other convenors, or the group's members when none of the other convenors was made a
+     * convenor by the day the lead was last active (`votersJoinedBy`).
      */
     electorate: 'convenors' | 'members';
     /**
@@ -194,11 +194,23 @@ export function successionElectorate(groupId: string, leadPubkey?: string | null
     return electorateOf(groupId, lead).voters;
 }
 
-/** "members who joined by 3 Sep 2026": who the electorate is, in the words the refusals and the chat use. */
+/**
+ * "members who were in the group by 3 Sep 2026": who the electorate is, in the words the refusals and the chat use,
+ * as the apps' own lines put it. "Members" is the role: an observer has no vote.
+ */
 function electorateWords(e: Electorate): string {
-    if (!e.joinedBy) return e.kind === 'convenors' ? 'convenors appointed before the lead went quiet' : 'members who joined before the lead went quiet';
-    const by = dayText(e.joinedBy);
-    return e.kind === 'convenors' ? `convenors appointed by ${by}` : `members who joined by ${by}`;
+    const by = e.joinedBy ? dayText(e.joinedBy) : 'the day the lead was last active';
+    return e.kind === 'convenors' ? `convenors appointed by ${by}` : `members who were in the group by ${by}`;
+}
+
+/**
+ * "; convenors appointed after 3 Sep 2026 can't": why a convenor has no part in the members' vote, which "members who
+ * were in the group by" does not tell one who was. Every convenor but the lead was appointed after the day (had one
+ * been appointed by then, the convenors would be voting). Nothing for the convenors' vote, whose words already say it.
+ */
+function lateConvenorsWords(e: Electorate, cannot: string): string {
+    if (e.kind === 'convenors') return '';
+    return `; convenors appointed after ${e.joinedBy ? dayText(e.joinedBy) : 'that day'} ${cannot}`;
 }
 
 /**
@@ -278,7 +290,7 @@ function settle(cb: MessagingCallbacks, prop: any, final: boolean, nowIso: strin
         // back after the lead went quiet — or the proposal is older than the rule that only people who were there
         // before the silence take part, which applies to every proposal at every count.
         if (!isActiveInGroup(prop.group_id, prop.candidate_pubkey)) { closeProposal(cb, prop, 'candidate_gone'); return 'candidate_gone'; }
-        closeProposal(cb, prop, 'candidate_ineligible', `${REASON_TEXT.candidate_ineligible}: only ${electorateWords(elect)} can be`);
+        closeProposal(cb, prop, 'candidate_ineligible', `${REASON_TEXT.candidate_ineligible}: only ${electorateWords(elect)} can be${lateConvenorsWords(elect, "can't")}`);
         return 'candidate_ineligible';
     }
 
@@ -288,9 +300,9 @@ function settle(cb: MessagingCallbacks, prop: any, final: boolean, nowIso: strin
     const fails = final ? yes <= no : no >= yes + outstanding;
     if (passes) {
         // The outgoing lead keeps the convenor role when their fellow convenors voted — they lost the lead, not
-        // the role (the enterprise rule: "old lead becomes ordinary keeper"). When the MEMBERS voted, the lead
-        // was the group's only convenor and the group has just voted them out of running it: they become an
-        // ordinary member, as they did before the lead convenor existed.
+        // the role (the enterprise rule: "old lead becomes ordinary keeper"). When the MEMBERS voted, no fellow
+        // convenor from before the silence was left and the group has just voted the lead out of running it: they
+        // become an ordinary member, as they did before the lead convenor existed.
         const votedByConvenors = elect.kind === 'convenors';
         db.transaction(() => {
             // role_since moves only with the role (packages/beanpool-engine groups.ts setMemberRole).
@@ -391,23 +403,23 @@ export function proposeGroupConvenor(
     const silence = getConvenorSilence(groupId);
     if (!silence.convenorPubkey) throw new Error('Only a group with a lead convenor can choose a new one this way');
     if (!silence.isSilent) throw new Error('The convenor has been active on the node within the last 30 days');
-    // Convenors when the lead has fellow convenors, members when the lead is the group's only convenor — in both
-    // cases only those who were there by the end of the lead's last active day. Both the proposer and the candidate
+    // Convenors when the lead has fellow convenors appointed by the end of the lead's last active day, members when
+    // none was — in both cases only those who were there by then. Both the proposer and the candidate
     // come from that set, so the error says which one it is, and says when someone is in the group but came too late.
     const elect = electorateOf(groupId, silence.convenorPubkey);
-    if (!silence.isEligible) throw new Error(`Nobody else in this group can vote on its lead convenor: only ${electorateWords(elect)} can, and there are none`);
+    if (!silence.isEligible) throw new Error(`Nobody else in this group can vote on its lead convenor: only ${electorateWords(elect)} can, and there are none${lateConvenorsWords(elect, "can't")}`);
     const electorate = elect.voters;
     const voterWord = elect.kind === 'convenors' ? 'convenor' : 'member';
     const cameLate = (pk: string) => cameTooLate(groupId, silence.convenorPubkey!, elect, pk);
     if (!electorate.includes(proposerPubkey)) {
         throw new Error(cameLate(proposerPubkey)
-            ? `Only ${electorateWords(elect)} can propose a new lead convenor`
+            ? `Only ${electorateWords(elect)} can propose a new lead convenor${lateConvenorsWords(elect, "can't")}`
             : `Only an active ${voterWord} of this group may propose a convenor`);
     }
     if (candidatePubkey === silence.convenorPubkey) throw new Error('The candidate cannot be the current convenor');
     if (!electorate.includes(candidatePubkey)) {
         throw new Error(cameLate(candidatePubkey)
-            ? `The candidate must be one of the ${electorateWords(elect)}`
+            ? `The candidate must be one of the ${electorateWords(elect)}${lateConvenorsWords(elect, "can't be chosen")}`
             : `The candidate must be an active ${voterWord} of this group`);
     }
 
@@ -433,11 +445,12 @@ export function proposeGroupConvenor(
     const who = proposerPubkey === candidatePubkey
         ? `${callsignOf(proposerPubkey)} offered to be lead convenor`
         : `${callsignOf(proposerPubkey)} proposed ${callsignOf(candidatePubkey)} as lead convenor`;
-    // "The other convenors appointed by 3 Sep 2026" or "Members who joined by 3 Sep 2026": who votes, as the rule has it.
+    // "The other convenors appointed by 3 Sep 2026 have 14 days to vote." or "Members who were in the group by 3 Sep
+    // 2026 have 14 days to vote; convenors appointed after 3 Sep 2026 have no vote.": who votes, as the rule has it.
     const whoVotes = electorateWords(elect);
     postGroupSystemLine(cb, groupId, GroupSystemType.CONVENOR_VOTE_OPENED,
         `${who}, because ${callsignOf(silence.convenorPubkey)} has not been active for 30 days. `
-        + `${elect.kind === 'convenors' ? `The other ${whoVotes}` : whoVotes.charAt(0).toUpperCase() + whoVotes.slice(1)} have 14 days to vote.`,
+        + `${elect.kind === 'convenors' ? `The other ${whoVotes}` : whoVotes.charAt(0).toUpperCase() + whoVotes.slice(1)} have 14 days to vote${lateConvenorsWords(elect, 'have no vote')}.`,
         { proposalId: id, candidatePubkey, proposerPubkey, deadlineAt, electorate: silence.electorate });
 
     const row = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;
@@ -480,7 +493,7 @@ export function voteGroupConvenor(
     const elect = electorateOf(prop.group_id, prop.convenor_pubkey);
     if (!elect.voters.includes(voterPubkey)) {
         throw new Error(cameTooLate(prop.group_id, prop.convenor_pubkey, elect, voterPubkey)
-            ? `Only ${electorateWords(elect)} can vote on a new lead convenor`
+            ? `Only ${electorateWords(elect)} can vote on a new lead convenor${lateConvenorsWords(elect, "can't")}`
             : 'Only an active member of this group may vote on its convenor');
     }
     if (db.prepare('SELECT 1 FROM group_convenor_votes WHERE proposal_id = ? AND voter_pubkey = ?').get(proposalId, voterPubkey)) {

@@ -15,6 +15,7 @@ import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
+import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import { colors, palette } from '../constants/colors';
 
@@ -207,6 +208,7 @@ export default function NodeMismatchScreen() {
                             <View style={styles.wipeWrap}>
                                 {words ? (
                                     <>
+                                        <NoScreenCapture />
                                         <Text style={styles.wipeTitle}>Write these 12 words down first</Text>
                                         <Text style={styles.wipeBody}>
                                             They are the only way back into this account, apart from a linked
@@ -217,6 +219,7 @@ export default function NodeMismatchScreen() {
                                                 <Text key={`${w}-${i}`} style={styles.word}>{i + 1}. {w}</Text>
                                             ))}
                                         </View>
+                                        <NoScreenLockNote style={[styles.wipeBody, { marginTop: 8 }]} />
                                     </>
                                 ) : (
                                     <>

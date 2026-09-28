@@ -29,6 +29,20 @@ export async function isLocalAuthEnrolled(): Promise<boolean> {
 }
 
 /**
+ * True only when the phone says it has no screen lock at all: no PIN, pattern, password, fingerprint or face
+ * (getEnrolledLevelAsync is NONE; isEnrolledAsync above answers for fingerprints and faces only). A phone that can't
+ * say, or the web, answers false. For one plain line under the 12 words (words-on-screen.ts), never for a gate.
+ */
+export async function phoneHasNoScreenLock(): Promise<boolean> {
+    if (isWeb) return false;
+    try {
+        return (await LocalAuthentication.getEnrolledLevelAsync()) === LocalAuthentication.SecurityLevel.NONE;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Authenticates the user using biometric authentication (Face ID / Touch ID)
  * with a fallback to the device passcode, PIN, or pattern.
  * 

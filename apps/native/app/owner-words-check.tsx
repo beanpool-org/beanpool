@@ -27,6 +27,7 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { hasMnemonic } from '../utils/identity';
+import { NoScreenCapture } from '../components/WordsOnScreen';
 import {
     OWNER_WORDS_COPY as COPY, OWNER_WORDS_INITIAL, checkMyWords, forgetOwnerWordsStatus, ownerWordsFindThem,
     ownerWordsReducer, saveCheckedWords, sendOwnerWordsAttestation, shouldOfferSaveWords, typedWordCount,
@@ -96,6 +97,8 @@ export default function OwnerWordsCheckScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+            {/* The box shows the words as they are typed. */}
+            <NoScreenCapture />
             <View style={styles.header}>
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.heading} />

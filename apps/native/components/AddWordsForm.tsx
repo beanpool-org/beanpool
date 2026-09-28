@@ -11,6 +11,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, Vi
 import * as Clipboard from 'expo-clipboard';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { addMnemonicToIdentity, type BeanPoolIdentity } from '../utils/identity';
+import { NoScreenCapture } from './WordsOnScreen';
 import {
     ADD_WORDS_COPY,
     applyWordBoxChange,
@@ -70,6 +71,8 @@ export function AddWordsForm({
 
     return (
         <View style={styles.wrap}>
+            {/* The boxes show the words as they are typed. */}
+            <NoScreenCapture />
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
                 {ADD_WORDS_COPY.title}
             </Text>

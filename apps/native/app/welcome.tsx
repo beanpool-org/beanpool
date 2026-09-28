@@ -32,6 +32,8 @@ import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/b
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
+import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
+import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
@@ -1324,7 +1326,7 @@ export default function WelcomeScreen() {
     async function handleCopyOutgoingSeed() {
         const words = outgoingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
@@ -1407,7 +1409,7 @@ export default function WelcomeScreen() {
         // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
         const words = pendingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -1684,8 +1686,10 @@ export default function WelcomeScreen() {
                             </Pressable>
                         ) : (
                         <>
+                        {/* No screenshots while the words are here (a screenshot is the copy most easily found by someone else). */}
+                        <NoScreenCapture />
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            💡 Take a screenshot or write them down somewhere safe.
+                            💡 Write them down on paper and keep it somewhere safe.
                         </Text>
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
@@ -1724,9 +1728,11 @@ export default function WelcomeScreen() {
                             )}
                         </View>
 
-                        {/* Copy to clipboard */}
+                        <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
+
+                        {/* Copy to clipboard: cleared from it a minute later (utils/words-clipboard.ts) */}
                         <Pressable
-                            style={[styles.secondaryBtn, { marginBottom: 12 }]}
+                            style={[styles.secondaryBtn, { marginBottom: 8 }]}
                             onPress={handleCopySeed}
                             accessibilityRole="button"
                         >
@@ -1734,6 +1740,7 @@ export default function WelcomeScreen() {
                                 {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
                             </Text>
                         </Pressable>
+                        <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.
@@ -2444,6 +2451,7 @@ export default function WelcomeScreen() {
                                         </Pressable>
                                     ) : (
                                         <>
+                                            <NoScreenCapture />
                                             <View style={styles.seedGrid}>
                                                 {outgoingWords?.map((word, i) => (
                                                     <View key={i} style={styles.seedCell}>
@@ -2459,9 +2467,11 @@ export default function WelcomeScreen() {
                                             >
                                                 <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? '✅ Copied!' : '📋 Copy All Words'}</Text>
                                             </Pressable>
+                                            <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 8 }]} />
                                             <Text style={styles.fieldHint}>
-                                                Write these 12 words down somewhere safe — they bring {outCallsign} back on any phone.
+                                                Write these 12 words down on paper and keep it somewhere safe. They bring {outCallsign} back on any phone.
                                             </Text>
+                                            <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0 }]} />
                                         </>
                                     )}
                                 </>
@@ -2523,6 +2533,8 @@ export default function WelcomeScreen() {
                 >
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
+                        {/* The boxes show the words as they are typed. */}
+                        <NoScreenCapture />
                         <Text style={styles.title}>🔑 Recover Identity</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <Text style={[styles.subtitle, { flex: 1, marginBottom: 0 }]}>Enter your 12 recovery words.</Text>

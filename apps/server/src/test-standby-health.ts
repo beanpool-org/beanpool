@@ -22,7 +22,9 @@
  *     one force-resync asked for, and the incident with one push. That resync is held to the ledger (not a seed): a forged
  *     payload that makes Beans is refused, and the real copy after it lands and is exact, which ends the incident. Planted
  *     again at once: recorded, and no second force-resync inside the limit; the incident opens again without a push (it
- *     flaps: the last one ended less than an hour ago) and the banner says what didn't match.
+ *     flaps: the last one ended less than an hour ago) and the banner says what didn't match. Then a whole copy the main
+ *     server sends without its hashes (as it does when written to while making one): recorded as not compared in full, it
+ *     is no all-clear (review 4118340714): the incident stays open, and the preview still warns and names the older exact copy.
  *  5. The report can't be forged into anything: too long, not JSON, a field out of shape, sent with the admin password
  *     instead of the replication token, or with a wrong token: ignored. A well-formed one with the token from a second
  *     standby is kept (so the refusals aren't vacuous), and an owner stops watching it.
@@ -166,6 +168,13 @@ async function child(): Promise<void> {
             payload.generatedAt = new Date().toISOString();
             return signSyncPayload(payload);
         },
+        /** M's own whole copy as its route sends one it was written to while making (routes/backup.ts): signed, no table hashes. */
+        'copy-without-hashes': async () => {
+            const { exportSyncState } = await import('./state-engine.js');
+            const { getPrivateKey } = await import('./p2p.js');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            return exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+        },
         /** The main server's watch (services/standby-health.ts), or null on a server without one. */
         health: async () => {
             const m = await optional(() => import('./services/standby-health.js'));
@@ -298,6 +307,8 @@ async function mainServerDoor(initialTarget: string): Promise<MainServerDoor> {
 }
 
 const brief = (v: unknown) => JSON.stringify(v)?.slice(0, 240);
+/** A time as the servers' words give it (services/standby-report.ts timeInWords). */
+const inWords = (ms: number | null | undefined) => (typeof ms === 'number' ? new Date(ms).toISOString().replace('T', ' ').replace(/:\d\d\.\d{3}Z$/, ' UTC') : 'never');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const kinds = (q: { items: { kind: string }[] } | undefined) => (q?.items ?? []).map((i) => i.kind);
 
@@ -516,6 +527,28 @@ async function main(): Promise<void> {
         const stale = await standby.send('preview-words', { offsetMs: 2 * HOUR });
         assert(stale?.lines.some((l: string) => /^Its last copy of the main server was at .* UTC: anything that changed there after that is not here\.$/.test(l)),
             `two hours on, it says its last copy is old: ${brief(stale?.lines)}`);
+
+        // The review's case (4118340714): a whole copy M sends without its table hashes, as its route does when it was
+        // written to while making it. S's copy is still wrong (a whole copy doesn't rewrite a row whose stamp hasn't moved,
+        // so the planted contact stays), and a check that can't see a table's content is no all-clear.
+        const openBefore = (await main.send('health'))?.state.incident;
+        const recBefore = await standby.send('record');
+        door.next({ status: 200, body: await main.send('copy-without-hashes') });
+        const unhashed = await pull(true);
+        rec = await standby.send('record');
+        assert(unhashed.ok && unhashed.whole && rec?.lastUncompared?.notCompared?.includes('content') === true
+            && rec.lastWhole?.at === recBefore?.lastWhole?.at && rec.lastWhole?.exact === false && rec.lastExactAt === recBefore?.lastExactAt,
+            `a whole copy without M's hashes lands and is recorded as not compared in full: the last verdict (members differed) and the last exact copy's time stay (${brief({ uncompared: rec?.lastUncompared, exact: rec?.lastWhole?.exact, exactAt: rec?.lastExactAt })})`);
+        await pull();
+        health = await main.send('health');
+        assert(openBefore && health?.state.incident?.id === openBefore.id && health.state.incident.problems.some((p: any) => p.kind === 'inexact'),
+            `S's next report is no all-clear: M's "inexact" incident stays open (${brief(health?.state.incident?.problems)})`);
+        words = await standby.send('preview-words', {});
+        assert(words?.warning === true
+            && words.lines.some((l: string) => /^This server's last whole copy of the main server that could be compared with it, at .* UTC, did not match it: members differed\.$/.test(l))
+            && words.lines.some((l: string) => l === `Last exact copy of the main server: ${inWords(recBefore?.lastExactAt)}.`)
+            && words.lines.some((l: string) => /^Its last whole copy of the main server, at .* UTC, could not be compared with it in full: the main server was changing while it made that copy/.test(l)),
+            `the preview still warns, names the older exact copy, and says the last whole copy could not be compared in full: ${brief(words?.lines)}`);
 
         // ── 5. The report can't be forged into anything ──
         console.log('\n— 5. a report that is not one —');

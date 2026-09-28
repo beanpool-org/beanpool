@@ -56,7 +56,7 @@ import { takeRecoverySealFullPull } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
 import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
-import { noteCopyFailed, noteCopyLanded, noteWholeCopyCheck, standbyReport, whyOf } from './standby-copy-record.js';
+import { noteCopyFailed, noteCopyLanded, noteUncomparedCheck, noteWholeCopyCheck, standbyReport, whyOf } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
 
@@ -450,8 +450,12 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
     // The ledger's line in what differed: an account whose balance differs, one only one side holds, one this server can't
     // store, or (with every account alike) a copy that names one twice.
     if ((c.ledger && !c.ledger.match) || (!c.ok && differs.size === 0)) differs.add(LEDGER_DIFFERS.ledger);
-    const exact = c.ok && differs.size === 0;
-    if (!exact) {
+    // A verdict only from a check that compared everything. A copy the main server sent without its hashes (one written to
+    // while it was being made) can't show a table's content differing, so finding nothing is no "exact": it neither ends
+    // nor starts anything the last verdict says, and the last exact copy's time stays the older one (review 4118340714).
+    const verdict: 'exact' | 'inexact' | 'uncompared' = differs.size > 0 ? 'inexact' : contents ? 'exact' : 'uncompared';
+    const exact = verdict === 'exact';
+    if (differs.size > 0) {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
         for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
@@ -463,10 +467,16 @@ export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
         ledgerResyncDue = true;
         lastLedgerResyncAt = now;
     }
-    recordQuietly(() => noteWholeCopyCheck({
-        at: now, exact, differs: [...differs].sort(), ledgerDiffering: c.ledger?.differing ?? 0, hashed: !!contents,
-        snapshotGeneratedAt: c.snapshotGeneratedAt,
-    }));
+    if (verdict === 'uncompared') {
+        logger.info('P2P', '[Backup] This whole copy came without the main server\'s table hashes (it was written to while it was being made): '
+            + 'its counts and its ledger match; no verdict on its content.');
+        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared: ['content'], snapshotGeneratedAt: c.snapshotGeneratedAt }));
+    } else {
+        recordQuietly(() => noteWholeCopyCheck({
+            at: now, exact, differs: [...differs].sort(), ledgerDiffering: c.ledger?.differing ?? 0, hashed: !!contents,
+            snapshotGeneratedAt: c.snapshotGeneratedAt,
+        }));
+    }
     if (wrong && !(c.ledger && !c.ledger.match)) {
         logger.warn('P2P', `[Backup] This standby's copy is not its main server's after a whole copy (${[...differs].join(', ')}). `
             + (resync ? 'Taking a force-resync next.' : `No force-resync before ${new Date(lastLedgerResyncAt + LEDGER_RESYNC_EVERY_MS).toISOString()}.`));

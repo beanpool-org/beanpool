@@ -724,7 +724,12 @@ export function AncestryTreePanel({
                 id="admin-members-tree"
                 className="max-h-[640px] overflow-y-auto border border-nature-800 rounded-xl p-3 bg-black/40 space-y-1"
             >
-                {genesisRoots.length === 0 ? (
+                {nodeDataLoading && members.length === 0 ? (
+                    <div className="p-8 text-center text-nature-400 text-xs font-mono flex items-center justify-center gap-2">
+                        <span className="animate-spin">🔄</span>
+                        <span>Loading lineage ancestry tree...</span>
+                    </div>
+                ) : genesisRoots.length === 0 ? (
                     <div className="p-8 text-center text-nature-500 text-xs font-mono">
                         No members found in directory
                     </div>

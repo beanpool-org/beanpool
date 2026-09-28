@@ -96,6 +96,9 @@ async function main() {
             'A2-14: amount≤0 txn counted as conflictsSkipped, not inserted');
         const zero = db.prepare(`SELECT 1 FROM transactions WHERE id='zero-tx'`).get();
         assert(!zero, 'A2-14: the invalid txn did not land in the DB');
+        // A standby only for that import: A2-18 is the main server's send route. A standby refuses every send before it
+        // looks at the recipient (409 standby, config/node-role.ts; test-standby-ledger-copy step 17).
+        setNodeRole('primary');
 
         // A2-18 — public transfer to a synthetic recipient is rejected.
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');

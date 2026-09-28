@@ -8,7 +8,7 @@ import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { getNodeRole } from '../config/node-role.js';
+import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1744,6 +1744,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
     assertMoneyMayMove?.();
+    // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
+    assertLedgerWritable();
 
     let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) {
@@ -1843,6 +1845,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
 }
 
 export function deleteCrowdfundProject(projectId: string, requesterPubkey: string) {
+    // It refunds the backers from the project's escrow (raw SQL below): never on a standby (config/node-role.ts).
+    assertLedgerWritable();
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");

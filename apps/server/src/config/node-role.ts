@@ -29,3 +29,37 @@ export function setNodeRole(role: NodeRole): void {
     nodeRole = role;
     console.log(`[Topology] NODE_ROLE set to '${role}'`);
 }
+
+/** The code a standby's refusal carries, as the escrow write-off's does (engine/escrow-write-off.ts). */
+export const STANDBY_CODE = 'standby';
+export const STANDBY_LEDGER_MESSAGE = 'This server is a standby copy of the community, not its main server. Beans move only on the main server, '
+    + 'and this copy picks the change up with its next sync.';
+
+/** A Bean move asked of a standby: 409 `standby`, the escrow write-off's status and code. */
+export class StandbyLedgerError extends Error {
+    readonly code = STANDBY_CODE;
+    readonly status = 409;
+    readonly statusCode = 409;
+    constructor(message: string = STANDBY_LEDGER_MESSAGE) {
+        super(message);
+        this.name = 'StandbyLedgerError';
+    }
+}
+
+/**
+ * A standby makes no Bean move of its own (director, 2026-09-28): its ledger is its main server's rows, verbatim, and its
+ * import is their only writer (design §4.1). Members use the main server. So every path that would write a balance or a
+ * trade here throws StandbyLedgerError first, before anything is written: the ledger primitives (state-engine.ts
+ * transfer, moveToCommons, payFromCommons, settleDemurrage, and conservingTransaction before it opens, which covers
+ * every composed move: trades and escrow steps, settlements, prunes, a member's own delete, Decisions, wind-ups), every
+ * step of a trade (state-engine.ts requestPost to resolveEscrowDispute), the raw writers of the pot and of demurrage
+ * (engine/audit.ts), and the crowdfund pledge and refunds (db.ts). The routes that move Beans or step a trade answer the
+ * same refusal before their handler runs (routes/standby-ledger-gate.ts).
+ *
+ * Not refused: a zero-balance row that comes with a member's or an enterprise's own row (a join, a visitor, a treasury, a
+ * project, a bridge). It moves no Bean and records no trade, and the next copy, which carries the main server's account
+ * set exactly, drops it.
+ */
+export function assertLedgerWritable(): void {
+    if (getNodeRole() === 'backup') throw new StandbyLedgerError();
+}

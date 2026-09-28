@@ -35,7 +35,10 @@
  *     least 6 of them (a holder that hides its key);
  *   - a counting round is R-other(K), plus this server's own attest verified, plus one of those three. Any other round
  *     counts for nothing; and this server's key answering at the name, or the registrar saying `you`, `free` or
- *     `reserved`, or naming a different key, starts the evidence again from nothing;
+ *     `reserved`, or naming a different key, starts the evidence again from nothing, as does a claim or a status that
+ *     brought a lost name back;
+ *   - a round during which something wrote the name on the record (a claim, Settings' status check, the agent) counts
+ *     for nothing and marks nothing lost, whatever the rule above says: what it heard may be older than that write;
  *   - lost, own release (decision D-B): this node released the name itself (Take offline), 30 days have passed (or a
  *     longer hold it recorded), no claim took it back, and the registrar's latest answer is `free` or `other`;
  *   - never: on the registrar's word alone; on silence; while this server's own key answers at the name; for a name the
@@ -139,13 +142,15 @@ export interface NameWatch {
     selfOk: boolean | null;
     /** The evidence being gathered, or null. */
     streak: Streak | null;
+    /** The name carried a `lost` mark when the last round ended: if it has none now, a claim or a status cleared it. */
+    marked: boolean;
     /** The state last logged, so each change is logged once. */
     logged: string | null;
 }
 
 const blank = (): NameWatch => ({
     checkedAt: null, registrar: null, registrarAt: null, holderKey: null, state: null, heldUntil: null, old: false,
-    edge: null, edgeAt: null, ownAt: null, selfOk: null, streak: null, logged: null,
+    edge: null, edgeAt: null, ownAt: null, selfOk: null, streak: null, marked: false, logged: null,
 });
 
 // ── The evidence row ────────────────────────────────────────────────────────────────────────
@@ -169,7 +174,8 @@ function watchOf(raw: unknown): NameWatch {
         checkedAt: num(r.checkedAt), registrar, registrarAt: num(r.registrarAt), holderKey: str(r.holderKey, KEY_RE),
         state: str(r.state, WORD_RE), heldUntil: num(r.heldUntil), old: r.old === true,
         edge: EDGE_WORDS.includes(r.edge) ? r.edge : null, edgeAt: num(r.edgeAt), ownAt: num(r.ownAt),
-        selfOk: typeof r.selfOk === 'boolean' ? r.selfOk : null, streak, logged: typeof r.logged === 'string' ? r.logged.slice(0, 40) : null,
+        selfOk: typeof r.selfOk === 'boolean' ? r.selfOk : null, streak, marked: r.marked === true,
+        logged: typeof r.logged === 'string' ? r.logged.slice(0, 40) : null,
     };
 }
 
@@ -352,14 +358,21 @@ export function ownReleaseEndsAt(entry: RegistrarName): number {
     return Math.max(released + OWN_RELEASE_HOLD_MS, Number.isFinite(held) ? held : 0);
 }
 
+/** A recorded name as the record holds it, but for `since` (registrarNames() stamps a name it adds from the stored address now). */
+const entryMark = (e: RegistrarName): string => JSON.stringify({ ...e, since: null });
+
 /**
  * One round's outcome: the evidence as it now stands, and the `lost` mark to write (undefined: unchanged). Pure: the
- * whole rule is here.
+ * whole rule is here. `entry` is the name as the record holds it now; `asked`, as it held it when the round's asks
+ * began. When they differ, something wrote the name while the round was asking (a claim, Settings' status check, the
+ * agent's answer), and what the round heard may be older than that: the round counts for nothing and marks nothing
+ * lost. It can still bring a name back.
  */
-export function decide(entry: RegistrarName, prev: NameWatch, holder: HolderAnswer, selfOk: boolean | null, edge: EdgeSeen | null, now: number):
-    { watch: NameWatch; lost: RegistrarNameLost | null | undefined; counted: boolean } {
+export function decide(entry: RegistrarName, prev: NameWatch, holder: HolderAnswer, selfOk: boolean | null, edge: EdgeSeen | null, now: number,
+    asked: RegistrarName = entry): { watch: NameWatch; lost: RegistrarNameLost | null | undefined; counted: boolean } {
     const w: NameWatch = { ...prev, checkedAt: now, streak: prev.streak ? { ...prev.streak } : null };
     let lost: RegistrarNameLost | null | undefined;
+    const moved = entryMark(asked) !== entryMark(entry);
 
     w.old = holder.held === 'old';
     if (holder.held === 'you' || holder.held === 'other' || holder.held === 'free' || holder.held === 'reserved') {
@@ -376,14 +389,15 @@ export function decide(entry: RegistrarName, prev: NameWatch, holder: HolderAnsw
         if (edge === 'own') w.ownAt = now;
     }
 
-    // The evidence starts again from nothing.
+    // The evidence starts again from nothing. A mark that is gone since the last round was cleared by a claim or a
+    // status giving the name to this key (engine/registrar-names.ts): what was gathered before that says nothing now.
     if (edge === 'own' || holder.held === 'you' || holder.held === 'free' || holder.held === 'reserved'
-        || (holder.held === 'other' && w.streak && w.streak.key !== holder.key)) w.streak = null;
+        || (holder.held === 'other' && w.streak && w.streak.key !== holder.key) || (prev.marked && !entry.lost)) w.streak = null;
 
     // Back: the registrar gives it to this key, or this server's key answers there (a proof mark only).
     if (entry.lost && (holder.held === 'you' || (edge === 'own' && entry.lost.why === 'another-key'))) lost = null;
 
-    const counted = holder.held === 'other' && selfOk === true && (edge === 'holder' || edge === 'foreign' || edge === 'other-origin');
+    const counted = !moved && holder.held === 'other' && selfOk === true && (edge === 'holder' || edge === 'foreign' || edge === 'other-origin');
     if (counted) {
         const s = (w.streak ??= { key: holder.key, since: now, rounds: 0, matchFirst: null, matchLast: null });
         s.rounds++;
@@ -398,10 +412,11 @@ export function decide(entry: RegistrarName, prev: NameWatch, holder: HolderAnsw
 
     // This node's own release, once the hold is over and the registrar no longer holds it for this key.
     const ends = ownReleaseEndsAt(entry);
-    if (!entry.lost && lost === undefined && Number.isFinite(ends) && now >= ends && !w.old
+    if (!moved && !entry.lost && lost === undefined && Number.isFinite(ends) && now >= ends && !w.old
         && (w.registrar === 'free' || w.registrar === 'other')) {
         lost = { since: iso(now), why: 'released', holderKey: w.registrar === 'other' ? w.holderKey : null };
     }
+    w.marked = !!(lost === undefined ? entry.lost : lost);
     return { watch: w, lost, counted };
 }
 
@@ -490,12 +505,13 @@ async function runRound(host: string, opts: { now?: number; loopbackOrigin?: str
         edge = await askAtName(host, ours, holder.held === 'other' ? holder.key : null);
     }
 
-    // From here on, nothing awaits: the record and the evidence are read, decided on and written as one step.
+    // From here on, nothing awaits: the record and the evidence are read, decided on and written as one step. A claim
+    // or a status that wrote the name while the round was asking (`first` no longer matches) makes it count for nothing.
     const names = registrarNames();
     const entry = names.find((e) => e.address === host);
     if (!entry) return { host, skipped: 'no longer recorded' };
     const all = readWatches();
-    const d = decide(entry, all[host] ?? blank(), holder, selfOk, edge, now);
+    const d = decide(entry, all[host] ?? blank(), holder, selfOk, edge, now, first);
     const lostNow = d.lost === undefined ? entry.lost : d.lost;
     const standing = standingOf(lostNow, d.watch);
     if (standing !== (d.watch.logged ?? 'held')) {

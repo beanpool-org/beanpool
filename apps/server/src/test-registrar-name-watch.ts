@@ -45,7 +45,9 @@
  * 14. race is lost; a round starts, K's answer at the name taking 1.5 s, and 0.7 s in the admin claims race back: accepted
  *     on every request, during the round and after it (07535a17: 421 once the round ends). A claim, or a status holding the
  *     name, that brings it back between rounds starts the evidence again: 10 more minutes of K before it is lost again
- *     (07535a17: lost on the next round).
+ *     (07535a17: lost on the next round). Any write to a name while a round is asking makes that round count for
+ *     nothing: race2's round that would complete the 10 minutes, while Settings' status check says race2 is live →
+ *     still 200 (07535a17: 421).
  * Node Q (its only name is its registrar name):
  * 15. a status that doesn't hold the name, newer than the registrar's last `you`: asked about every 5 minutes again
  *     (07535a17: 6 hours). The registrar naming K, with nothing answering at the name, for 48 h: never dropped. After a
@@ -844,6 +846,27 @@ async function main(): Promise<void> {
                 `the next round, the registrar naming K and K answering: not lost at once (${JSON.stringify(afterStatus[0])}; 07535a17: lost)`);
             const at53 = await rounds(P, 'race', [T0 + 53 * MIN]);
             assert(at53[0]?.lost?.why === 'another-key', `10 minutes on: lost (${JSON.stringify(at53[0])})`);
+
+            // Any write to the name while a round is asking, not only one that clears a mark: race2 is revoked, the
+            // registrar names K and K answers; the round that would complete the 10 minutes is still asking when Settings'
+            // status check says race2 is this key's, live.
+            assert((await claim(pBase, pAdmin, 'race2')).status === 200, 'P claims race2');
+            reg.status = { status: 'revoked', name: 'race2', hostname: host('race2') };
+            await statusOpen(pBase, pAdmin);
+            other('race2');
+            edgeKey('race2');
+            const r2 = await rounds(P, 'race2', [T0]);
+            assert(r2[0]?.counted === true && !r2[0]?.lost, `race2: a first counting round (${JSON.stringify(r2[0])})`);
+            edge.modes.set(host('race2'), { kind: 'key', seed: K.seed, pk: K.pk, delayMs: 1500 });
+            let done2 = false;
+            const inFlight2 = rounds(P, 'race2', [T0 + 10 * MIN]).finally(() => { done2 = true; });
+            await sleep(700);
+            reg.status = { status: 'live', name: 'race2', hostname: host('race2'), mode: 'tunnel', tunnelToken: 'T-shared' };
+            const live = await statusOpen(pBase, pAdmin);
+            assert(live.status === 200 && live.body?.status === 'live' && !done2, `0.7 s in, Settings' status check says race2 is live (${show(live)}; the round still asking: ${!done2})`);
+            const r2b = await inFlight2;
+            assert(r2b[0]?.counted === false && !r2b[0]?.lost && (await statusOf(P, host('race2'))) === 200,
+                `the round that was asking counts for nothing and doesn't drop it: 200 (${JSON.stringify(r2b[0])}; 07535a17: lost, 421)`);
         });
 
         // ── 15 ──

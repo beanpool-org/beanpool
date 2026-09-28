@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -135,6 +135,7 @@ interface Route {
 }
 
 interface WireDeletion {
+    id: string;
     pk: string;
     sub: string;
     day: string;
@@ -304,7 +305,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             try {
                 const d = await call<{ deletions: string }>('openBackupDeletions', {}, await store.get(name), 300_000);
                 for (const w of JSON.parse(d.deletions) as WireDeletion[]) {
-                    const rec: DeletionRow = { pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
+                    const rec: DeletionRow = { copy_id: w.id, pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
                     if (!restored.hasDeletion(rec)) restored.applyDeletion(rec);
                 }
             } catch {
@@ -711,6 +712,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch (e) {
             throw new HttpError(400, 'bad_backup', (e as Error).message);
         }
+        mkdirSync(opts.dataDir, { recursive: true, mode: 0o700 });
         writeFileSync(`${pendingPath}.part`, bytes, { mode: 0o600 });
         try {
             await call('adoptState', { custodian: ctx.key, sig: ctx.body.sig, backupName: name, state: header.state });
@@ -745,7 +747,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 const existing = new Set(await store.list());
                 let name = backupNameFor(now);
                 for (let i = 1; existing.has(name); i++) name = backupNameFor(now).replace('.bin', `-${i}.bin`);
-                const deletions = JSON.stringify(database.allDeletions().map(d => ({ pk: vaultB64(d.pk_index), sub: vaultB64(d.sub_index), day: d.day })));
+                const deletions = JSON.stringify(database.allDeletions().map(d => ({ id: d.copy_id, pk: vaultB64(d.pk_index), sub: vaultB64(d.sub_index), day: d.day })));
                 // No transaction is open (writes hold this lock, and node:sqlite is synchronous), and the journal is
                 // truncated at every commit: the file is the database as of its last commit.
                 const snapshot = readFileSync(database.file);

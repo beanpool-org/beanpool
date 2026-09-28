@@ -41,7 +41,13 @@ export interface HoldRow {
     released_at: number | null;
 }
 
+/**
+ * A deletion record (§1.7): `{pk_index, sub_index, day}`, plus the random id of the copy that went. The id is what
+ * makes a record name one copy: a member who disconnects, connects again and disconnects on the same day leaves two
+ * records, and a restore applies each to the copy it was for and to no later one.
+ */
 export interface DeletionRow {
+    copy_id: string;
     pk_index: Uint8Array;
     sub_index: Uint8Array;
     day: string;
@@ -68,10 +74,10 @@ CREATE TABLE IF NOT EXISTS holds (
 );
 CREATE INDEX IF NOT EXISTS holds_copy_id ON holds (copy_id);
 CREATE TABLE IF NOT EXISTS deletions (
+    copy_id TEXT PRIMARY KEY,
     pk_index BLOB NOT NULL,
     sub_index BLOB NOT NULL,
-    day TEXT NOT NULL,
-    UNIQUE (sub_index, pk_index, day)
+    day TEXT NOT NULL
 );
 `;
 
@@ -145,7 +151,7 @@ export class VaultDb {
     deleteCopy(row: CopyRow, day: string): void {
         this.db.prepare('DELETE FROM holds WHERE copy_id = ?').run(row.id);
         this.db.prepare('DELETE FROM copies WHERE id = ?').run(row.id);
-        this.db.prepare('INSERT OR IGNORE INTO deletions (pk_index, sub_index, day) VALUES (?, ?, ?)').run(row.pk_index, row.sub_index, day);
+        this.db.prepare('INSERT OR IGNORE INTO deletions (copy_id, pk_index, sub_index, day) VALUES (?, ?, ?, ?)').run(row.id, row.pk_index, row.sub_index, day);
     }
 
     // ─── holds ─────────────────────────────────────────────────────────────────────────────
@@ -191,21 +197,24 @@ export class VaultDb {
     // ─── deletion records ──────────────────────────────────────────────────────────────────
 
     allDeletions(): DeletionRow[] {
-        return this.db.prepare('SELECT * FROM deletions ORDER BY day, sub_index').all() as unknown as DeletionRow[];
+        return this.db.prepare('SELECT * FROM deletions ORDER BY day, copy_id').all() as unknown as DeletionRow[];
     }
 
-    hasDeletion(d: DeletionRow): boolean {
-        return !!this.db.prepare('SELECT 1 FROM deletions WHERE sub_index = ? AND pk_index = ? AND day = ?').get(d.sub_index, d.pk_index, d.day);
+    hasDeletion(d: Pick<DeletionRow, 'copy_id'>): boolean {
+        return !!this.db.prepare('SELECT 1 FROM deletions WHERE copy_id = ?').get(d.copy_id);
     }
 
-    /** Apply a deletion recorded in a newer backup: the copy for that sign-in account goes, and the record is kept. */
+    /**
+     * Apply a deletion recorded in a newer backup: the copy it names goes (a later copy for the same sign-in account,
+     * which it doesn't name, stays), and the record is kept.
+     */
     applyDeletion(d: DeletionRow): boolean {
-        const row = this.copyBySub(d.sub_index);
+        const row = this.copyById(d.copy_id);
         if (row) {
             this.db.prepare('DELETE FROM holds WHERE copy_id = ?').run(row.id);
             this.db.prepare('DELETE FROM copies WHERE id = ?').run(row.id);
         }
-        this.db.prepare('INSERT OR IGNORE INTO deletions (pk_index, sub_index, day) VALUES (?, ?, ?)').run(d.pk_index, d.sub_index, d.day);
+        this.db.prepare('INSERT OR IGNORE INTO deletions (copy_id, pk_index, sub_index, day) VALUES (?, ?, ?, ?)').run(d.copy_id, d.pk_index, d.sub_index, d.day);
         return !!row;
     }
 

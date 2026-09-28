@@ -150,6 +150,7 @@ export async function startVault(opts: {
     clock?: Clock;
     custodians?: CustodianKey[];
     storeDir?: string;
+    trustProxy?: boolean;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -162,7 +163,10 @@ export async function startVault(opts: {
     const makeKeyholder = () => new Keyholder({ stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0 });
     let kh = makeKeyholder();
     let server: KeyholderServer = await listenKeyholder(kh, socketPath);
-    const api = createVaultApi({ dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store: new LocalDirectoryStore(storeDir), fetch: stub.fetch, clock: clock.now });
+    const api = createVaultApi({
+        dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store: new LocalDirectoryStore(storeDir), fetch: stub.fetch, clock: clock.now,
+        trustProxy: opts.trustProxy,
+    });
     const port = await api.listen(0, '127.0.0.1');
     const baseUrl = `http://127.0.0.1:${port}`;
     return {
@@ -186,12 +190,12 @@ export async function startVault(opts: {
 
 // ─── Talking to the vault ────────────────────────────────────────────────────────────────────
 
-export async function signed(v: VaultUnderTest, p: string, body: unknown, seed: Uint8Array): Promise<Reply> {
+export async function signed(v: VaultUnderTest, p: string, body: unknown, seed: Uint8Array, extraHeaders: Record<string, string> = {}): Promise<Reply> {
     const url = `${v.baseUrl}${p}`;
     const text = JSON.stringify(body);
     const key = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
     const headers = await buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: key, sign: ed25519Signer(seed), timestamp: v.clock.now() });
-    const res = await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: text });
+    const res = await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', ...extraHeaders }, body: text });
     return { status: res.status, body: await res.json() as Record<string, any> };
 }
 

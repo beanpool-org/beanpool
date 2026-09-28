@@ -1814,14 +1814,15 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             // come back (a re-join is stamped after the tombstone and passes).
             if (remote.groupMembers) {
                 const importGroupMember = db.prepare(`INSERT INTO group_members
-                    (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at, role_since)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
                         role = excluded.role,
                         status = excluded.status,
                         joined_at = excluded.joined_at,
                         invited_by = excluded.invited_by,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        role_since = excluded.role_since
                     WHERE excluded.updated_at IS NOT NULL
                       AND (group_members.updated_at IS NULL OR excluded.updated_at > group_members.updated_at)`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'group_members' AND row_key = ?`);
@@ -1836,6 +1837,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     }
                     const res = importGroupMember.run(
                         gm.groupId, gm.memberPubkey, gm.role, gm.status, gm.joinedAt ?? null, gm.invitedBy ?? null, updatedAt,
+                        gm.roleSince ?? null,
                     );
                     if (res.changes > 0) groupChanges++;
                 }

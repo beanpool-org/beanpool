@@ -313,6 +313,8 @@ export interface SyncGroupMember {
     joinedAt: string | null;
     invitedBy: string | null;
     updatedAt: string;
+    /** When the row took its role (group_members.role_since). Absent from a node older than the column. */
+    roleSince?: string | null;
 }
 
 /**
@@ -1009,6 +1011,7 @@ export function exportSyncState(
             joinedAt: r.joined_at ?? null,
             invitedBy: r.invited_by ?? null,
             updatedAt: r.updated_at || r.joined_at,
+            roleSince: r.role_since ?? null,
         }));
     } catch {
         // Tables absent on older schema/fixtures

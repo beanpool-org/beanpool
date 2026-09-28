@@ -98,3 +98,6 @@ scripts/federation/fed-state.json
 
 # Jules agent runtime cache — local session state, never shared
 .jules/cache/
+
+# Wrangler's local state (any app): its cache names the Cloudflare account, with an email in the account name.
+.wrangler/

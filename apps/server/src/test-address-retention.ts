@@ -24,11 +24,13 @@
  *     key is in the same file; the live database keeps its fresh address and its hashes; nothing is left beside the
  *     file. A snapshot made before this version (a plain copy, addresses in it), downloaded as a backup: the backup's
  *     database holds none, in its bytes either.
- *  6b. Copies already on disk from before this version: a snapshot holding addresses of any age, hashes and an old
- *     log line, the same database as a fleet harvester's latest and daily copies of a server, a clean snapshot, and a
- *     twin a crash left. The boot run takes every address out of each (bytes too), keeps each file's name, mode and
- *     mtime (so the snapshot list and its rotation are unchanged), removes the twin, and leaves the clean one unread
- *     and unwritten; a second boot rewrites nothing.
+ *  6b. Copies already on disk from before this version: a snapshot holding addresses of any age, hashes and main's log
+ *     at its 2,500-line cap (1 line in 10 names an address, IPv4 or IPv6, as main wrote them), the same database as a
+ *     fleet harvester's latest and daily copies of a server, a clean snapshot, and a twin a crash left. The boot run
+ *     takes every address out of each (bytes too: a page's gap keeps none), keeps each file's name, mode and mtime (so
+ *     the snapshot list and its rotation are unchanged) and every log line, removes the twin, and leaves the clean one
+ *     unread and unwritten; a second boot rewrites nothing. The same old snapshot downloaded as a readable backup and
+ *     as a locked one (opened with the recovery code): neither backup's database holds an address, in its bytes either.
  *  7. The daily hash: the same address, the same tag all day; another address, another tag; the next day, another tag.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-address-retention.ts
@@ -76,9 +78,11 @@ const { gatewayAdmit, resetGatewayRateLimit } = await import('./gateway-rate-lim
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
 const { getStandbyHealthBanner } = await import('./services/standby-health.js');
-const { noteEnvelopeFetch, getEnvelopeHolders } = await import('./services/takeover-envelope.js');
+const { noteEnvelopeFetch, getEnvelopeHolders, makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
-const { createPlainBackup } = await import('./services/sealed-backup.js');
+const { createPlainBackup, createSealedBackup } = await import('./services/sealed-backup.js');
+const { ensureGenesis } = await import('./genesis.js');
+const { openEnvelope } = await import('@beanpool/core');
 const { logger } = await import('./logger.js');
 const { db } = await import('./db/db.js');
 // This change's own modules: absent on a build from before it, where the checks that need them fail instead of crashing.
@@ -413,9 +417,27 @@ async function main() {
         const access = JSON.parse((plant.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value);
         access.recent.push({ at: Date.now() - 60 * DAY, ip: '198.51.100.61', auth: 'rejected', reason: 'no credentials' });
         plant.prepare("UPDATE node_config SET value = ? WHERE key = 'replication_access'").run(JSON.stringify(access));
-        plant.prepare("INSERT INTO system_logs (level, category, message) VALUES ('SECURITY', 'AUTH', ?)")
-            .run('[password-brake] 6 wrong admin passwords from 198.51.100.62; that address now backs off');
+        // Its log as main's is: at the cap (2,500 lines, logger.ts), about 1 line in 10 naming an address the way main
+        // wrote the brake's line and the gateway's. That many rows make the log's b-tree grow a level while a copy of
+        // this file is built, and the page that turns interior keeps its old rows in its gap unless the copy is made
+        // with secure_delete on: SQL shows none there, `strings` does (#1289's review, inline 4126055254).
+        plant.prepare('DELETE FROM system_logs').run();
+        const logLine = plant.prepare('INSERT INTO system_logs (level, category, message, metadata) VALUES (?, ?, ?, ?)');
+        plant.transaction(() => {
+            for (let i = 0; i < 2499; i++) {
+                const n = i % 250;
+                if (i % 30 === 0) logLine.run('SECURITY', 'AUTH', `[password-brake] 6 wrong admin passwords from 198.51.100.${n}; that address now backs off`, null);
+                else if (i % 30 === 10) logLine.run('WARN', 'AUTH', `[gateway] rate limit reached for ip:203.0.113.${n}; answering 429 until the window resets`, null);
+                else if (i % 30 === 20) logLine.run('WARN', 'AUTH', `[gateway] rate limit reached for ip:2001:db8:15::${i.toString(16)}; answering 429 until the window resets`, null);
+                else logLine.run('INFO', 'P2P', `[Sync] pulled ${i % 37} posts and ${i % 11} offers from a peer in ${100 + (i % 900)} ms`, null);
+            }
+            logLine.run('SECURITY', 'AUTH', '[password-brake] 6 wrong admin passwords from 198.51.100.62; that address now backs off', null);
+        })();
+        const plantedLines = (plant.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;
         plant.close();
+        // The same snapshot, to download as a backup (below): outside snapshots/, so the boot run leaves it as it is.
+        const toDownload = path.join(snapDir, 'old-version-full.db');
+        fs.copyFileSync(planted, toDownload);
         // The same database as a fleet harvester holds a server's: the latest, and one day of its history.
         const heldLatest = path.join(DATA_DIR!, 'backups', 'node-a', 'state.db');
         const heldDay = path.join(DATA_DIR!, 'backups', 'node-a', 'history', 'beanpool-2026-09-20.db');
@@ -442,9 +464,10 @@ async function main() {
             const left = [...addressesIn(bytes), ...[signupHash, knockHash].filter((h) => bytes.includes(h))];
             const conn = new Database(f, { readonly: true });
             const entries = (conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
+            const lines = (conn.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;
             conn.close();
-            assert(left.length === 0 && entries.includes('"auth":"token"'),
-                `6b. the boot run took every address and hash out of ${path.relative(DATA_DIR!, f)}, file bytes included, and kept its entries (${left.join(', ') || 'none'})`);
+            assert(left.length === 0 && entries.includes('"auth":"token"') && lines === plantedLines,
+                `6b. the boot run took every address and hash out of ${path.relative(DATA_DIR!, f)}, file bytes included, and kept its entries and its ${lines}/${plantedLines} log lines (${left.join(', ') || 'none'})`);
             const was = statsBefore.get(f)!, now = fs.statSync(f);
             assert(Math.abs(now.mtimeMs - was.mtimeMs) < 1 && (now.mode & 0o777) === 0o640,
                 `6b. …and it keeps its mtime and mode (${new Date(now.mtimeMs).toISOString()} vs ${new Date(was.mtimeMs).toISOString()}, ${(now.mode & 0o777).toString(8)})`);
@@ -462,6 +485,44 @@ async function main() {
         const inodes = kept.map((f) => fs.statSync(f).ino);
         const again = await retention?.startForgettingOldAddresses();
         assert(again === 0 && kept.every((f, i) => fs.statSync(f).ino === inodes[i]), `6b. the next boot rewrites none of them (${again})`);
+
+        // The same old snapshot downloaded before the boot run reached it, as a readable backup and as a locked one:
+        // each backup's database holds no address and no hash, in its bytes either, and keeps its entries and lines.
+        assert(addressesIn(bytesOf(toDownload)).includes('198.51.100.62'), '6b. (the snapshot downloaded holds addresses)');
+        const drain = async (body: NodeJS.ReadableStream) => {
+            const parts: Buffer[] = [];
+            for await (const c of body) parts.push(Buffer.from(c as Uint8Array));
+            return Buffer.concat(parts);
+        };
+        const unpackDb = (tarBytes: Uint8Array, tag: string) => {
+            const dir = fs.mkdtempSync(path.join(snapDir, `${tag}-`));
+            const tar = path.join(dir, 'backup.tar.gz');
+            fs.writeFileSync(tar, tarBytes);
+            execFileSync('tar', ['-xzf', tar, '-C', dir]);
+            return path.join(dir, 'state.db');
+        };
+        const downloadImages = path.join(snapDir, 'old-version-full.db.images');
+        fs.mkdirSync(downloadImages);
+        const readable = await createPlainBackup({ dbFile: toDownload, imagesDir: downloadImages });
+        let readableBytes: Buffer;
+        try { readableBytes = await drain(readable.body); } finally { readable.cleanup(); }
+        await ensureGenesis();
+        const recovery = await makeRecoveryCode();
+        const locked = await createSealedBackup({ dbFile: toDownload, imagesDir: downloadImages });
+        let lockedBytes: Buffer;
+        try { lockedBytes = await drain(locked.body); } finally { locked.cleanup(); }
+        const opened = await openEnvelope(new Uint8Array(lockedBytes), { type: 'code', code: recovery.code }, { kind: 'backup' });
+        for (const [how, file] of [['readable', unpackDb(readableBytes, 'readable')], ['locked', unpackDb(opened.payload, 'locked')]] as const) {
+            const bytes = bytesOf(file);
+            const left = [...addressesIn(bytes), ...[signupHash, knockHash].filter((h) => bytes.includes(h))];
+            const conn = new Database(file, { readonly: true });
+            const entries = (conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
+            const lines = (conn.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;
+            const sqlLeft = addressesIn(entries + (conn.prepare(`SELECT group_concat(message || ' ' || COALESCE(metadata, ''), '\n') AS t FROM system_logs`).get() as { t: string }).t).length + addressHashes(conn).length;
+            conn.close();
+            assert(sqlLeft === 0 && left.length === 0 && entries.includes('"auth":"token"') && lines === plantedLines,
+                `6b. the old snapshot downloaded as a ${how} backup: its database holds no address or hash, file bytes included, and keeps its entries and ${lines}/${plantedLines} log lines (${left.join(', ') || 'none'}; ${sqlLeft} through SQL)`);
+        }
 
         // ── 7. The daily hash (last: a new day's key replaces today's) ──
         say('\n— 7. the daily hash —');

@@ -24,8 +24,9 @@
  *     back. A copy also loses the sign-up and knock limiters' address hashes (`open_joins.ip_hash`,
  *     `join_requests.ip_hash`): their key, `openJoinSalt`, is in the same file, so a hash there gives back the address
  *     to anyone who tries all of IPv4. And it loses every address in its log lines. Nothing is left in the file's free
- *     space or beside it: the copy is a VACUUM INTO (no free space comes along), cleaned with its freed bytes zeroed
- *     and its journal in memory, and renamed into place only then;
+ *     space or beside it: the copy is a VACUUM INTO (no free space comes along) made with secure_delete on (no page
+ *     it builds keeps an old row in its gap), cleaned with its freed bytes zeroed and its journal in memory, and
+ *     renamed into place only then;
  *   - in the copies this server already keeps, made before this version (their addresses are of any age: main never
  *     expired them): the boot run scrubs each snapshot, and each readable backup a fleet harvester holds, in the
  *     background (`forgetAddressesInStoredCopies`). Each keeps its name, mode and times, so the snapshot list and
@@ -165,8 +166,8 @@ function holdsAddresses(conn: Database.Database): boolean {
 
 /**
  * Every address out of a copy of the database, in place, whatever its age: the three rows', the limiters' address
- * hashes and any in a log line. What it frees is zeroed, but free space the file already had is not touched: make the
- * copy with `copyWithoutAddresses`, which starts from a VACUUM INTO (no free space). True when it is done. Never
+ * hashes and any in a log line. What it frees is zeroed, but free space the file already had (free pages, a page's gap)
+ * is not touched: make the copy with `copyWithoutAddresses`, whose VACUUM INTO leaves none. True when it is done. Never
  * throws: a copy is a recovery point, and one that failed here still holds only what this server keeps anyway (7 days
  * at most, a day for a hash), which a server restored from it clears at its first boot. So it is kept, and the log
  * says so.
@@ -211,11 +212,25 @@ export function forgetAddressesInLogs(): number {
 export const ADDRESS_SCRUB_SUFFIX = '.forgetting-addresses.tmp';
 
 /**
+ * `into`, a VACUUM INTO, run on `conn` with secure_delete on. The copy it writes takes `conn`'s setting (an attached
+ * database does), and it counts while the copy's tables are built: a page that turns interior as a table grows keeps,
+ * with it off, the rows it held in its gap, addresses and all, where SQL never looks (#1289's review found three in a
+ * copy of a snapshot with main's 2,500-line log). A new connection has it off; the live database's has it on (db/db.ts),
+ * and keeps it.
+ */
+function vacuumIntoZeroed(conn: Database.Database, into: string): void {
+    const was = Number(conn.pragma('secure_delete', { simple: true })) || 0;
+    conn.pragma('secure_delete = ON');
+    try { conn.exec(into); } finally { if (was !== 1) conn.pragma(`secure_delete = ${was}`); }
+}
+
+/**
  * Write `dest`, a copy of the database `from` (the live connection, or a database file) with no internet address in it.
  * VACUUM INTO first: it writes only live rows, so nothing in `from`'s free space comes along, and it is a consistent
- * copy of a database in use. Then `forgetAddressesInCopy`. All of it as a twin beside `dest`, renamed over `dest` at
- * the end, so `dest` is never half a copy, and never one still being cleaned (`from` may be `dest` itself: it is read
- * whole before the rename). Throws when the copy cannot be made, and leaves nothing behind then. A copy made but not
+ * copy of a database in use; made with secure_delete on (`vacuumIntoZeroed`), no page of it keeps an old row in its
+ * gap either. Then `forgetAddressesInCopy`. All of it as a twin beside `dest`, renamed over `dest` at the end, so
+ * `dest` is never half a copy, and never one still being cleaned (`from` may be `dest` itself: it is read whole
+ * before the rename). Throws when the copy cannot be made, and leaves nothing behind then. A copy made but not
  * cleaned is kept all the same (a recovery point): the result is false, and the log has said why.
  */
 export function copyWithoutAddresses(from: Database.Database | string, dest: string): boolean {
@@ -225,9 +240,9 @@ export function copyWithoutAddresses(from: Database.Database | string, dest: str
         const into = `VACUUM INTO '${twin.replace(/'/g, "''")}'`;
         if (typeof from === 'string') {
             const source = new Database(from, { readonly: true, fileMustExist: true });
-            try { source.exec(into); } finally { source.close(); }
+            try { vacuumIntoZeroed(source, into); } finally { source.close(); }
         } else {
-            from.exec(into);
+            vacuumIntoZeroed(from, into);
         }
         const cleaned = forgetAddressesInCopy(twin);
         fs.renameSync(twin, dest);
@@ -270,11 +285,12 @@ function storedCopies(root: string): { copies: string[]; leftovers: string[] } {
  * Every address out of a copy that already exists: a snapshot on disk, a backup packed from one, a backup a fleet
  * harvester receives. A copy that holds none (read through SQL) is only read, never written: a snapshot is rewritten
  * once, not at every boot, and a harvester keeps a clean backup byte for byte. That read is enough: every copy an
- * older version made is a VACUUM INTO, which has no free space, so an address in one is in a row. One that holds any
- * is rewritten by `copyWithoutAddresses` (a crash part-way leaves the old file whole) and gets back its mode and
- * times: a snapshot is dated, and rotated, by its mtime (listSnapshots). Synchronous from the first read to the
- * rename, so nothing else in this process (the snapshot rotation, the harvester) can touch the file in between. Never
- * throws. True if it was rewritten without its addresses.
+ * older version made is a VACUUM INTO, which has no free pages and writes only the rows it copies, so whatever a page's
+ * gap in one holds (made before db/db.ts turned secure_delete on) is one of its rows too, and an address anywhere in
+ * its bytes is also in a row. One that holds any is rewritten by `copyWithoutAddresses` (a crash part-way leaves the
+ * old file whole) and gets back its mode and times: a snapshot is dated, and rotated, by its mtime (listSnapshots).
+ * Synchronous from the first read to the rename, so nothing else in this process (the snapshot rotation, the
+ * harvester) can touch the file in between. Never throws. True if it was rewritten without its addresses.
  */
 export function forgetAddressesInStoredCopy(file: string): boolean {
     let before: fs.Stats;

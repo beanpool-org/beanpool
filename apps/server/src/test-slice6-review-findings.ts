@@ -404,7 +404,10 @@ async function main() {
         const cancelPlan = (db.prepare(
             "EXPLAIN QUERY PLAN UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'"
         ).all(lead.pub) as any[]).map(r => r.detail).join(' | ');
-        assert(/USING INDEX idx_succession_lead_active/.test(cancelPlan), `the cancel update uses it too (plan: ${cancelPlan})`);
+        // A search by the index, never a scan. SQLite reports it as a COVERING one when the table has an AFTER UPDATE trigger
+        // (its plain-table watermark, db.ts stampPlainTables): the update then collects the rows' ids from the index alone.
+        assert(/^SEARCH enterprise_succession_proposals USING (COVERING )?INDEX idx_succession_lead_active\b/.test(cancelPlan) && !/\bSCAN\b/.test(cancelPlan),
+            `the cancel update uses it too (plan: ${cancelPlan})`);
     }
 
     // ── 9. Thread rows reach the delta backup ─────────────────────────────────────────────────

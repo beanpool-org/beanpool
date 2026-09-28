@@ -1225,7 +1225,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/node/config', 'GET /api/local/admin/onboarding-funnel', 'POST /api/local/admin/onboarding-funnel',
             'POST /api/local/admin/posts/:id/delete', 'POST /api/local/admin/posts/:id/restore', 'POST /api/local/admin/posts/bulk-delete',
             'POST /api/local/admin/public-address/claim', 'GET /api/local/admin/public-address/logs', 'POST /api/local/admin/public-address/offline',
-            'POST /api/local/admin/public-address/restart-sidecar', 'GET /api/local/admin/public-address/status',
+            'POST /api/local/admin/public-address/restart-tunnel', 'GET /api/local/admin/public-address/status',
             'POST /api/local/admin/public-address/update', 'GET /api/local/admin/pulse/channels', 'POST /api/local/admin/pulse/channels',
             'POST /api/local/admin/pulse/channels/remove', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-config/get',
             'POST /api/local/admin/replication-config/save', 'POST /api/local/admin/replication-resync', 'POST /api/local/admin/replication-token/clear',

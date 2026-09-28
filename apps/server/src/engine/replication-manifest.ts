@@ -30,9 +30,9 @@ export interface ColumnException {
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear> } & Carried
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear> } & Carried
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
@@ -70,6 +70,22 @@ export const WHOLE_SET = 'whole set';
 
 /** Column names, from a space-separated list. */
 const cols = (names: string): string[] => names.trim().split(/\s+/);
+
+/**
+ * The SyncPayload key of the plain tables (`plain: true`, design G3 and §4.2): one generic path carries each, under its
+ * own name. The main server exports its rows `SELECT *` by the watermark, in the watermark's order (engine sync.ts
+ * exportPlainTables; a whole copy: every row; never an `except` column); a standby writes each row as it is, the main
+ * server's stamp included, checked against its own columns and rules, and a whole copy deletes the rows it doesn't name
+ * (engine/plain-tables.ts). A standby writes none of their rows itself (config/node-role.ts assertPlainTablesWritable). The
+ * next table is one line here, its `updated_at` in schema.sql with its ALTER in db.ts (which stamps every write,
+ * stampPlainTables), and a tombstone wherever a writer deletes one of its rows.
+ */
+export const PLAIN_TABLES_PAYLOAD = 'plainTables';
+
+/** A plain table: its columns copied, verbatim, by the generic path (PLAIN_TABLES_PAYLOAD), all but the `except` ones. */
+const plain = (columns: string, except?: Record<string, ColumnException>): TableEntry => (except
+    ? { kind: 'replicated-except', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), except, plain: true }
+    : { kind: 'replicated', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), plain: true });
 
 const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
 
@@ -172,7 +188,7 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
         columns: cols('id type post_id created_by created_at'),
         except: {
-            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net)", gap: 'G1b' },
+            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
         },
     },
     conversation_participants: {
@@ -274,21 +290,42 @@ export const TABLES: Record<string, TableEntry> = {
         reason: 'a key-value store: parts travel in the sync payload, parts in the bundle, the rest is per server or lost today; each key is classified in NODE_CONFIG_KEYS',
     },
 
+    // ── In-flight money and governance, on the generic path (design G3; PLAIN_TABLES_PAYLOAD) ──
+    // A keeper's wage owed and not yet paid: paid once after a take-over, since one the main server paid arrives paid.
+    deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
+    // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
+    // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at'),
+    decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
+    // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
+    // closes is deleted, with a tombstone.
+    suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', {
+        break_glass_hash: {
+            reason: "an owner's break-glass code, hashed: the take-over bundle carries the roles sealed, and this would travel "
+                + 'unsealed in every copy. An owner a promoted server gives the role back to makes a new code',
+        },
+    }),
+    enterprise_keeper_requests: plain('id enterprise_pubkey member_pubkey pledged_backing status created_at decided_at decided_by updated_at'),
+    enterprise_keeper_changes: plain('id enterprise_pubkey kind member_pubkey request_id pledged_backing proposed_by status created_at applies_at resolved_at resolved_by reason updated_at'),
+    enterprise_succession_proposals: plain('id enterprise_pubkey lead_pubkey candidate_pubkey proposer_pubkey status created_at executed_at deadline_at closed_reason updated_at'),
+    enterprise_succession_votes: plain('proposal_id voter_pubkey voted_at choice updated_at'),
+    group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
+    group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
+    // Every invite already sent, and who used which.
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
+    // A replacement phone's code an operator issued.
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
+    // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
+    // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
+    // server that made them and on one that took over.
+    recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at owner_pubkey'),
+    // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
+    federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
+    // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
+    // its treasury again, never a member's enterprise of the same name.
+    federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
+
     // ── Not copied today, and the design says they should be ──
-    deferred_wage_claims: { kind: 'local', gap: 'G3', reason: "not in the payload: keepers' unpaid wages" },
-    decisions: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    decision_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    suspended_node_roles: { kind: 'local', gap: 'G3', reason: 'not in the payload nor the bundle: an owner parked by a Decision' },
-    enterprise_keeper_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_keeper_changes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_succession_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_succession_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    group_convenor_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    group_convenor_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    invite_codes: { kind: 'local', gap: 'G3', reason: 'not in the payload: every invite already sent fails after a take-over' },
-    rekey_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload: an unused re-key code is refused after a take-over' },
-    recovery_releases: { kind: 'local', gap: 'G3', reason: 'not in the payload: the log of which recovery fragments left the node' },
-    federation_links: { kind: 'local', gap: 'G3', reason: 'not in the payload: a promoted server would make a second link treasury per peer' },
     push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
     chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
@@ -317,6 +354,27 @@ export const TABLES: Record<string, TableEntry> = {
     invite_links: { kind: 'local', reason: 'nothing reads or writes it (the design: delete it, day zero)' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
 };
+
+/** A plain table as the generic path reads it: its name, its watermark, and the columns it never carries. */
+export interface PlainTable {
+    table: string;
+    watermark: string;
+    except: string[];
+}
+
+/** Every plain table (PLAIN_TABLES_PAYLOAD), in the manifest's order: what the export sends and the import writes. */
+export const PLAIN_TABLES: readonly PlainTable[] = Object.entries(TABLES).flatMap(([table, e]) =>
+    ((e.kind === 'replicated' || e.kind === 'replicated-except') && e.plain
+        ? [{ table, watermark: e.watermark, except: e.kind === 'replicated-except' ? Object.keys(e.except) : [] }]
+        : []));
+
+/**
+ * The two triggers that stamp a plain table's watermark on every write (db.ts stampPlainTables makes them), which a
+ * standby's import sets aside while it writes its main server's rows (engine/sync.ts IMPORT_KEEPS_STAMPS).
+ */
+export function plainTableTriggers({ table, watermark }: PlainTable): { insert: string; touch: string } {
+    return { insert: `${table}_set_${watermark}_on_insert`, touch: `${table}_touch_${watermark}` };
+}
 
 /**
  * Rows a server writes again at every boot of its own, stamped with its own clock: system-managed rows whose canonical

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 72,
-  "hash": "5bf033cd81471f645bbc7720f701cadb6c4db90a8fd59ceebe925a70e3225a91",
+  "version": 73,
+  "hash": "b559e30abb86bf9b22169f4c4c8d57500cde241b05a5efe2b42997de1649e815",
   "sections": [
     {
       "id": "about",
@@ -4477,7 +4477,7 @@
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
-            "**App Lock:** asks for your phone's passcode or fingerprint each time the app opens.",
+            "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. It needs a screen lock on the phone: without one there is nothing for it to ask.",
             "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
           ]
         },
@@ -4913,7 +4913,10 @@
             "You cannot delete while you have a deal under way. Finish or cancel it first.",
             "If you hold beans, they go to the Commons.",
             "If you are below zero, the Commons covers the debt.",
-            "Your profile becomes \"Deleted Member\", and your posts come down.",
+            "Your profile becomes \"Deleted Member\".",
+            "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
+            "Events you host are cancelled and wiped the same way. The people going can still read the event's chat until 30 days after the event.",
+            "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
             "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
             "It deletes your account only in the community you are using. Your accounts in other communities stay.",
@@ -4935,7 +4938,7 @@
         {
           "type": "ul",
           "items": [
-            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.",
+            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.",
             "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
             "If a deal of yours is still under way, the other member or an admin must close it first."
           ]

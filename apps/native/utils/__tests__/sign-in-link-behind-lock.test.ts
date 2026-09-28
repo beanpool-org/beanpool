@@ -7,8 +7,9 @@
  * account when it joins with it: the join carries a recovery copy sealed to the door's sign-in.
  *
  * - connectAndDeposit asks the lock it is handed before anything starts: no node, no provider, no read of the words.
- *   The sheet hands it Settings' check (LocalAuth.authenticateUser), so a phone with no lock is let through, as
- *   Settings lets it through. A check that doesn't pass reads as a cancel: the sheet closes, nothing linked.
+ *   The sheet hands it Settings' check (LocalAuth.authenticateUser), so a phone with no screen lock is let through, as
+ *   Settings lets it through, and one with a screen PIN but no fingerprint or face is asked for its PIN. A check that
+ *   doesn't pass reads as a cancel: the sheet closes, nothing linked.
  * - The only account that skips it is a key the join wizard has just made (the member's own new account).
  * - The global door asks the same check before its sign-in when the key is the phone's own (not one the door made).
  *
@@ -56,6 +57,8 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async () => undefined),
 }));
 vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(),
     hasHardwareAsync: vi.fn(),
     isEnrolledAsync: vi.fn(),
     authenticateAsync: vi.fn(),
@@ -96,12 +99,17 @@ const MEMBER = {
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no hardware' | 'nothing enrolled';
+type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no screen lock and no sensor'
+    | 'no screen lock and a sensor with nothing enrolled';
+/** The lock a prompt asks for: a fingerprint or face, or a screen PIN, pattern or passcode alone. */
+type Lock = 'a fingerprint or face' | 'a PIN and no sensor' | 'a PIN and a sensor with nothing enrolled';
 
 /** The phone's lock, as expo-local-authentication reports it. */
-function phone(kind: Phone) {
-    vi.mocked(LocalAuthentication.hasHardwareAsync).mockResolvedValue(kind !== 'no hardware');
-    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(kind !== 'nothing enrolled');
+function phone(kind: Phone, lock: Lock = 'a fingerprint or face') {
+    const noLock = kind === 'no screen lock and no sensor' || kind === 'no screen lock and a sensor with nothing enrolled';
+    vi.mocked(LocalAuthentication.getEnrolledLevelAsync).mockResolvedValue((noLock ? 0 : lock === 'a fingerprint or face' ? 3 : 1) as never);
+    vi.mocked(LocalAuthentication.hasHardwareAsync).mockResolvedValue(kind !== 'no screen lock and no sensor' && lock !== 'a PIN and no sensor');
+    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(!noLock && lock === 'a fingerprint or face');
     vi.mocked(LocalAuthentication.authenticateAsync).mockImplementation(async () => {
         events.push('prompt');
         if (kind === 'prompt throws') throw new Error('prompt failed');
@@ -205,7 +213,34 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         },
     );
 
-    it.each(['no hardware', 'nothing enrolled'] as const)(
+    // A screen PIN, pattern or passcode is a lock: no fingerprint or face is not "nothing to ask with".
+    it.each(['a PIN and no sensor', 'a PIN and a sensor with nothing enrolled'] as const)(
+        'a phone with %s is asked for its PIN: a cancel links nothing and reads nothing, a pass links',
+        async (lock) => {
+            phone('cancelled', lock);
+            const refused = await connect(settingsCheck);
+
+            expect((refused.error as SsoSignInError).reason).toBe('cancelled');
+            expect(events).toEqual(['prompt']);
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+            expect(getMnemonic).not.toHaveBeenCalled();
+
+            vi.clearAllMocks();
+            events.length = 0;
+            phone('passes', lock);
+            const { value, error } = await connect(settingsCheck);
+
+            expect(error).toBeUndefined();
+            expect(value?.enrolledSso).toEqual(['github']);
+            expect(events[0]).toBe('prompt');
+            expect(vi.mocked(LocalAuthentication.authenticateAsync).mock.calls[0][0]).toMatchObject({
+                promptMessage: REASON,
+                disableDeviceFallback: false,
+            });
+        },
+    );
+
+    it.each(['no screen lock and no sensor', 'no screen lock and a sensor with nothing enrolled'] as const)(
         'a phone with %s has nothing to ask with and is let through, as Settings lets it through',
         async (kind) => {
             phone(kind);

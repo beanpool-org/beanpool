@@ -9,7 +9,9 @@
  *
  * - Every screen that shows or copies an account's words reads them through readWordsBehindLock, whose check IS
  *   Settings' check (LocalAuth.authenticateUser), so it behaves the same everywhere, including on a phone with no
- *   biometric or passcode set up: let through, as Settings lets it through.
+ *   screen lock at all: let through, as Settings lets it through.
+ * - A phone with a screen PIN, pattern or passcode and no fingerprint or face (no sensor, or none enrolled) is asked
+ *   for its PIN. It used to be let through unasked, as if it had no lock.
  * - A failed, cancelled or broken check reads nothing.
  * - The replace screen reads the outgoing account's words only when Show passes the check, never as it opens.
  * - Every other way the account leaves the phone or comes off it asks the same check (the last describe lists them).
@@ -37,6 +39,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 /** What happened, in order: the phone's prompt, and every read of the words. */
 const events: string[] = [];
 vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(),
     hasHardwareAsync: vi.fn(),
     isEnrolledAsync: vi.fn(),
     authenticateAsync: vi.fn(),
@@ -66,15 +70,24 @@ const SETTINGS_REASON = 'Confirm your security to view your recovery phrase.';
 /** Imported at the test, not the top: on a tree without it, only the tests that use it fail. */
 const gate = async () => (await import('../words-behind-lock')).readWordsBehindLock;
 
-type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no hardware' | 'nothing enrolled' | 'hardware check throws';
+type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'has no screen lock and no sensor'
+    | 'has no screen lock and a sensor with nothing enrolled' | 'cannot say what lock it has';
+/** The lock a prompt asks for: a fingerprint or face, or a screen PIN, pattern or passcode alone. */
+type Lock = 'a fingerprint or face' | 'a PIN and no sensor' | 'a PIN and a sensor with nothing enrolled';
+const PIN_ONLY = ['a PIN and no sensor', 'a PIN and a sensor with nothing enrolled'] as const;
 
 /** The phone's lock, as expo-local-authentication reports it. */
-function phone(kind: Phone) {
-    vi.mocked(LocalAuthentication.hasHardwareAsync).mockImplementation(async () => {
-        if (kind === 'hardware check throws') throw new Error('no module');
-        return kind !== 'no hardware';
+function phone(kind: Phone, lock: Lock = 'a fingerprint or face') {
+    const noLock = kind === 'has no screen lock and no sensor' || kind === 'has no screen lock and a sensor with nothing enrolled';
+    vi.mocked(LocalAuthentication.getEnrolledLevelAsync).mockImplementation(async () => {
+        if (kind === 'cannot say what lock it has') throw new Error('no module');
+        return (noLock ? 0 : lock === 'a fingerprint or face' ? 3 : 1) as never;
     });
-    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(kind !== 'nothing enrolled');
+    vi.mocked(LocalAuthentication.hasHardwareAsync).mockImplementation(async () => {
+        if (kind === 'cannot say what lock it has') throw new Error('no module');
+        return kind !== 'has no screen lock and no sensor' && lock !== 'a PIN and no sensor';
+    });
+    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(!noLock && lock === 'a fingerprint or face');
     vi.mocked(LocalAuthentication.authenticateAsync).mockImplementation(async () => {
         events.push('prompt');
         if (kind === 'prompt throws') throw new Error('prompt failed');
@@ -113,8 +126,8 @@ describe('readWordsBehindLock', () => {
         expect(getMnemonic).not.toHaveBeenCalled();
     });
 
-    it.each(['no hardware', 'nothing enrolled'] as const)(
-        'a phone with %s has nothing to ask with and is let through, as Settings lets it through',
+    it.each(['has no screen lock and no sensor', 'has no screen lock and a sensor with nothing enrolled'] as const)(
+        'a phone that %s has nothing to ask with and is let through, as Settings lets it through',
         async (kind) => {
             phone(kind);
             const read = await gate();
@@ -125,14 +138,44 @@ describe('readWordsBehindLock', () => {
         },
     );
 
-    it.each(['passes', 'fails', 'cancelled', 'prompt throws', 'no hardware', 'nothing enrolled', 'hardware check throws'] as const)(
-        "gives the same answer as Settings' check (LocalAuth.authenticateUser) when the phone %s",
-        async (kind) => {
-            phone(kind);
+    // A screen PIN, pattern or passcode is a lock: no fingerprint or face is not "nothing to ask with".
+    describe.each(PIN_ONLY)('a phone with %s', (lock) => {
+        it('is asked for its PIN, and the words are read once it passes', async () => {
+            phone('passes', lock);
+            const read = await gate();
+
+            expect(await read(ACCOUNT, SETTINGS_REASON)).toEqual(WORDS);
+            expect(events).toEqual(['prompt', 'read']);
+            expect(vi.mocked(LocalAuthentication.authenticateAsync).mock.calls[0][0]).toMatchObject({
+                promptMessage: SETTINGS_REASON,
+                disableDeviceFallback: false,
+            });
+        });
+
+        it.each(['cancelled', 'fails', 'prompt throws'] as const)('a check that is %s reads nothing', async (kind) => {
+            phone(kind, lock);
+            const read = await gate();
+
+            expect(await read(ACCOUNT, SETTINGS_REASON)).toBeNull();
+            expect(events).toEqual(['prompt']);
+            expect(getMnemonic).not.toHaveBeenCalled();
+        });
+    });
+
+    it.each([
+        ...(['passes', 'fails', 'cancelled', 'prompt throws'] as const).flatMap((kind) =>
+            (['a fingerprint or face', ...PIN_ONLY] as const).map((lock) => [kind, lock] as const)),
+        ['has no screen lock and no sensor', undefined],
+        ['has no screen lock and a sensor with nothing enrolled', undefined],
+        ['cannot say what lock it has', undefined],
+    ] as const)(
+        "gives the same answer as Settings' check (LocalAuth.authenticateUser) when the phone %s (%s)",
+        async (kind, lock) => {
+            phone(kind, lock);
             const settingsLetsThrough = await authenticateUser(SETTINGS_REASON);
             vi.clearAllMocks();
             events.length = 0;
-            phone(kind);
+            phone(kind, lock);
             const read = await gate();
 
             const words = await read(ACCOUNT, SETTINGS_REASON);

@@ -58,6 +58,11 @@ const WORKSPACES = [
     path: 'packages/beanpool-engine',
   },
   {
+    // The sign-in checks the server and the key vault share. Node only (node:crypto, global fetch).
+    path: 'packages/beanpool-signin',
+    nodeOnly: true,
+  },
+  {
     path: 'apps/pwa',
   },
   {
@@ -72,6 +77,13 @@ const WORKSPACES = [
     path: 'apps/server',
     nodeOnly: true,
     testFilePattern: /(^|\/)(?:test|bench)-[^/]*$|(^|\/)__fixtures__\/|(^|\/)takeover-test-harness\.ts$/,
+  },
+  {
+    // The key vault. Not in the node's Dockerfile: its own image (V3) bundles it, and an undeclared import that only
+    // resolves here through hoisting would break that build the same way. Node only; tests may use devDependencies.
+    path: 'apps/vault',
+    nodeOnly: true,
+    testFilePattern: /(^|\/)__tests__\//,
   },
 ];
 

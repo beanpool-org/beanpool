@@ -4,22 +4,24 @@
 //   PUBLIC_ADDRESS_AUTO=1            enable (or just set PUBLIC_ADDRESS_NAME)
 //   PUBLIC_ADDRESS_NAME=cairns       desired label (defaults to a slug of the community name)
 //   PUBLIC_ADDRESS_MODE=tunnel|direct  (default tunnel)
-//   PUBLIC_ADDRESS_ORIGIN=...         what Cloudflare/cloudflared points at (default https://localhost:8443)
 //   REGISTRAR_URL=https://beanpool.org
 //
-// On boot (primary only) it claims the name via the signed registrar client, persists the result to
-// node_config, and writes the tunnel token to <data>/tunnel-token for the cloudflared sidecar to pick up.
-// Re-runs every 5 min so a 'pending' (gated) name flips to live once you approve it. See docs/node-dns-registrar.md.
+// Every 5 min on a main server it asks the registrar about this server's name and saves a live answer; the tunnel inside
+// this server (services/tunnel-connector.ts) runs whatever token that holds. That refresh runs on any main server holding a
+// tunnel address (live, or waiting for approval), however it was claimed, and never claims a name. Only with the env above does it also claim: the
+// name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved.
+// See docs/node-dns-registrar.md.
+//
+// The tunnel's destination is always this server's own loopback (LOOPBACK_ORIGIN): the tunnel runs inside the server.
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { getNodeRole, updateNodeConfig, getNodeConfig } from '../state-engine.js';
+import { getNodeRole, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { persistAddress, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
-const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-const TOKEN_FILE = path.join(DATA_DIR, 'tunnel-token'); // the cloudflared sidecar reads this
+// Where it always lived; the take-over suites import it from here.
+export { withKeptTunnelToken };
 
 const slug = (s: string | null): string => {
     const cleaned = (s || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
@@ -32,149 +34,42 @@ const desiredName = (): string =>
 
 const isEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
 
-import http from 'node:http';
-
-export async function restartSidecar(): Promise<void> {
-    if (!fs.existsSync('/var/run/docker.sock')) return;
-    try {
-        const containersJson = await new Promise<string>((resolve) => {
-            const req = http.request({
-                socketPath: '/var/run/docker.sock',
-                path: '/containers/json?all=true',
-                method: 'GET',
-            }, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => resolve(data));
-            });
-            req.on('error', () => resolve('[]'));
-            req.setTimeout(5000, () => { req.destroy(); resolve('[]'); });
-            req.end();
-        });
-
-        let target: string = process.env.CLOUDFLARED_CONTAINER_NAME || '';
-        if (!target) {
-            try {
-                const list = JSON.parse(containersJson);
-                if (Array.isArray(list)) {
-                    for (const c of list) {
-                        const names = (c.Names || []).map((n: string) => String(n));
-                        const image = String(c.Image || '');
-                        if (names.some((n: string) => n.includes('cloudflared')) || image.includes('cloudflared')) {
-                            target = c.Id || names[0]?.replace(/^\//, '') || '';
-                            if (target) break;
-                        }
-                    }
-                }
-            } catch { /* parse err */ }
-        }
-
-        if (!target) {
-            console.warn('[PublicAddr] ⚠️ Sidecar restart skipped: no cloudflared container found.');
-            return;
-        }
-
-        const result = await new Promise<{ ok: boolean; status: number; body: string }>((resolve) => {
-            const req = http.request({
-                socketPath: '/var/run/docker.sock',
-                path: `/containers/${target}/restart?t=0`,
-                method: 'POST',
-            }, (res) => {
-                let body = '';
-                res.on('data', chunk => body += chunk);
-                res.on('end', () => resolve({ ok: res.statusCode === 204 || res.statusCode === 200 || res.statusCode === 304, status: res.statusCode || 0, body }));
-            });
-            req.on('error', (e) => resolve({ ok: false, status: 0, body: e.message }));
-            req.setTimeout(15000, () => { req.destroy(); resolve({ ok: false, status: 0, body: 'timeout' }); });
-            req.end();
-        });
-
-        if (result.ok) {
-            console.log(`[PublicAddr] ✅ restarted sidecar (HTTP ${result.status})`);
-        } else {
-            console.warn(`[PublicAddr] ❌ sidecar restart failed: HTTP ${result.status} — ${result.body}`);
-        }
-    } catch (e: any) {
-        console.warn('[PublicAddr] restartSidecar error:', e.message);
-    }
-}
-
-export async function writeToken(token?: string): Promise<void> {
-    if (!token) return;
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        const trimmed = token.trim();
-        // Skip restart if token hasn't changed (reconcile runs every 5 min)
-        let existing = '';
-        try { existing = fs.readFileSync(TOKEN_FILE, 'utf-8').trim(); } catch {}
-        if (existing === trimmed) return;
-        fs.writeFileSync(TOKEN_FILE, trimmed, { mode: 0o644 });
-        try { fs.chmodSync(TOKEN_FILE, 0o644); } catch {}
-        console.log('[PublicAddr] Token changed — restarting sidecar in 5s...');
-        // Brief pause for Cloudflare edge to register the new tunnel secret
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await restartSidecar();
-    } catch (e: any) {
-        console.warn('[PublicAddr] could not write tunnel token:', e.message);
-    }
-}
-
-export async function removeToken(): Promise<void> {
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        if (fs.existsSync(TOKEN_FILE)) {
-            fs.unlinkSync(TOKEN_FILE);
-        }
-    } catch (e: any) {
-        console.warn('[PublicAddr] could not remove tunnel token:', e.message);
-    }
-}
-
 /**
- * Save the registrar's answer. The registrar leaves `tunnelToken` out of its status when its own call to Cloudflare
- * fails (apps/registrar/src/index.js), so saving the answer as it came would drop a token that still works, and
- * the take-over keys would be re-locked without it until the next good answer (967 follow-up #2). So a missing
- * token keeps the one already saved for the same name.
+ * A tunnel address saved here, live or waiting for approval: Settings' claim, this agent's, or a take-over's. A live one's
+ * token can change (the registrar re-made the tunnel); a pending one goes live when the BeanPool project approves it.
  */
-export function withKeptTunnelToken(next: any, prev: any): any {
-    if (!next || typeof next !== 'object' || (typeof next.tunnelToken === 'string' && next.tunnelToken)) return next;
-    const kept = prev && typeof prev === 'object' && typeof prev.tunnelToken === 'string' && prev.tunnelToken ? prev.tunnelToken : null;
-    const sameName = !next.name || !prev?.name || next.name === prev.name;
-    return kept && sameName ? { ...next, tunnelToken: kept } : next;
-}
-
-/**
- * Store an answer as the node's address. The record of names (engine/registrar-names.ts) is written first, so a name
- * stored until now is kept as a former one when the answer names another. `claim`: the node's own claim answered.
- */
-const persist = (pa: any, use: 'stored' | 'claim' = 'stored') => {
-    recordRegistrarAnswer(pa, use);
-    updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
+const holdsTunnelAddress = (): boolean => {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct';
 };
 
-async function reconcile(): Promise<void> {
-    const name = desiredName();
-    if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
-    const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
-    const origin = process.env.PUBLIC_ADDRESS_ORIGIN || `https://localhost:${process.env.PORT_HTTPS || 8443}`;
+/** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
+export async function reconcile(): Promise<void> {
+    if (getNodeRole() !== 'primary') return;
+    const claims = isEnabled();
+    if (!claims && !holdsTunnelAddress()) return;
 
     let st: any;
     try { st = await addressStatus(); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
 
-    if (st.status === 'live') { persist(st); writeToken(st.tunnelToken); return; }
-    if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || name}" awaiting approval`); persist(st); return; }
+    if (st.status === 'live') { await persistAddress(st); return; }
+    if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`); await persistAddress(st); return; }
 
     // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
     recordRegistrarAnswer(st, 'status');
+    // The refresh never claims: only a server told to by its env claims a name.
+    if (!claims) return;
 
-    // status 'none' → claim it
+    const name = desiredName();
+    if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
+    const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
     const contact = process.env.PUBLIC_ADDRESS_CONTACT || undefined;
     const communityName = process.env.PUBLIC_ADDRESS_COMMUNITY_NAME || getLocalConfig().communityName || undefined;
 
     try {
-        const res = await claimAddress(name, mode, origin, contact, communityName);
-        persist({ name, mode, communityName, contact, ...res }, 'claim');
-        if (res.status === 'live') { writeToken(res.tunnelToken); console.log(`[PublicAddr] 🟢 live at ${res.hostname}`); }
+        const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName);
+        await persistAddress({ name, mode, communityName, contact, ...res, ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}) }, 'claim');
+        if (res.status === 'live') console.log(`[PublicAddr] 🟢 live at ${res.hostname}`);
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
     } catch (e: any) { console.warn('[PublicAddr] claim failed:', e.message); }
 }
@@ -182,10 +77,9 @@ async function reconcile(): Promise<void> {
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function initPublicAddress(): void {
-    if (!isEnabled()) return;
     if (getNodeRole() !== 'primary') { console.log('[PublicAddr] 🔒 skipping — backup replica.'); return; }
-    console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
+    if (isEnabled()) console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
     setTimeout(() => reconcile().catch(() => {}), 20_000);      // after identity/p2p ready
     if (timer) clearInterval(timer);
-    timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep token fresh
+    timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep the token fresh
 }

@@ -67,6 +67,7 @@ import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
+import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
@@ -290,10 +291,15 @@ async function main() {
     // Step 10.2: The watch on this server's standbys (design G8): when one stops copying or copies wrongly, the community's
     // owners are told. Set on every node like the mirror: each tick reads the role.
     startStandbyHealthWatch();
+    // Step 10.4: the tunnel for <name>.beanpool.org runs inside this server (services/tunnel-connector.ts), on the token in
+    // node_config, on the main server only, and after a take-over's own tunnel step. On every server: it also deletes a
+    // leftover data/tunnel-token and warns when docker-compose.yml still mounts Docker's control socket. Never throws;
+    // not awaited, so the boot never waits on it.
+    void initTunnelConnector();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
-        // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
-        // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
+        // Step 10.5: the public-address agent. Every 5 min it refreshes a tunnel address this server holds (the tunnel
+        // above runs the answer), and with PUBLIC_ADDRESS_* set it also claims <name>.beanpool.org from the registrar.
         initPublicAddress();
     }
 

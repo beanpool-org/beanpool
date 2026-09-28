@@ -33,6 +33,7 @@ export interface AuditSyncPayload {
     invalidatedKeys?: any[];
     treasuryOperators?: unknown[];
     enterprisePledges?: unknown[];
+    plainTables?: Record<string, unknown[]>;
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -322,6 +323,12 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // Each member's preferences, which travel with their row (design G2b): holiday, notification opt-outs. Only when the
         // copy carries them.
         ...(membersCarryPreferences(payload.members) ? [['member_preferences', preferenceCount(payload.members ?? [])] as [string, number]] : []),
+        // The plain tables (in-flight money and governance, sync.ts exportPlainTables), each one the copy carries: a row
+        // the import refused or couldn't write shows here, and so does one it left behind. Only by a name that is a plain
+        // identifier; a table this database doesn't have counts 0.
+        ...Object.entries(payload.plainTables ?? {})
+            .filter(([t, rows]) => Array.isArray(rows) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t))
+            .map(([t, rows]) => [t, rows.length] as [string, number]),
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

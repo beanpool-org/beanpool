@@ -64,7 +64,7 @@ describe('reshare', () => {
         const m1 = newMember();
         const m2 = newMember();
         await deposit(v, g, m1, 'google', 'reshare-g');
-        await deposit(v, g, m2, 'github', '4040');
+        await deposit(v, g, m2, 'facebook', '10150000000004040');
         const before = await v.api.runBackup();
         expect(wrapVersions(v)).toEqual([1, 1]);
 
@@ -107,7 +107,7 @@ describe('reshare', () => {
         const opened = await present(v, c4, fresh[2]);
         expect(opened.body).toMatchObject({ state: 'open' });
         expect((await get(v, '/v1/health')).body.state).toBe('open');
-        await expectCopy(v, 'github', '4040', m2);
+        await expectCopy(v, 'facebook', '10150000000004040', m2);
 
         // Backups: the one made before the reshare still opens with the old shares; the one after only with the new.
         const oldRestore = await vault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir });
@@ -122,7 +122,7 @@ describe('reshare', () => {
         expect((await present(newRestore, c2, g.shares[1])).body).toMatchObject({ state: 'locked', error: 'wrong_m' });
         await present(newRestore, c2, fresh[1]);
         expect((await present(newRestore, c4, fresh[2])).body.state).toBe('open');
-        await expectCopy(newRestore, 'github', '4040', m2);
+        await expectCopy(newRestore, 'facebook', '10150000000004040', m2);
     });
 
     it('the first custodian may correct their proposal before anyone joins it', async () => {

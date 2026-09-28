@@ -1,7 +1,7 @@
 # @beanpool/vault — BeanPool's key vault
 
 A small server that keeps each member's locked sign-in recovery copy, and gives one back only after it has checked
-the Google, Apple, Facebook or GitHub sign-in itself. No community keeps a copy or can ask for one. The design is
+the Google, Apple or Facebook sign-in itself. No community keeps a copy or can ask for one. The design is
 `scratch/global-node/DESIGN-key-vault-opus.md` (V2 is this package; V3 builds the image and releases).
 
 ## Two programs
@@ -38,8 +38,7 @@ nobody finished is replaced by the next one. Custodians keep their old shares un
 |---|---|---|
 | `GET /v1/health` | nobody | `{state, release, since}` |
 | `POST /v1/ticket` | the member key, or a throwaway key to restore | a ticket; the provider nonce is `base64url(SHA-256(ticket))` |
-| `POST /v1/github/start`, `/poll` | the ticket's key | GitHub's device flow, run by the vault |
-| `POST /v1/copies` | the member key | a deposit: `{ticket, provider, idToken \| proof, box}` |
+| `POST /v1/copies` | the member key | a deposit: `{ticket, provider, idToken, box}` |
 | `POST /v1/copies/status`, `/delete`, `/v1/push-token` | the member key | connected sign-ins and open holds; disconnect; this device's push token |
 | `POST /v1/restore`, `/v1/restore/collect` | the throwaway key | every restore is held 24 hours (D2), then released sealed to that key |
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
@@ -48,6 +47,10 @@ nobody finished is replaced by the next one. Custodians keep their old shares un
 
 Requests are signed in BeanPool's request format 2 (`@beanpool/core` `request-signing.ts`) for the vault's own host
 name. The wire formats the phone shares (tickets, deposit boxes, releases) are `@beanpool/core` `vault-wire.ts`.
+
+The sign-ins it keeps copies for are one list, `src/shared/providers.ts`. A provider dropped from it (GitHub was, on
+2026-09-29: its `sub` is the account's public user id) is refused everywhere, and its copies go, each with its deletion
+record, whenever the database next opens.
 
 ## Never stored
 
@@ -71,5 +74,5 @@ kept off disk by the image:
 
 ## Tests
 
-`pnpm --filter @beanpool/vault test`: vitest over real HTTP and a real Unix socket, with a stub JWKS, a stub GitHub and a
-stub Expo, and an injected clock. No provider, host or object store is contacted.
+`pnpm --filter @beanpool/vault test`: vitest over real HTTP and a real Unix socket, with a stub JWKS and a stub Expo, and an
+injected clock. No provider, host or object store is contacted.

@@ -13,8 +13,6 @@ import {
     type VaultTicketPurpose,
 } from '@beanpool/core';
 import {
-    BEANPOOL_GITHUB_CLIENT_IDS,
-    createGithubDeviceFlow,
     createJwksCache,
     createSignInVerifier,
     defaultAudiences,
@@ -54,14 +52,10 @@ const RESTORE_BUILD = `${DB_FILE}.restore`;
 /** After a restore from backup failed to finish, the next try waits this long (requests meanwhile get 503 at once). */
 export const RESTORE_RETRY_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
 
-/** §1.6. GitHub's own limit for one app's device flow is unverified (§10): the vault-wide ceiling stays well under it. */
+/** §1.6. */
 export const LIMITS = {
     ticketsPerAddressPerMinute: 10,
-    githubStartsPerAddressPerHour: 5,
-    githubStartsPerHourVaultWide: 40,
-    githubPollsPerAddressPerMinute: 30,
     restoresPerAccountPerDay: 5,
     depositsPerKeyPerDay: 10,
     ceremonyCallsPerAddressPerMinute: 20,
@@ -74,7 +68,7 @@ export interface VaultApiOptions {
     /** The host names a request may be signed for (`vault.beanpool.org`). */
     hosts: string[];
     store: BackupStore;
-    /** For the providers' keys, GitHub and Expo. Defaults to the global fetch. */
+    /** For the providers' keys and Expo. Defaults to the global fetch. */
     fetch?: FetchLike;
     clock?: () => number;
     /** Only if Expo requires one for BeanPool's project (§10). */
@@ -212,9 +206,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     const limits = {
         tickets: new RateLimiter(LIMITS.ticketsPerAddressPerMinute, 60_000),
-        githubStarts: new RateLimiter(LIMITS.githubStartsPerAddressPerHour, HOUR_MS),
-        githubStartsAll: new RateLimiter(LIMITS.githubStartsPerHourVaultWide, HOUR_MS),
-        githubPolls: new RateLimiter(LIMITS.githubPollsPerAddressPerMinute, 60_000),
         restores: new RateLimiter(LIMITS.restoresPerAccountPerDay, DAY_MS),
         deposits: new RateLimiter(LIMITS.depositsPerKeyPerDay, DAY_MS),
         ceremony: new RateLimiter(LIMITS.ceremonyCallsPerAddressPerMinute, 60_000),
@@ -226,7 +217,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const pendingTickets = new Map<string, VaultTicket>();
 
     const jwks = createJwksCache({ fetch: opts.fetch, now: clock });
-    const github = createGithubDeviceFlow({ fetch: opts.fetch, now: clock, userAgent: 'BeanPool-Vault' });
     const verifier = createSignInVerifier({
         jwks,
         now: clock,
@@ -236,7 +226,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             usedTickets.set(t.n, t.exp);
             return true;
         },
-        consumeGithubSession: (sessionId, subject) => github.consume(sessionId, subject),
     });
 
     let db: VaultDb | null = null;
@@ -323,6 +312,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 db = VaultDb.open(opts.dataDir);
             }
             track(rewrapAll());
+            track(dropRetiredCopies());
             return db;
         })().finally(() => {
             opening = null;
@@ -420,6 +410,50 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return changed;
     }
 
+    /**
+     * Every copy for a sign-in the vault no longer keeps (shared/providers.ts), deleted with its holds and a deletion
+     * record, so a restore from an older backup drops it again (§1.7). Run whenever the database opens (a start, an
+     * unlock, a restore from backup), as the re-wrap is; a pass that finds none writes nothing. The provider is read from
+     * each envelope's metadata by the keyholder, since no column names it; the log says how many went, never whose.
+     */
+    async function dropRetiredCopies(): Promise<number> {
+        const status = await keyholderStatus();
+        if (status.state !== 'open' || !db) return 0;
+        let after = '';
+        let dropped = 0;
+        for (;;) {
+            const rows = (db as VaultDb).copiesAfter(after, 200);
+            if (!rows.length) break;
+            after = rows[rows.length - 1].id;
+            await withWriteLock(async () => {
+                const retired: CopyRow[] = [];
+                for (const row of rows) {
+                    const current = (db as VaultDb).copyById(row.id);
+                    if (!current) continue;
+                    let provider: string;
+                    try {
+                        provider = (await metaOf(current)).provider;
+                    } catch {
+                        // An envelope the keyholder can't read is no copy it could release either; it is left as it is.
+                        continue;
+                    }
+                    if (!isVaultProvider(provider)) retired.push(current);
+                }
+                if (!retired.length) return;
+                const day = dayOf(clock());
+                (db as VaultDb).transaction(() => {
+                    for (const row of retired) (db as VaultDb).deleteCopy(row, day);
+                });
+                dropped += retired.length;
+            });
+        }
+        if (dropped) {
+            counters.counts.deletes += dropped;
+            console.log(`vault-api: removed ${dropped} ${dropped === 1 ? 'copy' : 'copies'} for a sign-in the vault no longer keeps.`);
+        }
+        return dropped;
+    }
+
     // ─── Sign-in checks ─────────────────────────────────────────────────────────────────────
 
     function ticketKeys(status: KeyholderStatus): string[] {
@@ -444,12 +478,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return { ticket: check.ticket, raw: raw as string, nonce: vaultTicketNonce(raw as string) };
     }
 
-    const githubSubject = (nonce: string) => `vault-ticket:${nonce}`;
-
     /**
      * The sign-in in a deposit or restore, checked only through @beanpool/signin: BeanPool's own client ids as the
-     * audience (no override), and as the provider nonce the hash of the ticket this request carries. GitHub's is the
-     * vault's own device-flow session, started for this ticket. The ticket is spent only when the sign-in checks out.
+     * audience (no override), and as the provider nonce the hash of the ticket this request carries. The ticket is
+     * spent only when the sign-in checks out.
      */
     async function checkSignIn(ctx: Ctx, purpose: VaultTicketPurpose, beforeVerify?: () => void): Promise<{ provider: SsoProvider; identity: SsoIdentity }> {
         const provider = ctx.body.provider;
@@ -458,12 +490,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         beforeVerify?.();
         pendingTickets.set(nonce, ticket);
         try {
-            const subject = provider === 'github' ? githubSubject(nonce) : ctx.key;
-            const identity = await verifier.verifySignIn(provider, signInCredentialFrom(ctx.body), defaultAudiences(provider), nonce, subject);
-            if (provider === 'github') {
-                if (usedTickets.has(ticket.n)) throw new HttpError(401, 'ticket_used', 'That ticket was already used. Start again.');
-                usedTickets.set(ticket.n, ticket.exp);
-            }
+            const identity = await verifier.verifySignIn(provider, signInCredentialFrom(ctx.body), defaultAudiences(provider), nonce, ctx.key);
             return { provider, identity };
         } finally {
             pendingTickets.delete(nonce);
@@ -521,22 +548,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const t = await call<{ ticket: string; expiresAt: number }>('signTicket', { key: ctx.key, purpose });
         counters.counts.tickets++;
         return json(200, t);
-    });
-
-    route('POST', '/v1/github/start', 'signed', false, async ctx => {
-        limited(limits.githubStarts.take(ctx.address, ctx.now), 'GitHub sign-ins from this address');
-        limited(limits.githubStartsAll.take('all', ctx.now), 'GitHub sign-ins');
-        const { nonce } = acceptTicket(ctx);
-        return json(200, await github.start(githubSubject(nonce), BEANPOOL_GITHUB_CLIENT_IDS[0]));
-    });
-
-    route('POST', '/v1/github/poll', 'signed', false, async ctx => {
-        limited(limits.githubPolls.take(ctx.address, ctx.now), 'GitHub checks from this address');
-        const { nonce } = acceptTicket(ctx);
-        const sessionId = typeof ctx.body.sessionId === 'string' ? ctx.body.sessionId : '';
-        const polled = await github.poll(sessionId, githubSubject(nonce));
-        // The GitHub id is what seals and opens the copy on the phone; the address is not the vault's business.
-        return json(200, polled.status === 'ok' ? { status: 'ok', sub: polled.sub } : polled);
     });
 
     route('POST', '/v1/copies', 'signed', false, async ctx => {

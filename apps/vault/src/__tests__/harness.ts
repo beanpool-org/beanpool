@@ -27,8 +27,8 @@ import type { CustodianShare } from '../shared/ceremony.js';
 
 /**
  * A whole vault for a test: the keyholder on a real Unix socket and the API on a real port, in a temp directory, with
- * a clock the test moves. No provider is contacted: `stub.fetch` answers the pinned JWKS URLs (with a key made here),
- * GitHub's three device-flow endpoints and Expo's push endpoint, records every call, and throws on anything else.
+ * a clock the test moves. No provider is contacted: `stub.fetch` answers the pinned JWKS URLs (with a key made here)
+ * and Expo's push endpoint, records every call, and throws on anything else.
  */
 
 export const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
@@ -54,11 +54,6 @@ export class StubProviders {
     readonly kid = 'stub-kid';
     readonly calls: string[] = [];
     readonly pushes: PushCall[] = [];
-    /** The GitHub account the next device-flow sign-in finishes as. */
-    githubUserId = 583231;
-    private deviceCodes = new Map<string, number>();
-    private tokens = new Map<string, number>();
-    private n = 0;
 
     static readonly JWKS: Record<string, string> = {
         google: 'https://www.googleapis.com/oauth2/v3/certs',
@@ -75,24 +70,6 @@ export class StubProviders {
             const jwk = { ...this.rsa.publicKey.export({ format: 'jwk' }), kid: this.kid, alg: 'RS256', use: 'sig' };
             return json({ keys: [jwk] });
         }
-        if (url === 'https://github.com/login/device/code') {
-            const code = `device-${++this.n}`;
-            this.deviceCodes.set(code, this.githubUserId);
-            return json({ device_code: code, user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 });
-        }
-        if (url === 'https://github.com/login/oauth/access_token') {
-            const body = JSON.parse(String(init?.body ?? '{}')) as { device_code?: string };
-            const user = this.deviceCodes.get(String(body.device_code));
-            if (user === undefined) return json({ error: 'expired_token' });
-            const token = `gho_${crypto.randomBytes(12).toString('hex')}`;
-            this.tokens.set(token, user);
-            return json({ access_token: token, token_type: 'bearer' });
-        }
-        if (url === 'https://api.github.com/user') {
-            const auth = new Headers(init?.headers).get('Authorization') ?? '';
-            const user = this.tokens.get(auth.replace(/^Bearer /, ''));
-            return user === undefined ? json({ message: 'Bad credentials' }, 401) : json({ id: user, login: `user${user}`, email: `user${user}@example.com` });
-        }
         if (url === 'https://exp.host/--/api/v2/push/send') {
             const body = String(init?.body ?? '');
             this.pushes.push({ body, messages: JSON.parse(body) });
@@ -102,7 +79,7 @@ export class StubProviders {
     };
 
     /** An id_token as the provider would sign it. */
-    mint(provider: Exclude<SsoProvider, 'github'>, claims: { sub: string; nonce: string; aud?: string; email?: string; now: number }): string {
+    mint(provider: SsoProvider, claims: { sub: string; nonce: string; aud?: string; email?: string; now: number }): string {
         const iss = { google: 'https://accounts.google.com', apple: 'https://appleid.apple.com', facebook: 'https://www.facebook.com' }[provider];
         const aud = claims.aud ?? { google: BEANPOOL_GOOGLE_CLIENT_IDS[0], apple: BEANPOOL_APPLE_BUNDLE_ID, facebook: BEANPOOL_FACEBOOK_APP_ID }[provider];
         const seconds = Math.floor(claims.now / 1000);
@@ -270,20 +247,8 @@ export async function ticketFor(v: VaultUnderTest, seed: Uint8Array, purpose: 'd
     return r.body.ticket as string;
 }
 
-/** A finished GitHub device-flow sign-in for `ticket`, as the phone would drive it. */
-export async function githubProof(v: VaultUnderTest, seed: Uint8Array, ticket: string, userId: number): Promise<{ sessionId: string }> {
-    v.stub.githubUserId = userId;
-    const start = await signed(v, '/v1/github/start', { ticket }, seed);
-    if (start.status !== 200) throw new Error(`github start refused: ${JSON.stringify(start.body)}`);
-    v.clock.advance(6_000);
-    const poll = await signed(v, '/v1/github/poll', { ticket, sessionId: start.body.sessionId }, seed);
-    if (poll.body.status !== 'ok') throw new Error(`github poll: ${JSON.stringify(poll.body)}`);
-    return { sessionId: start.body.sessionId as string };
-}
-
 /** The sign-in part of a deposit or restore body. */
 export async function credential(v: VaultUnderTest, seed: Uint8Array, provider: SsoProvider, sub: string, ticket: string, over: { aud?: string; nonce?: string; email?: string } = {}) {
-    if (provider === 'github') return { proof: await githubProof(v, seed, ticket, Number(sub)) };
     return { idToken: v.stub.mint(provider, { sub, nonce: over.nonce ?? vaultTicketNonce(ticket), aud: over.aud, email: over.email, now: v.clock.now() }) };
 }
 

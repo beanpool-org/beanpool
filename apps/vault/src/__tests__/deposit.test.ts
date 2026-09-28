@@ -40,7 +40,7 @@ afterEach(async () => {
 describe('what the database holds', () => {
     it('no sub, no member key (hex, raw or base64) and no email, for any provider', async () => {
         const member = newMember();
-        const subs: Record<SsoProvider, string> = { google: '109876543210987654321', apple: '001234.abcdef0123456789.0123', facebook: '10160000000000001', github: '98765432' };
+        const subs: Record<SsoProvider, string> = { google: '109876543210987654321', apple: '001234.abcdef0123456789.0123', facebook: '10160000000000001' };
         for (const provider of Object.keys(subs) as SsoProvider[]) {
             const r = await deposit(v, g, member, provider, subs[provider], { email: `m.${provider}@example.com`, pushToken: 'ExponentPushToken[device-a]' });
             expect({ provider, ...r }).toMatchObject({ provider, status: 200, body: { ok: true, replaced: false } });
@@ -49,7 +49,7 @@ describe('what the database holds', () => {
         const raw = Buffer.from(member.key, 'hex');
         const needles = [
             ...Object.values(subs), member.key, member.key.toUpperCase(), raw, raw.toString('base64'), raw.toString('base64url'),
-            'example.com', 'm.google@', 'user98765432', 'ExponentPushToken',
+            'example.com', 'm.google@', 'ExponentPushToken',
         ];
         expect(scan(v.dataDir, needles)).toEqual([]);
         // The scan sees what is there: each row's day is stored in the clear.
@@ -57,18 +57,8 @@ describe('what the database holds', () => {
         expect(scan(v.storeDir, needles)).toEqual([]);
         expect(scan(v.stateDir, needles)).toEqual([]);
         const status = await signed(v, '/v1/copies/status', {}, member.seed);
-        expect(status.body.copies.map((c: { provider: string }) => c.provider).sort()).toEqual(['apple', 'facebook', 'github', 'google']);
+        expect(status.body.copies.map((c: { provider: string }) => c.provider).sort()).toEqual(['apple', 'facebook', 'google']);
         expect(JSON.stringify(status.body)).not.toMatch(/encryptedShare|clientCopy|envelope/);
-    });
-
-    it('the GitHub check tells the phone the account id and nothing else', async () => {
-        const member = newMember();
-        const ticket = await ticketFor(v, member.seed, 'deposit', 'github');
-        v.stub.githubUserId = 4242;
-        const start = await signed(v, '/v1/github/start', { ticket }, member.seed);
-        v.clock.advance(6_000);
-        const poll = await signed(v, '/v1/github/poll', { ticket, sessionId: start.body.sessionId }, member.seed);
-        expect(poll.body).toEqual({ status: 'ok', sub: '4242' });
     });
 });
 
@@ -167,7 +157,7 @@ describe('replace and delete', () => {
     it('delete removes the row and its bytes (the vault\'s own secure_delete and auto_vacuum: no VACUUM here), and a later restore finds no copy', async () => {
         const member = newMember();
         await deposit(v, g, member, 'google', 'to-delete');
-        await deposit(v, g, member, 'github', '777');
+        await deposit(v, g, member, 'facebook', '10160000000000777');
         const dbFile = path.join(v.dataDir, 'vault.db');
         const reader = new DatabaseSync(dbFile, { readOnly: true });
         const rows = reader.prepare('SELECT id, envelope FROM copies').all() as { id: string; envelope: Uint8Array }[];
@@ -177,7 +167,7 @@ describe('replace and delete', () => {
         const del = await signed(v, '/v1/copies/delete', { provider: 'google' }, member.seed);
         expect(del.body).toEqual({ deleted: 1 });
         const status = await signed(v, '/v1/copies/status', {}, member.seed);
-        expect(status.body.copies.map((c: { provider: string }) => c.provider)).toEqual(['github']);
+        expect(status.body.copies.map((c: { provider: string }) => c.provider)).toEqual(['facebook']);
 
         // What the delete itself left on disk: the database and its journal, as the vault wrote them.
         const after = new DatabaseSync(dbFile, { readOnly: true });

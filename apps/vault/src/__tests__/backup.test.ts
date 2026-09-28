@@ -73,7 +73,7 @@ describe('backups', () => {
         const m1 = newMember();
         const m2 = newMember();
         await deposit(a, g, m1, 'google', 'g-111');
-        await deposit(a, g, m2, 'github', '222');
+        await deposit(a, g, m2, 'facebook', '10150000000000222');
         await deposit(a, g, m2, 'apple', 'a-333');
         const name = await a.api.runBackup();
         const file = readFileSync(path.join(a.storeDir, name));
@@ -91,7 +91,7 @@ describe('backups', () => {
         const opened = await unlockWith(b, g.shares, [0, 2]);
         expect(opened[1].body.state).toBe('open');
         await expectCopy(b, 'google', 'g-111', m1);
-        await expectCopy(b, 'github', '222', m2);
+        await expectCopy(b, 'facebook', '10150000000000222', m2);
         await expectCopy(b, 'apple', 'a-333', m2);
         expect((await signed(b, '/v1/copies/status', {}, m2.seed)).body.copies).toHaveLength(2);
         // The restore is finished: the vault is an ordinary one now.

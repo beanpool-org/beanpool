@@ -33,6 +33,7 @@ import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPo
 import { MemberGuide } from '../components/MemberGuide';
 import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
+import { WEB_COPY_CLEARS_LINE, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -392,13 +393,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity, mode]);
 
+    // On the clipboard for a minute, then cleared if the page can tell it still holds them (lib/words-clipboard.ts).
     const handleCopySeed = async () => {
         const words = await getMnemonic(identity);
         if (!words) return;
-        navigator.clipboard.writeText(words.join(' '));
+        if (!(await copyWordsForAMinute(words.join(' ')))) return;
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
     };
+    // Leaving the words screen, the page can no longer vouch that nothing else was copied since.
+    useEffect(() => {
+        if (mode !== 'seed') return;
+        return leftTheWordsScreen;
+    }, [mode]);
 
     // Redeem invite & Node settings
     const [redeemInviteCode, setRedeemInviteCode] = useState('');
@@ -1188,10 +1195,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <button
                                     onClick={handleCopySeed}
-                                    className="w-full py-3 mb-4 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>
+                                <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
+                                    {WEB_COPY_CLEARS_LINE}
+                                </p>
                             </>
                         ) : (
                             // Not "generated without seed phrase storage": most often it was brought back from a sign-in copy

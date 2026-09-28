@@ -1077,6 +1077,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
@@ -7700,9 +7701,10 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // The snapshot-pull endpoint hands out the entire ledger (incl. DMs + recovery
 // data), so on the PRIMARY we record who pulls it — to attribute legitimate
 // backup traffic AND to surface rejected attempts (a leaked-credential / probing
-// signal) on the admin dashboard.
+// signal) on the admin dashboard. Each entry's address is kept 7 days, then
+// null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
@@ -7722,9 +7724,9 @@ const EMPTY_ACCESS_LOG: ReplicationAccessLog = {
 export function getReplicationAccessLog(): ReplicationAccessLog {
     try {
         const row = db.prepare(`SELECT value FROM node_config WHERE key='replication_access'`).get() as any;
-        if (row?.value) return { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) };
+        if (row?.value) return withoutOldAddresses('replication_access', { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) });
     } catch { /* fall through to empty */ }
-    return { ...EMPTY_ACCESS_LOG };
+    return { ...EMPTY_ACCESS_LOG, recent: [] };
 }
 
 export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
@@ -7741,6 +7743,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
             log.lastPullAuth = ev.auth;
         }
         log.recent = [ev, ...(log.recent || [])].slice(0, 20);
+        withoutOldAddresses('replication_access', log);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replication_access', ?)`).run(JSON.stringify(log));
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);

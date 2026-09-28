@@ -12,6 +12,11 @@
  * It also pins that the key is the signer's: naming another key in the body neither registers nor deletes for it,
  * and an unsigned request changes nothing.
  *
+ * And what a key with no row here can store (state-engine.ts STRANGER_PUSH_RULES, #1295 review 4126286269): so many new
+ * tokens an address a day, and so many the node, over which it is answered 429 while a member, a visitor's row and the
+ * same token again are not; the address kept only as a keyed hash, for a day; its tokens not registered again for a
+ * month pruned as the next one registers, with no tombstone, and a member's and a visitor's kept.
+ *
  * Local only: it talks to the server it starts on localhost and nothing else. No push service is contacted.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-push-token-own-rows.ts
@@ -21,7 +26,8 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { getPushTokens, initStateEngine, isNodeMember } from './state-engine.js';
+import { STRANGER_PUSH_RULES, getPushTokens, initStateEngine, isNodeMember, registerPushToken } from './state-engine.js';
+import { forgetOldJoinAddresses } from './engine/open-join.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
@@ -54,6 +60,11 @@ function member(name: string): Identity {
 }
 
 async function send(method: 'POST' | 'DELETE', path: string, body: unknown, signer: Identity | null): Promise<number> {
+    return (await answer(method, path, body, signer)).status;
+}
+
+/** The node's answer to a request, signed by `signer` or not: its status and its `code`, if any. */
+async function answer(method: 'POST' | 'DELETE', path: string, body: unknown, signer: Identity | null): Promise<{ status: number; code?: string }> {
     const bodyString = JSON.stringify(body);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (signer) {
@@ -66,8 +77,10 @@ async function send(method: 'POST' | 'DELETE', path: string, body: unknown, sign
         headers['X-Nonce'] = nonce;
     }
     const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyString });
-    await res.text();
-    return res.status;
+    const text = await res.text();
+    let code: string | undefined;
+    try { code = JSON.parse(text)?.code; } catch { /* not JSON */ }
+    return { status: res.status, code };
 }
 
 /** Who holds a row for this token on the node, sorted. */
@@ -162,6 +175,68 @@ async function main(): Promise<void> {
         'Ava unregisters her phone, signed by her key');
     assert(same(alertTokensOf(ava), [AVA_TABLET]), '...her phone row goes and her tablet stays');
     assert(same(holders(PHONE), keys(ben)), '...and Ben\'s row for the phone token stays: her delete removes only hers');
+
+    // ── 6. What a key with no row here can store ──────────────────────────────────────────────
+    console.log('\n── A key with no row here: its new tokens are capped, and pruned after a month');
+    const { perAddressPerDay, perNodePerDay, keptDays } = STRANGER_PUSH_RULES;
+    const addresses = () => db.prepare('SELECT ip_hash FROM push_token_addresses').all() as { ip_hash: string | null }[];
+    const register = (id: Identity, token: string) => answer('POST', '/api/push-tokens', { publicKey: id.pub, token, platform: 'android' }, id);
+    const tokenOf = (id: Identity) => `ExponentPushToken[${id.name}]`;
+    const before = addresses();
+    assert(before.length === 1 && /^[A-Za-z0-9_-]{43}$/.test(before[0].ip_hash ?? '') && !/127\.0\.0\.1|::1/.test(before[0].ip_hash ?? ''),
+        `the stranger's token above is this address's first today, kept as a keyed hash, never the address (${JSON.stringify(before)})`);
+    const fresh = Array.from({ length: perAddressPerDay }, (_, i) => keyPair(`fresh-${i}`));
+    const firstDay: number[] = [];
+    for (const f of fresh.slice(1)) firstDay.push((await register(f, tokenOf(f))).status);
+    assert(firstDay.every((st) => st === 200) && addresses().length === perAddressPerDay,
+        `${perAddressPerDay - 1} more fresh keys register a token each from this address: ${perAddressPerDay} today (${firstDay.join(', ')})`);
+    const overAddress = await register(fresh[0], tokenOf(fresh[0]));
+    assert(overAddress.status === 429 && overAddress.code === 'rate_limited' && holders(tokenOf(fresh[0])).length === 0 && addresses().length === perAddressPerDay,
+        `the next one is refused, 429 rate_limited, and stores nothing (${JSON.stringify(overAddress)})`);
+    const again = await register(fresh[1], tokenOf(fresh[1]));
+    assert(again.status === 200 && addresses().length === perAddressPerDay, `a fresh key registering its own token again is taken: it adds no row (${JSON.stringify(again)})`);
+    const benMore = await register(ben, 'ExponentPushToken[ben-tablet]');
+    const vis = keyPair('visitor');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_visitor) VALUES (?, 'Visitor', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1)`).run(vis.pub);
+    const visitorPhone = await register(vis, tokenOf(vis));
+    assert(benMore.status === 200 && visitorPhone.status === 200 && addresses().length === perAddressPerDay,
+        `a member and a visitor's row register new tokens from the same address, uncounted (${benMore.status}, ${visitorPhone.status})`);
+    // A day later the address's count starts again, and the day-old addresses are gone.
+    db.prepare(`UPDATE push_token_addresses SET made_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours')`).run();
+    const nextDay = await register(fresh[0], tokenOf(fresh[0]));
+    assert(nextDay.status === 200 && addresses().length === 1, `a day later the address may register again, and only today's is kept (${JSON.stringify(nextDay)}, ${addresses().length})`);
+    // The node's day, from every address together: an address costs nothing.
+    for (let i = addresses().length; i < perNodePerDay; i++) {
+        const r = registerPushToken(keyPair(`far-${i}`).pub, `ExponentPushToken[far-${i}]`, 'android', null, `address-${i}`);
+        if (r !== 'registered') throw new Error(`the node's day filled early, at ${i}: ${r}`);
+    }
+    const late = keyPair('late');
+    const overNode = await register(late, tokenOf(late));
+    assert(overNode.status === 429 && overNode.code === 'busy' && holders(tokenOf(late)).length === 0,
+        `past ${perNodePerDay} new tokens of keys with no row on this node today, from any address, one more is refused, 429 busy (${JSON.stringify(overNode)})`);
+    assert(registerPushToken(late.pub, tokenOf(late), 'android', null, 'a-new-address') === 'busy', '...from a new address too');
+    const benAtCap = await register(ben, 'ExponentPushToken[ben-watch]');
+    assert(benAtCap.status === 200, `and a member still registers (${JSON.stringify(benAtCap)})`);
+    assert(forgetOldJoinAddresses(Date.now() + 25 * 3600_000) === perNodePerDay && addresses().length === 0,
+        'the addresses are forgotten once a day old (the minute sweep, engine/open-join.ts)');
+    // A month on, a key with no row's tokens it hasn't registered again go as the next one registers; no tombstone.
+    const monthAgo = `-${keptDays + 1} days`;
+    const age = (pub: string) => db.prepare(`UPDATE push_tokens SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) WHERE public_key = ?`).run(monthAgo, pub);
+    for (const pub of [fresh[2].pub, fresh[3].pub, ben.pub, vis.pub]) age(pub);
+    assert((await register(fresh[3], tokenOf(fresh[3]))).status === 200, 'a fresh key registers its token again (the app starting)');
+    const tombstonesBefore = (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'push_tokens'`).get() as { n: number }).n;
+    const another = keyPair('another');
+    assert((await register(another, tokenOf(another))).status === 200, 'a new key with no row registers a token');
+    const tombstonesAfter = (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'push_tokens'`).get() as { n: number }).n;
+    assert(holders(tokenOf(fresh[2])).length === 0 && holders(tokenOf(fresh[3])).length === 1,
+        `a key with no row's token not registered again in ${keptDays} days is pruned; one registered again is kept`);
+    assert(alertTokensOf(ben).length === 3 && holders(tokenOf(vis)).length === 1,
+        `a member's (${alertTokensOf(ben).length}) and a visitor's row's tokens are kept however old`);
+    assert(tombstonesAfter === tombstonesBefore, `the prune writes no tombstone: those tokens never travel (${tombstonesBefore} → ${tombstonesAfter})`);
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN DELETE FROM push_tokens WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
+        AND public_key NOT IN (SELECT m.public_key FROM members m)`).all(monthAgo) as { detail: string }[]).map((r) => r.detail).join('; ');
+    assert(/SEARCH push_tokens USING INDEX idx_push_tokens_created_at/.test(plan) && !/SCAN push_tokens/.test(plan),
+        `the prune runs at each stranger's new token, so it searches idx_push_tokens_created_at, never scans the table (${plan})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

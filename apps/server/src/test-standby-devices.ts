@@ -19,6 +19,15 @@
  *  3. More on M, then a delta: Ann unmutes one chat and is re-keyed (her phone goes, her mute moves to her new key) and
  *     registers again; Bo leaves a phone; a custom pricing item is made and deleted; another activity line. S is M's
  *     again, each delete by its tombstone, the unmute's applied before S follows the re-key.
+ * 3b. Kip leaves his first phone again, a day after his first leave of it (review 4126285975): M renews his leave and
+ *     clears Bo's day-old one, with no tombstone; a delta brings Kip's renewed leave, stamp for stamp, and a whole copy
+ *     drops Bo's, exact.
+ * 3c. Keys with no member's row here (review 4126286269), with S refusing a table of more than STANDBY_ROW_CAP rows as
+ *     the review scaled it: a 1.9 MB token (and a 513-character one, one that is no string, an empty one, one on two lines,
+ *     a 1.9 MB platform) is refused; five fresh keys' phones and a visitor's stay on M, and neither a delta nor a whole
+ *     copy carries them, which stays exact with S's routine whole copies on, while a member's phone and leave copy
+ *     verbatim; a stranger who joins has its phone copied by the next whole copy; 160 fresh keys' leaves, and their prune
+ *     a day later, change nothing on S.
  *  4. On S, every writer of these tables refuses (the routes with 409 `standby`, the engine's functions before they
  *     write), the side writes of a read or a listing write nothing, and its G4 tables are exactly as before.
  *  5. A whole copy with a plain row and values S's table refuses (a stricter, older standby's CHECKs on invites): the
@@ -27,8 +36,9 @@
  *     timers, and a chat message and an enterprise thread post over HTTPS. The only call of the push service in the
  *     server's source is the dispatcher's, and the copy with the tokens is served to the replication token alone.
  *  7. A standby as a format 5 importer left it, holding a pricing item of its own: it re-seeds itself once.
- *  8. M dies; S takes over with the recovery code. On the promoted server: every phone is M's, verbatim, and a push of
- *     each category reaches exactly as many phones as M's did; the copied leave refuses the late registration Kip's
+ *  8. M dies; S takes over with the recovery code. On the promoted server: every member's phone is M's, verbatim; the
+ *     take-over's notice reaches them; a push of each category reaches exactly as many phones as M's did (a visitor's is
+ *     reached once its app registers again there, the narrow rule); the copied leave refuses the late registration Kip's
  *     phone sent before it, and a leave presented there removes exactly the (key, token) stamped at or before it; Cy's
  *     row for the shared phone outlives Dee's delete; a muted chat stays muted and an unmuted one pushes; the keepers'
  *     read marks, the activity list and the pricing guide answer as M's did; a reminder M sent is not sent again, and
@@ -59,6 +69,11 @@ const MIN = 60_000;
 /** The importer format this change's copy records (engine/sync.ts REPLICA_FORMAT); the one before it, a standby to re-seed. */
 const FORMAT = '6';
 const FORMAT_BEFORE = '5';
+/**
+ * The standby's cap on the rows of any one table in a copy (engine/sync.ts MAX_IMPORT_ROWS_PER_CATEGORY, 250,000 by
+ * default), scaled down as review 4126286269 measured it: 160 rows of one table from strangers would be refused.
+ */
+const STANDBY_ROW_CAP = 150;
 
 /** The G4 tables on the plain path (engine/replication-manifest.ts). */
 const DEVICES = [
@@ -87,13 +102,30 @@ function guardFetch(): { blocked: string[]; pushes: Push[] } {
     return seen;
 }
 
-/** Each G4 table as this server holds it, every column, ordered by its key. */
+/**
+ * Each G4 table as this server holds it, every column, ordered by its key: the rows that travel, by the manifest's
+ * RowRule (a phone or a leave of a key with no member's row here is the server's own; `outsideRule` counts those).
+ */
 async function deviceRows(): Promise<Tables> {
     const { db } = await import('./db/db.js');
+    const { travellingRows } = await import('./engine/replication-manifest.js');
     const out: Tables = {};
     for (const t of DEVICES) {
         const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk').all(t) as { name: string }[]).map((c) => `"${c.name}"`);
-        out[t] = db.prepare(`SELECT * FROM ${t} ORDER BY ${key.join(', ')}`).all() as Record<string, unknown>[];
+        const held = travellingRows(t);
+        out[t] = db.prepare(`SELECT * FROM ${t}${held ? ` WHERE (${held})` : ''} ORDER BY ${key.join(', ')}`).all() as Record<string, unknown>[];
+    }
+    return out;
+}
+
+/** The rows of each G4 table the manifest's RowRule doesn't hold: a key with no member's row here's. */
+async function outsideRule(): Promise<Record<string, number>> {
+    const { db } = await import('./db/db.js');
+    const { travellingRows } = await import('./engine/replication-manifest.js');
+    const out: Record<string, number> = {};
+    for (const t of DEVICES) {
+        const held = travellingRows(t);
+        if (held) out[t] = (db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE NOT (${held})`).get() as { n: number }).n;
     }
     return out;
 }
@@ -156,14 +188,29 @@ async function child(): Promise<void> {
             const format = (db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined)?.value ?? null;
             const tombstones = db.prepare(`SELECT table_name, row_key FROM tombstones WHERE table_name IN (${DEVICES.map(() => '?').join(', ')})
                                            ORDER BY table_name, row_key`).all(...DEVICES) as { table_name: string; row_key: string }[];
-            return { tables: await deviceRows(), format, tombstones };
+            return { tables: await deviceRows(), format, tombstones, outside: await outsideRule() };
         },
         /** What the last whole copy's check found, and this standby's record of it (services/standby-copy-record.ts). */
         record: async () => {
             const { getBackupStatus } = await import('./services/backup-puller.js');
             const { readCopyRecord } = await import('./services/standby-copy-record.js');
             const r = readCopyRecord();
-            return { consistency: getBackupStatus().consistency ?? null, lastWhole: r.lastWhole, lastMismatchResyncAt: r.lastMismatchResyncAt };
+            const status = getBackupStatus();
+            return {
+                consistency: status.consistency ?? null, lastWhole: r.lastWhole, lastMismatchResyncAt: r.lastMismatchResyncAt,
+                reconcileDisabledForSize: status.reconcileDisabledForSize,
+            };
+        },
+        /**
+         * The leave statements applied here `days` ago, as a day passing would leave them: `keys`' own, or every key's with
+         * no member's row here (`strangers`).
+         */
+        'age-leaves': async (a: { days: number; keys?: string[]; strangers?: boolean }) => {
+            const { db } = await import('./db/db.js');
+            const whose = a.strangers ? 'public_key NOT IN (SELECT public_key FROM members WHERE is_visitor = 0)'
+                : `public_key IN (${(a.keys ?? []).map(() => '?').join(', ') || "''"})`;
+            return db.prepare(`UPDATE push_token_leaves SET applied_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) WHERE ${whose}`)
+                .run(`-${a.days} days`, ...(a.strangers ? [] : a.keys ?? [])).changes;
         },
         /**
          * invite_codes held to a stricter rule than the main server's, as an older standby's CHECK that doesn't know a value
@@ -190,11 +237,14 @@ async function child(): Promise<void> {
         },
         /** The pushes this server handed to the push service since the last ask. */
         pushes: async () => takePushes(),
-        /** A push of each category to every member, as the push service is handed it (dispatchPushNotification's count). */
-        'push-counts': async () => {
+        /**
+         * A push of each category to every member (not a visitor: its phone isn't copied, engine/replication-manifest.ts
+         * MEMBERS_OWN), or to `keys`, as the push service is handed it (dispatchPushNotification's count).
+         */
+        'push-counts': async (a: { keys?: string[] } = {}) => {
             const { db } = await import('./db/db.js');
             const { dispatchPushNotification } = await import('./state-engine.js');
-            const everyone = (db.prepare("SELECT public_key FROM members WHERE public_key != 'SYSTEM'").all() as { public_key: string }[]).map((r) => r.public_key);
+            const everyone = a.keys ?? (db.prepare("SELECT public_key FROM members WHERE public_key != 'SYSTEM' AND is_visitor = 0").all() as { public_key: string }[]).map((r) => r.public_key);
             takePushes();
             const counts: Record<string, number> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
@@ -426,7 +476,10 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({
+        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        ...(role === 'backup' ? { MAX_IMPORT_ROWS_PER_CATEGORY: String(STANDBY_ROW_CAP) } : {}),
+    });
     const gwen = newId('Gwen');
     const [ann, bo, cy, dee, kip] = ['Ann', 'Bo', 'Cy', 'Dee', 'Kip'].map(newId);
     const ann2 = newId('Ann (new key)');
@@ -574,6 +627,113 @@ async function main(): Promise<void> {
             `every G4 table is M's again: the unmute before the re-key, the re-key, the leave and the deleted item included (${count(s.tables)}; differences ${first(tablesDiff(m3.tables, s.tables))})`);
         assert(has(s.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1'), registered_at: 9000 }),
             'Kip\'s first phone, registered again after his leave\'s tombstone, stays on S: the row is stamped after it');
+
+        // ── 3b. The same phone left again, a day after the first leave (review 4126285975) ──
+        console.log('\n— 3b. Kip leaves his first phone again, a day after his first leave of it; a delta, then a whole copy —');
+        require_(await main.send('age-leaves', { days: 2, keys: [kip.pk, bo.pk] }) === 2, 'M: Kip\'s and Bo\'s leaves were applied two days ago');
+        const aged = await standby.send('pull', {});
+        require_(aged.ok === true && aged.mode === 'delta', `S: a delta brings them (${aged.ok ? aged.mode : aged.error})`);
+        built('Kip signs out on his first phone again (stamped 9500)', await S_(kip, '/api/push-tokens', { publicKey: kip.pk, token: token('kip-1'), leftAt: 9500 }, 'DELETE'));
+        const m3b = await main.send('rows');
+        const kipLeave = m3b.tables.push_token_leaves.find((r: any) => r.public_key === kip.pk && r.token === token('kip-1'));
+        assert(kipLeave?.left_at === 9500 && Date.parse(kipLeave.applied_at) > Date.now() - 60_000 && !has(m3b.tables, 'push_token_leaves', { public_key: bo.pk })
+            && !has(m3b.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1') }),
+            `M: Kip's leave is renewed (left at 9500, applied now) and his phone gone; Bo's day-old leave is cleared (${JSON.stringify(m3b.tables.push_token_leaves)})`);
+        const leaveTombstones = (r: any) => r.tombstones.filter((t: any) => t.table_name === 'push_token_leaves');
+        assert(leaveTombstones(m3b).length === 0,
+            `M writes no tombstone for a day-old leave it clears, so none shares its millisecond with Kip's renewed one (${JSON.stringify(leaveTombstones(m3b))})`);
+        const second = await standby.send('pull', {});
+        require_(second.ok === true && second.mode === 'delta', `S: a delta (${second.ok ? second.mode : second.error})`);
+        s = await standby.send('rows');
+        assert(has(s.tables, 'push_token_leaves', { public_key: kip.pk, token: token('kip-1'), left_at: 9500, applied_at: kipLeave?.applied_at, updated_at: kipLeave?.updated_at })
+            && !has(s.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1') }),
+            `S after the delta: Kip's renewed leave, stamp for stamp, and his phone gone (${JSON.stringify(s.tables.push_token_leaves)})`);
+        const afterSecond = tablesDiff(m3b.tables, s.tables);
+        assert(afterSecond.length === 1 && afterSecond[0].startsWith('push_token_leaves') && afterSecond[0].includes(bo.pk.slice(0, 20)) && afterSecond[0].endsWith('extra'),
+            `every other G4 row is M's, but for Bo's day-old leave, which M cleared without a tombstone and which refuses nothing (${first(afterSecond)})`);
+        const whole3b = await standby.send('pull', { whole: true });
+        const record3b = await standby.send('record');
+        s = await standby.send('rows');
+        assert(whole3b.ok === true && whole3b.whole === true && tablesDiff(m3b.tables, s.tables).length === 0,
+            `a whole copy: S's G4 tables are M's, Bo's day-old leave gone (${whole3b.ok ? whole3b.mode : whole3b.error}; differences ${first(tablesDiff(m3b.tables, s.tables))})`);
+        assert(record3b.lastWhole?.exact === true && record3b.lastWhole.resyncAsked === false && record3b.lastMismatchResyncAt === null,
+            `and the copy is exact, with no force-resync asked (${JSON.stringify(record3b.lastWhole)})`);
+        built('Kip signs back in on his first phone (stamped 9600)', await phone(kip, token('kip-1'), 9600));
+
+        // ── 3c. Keys with no member's row here (review 4126286269) ──
+        console.log(`\n— 3c. keys with no member's row: what they store stays on M, and no copy grows (S refuses a table over ${STANDBY_ROW_CAP} rows) —`);
+        const strangers = Array.from({ length: 5 }, (_, i) => newId(`Stranger ${i + 1}`));
+        const huge: number[] = [];
+        for (const st of strangers) huge.push((await phone(st, `ExponentPushToken[${'x'.repeat(1_900_000)}]`, 100)).status);
+        assert(huge.every((st) => st === 400), `M refuses a 1.9 MB token from each of five fresh keys (${huge.join(', ')})`);
+        const longest = (tag: string) => `ExponentPushToken[${tag.padEnd(512 - 19, 'y')}]`;
+        const odd: [string, Answer][] = [
+            ['a token of 513 characters', await phone(strangers[0], `${longest('odd')}z`, 100)],
+            ['a token that is no string', await S_(strangers[0], '/api/push-tokens', { publicKey: strangers[0].pk, token: { $ne: null } })],
+            ['an empty token', await S_(strangers[0], '/api/push-tokens', { publicKey: strangers[0].pk, token: '' })],
+            ['a token on two lines', await phone(strangers[0], 'ExponentPushToken[a]\nExponentPushToken[b]', 100)],
+            ['a 1.9 MB platform', await S_(strangers[0], '/api/push-tokens', { publicKey: strangers[0].pk, token: token('odd'), platform: 'x'.repeat(1_900_000) })],
+        ];
+        const oddTaken = odd.filter(([, r]) => r.status !== 400);
+        assert(oddTaken.length === 0, `and ${odd.map(([what]) => what).join(', ')} (${oddTaken.map(([what, r]) => `${what}: ${brief(r)}`).join('; ') || 'each 400'})`);
+        const took: number[] = [];
+        for (const [i, st] of strangers.entries()) took.push((await phone(st, longest(`stranger-${i}`), 100)).status);
+        assert(took.every((st) => st === 200), `each fresh key registers a 512-character token, the longest a phone can leave (${took.join(', ')})`);
+        const visitor = newId('Vi');
+        built('Bo writes to a fresh key, Vi, which makes Vi a visitor\'s row', await S_(bo, '/api/messages/conversation', { type: 'dm', participants: [bo.pk, visitor.pk], createdBy: bo.pk }));
+        built('Vi registers a phone', await phone(visitor, token('vi'), 100));
+        built('Dee, a member, registers a second phone with a 512-character token', await phone(dee, longest('dee-2'), 3800));
+        built('and Gwen leaves hers (a stamped leave)', await S_(gwen, '/api/push-tokens', { publicKey: gwen.pk, token: token('gwen'), leftAt: 7 }, 'DELETE'));
+        const m3c = await main.send('rows');
+        require_(m3c.outside.push_tokens === 6 && has(m3c.tables, 'push_tokens', { public_key: dee.pk, token: longest('dee-2') })
+            && has(m3c.tables, 'push_token_leaves', { public_key: gwen.pk, token: token('gwen') }),
+            `M holds the five strangers' phones and Vi's outside the rule, and Dee's and Gwen's within it (${JSON.stringify(m3c.outside)})`);
+        const d3c = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(d3c.ok === true && d3c.mode === 'delta' && tablesDiff(m3c.tables, s.tables).length === 0 && Object.values(s.outside).every((n) => n === 0),
+            `a delta: S holds Dee's phone and Gwen's leave verbatim, and none of the strangers' or the visitor's (${d3c.ok ? d3c.mode : d3c.error}; differences ${first(tablesDiff(m3c.tables, s.tables))}; outside ${JSON.stringify(s.outside)})`);
+        const w3c = await standby.send('pull', { whole: true });
+        const r3c = await standby.send('record');
+        s = await standby.send('rows');
+        assert(w3c.ok === true && w3c.whole === true && tablesDiff(m3c.tables, s.tables).length === 0 && Object.values(s.outside).every((n) => n === 0),
+            `a whole copy carries none of them either (${w3c.ok ? w3c.mode : w3c.error}; differences ${first(tablesDiff(m3c.tables, s.tables))}; outside ${JSON.stringify(s.outside)})`);
+        assert(r3c.lastWhole?.exact === true && r3c.reconcileDisabledForSize === false,
+            `and it is exact, and S keeps its routine whole copies on (${JSON.stringify(r3c.lastWhole)}; reconcileDisabledForSize ${r3c.reconcileDisabledForSize})`);
+        // A key's phones start travelling once it is a member: at its next write, or the next whole copy.
+        const strangerJoins = await invite();
+        built('the first stranger joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: strangerJoins, publicKey: strangers[0].pk, callsign: 'Newcomer' } }));
+        const mJoined = await main.send('rows');
+        const joinedWhole = await standby.send('pull', { whole: true });
+        s = await standby.send('rows');
+        assert(joinedWhole.ok === true && has(s.tables, 'push_tokens', { public_key: strangers[0].pk, token: longest('stranger-0') })
+            && tablesDiff(mJoined.tables, s.tables).length === 0 && (await standby.send('record')).lastWhole?.exact === true,
+            `once a member, the newcomer's phone reaches S with the next whole copy, verbatim, and the copy is exact (differences ${first(tablesDiff(mJoined.tables, s.tables))})`);
+        // 160 leaves from fresh keys, more than S takes of one table, then their prune a day later.
+        const leavers = Array.from({ length: STANDBY_ROW_CAP + 10 }, (_, i) => newId(`Leaver ${i + 1}`));
+        const leaves: number[] = [];
+        for (const [i, lv] of leavers.entries()) leaves.push((await S_(lv, '/api/push-tokens', { publicKey: lv.pk, token: token(`leaver-${i}`), leftAt: 100 }, 'DELETE')).status);
+        const mLeaves = await main.send('rows');
+        require_(leaves.every((st) => st === 200) && mLeaves.outside.push_token_leaves === leavers.length,
+            `M: ${leavers.length} fresh keys each leave a phone (${mLeaves.outside.push_token_leaves} leaves outside the rule)`);
+        const dLeaves = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dLeaves.ok === true && dLeaves.mode === 'delta' && tablesDiff(mLeaves.tables, s.tables).length === 0 && s.outside.push_token_leaves === 0,
+            `a delta lands and carries none of them (${dLeaves.ok ? dLeaves.mode : dLeaves.error}; outside ${JSON.stringify(s.outside)})`);
+        require_(await main.send('age-leaves', { days: 2, strangers: true }) === leavers.length, 'M: those leaves were applied two days ago');
+        built('another fresh key leaves a phone: M clears the day-old leaves', await S_(strangers[1], '/api/push-tokens', { publicKey: strangers[1].pk, token: longest('stranger-1'), leftAt: 200 }, 'DELETE'));
+        const mPruned = await main.send('rows');
+        assert(mPruned.outside.push_token_leaves === 1 && leaveTombstones(mPruned).length === 0,
+            `M: the ${leavers.length} day-old leaves are gone, with no tombstone (${mPruned.outside.push_token_leaves} left outside the rule; ${leaveTombstones(mPruned).length} tombstones)`);
+        const dPruned = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dPruned.ok === true && dPruned.mode === 'delta' && tablesDiff(mPruned.tables, s.tables).length === 0,
+            `the next delta lands, and S's G4 tables are M's (${dPruned.ok ? dPruned.mode : dPruned.error}; differences ${first(tablesDiff(mPruned.tables, s.tables))})`);
+        const wPruned = await standby.send('pull', { whole: true });
+        const rPruned = await standby.send('record');
+        s = await standby.send('rows');
+        assert(wPruned.ok === true && wPruned.whole === true && tablesDiff(mPruned.tables, s.tables).length === 0 && Object.values(s.outside).every((n) => n === 0)
+            && rPruned.lastWhole?.exact === true && rPruned.lastMismatchResyncAt === null,
+            `and so does a whole copy, exact (${wPruned.ok ? wPruned.mode : wPruned.error}; ${JSON.stringify(rPruned.lastWhole)})`);
         const ids: Record<string, string> = {
             gwen: gwen.pk, ann2: ann2.pk, bo: bo.pk, cy: cy.pk, dee: dee.pk, kip: kip.pk, probe: probe.publicKey, chatAB, chatAC,
             sharedToken: SHARED, itemEdited: edited.id, report: report.reportId, post: tuneUp.id, remindAt: String(hourBefore),
@@ -617,9 +777,9 @@ async function main(): Promise<void> {
         const record5 = await standby.send('record');
         const c5 = record5.consistency;
         assert(whole5.ok === true && whole5.whole === true && JSON.stringify(c5?.plainTablesLeftOut?.tables) === '["invite_codes"]' && c5.ok === false
-            && c5.plainTablesLeftOut.count === 5 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
+            && c5.plainTablesLeftOut.count === 6 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
             && c5.tables.some((t: any) => t.name === 'invite_codes' && !t.match),
-            `the whole copy lands; the row (Bo's invite, so a count short) and the values (four takers) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
+            `the whole copy lands; the row (Bo's invite, so a count short) and the values (five takers: four members' and the newcomer's, 3c) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
         assert(before5.lastMismatchResyncAt === null && record5.lastWhole?.exact === false && record5.lastWhole.differs?.includes('invite_codes')
             && record5.lastWhole.resyncAsked === false && record5.lastMismatchResyncAt === null,
             `its record: not exact, invite_codes differing, and no force-resync asked (${JSON.stringify(record5.lastWhole)})`);
@@ -687,6 +847,7 @@ async function main(): Promise<void> {
         s = await standby.send('rows');
         require_(tablesDiff(onMain.tables, s.tables).length === 0, `S holds M's G4 tables at its last copy (differences ${first(tablesDiff(onMain.tables, s.tables))})`);
         const mainCounts = await main.send('push-counts');
+        const mainToVisitor = await main.send('push-counts', { keys: [visitor.pk] });
         const mainFeed = await api(m, 'GET', '/api/activity/feed', { as: bo });
         const mainGuide = await api(m, 'GET', '/api/pricing-guide', { as: bo });
         const mainGroups = await main.send('your-groups', { keepers: [cy.pk, kip.pk] });
@@ -713,10 +874,21 @@ async function main(): Promise<void> {
         let pr = await standby.send('rows');
         assert(tablesDiff(onMain.tables, pr.tables).length === 0, `the promoted server's G4 tables are M's, every row and stamp (differences ${first(tablesDiff(onMain.tables, pr.tables))})`);
 
-        // Phones.
+        // Phones. The take-over's notice, posted as the promoted server booted, reached the members' copied phones.
+        const movedNotice: Push[] = (await standby.send('pushes')).filter((x: Push) => x.title === 'This community moved to a new server');
         const promotedCounts = await standby.send('push-counts');
+        assert(movedNotice.length > 0 && movedNotice.length === promotedCounts.counts.marketplace,
+            `the notice "This community moved to a new server" reaches the members' phones the standby copied, as any announcement does (${movedNotice.length} phones; a push of its category reaches ${promotedCounts.counts.marketplace})`);
         assert(JSON.stringify(promotedCounts.counts) === JSON.stringify(mainCounts.counts) && promotedCounts.handed === mainCounts.handed,
-            `a push of each category reaches exactly the phones M's did (${JSON.stringify(promotedCounts.counts)}; M ${JSON.stringify(mainCounts.counts)})`);
+            `a push of each category reaches exactly the members' phones M's did (${JSON.stringify(promotedCounts.counts)}; M ${JSON.stringify(mainCounts.counts)})`);
+        assert(Object.values(pr.outside).every((n) => n === 0), `and holds no phone or leave of a key with no member's row (${JSON.stringify(pr.outside)})`);
+        const promotedToVisitor = await standby.send('push-counts', { keys: [visitor.pk] });
+        const viAgain = await phone2(p, visitor, token('vi'), 101);
+        const promotedToVisitorAfter = await standby.send('push-counts', { keys: [visitor.pk] });
+        assert(Object.values(mainToVisitor.counts as Record<string, number>).every((n) => n === 1)
+            && Object.values(promotedToVisitor.counts as Record<string, number>).every((n) => n === 0)
+            && viAgain.status === 200 && Object.values(promotedToVisitorAfter.counts as Record<string, number>).every((n) => n === 1),
+            `a visitor's phone isn't copied (the narrow rule): Vi is reached on the promoted server once the app registers there again (M ${JSON.stringify(mainToVisitor.counts)}; then ${JSON.stringify(promotedToVisitor.counts)}; after ${JSON.stringify(promotedToVisitorAfter.counts)})`);
         const lateAgain = await phone2(p, kip, token('kip-1'), 5500);
         assert(lateAgain.status === 409 && lateAgain.body?.code === 'push_token_left',
             `the leave M applied refuses, on the promoted server, a registration Kip's phone sent before it (${brief(lateAgain)})`);

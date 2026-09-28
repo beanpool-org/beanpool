@@ -50,6 +50,7 @@ import { setTakeoverChangeHandler } from './takeover-signal.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { withoutOldAddresses } from './address-retention.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
 /** Chokepoints fire in bursts (a prune touches roles, status and config); one re-seal covers the burst. */
@@ -605,9 +606,13 @@ export async function getSealedTakeoverEnvelope(): Promise<{ envelopeId: string;
 
 // ── Which standby holds which envelope (§4: "standby @ 203.0.113.9 holds the keys sealed today 14:02") ──
 
-/** One standby's last fetch of the envelope, keyed by the address it came from. */
+/**
+ * One standby's last fetch of the envelope, keyed by the address it came from. The address is kept 7 days from that
+ * fetch, then null (services/address-retention.ts): the record stays, because which keys went out, and when, still
+ * matters to the owners.
+ */
 export interface EnvelopeHolderRecord {
-    ip: string;
+    ip: string | null;
     envelopeId: string;
     /** When that envelope was sealed (its header's createdAt). */
     sealedAt: string;
@@ -629,7 +634,9 @@ function readHolderRecords(): EnvelopeHolderRecord[] {
     try {
         const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(HOLDERS_KEY) as { value?: string } | undefined;
         const list = row?.value ? JSON.parse(row.value) : [];
-        return Array.isArray(list) ? list.filter((h) => h && typeof h.ip === 'string' && typeof h.envelopeId === 'string') : [];
+        return Array.isArray(list)
+            ? withoutOldAddresses('takeover_envelope_holders', list.filter((h) => h && (typeof h.ip === 'string' || h.ip === null) && typeof h.envelopeId === 'string'))
+            : [];
     } catch {
         return [];
     }
@@ -639,9 +646,9 @@ function readHolderRecords(): EnvelopeHolderRecord[] {
 export function noteEnvelopeFetch(ip: string, envelopeId: string, sealedAt: string, how: EnvelopeHolderRecord['how']): void {
     try {
         const others = readHolderRecords().filter((h) => h.ip !== ip);
-        const list = [{ ip, envelopeId, sealedAt, lastFetchAt: Date.now(), how }, ...others]
+        const list = withoutOldAddresses('takeover_envelope_holders', [{ ip, envelopeId, sealedAt, lastFetchAt: Date.now(), how }, ...others]
             .sort((a, b) => b.lastFetchAt - a.lastFetchAt)
-            .slice(0, HOLDERS_KEEP);
+            .slice(0, HOLDERS_KEEP));
         db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(HOLDERS_KEY, JSON.stringify(list));
     } catch (e: any) {
         logger.warn('SYS', `[Takeover] Could not record which standby fetched the envelope: ${e?.message || e}`);
@@ -657,9 +664,10 @@ export function getEnvelopeHolders(): EnvelopeHolder[] {
     return readHolderRecords().map((h) => {
         const current = !!stored && stored.envelopeId === h.envelopeId;
         const verb = h.how === 'confirmed' ? 'holds' : 'was sent';
+        const who = h.ip ? `The standby at ${h.ip}` : 'A standby whose address is no longer kept';
         const message = current
-            ? `The standby at ${h.ip} ${verb} the take-over keys sealed ${h.sealedAt}, the current lock.`
-            : `The standby at ${h.ip} ${verb} take-over keys sealed ${h.sealedAt}, from before the latest change`
+            ? `${who} ${verb} the take-over keys sealed ${h.sealedAt}, the current lock.`
+            : `${who} ${verb} take-over keys sealed ${h.sealedAt}, from before the latest change`
                 + (stored ? ` (${stored.reason}, ${stored.sealedAt}).` : '.');
         return { ...h, current, message };
     });

@@ -131,6 +131,7 @@ import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
+import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
@@ -1123,6 +1124,10 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
     // a day old on this timer too, not only when somebody joins (engine/open-join.ts).
     startForgettingJoinAddresses();
+    // Nobody's internet address is kept longer than 7 days: the copying routes' access list, the standby watch and the
+    // take-over keys' holders forget theirs, now (the first boot of a version clears older ones) and hourly after
+    // (services/address-retention.ts).
+    startForgettingOldAddresses();
     // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();

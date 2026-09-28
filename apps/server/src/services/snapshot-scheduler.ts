@@ -52,6 +52,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
+import { forgetAddressesInCopy } from './address-retention.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 export const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -98,6 +99,9 @@ export function writeDbSnapshot(destPath: string): void {
     // destination must not already exist.
     if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
     db.exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
+    // Every snapshot and backup is made here, and none keeps an internet address: a copy can be kept for weeks, and
+    // this server keeps an address 7 days at most (services/address-retention.ts).
+    forgetAddressesInCopy(destPath);
 }
 
 // ===================== CONFIG =====================

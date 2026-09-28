@@ -2761,6 +2761,21 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
 }
 
 /**
+ * A community that refuses this phone its listings (a members_only answer, services/pillar-sync.ts): every listing this
+ * phone cached of it goes, with its poll votes and RSVPs, but the phone's own posts and everything of its own member's
+ * (messages, deals, Beans) stay. Only this community's database is written: applyDelta checks it is the one asked.
+ * The next sync that may read the listings is a whole one (pillar-sync drops the cursor).
+ */
+async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfPubkey: string | null): Promise<void> {
+    const own = selfPubkey ?? '';
+    const others = 'SELECT id FROM posts WHERE author_pubkey IS NOT ?';
+    await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${others})`, [own]);
+    await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${others})`, [own]);
+    const gone = await txn.runAsync('DELETE FROM posts WHERE author_pubkey IS NOT ?', [own]);
+    if (gone.changes > 0) console.log(`[DB] applyDelta: ${gone.changes} listing(s) of a community that keeps its listings for its members left this phone`);
+}
+
+/**
  * After a take-over, the listings the whole pull `posts` shows the node no longer has go (utils/posts-replace.ts says
  * which: its rule, and why).
  */
@@ -2939,6 +2954,11 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
             if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
         }
+
+        // The community refused this phone its listings (a local community's are its members', utils/members-only-listings.ts):
+        // what it kept of them from before goes, so no old listing or pin stays on show and the Market shows the
+        // members-only card.
+        if (delta.postsRefused === true) await dropListingsOfARefusedCommunity(txn, selfPubkey);
 
         // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they
         // arrived. They come after `posts` so that a catch-up sync whose pull left the node BEFORE a push replays

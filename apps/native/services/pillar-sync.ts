@@ -401,7 +401,20 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
                 await noteMembersOnly(anchorUrl, membersOnly);
                 if (membersOnly) {
+                    // What this phone cached of the community's listings before it was refused them (its key is no
+                    // member there) is not its to keep showing: it goes, never another community's and never the phone's
+                    // own posts (utils/db.ts applyDelta `postsRefused`), and the Market shows the members-only card. The
+                    // cursor and fingerprints go with it, so the sync after the phone may read them again is a whole one.
                     const { DeviceEventEmitter } = require('react-native');
+                    try {
+                        if (await applyDelta({ postsRefused: true }, expectedDbName)) {
+                            await AsyncStorage.removeItem(kLastSync);
+                            forgetFingerprintsOf(anchorUrl);
+                            DeviceEventEmitter.emit('sync_data_updated');
+                        }
+                    } catch (e) {
+                        console.warn('[Pillar Sync] Could not drop the listings of a community that keeps them for its members:', e);
+                    }
                     DeviceEventEmitter.emit('members_only_listings');
                 }
                 timeouts.clear();

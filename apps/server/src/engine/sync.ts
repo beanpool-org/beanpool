@@ -15,6 +15,7 @@ import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
+import { RowRules } from '../db/table-rules.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
@@ -233,6 +234,12 @@ export interface ImportResult {
     tombstonesApplied: number;
     conflictsSkipped: number;
     recoverySharesImported: number;
+    /**
+     * `<member key>.<column>` for each value of the copy's members rows this table's own rules refuse (a goal below 0 from a
+     * main server whose column has no CHECK), left out of the write: this standby's row isn't the main server's there, and
+     * the whole-copy check says so (services/backup-puller.ts checkWholeCopy).
+     */
+    valuesLeftOut: string[];
 }
 
 export interface SyncCallbacks {
@@ -840,15 +847,29 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * with the main server's `updated_at`. No value here outlives the copy's: the main server is this standby's only writer
  * and the puller refuses an older copy, so a row that differs in any column is written, whatever its stamp (a withdrawn
  * vouch, a lifted freeze, an unset pin). A column this table has and the copy doesn't name (a standby newer than its main
- * server) keeps its own value, or its default on a new row. Returns 'new', 'updated' or null (already the main server's).
+ * server) keeps its own value, or its default on a new row.
+ *
+ * Never a value this table's own rules refuse (its CHECKs and NOT NULLs, db/table-rules.ts RowRules): a main server whose
+ * column came from an ALTER with no CHECK can hold one (a goal below 0 on a community older than the enterprise
+ * unification), and one such value would fail this copy and every copy after it. It is left out of the write (the row
+ * keeps what it holds here, or a new row the column's default) and named in `leftOut`, which the whole-copy check reports
+ * (services/backup-puller.ts checkWholeCopy). Returns 'new', 'updated', null (already the main server's), or 'refused'
+ * when the row breaks a rule whatever is left out (a new row with no callsign): not written, and counted by the caller.
  */
 function writeMemberStanding(
-    memberColumns: ReadonlySet<string>, cache: Map<string, Database.Statement>, publicKey: string,
-    standing: Record<string, unknown>, updatedAt: unknown,
-): 'new' | 'updated' | null {
-    const columns = Object.keys(standing).filter((c) => memberColumns.has(c) && isColumnValue(standing[c])).sort();
+    memberColumns: ReadonlySet<string>, rules: RowRules, cache: Map<string, Database.Statement>, publicKey: string,
+    standing: Record<string, unknown>, updatedAt: unknown, leftOut: string[],
+): 'new' | 'updated' | 'refused' | null {
+    const offered = Object.keys(standing).filter((c) => memberColumns.has(c) && isColumnValue(standing[c])).sort();
     const stamp = typeof updatedAt === 'string' && updatedAt ? updatedAt : null;
     const existing = db.prepare('SELECT * FROM members WHERE public_key = ?').get(publicKey) as Record<string, unknown> | undefined;
+    if (existing && existing.updated_at === stamp && offered.every((c) => existing[c] === standing[c])) return null;
+    const admitted = rules.admit(offered, standing, existing);
+    if (!admitted) return 'refused';
+    for (const c of admitted.leftOut) leftOut.push(`${publicKey.slice(0, 16)}.${c}`);
+    const columns = admitted.columns;
+    // A row that differs only in a value left out is written once, not again with every copy.
+    if (existing && existing.updated_at === stamp && columns.every((c) => existing[c] === standing[c])) return null;
     const values = columns.map((c) => standing[c] as string | number | null);
     const q = (c: string) => `"${c}"`;
     if (!existing) {
@@ -858,7 +879,6 @@ function writeMemberStanding(
         insert.run(publicKey, ...values, stamp);
         return 'new';
     }
-    if (existing.updated_at === stamp && columns.every((c, i) => existing[c] === values[i])) return null;
     const sql = `UPDATE members SET ${columns.map((c) => `${q(c)} = ?, `).join('')}updated_at = ? WHERE public_key = ?`;
     let update = cache.get(sql);
     if (!update) cache.set(sql, update = db.prepare(sql));
@@ -1038,6 +1058,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     let groupChanges = 0;
     // Preferences, keepers and pledges written (design G2b, G2c).
     let standingChanges = 0;
+    // `<member key>.<column>` for each value of a members row this table's own rules refuse, left out of its write.
+    const valuesLeftOut: string[] = [];
 
     // Photos go through the store BEFORE the transaction opens, never inside it — the same rule the create
     // and update paths keep (`storedPhotoColumns` in engine/posts.ts). Each `store.put` is a mkdir, a temp
@@ -1102,15 +1124,22 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             const memberColumns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[])
                 .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at'));
             const standingStatements = new Map<string, Database.Statement>();
+            // This table's own rules, which a whole row is checked against before it is written (writeMemberStanding); only
+            // for a copy that carries whole rows.
+            const memberRules = (remote.members ?? []).some((rm) => isPlainObject(rm?.standing)) ? new RowRules(db, 'members') : null;
             for (const rm of remote.members ?? []) {
                 // The main server's whole row (design G2a, §4.1): every column as it holds it. The special cases below (the
                 // visitor's mark never lowered by a copy, the owner's delete kept, the first voucher kept) are for a main
                 // server older than that, which sends its members as a fixed list of fields.
-                if (isPlainObject(rm.standing)) {
+                if (memberRules && isPlainObject(rm.standing)) {
                     if (typeof rm.publicKey !== 'string' || !rm.publicKey) { conflictsSkipped++; continue; }
-                    const wrote = writeMemberStanding(memberColumns, standingStatements, rm.publicKey, rm.standing, rm.updatedAt);
+                    const wrote = writeMemberStanding(memberColumns, memberRules, standingStatements, rm.publicKey, rm.standing, rm.updatedAt, valuesLeftOut);
                     if (wrote === 'new') newMembers++;
                     else if (wrote === 'updated') updatedMembers++;
+                    else if (wrote === 'refused') {
+                        conflictsSkipped++;
+                        console.warn(`[Sync] A member's row this table's rules refuse whatever is left out, not written: ${rm.publicKey.slice(0, 16)}`);
+                    }
                     continue;
                 }
                 const existing = db.prepare("SELECT updated_at, is_visitor, board_standing_changed_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null; board_standing_changed_at: string | null } | undefined;
@@ -1211,6 +1240,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     );
                     if (res.changes > 0) updatedMembers++;
                 }
+            }
+
+            memberRules?.close();
+            if (valuesLeftOut.length > 0) {
+                console.warn(`[Sync] ${valuesLeftOut.length} value(s) in the main server's members rows this table's rules refuse, left out `
+                    + `(the row keeps its own, or the default): ${valuesLeftOut.slice(0, 5).join(', ')}`);
             }
 
             // Each member's preferences, with their row (design G2b): holiday, notification settings, reminder defaults.
@@ -2145,5 +2180,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
         tombstonesApplied,
         conflictsSkipped,
         recoverySharesImported,
+        valuesLeftOut,
     };
 }

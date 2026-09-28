@@ -29,7 +29,15 @@
  *     a pledge and a release under the routes; nothing is written. A pledge S holds that M doesn't (as its own release
  *     route wrote one before it refused) is counted by the whole-copy check, and a whole copy deletes it: Probe Co's
  *     floor, allowance and backing on S are M's again (before, it stayed through every copy and a take-over).
- *  8. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
+ *  8. A value the standby's own table refuses (#1276 review 4118882942). M's members table is a community's from before
+ *     the enterprise unification (Slice 3's columns came from ALTERs, with no CHECK); S's is a fresh install's. M refuses a
+ *     goal below 0 now, and holds one as an older build wrote it. The running S's delta and whole copy land, the goal
+ *     left out (S keeps its own), a listing made after it arrives, and the whole-copy check reports the value; a fresh
+ *     standby's first copy lands with the goal at its default, and so do its next pulls (before, every copy was refused
+ *     on the CHECK, and a fresh standby held no member). A standby cleans none of its rows at boot. M, booted on this
+ *     build as if for the first time (its marker gone), brings the goal into the schema's rules once: the column's
+ *     default, the row stamped, nothing else changed.
+ *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
  *     vouch gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
  *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
  *     with; the enterprises pay no demurrage; the opt-outs hold; the appointed voucher vouches; the enterprise is on the
@@ -217,6 +225,22 @@ async function child(): Promise<void> {
             const { getBackupStatus } = await import('./services/backup-puller.js');
             return getBackupStatus().consistency ?? null;
         },
+        /** Whether this database's members.goal_amount has the fresh schema's CHECK (an ALTER'd column has none). */
+        'goal-rule': async () => {
+            const { db } = await import('./db/db.js');
+            const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'members'`).get() as { sql: string }).sql;
+            return /goal_amount IS NULL OR goal_amount >= 0/.test(sql);
+        },
+        /** A goal as an older build wrote it: POST /api/treasury passed Number(goalAmount) on unchecked. */
+        'plant-goal': async (a: { pk: string; goal: number }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('UPDATE members SET goal_amount = ? WHERE public_key = ?').run(a.goal, a.pk).changes === 1;
+        },
+        /** This node's record that its members rows keep the fresh schema's rules (db.ts bringMembersToSchemaRules). */
+        marker: async () => {
+            const { db } = await import('./db/db.js');
+            return (db.prepare(`SELECT value FROM node_config WHERE key = 'migration_members_schema_rules_v1'`).get() as { value: string } | undefined)?.value ?? null;
+        },
         fetches: async () => fetches,
     });
 }
@@ -305,6 +329,19 @@ function rowsDiff(m: Rows, s: Rows): string[] {
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 6).join(' | ')}`);
 
+/**
+ * The members table of a community from before the enterprise unification: every column a fresh install's has but Slice 3's
+ * five (purpose, goal_amount, deadline_at, lifecycle, paused), which db.ts then adds with ALTERs that carry no CHECK.
+ */
+function membersBeforeSlice3(): string {
+    const schema = fs.readFileSync(path.join(path.dirname(SCRIPT), 'db', 'schema.sql'), 'utf-8');
+    const create = /CREATE TABLE IF NOT EXISTS members \([\s\S]*?\n\);/.exec(schema)?.[0] ?? '';
+    const lines = create.split('\n');
+    const kept = lines.filter((l) => !/^\s*(purpose|goal_amount|deadline_at|lifecycle|paused)\s/.test(l));
+    if (lines.length - kept.length !== 5) throw new Error(`schema.sql's members table: expected Slice 3's five columns, found ${lines.length - kept.length}`);
+    return kept.join('\n');
+}
+
 /** A stopped node's database, written as the old importer left it. */
 function withDb(dir: string, fn: (db: Database.Database) => void): void {
     const db = new Database(path.join(dir, 'state.db'));
@@ -338,6 +375,10 @@ async function main(): Promise<void> {
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: an enterprise with keepers and pledges, a project, trust, holiday, opt-outs —');
+        // M's members table is that of a community running since before the enterprise unification: its Slice 3 columns
+        // come from db.ts's ALTERs, with no CHECK (step 8).
+        fs.mkdirSync(dir('main'), { recursive: true });
+        withDb(dir('main'), (db) => db.exec(membersBeforeSlice3()));
         const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
@@ -562,8 +603,76 @@ async function main(): Promise<void> {
         assert(check7?.ok === true && check7.tables.some((t: any) => t.name === 'enterprise_pledges' && t.match),
             `the whole-copy check after it finds the copy exact, pledges counted (${JSON.stringify(check7?.tables?.filter((t: any) => !t.match))})`);
 
-        // ── 8. The take-over ──
-        console.log('\n— 8. M dies; S takes over with the recovery code —');
+        // ── 8. A value the standby's own table refuses ──
+        console.log('\n— 8. an older main server\'s row holds a goal below 0, which a standby\'s table refuses: left out, reported, and copying goes on —');
+        const shapes8 = { m: await main.send('goal-rule'), s: await standby.send('goal-rule') };
+        require_(shapes8.m === false && shapes8.s === true, `M's goal column came from an ALTER, with no CHECK; S's, from schema.sql, has one (${JSON.stringify(shapes8)})`);
+        const minus8 = await S_(eve, '/api/treasury', { name: 'Minus Fund', purpose: 'Below zero', lifecycle: 'bounded', goalAmount: -5 });
+        const minusCrowd8 = await S_(eve, '/api/crowdfund/projects', { title: 'Minus Crowd', description: 'Below zero', goalAmount: -5, creatorPubkey: eve.pk });
+        assert(minus8.status === 400 && /goal/i.test(JSON.stringify(minus8.body)) && minusCrowd8.status === 400 && /goal/i.test(JSON.stringify(minusCrowd8.body)),
+            `M refuses a goal below 0 now, for an enterprise and a crowdfund (${brief(minus8)}; ${brief(minusCrowd8)})`);
+        require_(await main.send('plant-goal', { pk: seed.publicKey, goal: -5 }), 'M: Seed Fund\'s goal is -5, as an older build wrote it (POST /api/treasury passed it on unchecked)');
+        const m8: Rows = await main.send('rows');
+        const goalOf = (r: Rows, pk: string) => r.members.find((x) => x.public_key === pk)?.goal_amount;
+        const example8 = `${seed.publicKey.slice(0, 16)}.goal_amount`;
+        const onlyTheGoal = (d: string[]) => d.length === 1 && d[0].startsWith(`members ${seed.publicKey.slice(0, 12)}.goal_amount:`);
+        const delta8 = await standby.send('pull', {});
+        let s8: Rows = await standby.send('rows');
+        assert(delta8.ok === true && delta8.mode === 'delta' && goalOf(s8, seed.publicKey) === 100 && onlyTheGoal(rowsDiff(m8, s8)),
+            `the running standby's delta lands: Seed Fund's row is M's but for the goal, which S keeps (${JSON.stringify({ ok: delta8.ok, mode: delta8.mode, error: delta8.error })}; differences ${first(rowsDiff(m8, s8))})`);
+        const plums = await offer(ann, 'Late plums', 3);
+        const next8 = await standby.send('pull', {});
+        assert(next8.ok === true && (await boardOn(sb)).includes(plums.id), `and so does the next: a listing M makes after it arrives (${next8.ok ? next8.mode : next8.error})`);
+        const whole8 = await standby.send('pull', { whole: true });
+        const m8b: Rows = await main.send('rows');
+        s8 = await standby.send('rows');
+        const check8 = await standby.send('consistency');
+        assert(whole8.ok === true && whole8.whole === true && onlyTheGoal(rowsDiff(m8b, s8)),
+            `its whole copy lands, the goal left out (${whole8.ok ? whole8.mode : whole8.error}; differences ${first(rowsDiff(m8b, s8))})`);
+        assert(check8?.ok === false && check8.valuesLeftOut?.count === 1 && check8.valuesLeftOut.examples?.[0] === example8
+            && check8.tables.every((t: any) => t.match) && check8.ledger?.match === true,
+            `the whole-copy check reports the value left out, so the copy isn't exact; every count and account matches (${JSON.stringify({ ok: check8?.ok, valuesLeftOut: check8?.valuesLeftOut, differ: check8?.tables?.filter((t: any) => !t.match) })})`);
+
+        fs.mkdirSync(dir('fresh'), { recursive: true });
+        fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('fresh'), 'genesis.json'));
+        const fresh = await spawnNode(SCRIPT, dir('fresh'), env(PW_STANDBY, 'backup'));
+        nodes.push(fresh);
+        await fresh.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        const fresh1 = await fresh.send('pull', {});
+        const f8: Rows = await fresh.send('rows');
+        const m8c: Rows = await main.send('rows');
+        const freshCheck = await fresh.send('consistency');
+        assert(fresh1.ok === true && f8.members.length === m8c.members.length && goalOf(f8, seed.publicKey) === null && onlyTheGoal(rowsDiff(m8c, f8)),
+            `a fresh standby's first copy lands: every member, and Seed Fund's goal at the column's default, none (${JSON.stringify({ ok: fresh1.ok, mode: fresh1.mode, error: fresh1.error })}; members ${f8.members.length} of ${m8c.members.length}; differences ${first(rowsDiff(m8c, f8))})`);
+        assert(freshCheck?.ok === false && freshCheck.valuesLeftOut?.examples?.[0] === example8, `and its whole-copy check reports the value (${JSON.stringify(freshCheck?.valuesLeftOut ?? null)})`);
+        const fresh2 = await fresh.send('pull', {});
+        const fresh3 = await fresh.send('pull', { whole: true });
+        assert(fresh2.ok === true && fresh2.mode === 'delta' && fresh3.ok === true && fresh3.whole === true,
+            `its next pulls land, a delta and a whole copy (${JSON.stringify([fresh2, fresh3].map((r) => ({ ok: r.ok, mode: r.mode, error: r.error })))})`);
+        const markers8 = { main: await main.send('marker'), standby: await standby.send('marker'), fresh: await fresh.send('marker') };
+        assert(markers8.main === '1' && markers8.standby === null && markers8.fresh === null,
+            `M ran its clean-up at its first boot; a standby runs none on its rows and records none (${JSON.stringify(markers8)})`);
+        refused.push(...(await fresh.send('fetches')).blocked);
+        await fresh.kill('SIGTERM');
+
+        console.log('\n— 8. a main server holding such a goal from an older build brings it into the schema\'s rules once, at boot —');
+        await main.send('checkpoint');
+        copyDir(dir('main'), dir('upgraded'));
+        withDb(dir('upgraded'), (db) => db.prepare(`DELETE FROM node_config WHERE key = 'migration_members_schema_rules_v1'`).run());
+        const upgraded = await spawnNode(SCRIPT, dir('upgraded'), env(PW_MAIN, 'primary'));
+        nodes.push(upgraded);
+        const u8: Rows = await upgraded.send('rows');
+        const seedBefore = m8c.members.find((r) => r.public_key === seed.publicKey);
+        const seedAfter = u8.members.find((r) => r.public_key === seed.publicKey);
+        assert(seedBefore?.goal_amount === -5 && seedAfter?.goal_amount === null && seedAfter.updated_at > seedBefore.updated_at && await upgraded.send('marker') === '1',
+            `its goal is the column's default, none, and the row is stamped so a delta carries it (${JSON.stringify({ before: [seedBefore?.goal_amount, seedBefore?.updated_at], after: [seedAfter?.goal_amount, seedAfter?.updated_at] })})`);
+        const others8 = rowsDiff(m8c, u8).filter((d) => !d.startsWith(`members ${seed.publicKey.slice(0, 12)}.`));
+        assert(others8.length === 0, `nothing else changes (${first(others8)})`);
+        refused.push(...(await upgraded.send('fetches')).blocked);
+        await upgraded.kill('SIGTERM');
+
+        // ── 9. The take-over ──
+        console.log('\n— 9. M dies; S takes over with the recovery code —');
         const last = await standby.send('pull', {});
         require_(last.ok === true && last.envelope !== undefined, `S: a last pull, and the take-over envelope (${last.ok ? last.mode : last.error})`);
         const everyone: [string, string][] = [gwen, ann, bo, cy, kip2, lou, eve, fay, dee2, hal].map((w) => [w.name, w.pk]);
@@ -592,7 +701,7 @@ async function main(): Promise<void> {
         const p = `https://localhost:${await standby.send('serve')}`;
         const P_ = (who: Id, route: string, body: unknown = {}) => api(p, 'POST', route, { as: who, body });
 
-        console.log('\n— 8. the promoted server holds every member\'s and enterprise\'s standing —');
+        console.log('\n— 9. the promoted server holds every member\'s and enterprise\'s standing —');
         await standby.send('fresh-trust');
         const promoted = { standing: await standingOn(p), board: await boardOn(p) };
         const floorsDiffer = Object.keys(onMain.standing).filter((n) => JSON.stringify((onMain.standing as any)[n]) !== JSON.stringify((promoted.standing as any)[n]));

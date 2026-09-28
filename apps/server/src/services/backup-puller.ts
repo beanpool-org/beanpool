@@ -169,6 +169,7 @@ function summarize(r: ImportResult): string {
     if (r.newMessages) parts.push(`msgs+${r.newMessages}`);
     if (r.tombstonesApplied) parts.push(`deletes-${r.tombstonesApplied}`);
     if (r.conflictsSkipped) parts.push(`skipped:${r.conflictsSkipped}`);
+    if (r.valuesLeftOut?.length) parts.push(`values left out:${r.valuesLeftOut.length}`);
     return parts.length === 0 ? 'no changes' : parts.join(', ');
 }
 
@@ -375,7 +376,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // Verify the replica matches what the primary sent. Never let a
             // consistency-check error mask an otherwise-successful pull.
             try {
-                checkWholeCopy(payload);
+                checkWholeCopy(payload, result.valuesLeftOut);
             } catch (e: any) {
                 logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
             }
@@ -405,14 +406,21 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
  * every six hours. That force-resync is not a seed: a main server can send a copy that fails this check, so its import
  * is held to the total this standby's ledger had before its clear (ResyncKind). An entry of the copy with no key this
  * server can store or no number for a balance is recorded and asks for none: a force-resync would read the same entry.
- * Exported so a suite can run it on a copy it fetched.
+ * `valuesLeftOut`: the values of this copy's members rows the import left out because this standby's table refuses them
+ * (engine/sync.ts writeMemberStanding); any makes the copy not exact, and is logged, but asks for no force-resync (one
+ * would leave the same values out). Exported so a suite can run it on a copy it fetched.
  */
-export function checkWholeCopy(payload: SyncPayload): ReplicaConsistency {
+export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly string[] = []): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
+    if (valuesLeftOut.length > 0) {
+        c.valuesLeftOut = { count: valuesLeftOut.length, examples: valuesLeftOut.slice(0, 5) };
+        c.ok = false;
+    }
     lastConsistency = c;
     if (!c.ok) {
         const bad = c.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
+        if (c.valuesLeftOut) bad.push(`${c.valuesLeftOut.count} members value(s) this server's table refuses, left out (${c.valuesLeftOut.examples.join(', ')})`);
         logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
     }
     if (c.ledger && !c.ledger.match) {

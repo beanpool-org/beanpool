@@ -1839,10 +1839,11 @@ WHERE status = 'pending';
 -- Request binding (engine/member-signature.ts): how many people's apps signed here each day (UTC), for Settings.
 -- `own`: per address of this community's; `unconfirmed`: per address a node with no configured names was reached at,
 -- which Settings offers the owner to confirm; `old_app`: signatures in the old format, bound to no community ("N
--- members are on an old app", until the switch). Counts only: no key is stored. Rows older than 8 days are dropped.
+-- members are on an old app", until the switch); `lost`: per lost name (another community holds it), the apps refused
+-- there. Counts only: no key is stored. Rows older than 8 days are dropped. db.ts rebuilds a table from before `lost`.
 CREATE TABLE IF NOT EXISTS signature_audiences (
     day      TEXT NOT NULL,
-    kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app')),
+    kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app', 'lost')),
     address  TEXT NOT NULL,
     people   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, kind, address)

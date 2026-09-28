@@ -18,7 +18,7 @@ import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
-import { peerFromBridgeAccountId } from '@beanpool/core';
+import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
@@ -7246,28 +7246,59 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     return next;
 }
 
+/**
+ * The hosts of this key's registrar names marked lost (engine/registrar-names.ts `lost`, services/registrar-name-watch.ts):
+ * another community holds each and answers there, or this node released it and the hold is over. Read from the stored
+ * record directly, so this module needs nothing from registrar-names.ts at run time.
+ */
+export function lostRegistrarHosts(config: NodeConfig = getNodeConfig()): Set<string> {
+    const out = new Set<string>();
+    const list: unknown = (config as any).registrarNames;
+    if (!Array.isArray(list)) return out;
+    for (const e of list) {
+        if (!e || typeof e !== 'object' || typeof e.address !== 'string' || !e.lost || typeof e.lost !== 'object') continue;
+        // As registrar-names.ts reads a mark: a malformed one marks nothing (the name is accepted, so it stays published).
+        if (typeof e.lost.since !== 'string' || !Number.isFinite(Date.parse(e.lost.since))
+            || (e.lost.why !== 'another-key' && e.lost.why !== 'released')) continue;
+        const host = audienceOf(e.address);
+        if (host) out.add(host);
+    }
+    return out;
+}
+
+/**
+ * This community's public address: the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`, else
+ * CF_RECORD_NAME. Never a lost name (lostRegistrarHosts): the directory's `publicUrl` and this community's own names
+ * (engine/own-addresses.ts item 1) must not send anyone to a name another community holds.
+ */
 export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
+    const lost = lostRegistrarHosts(config);
+    const usable = (host: string | null): string | null => {
+        if (!host) return null;
+        const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        if (!clean) return null;
+        const h = audienceOf(clean);
+        return h && lost.has(h) ? null : clean;
+    };
     let host: string | null = null;
     const pa: any = config.publicAddress;
     if (pa) {
         if (typeof pa === 'string' && pa.trim()) {
-            host = pa.trim();
+            host = usable(pa.trim());
         } else if (typeof pa === 'object') {
             if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
-                host = pa.hostname.trim();
+                host = usable(pa.hostname.trim());
             } else if (typeof pa.name === 'string' && pa.name.trim()) {
                 const n = pa.name.trim();
-                host = n.includes('.') ? n : `${n}.beanpool.org`;
+                host = usable(n.includes('.') ? n : `${n}.beanpool.org`);
             }
         }
     }
     if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
         const cf = process.env.CF_RECORD_NAME.trim();
-        host = cf.includes('.') ? cf : `${cf}.beanpool.org`;
+        host = usable(cf.includes('.') ? cf : `${cf}.beanpool.org`);
     }
-    if (!host) return null;
-    const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-    return clean ? `https://${clean}` : null;
+    return host ? `https://${host}` : null;
 }
 
 export function getDirectoryInfo(): any {

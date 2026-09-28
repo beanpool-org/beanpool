@@ -17,6 +17,8 @@
  *     sqlite_master), and each declared one is really missing from it, so the fix that adds one deletes its line.
  *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified, and the
  *     community settings record (config/community-settings.ts) carries exactly the ones classified as the community's.
+ *  6. Every node_config row key the server's code writes (read from its source: a literal, a constant, a prefix) is
+ *     classified in NODE_CONFIG_KEYS, and every write names its key in a way this can read.
  *
  * Adding a table, a column or a setting then fails here until the same PR decides how a standby holds it.
  *
@@ -83,6 +85,161 @@ function writesIn(root: string, skip: (file: string) => boolean): Write[] {
     };
     walk(root);
     return out;
+}
+
+/** A node_config row key a write names (`x*`: one whose start only is fixed), and where. */
+interface ConfigKeyWrite { key: string; at: string }
+
+/**
+ * Every node_config row key the .ts files under `roots` write, outside tests: each INSERT, REPLACE or UPDATE of
+ * node_config, its key a literal in the SQL or the `?` its `.run(…)` fills. That argument is read through string
+ * literals, a constant (declared once in its file, or imported and exported once anywhere), `a + b` and templates (a
+ * part that can't be read leaves a prefix: `nodeProfile.*`), and `for (const k of LIST)` over a constant list.
+ * `unread`: each write whose key this can't read, so a new kind of write is looked at, never missed.
+ */
+function nodeConfigKeysWritten(roots: string[], relativeTo: string): { writes: ConfigKeyWrite[]; unread: string[] } {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            const file = path.join(dir, e.name);
+            if (e.isDirectory()) {
+                if (!['node_modules', 'dist', '__tests__'].includes(e.name)) walk(file);
+            } else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts') && !/^(test-|bench-)|-test-harness\.ts$|\.test\.ts$/.test(e.name)) {
+                files.push(file);
+            }
+        }
+    };
+    for (const r of roots) walk(r);
+    const sources = files.map((f) => ts.createSourceFile(f, fs.readFileSync(f, 'utf-8'), ts.ScriptTarget.Latest, true));
+
+    // Per file, how often each name is declared (a variable, a destructured name, a parameter), its constants' values,
+    // and the names it imports; across files, the exported constants.
+    const declared = new Map<ts.SourceFile, Map<string, number>>();
+    const consts = new Map<ts.SourceFile, Map<string, ts.Expression>>();
+    const imported = new Map<ts.SourceFile, Set<string>>();
+    const exported = new Map<string, ts.Expression[]>();
+    for (const sf of sources) {
+        const count = new Map<string, number>();
+        const own = new Map<string, ts.Expression>();
+        const names = new Set<string>();
+        const visit = (n: ts.Node) => {
+            if ((ts.isVariableDeclaration(n) || ts.isBindingElement(n) || ts.isParameter(n)) && ts.isIdentifier(n.name)) {
+                count.set(n.name.text, (count.get(n.name.text) ?? 0) + 1);
+                if (ts.isVariableDeclaration(n) && n.initializer && ts.isVariableDeclarationList(n.parent) && (n.parent.flags & ts.NodeFlags.Const)) {
+                    own.set(n.name.text, n.initializer);
+                    const statement = n.parent.parent;
+                    if (ts.isVariableStatement(statement) && statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
+                        exported.set(n.name.text, [...(exported.get(n.name.text) ?? []), n.initializer]);
+                    }
+                }
+            }
+            if (ts.isImportSpecifier(n)) names.add(n.name.text);
+            ts.forEachChild(n, visit);
+        };
+        visit(sf);
+        declared.set(sf, count);
+        consts.set(sf, own);
+        imported.set(sf, names);
+    }
+
+    // The strings an expression can be (`x*`: only its start is known), or null.
+    const read = (e: ts.Expression | undefined, seen: Set<ts.Node> = new Set()): string[] | null => {
+        if (!e || seen.has(e)) return null;
+        seen.add(e);
+        if (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e)) return read(e.expression, seen);
+        if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return [e.text];
+        if (ts.isArrayLiteralExpression(e)) {
+            const out: string[] = [];
+            for (const el of e.elements) {
+                const v = read(el, seen);
+                if (!v) return null;
+                out.push(...v);
+            }
+            return out;
+        }
+        const join = (parts: (string[] | null)[]): string[] => {
+            let out = [''];
+            for (const p of parts) {
+                if (!p) return out.map((s) => (s.endsWith('*') ? s : `${s}*`));
+                out = out.flatMap((a) => (a.endsWith('*') ? [a] : p.map((b) => a + b)));
+            }
+            return out;
+        };
+        if (ts.isTemplateExpression(e)) return join([[e.head.text], ...e.templateSpans.flatMap((s) => [read(s.expression, seen), [s.literal.text]])]);
+        if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) return join([read(e.left, seen), read(e.right, seen)]);
+        if (!ts.isIdentifier(e)) return null;
+        for (let n: ts.Node = e; n.parent; n = n.parent) {
+            const p = n.parent;
+            if (!ts.isForOfStatement(p) || n !== p.statement || !ts.isVariableDeclarationList(p.initializer)) continue;
+            const d = p.initializer.declarations[0];
+            if (d && ts.isIdentifier(d.name) && d.name.text === e.text) return read(p.expression, seen);
+        }
+        const sf = e.getSourceFile();
+        const times = declared.get(sf)?.get(e.text) ?? 0;
+        if (times === 1) return consts.get(sf)?.has(e.text) ? read(consts.get(sf)!.get(e.text), seen) : null;
+        const other = exported.get(e.text);
+        return times === 0 && imported.get(sf)?.has(e.text) && other?.length === 1 ? read(other[0], seen) : null;
+    };
+
+    const WRITE = /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?)\s+node_config\b/i;
+    const isCallOf = (n: ts.Node, method: string): n is ts.CallExpression =>
+        ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === method;
+    const writes: ConfigKeyWrite[] = [];
+    const unread: string[] = [];
+    for (const sf of sources) {
+        const where = (n: ts.Node) => `${path.relative(relativeTo, sf.fileName)}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
+        const calls: ts.CallExpression[] = [];
+        const collect = (n: ts.Node) => {
+            if (ts.isCallExpression(n)) calls.push(n);
+            ts.forEachChild(n, collect);
+        };
+        collect(sf);
+        // The calls that run a prepared statement: `<prepare>.run(…)`, or `<name>.run(…)` for `const <name> = <prepare>`.
+        const runsOf = (prepare: ts.CallExpression): ts.CallExpression[] => {
+            const p = prepare.parent;
+            if (ts.isPropertyAccessExpression(p) && p.name.text === 'run' && isCallOf(p.parent, 'run')) return [p.parent];
+            if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) {
+                const name = p.name.text;
+                return calls.filter((c) => isCallOf(c, 'run') && ts.isIdentifier((c.expression as ts.PropertyAccessExpression).expression)
+                    && ((c.expression as ts.PropertyAccessExpression).expression as ts.Identifier).text === name);
+            }
+            return [];
+        };
+        const visit = (n: ts.Node) => {
+            ts.forEachChild(n, visit);
+            if (!ts.isStringLiteral(n) && !ts.isNoSubstitutionTemplateLiteral(n) && !ts.isTemplateExpression(n)) return;
+            const sql = ts.isTemplateExpression(n) ? n.getText(sf) : n.text;
+            if (!WRITE.test(sql)) return;
+            const at = where(n);
+            const literal = /\bnode_config\s*\(\s*key\s*,[^)]*\)\s*VALUES\s*\(\s*'([^']*)'/i.exec(sql) ?? /\bWHERE\s+key\s*=\s*'([^']*)'/i.exec(sql);
+            if (literal) {
+                writes.push({ key: literal[1], at });
+                return;
+            }
+            const byKey = ts.isTemplateExpression(n) ? null
+                : /\bnode_config\s*\(\s*key\s*,[^)]*\)\s*VALUES\s*\(\s*\?/i.exec(sql) ?? /\bWHERE\s+key\s*=\s*\?/i.exec(sql);
+            if (!byKey) {
+                unread.push(at);
+                return;
+            }
+            const index = (sql.slice(0, byKey.index + byKey[0].length).match(/\?/g) ?? []).length - 1;
+            // The statement is prepared where it is written, or through the constant it is the value of.
+            const prepares = isCallOf(n.parent, 'prepare') && n.parent.arguments[0] === n ? [n.parent]
+                : ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name)
+                    ? calls.filter((c) => isCallOf(c, 'prepare') && ts.isIdentifier(c.arguments[0] as ts.Node)
+                        && (c.arguments[0] as ts.Identifier).text === (n.parent as ts.VariableDeclaration & { name: ts.Identifier }).name.text)
+                    : [];
+            const runs = prepares.flatMap(runsOf);
+            if (runs.length === 0) unread.push(`${at} (never run with its key)`);
+            for (const run of runs) {
+                const keys = read(run.arguments[index]);
+                if (!keys || keys.some((k) => k === '' || k === '*')) unread.push(`${where(run)} (${run.arguments[index]?.getText(sf) ?? 'no key'})`);
+                else for (const key of keys) writes.push({ key, at: where(run) });
+            }
+        };
+        visit(sf);
+    }
+    return { writes, unread };
 }
 
 /** The field names of `export interface <name> { … }` in a source file, one level deep. */
@@ -289,6 +446,22 @@ async function main(): Promise<void> {
         assert(community.length > 0 && notCarried.length === 0 && notCommunity.length === 0,
             `the community settings record carries exactly the ${what} settings the manifest calls the community's (${community.length}; not carried: ${list(notCarried)}; carried but not the community's: ${list(notCommunity)})`);
     }
+
+    console.log('\n— 6. node_config row keys —');
+    // node_config is classified key by key (bySetting): a key no entry covers is `setting:unclassified` in the twin
+    // suite, but only once a parity run happens to write it. Read every key the server's code writes instead.
+    const { nodeConfigKeyEntry } = manifest;
+    const repo = path.resolve(here, '../../..');
+    const { writes, unread } = nodeConfigKeysWritten([here, path.join(repo, 'packages/beanpool-engine/src')], repo);
+    const covered = (key: string) => (key.endsWith('*')
+        ? Object.keys(NODE_CONFIG_KEYS).some((k) => k.endsWith('*') && key.startsWith(k.slice(0, -1)))
+        : !!nodeConfigKeyEntry(key));
+    const keys = new Set(writes.map((w) => w.key));
+    console.log(`  keys the server writes: ${list([...keys].sort())}`);
+    const notCovered = [...new Set(writes.filter((w) => !covered(w.key)).map((w) => `${w.key} (${w.at})`))];
+    assert(keys.size > 20 && keys.has('appAddressStaffSeen') && keys.has('nodeProfile.*') && keys.has('ledger_audit_baseline') && notCovered.length === 0,
+        `every node_config row key the server's code writes is classified in NODE_CONFIG_KEYS (${keys.size} keys; unclassified: ${list(notCovered)})`);
+    assert(unread.length === 0, `every write to node_config names its key where this check can read it (unread: ${list(unread)})`);
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

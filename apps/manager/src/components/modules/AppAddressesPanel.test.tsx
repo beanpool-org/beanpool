@@ -328,6 +328,55 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect((await screen.findByRole('alert')).textContent).toBe('This community already has 20 confirmed addresses.');
     });
 
+    it("says where each BeanPool name stands: lost (and how many apps tried), contradicted, at risk, released and held", async () => {
+        const base = { releasedOn: null, acceptedUntil: null, leadsHere: false, lostSince: null, why: null, checkedAt: '2026-09-28T01:00:00Z' } as const;
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [
+                { address: 'now.beanpool.org', source: 'public-address', today: 5, busiestDay: 9 },
+                {
+                    address: 'taken.beanpool.org', source: 'registrar', former: true, today: 0, busiestDay: 2, lost: true, tried: { today: 3, busiestDay: 4 },
+                    standing: { ...base, state: 'lost', registrarSays: 'other', lostSince: '2026-09-20T10:00:00Z', why: 'another-key' },
+                },
+                {
+                    address: 'gaveup.beanpool.org', source: 'registrar', former: true, today: 0, busiestDay: 0, lost: true, tried: { today: 1, busiestDay: 1 },
+                    standing: { ...base, state: 'lost', registrarSays: 'free', releasedOn: '2026-08-01T00:00:00Z', acceptedUntil: '2026-08-31T00:00:00Z', lostSince: '2026-08-31T00:05:00Z', why: 'released' },
+                },
+                { address: 'mixed.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 2, standing: { ...base, state: 'contradiction', registrarSays: 'other', leadsHere: true } },
+                { address: 'risky.beanpool.org', source: 'registrar', former: true, today: 1, busiestDay: 1, standing: { ...base, state: 'at-risk', registrarSays: 'other' } },
+                {
+                    address: 'resting.beanpool.org', source: 'registrar', former: true, today: 0, busiestDay: 0,
+                    standing: { ...base, state: 'at-risk', registrarSays: 'released', releasedOn: '2026-09-20T00:00:00Z', acceptedUntil: '2026-10-20T00:00:00Z' },
+                },
+            ],
+        }));
+        vi.mocked(nodeClient.confirmAppAddress).mockRejectedValue(new Error('Another community holds taken.beanpool.org and answers there, so this community refuses what apps sign for it.'));
+        render(<AppAddressesPanel activeNode={node} />);
+        const rows = await screen.findAllByTestId('app-address');
+        const standing = (i: number) => rows[i].querySelector('[data-testid="app-address-standing"]');
+        expect(standing(0)).toBeNull();
+        // Lost: never "still accepted", in red, since when, how many apps tried, and what to do.
+        expect(rows[1].textContent).toMatch(/^taken\.beanpool\.org · no longer accepted/);
+        expect(standing(1)!.getAttribute('data-state')).toBe('lost');
+        expect(standing(1)!.className).toMatch(/text-red-300/);
+        expect(standing(1)!.textContent).toMatch(/^Since [^.]{1,20}2026 another community holds taken\.beanpool\.org and answers there\. Members' apps that still use taken\.beanpool\.org are talking to that community, so this one refuses what they sign for taken\.beanpool\.org\. 3 apps tried it today\. Ask them to add this community again at its current address, or choose a new name for it\.$/);
+        expect(standing(2)!.textContent).toMatch(/^This community released gaveup\.beanpool\.org on [^.]{1,20}2026 and its hold is over, so it no longer accepts what apps sign for gaveup\.beanpool\.org\. 1 app tried it today\./);
+        expect(standing(3)!.textContent).toBe('The address service says another community holds mixed.beanpool.org, but mixed.beanpool.org still leads to this server. It stays accepted.');
+        expect(standing(3)!.className).toMatch(/text-amber-300/);
+        expect(rows[3].textContent).toMatch(/still accepted/);
+        expect(standing(4)!.textContent).toBe("The address service says another community holds risky.beanpool.org. Members' apps that use it are still accepted. This server checks what answers there before it stops accepting it.");
+        expect(standing(5)!.textContent).toMatch(/^This community released resting\.beanpool\.org on [^.]{1,20}2026, and it is held for this community until [^.]{1,20}2026\. Members' apps that use it are accepted until then\.$/);
+        // Every standing wraps at phone width.
+        for (const el of screen.getAllByTestId('app-address-standing')) expect(el.className).toMatch(/break-words/);
+    });
+
+    it('a refused confirm (a lost name, 409) shows the reason', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({ named: false, unconfirmed: [{ address: 'community.example.org', today: 1, busiestDay: 1 }] }));
+        vi.mocked(nodeClient.confirmAppAddress).mockRejectedValue(new Error("Another community holds community.example.org and answers there, so this community refuses what apps sign for it. It can't be confirmed; choose another address."));
+        render(<AppAddressesPanel activeNode={node} />);
+        fireEvent.click(await screen.findByText('Yes, community.example.org is its address'));
+        expect((await screen.findByRole('alert')).textContent).toMatch(/^Another community holds community\.example\.org and answers there/);
+    });
+
     it("says how many apps still reach the community by a name it had before today, and where it lives now (lost-name L4)", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
             addresses: [

@@ -865,6 +865,33 @@ export function initSchema() {
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 
+    // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).
+    // Counts only, local to this node; rebuilt once on a node whose table still declares the old list, rows kept.
+    try {
+        const saSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='signature_audiences'").get() as any)?.sql as string | undefined;
+        if (saSql && !saSql.includes("'lost'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS signature_audiences_migration;
+                    CREATE TABLE signature_audiences_migration (
+                        day      TEXT NOT NULL,
+                        kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app', 'lost')),
+                        address  TEXT NOT NULL,
+                        people   INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (day, kind, address)
+                    );
+                    INSERT INTO signature_audiences_migration (day, kind, address, people)
+                        SELECT day, kind, address, people FROM signature_audiences;
+                    DROP TABLE signature_audiences;
+                    ALTER TABLE signature_audiences_migration RENAME TO signature_audiences;
+                `);
+            })();
+            console.log('[DB] ✅ Migrated signature_audiences CHECK constraint to allow lost');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate signature_audiences for lost:', err?.message || err);
+    }
+
     // A succession proposal opened before deadlines existed gets the same 14 days from when it opened.
     try {
         db.prepare(`UPDATE enterprise_succession_proposals

@@ -70,7 +70,22 @@ export const DEFAULT_AUTOSNAPSHOT_CONFIG: AutoSnapshotConfig = {
     keep: 7,
 };
 
+/**
+ * How often a snapshot is taken, in whole hours. The scheduler's timer can't wait longer than 2^31 - 1 ms (596 hours):
+ * past that, or an interval that rounds to nothing, Node fires it every millisecond, a VACUUM INTO after another until
+ * the disk is full. The admin route (routes/backup.ts) and a kept community settings record
+ * (config/community-settings.ts) take only this; the Backup tab offers 6 to 48.
+ */
+export const MAX_AUTOSNAPSHOT_INTERVAL_HOURS = Math.floor((2 ** 31 - 1) / 3_600_000);
+export function isAutoSnapshotInterval(v: unknown): v is number {
+    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_AUTOSNAPSHOT_INTERVAL_HOURS;
+}
+/** A number of hours the timer can hold. A row written before the bound, or brought back by a restore, is read through it. */
+const timerHours = (h: number): number => Math.min(MAX_AUTOSNAPSHOT_INTERVAL_HOURS, Math.max(1, Math.round(h)));
+
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+/** The interval the running timer was armed with, in hours. */
+let armedHours: number | null = null;
 let creating = false;
 
 /**
@@ -94,7 +109,7 @@ export function getAutoSnapshotConfig(): AutoSnapshotConfig {
         return {
             enabled: stored.enabled !== undefined ? !!stored.enabled : DEFAULT_AUTOSNAPSHOT_CONFIG.enabled,
             intervalHours: Number.isFinite(stored.intervalHours) && stored.intervalHours > 0
-                ? Math.round(stored.intervalHours) : DEFAULT_AUTOSNAPSHOT_CONFIG.intervalHours,
+                ? timerHours(stored.intervalHours) : DEFAULT_AUTOSNAPSHOT_CONFIG.intervalHours,
             keep: Number.isFinite(stored.keep) && stored.keep > 0
                 ? Math.round(stored.keep) : DEFAULT_AUTOSNAPSHOT_CONFIG.keep,
         };
@@ -108,9 +123,9 @@ export function updateAutoSnapshotConfig(update: Partial<AutoSnapshotConfig>): A
     const current = getAutoSnapshotConfig();
     const next: AutoSnapshotConfig = {
         enabled: update.enabled !== undefined ? !!update.enabled : current.enabled,
-        // Clamp to sane bounds: at least 1 hour, at least 1 kept snapshot.
+        // Clamp to sane bounds: 1 hour to what the timer can hold, at least 1 kept snapshot.
         intervalHours: update.intervalHours !== undefined
-            ? Math.max(1, Math.round(Number(update.intervalHours) || current.intervalHours))
+            ? timerHours(Number(update.intervalHours) || current.intervalHours)
             : current.intervalHours,
         keep: update.keep !== undefined
             ? Math.max(1, Math.round(Number(update.keep) || current.keep))
@@ -330,7 +345,17 @@ export function createSnapshot(): SnapshotInfo {
 
 // ===================== SCHEDULER =====================
 
+/**
+ * Arm the timer from the schedule row as it is now, replacing any timer already running: a standby promoted by hand
+ * installs its community's schedule (config/community-settings.ts) and re-arms inside initStateEngine, before
+ * initSnapshotScheduler arms again, and two timers would take every snapshot twice.
+ */
 function arm(): void {
+    if (snapshotTimer) {
+        clearInterval(snapshotTimer);
+        snapshotTimer = null;
+    }
+    armedHours = null;
     const cfg = getAutoSnapshotConfig();
     if (!cfg.enabled) {
         logger.info('SYS', '[Snapshots] Auto-snapshots disabled.');
@@ -342,6 +367,7 @@ function arm(): void {
         try { createSnapshot(); }
         catch (e) { logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
     }, intervalMs);
+    armedHours = cfg.intervalHours;
 }
 
 /** Initialize the scheduler. Call once after initStateEngine(). */
@@ -352,9 +378,14 @@ export function initSnapshotScheduler(): void {
 
 /** Re-read config and re-arm the timer (used when config changes). */
 export function restartScheduler(): void {
-    if (snapshotTimer) {
-        clearInterval(snapshotTimer);
-        snapshotTimer = null;
-    }
     arm();
+}
+
+/**
+ * How often the running timer takes a snapshot, in hours; null when none is running (snapshots are off, or the
+ * scheduler never started). What this server does, which the schedule row alone doesn't say: a row written without a
+ * re-arm is not the schedule until the next start.
+ */
+export function armedSnapshotInterval(): number | null {
+    return snapshotTimer ? armedHours : null;
 }

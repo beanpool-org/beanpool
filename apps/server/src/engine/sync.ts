@@ -9,6 +9,7 @@ import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
+import { readCommunitySettings } from '../config/community-settings.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
@@ -27,6 +28,7 @@ import {
     isWellFormedKey,
     summariseLedger,
     type LedgerSummary,
+    type SyncAccount,
     type SyncPayload,
     type Transaction
 } from '@beanpool/engine';
@@ -48,8 +50,13 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     community's), its category, cash note and search words follow each edit, a deal keeps its dispute resolution and
  *     last reminder, and every stamp is the main server's (IMPORT_KEEPS_STAMPS). A copy made by format 1 holds those
  *     rows under stamps no later copy moves past.
+ *  3. No trade the standby made itself. Its own demurrage flush, and a Bean move made on it (a send, a trade, a member's
+ *     own delete), wrote trades the main server never made, which no copy removes: the import never deletes a trade a
+ *     copy doesn't name. Now the flush writes nothing on a standby (engine/audit.ts persistDecayAndCommons) and every
+ *     Bean move refuses there before it writes (config/node-role.ts assertLedgerWritable). The force-resync this format
+ *     asks for clears the ones a standby already holds, of both kinds, a format 2 standby's included.
  */
-export const REPLICA_FORMAT = 2;
+export const REPLICA_FORMAT = 3;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -412,6 +419,9 @@ export async function exportSyncState(
         const sealEpoch = recoverySealEpoch();
         if (sealEpoch) payload.sealEpoch = sealEpoch;
     }
+    // The community's own settings (config/community-settings.ts): a standby keeps them, applied to nothing, for a
+    // take-over or a hand promotion to install. In every payload, delta or whole: a settings change moves no row.
+    payload.communitySettings = readCommunitySettings();
     return signSyncPayload(cb, payload);
 }
 
@@ -695,6 +705,26 @@ function instantOrNull(v: unknown): string | null {
 const ENFORCE_LEDGER_AUTH = process.env.ENFORCE_LEDGER_AUTH === 'true';
 const LEDGER_CONSERVATION_TOLERANCE = 0.5;
 
+/**
+ * The largest balance a copy may carry: 900,719,925,474.0991 Beans, Number.MAX_SAFE_INTEGER / 10,000. The ledger's
+ * smallest unit is 0.0001 Bean (the engine rounds to it, round4), and past this a balance in those units is no longer a
+ * safe integer, so it can't be held to the unit. No real ledger comes near it: every Bean an account holds is credit some
+ * other account spent, and credit lines are a few thousand Beans (an earned one tops out below 1,920), so one account at
+ * this bound takes some 470 million members each spending a full line into it. A copy carrying a balance beyond it, or one
+ * that isn't a finite number (JSON's 1e400 parses to Infinity), is refused before anything is written.
+ *
+ * It also keeps the conservation guard's sum exact enough: SQLite's SUM compensates its rounding (Kahan-Babuska-Neumaier,
+ * since 3.43; this build's better-sqlite3 carries 3.51), so over any copy the row cap lets in (250,000 accounts by default,
+ * at most this much each) its error, beyond rounding the total itself, is under 1e-8 Beans. A running sum of doubles loses
+ * up to half a step of the running total at each account instead (16 Beans near 2e17).
+ */
+const MAX_LEDGER_BALANCE = Number.MAX_SAFE_INTEGER / 10_000;
+
+/** What this server's ledger holds between all its accounts, as SQLite sums it (compensated, MAX_LEDGER_BALANCE). */
+function ledgerTotal(): number {
+    return (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+}
+
 function isRegularMemberAccount(pk: string): boolean {
     return pk !== 'COMMONS_POOL' && pk !== 'SYSTEM' && pk !== 'genesis'
         && !pk.startsWith('escrow_') && !pk.startsWith('project_');
@@ -831,6 +861,15 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             throw new Error(`[Sync] Import payload category '${String(cat)}' has ${arr.length} rows (> ${MAX_IMPORT_ROWS}); rejecting oversized payload to protect the event loop`);
         }
     }
+    // A balance no ledger holds (MAX_LEDGER_BALANCE), before anything is written, the photo store included. An entry with
+    // no number for a balance isn't one: the import leaves that account as it is, and the whole-copy check counts it.
+    // A conservation violation, as the guard's refusals are, so the puller logs it at SECURITY, not as a pull to retry.
+    for (const acc of Array.isArray(remote.accounts) ? remote.accounts : []) {
+        const b = acc?.balance as unknown;
+        if (typeof b === 'number' && !(Math.abs(b) <= MAX_LEDGER_BALANCE)) {
+            throw new Error(`[Sync] Conservation violation: import payload account ${String(acc?.publicKey).slice(0, 16)} has a balance of ${b}, beyond what any ledger holds (|balance| ≤ ${MAX_LEDGER_BALANCE}); rejecting payload`);
+        }
+    }
 
     let newMembers = 0, newPosts = 0;
     let updatedMembers = 0, updatedPosts = 0;
@@ -854,6 +893,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
 
     try {
         db.transaction(() => {
+            // The ledger's total before this copy writes anything, what the conservation guard holds it to (below).
+            const totalBefore = ledgerTotal();
             const putTouchTriggersBack = setTouchTriggersAside();
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
@@ -1185,10 +1226,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 }
             }
 
+            // The accounts a copy names: its entries with a key this server stores as that same string. Another entry
+            // names none (no key, or half a surrogate pair, which SQLite stores as U+FFFD: a row under another key), and
+            // is never written; the whole-copy check counts it as unreadable (engine audit.ts getReplicaConsistency).
+            const readableKey = (acc: { publicKey?: unknown } | null | undefined): acc is SyncAccount =>
+                typeof acc?.publicKey === 'string' && !!acc.publicKey && isWellFormedKey(acc.publicKey);
             // A copy that names no account carries no ledger, and changes no account here: a main server always holds its
             // Commons account (state-engine.ts seeds it at every boot), so no main server's ledger is empty. Read as a
-            // ledger, it emptied this standby's, and a ledger that sums to 0 lets that past the guard.
-            if (Array.isArray(remote.accounts) && remote.accounts.length > 0) {
+            // ledger, it emptied this standby's, and a ledger that sums to 0 lets that past the guard. That is a copy with
+            // an empty account set, and one whose every entry names no account (none, or only unreadable keys).
+            const carriesLedger = Array.isArray(remote.accounts) && remote.accounts.some(readableKey);
+            if (carriesLedger) {
                 // The main server's account set, exactly (design §4.1, G0). It is this standby's only writer, every copy,
                 // delta or whole, carries every account it holds as of `generatedAt`, and the puller refuses an older copy,
                 // so there is nothing for a stamp to decide. Each account is written as the main server holds it whenever
@@ -1205,13 +1253,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                                 balance = excluded.balance,
                                 last_updated_at = excluded.last_updated_at,
                                 last_demurrage_epoch = excluded.last_demurrage_epoch`);
-                // What this copy moves the standby's total by, the conservation guard's measure.
-                let importedBalanceDelta = 0;
-                for (const acc of remote.accounts) {
-                    // A key SQLite would store as another string (an unpaired surrogate half comes back as U+FFFD) is never
-                    // written: the row would be an account the copy doesn't name. The whole-copy check counts it as
-                    // unreadable, which asks for no force-resync (engine audit.ts getReplicaConsistency).
-                    if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey)) {
+                for (const acc of remote.accounts!) {
+                    if (!readableKey(acc)) {
                         conflictsSkipped++;
                         continue;
                     }
@@ -1227,41 +1270,21 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     if (mine && mine.balance === acc.balance && mine.last_updated_at === stamp && mine.last_demurrage_epoch === epoch) continue;
                     writeAccount.run(acc.publicKey, acc.balance, stamp, epoch);
                     accountChanges++;
-                    importedBalanceDelta += acc.balance - (mine?.balance ?? 0);
-                    // What the row holds now, so an account the copy names twice is measured from its first write, as the
-                    // row is: never a shift the guard doesn't see.
+                    // What the row holds now: an account the copy names twice is written twice, and its second entry is
+                    // compared with its first.
                     local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance, last_updated_at: stamp, last_demurrage_epoch: epoch });
                 }
                 const dropAccount = db.prepare('DELETE FROM accounts WHERE public_key = ?');
-                for (const [pk, mine] of local) {
+                for (const pk of local.keys()) {
                     if (named.has(pk)) continue; // every row the loop wrote is named: what is left here, it held before
                     dropAccount.run(pk);
                     accountChanges++;
-                    importedBalanceDelta -= mine.balance ?? 0;
                 }
-
-                // The guard's meaning is unchanged: a copy may not move this standby's total by more than the tolerance,
-                // unless the puller took it as a seed (ImportOptions.seed), which it decides from this standby's own
-                // records and never from the ledger here: a count of accounts let one copy that named none bring the
-                // ledger back to "empty", and the next went unchecked. With every account now the main server's, what
-                // it measures is the shift between the two ledgers, which is 0 whenever the main server conserves. A
-                // copy held to a total (after this standby's own clear) is measured below, against that total.
-                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed && heldToSum === null
-                    && Math.abs(importedBalanceDelta) > LEDGER_CONSERVATION_TOLERANCE) {
-                    throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
-                }
-
-                // The in-memory ledger follows these rows once they are committed, and only then. Loaded here, inside the
-                // transaction, it kept this copy's accounts and Commons pot when a later section threw and the rows rolled
-                // back; this standby's own flush (persistDecayAndCommons, every 5 minutes and in the ledger audit) then
-                // wrote that pot over its last good copy's, and every later copy was refused by the guard above, for good.
-                // A hook queued here is dropped when the transaction rolls back (db.ts), so memory stays at the rows.
-                afterTransactionCommit(() => cb.resyncLedgerToRows());
 
                 // The main server's ledger as this copy carries it, which a take-over's audit holds the promoted ledger to
                 // (services/takeover.ts). In this transaction, so it is the ledger of the last copy that landed; written
                 // when it changes, so `generatedAt` is the first copy that carried it.
-                const summary = summariseLedger(remote.accounts.filter((a) => typeof a?.publicKey === 'string')
+                const summary = summariseLedger(remote.accounts!.filter((a) => typeof a?.publicKey === 'string')
                     .map((a) => ({ publicKey: a.publicKey, balance: a.balance })));
                 const last = mainLedgerAtLastCopy();
                 if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
@@ -1278,20 +1301,44 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 }
             }
 
-            // After this standby cleared its own ledger for a force-resync that isn't a seed (a whole copy that didn't
-            // match, services/backup-puller.ts): the copy is held to the total the ledger had before that clear, the last
-            // accepted copy's, not to the rows the clear left. Only a copy's ledger puts back the one the clear took, so
-            // one that carries none is refused too. The record of that total goes when a copy lands, in this transaction.
+            // The conservation guard: what this copy moved the ledger's total by, measured as the total after its writes
+            // against the total before them, both as SQLite sums the rows (exact enough, MAX_LEDGER_BALANCE). A running sum
+            // of each account's change, in the copy's order, lost a change smaller than half a step of the running total:
+            // +1e20, 1000, then -1e20 measured 0, and the next copy, dropping the two, measured 0 too, which left 1000 Beans
+            // here that the main server's ledger doesn't have. Every write this copy makes to the accounts is before this
+            // point, a re-key's move included, whatever branch above it took.
+            const totalAfter = ledgerTotal();
             if (heldToSum !== null && !seed) {
-                if (!Array.isArray(remote.accounts) || remote.accounts.length === 0) {
+                // After this standby cleared its own ledger for a force-resync that isn't a seed (a whole copy that didn't
+                // match, services/backup-puller.ts): the copy is held to the total the ledger had before that clear, the
+                // last accepted copy's, not to the rows the clear left. Only a copy's ledger puts back the one the clear
+                // took, so one that carries none (it names no account, above) is refused too. The record of that total
+                // goes when a copy lands, in this transaction.
+                if (!carriesLedger) {
                     throw new Error('[Sync] Conservation violation: this standby cleared its ledger for a force-resync, and the copy carries none to put back; rejecting it');
                 }
-                const total = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
-                if (Math.abs(total - heldToSum) > LEDGER_CONSERVATION_TOLERANCE) {
-                    throw new Error(`[Sync] Conservation violation: import shifted total balance by ${(total - heldToSum).toFixed(4)} from the ${heldToSum} this standby held before its own clear (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
+                if (Math.abs(totalAfter - heldToSum) > LEDGER_CONSERVATION_TOLERANCE) {
+                    throw new Error(`[Sync] Conservation violation: import shifted total balance by ${(totalAfter - heldToSum).toFixed(4)} from the ${heldToSum} this standby held before its own clear (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
                 }
+            } else if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed
+                && Math.abs(totalAfter - totalBefore) > LEDGER_CONSERVATION_TOLERANCE) {
+                // A copy may not move this standby's total by more than the tolerance, unless the puller took it as a seed
+                // (ImportOptions.seed), which it decides from this standby's own records and never from the ledger here: a
+                // count of accounts let one copy that named none bring the ledger back to "empty", and the next went
+                // unchecked. With every account the main server's, what it measures is the shift between the two ledgers,
+                // which is 0 whenever the main server conserves.
+                throw new Error(`[Sync] Conservation violation: import shifted total balance by ${(totalAfter - totalBefore).toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
             }
             db.prepare(`DELETE FROM node_config WHERE key = 'replica_held_sum'`).run();
+
+            // The in-memory ledger follows these rows once they are committed, after every copy that lands, and only then.
+            // Loaded inside the transaction, it kept this copy's accounts and Commons pot when a later section threw and the
+            // rows rolled back; this standby's flush then wrote that pot over its last good copy's, and every later copy was
+            // refused by the guard above, for good. A hook queued here is dropped when the transaction rolls back (db.ts),
+            // so memory stays at the rows. After every copy, not only one that writes an account: a re-key the copy
+            // carries moves the member's account row (followReplicatedRekeys, above) in a copy that may name no account,
+            // and memory left on the old key read that account's demurrage into a Commons pot the rows didn't have.
+            afterTransactionCommit(() => cb.resyncLedgerToRows());
 
             if (remote.transactions) {
                 // Each trade as the main server holds it, its Commons fee and its project included (G0). A trade never

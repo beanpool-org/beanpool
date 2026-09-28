@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
     createJwksCache,
     createSignInVerifier,
-    GITHUB_TOKEN_REFUSED,
+    isSsoProvider,
+    SSO_PROVIDERS,
     SsoProviderUnavailableError,
     SsoVerificationError,
     type FetchLike,
     type Jwk,
-    type SsoIdentity,
     type SsoProvider,
 } from '../index.js';
 
@@ -80,17 +80,8 @@ function consumeNonce(nonce: string, subject: string): boolean {
 }
 
 let jwks = createJwksCache({ fetch: stubFetch, now: () => now });
-let githubSpent: string[] = [];
 function makeVerifier() {
-    return createSignInVerifier({
-        jwks,
-        consumeNonce,
-        consumeGithubSession: (sessionId: string, subject: string): SsoIdentity => {
-            githubSpent.push(`${sessionId}:${subject}`);
-            return { provider: 'github', sub: '42', audience: 'gh-client', issuedAt: 0, expiresAt: 0 };
-        },
-        now: () => now,
-    });
+    return createSignInVerifier({ jwks, consumeNonce, now: () => now });
 }
 let verifier = makeVerifier();
 
@@ -98,7 +89,6 @@ beforeEach(() => {
     now = T0;
     fetchCalls = [];
     nonces.clear();
-    githubSpent = [];
     providerAnswer = () => new Response(JSON.stringify({ keys: [publicJwk] }), {
         status: 200, headers: { 'cache-control': 'public, max-age=3600' },
     });
@@ -331,7 +321,6 @@ describe.each(CASES)('$label id_token', ({ provider, label, iss, aud }) => {
         const nonce = issueNonce(SUBJECT);
         const identity = await verifier.verifySignIn(provider, { idToken: mint(claims(nonce)) }, [aud], nonce, SUBJECT);
         expect(identity.provider).toBe(provider);
-        expect(githubSpent).toEqual([]);
     });
 });
 
@@ -381,22 +370,19 @@ describe('the key cache', () => {
     });
 });
 
-describe('GitHub through the verifier', () => {
-    it('refuses a GitHub id_token by name, before any request', async () => {
-        expectRefused(await refusal(verifier.verifyIdToken('github', 'gho_anything', ['gh-client'], 'n', SUBJECT)), GITHUB_TOKEN_REFUSED);
-        expectRefused(await refusal(verifier.verifySignIn('github', { idToken: 'gho_anything' }, ['gh-client'], 'n', SUBJECT)), GITHUB_TOKEN_REFUSED);
-        expect(fetchCalls).toEqual([]);
-        expect(githubSpent).toEqual([]);
+describe('providers it does not know', () => {
+    it('offers Google, Apple and Facebook, and no GitHub', () => {
+        expect(SSO_PROVIDERS).toEqual(['google', 'apple', 'facebook']);
+        expect(isSsoProvider('github')).toBe(false);
     });
 
-    it('spends the session for the subject, and refuses one run for an application no longer accepted', async () => {
-        expect((await verifier.verifySignIn('github', { sessionId: 's1' }, ['gh-client'], '', SUBJECT)).sub).toBe('42');
-        expect(githubSpent).toEqual([`s1:${SUBJECT}`]);
-        expectRefused(await refusal(verifier.verifySignIn('github', { sessionId: 's2' }, ['another-client'], '', SUBJECT)),
-            'GitHub sign-in was run for a different application.');
-        expectRefused(await refusal(verifier.verifySignIn('github', {}, ['gh-client'], '', SUBJECT)), 'GitHub sign-in is missing its session.');
-        expectRefused(await refusal(verifier.verifySignIn('github', { sessionId: 's3' }, ['gh-client'], '', '')),
-            'A GitHub sign-in must be verified against a known member.');
+    it('refuses GitHub by name like any provider it does not know, before any request, whatever the credential', async () => {
+        const unknown = "Unknown sign-in provider 'github'.";
+        const github = 'github' as SsoProvider;
+        expectRefused(await refusal(verifier.verifyIdToken(github, 'gho_anything', ['gh-client'], 'n', SUBJECT)), unknown);
+        expectRefused(await refusal(verifier.verifySignIn(github, { idToken: 'gho_anything' }, ['gh-client'], 'n', SUBJECT)), unknown);
+        expectRefused(await refusal(verifier.verifySignIn(github, { sessionId: 's1' } as never, ['gh-client'], '', SUBJECT)), unknown);
+        expect(fetchCalls).toEqual([]);
     });
 
     it('refuses a provider it does not know by name', async () => {

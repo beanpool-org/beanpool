@@ -1,7 +1,7 @@
 {
   "name": "@beanpool/signin",
   "version": "1.0.0",
-  "description": "BeanPool's sign-in checks (Google, Apple, Facebook id_tokens; GitHub device flow), shared by the node and the key vault",
+  "description": "BeanPool's sign-in checks (Google, Apple and Facebook id_tokens), shared by the node and the key vault",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

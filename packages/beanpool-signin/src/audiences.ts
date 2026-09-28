@@ -14,7 +14,7 @@ import { providerConfig, type SsoProvider } from './providers.js';
  * node it is talking to.
  *
  * These are public values. A client ID identifies an application; it authorises nothing on its
- * own, which is the whole reason Google and Apple survived D11 while Facebook and GitHub did not.
+ * own, which is the whole reason Google and Apple survived D11 while Facebook did not.
  *
  * Android note: the ANDROID client IDs are listed for completeness but the app sends the WEB one
  * as its serverClientId, so in practice `aud` comes back as the web ID on both platforms. They are
@@ -50,12 +50,6 @@ export const BEANPOOL_APPLE_SERVICES_ID = 'org.beanpool.web';
 /** BeanPool's Meta app (the member sign-in app, never the Pulse one). The same id on every platform. */
 export const BEANPOOL_FACEBOOK_APP_ID = '818892721251369';
 
-/** BeanPool's GitHub OAuth apps. The device flow starts with the first one a caller accepts. */
-export const BEANPOOL_GITHUB_CLIENT_IDS: readonly string[] = [
-    'Ov23li8mmDfBr7GyJVRU',
-    'Ov23liilgPHDo8VujObM',
-];
-
 /**
  * A caller's own additions and replacements. On a node these come from its env, under the names in
  * brackets; the key vault passes none.
@@ -63,13 +57,11 @@ export const BEANPOOL_GITHUB_CLIENT_IDS: readonly string[] = [
 export interface AudienceSettings {
     /** One more Facebook app id, accepted beside BeanPool's [FACEBOOK_APP_ID]. */
     facebookAppId?: string;
-    /** One more GitHub client id, accepted beside BeanPool's [GITHUB_CLIENT_ID]. */
-    githubClientId?: string;
     /** The Apple Services ID a browser signs in with, in place of BeanPool's [APPLE_SERVICES_ID]. */
     appleServicesId?: string;
     /**
      * Per provider, a comma-separated list that REPLACES the defaults for that provider
-     * [GOOGLE_CLIENT_IDS, APPLE_CLIENT_IDS, FACEBOOK_CLIENT_IDS, GITHUB_CLIENT_IDS]. Blank means the defaults.
+     * [GOOGLE_CLIENT_IDS, APPLE_CLIENT_IDS, FACEBOOK_CLIENT_IDS]. Blank means the defaults.
      */
     replace?: Partial<Record<SsoProvider, string | undefined>>;
 }
@@ -79,14 +71,13 @@ export function appleServicesId(settings: AudienceSettings = {}): string {
     return settings.appleServicesId?.trim() || BEANPOOL_APPLE_SERVICES_ID;
 }
 
-/** BeanPool's ids for a provider, plus the caller's one extra Facebook or GitHub id. */
+/** BeanPool's ids for a provider, plus the caller's one extra Facebook id. */
 export function defaultAudiences(provider: SsoProvider, settings: AudienceSettings = {}): string[] {
     if (provider === 'google') return [...BEANPOOL_GOOGLE_CLIENT_IDS];
     if (provider === 'apple') {
         return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, appleServicesId(settings)])];
     }
     if (provider === 'facebook') return [BEANPOOL_FACEBOOK_APP_ID, settings.facebookAppId?.trim() || ''].filter(Boolean);
-    if (provider === 'github') return [...BEANPOOL_GITHUB_CLIENT_IDS, settings.githubClientId?.trim() || ''].filter(Boolean);
     return [];
 }
 
@@ -126,8 +117,6 @@ export type WebSignInProvider = 'google' | 'apple' | 'facebook';
  *   apple     the Services ID (appleServicesId), only while it is accepted: an APPLE_CLIENT_IDS that leaves
  *             it out gets null, never an id whose tokens the node would then refuse.
  *   facebook  the first app id accepted.
- *
- * GitHub has none: the checker runs its sign-in itself (github-device.ts).
  */
 export function webClientId(provider: WebSignInProvider, settings: AudienceSettings = {}): string | null {
     const accepted = configuredAudiences(provider, settings);

@@ -45,7 +45,8 @@ minutes ago. Otherwise the claim answers **503** "cleaning up … try again shor
 
 The registrar can stop routing a name, but never hands it to another key. A name frees only when its
 owner releases it (after a 30-day hold for that same key, `RELEASE_COOLOFF_S`), when the admin releases
-it (the same hold by default; at once with "free now"), or — a later PR — after a long, warned abandonment. States (`name_allocations.status`, see
+it (the same hold by default, from its own key too if the admin had blocked or paused it; at once with "free now"),
+or — a later PR — after a long, warned abandonment. States (`name_allocations.status`, see
 `migrations/0002_states.sql`):
 
 | State | Routed | Another key may claim it | How it gets there · how it leaves |
@@ -53,8 +54,8 @@ it (the same hold by default; at once with "free now"), or — a later PR — af
 | `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
 | `live` | yes | no | claim / approve / heal / resume |
 | `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
-| `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time; others once free |
-| `blocked` | no | never | admin block (the kill switch) · admin resume or release; the owner can't heal or release it |
+| `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`; the admin's of a name it had blocked or paused, `admin-held-all`, which its own key can't claim either) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time (not after `admin-held-all`: it waits out the hold like anyone, then claims as a new claimant); others once free |
+| `blocked` | no | never | admin block (the kill switch) · admin resume or release (held 30 days from every key, this one included, unless "free now"); the owner can't heal or release it |
 | `abandoned` | no | yes | a later PR |
 
 A heal (`claim` of your own name, or `heal`) never deprovisions first: `ensure` keeps the tunnel if
@@ -73,11 +74,21 @@ undone). The names page's "free now" box (`{"free_now": true}`) frees it at once
 for someone new; "Free now" on a held release does the same. Rejecting a gated claim nobody approved frees the name at
 once either way: it was never that key's. An admin release written before D-C (`pause_reason` `admin`) stays free.
 
+A name the admin **blocked** (the only rows the names page offers Release on), or paused itself, is different: its
+default release (`admin-held-all`) holds it 30 days from **every** key, the one the admin stopped included. That key's
+claim, heal and release answer 403 `name blocked`, as while it was blocked, and `status` gives it no `held_until` (there
+is nothing for it to take back). Block's promise, "its node cannot heal or release it", holds through a release: its
+node's public-address agent, which claims every 5 minutes, can't bring it back (r4117740868). After the hold the name is
+free to anyone, that key included as a new claimant, so a gated name needs approval again. "Free now" frees it at once.
+A community's own release, and the admin's release of any other row, keep D-C's meaning. A Worker rolled back past this
+reads `admin-held-all` as an owner's release (held for that key, which could take it back): no worse than before D-C,
+when the admin's release freed the name to any key at once, the blocked one first.
+
 **Who holds a name** — `POST /api/registrar/holder {name}`, signed like `status` (a POST, so the name is inside the
 signed bytes). It answers `{ name, held, holder_key?, state?, since?, held_until? }`: `held` is `you` (the asking key
 holds it: any state that holds a name, or its own release inside the hold), `other` (another key holds it on the same
 terms; `holder_key` names that key, the only answer that does), `reserved` (nobody holds it and policy keeps it from
-every claim) or `free`. `state`, `since` (when the holder's tenure began) and, for a release inside its hold,
+every claim; also what the key the admin stopped hears about its name inside an `admin-held-all` hold) or `free`. `state`, `since` (when the holder's tenure began) and, for a release inside its hold,
 `held_until` come with `you` and `other`. Read-only: it writes nothing, not even contact, and asks nothing of
 Cloudflare or any node. A node uses it to tell whether a name it held has passed to another community
 (`scratch/registrar/DESIGN-lost-name-audience-opus.md` §5); an older Worker answers 404, and the node then drops nothing.

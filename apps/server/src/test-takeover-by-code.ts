@@ -274,8 +274,9 @@ async function main(): Promise<void> {
         assert(pv.mainServer.answers === false && pv.mainServer.warning === null, 'the main server does not answer, and the preview says so (no warning)');
         assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
             `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
-        assert(pv.missing.some((m: string) => /invites/.test(m)) && pv.missing.some((m: string) => /Decisions/.test(m)) && pv.missing.some((m: string) => /notification/.test(m)),
-            'the preview lists what will be missing (Decisions and votes, pledges, invites, notification settings, …)');
+        assert(pv.missing.some((m: string) => /photos sent in chats/.test(m)) && pv.missing.some((m: string) => /Commons project proposals/.test(m))
+            && !pv.missing.some((m: string) => /Decisions|invites|keeper changes/.test(m)),
+            'the preview lists what will be missing (chat photos, Commons proposals, …), and no longer Decisions, invites or keeper changes, which the standby copies');
         assert(!JSON.stringify(opened.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(opened.body)),
             'the preview carries no secret from inside the keys');
 

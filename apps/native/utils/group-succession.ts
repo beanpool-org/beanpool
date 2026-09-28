@@ -85,7 +85,10 @@ export interface GroupSuccessionView {
      * why no vote can open.
      */
     silenceLine: string | null;
-    /** "Only members who joined by 19 Aug 2026 can vote." Who takes part, while a vote can run or is running. */
+    /**
+     * "Only the members who were in the group by 19 Aug 2026 vote; convenors appointed after 19 Aug 2026 don't."
+     * Who takes part, while a vote can run or is running.
+     */
     whoVotesLine: string | null;
     /** Offer the Propose action and its picker. False unless the SERVER says this viewer may propose. */
     canPropose: boolean;
@@ -140,10 +143,13 @@ export function electorateText(s: GroupSilence): string | null {
     return s.electorate === 'convenors' ? `convenors appointed by ${by}` : `members who joined by ${by}`;
 }
 
-/** "Only members who joined by 19 Aug 2026 can vote." */
+/** "Only the members who were in the group by 19 Aug 2026 vote; convenors appointed after 19 Aug 2026 don't." */
 export function whoVotesLineText(s: GroupSilence): string | null {
-    const who = electorateText(s);
-    return who ? `Only ${who} can vote.` : null;
+    const by = s.votersJoinedBy ? closingDateText(s.votersJoinedBy) : null;
+    if (!by) return null;
+    return s.electorate === 'convenors'
+        ? `Only convenors appointed by ${by} can vote.`
+        : `Only the members who were in the group by ${by} vote; convenors appointed after ${by} don't.`;
 }
 
 /**

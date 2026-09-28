@@ -265,7 +265,7 @@ and edits the group; only the lead can remove or demote a convenor; and nobody c
 lead, node admins included (they hold no power over groups, and this changed nothing about that). The
 lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), or by
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
-its members when the lead is its only convenor. Only people who were there before the lead went quiet take
+its members when no fellow convenor qualifies (below). Only people who were there before the lead went quiet take
 part (Marty, 2026-09-28, on every node): members whose membership began by the end of the lead's last active
 UTC day, and convenors appointed by then (`group_members.role_since`). Anyone later cannot propose, stand or
 vote and is not counted, so accounts made after a group is abandoned — one Google sign-in apiece on the global
@@ -291,7 +291,8 @@ that power through the back door — a rogue lead has to be dealt with by the co
 
 What a community actually does about one today is the **30-day-silence vote**, which both apps have had
 screens for since 2026-09-23: a suspended lead stops being active, so 30 days after their last activity
-the other convenors — or the members, when the lead is the group's only convenor — can vote a replacement
+the other convenors — or the members, when none of the other convenors was made a convenor by the lead's last
+active day — can vote a replacement
 in, from the group's own screen. Until that window opens there is nothing to be
 done, because the paths that are faster all need the lead themselves: hand-over and stepping down. The
 Decisions the node has (`suspend_member`, `remove_member`) act on the *account*, not on the group, and

@@ -59,6 +59,13 @@ export interface HashOptions {
      * copy brings them, and a standby may or may not hold its own, so both servers hash the rest without them.
      */
     photosLeftOut?: ReadonlySet<string>;
+    /**
+     * The values of members rows a standby's import left out because its own table refuses them (engine/sync.ts
+     * writeMemberStanding), as the copy names them: the member's `public_key` → column → the main server's value. Hashed as
+     * the copy's, so both servers hash what the import copied verbatim: the whole-copy check reports the values left out
+     * on their own, and a members row that differs anywhere else still differs here.
+     */
+    membersLeftOut?: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 }
 
 /** Every copied table this server has, with the columns hashed and the order its rows are hashed in. */
@@ -90,6 +97,8 @@ export function tableContentHashes(opts: HashOptions = {}): TableHashes {
         if (opts.only && !opts.only.includes(table)) continue;
         const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
         const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
+        const asCopied = table === 'members' && opts.membersLeftOut && opts.membersLeftOut.size > 0 ? opts.membersLeftOut : null;
+        const keyAt = columns.indexOf('public_key');
         const select = columns.map((c) => {
             const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
             return stamped.length === 0 ? q(c)
@@ -99,6 +108,13 @@ export function tableContentHashes(opts: HashOptions = {}): TableHashes {
         let rows = 0;
         for (const row of db.prepare(`SELECT ${select} FROM ${q(table)} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
             if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) continue;
+            const copied = asCopied && keyAt >= 0 ? asCopied.get(row[keyAt] as string) : undefined;
+            if (copied) {
+                for (const [c, v] of Object.entries(copied)) {
+                    const at = columns.indexOf(c);
+                    if (at >= 0) row[at] = v;
+                }
+            }
             h.update(JSON.stringify(row.map((v) => (Buffer.isBuffer(v) ? `x'${v.toString('hex')}'` : typeof v === 'bigint' ? v.toString() : v))));
             h.update('\n');
             rows++;
@@ -125,12 +141,13 @@ export function readTableHashes(raw: unknown): Record<string, TableHash> | null 
 /**
  * This server's copied tables against the main server's: the tables both hash, and those whose count or hash differs.
  * A table only one side hashes (another version's manifest) is not compared. `photosLeftOut`: the photos the main server
- * left out of its hash (the copy's `photosOmitted`), left out of this server's too.
+ * left out of its hash (the copy's `photosOmitted`), left out of this server's too. `membersLeftOut`: the members values
+ * this server's import left out, hashed as the copy's.
  */
 export function compareTableHashes(
-    theirs: Record<string, TableHash>, opts: Pick<HashOptions, 'photosLeftOut'> = {},
+    theirs: Record<string, TableHash>, opts: Pick<HashOptions, 'photosLeftOut' | 'membersLeftOut'> = {},
 ): { compared: string[]; differing: { table: string; rows: number; theirRows: number }[] } {
-    const mine = tableContentHashes({ photosLeftOut: opts.photosLeftOut }).tables;
+    const mine = tableContentHashes({ photosLeftOut: opts.photosLeftOut, membersLeftOut: opts.membersLeftOut }).tables;
     const compared: string[] = [];
     const differing: { table: string; rows: number; theirRows: number }[] = [];
     for (const [table, t] of Object.entries(theirs)) {

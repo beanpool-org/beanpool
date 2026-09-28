@@ -358,7 +358,7 @@ async function main(): Promise<void> {
         const ownOrigins = [...new Set(s.posts.filter((p) => p.id !== cachedRow.id).map((p) => p.origin_node))];
         assert(ownOrigins.length === 1 && ownOrigins[0] === null, `a listing of M's own names no origin on S (${JSON.stringify(ownOrigins)})`);
         assert(s.posts.find((p) => p.id === cachedRow.id)?.origin_node === NEIGHBOUR_URL, 'the cached one names its community');
-        assert(s.format === '4', `the copy records the importer's format, 4 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 in-flight money and governance's (G3)
+        assert(s.format === '5', `the copy records the importer's format, 5 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 the standing copy's (G2); 5 in-flight money and governance's (G3)
 
         // ── 3. Changes after the first copy, then a delta ──
         console.log('\n— 3. after the first copy: the changes a delta must carry —');

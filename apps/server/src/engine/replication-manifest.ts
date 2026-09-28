@@ -30,14 +30,29 @@ export interface ColumnException {
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true }
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true }
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
      *  key-value table whose keys are classified one by one (NODE_CONFIG_KEYS), not compared as rows. */
     | { kind: 'takeover-bundle'; reason: string; bySetting?: true };
+
+/** How a copied table's rows travel when it is not simply by its own watermark column. */
+export interface Carried {
+    /**
+     * A delta also finds a row by this column (`watermark` OR it): a table with two writes and a stamp for each
+     * (enterprise_pledges: a pledge made, a pledge released).
+     */
+    orWatermark?: string;
+    /**
+     * The rows travel inside each copied row of `table`, as its `field` (member_preferences, in each member's row): a delta
+     * finds them by that table's `watermark`, which every writer of these rows moves (they stamp the parent row).
+     * `payload` is that table's.
+     */
+    inRowOf?: { table: string; field: string };
+}
 
 /**
  * A copied column the main server sets to NULL, in a write that moves no watermark, when a row it names is deleted; the
@@ -74,42 +89,40 @@ const plain = (columns: string, except?: Record<string, ColumnException>): Table
 
 const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
 
-/**
- * A members text column the export (rowToMember) and the import both write as `value || null`, so a '' the main server
- * holds is null on the standby. contact_value and contact_visibility share the `|| null` but stay copied: no writer
- * stores '' in them (engine/members.ts updateProfile and db.ts's legacy import write null for an empty one).
- */
-const EMPTY_COPIED_AS_NULL = "'' on the main server is null on the standby: the export (rowToMember) and the import write `|| null`";
-
-/**
- * members columns not copied today (engine/sync.ts writes a fixed list, design §2 G2a). The export sends
- * `isTreasury`, `earnedCredit` and `profileUpdatedAt`; the import drops them.
- */
-const MEMBERS_STANDING_NOT_COPIED = [
-    'can_vouch', 'vouch_credit', 'credit_frozen', 'is_treasury', 'can_operate', 'earned_credit', 'earned_surplus',
-    'working_capital_ceiling', 'legacy_credit_floor', 'profile_updated_at', 'purpose', 'goal_amount', 'deadline_at',
-    'lifecycle', 'paused', 'paused_at', 'paused_by', 'paused_floor_snapshot', 'wind_up_initiated_at',
-    'wind_up_initiated_by', 'wind_up_finalised_at', 'lat', 'lng', 'location_auth_signer', 'auth_signer',
-    'location_updated_at',
-] as const;
-
 export const TABLES: Record<string, TableEntry> = {
     // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
+    // A member's whole row, verbatim (`standing`, engine/sync.ts importRemoteState, G2a): an enterprise, a vouch, a freeze,
+    // granted credit, a pause, a map pin and every other column, with the main server's stamps (the import sets the
+    // members' touch triggers aside while it writes them).
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols('public_key callsign contact_value contact_visibility status updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at board_standing_changed_at'),
+        columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_url bio contact_value contact_visibility status
+            elder_vouched_by can_vouch vouch_credit credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
+            legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
+            paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
+            location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
+            board_standing_changed_at`),
         except: {
-            avatar_url: { reason: `${EMPTY_COPIED_AS_NULL} (an enterprise made with no photo holds '')`, gap: 'G2a' },
-            bio: { reason: `${EMPTY_COPIED_AS_NULL} (a member who clears their bio saves '')`, gap: 'G2a' },
-            archetype: { reason: `${EMPTY_COPIED_AS_NULL} (a profile saved with an empty archetype holds '')`, gap: 'G2a' },
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
-            ...Object.fromEntries(MEMBERS_STANDING_NOT_COPIED.map((c) => [c, { reason: 'not in the import (a member\'s and an enterprise\'s standing)', gap: 'G2a' as const }])),
-            joined_at: { reason: 'written on the first copy only: a later change on the main server never reaches the standby', gap: 'G2a' },
-            invited_by: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
-            invite_code: { reason: 'written on the first copy only (and on a visitor\'s join)', gap: 'G2a' },
-            home_node_url: { reason: 'written on the first copy only', gap: 'G2a' },
-            elder_vouched_by: { reason: 'the import keeps the first voucher it copied (COALESCE): a withdrawn vouch, a prune or a new voucher never reaches the standby', gap: 'G2a' },
         },
+    },
+    // Holiday, notification settings and reminder defaults, in each member's row (`preferences`, G2b): every writer stamps
+    // the member's row (state-engine.ts setMemberPreferences, setHolidayMode; engine/event-reminders.ts), and the import
+    // replaces the member's rows with the ones the copy names.
+    member_preferences: {
+        kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'preferences' },
+        columns: cols('public_key pref_key pref_value'),
+    },
+    // Who keeps each enterprise (G2c): the whole set in every payload, applied as a diff, so an unbound keeper needs no
+    // tombstone.
+    treasury_operators: {
+        kind: 'replicated', payload: 'treasuryOperators', watermark: WHOLE_SET,
+        columns: cols('treasury_pubkey member_pubkey role granted_at granted_by backing auto_promoted_at'),
+    },
+    // Keepers' pledges (G2c): made (pledged_at) and released (released_at), never deleted.
+    enterprise_pledges: {
+        kind: 'replicated', payload: 'enterprisePledges', watermark: 'pledged_at', orWatermark: 'released_at',
+        columns: cols('id keeper enterprise amount pledged_at released_at'),
     },
     // A listing, its photos, a deal and a crowdfund project are the main server's rows verbatim, stamps included: the
     // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
@@ -309,9 +322,6 @@ export const TABLES: Record<string, TableEntry> = {
     federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
 
     // ── Not copied today, and the design says they should be ──
-    member_preferences: { kind: 'local', gap: 'G2b', reason: 'not in the payload: holiday, notification opt-outs, reminder defaults' },
-    treasury_operators: { kind: 'local', gap: 'G2c', reason: 'not in the payload: who keeps each enterprise' },
-    enterprise_pledges: { kind: 'local', gap: 'G2c', reason: "not in the payload: keepers' pledges" },
     push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
     chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
@@ -389,8 +399,6 @@ export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
     updated_at: { reason: 'the stamp itself' },
     last_active_at: { reason: 'travels only with another change of the row, by design' },
     board_standing_changed_at: { reason: 'every change of standing moves updated_at in the same statement (paused and status are in the trigger; setHolidayMode stamps both), so a delta carries it; listed, the trigger would restamp a copied row' },
-    earned_surplus: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
-    working_capital_ceiling: { reason: 'missing from the trigger: a change to it alone never moves updated_at', gap: 'G2a' },
 };
 
 // ── Community settings (design §2 G5) ──────────────────────────────────────────────────────

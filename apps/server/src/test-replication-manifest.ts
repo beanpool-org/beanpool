@@ -7,8 +7,10 @@
  *  2. Every column (PRAGMA table_info) of a copied table is named once: copied, or not copied with the reason. Every
  *     column the manifest names exists.
  *  3. Every copied table has a watermark column, or is declared a whole set and a delta carries all of it (a row stamped
- *     long ago included); its payload key is in the sync payload, a plain table's under `plainTables` by its own name, and
- *     a plain table has a key to match its rows by and both stamping triggers. Every write to it moves the watermark: a touch trigger
+ *     long ago included), or travels inside its parent's rows (each carries it); a second watermark column is one a delta
+ *     finds a row by (a row stamped long ago by the first); its payload key is in the sync payload, a plain table's under
+ *     `plainTables` by its own name, and a plain table has a key to match its rows by and both stamping triggers. Every
+ *     write to it moves the watermark: a touch trigger
  *     stamps it, or each UPDATE and upsert in the source sets it, or writes only columns the table doesn't copy (a write
  *     that moves nothing reaches a standby only in a whole copy), or clears a column the standby clears itself when the
  *     named tombstone arrives (the importer is read for the clear).
@@ -306,17 +308,53 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES ('manifest-whole-set', 1, '2000-01-01T00:00:00.000Z', 0)`).run();
             return (x) => x?.publicKey === 'manifest-whole-set';
         },
+        treasury_operators: () => {
+            db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES ('manifest-whole-set', 'manifest-keeper', 'keeper', '2000-01-01T00:00:00.000Z')`).run();
+            return (x) => x?.treasuryPubkey === 'manifest-whole-set' && x?.memberPubkey === 'manifest-keeper';
+        },
     };
+    // A row stamped long ago by its watermark and now by its second one: a delta from now finds it by the second.
+    const OR_WATERMARK_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
+        enterprise_pledges: () => {
+            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                        VALUES ('manifest-or-watermark', 'k', 'e', 1, '2000-01-01T00:00:00.000Z', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run();
+            return (x) => x?.id === 'manifest-or-watermark';
+        },
+    };
+    // A parent row carrying its rows (`inRowOf`): one planted, with one of the rows it carries.
+    const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
+        member_preferences: () => {
+            db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row', 'Manifest In Row')`).run();
+            db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('manifest-in-row', 'notify_chat', 'false')`).run();
+            return (x) => x?.publicKey === 'manifest-in-row' && x?.preferences?.notify_chat === 'false';
+        },
+    };
+    const deltaNow = () => exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown>;
+    const carries = (p: Record<string, unknown>, key: string, isIt: (x: any) => boolean) => Array.isArray(p[key]) && (p[key] as unknown[]).some(isIt);
     for (const [t, entry] of Object.entries(TABLES)) {
         if (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') continue;
-        if (entry.watermark === WHOLE_SET) {
+        if (entry.inRowOf) {
+            const parent = TABLES[entry.inRowOf.table];
+            const plant = IN_ROW_OF[t];
+            const isIt = plant?.();
+            assert(!!parent && (parent.kind === 'replicated' || parent.kind === 'replicated-except') && parent.payload === entry.payload
+                && parent.watermark === entry.watermark && columnsOf(entry.inRowOf.table).includes(entry.watermark),
+            `${t}: travels in each copied \`${entry.inRowOf.table}\` row, found by its \`${entry.watermark}\``);
+            assert(!!isIt && carries(exportSyncState(db as any, 'manifest-test', null, 0) as any, entry.payload, isIt),
+                `${t}: each \`${entry.payload}\` row carries its rows as \`${entry.inRowOf.field}\`${plant ? '' : ' (no row to plant for it here: add one)'}`);
+        } else if (entry.watermark === WHOLE_SET) {
             const plant = WHOLE_SET_ROW[t];
             const isIt = plant?.();
-            const delta = isIt ? exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown> : {};
-            const carried = !!isIt && Array.isArray(delta[entry.payload]) && (delta[entry.payload] as unknown[]).some(isIt);
-            assert(carried, `${t}: a delta carries the whole set, a row stamped long ago included${plant ? '' : ' (no row to plant for it here: add one)'}`);
+            assert(!!isIt && carries(deltaNow(), entry.payload, isIt),
+                `${t}: a delta carries the whole set, a row stamped long ago included${plant ? '' : ' (no row to plant for it here: add one)'}`);
         } else {
             assert(tables.includes(t) && columnsOf(t).includes(entry.watermark), `${t}: a delta finds a change by \`${entry.watermark}\``);
+        }
+        if (entry.orWatermark) {
+            const plant = OR_WATERMARK_ROW[t];
+            const isIt = plant?.();
+            assert(columnsOf(t).includes(entry.orWatermark) && !!isIt && carries(deltaNow(), entry.payload, isIt),
+                `${t}: a delta also finds a change by \`${entry.orWatermark}\`, a row stamped long ago by \`${entry.watermark}\` included${plant ? '' : ' (no row to plant for it here: add one)'}`);
         }
         if (entry.plain) {
             const carried = (payload[PLAIN_TABLES_PAYLOAD] ?? {}) as Record<string, unknown>;
@@ -331,6 +369,10 @@ async function main(): Promise<void> {
         }
     }
     db.prepare(`DELETE FROM accounts WHERE public_key = 'manifest-whole-set'`).run();
+    db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = 'manifest-whole-set'`).run();
+    db.prepare(`DELETE FROM enterprise_pledges WHERE id = 'manifest-or-watermark'`).run();
+    db.prepare(`DELETE FROM member_preferences WHERE public_key = 'manifest-in-row'`).run();
+    db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row'`).run();
 
     // A delta finds a change only if the write moved the watermark. A touch trigger that stamps it moves it on every
     // update (members' trigger names its columns: §4). Every other copied table's writes must set it, or write only
@@ -351,7 +393,7 @@ async function main(): Promise<void> {
     for (const w of [...serverWrites, ...engineWrites]) {
         const entry = TABLES[w.table];
         if (!entry || (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || entry.watermark === WHOLE_SET) continue;
-        if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark)) continue;
+        if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark) || (!!entry.orWatermark && w.set.includes(entry.orWatermark))) continue;
         const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
         const cleared = entry.clearedByTombstone ?? {};
         if (w.set.length > 0 && w.set.every((c) => notCopied[c])) notCopiedOnly.push(`${w.table}.${w.set.join('+')} (${w.at})`);

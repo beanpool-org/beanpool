@@ -909,12 +909,16 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- semantic change. ⚠️ MAINTENANCE: whenever you add a profile-relevant column
 -- to the `members` table above, add it to this whitelist too — otherwise
 -- mutations to that column won't be picked up by cursor-based delta sync.
+-- db.ts drops this trigger at every boot before this file runs, so the list here is the one in force on an existing
+-- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus and working_capital_ceiling
+-- are an enterprise's standing a standby copies (engine/sync.ts importRemoteState, design G2a): Rule 6's surplus and the
+-- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
-    legacy_credit_floor,
+    legacy_credit_floor, earned_surplus, working_capital_ceiling,
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
@@ -1718,7 +1722,7 @@ CREATE TABLE IF NOT EXISTS group_convenor_proposals (
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     deadline_at      DATETIME NOT NULL,
     executed_at      DATETIME,
-    -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'no_longer_needed'.
+    -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'candidate_ineligible', 'no_longer_needed'.
     closed_reason    TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

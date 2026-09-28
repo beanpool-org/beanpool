@@ -13,7 +13,7 @@
  *
  *  1. The main server M: an enterprise with a lead and keepers, a keeper's wage owed (the enterprise held nothing when it
  *     hired him), invites made and used.
- *  2. The standby S's first copy: every plain table is M's, row for row and stamp for stamp, and its copy is format 4.
+ *  2. The standby S's first copy: every plain table is M's, row for row and stamp for stamp, and its copy is format 5.
  *  3. More on M, then a delta: a keeper request with pledged backing approved into a keeper change in its objection
  *     window; a lead succession vote and a convenor vote, open; a Decision open with three ballots and a removal passed
  *     into its grace period; an owner suspended by an admin (a Decision, her role held aside); a moderator suspended and
@@ -25,9 +25,9 @@
  *  5. A whole copy M signed with a value S's tables refuse, and a row its unique index refuses: the copy lands, the two
  *     are left out and reported, and the next whole copy is M's again. A row M no longer holds (deleted by hand, no
  *     tombstone) goes from S with a whole copy.
- *  6. A standby as a format 3 importer left it, holding an invite of its own: it re-seeds itself once, and the invite goes.
- *  7. M dies; S takes over with the recovery code. Standing (G2: enterprises, keepers, pledges) is written on the
- *     promoted server as M held it, since that is #1276's to copy, not this PR's; every step here acts on G3's rows.
+ *  6. A standby as a format 4 importer left it, holding an invite of its own: it re-seeds itself once, and the invite goes.
+ *  7. M dies; S takes over with the recovery code. Standing (G2: every members column, keepers, pledges) is M's on the
+ *     promoted server as it copied it (#1276), and every step here acts on G3's rows.
  *  8. On the promoted S: the keeper change applies after its window and the request is approved; the succession vote
  *     counts the proposer's ballot from M with two new ones and passes; the convenor vote counts M's ballot and a new one
  *     and passes at its deadline; the open Decision counts M's three ballots and a new one, passes and is carried out;
@@ -56,6 +56,9 @@ const PW_STANDBY = 'InFlight-Standby-Pw-2208!';
 const AHEAD_MS = 3600_000;
 const DAY = 86400_000;
 const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
+/** The importer format this change's copy records (engine/sync.ts REPLICA_FORMAT); the one before it, a standby to re-seed. */
+const FORMAT = '5';
+const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */
 const PLAIN = [
@@ -306,43 +309,19 @@ async function child(): Promise<void> {
             const changed = PLAIN.filter((t) => JSON.stringify(before[t]) !== JSON.stringify(after[t]));
             return { answers, links, reads, changed };
         },
-        /** Members' standing, keepers and pledges as this server holds them (G2's tables and columns, #1276's to copy). */
+        /**
+         * Members' standing, keepers and pledges as this server holds them (G2's tables and columns, which #1276 copies):
+         * every members column but `last_active_at` (travels only with another change, by design), in key order.
+         */
         standing: async () => {
             const { db } = await import('./db/db.js');
+            const members = (db.prepare('SELECT * FROM members ORDER BY public_key').all() as Record<string, unknown>[])
+                .map(({ last_active_at: _, ...row }) => row);
             return {
-                members: db.prepare('SELECT * FROM members').all(),
-                operators: db.prepare('SELECT * FROM treasury_operators').all(),
-                pledges: db.prepare('SELECT * FROM enterprise_pledges').all(),
+                members,
+                operators: db.prepare('SELECT * FROM treasury_operators ORDER BY treasury_pubkey, member_pubkey').all(),
+                pledges: db.prepare('SELECT * FROM enterprise_pledges ORDER BY id').all(),
             };
-        },
-        /**
-         * The standing M held, written here as #1276 copies it (every members column, keepers, pledges): G2, not this PR's.
-         * Answers how many values it changed; with #1276 in, none.
-         */
-        'plant-standing': async (a: { members: Record<string, unknown>[]; operators: Record<string, unknown>[]; pledges: Record<string, unknown>[] }) => {
-            const { db } = await import('./db/db.js');
-            let changed = 0;
-            db.transaction(() => {
-                for (const m of a.members) {
-                    const here = db.prepare('SELECT * FROM members WHERE public_key = ?').get(m.public_key) as Record<string, unknown> | undefined;
-                    if (!here) continue;
-                    // Standing only: never the name (the standby's boot may have renamed a BeanPool its copy didn't hold as one).
-                    const cols = Object.keys(m).filter((c) => c in here && !['public_key', 'callsign', 'updated_at', 'last_active_at'].includes(c) && here[c] !== m[c]);
-                    if (cols.length === 0) continue;
-                    changed += cols.length;
-                    db.prepare(`UPDATE members SET ${cols.map((c) => `"${c}" = ?`).join(', ')} WHERE public_key = ?`).run(...cols.map((c) => m[c] as any), m.public_key);
-                }
-                for (const o of a.operators) {
-                    const cols = Object.keys(o);
-                    changed += db.prepare(`INSERT OR IGNORE INTO treasury_operators (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => o[c] as any)).changes;
-                }
-                for (const p of a.pledges) {
-                    const cols = Object.keys(p);
-                    changed += db.prepare(`INSERT OR IGNORE INTO enterprise_pledges (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => p[c] as any)).changes;
-                }
-            })();
-            db.pragma('wal_checkpoint(TRUNCATE)');
-            return changed;
         },
         /** What the outcomes read: a Decision, a member, an enterprise's keepers, node roles, a claim, trades. */
         facts: async (a: { ids: Record<string, string> }) => {
@@ -540,7 +519,7 @@ async function main(): Promise<void> {
         require_(firstPull.ok === true, `S: the loop's first pull lands (${firstPull.ok ? firstPull.mode : firstPull.error})`);
         let s: { tables: Tables; format: string | null } = await standby.send('rows');
         assert(tablesDiff(m1, s.tables).length === 0, `every plain table is M's, row for row and stamp for stamp (${count(s.tables)}; differences ${first(tablesDiff(m1, s.tables))})`);
-        assert(s.format === '4', `and its copy is one this importer made, format 4 (${s.format})`);
+        assert(s.format === FORMAT, `and its copy is one this importer made, format ${FORMAT} (${s.format})`);
 
         // ── 3. More on M, then a delta ──
         console.log('\n— 3. keeper and succession votes, Decisions, a suspension, codes, releases, a link; then a delta —');
@@ -650,21 +629,21 @@ async function main(): Promise<void> {
         refused.push(...(await standby.send('fetches')).blocked);
         await standby.kill('SIGTERM');
 
-        // ── 6. A format 3 standby re-seeds once ──
+        // ── 6. A format 4 standby re-seeds once ──
         console.log('\n— 6. a standby from before this format re-seeds itself once —');
         withDb(dir('standby'), (db) => {
             db.pragma('foreign_keys = OFF');
             db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, updated_at) VALUES ('STANDBY-OWN', ?, ?, ?)`)
                 .run(gwen.pk, new Date().toISOString(), new Date().toISOString());
-            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', '3')`).run();
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', ?)`).run(FORMAT_BEFORE);
         });
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
         nodes.push(standby);
         const planted = await standby.send('rows');
-        require_(planted.format === '3' && planted.tables.invite_codes.some((r: any) => r.code === 'STANDBY-OWN'), 'S: format 3, with an invite of its own');
+        require_(planted.format === FORMAT_BEFORE && planted.tables.invite_codes.some((r: any) => r.code === 'STANDBY-OWN'), `S: format ${FORMAT_BEFORE}, with an invite of its own`);
         const reseed = await standby.send('pull', {});
         s = await standby.send('rows');
-        assert(reseed.ok === true && reseed.mode === 'resync' && s.format === '4', `its next pull re-seeds it, once (${reseed.ok ? reseed.mode : reseed.error}; format ${s.format})`);
+        assert(reseed.ok === true && reseed.mode === 'resync' && s.format === FORMAT, `its next pull re-seeds it, once, to format ${FORMAT} (${reseed.ok ? reseed.mode : reseed.error}; format ${s.format})`);
         assert(!s.tables.invite_codes.some((r: any) => r.code === 'STANDBY-OWN') && tablesDiff(m5, s.tables).length === 0,
             `its own invite is gone, and every plain table is M's (differences ${first(tablesDiff(m5, s.tables))})`);
         const after = await standby.send('pull', {});
@@ -692,12 +671,11 @@ async function main(): Promise<void> {
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
         nodes.push(standby);
         require_(standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId, `promoted, with M's PeerId (${standby.ready.role})`);
-        // Standing is G2's (#1276): written here as M held it, then a restart, so every cache is read afresh.
-        const plantedValues = await standby.send('plant-standing', standingOnMain);
-        console.log(`  standing written as M held it (G2, #1276's to copy): ${plantedValues} value(s) this copy didn't hold`);
-        await standby.kill('SIGTERM');
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
-        nodes.push(standby);
+        // Standing is G2's, which #1276 copies: the promoted server holds M's, every column of it, with nothing written by
+        // hand (before #1276 was in, this suite wrote it here).
+        const standingHere = await standby.send('standing');
+        const standingDiff = (['members', 'operators', 'pledges'] as const).filter((k) => JSON.stringify(standingOnMain[k]) !== JSON.stringify(standingHere[k]));
+        assert(standingDiff.length === 0, `the promoted server's members, keepers and pledges are M's, as it copied them (differing: ${standingDiff.join(', ') || 'none'})`);
         const p = `https://localhost:${await standby.send('serve')}`;
         const P_ = (who: Id, route: string, body: unknown = {}) => api(p, 'POST', route, { as: who, body });
         const PA = (route: string, body: unknown) => api(p, 'POST', route, { admin: PW_MAIN, body });

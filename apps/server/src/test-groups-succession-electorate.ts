@@ -156,22 +156,22 @@ async function main(): Promise<void> {
         assert(lateView.status === 200 && lateView.body?.canPropose === false, `the newcomer is offered no proposal (${show(lateView)})`);
 
         const lateProposes = await call('POST', `/api/groups/${g}/succession/propose`, late, { candidatePubkey: late.pk });
-        assert(lateProposes.status === 403 && new RegExp(`Only members who joined by ${esc(by)} can propose`).test(lateProposes.body?.error ?? ''),
+        assert(lateProposes.status === 403 && new RegExp(`Only members who were in the group by ${esc(by)} can propose`).test(lateProposes.body?.error ?? ''),
             `the newcomer can't propose, and is told why (${show(lateProposes)})`);
         const crowdProposes = await call('POST', `/api/groups/${g}/succession/propose`, crowd[0], { candidatePubkey: ash.pk });
         assert(crowdProposes.status === 403 && proposalsIn(g) === 0, `nor can any of the crowd (${show(crowdProposes)})`);
         const lateStands = await call('POST', `/api/groups/${g}/succession/propose`, ash, { candidatePubkey: late.pk });
-        assert(lateStands.status === 400 && new RegExp(`candidate must be one of the members who joined by ${esc(by)}`).test(lateStands.body?.error ?? '')
+        assert(lateStands.status === 400 && new RegExp(`candidate must be one of the members who were in the group by ${esc(by)}`).test(lateStands.body?.error ?? '')
             && proposalsIn(g) === 0, `nor stand as the candidate (${show(lateStands)})`);
 
         const opened = await call('POST', `/api/groups/${g}/succession/propose`, ash, { candidatePubkey: bay.pk });
         const p = opened.body?.proposal;
         assert(opened.status === 200 && p?.status === 'active' && p?.yesCount === 1 && p?.electorateSize === 3,
             `Ash proposes Bay: 3 may vote, not 14 (${show(opened)})`);
-        assert(new RegExp(`Members who joined by ${esc(by)} have 14 days to vote`).test(lastLine(g)), `the chat says who votes (${lastLine(g)})`);
+        assert(new RegExp(`Members who were in the group by ${esc(by)} have 14 days to vote; convenors appointed after ${esc(by)} have no vote\\.`).test(lastLine(g)), `the chat says who votes (${lastLine(g)})`);
 
         const lateVotes = await call('POST', `/api/groups/${g}/succession/${p?.id}/vote`, late, { choice: 'no' });
-        assert(lateVotes.status === 403 && new RegExp(`Only members who joined by ${esc(by)} can vote`).test(lateVotes.body?.error ?? ''),
+        assert(lateVotes.status === 403 && new RegExp(`Only members who were in the group by ${esc(by)} can vote`).test(lateVotes.body?.error ?? ''),
             `the newcomer can't vote (${show(lateVotes)})`);
         const crowdVotes = await Promise.all(crowd.map(c => call('POST', `/api/groups/${g}/succession/${p?.id}/vote`, c, { choice: 'no' })));
         assert(crowdVotes.every(r => r.status === 403) && ballotsBy([late, ...crowd]) === 0, 'nor can the crowd, and no ballot of theirs is kept');
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
         assert(seen.body?.silence?.electorate === 'members' && sameSet(seen.body?.voters, [reed]) && seen.body?.canPropose === true,
             `the members vote — Reed — and Pine, a convenor since, does not (${show(seen)})`);
         const pineProposes = await call('POST', `/api/groups/${g}/succession/propose`, pine, { candidatePubkey: pine.pk });
-        assert(pineProposes.status === 403 && new RegExp(`Only members who joined by ${esc(dayText(quietAt))} can propose`).test(pineProposes.body?.error ?? ''),
+        assert(pineProposes.status === 403 && new RegExp(`Only members who were in the group by ${esc(dayText(quietAt))} can propose a new lead convenor; convenors appointed after ${esc(dayText(quietAt))} can't`).test(pineProposes.body?.error ?? ''),
             `Pine can't propose (${show(pineProposes)})`);
         const reedOffers = await call('POST', `/api/groups/${g}/succession/propose`, reed, { candidatePubkey: reed.pk });
         assert(reedOffers.body?.executed === true && leadOf(g) === reed.pk && role(g, lotus) === 'member' && role(g, pine) === 'convenor',
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
         const seen = await call('GET', `/api/groups/${g}/succession`, birch);
         assert(sameSet(seen.body?.voters, [birch, cress]), `Birch and Cress vote; Alder, back since, does not (${seen.body?.voters?.length})`);
         const alderProposes = await call('POST', `/api/groups/${g}/succession/propose`, alder, { candidatePubkey: alder.pk });
-        assert(alderProposes.status === 403 && /joined by/.test(alderProposes.body?.error ?? ''), `Alder can't propose (${show(alderProposes)})`);
+        assert(alderProposes.status === 403 && /were in the group by/.test(alderProposes.body?.error ?? ''), `Alder can't propose (${show(alderProposes)})`);
     }
 
     // ── 5. A re-key keeps the membership's time ──────────────────────────────────────────────────
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
             && Array.isArray(seen.body?.voters) && seen.body.voters.length === 0 && s?.votersJoinedBy === utcMidnight(quietAt),
             `the lead is quiet, nobody may vote, and the node serves the day that explains it (${show(seen)})`);
         const tries = await call('POST', `/api/groups/${g}/succession/propose`, yarrow, { candidatePubkey: yarrow.pk });
-        assert(tries.status === 400 && new RegExp(`Nobody else in this group can vote on its lead convenor: only members who joined by ${esc(dayText(quietAt))} can, and there are none`).test(tries.body?.error ?? '')
+        assert(tries.status === 400 && new RegExp(`Nobody else in this group can vote on its lead convenor: only members who were in the group by ${esc(dayText(quietAt))} can, and there are none; convenors appointed after ${esc(dayText(quietAt))} can't`).test(tries.body?.error ?? '')
             && proposalsIn(g) === 0, `no vote can open, and the refusal says why in plain words (${show(tries)})`);
     }
 
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
         const closed = seen.body?.proposals?.find((x: any) => x.id === p1);
         assert(closed?.status === 'cancelled' && closed?.closedReason === 'candidate_ineligible',
             `its candidate came later: it closes at the next count (${JSON.stringify(closed)})`);
-        assert(/The vote to make Linden convenor closed: the person proposed can't be chosen: only members who joined by .+ can be\./.test(lastLine(g)),
+        assert(/The vote to make Linden convenor closed: the person proposed can't be chosen: only members who were in the group by .+ can be; convenors appointed after .+ can't\./.test(lastLine(g)),
             `with a line in the chat saying why (${lastLine(g)})`);
 
         const p2 = crypto.randomUUID();

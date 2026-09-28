@@ -2,6 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
+import type Database from 'better-sqlite3';
 import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainServer } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
@@ -16,6 +17,7 @@ import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
 import { importPlainTables, deletePlainRow, plainRowStamp } from './plain-tables.js';
 import { PLAIN_TABLES, plainTableTriggers } from './replication-manifest.js';
+import { RowRules } from '../db/table-rules.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
@@ -27,6 +29,7 @@ import {
 } from './key-move.js';
 import {
     exportSyncState as exportSyncStateEngine,
+    clearEnterpriseFloorCache,
     isWellFormedKey,
     summariseLedger,
     type LedgerSummary,
@@ -57,13 +60,18 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     copy doesn't name. Now the flush writes nothing on a standby (engine/audit.ts persistDecayAndCommons) and every
  *     Bean move refuses there before it writes (config/node-role.ts assertLedgerWritable). The force-resync this format
  *     asks for clears the ones a standby already holds, of both kinds, a format 2 standby's included.
- *  4. In-flight money and governance are the main server's (G3), on the generic path for plain tables
+ *  4. A member's and an enterprise's standing are the main server's (G2a, G2b, G2c): every members column, verbatim (an
+ *     enterprise, a vouch, a freeze, granted credit, a pause, a map pin; before, a fixed list, and the first voucher kept
+ *     over a withdrawal), each member's preferences (holiday, notification settings), who keeps each enterprise and the
+ *     keepers' pledges. A copy made by format 3 holds members rows under the main server's stamps without those columns,
+ *     which no later copy moves past.
+ *  5. In-flight money and governance are the main server's (G3), on the generic path for plain tables
  *     (engine/plain-tables.ts): keepers' wages owed, Decisions and their ballots, a role a Decision holds aside, keeper
  *     requests and changes, succession and convenor votes, invites, re-key codes, recovery releases and links with other
- *     communities. A copy made by format 3 holds none of them, or rows this standby wrote itself (an invite it made, a
- *     link it created at boot), which no copy names.
+ *     communities. A copy made by format 4 or older holds none of them, or rows this standby wrote itself (an invite it
+ *     made, a link it created at boot), which no copy names.
  */
-export const REPLICA_FORMAT = 4;
+export const REPLICA_FORMAT = 5;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -241,6 +249,23 @@ export interface ImportResult {
      * whole-copy check counts the rows (services/backup-puller.ts checkWholeCopy).
      */
     plainTablesLeftOut: string[];
+    /**
+     * Each value of the copy's members rows this table's own rules refuse (a goal below 0 from a main server whose column
+     * has no CHECK), left out of the write: this standby's row isn't the main server's there, and the whole-copy check says
+     * so (services/backup-puller.ts checkWholeCopy).
+     */
+    valuesLeftOut: ValueLeftOut[];
+}
+
+/** A value of a members row the import left out, the member's key in full (writeMemberStanding). */
+export interface ValueLeftOut {
+    publicKey: string;
+    column: string;
+}
+
+/** A value left out, as the logs and the whole-copy check name it: `<member key's first 16>.<column>`. */
+export function valueLeftOutName(v: ValueLeftOut): string {
+    return `${v.publicKey.slice(0, 16)}.${v.column}`;
 }
 
 export interface SyncCallbacks {
@@ -507,9 +532,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             const r = db.prepare(`DELETE FROM group_members WHERE group_id=? AND member_pubkey=?`).run(groupId, memberPubkey);
             return r.changes > 0;
         }
+        // A deleted enterprise (state-engine.ts deleteProject, db.ts deleteCrowdfundProject): the main server deletes its
+        // keepers and keeps its row, pruned, which the copy brings. So does this standby: the row is the main server's
+        // (design §4.1), and the trades that name the enterprise still name who it was. Before its rows were copied whole,
+        // no row here was an enterprise, and the delete of the row this made never matched one.
         case 'members': {
-            const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
-            db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
+            const r = db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
             return r.changes > 0;
         }
         // A place watch its member removed, or that went with them on a prune or a self-deletion (engine/place-watches.ts).
@@ -799,8 +827,9 @@ export interface ImportOptions {
      */
     heldToSum?: number | null;
     /**
-     * The copy is a whole one (the puller asked for the snapshot, not a delta), so each plain table it carries is the main
-     * server's whole table: a row here it doesn't name is deleted (engine/plain-tables.ts).
+     * The copy is a whole one (the puller asked for the snapshot, not a delta), so the sets it carries whole are the main
+     * server's entire sets: the keepers' pledges it doesn't name are deleted here (mergeEnterprisePledges), and so is a row
+     * of a plain table it doesn't name (engine/plain-tables.ts).
      */
     whole?: boolean;
 }
@@ -819,16 +848,174 @@ const IMPORT_KEEPS_STAMPS = [
     ...PLAIN_TABLES.flatMap((t) => Object.values(plainTableTriggers(t))),
 ] as const;
 
-/** Drops IMPORT_KEEPS_STAMPS' triggers; the function it returns creates again the ones this database had. In a transaction. */
-function setTouchTriggersAside(): () => void {
+/**
+ * The members' triggers, set aside too when the copy carries the members' whole rows (`standing`): the import then writes
+ * `updated_at` and `board_standing_changed_at` as the main server holds them, and neither trigger may stamp either with
+ * this server's clock (a pause copied onto a row whose standing stamp is already the main server's, a re-key followed
+ * here). A main server older than `standing` sends neither, and the board standing trigger still stamps a change of
+ * `status` it sends, as it did.
+ */
+const MEMBERS_KEEP_STAMPS = ['members_touch_updated_at', 'members_touch_board_standing'] as const;
+
+/** Drops the named touch triggers; the function it returns creates again the ones this database had. In a transaction. */
+function setTouchTriggersAside(names: readonly string[]): () => void {
     const held: string[] = [];
-    for (const name of IMPORT_KEEPS_STAMPS) {
+    for (const name of names) {
         const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(name) as { sql: string } | undefined)?.sql;
         if (!sql) continue;
         held.push(sql);
         db.exec(`DROP TRIGGER ${name}`);
     }
     return () => { for (const sql of held) db.exec(sql); };
+}
+
+/** A value SQLite stores as the main server held it: text, a finite number, or null. Anything else is left out. */
+function isColumnValue(v: unknown): v is string | number | null {
+    return v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v));
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+    return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * A member's row as the main server holds it (`standing`, design G2a, §4.1): every key of it that is a column of this
+ * table, checked against this database's own `PRAGMA table_info` (a name the copy carries is never put in SQL unchecked),
+ * with the main server's `updated_at`. No value here outlives the copy's: the main server is this standby's only writer
+ * and the puller refuses an older copy, so a row that differs in any column is written, whatever its stamp (a withdrawn
+ * vouch, a lifted freeze, an unset pin). A column this table has and the copy doesn't name (a standby newer than its main
+ * server) keeps its own value, or its default on a new row.
+ *
+ * Never a value this table's own rules refuse (its CHECKs and NOT NULLs, db/table-rules.ts RowRules): a main server whose
+ * column came from an ALTER with no CHECK can hold one (a goal below 0 on a community older than the enterprise
+ * unification), and one such value would fail this copy and every copy after it. It is left out of the write (the row
+ * keeps what it holds here, or a new row the column's default) and named in `leftOut`, which the whole-copy check reports
+ * (services/backup-puller.ts checkWholeCopy). Returns 'new', 'updated', null (already the main server's), or 'refused'
+ * when the row breaks a rule whatever is left out (a new row with no callsign): not written, and counted by the caller.
+ */
+function writeMemberStanding(
+    memberColumns: ReadonlySet<string>, rules: RowRules, cache: Map<string, Database.Statement>, publicKey: string,
+    standing: Record<string, unknown>, updatedAt: unknown, leftOut: ValueLeftOut[],
+): 'new' | 'updated' | 'refused' | null {
+    const offered = Object.keys(standing).filter((c) => memberColumns.has(c) && isColumnValue(standing[c])).sort();
+    const stamp = typeof updatedAt === 'string' && updatedAt ? updatedAt : null;
+    const existing = db.prepare('SELECT * FROM members WHERE public_key = ?').get(publicKey) as Record<string, unknown> | undefined;
+    if (existing && existing.updated_at === stamp && offered.every((c) => existing[c] === standing[c])) return null;
+    const admitted = rules.admit(offered, standing, existing);
+    if (!admitted) return 'refused';
+    for (const column of admitted.leftOut) leftOut.push({ publicKey, column });
+    const columns = admitted.columns;
+    // A row that differs only in a value left out is written once, not again with every copy.
+    if (existing && existing.updated_at === stamp && columns.every((c) => existing[c] === standing[c])) return null;
+    const values = columns.map((c) => standing[c] as string | number | null);
+    const q = (c: string) => `"${c}"`;
+    if (!existing) {
+        const sql = `INSERT INTO members (public_key, ${columns.map(q).join(', ')}${columns.length ? ', ' : ''}updated_at) VALUES (?, ${columns.map(() => '?, ').join('')}?)`;
+        let insert = cache.get(sql);
+        if (!insert) cache.set(sql, insert = db.prepare(sql));
+        insert.run(publicKey, ...values, stamp);
+        return 'new';
+    }
+    const sql = `UPDATE members SET ${columns.map((c) => `${q(c)} = ?, `).join('')}updated_at = ? WHERE public_key = ?`;
+    let update = cache.get(sql);
+    if (!update) cache.set(sql, update = db.prepare(sql));
+    update.run(...values, stamp, publicKey);
+    return 'updated';
+}
+
+/**
+ * A member's preferences as the main server holds them (design G2b): the copy names every one the member has, so this
+ * member's rows here are replaced by them when they differ. A malformed entry is left out. Only for a member this database
+ * has (the members import above wrote each one the copy names).
+ */
+function replaceMemberPreferences(publicKey: string, preferences: Record<string, unknown>): boolean {
+    const incoming = new Map<string, string>();
+    for (const [key, value] of Object.entries(preferences)) {
+        if (key.length > 0 && key.length <= 200 && typeof value === 'string' && value.length <= 10_000) incoming.set(key, value);
+    }
+    const here = db.prepare('SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?').all(publicKey) as { pref_key: string; pref_value: string }[];
+    if (here.length === incoming.size && here.every((r) => incoming.get(r.pref_key) === r.pref_value)) return false;
+    db.prepare('DELETE FROM member_preferences WHERE public_key = ?').run(publicKey);
+    const insert = db.prepare('INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)');
+    for (const [key, value] of incoming) insert.run(publicKey, key, value);
+    return true;
+}
+
+/**
+ * Who keeps each enterprise, as the main server holds it (design G2c): the copy carries the whole set, so it is applied as a
+ * diff, a row it no longer has (a keeper unbound, an enterprise deleted) deleted here. After the re-key follow, which has
+ * moved this standby's rows to the new keys the main server's rows name. A malformed row is left out and counted.
+ */
+function replaceTreasuryOperators(rows: unknown[]): { changes: number; skipped: number } {
+    const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
+    const orNull = <T>(v: unknown, ok: (x: unknown) => x is T): T | null => (ok(v) ? v : null);
+    const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const here = new Map((db.prepare('SELECT * FROM treasury_operators').all() as Record<string, unknown>[])
+        .map((r) => [`${r.treasury_pubkey}|${r.member_pubkey}`, r]));
+    const upsert = db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by, backing, auto_promoted_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET
+                                   role = excluded.role, granted_at = excluded.granted_at, granted_by = excluded.granted_by,
+                                   backing = excluded.backing, auto_promoted_at = excluded.auto_promoted_at`);
+    const named = new Set<string>();
+    let changes = 0, skipped = 0;
+    for (const raw of rows) {
+        const r = raw as Record<string, unknown> | null;
+        if (!r || !text(r.treasuryPubkey) || !text(r.memberPubkey) || !text(r.role)) { skipped++; continue; }
+        const key = `${r.treasuryPubkey}|${r.memberPubkey}`;
+        named.add(key);
+        const row = [r.role, orNull(r.grantedAt, text), orNull(r.grantedBy, text), orNull(r.backing, isNumber), orNull(r.autoPromotedAt, text)] as const;
+        const mine = here.get(key);
+        if (mine && mine.role === row[0] && mine.granted_at === row[1] && mine.granted_by === row[2] && mine.backing === row[3] && mine.auto_promoted_at === row[4]) continue;
+        upsert.run(r.treasuryPubkey, r.memberPubkey, ...row);
+        changes++;
+    }
+    const drop = db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?');
+    for (const [key, r] of here) {
+        if (named.has(key)) continue;
+        drop.run(r.treasury_pubkey, r.member_pubkey);
+        changes++;
+    }
+    return { changes, skipped };
+}
+
+/**
+ * Keepers' pledges as the main server holds them (design G2c), each row by its id, every column. The main server deletes
+ * none (a pledge is made and then released), so a delta only upserts. A whole copy (`whole`) carries every pledge the main
+ * server holds, and one it doesn't name is deleted here: a pledge this standby wrote itself (a release on its own route
+ * before its writers refused on a standby, state-engine.ts assertPledgeWritable, pledged the rest again under a new id no
+ * copy ever names) would otherwise stay active through every copy and a take-over, and make the enterprise's credit floor
+ * deeper than the main server's. A malformed row is left out and counted, and names no row to keep.
+ */
+function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: number; skipped: number } {
+    const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
+    const upsert = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                               VALUES (?, ?, ?, ?, ?, ?)
+                               ON CONFLICT(id) DO UPDATE SET
+                                   keeper = excluded.keeper, enterprise = excluded.enterprise, amount = excluded.amount,
+                                   pledged_at = excluded.pledged_at, released_at = excluded.released_at
+                               WHERE enterprise_pledges.keeper IS NOT excluded.keeper OR enterprise_pledges.enterprise IS NOT excluded.enterprise
+                                  OR enterprise_pledges.amount IS NOT excluded.amount OR enterprise_pledges.pledged_at IS NOT excluded.pledged_at
+                                  OR enterprise_pledges.released_at IS NOT excluded.released_at`);
+    let changes = 0, skipped = 0;
+    const named = new Set<string>();
+    for (const raw of rows) {
+        const r = raw as Record<string, unknown> | null;
+        if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || typeof r.amount !== 'number' || !(r.amount > 0) || !Number.isFinite(r.amount)
+            || (r.pledgedAt !== null && !text(r.pledgedAt)) || (r.releasedAt !== null && !text(r.releasedAt))) {
+            skipped++;
+            continue;
+        }
+        named.add(r.id);
+        changes += upsert.run(r.id, r.keeper, r.enterprise, r.amount, r.pledgedAt, r.releasedAt).changes;
+    }
+    if (whole) {
+        const drop = db.prepare('DELETE FROM enterprise_pledges WHERE id = ?');
+        for (const { id } of db.prepare('SELECT id FROM enterprise_pledges').all() as { id: string }[]) {
+            if (!named.has(id)) changes += drop.run(id).changes;
+        }
+    }
+    return { changes, skipped };
 }
 
 export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, opts: ImportOptions = {}): Promise<ImportResult> {
@@ -883,7 +1070,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'memberBlocks', 'invalidatedKeys', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'memberBlocks', 'invalidatedKeys', 'treasuryOperators', 'enterprisePledges', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -914,6 +1101,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     // The plain tables' rows written or deleted (design G3), and each value or row of theirs left out.
     let plainChanges = 0;
     const plainTablesLeftOut: string[] = [];
+    // Preferences, keepers and pledges written (design G2b, G2c).
+    let standingChanges = 0;
+    // Each value of a members row this table's own rules refuse, left out of its write.
+    const valuesLeftOut: ValueLeftOut[] = [];
 
     // Photos go through the store BEFORE the transaction opens, never inside it — the same rule the create
     // and update paths keep (`storedPhotoColumns` in engine/posts.ts). Each `store.put` is a mkdir, a temp
@@ -929,11 +1120,15 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
 
+    // A main server that sends its members' whole rows (`standing`) sends its keepers too, the whole set in every copy: the
+    // members' own triggers are set aside for such a copy (MEMBERS_KEEP_STAMPS).
+    const standingCopy = Array.isArray(remote.treasuryOperators) || (remote.members ?? []).some((rm) => isPlainObject(rm?.standing));
+
     try {
         db.transaction(() => {
             // The ledger's total before this copy writes anything, what the conservation guard holds it to (below).
             const totalBefore = ledgerTotal();
-            const putTouchTriggersBack = setTouchTriggersAside();
+            const putTouchTriggersBack = setTouchTriggersAside(standingCopy ? [...IMPORT_KEEPS_STAMPS, ...MEMBERS_KEEP_STAMPS] : IMPORT_KEEPS_STAMPS);
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -970,7 +1165,28 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 noteReplacedKeysFromMainServer();
             }
 
+            // This table's own columns, which alone a member's `standing` may name; never the key or the stamp, written apart.
+            const memberColumns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[])
+                .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at'));
+            const standingStatements = new Map<string, Database.Statement>();
+            // This table's own rules, which a whole row is checked against before it is written (writeMemberStanding); only
+            // for a copy that carries whole rows.
+            const memberRules = (remote.members ?? []).some((rm) => isPlainObject(rm?.standing)) ? new RowRules(db, 'members') : null;
             for (const rm of remote.members ?? []) {
+                // The main server's whole row (design G2a, §4.1): every column as it holds it. The special cases below (the
+                // visitor's mark never lowered by a copy, the owner's delete kept, the first voucher kept) are for a main
+                // server older than that, which sends its members as a fixed list of fields.
+                if (memberRules && isPlainObject(rm.standing)) {
+                    if (typeof rm.publicKey !== 'string' || !rm.publicKey) { conflictsSkipped++; continue; }
+                    const wrote = writeMemberStanding(memberColumns, memberRules, standingStatements, rm.publicKey, rm.standing, rm.updatedAt, valuesLeftOut);
+                    if (wrote === 'new') newMembers++;
+                    else if (wrote === 'updated') updatedMembers++;
+                    else if (wrote === 'refused') {
+                        conflictsSkipped++;
+                        console.warn(`[Sync] A member's row this table's rules refuse whatever is left out, not written: ${rm.publicKey.slice(0, 16)}`);
+                    }
+                    continue;
+                }
                 const existing = db.prepare("SELECT updated_at, is_visitor, board_standing_changed_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null; board_standing_changed_at: string | null } | undefined;
                 if (!existing) {
                     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
@@ -1069,6 +1285,32 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     );
                     if (res.changes > 0) updatedMembers++;
                 }
+            }
+
+            memberRules?.close();
+            if (valuesLeftOut.length > 0) {
+                console.warn(`[Sync] ${valuesLeftOut.length} value(s) in the main server's members rows this table's rules refuse, left out `
+                    + `(the row keeps its own, or the default): ${valuesLeftOut.slice(0, 5).map(valueLeftOutName).join(', ')}`);
+            }
+
+            // Each member's preferences, with their row (design G2b): holiday, notification settings, reminder defaults.
+            // A main server older than this sends none, and this standby keeps the rows it has.
+            const memberHere = db.prepare('SELECT 1 FROM members WHERE public_key = ?');
+            for (const rm of remote.members ?? []) {
+                if (!isPlainObject(rm.preferences) || typeof rm.publicKey !== 'string' || !memberHere.get(rm.publicKey)) continue;
+                if (replaceMemberPreferences(rm.publicKey, rm.preferences)) standingChanges++;
+            }
+            // Who keeps each enterprise, the whole set, after the re-key follow above (design G2c, §5.3), and the keepers'
+            // pledges. A main server older than this sends neither, and this standby keeps the rows it has.
+            if (Array.isArray(remote.treasuryOperators)) {
+                const kept = replaceTreasuryOperators(remote.treasuryOperators);
+                standingChanges += kept.changes;
+                conflictsSkipped += kept.skipped;
+            }
+            if (Array.isArray(remote.enterprisePledges)) {
+                const pledged = mergeEnterprisePledges(remote.enterprisePledges, opts.whole === true);
+                standingChanges += pledged.changes;
+                conflictsSkipped += pledged.skipped;
             }
 
             for (const rp of remote.posts ?? []) {
@@ -1975,13 +2217,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     // so nothing downstream would ever have noticed.
     // groupChanges too: the groups list answers conditional requests from its own version counter, which
     // 'state_synced' bumps — an import that only changed groups would otherwise leave it serving 304s.
-    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0 || groupChanges > 0 || plainChanges > 0) {
+    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0 || groupChanges > 0 || standingChanges > 0
+        || plainChanges > 0) {
         cb.broadcast({
             type: 'state_synced',
-            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied, groupChanges, plainChanges,
+            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied, groupChanges, standingChanges, plainChanges,
             from: remote.nodeId,
         });
     }
+    // An enterprise's floor is kept in memory (engine trust.ts getEnterpriseFloor), and its keepers, pledges and legacy
+    // floor may have changed with this copy.
+    if (newMembers > 0 || updatedMembers > 0 || standingChanges > 0 || tombstonesApplied > 0) clearEnterpriseFloorCache(db);
 
     // #134: Permanent audit trail — write one row per import with origin peer identity and change counts.
     writeSyncAuditLog({
@@ -2006,5 +2252,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
         recoverySharesImported,
         plainChanges,
         plainTablesLeftOut,
+        valuesLeftOut,
     };
 }

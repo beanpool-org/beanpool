@@ -748,8 +748,6 @@ const BACKUP_STATUS = {
 };
 
 const TAKEOVER_MISSING = [
-    "which members are enterprises, who keeps each one, and the keepers' pledges",
-    "members' holiday and notification settings, vouches, granted credit and credit freezes",
     'the phones members get notifications on: nobody gets one until they open the app again',
     'photos sent in chats',
     "muted chats, what members have read in enterprise threads, the activity list, event reminders already sent, and the pricing guide's own prices and members' price reports",

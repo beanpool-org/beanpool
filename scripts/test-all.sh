@@ -516,6 +516,7 @@ run_federation_suites() {
       test-groups-sync-and-removal
       test-groups-chat
       test-chat-parity
+      test-dm-never-plaintext
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession

@@ -1119,6 +1119,7 @@ async function main(): Promise<void> {
             [yan2, `/api/enterprise/${gwen0.pk}/sweep`], [yan2, '/api/commons/decisions'], [yan2, '/api/member/re-enroll'],
             [yan2, '/api/federation/purchase'], ['admin', `/api/local/admin/posts/${figs.id}/delete`], ['admin', '/api/local/admin/disputes/x/resolve'],
             ['admin', `/api/local/admin/branches/${zed.pk}/prune`], ['admin', '/api/local/admin/reports/x/action'],
+            ['admin', '/api/local/admin/decisions/x/halt'], ['admin', '/api/local/admin/decisions/x/accelerate'],
         ];
         const notRefused: string[] = [];
         for (const [who, route] of moneyRoutes) {
@@ -1128,6 +1129,9 @@ async function main(): Promise<void> {
         assert(notRefused.length === 0, `every route that moves Beans or steps a trade answers 409 standby on S0 (${notRefused.length} did not: ${notRefused.join(' | ') || 'none'})`);
         const read17 = await api(f, 'GET', `/api/ledger/balance/${yan2.pk}`, { as: yan2 });
         assert(read17.status === 200 && typeof read17.body?.balance === 'number', `a read still answers on S0 (${brief(read17)})`);
+        // The admin's Decisions list is a POST that only reads (#1268 review 4118052544): it answers on a standby too.
+        const decisions17 = await api(f, 'POST', '/api/local/admin/decisions', { admin: PW_STANDBY, body: {} });
+        assert(decisions17.status === 200 && Array.isArray(decisions17.body?.decisions), `the admin's Decisions list still answers on S0 (${brief(decisions17)})`);
         await unchanged('all of them');
 
         const next17 = await format1.send('pull', {});

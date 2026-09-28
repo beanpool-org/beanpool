@@ -28,9 +28,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     // A crowdfund pledge, and a crowdfund's delete, which refunds its backers.
     /^\/api\/crowdfund\/projects\/(delete|[^/]+\/pledge)\/?$/,
     // Decisions: a vote can carry one out, and a Decision can grant Beans from the Commons, write them off or remove a
-    // member; an admin's accelerate carries one out.
+    // member; an admin's halt or accelerate acts on one. The admin's list (POST /api/local/admin/decisions) is a read.
     /^\/api\/commons\/decisions(\/|$)/,
-    /^\/api\/local\/admin\/decisions(\/|$)/,
+    /^\/api\/local\/admin\/decisions\/[^/]+\/(halt|accelerate)\/?$/,
     // A member's own delete (their balance goes to or comes from the Commons) and a re-key (it moves to the new key),
     // theirs or an operator's, and an operator's offboarding.
     /^\/api\/member\/(purge|re-enroll)\/?$/,

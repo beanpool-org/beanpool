@@ -339,4 +339,46 @@ describe('Settings → View Recovery Phrase', () => {
         await act(async () => { tap(screen.getByText('accident')); await vi.advanceTimersByTimeAsync(0); });
         expect(browser.clip).toBe('');
     });
+
+    it('Chrome: the Public Key copied after the words is still there after the minute', async () => {
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        page();
+        await screen.findByText('accident');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Copy All Words/ })); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+        await act(async () => { fireEvent.click(screen.getByTitle('Copy Public Key')); });
+        expect(browser.clip).toBe('me-pk');
+        await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+        expect(browser.clip).toBe('me-pk');
+    });
+
+    it('Safari: the Public Key copied after the words survives the minute and the next tap', async () => {
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        browser.needsGesture = true;
+        page();
+        await screen.findByText('accident');
+        browser.inGesture = true;
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Copy All Words/ })); });
+        await act(async () => { fireEvent.click(screen.getByTitle('Copy Public Key')); });
+        browser.inGesture = false;
+        expect(browser.clip).toBe('me-pk');
+        await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+        await act(async () => { tap(screen.getByText('accident')); await vi.advanceTimersByTimeAsync(0); });
+        expect(browser.clip).toBe('me-pk');
+    });
+
+    it('leaving the words screen ends the clear: the words stay after the minute and a tap', async () => {
+        browser.needsGesture = true;
+        const view = page();
+        await screen.findByText('accident');
+        browser.inGesture = true;
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Copy All Words/ })); });
+        browser.inGesture = false;
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(browser.clip).toBe(TEXT);
+        view.unmount();
+        await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+        await act(async () => { tap(document.body); await vi.advanceTimersByTimeAsync(0); });
+        expect(browser.clip).toBe(TEXT);
+    });
 });

@@ -4,9 +4,10 @@
  * ask the member for permission, and the answer isn't needed). Best effort, and silent: nothing here throws or shows an
  * error.
  *
- * "Nothing else since" is what the page itself saw: the member stayed on the words screen (it has no other Copy, and the
- * app's other Copy buttons write without a copy event), the page kept focus and stayed in view (another app or tab could
- * have copied), and nothing was copied or cut on the page. If any of that fails, the clipboard is left alone for good.
+ * "Nothing else since" is what the page itself saw: the member stayed on the words screen, no other Copy button on the page
+ * was used (they write without a copy event, so each calls anotherCopyMade: the screen's Public Key copy does), the page kept
+ * focus and stayed in view (another app or tab could have copied), and nothing was copied or cut on the page. If any of that
+ * fails, the clipboard is left alone for good.
  *
  * Browsers differ on the write itself (PR #1284 review 4124179538):
  * - Chrome, Edge and the other Chromium browsers let the page in front write at any time: cleared on the minute.
@@ -98,5 +99,10 @@ export async function copyWordsForAMinute(words: string): Promise<boolean> {
 
 /** The words screen closed (Back, another section, or Settings itself): the clipboard may change without the page seeing it. */
 export function leftTheWordsScreen(): void {
+    latest?.finish();
+}
+
+/** Another Copy button on the page is about to write (it fires no copy event): the words' clear must not wipe what it copies. */
+export function anotherCopyMade(): void {
     latest?.finish();
 }

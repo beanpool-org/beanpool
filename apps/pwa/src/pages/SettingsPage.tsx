@@ -33,7 +33,7 @@ import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPo
 import { MemberGuide } from '../components/MemberGuide';
 import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
-import { WEB_COPY_CLEARS_LINE, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
+import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -578,6 +578,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <span>{fingerprint}</span>
                         <button
                             onClick={() => {
+                                anotherCopyMade();
                                 navigator.clipboard.writeText(identity.publicKey);
                                 alert('Public Key copied to clipboard');
                             }}

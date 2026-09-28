@@ -361,7 +361,11 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
         warning = true;
         lines.push(`Its last ${r.failedImportsInARow === 1 ? 'copy was' : `${r.failedImportsInARow} copies were`} refused: ${r.lastWhy === 'oversized' && r.lastOversized
             ? `the main server holds more rows of ${differsInWords(r.lastOversized.tables)} than one copy carries, and the ledger needs ${r.lastOversized.tables.length === 1 ? 'it' : 'them'} whole`
-            : whyInWords(r.lastWhy)}. Nothing has landed since ${timeInWords(r.lastOkAt)}: this server holds the last copy that did, whole.`);
+            : whyInWords(r.lastWhy)}.`);
+        // Refused since: a refusal clears nothing, so what this server holds is the last copy that landed, whole (design §4.2 N4).
+        lines.push(r.lastOkAt !== null
+            ? `Nothing has landed since ${timeInWords(r.lastOkAt)}: this server holds the last copy that did, whole.`
+            : 'No copy has landed here yet.');
     } else if (r.lastOversized) {
         // Deltas land, and every whole copy is refused: this server's copy is current, and nothing can check it is exact.
         warning = true;

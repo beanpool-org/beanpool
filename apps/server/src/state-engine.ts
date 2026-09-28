@@ -4496,6 +4496,18 @@ function beansOffPrice(credits: unknown): number {
 }
 
 /**
+ * Who hears that a deferred wage was paid: the keeper it paid, and the enterprise's keepers who may act for it
+ * (canOperateTreasury), the readers of its claims on its page (routes/treasury.ts `deferredClaims`). It names a person
+ * and what they were paid, so it never goes to the whole feed (balances and trades are private, 2026-09-28).
+ */
+function deferredWageRecipients(enterprisePubkey: string, keeperPubkey: string): string[] {
+    const out = new Set<string>([keeperPubkey]);
+    const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as { member_pubkey: string }[];
+    for (const k of keepers) if (canOperateTreasury(k.member_pubkey, enterprisePubkey)) out.add(k.member_pubkey);
+    return [...out];
+}
+
+/**
  * Process pending deferred wage claims for an enterprise (docs/the-commons.md §2.4 Rule 6).
  * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
  */
@@ -4578,9 +4590,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
                         amount: claim.amount,
-                    });
+                    }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
-                // deferred_wage_paid goes to the member feed only.
+                // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
+                // listing leave the board, if it did.
                 if (listingDone) ringListingDoorbell('post_removed');
             }
         }

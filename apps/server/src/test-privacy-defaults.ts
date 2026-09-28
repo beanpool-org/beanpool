@@ -10,7 +10,8 @@
  *   3. The activity feed: a completed trade reaches its two people only, and one reader's copy is never confirmed to
  *      another with a 304.
  *   4. An enterprise's book: every amount is open, but who paid it and what they wrote only to its keepers and to that
- *      member. Its public page's flow carries no memo to a stranger.
+ *      member. Its public page's flow carries no memo to a stranger. A deferred wage it pays goes on the live feed to
+ *      the keeper it paid and its keepers, and to no other socket.
  *   5. Who took a listing: the author and the taker read it, on the board and on the live feed; nobody else does.
  *   6. A local community's listings: a stranger (unsigned), a key that is no member here and a visitor's row are refused
  *      the board, one listing, a sync and a delta, with code members_only and the global community's address; a member
@@ -301,6 +302,27 @@ async function main() {
             && !flowUnsigned.text.includes('rye loaf'), `its public page shows the flow's amounts and no memo to a stranger (got ${flowUnsigned.status})`);
         const flowKeeper = await get(`/api/treasury/${enterprise}`, alice);
         assert(flowKeeper.text.includes('rye loaf'), 'and the memo to its keeper');
+
+        // A deferred wage paid out names its keeper and the amount (the deciding review's 4125322206): it goes to that
+        // keeper and the enterprise's keepers, and never to another member's socket.
+        const kim = member('PrivKim');
+        se.adminAssignTreasuryOperator(enterprise, kim.pk);
+        se.transfer('genesis', enterprise, 20, 'Seed the bakery', 'direct', true);
+        db.prepare('UPDATE members SET earned_surplus = 20 WHERE public_key = ?').run(enterprise);
+        const kimSock = await openSocket(`${wsBase}?${signedWsQuery(kim)}`);
+        const aliceSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
+        const bystanderSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
+        const keylessSock = await openSocket(wsBase);
+        await sleep(200);
+        se.recordDeferredWageClaim(enterprise, kim.pk, 7);
+        assert(se.processDeferredWageClaims(enterprise) === 1, 'setup: the bakery pays Kim, a keeper, a deferred wage of 7');
+        await sleep(300);
+        const wage = (s: Sock) => s.events.find(e => e.type === 'deferred_wage_paid');
+        assert(wage(kimSock)?.keeper === kim.pk && wage(kimSock)?.amount === 7, `Kim, the keeper it paid, hears it (got ${JSON.stringify(wage(kimSock))})`);
+        assert(wage(aliceSock)?.keeper === kim.pk, "Alice, the bakery's lead keeper, hears it");
+        assert(!bystanderSock.raw.some(r => r.includes('deferred_wage_paid')), "Carol, a member who keeps nothing there, hears no wage");
+        assert(!keylessSock.raw.some(r => r.includes('deferred_wage_paid') || r.includes(kim.pk)), "a key-less socket hears no wage, and nothing that names Kim");
+        for (const s of [kimSock, aliceSock, bystanderSock, keylessSock]) s.ws.close();
     }
 
     // ── 5 and 6. listings ──────────────────────────────────────────────────────────────────────

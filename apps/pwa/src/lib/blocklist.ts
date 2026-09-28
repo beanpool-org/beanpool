@@ -300,9 +300,13 @@ function takeNodeAnswer(res: BlockList, asked: number): void {
         const older = new Set(keys);
         const tick = ++ticks;
         let differs = false;
+        // What the older request itself added (the node's `added`): a block of a key the member unblocked here since that
+        // reached the node after the unblock, so the node holds it again and the page must say so (#1278 review 4119489106).
+        const added = (res as { added?: unknown })?.added;
+        const addedByIt = new Set(Array.isArray(added) ? added : []);
         for (const k of older) {
             if (newer.has(k)) continue;
-            if ((unblockedHere.get(k) ?? 0) > asked) continue;
+            if ((unblockedHere.get(k) ?? 0) > asked && !addedByIt.has(k)) continue;
             leaving.set(k, tick);
             differs = true;
         }

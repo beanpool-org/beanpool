@@ -889,6 +889,28 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(node.sent).toEqual(['clear', `add ${K2}`, 'read']);
     });
 
+    // #1278 review 4119489106: a double Block (the chat header's button has no busy guard), then an unblock here, and the
+    // second block reaches the node last: the node holds K1 again, so the page shows it, after one read.
+    it.each(['unblock of K1', 'Unblock All'] as const)('a second block of K1 that reaches the node after the %s shows, with the socket down', async (how) => {
+        const T = await oneTabRead([], null);
+        node.thereQueue = { add: [1, 100] };
+        node.there = { remove: 1, clear: 1, read: 1 };
+        node.back = { add: 1, remove: 1, clear: 1, read: 1 };
+        const first = T.blockUser(K1);
+        const second = T.blockUser(K1);
+        await vi.advanceTimersByTimeAsync(5);
+        await expect(first).resolves.toBe(true);
+        expect(T.getBlockedUsers()).toEqual([K1]);
+        const lifting = unblockK1OrAll(T, how);
+        await vi.advanceTimersByTimeAsync(5);
+        await lifting;
+        expect(T.getBlockedUsers()).toEqual([]);
+        await vi.advanceTimersByTimeAsync(3000);
+        await second;
+        expect(node.list).toEqual([K1]);
+        expect(T.getBlockedUsers()).toEqual([K1]);
+    });
+
     it('an older answer never shows again a block the member lifted here since: an unblock of K1 answered slowly, then Unblock All', async () => {
         const T = await oneTabRead([K1, K2], null);
         // The unblock of K1 reaches the node at 1 ms, and its answer (K2 blocked) comes back at 201 ms. At 10 ms the member

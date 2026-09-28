@@ -5,6 +5,8 @@
  * - Author enters question (title), optional description.
  * - 2 to 4 options.
  * - Duration selector: 3, 7 (default), or 14 days.
+ * - Open vote: off by default, so the poll is anonymous (everyone sees only the totals). On, members see who chose
+ *   what. Fixed once someone has voted (Marty, 2026-09-28).
  * - Rate limit awareness: 1 open poll per member, 5 per node.
  * - Franchise: active members only, credit_frozen = 0.
  */
@@ -52,6 +54,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
         { id: '2', text: '' },
     ]);
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
+    const [openVote, setOpenVote] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const handleAddOption = () => {
@@ -118,6 +121,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                 created_at: new Date().toISOString(),
                 poll_options: JSON.stringify(cleanOptionsObj),
                 durationDays,
+                pollOpenVote: openVote,
             });
 
             // Reset form
@@ -125,6 +129,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             setDescription('');
             setOptions([{ id: '1', text: '' }, { id: '2', text: '' }]);
             setDurationDays(7);
+            setOpenVote(false);
 
             Alert.alert('Poll Created', 'Your poll has been published to the community feed!');
             onSuccess?.();
@@ -285,6 +290,26 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 </Pressable>
                             ))}
                         </View>
+
+                        {/* Open vote: anonymous unless ticked; can't change once someone has voted */}
+                        <Pressable
+                            onPress={() => setOpenVote(v => !v)}
+                            style={[styles.openVoteRow, openVote && styles.openVoteRowActive]}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: openVote }}
+                            accessibilityLabel="Open vote: members see who chose what"
+                            testID="poll-open-vote"
+                        >
+                            <Text style={styles.openVoteBox}>{openVote ? '☑' : '☐'}</Text>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={styles.openVoteTitle}>👁️ Open vote</Text>
+                                <Text style={styles.openVoteHint}>
+                                    {openVote
+                                        ? "Members will see who chose what. You can't change this once someone has voted."
+                                        : "Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can't change it once someone has voted."}
+                                </Text>
+                            </View>
+                        </Pressable>
                     </ScrollView>
                 </View>
             </KeyboardAvoidingView>
@@ -473,5 +498,36 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         durationBtnTextActive: {
             fontWeight: '800',
             color: '#7c3aed',
+        },
+        openVoteRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 10,
+            marginTop: 18,
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',
+            backgroundColor: colors.surface.card,
+        },
+        openVoteRowActive: {
+            borderColor: '#7c3aed',
+            backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff',
+        },
+        openVoteBox: {
+            fontSize: 20,
+            color: '#7c3aed',
+            lineHeight: 22,
+        },
+        openVoteTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text.body,
+            marginBottom: 2,
+        },
+        openVoteHint: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            lineHeight: 17,
         },
     });

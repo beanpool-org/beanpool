@@ -330,12 +330,17 @@ export default function LedgerScreen() {
         if (!anchorUrl || !identity?.publicKey) return;
         setExporting(true);
         try {
+            // Signed by the app's request signing (utils/node-request-signing.ts): the node answers with this member's own
+            // transactions only (balances and trades are private, 2026-09-28), and says why when it refuses.
             const res = await fetch(`${anchorUrl}/api/ledger/export`);
-            if (!res.ok) throw new Error('Export failed');
+            if (!res.ok) {
+                const refusal = await res.json().catch(() => null);
+                throw new Error(refusal?.error || 'Export failed');
+            }
             const { transactionsCsv } = await res.json();
-            const path = `${FileSystem.cacheDirectory}beanpool-ledger.csv`;
+            const path = `${FileSystem.cacheDirectory}beanpool-my-transactions.csv`;
             await FileSystem.writeAsStringAsync(path, transactionsCsv, { encoding: FileSystem.EncodingType.UTF8 });
-            await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export Ledger' });
+            await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export my transactions' });
         } catch (e: any) {
             Alert.alert('Export Failed', e.message || 'Could not export ledger.');
         } finally {

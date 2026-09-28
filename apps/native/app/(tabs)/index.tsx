@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { membersOnlyHere } from '../../utils/members-only-listings';
+import { GLOBAL_NODE_URL } from '../../utils/node-profile';
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -545,6 +547,17 @@ export default function MarketScreen() {
     // loading state rather than the "no items" empty state (which reads as broken/empty).
     const [firstSyncDone, setFirstSyncDone] = useState(false);
     const [syncTimedOut, setSyncTimedOut] = useState(false);
+    // The community refused this phone its listings: its key is no member there, and a local community's listings are
+    // its members' (2026-09-28; utils/members-only-listings.ts). Read again on each focus and after each sync.
+    const [membersOnly, setMembersOnly] = useState(false);
+    useFocusEffect(useCallback(() => {
+        let live = true;
+        const read = () => { membersOnlyHere().then(v => { if (live) setMembersOnly(v); }); };
+        read();
+        const refused = DeviceEventEmitter.addListener('members_only_listings', read);
+        const ended = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, read);
+        return () => { live = false; refused.remove(); ended.remove(); };
+    }, []));
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1615,7 +1628,25 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    (!hasActiveFilters && !firstSyncDone && !syncTimedOut) ? (
+                    membersOnly ? (
+                        // Not a member of this community: its listings are its members'. Not "trouble connecting".
+                        <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
+                            <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>
+                            <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text.body, marginBottom: 8, textAlign: 'center' }}>
+                                This community's listings are for its members
+                            </Text>
+                            <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 18 }}>
+                                To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.
+                            </Text>
+                            <Pressable
+                                accessibilityRole="link"
+                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
+                                onPress={() => { Linking.openURL(GLOBAL_NODE_URL).catch(() => {}); }}
+                            >
+                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>🌍 Look around the global community</Text>
+                            </Pressable>
+                        </View>
+                    ) : (!hasActiveFilters && !firstSyncDone && !syncTimedOut) ? (
                         // First-run / initial sync — show a loader, not the empty state.
                         <View style={{ padding: 48, alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={colors.brand.primary} />

@@ -6,7 +6,9 @@
  * - Options list with live progress bars, vote counts, and percentages.
  * - Tap-to-vote: one member, one vote; re-voting overwrites choice.
  * - Turnout tally & close date or "Closed" badge.
- * - Open ballot: collapsible list of who voted for what (open, not secret).
+ * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
+ *   (`pollOpenVote`, `poll_open_vote` in the phone's cache), members also get a collapsible list of who voted for what.
+ *   The card says which.
  * - Author "Close Poll" action for early closure.
  */
 
@@ -81,6 +83,10 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
+    // Only a poll its creator made an open vote names its voters. A node before the choice sends no flag, and its polls
+    // showed voters to members, so a list that comes with such a poll is shown as before.
+    const openFlag = livePost.pollOpenVote ?? livePost.poll_open_vote;
+    const openVote = openFlag === true || openFlag === 1 || (openFlag === undefined && votesList.length > 0);
 
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
@@ -259,17 +265,23 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                 })}
             </View>
 
-            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
-            <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
-                👁️ Your vote is visible to members
-            </Text>
+            {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
+            {openVote ? (
+                <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
+                    👁️ Open vote: members can see who chose what
+                </Text>
+            ) : (
+                <Text style={styles.openBallotNote} testID="poll-anonymous-note">
+                    🔒 Anonymous: everyone sees only the totals
+                </Text>
+            )}
 
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
                 <Text style={styles.turnoutText}>
                     📊 {totalVotes} total {totalVotes === 1 ? 'vote' : 'votes'} cast
                 </Text>
-                {votesList.length > 0 && (
+                {openVote && votesList.length > 0 && (
                     <Pressable
                         onPress={() => setShowVoters(prev => !prev)}
                         style={styles.votersToggleBtn}
@@ -284,11 +296,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                 )}
             </View>
 
-            {/* Open / Non-Secret Ballot: Collapsible Voter List */}
-            {showVoters && votesList.length > 0 && (
+            {/* An open vote's collapsible voter list */}
+            {openVote && showVoters && votesList.length > 0 && (
                 <View style={styles.votersSection}>
                     <Text style={styles.votersNotice}>
-                        Village voting is open and transparent. Every vote is signed and visible to members.
+                        This is an open vote: its creator chose to let members see who chose what.
                     </Text>
                     {votesList.map((v, i) => {
                         const matchedOpt = optionsById.get(v.optionId);

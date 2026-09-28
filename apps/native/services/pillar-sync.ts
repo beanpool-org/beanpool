@@ -19,6 +19,7 @@ import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
+import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 
 const SYNC_TIMEOUT_MS = 20_000;
 const MAX_STORED_TRANSACTIONS = 1000;
@@ -394,11 +395,21 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
             }
             if (!postsRes.ok) {
+                // A local community refuses its listings to a phone whose key is no member there (2026-09-28): noted for
+                // the Market, which says so with the way to the global community (utils/members-only-listings.ts).
+                const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
+                const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
+                await noteMembersOnly(anchorUrl, membersOnly);
+                if (membersOnly) {
+                    const { DeviceEventEmitter } = require('react-native');
+                    DeviceEventEmitter.emit('members_only_listings');
+                }
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
-                result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
+                result.errorMessage = membersOnly ? 'members_only' : `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
             }
+            await noteMembersOnly(anchorUrl, false);
             // The visitors' view reaching a member (G9c, utils/posts-view.ts) goes the same way as a failed
             // fetch: nothing written, the cursor not moved, and the next sync asks again.
             const viewRefusal = await postsViewRefusal(postsRes, anchorUrl, pubKey);

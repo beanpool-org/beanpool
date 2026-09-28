@@ -659,9 +659,16 @@ export function DecideSection({
 
                             // §3.8 Removal ballot text
                             const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
-                            const debtAmount = item.params?.debt !== undefined ? Math.abs(item.params.debt) : (item.params?.balance !== undefined ? Math.abs(Math.min(0, item.params.balance)) : 0);
+                            // The node sends the member's balance and debt only to those who can vote in it (and to the member):
+                            // balances are private (2026-09-28). Anyone else is told so, never shown a made-up 0.
+                            const knowsDebt = typeof item.params?.debt === 'number' || typeof item.params?.balance === 'number';
+                            const debtAmount = typeof item.params?.debt === 'number' ? Math.abs(item.params.debt) : (typeof item.params?.balance === 'number' ? Math.abs(Math.min(0, item.params.balance)) : 0);
                             const poolAmount = Math.round(item.params?.commonsPool ?? balanceState.commons ?? 0);
-                            const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+                            const debtWriteOffLine = !knowsDebt
+                                ? `Balances are private: only the members who can vote in this see ${targetName}'s balance and any debt. The Commons pool holds ${poolAmount} beans.`
+                                : debtAmount > 0
+                                    ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+                                    : `${targetName} has no debt. Removing them charges nothing to the Commons pool, which currently holds ${poolAmount}.`;
 
                             return (
                                 <View key={item.id} style={styles.card}>

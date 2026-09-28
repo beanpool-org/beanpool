@@ -114,7 +114,11 @@ services:
       # thread's copy of the setting, and it is on from the first instruction
       # rather than from the first import. Supported since Node 22.13; the image
       # is node:22-alpine3.21 (22.21.1), measured.
-      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env
+      # --report-exclude-network: no network interfaces in a report, and no DNS
+      # lookup of each open connection's address while one is written (on a
+      # direct-mode server those are members' addresses). The server takes the
+      # addresses themselves out of each report (apps/server/src/process-handlers.ts).
+      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env --report-exclude-network
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock

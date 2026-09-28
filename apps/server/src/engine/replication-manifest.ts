@@ -188,7 +188,7 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
         columns: cols('id type post_id created_by created_at'),
         except: {
-            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net)", gap: 'G1b' },
+            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
         },
     },
     conversation_participants: {
@@ -495,6 +495,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
+    // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
+    // (services/address-retention.ts).
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
     replication_access: { kind: 'per-server', reason: "this server's replication access log" },
     replicated_member_blocks_v1: { kind: 'per-server', reason: "a standby's own marker" },

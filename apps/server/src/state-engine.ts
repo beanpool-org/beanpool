@@ -28,7 +28,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
-import { pruneOldActivity } from './db/activity-feed-db.js';
+import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
@@ -38,6 +38,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
+import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
@@ -1077,6 +1078,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
@@ -6964,7 +6966,8 @@ function deleteReplicatedRows(table: 'suspended_node_roles' | 'recovery_releases
  * 2. Settles positive or negative balance with COMMONS_POOL (a removal already settled it: then nothing moves).
  * 3. Anonymizes the profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area) and marks
  *    it deleted by its owner.
- * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
+ * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
+ *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
@@ -7063,6 +7066,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 updated_at = ?
             WHERE public_key = ?
         `).run(now, now, now, publicKey);
+        // The activity feed's own copies of their name (its join line, a ruling's other party): every other line reads it
+        // from the row above.
+        renameMemberInActivity(publicKey, 'Deleted Member');
 
         // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`
@@ -7073,12 +7079,15 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND type = 'poll' AND status IN ${POLLS_A_PRUNE_CLOSES}
         `).run(now, publicKey);
         db.prepare(`
-            UPDATE posts 
-            SET status = 'cancelled', 
-                active = 0, 
-                updated_at = ? 
+            UPDATE posts
+            SET status = 'cancelled',
+                active = 0,
+                updated_at = ?
             WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
+        // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
+        // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
+        scrubPostsOf(publicKey, now);
 
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
@@ -7690,9 +7699,10 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // The snapshot-pull endpoint hands out the entire ledger (incl. DMs + recovery
 // data), so on the PRIMARY we record who pulls it — to attribute legitimate
 // backup traffic AND to surface rejected attempts (a leaked-credential / probing
-// signal) on the admin dashboard.
+// signal) on the admin dashboard. Each entry's address is kept 7 days, then
+// null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
@@ -7712,9 +7722,9 @@ const EMPTY_ACCESS_LOG: ReplicationAccessLog = {
 export function getReplicationAccessLog(): ReplicationAccessLog {
     try {
         const row = db.prepare(`SELECT value FROM node_config WHERE key='replication_access'`).get() as any;
-        if (row?.value) return { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) };
+        if (row?.value) return withoutOldAddresses('replication_access', { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) });
     } catch { /* fall through to empty */ }
-    return { ...EMPTY_ACCESS_LOG };
+    return { ...EMPTY_ACCESS_LOG, recent: [] };
 }
 
 export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
@@ -7731,6 +7741,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
             log.lastPullAuth = ev.auth;
         }
         log.recent = [ev, ...(log.recent || [])].slice(0, 20);
+        withoutOldAddresses('replication_access', log);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replication_access', ?)`).run(JSON.stringify(log));
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);

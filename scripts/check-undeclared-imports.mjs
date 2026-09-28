@@ -78,6 +78,13 @@ const WORKSPACES = [
     nodeOnly: true,
     testFilePattern: /(^|\/)(?:test|bench)-[^/]*$|(^|\/)__fixtures__\/|(^|\/)takeover-test-harness\.ts$/,
   },
+  {
+    // The key vault. Not in the node's Dockerfile: its own image (V3) bundles it, and an undeclared import that only
+    // resolves here through hoisting would break that build the same way. Node only; tests may use devDependencies.
+    path: 'apps/vault',
+    nodeOnly: true,
+    testFilePattern: /(^|\/)__tests__\//,
+  },
 ];
 
 function walk(dir) {

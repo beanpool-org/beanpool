@@ -3276,9 +3276,10 @@
                     notice.textContent = text;
                     notice.style.display = text ? 'block' : 'none';
                 }
+                // An address is kept 7 days; after that the server sends null (services/address-retention.ts).
                 const lastPull = document.getElementById('rep-last-pull');
                 if (lastPull) lastPull.textContent = d.lastPullAt
-                    ? `${relativeTime(d.lastPullAt)}${d.lastPullIp ? ' · ' + d.lastPullIp : ''}${d.lastPullAuth ? ' · ' + d.lastPullAuth : ''}`
+                    ? `${relativeTime(d.lastPullAt)} · ${d.lastPullIp || 'address no longer kept'}${d.lastPullAuth ? ' · ' + d.lastPullAuth : ''}`
                     : 'never';
                 const totalPulls = document.getElementById('rep-total-pulls');
                 if (totalPulls) totalPulls.textContent = String(d.totalPulls || 0);
@@ -3312,7 +3313,7 @@
                                 const ok = ev.auth !== 'rejected';
                                 const color = ok ? '#22c55e' : '#f87171';
                                 const tag = ok ? ev.auth : ('rejected' + (ev.reason ? ' (' + ev.reason + ')' : ''));
-                                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0;"><span style="color:${color};">${tag}</span><span style="color:#64748b;">${ev.ip || '—'} · ${relativeTime(ev.at)}</span></div>`;
+                                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0;"><span style="color:${color};">${tag}</span><span style="color:#64748b;">${ev.ip || 'address no longer kept'} · ${relativeTime(ev.at)}</span></div>`;
                             }).join('');
                     }
                 }

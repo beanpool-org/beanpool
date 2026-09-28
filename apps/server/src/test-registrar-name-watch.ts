@@ -41,6 +41,16 @@
  * The take-over:
  * 13. N drops sname; its standby takes over with the recovery code and refuses sname at once (main: 200); this server's
  *     attestation at sname (the promoted standby's own key) brings it back on the next round.
+ * A claim that lands during a round, on P:
+ * 14. race is lost; a round starts, K's answer at the name taking 1.5 s, and 0.7 s in the admin claims race back: accepted
+ *     on every request, during the round and after it (07535a17: 421 once the round ends). A claim, or a status holding the
+ *     name, that brings it back between rounds starts the evidence again: 10 more minutes of K before it is lost again
+ *     (07535a17: lost on the next round).
+ * Node Q (its only name is its registrar name):
+ * 15. a status that doesn't hold the name, newer than the registrar's last `you`: asked about every 5 minutes again
+ *     (07535a17: 6 hours). The registrar naming K, with nothing answering at the name, for 48 h: never dropped. After a
+ *     `you`, Settings' status check says none and K answers there: Settings says so at once, and it is dropped 15 minutes
+ *     on (07535a17: nothing due for 6 hours, and Settings says nothing).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-registrar-name-watch.ts
  */
@@ -59,6 +69,7 @@ const PW_P = 'Name-Watch-P-Pw-3317!';
 const PW_U = 'Name-Watch-U-Pw-4428!';
 const PW_N = 'Name-Watch-N-Pw-5539!';
 const PW_STANDBY = 'Name-Watch-Standby-Pw-6640!';
+const PW_Q = 'Name-Watch-Q-Pw-7751!';
 /** The Cloudflare edge Settings' probe asks (routes/public-address.ts verifyEdgeStatus). */
 const CF_EDGE_IP = '104.21.93.179';
 
@@ -149,7 +160,10 @@ async function child(): Promise<void> {
         },
         due: async (a: { now: number }) => {
             const watch = await watchModule();
-            return watch ? watch.checkDueRegistrarNames({ now: a.now }) : null;
+            if (!watch) return null;
+            const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+            resetGatewayRateLimit();
+            return watch.checkDueRegistrarNames({ now: a.now });
         },
         resetRecheck: async () => {
             (await watchModule())?.resetNameRecheckLimitForTests();
@@ -318,7 +332,8 @@ async function startRegistrar(): Promise<Registrar> {
 
 type EdgeMode =
     | { kind: 'ours'; base: string }
-    | { kind: 'key'; seed: Uint8Array; pk: string }
+    /** `delayMs`: the answer takes that long. */
+    | { kind: 'key'; seed: Uint8Array; pk: string; delayMs?: number }
     | { kind: 'page' }
     | { kind: 'status'; code: number; body: string }
     | { kind: 'drop' };
@@ -346,6 +361,7 @@ async function startEdge(sign: (seed: Uint8Array, nonce: string, ts: number) => 
             return;
         }
         if (mode.kind === 'key') {
+            if (mode.delayMs) await sleep(mode.delayMs);
             const timestamp = Math.floor(Date.now() / 1000);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ pubkey: mode.pk, nonce, timestamp, signature: sign(mode.seed, nonce, timestamp) }));
@@ -390,7 +406,7 @@ async function main(): Promise<void> {
     const K = keyOf();
     const F = keyOf();
 
-    const dirs = { p: path.join(root, 'p'), u: path.join(root, 'u'), n: path.join(root, 'n'), standby: path.join(root, 'standby') };
+    const dirs = { p: path.join(root, 'p'), u: path.join(root, 'u'), n: path.join(root, 'n'), standby: path.join(root, 'standby'), q: path.join(root, 'q') };
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const strangerSeedHex = crypto.randomBytes(32).toString('hex');
@@ -762,6 +778,132 @@ async function main(): Promise<void> {
             const back = await rounds(standby, 'sname', [T0 + 20 * MIN]);
             assert(back[0]?.edge === 'own' && back[0]?.lost === null && (await statusOf(standby, host('sname'))) === 200,
                 `its own key answering at sname brings it back by the next round (${JSON.stringify(back[0])})`);
+        });
+
+        // ── 14 ──
+        console.log('\n— 14. a claim that lands while a round is still asking: that round never undoes it —');
+        await section('14', async () => {
+            assert((await claim(pBase, pAdmin, 'race')).status === 200, 'P claims race');
+            other('race');
+            edgeKey('race');
+            const dropped = await rounds(P, 'race', [T0, T0 + 10 * MIN]);
+            assert(dropped[1]?.lost?.why === 'another-key', `race is lost (${sum(dropped)})`);
+            // The refusal asks for a round (it sees K again) and uses the re-check limit: from now on a refusal waits for
+            // the next round, as it would where the old holder relays members' requests here.
+            assert((await statusOf(P, host('race'))) === 421, 'a request signed for race.beanpool.org → 421');
+            await rounds(P, 'race', [T0 + 11 * MIN]);
+
+            // K's answer at the name now takes 1.5 s, so the round spends about 4.5 s asking there; the admin claims the
+            // name back 0.7 s in, and the registrar now says it is this key's.
+            edge.modes.set(host('race'), { kind: 'key', seed: K.seed, pk: K.pk, delayMs: 1500 });
+            let done = false;
+            const inFlight = rounds(P, 'race', [T0 + 20 * MIN]).finally(() => { done = true; });
+            await sleep(700);
+            holderSays('race', { held: 'you', state: 'live' });
+            const back = await claim(pBase, pAdmin, 'race');
+            assert(back.status === 200 && !done, `0.7 s into the round, the admin claims race again (${show(back)}; the round still asking: ${!done})`);
+            const seen: number[] = [];
+            while (!done) {
+                seen.push(await statusOf(P, host('race')));
+                await sleep(200);
+            }
+            const raced = await inFlight;
+            for (let i = 0; i < 3; i++) seen.push(await statusOf(P, host('race')));
+            assert(seen.length > 6 && seen.every((s) => s === 200),
+                `accepted on every request from the claim until after the round (${seen.join(' ')}; 07535a17: 421 once the round ends)`);
+            assert(raced[0]?.registrar === 'other' && raced[0]?.edge === 'holder' && !raced[0]?.lost && raced[0]?.changed !== 'lost',
+                `the round that was still asking (the registrar named K, K answered) did not mark it lost (${JSON.stringify(raced[0])})`);
+            const s = await P.send('inspect');
+            const entry = (s.registrarNames ?? []).find((e: any) => e.address === host('race'));
+            assert(entry?.lost === null && entry?.role === 'current', `the record keeps race as the current name, not lost (${JSON.stringify(entry ?? null)})`);
+
+            // The registrar naming K again at once, K answering: the evidence from before the claim starts again from
+            // nothing, so it takes 10 more minutes of both.
+            edgeKey('race');
+            other('race');
+            const again = await rounds(P, 'race', [T0 + 21 * MIN, T0 + 30 * MIN]);
+            assert(noneLost(again) && (await statusOf(P, host('race'))) === 200,
+                `two rounds 9 minutes apart after the claim: still accepted (${sum(again)}; 07535a17: lost)`);
+            const at31 = await rounds(P, 'race', [T0 + 31 * MIN]);
+            assert(at31[0]?.lost?.why === 'another-key', `10 minutes of both channels after the claim: lost again (${JSON.stringify(at31[0])})`);
+
+            // A claim between rounds does the same.
+            assert((await claim(pBase, pAdmin, 'race')).status === 200 && (await statusOf(P, host('race'))) === 200, 'claimed back between rounds: 200');
+            const afterClaim = await rounds(P, 'race', [T0 + 32 * MIN]);
+            assert(noneLost(afterClaim) && (await statusOf(P, host('race'))) === 200,
+                `the next round, the registrar still naming K and K answering: not lost at once (${JSON.stringify(afterClaim[0])}; 07535a17: lost)`);
+            const at42 = await rounds(P, 'race', [T0 + 42 * MIN]);
+            assert(at42[0]?.lost?.why === 'another-key', `10 minutes on: lost (${JSON.stringify(at42[0])})`);
+
+            // So does a status holding the name for this key (Settings' status check: paused, naming race).
+            reg.status = { status: 'paused', name: 'race', hostname: host('race') };
+            assert((await statusOpen(pBase, pAdmin)).status === 200 && (await statusOf(P, host('race'))) === 200,
+                'a status holding race for this key brings it back: 200');
+            const afterStatus = await rounds(P, 'race', [T0 + 43 * MIN]);
+            assert(noneLost(afterStatus) && (await statusOf(P, host('race'))) === 200,
+                `the next round, the registrar naming K and K answering: not lost at once (${JSON.stringify(afterStatus[0])}; 07535a17: lost)`);
+            const at53 = await rounds(P, 'race', [T0 + 53 * MIN]);
+            assert(at53[0]?.lost?.why === 'another-key', `10 minutes on: lost (${JSON.stringify(at53[0])})`);
+        });
+
+        // ── 15 ──
+        console.log("\n— 15. a status newer than the registrar's last `you`: watched every 5 minutes again —");
+        await section('15', async () => {
+            const Q = await spawnNode(SCRIPT, dirs.q, { ...noAgent, ADMIN_PASSWORD: PW_Q, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
+            nodes.push(Q);
+            const qSetup = await Q.send('setup', { ownerSeedHex });
+            const qAdmin = { 'X-Admin-Password': PW_Q };
+            const due = async (at: number) => ((await Q.send('due', { now: at })) ?? []) as any[];
+            const qname = host('qname');
+            const standing = async () => {
+                const report = await call(qSetup.https, 'GET', '/api/local/admin/app-addresses', qAdmin);
+                return (report.body?.addresses ?? []).find((a: any) => a.address === qname)?.standing ?? null;
+            };
+
+            reg.status = { status: 'live', name: 'qname', hostname: qname, mode: 'tunnel', tunnelToken: 'T-shared' };
+            const opened = await statusOpen(qSetup.https, qAdmin);
+            assert(opened.status === 200 && opened.body?.hostname === qname, `Q stores qname, live (${show(opened)})`);
+            const t1 = Date.now();
+            const r0 = await due(t1);
+            assert(r0.length === 1 && r0[0]?.registrar === 'you', `the registrar says qname is Q's own (${JSON.stringify(r0)})`);
+            const quiet = await due(t1 + 5 * MIN + 1_000);
+            assert(quiet.length === 0, `current, live, and the registrar's own: nothing due 5 minutes on (${JSON.stringify(quiet)})`);
+
+            // The registrar's word alone: Settings' status check says revoked, /holder names K, nothing answers at the name.
+            reg.status = { status: 'revoked', name: 'qname', hostname: qname };
+            await statusOpen(qSetup.https, qAdmin);
+            other('qname');
+            edge.modes.set(qname, { kind: 'drop' });
+            const w10 = await due(t1 + 10 * MIN + 1_000);
+            assert(w10.length === 1 && w10[0]?.registrar === 'other' && w10[0]?.edge === 'silence' && !w10[0]?.lost,
+                `revoked after the registrar's \`you\`: a round is due, and hears nothing at the name (${JSON.stringify(w10)}; 07535a17: nothing due)`);
+            const words: any[] = [];
+            for (const at of [20 * MIN, HOUR, 6 * HOUR, DAY, 2 * DAY]) words.push(...(await due(t1 + at)));
+            assert(words.length === 5 && noneLost(words) && (await statusOf(Q, qname)) === 200,
+                `the registrar naming K, silence at the name, rounds over 48 hours: never dropped, still accepted (${sum(words)})`);
+
+            // The registrar says `you` again; then Settings' status check says none, and it names K, who answers there.
+            holderSays('qname', { held: 'you', state: 'live' });
+            const t2 = t1 + 2 * DAY + 10 * MIN;
+            const yours = await due(t2);
+            assert(yours.length === 1 && yours[0]?.registrar === 'you', `the registrar says qname is Q's again (${JSON.stringify(yours)})`);
+            reg.status = { status: 'none' };
+            await statusOpen(qSetup.https, qAdmin);
+            const said = await standing();
+            assert(said?.state === 'at-risk' && said?.registrarSays === 'none',
+                `Settings says at once that the address service says none (${JSON.stringify(said)}; 07535a17: nothing)`);
+            other('qname');
+            edgeKey('qname');
+            const d5 = await due(t2 + 5 * MIN + 1_000);
+            assert(d5.length === 1 && d5[0]?.registrar === 'other' && d5[0]?.edge === 'holder' && d5[0]?.counted === true && !d5[0]?.lost,
+                `5 minutes on, a round is due and sees K there (${JSON.stringify(d5)}; 07535a17: nothing due until 6 hours on)`);
+            const d10 = await due(t2 + 10 * MIN + 2_000);
+            assert(d10.length === 1 && noneLost(d10), `10 minutes on: K again, not yet lost (${JSON.stringify(d10)})`);
+            const d15 = await due(t2 + 15 * MIN + 3_000);
+            assert(d15.length === 1 && d15[0]?.lost?.why === 'another-key' && d15[0]?.lost?.holderKey === K.pk,
+                `15 minutes on: lost, K its holder (${JSON.stringify(d15)}; 07535a17: 6 hours 10 minutes)`);
+            assert((await statusOf(Q, qname)) === 421, 'a request signed for qname.beanpool.org → 421');
+            await Q.kill('SIGKILL');
         });
 
         assert(!reg.calls.some((c) => !/^(GET|POST) \/api\/registrar\/(status|claim|offline|holder)$/.test(c)),

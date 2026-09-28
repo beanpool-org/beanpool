@@ -44,7 +44,8 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
     if [ -n "$CHANGED_FILES" ]; then
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-core/" || HAS_CORE_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-engine/" || HAS_ENGINE_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^apps/server/" || HAS_SERVER_CHANGES=0
+      # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them.
+      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/" || HAS_SERVER_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^apps/native/" || HAS_NATIVE_CHANGES=0
     fi
   fi

@@ -58,6 +58,11 @@ const WORKSPACES = [
     path: 'packages/beanpool-engine',
   },
   {
+    // The sign-in checks the server and the key vault share. Node only (node:crypto, global fetch).
+    path: 'packages/beanpool-signin',
+    nodeOnly: true,
+  },
+  {
     path: 'apps/pwa',
   },
   {

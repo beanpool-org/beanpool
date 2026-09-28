@@ -43,7 +43,7 @@
             <li>Your community's operator can read what their server holds, except what you write in direct messages, which are end-to-end encrypted. <!-- DEPENDS: #1288 fix/dm-never-plaintext (no plaintext fallback; the server refuses one) --> The operator can read group, event and enterprise chats, and the notices BeanPool adds to a chat about a deal, such as its amount.</li>
             <li>Other members can't see your balance or your trades. If you keep an enterprise, your name and the Beans you pledge to back it are public (section 4). <!-- DEPENDS: #1286 fix/privacy-defaults (balances and trades private) --></li>
             <li>On a local community, only its members see its listings. <!-- DEPENDS: #1286 fix/privacy-defaults (local listings members-only) --></li>
-            <li>The apps contain no analytics, advertising or crash-reporting code.</li>
+            <li>The apps contain no analytics, advertising or crash-reporting code. The app stores give us install counts and some crash reports (section 10).</li>
             <li>If you link a Google, Apple, GitHub or Facebook sign-in, a locked copy of your account is kept in BeanPool's key vault in Iceland. Opening it takes two of the three people who look after the vault, acting together, though the vault's hosting company could read it from the running vault's memory. Apart from giving it back to you, we open a copy only under a valid court order. <!-- DEPENDS: vault V2-V6, the reshare, and D5; the host: vault design §7 --></li>
         </ul>
 
@@ -78,7 +78,7 @@
             <li><strong>The key vault</strong>, which keeps sign-in recovery copies (section 3). <!-- DEPENDS: vault V2 live --></li>
             <li><strong>The address service</strong>, which gives communities names such as yourtown.beanpool.org.</li>
             <li><strong>The communities directory</strong>, the public map of communities on this website.</li>
-            <li><strong>This website</strong>, with its newsletter sign-up and the members' guide, and <strong>the feedback service</strong> the apps send feedback to.</li>
+            <li><strong>This website</strong>, with its newsletter sign-up and the members' guide, and <strong>the feedback service</strong> the apps send feedback to. <!-- DEPENDS: feedback live (section 10) --></li>
             <li><strong>The apps</strong>, which we build and publish on Google Play and the App Store.</li>
         </ul>
 
@@ -176,17 +176,18 @@
             <li><strong>The global community</strong> and <strong>the communities we run</strong>: everything in section 4, for their members, because we are their operator. Beans are switched off on the global community.</li>
             <li><strong>The key vault:</strong> the locked copies described in section 3. <!-- DEPENDS: vault V2 --></li>
             <li><strong>The address service:</strong> each community's name, its server's public key, how the server is reached (and its IP address, when it is reached directly), and a contact for its operator if they give one. Nothing about members. Every beanpool.org name, and every tunnel the service makes, is in BeanPool's Cloudflare account (section 1).</li>
-            <li><strong>The communities directory:</strong> what each community's operator chooses to publish: its name, address and the area it serves, its member count, and a contact email or phone number. The directory is public.</li>
+            <li><strong>The communities directory:</strong> a community's server lists itself there unless its operator switches that off. The global community doesn't list itself. For each community listed: its name and web address; unless its operator switches each off, the area it serves (a point on the map and a distance around it), its member count, and its software version and whether it is online; and its contact email and phone number only if its operator turns each on. The directory is public: it is shown on this website's map and in the global community. <!-- DEPENDS: #1287 fix/website-directory-safety (contacts off unless publishContactEmail / publishContactPhone is true; name and web address always sent while the node pushes). state-engine.ts getDirectoryInfo; node-profile.ts publishToDirectory; engine/directory-cache.ts --></li>
             <li><strong>The newsletter:</strong> your email address, if you sign up on this website.</li>
-            <li><strong>Feedback:</strong> the text you send, its kind, the app version, platform and language, and your community's name if you type it. Not your IP address, your account or your community's address. We may copy feedback into an issue or discussion on GitHub, which may be public, so please put nothing private in it.</li>
+            <li><strong>Feedback:</strong> the text you send, its kind, the app version, platform and language, and your community's name if you type it. Not your IP address, your account or your community's address. We may copy feedback into an issue or discussion on GitHub, which may be public, so please put nothing private in it. <!-- DEPENDS: feedback live: the apps/feedback Worker deployed and FEEDBACK_LIVE set true (packages/beanpool-core/src/feedback.ts:17; the release checklist). Off on main: every "Suggest a change" entry is hidden. The same DEPENDS covers the feedback lines in sections 1, 11 and 12 --></li>
+            <li><strong>The app stores:</strong> Google Play and the App Store tell us how many people install the apps. From phones whose owners chose to share diagnostics with Google or Apple, they also give us crash reports: the phone's model, its system version and where in the app it failed, with no name. This comes from the stores, not from code in the apps.</li>
             <li><strong>This website</strong> loads its fonts from Google Fonts, some of its code from unpkg.com and jsdelivr.net, and its map pictures from OpenStreetMap. The directory map and the newsletter sign-up talk to Supabase.</li>
         </ul>
 
         <h2 id="where">11. Where it is kept</h2>
         <ul>
             <li><strong>Australia:</strong> the communities we run, at Binary Lane (an Australian company); the communities directory and the newsletter list, at Supabase (a US company), in its Sydney region.</li>
-            <li><strong>United States:</strong> the global community, at DigitalOcean in New York; notifications pass through Expo; feedback we copy to GitHub.</li>
-            <li><strong>Cloudflare</strong> (a US company with servers around the world): the address service, the feedback service and this website, and, in BeanPool's Cloudflare account, every beanpool.org name and every tunnel the address service makes, including those of communities we don't run. Every community we run, including global, and every community that uses a beanpool.org address through a Cloudflare tunnel, is reached through Cloudflare, which decrypts its traffic at Cloudflare's servers before passing it on. The global community's photos are stored with Cloudflare. <!-- CHECK: global's .env has IMAGE_STORE=s3 (Cloudflare R2), as docker-compose.yml says; if not, drop the last sentence --></li>
+            <li><strong>United States:</strong> the global community, at DigitalOcean in New York; notifications pass through Expo; feedback we copy to GitHub <!-- DEPENDS: feedback live (section 10) -->; the app stores' install counts and crash reports, at Google and Apple.</li>
+            <li><strong>Cloudflare</strong> (a US company with servers around the world): the address service, the feedback service <!-- DEPENDS: feedback live (section 10) --> and this website, and, in BeanPool's Cloudflare account, every beanpool.org name and every tunnel the address service makes, including those of communities we don't run. Every community we run, including global, and every community that uses a beanpool.org address through a Cloudflare tunnel, is reached through Cloudflare, which decrypts its traffic at Cloudflare's servers before passing it on. The global community's photos are stored with Cloudflare. <!-- CHECK: global's .env has IMAGE_STORE=s3 (Cloudflare R2), as docker-compose.yml says; if not, drop the last sentence --></li>
             <li><strong>Iceland:</strong> the key vault, at an Icelandic hosting company. Its encrypted backups are kept by a second provider in another country, which cannot read them. <!-- DEPENDS: the vault host bought (1984 or the fallback, after their answers) and the backup store chosen --></li>
             <li><strong>Communities run by others:</strong> wherever their operator chose.</li>
         </ul>
@@ -207,7 +208,7 @@
             <li><strong>Community servers' logs:</strong> the newest 2,500 entries, plus the server's own output, capped at 30&nbsp;MB.</li>
             <li><strong>The key vault:</strong> your copy until you tap Disconnect, or link a different BeanPool account to the same sign-in account; encrypted backups for 30 days; after you Disconnect, a record of the deletion (the two codes and the day) for 30 days, so that a vault rebuilt from an older backup deletes your copy again; the record of a restore for seven days after it ends; its error log for seven days, with nothing about requests in it. <!-- DEPENDS: vault V2 (design §1.7) --></li>
             <li><strong>The global community's fingerprint</strong> of your sign-in account: while your account there exists, and after that if the community had removed or suspended you (section 3). <!-- state-engine.ts:7079; also status disabled --></li>
-            <li><strong>Feedback:</strong> until we delete it. There is no fixed schedule yet.</li>
+            <li><strong>Feedback:</strong> until we delete it. There is no fixed schedule yet. <!-- DEPENDS: feedback live (section 10) --></li>
             <li><strong>The newsletter:</strong> until you ask us to remove your email address.</li>
         </ul>
 

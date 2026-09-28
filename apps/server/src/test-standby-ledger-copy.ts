@@ -51,6 +51,13 @@
  * 16. A standby's own demurrage flush writes nothing: its trades are its main server's after a copy (before, a decay it
  *     flushed over another window than the main server's stayed in its history through every copy). A standby holding
  *     such a trade under the last importer format re-seeds at its first pull, and its trades are its main server's.
+ * 17. A standby makes no Bean move of its own (director, 2026-09-28). On it, a member who owes 2,100 Beans deleting their
+ *     own account (the review's sequence, 4117546944), a send, a trade's approval and a new request, and a payment from
+ *     the Commons are each refused, by its routes (409 standby) and by its engine under them, with nothing written: its
+ *     rows still sum to its main server's, and so after a read that applies demurrage, two moves and its own flush. Every
+ *     route that moves Beans or steps a trade answers the same; a read still answers. Its next copy lands. The same moves
+ *     on the main server work, and the copy carrying them lands with no trade of the standby's own (before, the delete
+ *     left the standby's rows 2,102.34 Beans over its main server's and every copy after it was refused).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -75,7 +82,11 @@ const PW_STANDBY = 'Ledger-Copy-Standby-Pw-775!';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
-/** No node reaches anything but this machine: a push to Expo is answered here, anything else refused and counted. */
+/**
+ * No node reaches anything but this machine: a push to Expo is answered here, and so is the update check's ask of GitHub
+ * for the latest release (routes/settings.ts, 30 s after a node serves, as test-2fa-covers-admin-routes answers it);
+ * anything else is refused and counted.
+ */
 function guardFetch(): { blocked: string[] } {
     const seen = { blocked: [] as string[] };
     const real = globalThis.fetch;
@@ -83,6 +94,7 @@ function guardFetch(): { blocked: string[] } {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        if (url.hostname === 'api.github.com' && url.pathname.startsWith('/repos/beanpool-org/beanpool/')) return new Response('{}', { status: 404 });
         seen.blocked.push(url.hostname);
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
@@ -274,6 +286,27 @@ async function child(): Promise<void> {
             const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
             const { code } = issueRekeyCode(a.oldPk, 'owner:password');
             return completeRekey(a.oldPk, a.newPk, code, 'owner:password').success;
+        },
+        /**
+         * A Bean move asked of this server's engine itself, under its routes: a member's own delete, a send, a trade's
+         * approval (the Beans go into escrow), a payment from the Commons. What it threw, if it did.
+         */
+        'engine-move': async (a: { kind: 'purge' | 'transfer' | 'approve' | 'commons-pay'; publicKey: string; to?: string; amount?: number; transactionId?: string }) => {
+            const se = await import('./state-engine.js');
+            try {
+                if (a.kind === 'purge') se.purgeMemberSelf(a.publicKey);
+                else if (a.kind === 'transfer') { if (!se.transfer(a.publicKey, a.to!, a.amount!, 'a send', 'direct', true)) return { ok: false, error: 'refused (null)' }; }
+                else if (a.kind === 'approve') se.approvePostRequest(a.transactionId!, a.publicKey);
+                else if (!se.payFromCommons(a.publicKey, a.amount!, 'a commons payment', { allowDeficit: true })) return { ok: false, error: 'refused (null)' };
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, name: e?.name ?? null, code: e?.code ?? null, status: e?.status ?? null, error: e?.message || String(e) };
+            }
+        },
+        /** A trade as this server holds it. */
+        trade: async (a: { id: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('SELECT id, status, credits FROM marketplace_transactions WHERE id = ?').get(a.id) ?? null;
         },
         /**
          * The whole-copy check, on M's current whole copy fetched with the replication token and not imported: what the
@@ -797,7 +830,8 @@ async function main(): Promise<void> {
         copyDir(dir('audit'), dir('held'));
         let heldS = await spawnNode(SCRIPT, dir('held'), env(PW_STANDBY, 'backup'));
         nodes.push(heldS);
-        // Its boot's escrow sweep deleted the empty escrow accounts M still holds: a pull puts them back first.
+        // It copies M's latest first. (Its boot's escrow sweep once deleted the empty escrow accounts M still holds; a
+        // standby's boot sweeps nothing now: its accounts are M's, state-engine.ts sweepSettledEscrowAccounts.)
         require_((await heldS.send('pull', {})).ok === true, 'the restarted copy of S pulls');
         const m12: Ledger = await main.send('ledger');
         await heldS.send('plant-balance', { publicKey: ann.pk, add: 4 });
@@ -1009,6 +1043,113 @@ async function main(): Promise<void> {
         const z16b: Ledger = await main0.send('ledger');
         assert(healed16.ok === true && healed16.mode === 'resync' && Number(f16.format) > 1 && ledgerDiff(z16b, f16).length === 0,
             `its first pull is the format re-seed, and its trades are M0's (${JSON.stringify({ ok: healed16.ok, mode: healed16.mode, error: healed16.error, format: f16.format })}; differences ${first(ledgerDiff(z16b, f16))})`);
+
+        // ── 17. A standby makes no Bean move of its own ──
+        console.log('\n— 17. on a standby, a member in debt deleting their own account, a send, a trade and a Commons payment are refused —');
+        // The review's sequence (4117546944): a member who owes Beans deletes their own account on the standby. The Commons'
+        // payment of their debt wrote their credit, the flush that wrote the pot's debit writes nothing on a standby, and the
+        // rows summed to 2,102.34 over the main server's: every copy after it was refused. Now every Bean move refuses there
+        // before it writes, through its routes (409 standby) and in its engine under them.
+        const zed = newId('Zed');
+        const invZ = built('M0: Gwen makes an invite for Zed', await Z_(gwen0, '/api/invite/generate', { publicKey: gwen0.pk }));
+        built('M0: Zed joins with it', await api(z, 'POST', '/api/invite/redeem', { body: { code: invZ.invite?.code ?? invZ.code, publicKey: zed.pk, callsign: 'Zed' } }));
+        built('M0: Zed sets a profile photo', await Z_(zed, '/api/profile/update', { avatar: TINY_PNG }));
+        await offer0(yan2, 'Pears', 3);
+        const figs = await offer0(gwen0, 'Figs', 4);
+        const tx17 = built('M0: Yan asks for Gwen\'s figs', await Z_(yan2, '/api/marketplace/posts/request', { postId: figs.id, buyerPublicKey: yan2.pk })).transaction;
+        // Zed owes 2,100 Beans; Yan holds them, last read 60 days ago, so a read applies demurrage (the review's second probe).
+        await main0.send('plant-ledger', { moves: [{ publicKey: zed.pk, add: -2100 }, { publicKey: yan2.pk, add: 2100, epochsAgo: 60 }] });
+        require_((await format1.send('pull', {})).ok === true, 'S0 copies it');
+        const f = `https://localhost:${await format1.send('serve')}`;
+        const z17: Ledger = await main0.send('ledger');
+        const before17: Ledger = await format1.send('ledger');
+        require_(ledgerDiff(z17, before17).length === 0 && (before17.accounts.find((a) => a.public_key === zed.pk)?.balance ?? 0) < -2000
+            && (await format1.send('trade', { id: tx17.id }))?.status === 'requested',
+            `S0 holds M0's ledger, Zed owing 2,100 Beans, and Yan's request (differences ${first(ledgerDiff(z17, before17))})`);
+        const F_ = (who: Id, route: string, body: unknown = {}) => api(f, 'POST', route, { as: who, body });
+        const standbyRefusal = (a: Answer) => a.status === 409 && a.body?.code === 'standby' && /standby copy of the community/.test(a.body?.error ?? '');
+        const engineRefusal = (r: any) => r?.ok === false && r.name === 'StandbyLedgerError' && r.code === 'standby' && r.status === 409;
+        const unchanged = async (what: string) => {
+            const now: Ledger = await format1.send('ledger');
+            assert(ledgerDiff(before17, now).length === 0 && Math.abs(now.sum - z17.sum) < 1e-9,
+                `${what}: nothing is written, and S0's rows still sum to M0's (${now.sum}, M0 ${z17.sum}; differences ${first(ledgerDiff(before17, now))})`);
+        };
+
+        const purgeHttp = await F_(zed, '/api/member/purge');
+        assert(standbyRefusal(purgeHttp), `Zed, who owes 2,100 Beans, deleting their own account on S0 is refused: 409 standby (${brief(purgeHttp)})`);
+        const purgeEngine = await format1.send('engine-move', { kind: 'purge', publicKey: zed.pk });
+        assert(engineRefusal(purgeEngine), `and so is the same delete asked of S0's engine, under its routes (${JSON.stringify(purgeEngine)})`);
+        await unchanged('the delete');
+
+        const sendHttp = await F_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount: 5, memo: 'on the standby' });
+        const sendEngine = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: 5 });
+        assert(standbyRefusal(sendHttp) && engineRefusal(sendEngine), `a send on S0 is refused, by its route and by its engine (${brief(sendHttp)}; ${JSON.stringify(sendEngine)})`);
+        await unchanged('the send');
+
+        const approveHttp = await F_(gwen0, '/api/marketplace/transactions/approve', { transactionId: tx17.id, authorPublicKey: gwen0.pk });
+        const approveEngine = await format1.send('engine-move', { kind: 'approve', transactionId: tx17.id, publicKey: gwen0.pk });
+        const requestHttp = await F_(yan2, '/api/marketplace/posts/request', { postId: figs.id, buyerPublicKey: yan2.pk });
+        assert(standbyRefusal(approveHttp) && engineRefusal(approveEngine) && standbyRefusal(requestHttp),
+            `a trade's steps on S0 are refused: Gwen approving Yan's request (the Beans into escrow), by route and by engine, and a new request (${brief(approveHttp)}; ${JSON.stringify(approveEngine)}; ${brief(requestHttp)})`);
+        const trade17 = await format1.send('trade', { id: tx17.id });
+        assert(trade17?.status === 'requested', `the trade is as M0 holds it, still asked for (${JSON.stringify(trade17)})`);
+        await unchanged('the trade');
+
+        const payEngine = await format1.send('engine-move', { kind: 'commons-pay', publicKey: gwen0.pk, amount: 50 });
+        const pruneHttp = await api(f, 'POST', `/api/local/admin/users/${zed.pk}/prune`, { admin: PW_STANDBY, body: {} });
+        assert(engineRefusal(payEngine) && standbyRefusal(pruneHttp),
+            `a payment from the Commons on S0 is refused, and so is an admin's prune, which pays a debt from it (${JSON.stringify(payEngine)}; ${brief(pruneHttp)})`);
+        await unchanged('the Commons payment');
+
+        // The review's second probe: a read that applies demurrage in memory, a move, then another; now both are refused
+        // before any transaction opens, so nothing puts back a pot holding that decay, and S0's own flush writes nothing.
+        await format1.send('read-balance', { publicKey: yan2.pk });
+        const afterRead1 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: zed.pk, amount: 1e9 });
+        const afterRead2 = await format1.send('engine-move', { kind: 'transfer', publicKey: yan2.pk, to: gwen0.pk, amount: 1 });
+        await format1.send('persist');
+        assert(engineRefusal(afterRead1) && engineRefusal(afterRead2), `after a read with 60 days of demurrage due, S0's moves are refused (${JSON.stringify([afterRead1.error, afterRead2.error])})`);
+        await unchanged('a read, two moves and S0\'s own flush');
+
+        // Every route that moves Beans or steps a trade answers the same, before its handler; a read still answers.
+        const moneyRoutes: [Id | 'admin', string][] = [
+            [yan2, '/api/marketplace/posts/accept'], [yan2, '/api/marketplace/transactions/complete'], [yan2, '/api/marketplace/transactions/cancel'],
+            [gwen0, '/api/marketplace/transactions/reject'], [yan2, '/api/marketplace/transactions/cancel-request'],
+            [yan2, `/api/crowdfund/projects/${figs.id}/pledge`], [yan2, '/api/crowdfund/projects/delete'], [yan2, `/api/treasury/${gwen0.pk}/pledge`],
+            [yan2, `/api/enterprise/${gwen0.pk}/sweep`], [yan2, '/api/commons/decisions'], [yan2, '/api/member/re-enroll'],
+            [yan2, '/api/federation/purchase'], ['admin', `/api/local/admin/posts/${figs.id}/delete`], ['admin', '/api/local/admin/disputes/x/resolve'],
+            ['admin', `/api/local/admin/branches/${zed.pk}/prune`], ['admin', '/api/local/admin/reports/x/action'],
+        ];
+        const notRefused: string[] = [];
+        for (const [who, route] of moneyRoutes) {
+            const r = who === 'admin' ? await api(f, 'POST', route, { admin: PW_STANDBY, body: {} }) : await F_(who, route, {});
+            if (!standbyRefusal(r)) notRefused.push(`${route} ${brief(r)}`);
+        }
+        assert(notRefused.length === 0, `every route that moves Beans or steps a trade answers 409 standby on S0 (${notRefused.length} did not: ${notRefused.join(' | ') || 'none'})`);
+        const read17 = await api(f, 'GET', `/api/ledger/balance/${yan2.pk}`, { as: yan2 });
+        assert(read17.status === 200 && typeof read17.body?.balance === 'number', `a read still answers on S0 (${brief(read17)})`);
+        await unchanged('all of them');
+
+        const next17 = await format1.send('pull', {});
+        let s17: Ledger = await format1.send('ledger');
+        assert(next17.ok === true && ledgerDiff(await main0.send('ledger'), s17).length === 0,
+            `S0's next copy lands (${JSON.stringify({ ok: next17.ok, mode: next17.mode, error: next17.error })}; differences ${first(ledgerDiff(await main0.send('ledger'), s17))})`);
+        assert(memoryVsRows(await format1.send('memory-ledger'), s17).length === 0, 'and its memory is its rows');
+
+        // The same moves on the main server still work, and the copy that carries them lands.
+        console.log('\n— 17. the same moves on the main server still work, and S0 copies them —');
+        built('M0: Gwen approves Yan\'s request: the Beans are held', await Z_(gwen0, '/api/marketplace/transactions/approve', { transactionId: tx17.id, authorPublicKey: gwen0.pk }));
+        built('M0: Yan confirms: Gwen is paid', await Z_(yan2, '/api/marketplace/transactions/complete', { transactionId: tx17.id, confirmerPublicKey: yan2.pk }));
+        built('M0: Yan gives Gwen 5 Beans', await Z_(yan2, '/api/ledger/transfer', { to: gwen0.pk, amount: 5, memo: 'on the main server' }));
+        require_(await main0.send('grant', { publicKey: gwen0.pk, amount: 7 }), 'M0: the Commons pays Gwen 7 Beans');
+        built('M0: Zed, who owes 2,100 Beans, deletes their own account', await Z_(zed, '/api/member/purge'));
+        const z17b: Ledger = await main0.send('ledger');
+        require_(Math.abs(z17b.sum - z17.sum) < 1e-6 && z17b.transactions.length > z17.transactions.length,
+            `M0: its ledger moved, and still sums to what it did (${z17.sum} → ${z17b.sum})`);
+        const landed17 = await format1.send('pull', {});
+        s17 = await format1.send('ledger');
+        assert(landed17.ok === true && ledgerDiff(z17b, s17).length === 0 && Math.abs(s17.sum - z17b.sum) < 1e-9,
+            `the next copy lands, and S0's ledger is M0's, with no trade of its own (${JSON.stringify({ ok: landed17.ok, mode: landed17.mode, error: landed17.error })}; differences ${first(ledgerDiff(z17b, s17))})`);
+        assert(memoryVsRows(await format1.send('memory-ledger'), s17).length === 0, 'and its memory is its rows');
         refused.push(...(await format1.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
 
         assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');

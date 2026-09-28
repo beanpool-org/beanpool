@@ -364,6 +364,19 @@ async function main() {
         const board = await get('/api/marketplace/posts', carol);
         assert(board.body?.some((p: any) => p.id === offerId && typeof p.lat === 'number'), 'the member reads the listing and its pin');
 
+        // A visitor's row may still hold a listing from before visitors were refused one, and may take it down: it reads
+        // its own listings, and nothing else of the board.
+        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status) VALUES ('priv-vera-old', 'offer', 'other', 'Sentinel old visitor offer', 'd', 1, ?, 1, 'active')").run(vera.pk);
+        const own = await get(`/api/marketplace/posts?author=${vera.pk}`, vera);
+        assert(own.status === 200 && Array.isArray(own.body) && own.body.length === 1 && own.body[0].id === 'priv-vera-old',
+            `a visitor's row reads its own listing (got ${own.status} ${own.text.slice(0, 100)})`);
+        const others = await get(`/api/marketplace/posts?author=${alice.pk}`, vera);
+        assert(others.status === 403 && others.body?.code === 'members_only', `and is refused another's (got ${others.status})`);
+        const sneaky = await get(`/api/marketplace/posts?author=${vera.pk}&id=${offerId}`, vera);
+        assert(sneaky.status === 200 && Array.isArray(sneaky.body) && sneaky.body.length === 0, `its own read never carries anyone else's listing (got ${sneaky.text.slice(0, 80)})`);
+        const takeDown = await post('/api/marketplace/posts/remove', { id: 'priv-vera-old', authorPublicKey: vera.pk }, vera);
+        assert(takeDown.status === 200, `and takes it down (got ${takeDown.status} ${takeDown.text.slice(0, 100)})`);
+
         // No public read gives a stranger a listing's id, the one thing its photo's URL is made of.
         let leaks = 0;
         for (const path of PUBLIC_READ_EXACT) {

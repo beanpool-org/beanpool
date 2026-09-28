@@ -25,6 +25,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { lockedDm } from './dm-test-payload.js'; // no engine import: safe to hoist
 
 const PORT = 8597;
 const BASE = `https://localhost:${PORT}`;
@@ -78,7 +79,8 @@ async function main() {
 
     const conv = createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: could not create the DM');
-    sendMessage(conv.id, alice.pubKeyHex, 'ciphertext', 'nonce');
+    const line = lockedDm(); // a DM goes in encrypted
+    sendMessage(conv.id, alice.pubKeyHex, line.ciphertext, line.nonce);
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('tx-read-auth-default', alice.pubKeyHex, bob.pubKeyHex, 1, 'private memo', new Date().toISOString());
 

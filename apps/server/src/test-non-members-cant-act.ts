@@ -78,6 +78,7 @@ import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -287,9 +288,11 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(pruney.pubKeyHex);
     vouchMember(pruney.pubKeyHex, carol.pubKeyHex, 1);
     const pruneyDm = createConversation('dm', [pruney.pubKeyHex, alice.pubKeyHex], pruney.pubKeyHex)!;
-    const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, 'aGk=', 'n1')!;
+    const aliceDmText = lockedDm(); // a DM goes in encrypted
+    const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, aliceDmText.ciphertext, aliceDmText.nonce)!;
     const rekeyeeDm = createConversation('dm', [rekeyee.pubKeyHex, bob.pubKeyHex], rekeyee.pubKeyHex)!;
-    const bobDmLine = sendMessage(rekeyeeDm.id, bob.pubKeyHex, 'aGk=', 'n2')!;
+    const bobDmText = lockedDm();
+    const bobDmLine = sendMessage(rekeyeeDm.id, bob.pubKeyHex, bobDmText.ciphertext, bobDmText.nonce)!;
     const rekeyeeOffer2 = offer(rekeyee, 'Rekeyee pickles');
     const tRekeyee2 = requestPost(rekeyeeOffer2.id, bob.pubKeyHex);
     const aliceOffer4 = offer(alice, 'Alice quinces');
@@ -593,7 +596,7 @@ async function main(): Promise<void> {
         assert(!db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ?').get(aliceOffer5.id), 'and no trade is opened');
         const before = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number };
         refused('nor message Bob as them',
-            await signedFetch('POST', '/api/messages/send', rekeyee, { conversationId: rekeyeeDm.id, authorPubkey: rekeyee.pubKeyHex, ciphertext: 'aGk=', nonce: 'n3' }));
+            await signedFetch('POST', '/api/messages/send', rekeyee, { conversationId: rekeyeeDm.id, authorPubkey: rekeyee.pubKeyHex, ...lockedDm() }));
         assert((db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number }).n === before.n, 'and nothing is sent');
         refused("nor react to Bob's message",
             await signedFetch('POST', '/api/messages/react', rekeyee, { messageId: bobDmLine.id, authorPubkey: rekeyee.pubKeyHex, emoji: '👍' }));
@@ -634,7 +637,8 @@ async function main(): Promise<void> {
             id: rekeyGroupEvent.id, postId: aliceOffer4.id, groupId: rekeyGroup.id, targetGroupId: rekeyGroup.id, conversationId: rekeyeeDm.id,
             messageId: bobDmLine.id, transactionId: tRekeyee2.id, projectId: project, code: phonelessRekey.code,
             type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', credits: 1, priceType: 'fixed', amount: 1,
-            ciphertext: 'aGk=', nonce: 'c3dlcHQ=', emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
+            ...lockedDm(), // ciphertext + nonce in the encrypted form, the only one a DM send or edit takes
+            emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
             token: 'ExponentPushToken[swept]', platform: 'android', status: 'going', choice: 'yes', optionId: 'a',
             ...own,
         };
@@ -736,7 +740,7 @@ async function main(): Promise<void> {
             const post = await signedFetch('POST', '/api/marketplace/posts', member, { type: 'offer', category: 'produce', title: `Honey from ${status}`,
                 description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex });
             const message = await signedFetch('POST', '/api/messages/send', member,
-                { conversationId: dm.id, authorPubkey: member.pubKeyHex, ciphertext: 'aGk=', nonce: `bm9uY2Ut${status}` });
+                { conversationId: dm.id, authorPubkey: member.pubKeyHex, ...lockedDm() }); // a DM goes in encrypted
             const pause = await signedFetch('POST', '/api/marketplace/posts/pause', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
             const resume = await signedFetch('POST', '/api/marketplace/posts/resume', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
             const edit = await signedFetch('POST', '/api/marketplace/posts/update', member,

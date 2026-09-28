@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 64,
-  "hash": "0a1df011bdec5c940c7dafc7aefd874502223be180ed78ebc715c92416436b23",
+  "version": 65,
+  "hash": "07a0b96e0b5c60cf695a18f4eac74a0835e73142e2a85951a74a6ee0353921df",
   "sections": [
     {
       "id": "setup",
@@ -2392,7 +2392,7 @@
         {
           "type": "ul",
           "items": [
-            "**Direct messages** between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read."
+            "**Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored."
           ]
         },
         {
@@ -2408,7 +2408,8 @@
           "items": [
             "members' names, profiles, posts, photos, deals, balances and every trade;",
             "**group chats, event chats and enterprise chats**: these are not encrypted;",
-            "who messaged whom, and when, even for direct messages;",
+            "the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;",
+            "who messaged whom, and when, and their emoji reactions, even for direct messages;",
             "**how each member voted**."
           ]
         },

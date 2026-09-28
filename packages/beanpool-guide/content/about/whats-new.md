@@ -47,6 +47,7 @@ Some of these changes live on your community's server. You get them when your co
 - Only an owner can give back or take away an owner's or admin's role.
 - An admin cannot settle a stuck trade they are part of.
 - Group and event chats limit how fast one person can post.
+- **Chats between two people are always locked.** The app used to send a message without the lock if it could not find the other person's key. Now it does not send it: your words stay in the message box, and you can send again in a moment. Your community's server refuses a message between two people that is not locked.
 
 ### Fixes
 

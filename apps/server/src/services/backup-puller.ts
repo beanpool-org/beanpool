@@ -57,6 +57,7 @@ import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config
 import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import { noteCopyFailed, noteCopyLanded, noteWholeCopyCheck, standbyReport, whyOf } from './standby-copy-record.js';
+import { errorMessage } from '../error-message.js';
 
 // Said once per value, not on every 60 s pull.
 let lastProfileNote: string | null = null;
@@ -389,7 +390,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
 
 /** The standby's record of its copies (services/standby-copy-record.ts) never fails a pull, nor masks how one went. */
 function recordQuietly(write: () => void): void {
-    try { write(); } catch (e: any) { logger.warn('P2P', `[Backup] Could not record how this pull went: ${e?.message || e}`); }
+    try { write(); } catch (e) { logger.warn('P2P', `[Backup] Could not record how this pull went: ${errorMessage(e)}`); }
 }
 
 /**

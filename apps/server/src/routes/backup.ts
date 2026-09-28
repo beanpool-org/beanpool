@@ -492,8 +492,11 @@ function writesSoFar(): number {
  * the rest. A copy this server can't sign again goes as it was, without them.
  */
 async function withTableHashes(payload: SyncPayload, hashes: TableHashes): Promise<SyncPayload> {
-    const { signature: _signature, publicKey: _publicKey, ...unsigned } = payload;
-    const signed = await signSyncPayload({ ...unsigned, tableHashes: hashes } as SyncPayload);
+    const unsigned: SyncPayload & { tableHashes?: TableHashes } = { ...payload };
+    delete unsigned.signature;
+    delete unsigned.publicKey;
+    unsigned.tableHashes = hashes;
+    const signed = await signSyncPayload(unsigned);
     return signed.signature && signed.publicKey ? signed : payload;
 }
 
@@ -707,15 +710,15 @@ router.get('/api/local/admin/backup-enroll', async (ctx) => {
 // The main server's watch on its standbys (services/standby-health.ts): what the owners' Settings banner shows, and an
 // owner's "this standby is gone for good". The community's owners only: nobody else is told.
 router.post('/api/local/admin/standby-health', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx))) return;
     if (!requireAdminRole(ctx, ['owner'], "Only an owner of this node is told about its standby")) return;
     ctx.set('Cache-Control', 'no-store');
     ctx.body = getStandbyHealthBanner();
 });
 router.post('/api/local/admin/standby-health/forget', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx))) return;
     if (!requireAdminRole(ctx, ['owner'], "Only an owner of this node can stop watching its standby")) return;
-    const id = (ctx as any).requestBody?.id;
+    const id = (ctx as unknown as { requestBody?: { id?: unknown } }).requestBody?.id;
     if (!forgetStandby(id)) {
         ctx.status = 404;
         ctx.body = { error: 'No standby with that id is watched here' };

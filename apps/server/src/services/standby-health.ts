@@ -24,6 +24,7 @@ import { getNodeRole } from '../config/node-role.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { dispatchPushNotification } from '../state-engine.js';
 import { getReplacedInfo } from './identity-epoch.js';
+import { errorMessage } from '../error-message.js';
 import { differsInWords, parseStandbyReport, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
@@ -93,7 +94,7 @@ function read(): HealthState {
     try {
         const s = JSON.parse(row.value);
         return {
-            standbys: Array.isArray(s?.standbys) ? s.standbys.filter((x: any) => typeof x?.id === 'string') : [],
+            standbys: Array.isArray(s?.standbys) ? s.standbys.filter((x: unknown) => typeof (x as StandbySeen | null)?.id === 'string') : [],
             incident: s?.incident && typeof s.incident.id === 'string' ? s.incident : null,
             lastIncident: s?.lastIncident && typeof s.lastIncident.id === 'string' ? s.lastIncident : null,
         };
@@ -153,8 +154,8 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
         });
         evaluate(s, t);
         return true;
-    } catch (e: any) {
-        logger.warn('P2P', `[StandbyHealth] Could not keep a standby's report: ${e?.message || e}`);
+    } catch (e) {
+        logger.warn('P2P', `[StandbyHealth] Could not keep a standby's report: ${errorMessage(e)}`);
         return false;
     }
 }
@@ -226,8 +227,8 @@ function evaluate(s: HealthState, t: number): void {
             { kind: 'standby_health', incidentId: incident.id, section: 'home' }, 'marketplace',
         );
         incident.pushedAt = t;
-    } catch (e: any) {
-        logger.warn('P2P', `[StandbyHealth] The owners' push failed: ${e?.message || e}`);
+    } catch (e) {
+        logger.warn('P2P', `[StandbyHealth] The owners' push failed: ${errorMessage(e)}`);
         incident.pushedAt = t;
     }
     write(s);
@@ -240,8 +241,8 @@ export function checkStandbyHealth(): void {
         const s = read();
         if (s.standbys.length === 0 && !s.incident) return;
         evaluate(s, now());
-    } catch (e: any) {
-        logger.warn('P2P', `[StandbyHealth] Check failed: ${e?.message || e}`);
+    } catch (e) {
+        logger.warn('P2P', `[StandbyHealth] Check failed: ${errorMessage(e)}`);
     }
 }
 

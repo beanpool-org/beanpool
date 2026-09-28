@@ -104,14 +104,15 @@ export function noteWholeCopyCheck(check: WholeCopyCheck): void {
 }
 
 /** Why a pull failed, as a code: what the report may carry (never the error's own text). */
-export function whyOf(stage: 'fetch' | 'import', e: any): WhyCode {
-    const msg = String(e?.message || e || '');
+export function whyOf(stage: 'fetch' | 'import', e: unknown): WhyCode {
+    const err = e as { message?: unknown; name?: unknown } | null | undefined;
+    const msg = String(err?.message || e || '');
     if (stage === 'import') {
         if (/conservation/i.test(msg)) return 'conservation';
         if (/signature|untrusted|mirror/i.test(msg)) return 'signature';
         return 'import-error';
     }
-    if (e?.name === 'AbortError') return 'timeout';
+    if (err?.name === 'AbortError') return 'timeout';
     const http = /^primary returned HTTP (\d{3})$/.exec(msg);
     if (http && /^[1-5]\d\d$/.test(http[1])) return `http-${Number(http[1])}`;
     if (e instanceof SyntaxError) return 'unparseable';

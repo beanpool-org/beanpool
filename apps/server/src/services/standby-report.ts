@@ -34,7 +34,7 @@ export const LEDGER_DIFFERS = { ledger: 'ledger', sum: 'ledger-sum', commons: 'c
 
 function differsName(name: unknown): name is string {
     if (typeof name !== 'string') return false;
-    if (Object.values(LEDGER_DIFFERS).includes(name as any)) return true;
+    if ((Object.values(LEDGER_DIFFERS) as string[]).includes(name)) return true;
     const entry = Object.prototype.hasOwnProperty.call(TABLES, name) ? TABLES[name] : undefined;
     return !!entry && (entry.kind === 'replicated' || entry.kind === 'replicated-except');
 }
@@ -67,21 +67,25 @@ const age = (v: unknown): v is number | null => v === null || (Number.isInteger(
 /** A report as the header carries it, or null when it isn't one: then it is ignored, whole. */
 export function parseStandbyReport(raw: unknown): StandbyReport | null {
     if (typeof raw !== 'string' || raw.length === 0 || raw.length > STANDBY_REPORT_MAX_CHARS) return null;
-    let r: any;
-    try { r = JSON.parse(raw); } catch { return null; }
-    if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const r = parsed as Record<string, unknown>;
     if (r.v !== 1) return null;
     if (typeof r.id !== 'string' || !/^[0-9a-f]{32}$/.test(r.id)) return null;
-    if (!['ok', 'refused', 'fetch-failed', 'none'].includes(r.last)) return null;
+    const last = r.last;
+    if (last !== 'ok' && last !== 'refused' && last !== 'fetch-failed' && last !== 'none') return null;
     if (!(r.why === null || (typeof r.why === 'string' && WHY.test(r.why)))) return null;
-    if (!Number.isInteger(r.fails) || r.fails < 0 || r.fails > 1_000_000) return null;
-    if (!age(r.okAgo) || !age(r.wholeAgo) || !age(r.exactAgo)) return null;
-    if (!(r.exact === null || typeof r.exact === 'boolean')) return null;
-    if (!Array.isArray(r.differs) || r.differs.length > MAX_DIFFERS || !r.differs.every(differsName)) return null;
-    if (typeof r.hashed !== 'boolean') return null;
+    const fails = r.fails;
+    if (typeof fails !== 'number' || !Number.isInteger(fails) || fails < 0 || fails > 1_000_000) return null;
+    const { okAgo, wholeAgo, exactAgo, exact, differs, hashed } = r;
+    if (!age(okAgo) || !age(wholeAgo) || !age(exactAgo)) return null;
+    if (!(exact === null || typeof exact === 'boolean')) return null;
+    if (!Array.isArray(differs) || differs.length > MAX_DIFFERS || !differs.every(differsName)) return null;
+    if (typeof hashed !== 'boolean') return null;
     return {
-        v: 1, id: r.id, last: r.last, why: r.why, fails: r.fails, okAgo: r.okAgo, wholeAgo: r.wholeAgo,
-        exact: r.exact, exactAgo: r.exactAgo, differs: [...new Set<string>(r.differs)], hashed: r.hashed,
+        v: 1, id: r.id, last, why: r.why as WhyCode | null, fails, okAgo, wholeAgo,
+        exact, exactAgo, differs: [...new Set<string>(differs)], hashed,
     };
 }
 

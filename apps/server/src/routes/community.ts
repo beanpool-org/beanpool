@@ -39,7 +39,7 @@ import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE
 import { completeRekey } from '../engine/member-wizards.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
-import { publishedAddresses } from '../engine/own-addresses.js';
+import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
@@ -751,6 +751,11 @@ router.get('/api/community/info', async (ctx) => {
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
         requestSigning: REQUEST_SIGNING_VERSION,
         addresses: publishedAddresses(),
+        // Lost-name L4: where the community lives now (one of `addresses`, or null), and the BeanPool names it had
+        // before, still accepted but never an address to send an app to. The web app opened at one of those says the
+        // community has moved, with a plain link to `primaryAddress`.
+        primaryAddress: primaryAddress(),
+        formerAddresses: formerAddresses(),
     };
 });
 

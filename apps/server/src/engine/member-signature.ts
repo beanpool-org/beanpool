@@ -516,6 +516,29 @@ export function signatureUsage(now = Date.now()): AudienceUsage[] {
     return rows.map((r) => ({ kind: r.kind, address: r.address, today: Number(r.today) || 0, busiestDay: Number(r.busiest) || 0 }));
 }
 
+/**
+ * How many members' apps signed for any of `addresses`, this community's own names, today and on the busiest day of
+ * the last 7 (what memory holds is written first). For Settings' count of apps still on a former name (lost-name L4):
+ * each name's own count, summed day by day. An app that used two of them on one day would count twice; a real app
+ * reaches a community at one address.
+ */
+export function ownAddressesUsage(addresses: string[], now = Date.now()): { today: number; busiestDay: number } {
+    if (addresses.length === 0) return { today: 0, busiestDay: 0 };
+    flushSignatureCounts(now);
+    const day = today(now);
+    const rows = db.prepare(
+        `SELECT day, SUM(people) AS people FROM signature_audiences
+         WHERE kind = 'own' AND day >= ? AND address IN (${addresses.map(() => '?').join(', ')}) GROUP BY day`,
+    ).all(daysAgo(now, 6), ...addresses) as { day: string; people: number }[];
+    let todays = 0, busiest = 0;
+    for (const r of rows) {
+        const n = Number(r.people) || 0;
+        if (r.day === day) todays = n;
+        busiest = Math.max(busiest, n);
+    }
+    return { today: todays, busiestDay: busiest };
+}
+
 /** The `unconfirmed` addresses an owner's or admin's app signed for in the last 7 days (what memory holds is written first). */
 export function staffSeenAddresses(now = Date.now()): Set<string> {
     flushSignatureCounts(now);

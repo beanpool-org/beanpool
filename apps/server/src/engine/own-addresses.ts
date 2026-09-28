@@ -18,6 +18,8 @@
  *      loses its own name through a check, a bug or a stale registrar (Marty, 2026-09-24). A former name counts as one
  *      of 1–4, so a node whose only name went former is never `unconfigured`. Only the current one is published: a
  *      former name is accepted, never advertised;
+ *      `/api/community/info` lists former names apart (formerAddresses), with where the community lives now
+ *      (primaryAddress), so the web app opened at one can say it has moved (lost-name L4);
  *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
  *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node). A loopback name the
  *      operator listed in 2 doesn't count as one of 1–4 here: it names no community, only whichever machine an app
@@ -209,4 +211,27 @@ export function audienceStanding(host: string): AudienceStanding {
  */
 export function publishedAddresses(): string[] {
     return configuredAddresses().filter((a) => namesThisCommunity(a) && !a.former).map((a) => a.address);
+}
+
+/**
+ * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
+ * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
+ * live, else the first of its published names; null on a node with none (one that knows none of its names, or whose
+ * only name it released). Always one of publishedAddresses(), so never a former name or a loopback one.
+ */
+export function primaryAddress(): string | null {
+    const published = publishedAddresses();
+    const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live');
+    if (live && published.includes(live.address)) return live.address;
+    return published[0] ?? null;
+}
+
+/**
+ * The BeanPool names this community had before (4), for `/api/community/info`: only so that the web app, opened at one
+ * of them, can say where the community lives now (primaryAddress; design §6). Never an address to send an app to:
+ * they are accepted here and never published. One that is also set on the server or confirmed in Settings is one of
+ * this community's names in use (published), not a former one, and isn't here.
+ */
+export function formerAddresses(): string[] {
+    return configuredAddresses().filter((a) => a.former).map((a) => a.address);
 }

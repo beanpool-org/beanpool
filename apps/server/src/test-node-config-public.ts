@@ -14,6 +14,10 @@
  *      and refuses a caller without the admin password
  *   4. the contact email and phone switches are the owner's alone: a Settings save turns each on and off, and a save
  *      from a page that still sends the old single contacts switch turns neither on
+ *   5. the community's contact email and phone are in no unsigned public read unless the owner turned that one on
+ *      (/api/local/community-info needs no key and no password, and the directory lists every community's address);
+ *      the admin route the manager and static/settings.js read them from returns both, and refuses a caller without
+ *      the admin password
  *
  * Contacts no registrar: REGISTRAR_URL points at a closed local port, so the admin status route answers from the
  * saved address, as it does whenever the registrar is unreachable.
@@ -174,6 +178,55 @@ async function main() {
     const notBool = await postAdmin(CONFIG, { publishContactEmail: 'yes' });
     assert(notBool.status === 400 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: true }),
         `a switch that isn't true or false is refused, and nothing changes (${notBool.status} ${JSON.stringify(await switches())})`);
+
+    console.log('\n── 5. the contacts are public only where the owner turned each on; the admin screens read both ──');
+    const EMAIL = 'owner-contacts-nodeconfig@example.invalid';
+    const PHONE = '+61 400 555 017';
+    const identity = await postAdmin('/api/local/update-identity', { communityName: 'Test Vale', contactEmail: EMAIL, contactPhone: PHONE });
+    if (identity.status !== 200) throw new Error(`setup: update-identity answered ${identity.status} ${identity.text}`);
+    // Every unsigned read that says who this community is, as anyone walking the directory's addresses would ask.
+    const PUBLIC = ['/api/local/community-info', '/api/community/info', '/api/directory/info', '/api/node/config', '/api/local/dashboard'];
+    for (const [email, phone] of [[false, false], [true, false], [false, true], [true, true]] as const) {
+        const set = await postAdmin(CONFIG, { publishContactEmail: email, publishContactPhone: phone });
+        if (set.status !== 200) throw new Error(`setup: the switches answered ${set.status} ${set.text}`);
+        const label = `email ${email ? 'on' : 'off'}, phone ${phone ? 'on' : 'off'}`;
+        const reads = Object.fromEntries(await Promise.all(PUBLIC.map(async (p) => [p, await getRaw(p)] as const)));
+        for (const [p, r] of Object.entries(reads)) {
+            assert(r.status === 200, `${label}: unsigned GET ${p} is 200 (got ${r.status})`);
+            if (!email) assert(!r.text.includes(EMAIL), `${label}: ${p} does not hold the email`);
+            if (!phone) assert(!r.text.includes(PHONE), `${label}: ${p} does not hold the phone`);
+        }
+        const info = JSON.parse(reads['/api/local/community-info'].text);
+        assert(info.communityName === 'Test Vale', `${label}: community-info still names the community (${info.communityName})`);
+        assert(info.contactEmail === (email ? EMAIL : null) && info.contactPhone === (phone ? PHONE : null),
+            `${label}: community-info says only the contact turned on (${JSON.stringify({ email: info.contactEmail, phone: info.contactPhone })})`);
+        const dir = JSON.parse(reads['/api/directory/info'].text);
+        assert(dir.contactEmail === (email ? EMAIL : null) && dir.contactPhone === (phone ? PHONE : null),
+            `${label}: the directory preview says the same (${JSON.stringify({ email: dir.contactEmail, phone: dir.contactPhone })})`);
+    }
+    const noStore = await fetch(`${BASE}/api/local/community-info`);
+    assert(/no-store/.test(noStore.headers.get('cache-control') ?? ''),
+        `community-info is not kept by a cache, so a contact turned off stops showing at once (${noStore.headers.get('cache-control')})`);
+    await noStore.text();
+
+    const DIAG = '/api/local/admin/diagnostics';
+    const quiet = await postAdmin(CONFIG, { publishContactEmail: false, publishContactPhone: false });
+    if (quiet.status !== 200) throw new Error(`setup: the switches answered ${quiet.status} ${quiet.text}`);
+    const noAuth = await getRaw(DIAG);
+    assert(noAuth.status === 401, `without the admin password ${DIAG} is refused (got ${noAuth.status})`);
+    assert(!noAuth.text.includes(EMAIL) && !noAuth.text.includes(PHONE), 'the refusal holds neither contact');
+    const adminGet = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    assert(adminGet.contactEmail === EMAIL && adminGet.contactPhone === PHONE,
+        `with the admin password, GET ${DIAG} (the manager) returns both, with both switches off (${JSON.stringify({ email: adminGet.contactEmail, phone: adminGet.contactPhone })})`);
+    const adminPost = await postAdmin(DIAG, { password: ADMIN_PASSWORD });
+    const posted = JSON.parse(adminPost.text);
+    assert(adminPost.status === 200 && posted.contactEmail === EMAIL && posted.contactPhone === PHONE,
+        `and POST ${DIAG} (static/settings.js) too (${adminPost.status} ${JSON.stringify({ email: posted.contactEmail, phone: posted.contactPhone })})`);
+    const cleared = await postAdmin('/api/local/update-identity', { contactEmail: '', contactPhone: '' });
+    if (cleared.status !== 200) throw new Error(`setup: update-identity answered ${cleared.status} ${cleared.text}`);
+    const none = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    assert(none.contactEmail === null && none.contactPhone === null,
+        `a node with no contacts says null for each, so a screen can tell "none" from "not loaded" (${JSON.stringify({ email: none.contactEmail, phone: none.contactPhone })})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

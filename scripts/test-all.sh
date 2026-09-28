@@ -375,6 +375,7 @@ run_federation_suites() {
       test-replication-manifest
       test-standby-ledger-copy
       test-standby-listings-verbatim
+      test-standby-health
       test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed

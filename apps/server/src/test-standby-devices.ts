@@ -21,8 +21,8 @@
  *     again, each delete by its tombstone, the unmute's applied before S follows the re-key.
  *  4. On S, every writer of these tables refuses (the routes with 409 `standby`, the engine's functions before they
  *     write), the side writes of a read or a listing write nothing, and its G4 tables are exactly as before.
- *  5. A whole copy with a plain row value S's table refuses (a stricter, older standby's CHECK on invites): the copy is
- *     not exact, reported, and asks for no force-resync (review 4123472786); the next pull is a delta.
+ *  5. A whole copy with a plain row and values S's table refuses (a stricter, older standby's CHECKs on invites): the
+ *     copy is not exact, reported, and asks for no force-resync (review 4123472786); the next pull is a delta.
  *  6. S sends no push, by any sender: the dispatcher for each category, the escrow and announcement senders, the
  *     timers, and a chat message and an enterprise thread post over HTTPS. The only call of the push service in the
  *     server's source is the dispatcher's, and the copy with the tokens is served to the replication token alone.
@@ -167,9 +167,10 @@ async function child(): Promise<void> {
         },
         /**
          * invite_codes held to a stricter rule than the main server's, as an older standby's CHECK that doesn't know a value
-         * would be (`on`), or given its own text back (`off`): a used invite's `used_by` is a value this table refuses.
+         * would be (`on`), or given its own text back (`off`): a used invite's `used_by` is a value this table refuses, and
+         * the invite `refuse` is a row it refuses whatever is left out (its key).
          */
-        'strict-invites': async (a: { on: boolean }) => {
+        'strict-invites': async (a: { on: boolean; refuse?: string }) => {
             const { db } = await import('./db/db.js');
             const rebuild = (sql: string) => db.transaction(() => {
                 db.exec('DROP TABLE IF EXISTS invite_codes_held; CREATE TABLE invite_codes_held AS SELECT * FROM invite_codes; DROP TABLE invite_codes;');
@@ -179,7 +180,8 @@ async function child(): Promise<void> {
             if (a.on) {
                 invitesAsBuilt = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'invite_codes'`).get() as { sql: string }).sql;
                 db.prepare('UPDATE invite_codes SET used_by = NULL').run();
-                rebuild(invitesAsBuilt.replace(/\)\s*$/, ', CHECK (used_by IS NULL))'));
+                db.prepare('DELETE FROM invite_codes WHERE code = ?').run(a.refuse ?? '');
+                rebuild(invitesAsBuilt.replace(/\)\s*$/, `, CHECK (used_by IS NULL), CHECK (code != '${String(a.refuse ?? '').replace(/'/g, "''")}'))`));
             } else if (invitesAsBuilt) {
                 rebuild(invitesAsBuilt);
                 invitesAsBuilt = null;
@@ -446,8 +448,10 @@ async function main(): Promise<void> {
             return (inv.invite?.code ?? inv.code) as string;
         };
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
+        const joinedWith: Record<string, string> = {};
         for (const who of [ann, bo, cy, dee, kip]) {
-            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: who.pk, callsign: who.name } }));
+            joinedWith[who.name] = await invite();
+            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { body: { code: joinedWith[who.name], publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         const phone = (who: Id, t: string, registeredAt: number | null, platform = 'android') =>
@@ -605,14 +609,17 @@ async function main(): Promise<void> {
         assert(writers.changed.length === 0, `and S's G4 tables are exactly as before (changed: ${writers.changed.join(', ') || 'none'})`);
 
         // ── 5. A plain value S's table refuses ──
-        console.log('\n— 5. a whole copy with a value S refuses is not exact, and asks for no force-resync —');
-        require_(await standby.send('strict-invites', { on: true }), 'S: its invites table holds a used invite\'s taker to a rule M\'s doesn\'t (an older standby\'s CHECK)');
+        console.log('\n— 5. a whole copy with a row and values S refuses is not exact, and asks for no force-resync —');
+        require_(await standby.send('strict-invites', { on: true, refuse: joinedWith.Bo }),
+            'S: its invites table holds a used invite\'s taker, and the invite Bo joined with, to rules M\'s doesn\'t (an older standby\'s CHECK)');
         const before5 = await standby.send('record');
         const whole5 = await standby.send('pull', { whole: true });
         const record5 = await standby.send('record');
         const c5 = record5.consistency;
-        assert(whole5.ok === true && whole5.whole === true && c5?.plainTablesLeftOut?.tables?.includes('invite_codes') && c5.plainTablesLeftOut.count > 0 && c5.ok === false,
-            `the whole copy lands, the values left out reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
+        assert(whole5.ok === true && whole5.whole === true && JSON.stringify(c5?.plainTablesLeftOut?.tables) === '["invite_codes"]' && c5.ok === false
+            && c5.plainTablesLeftOut.count === 5 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
+            && c5.tables.some((t: any) => t.name === 'invite_codes' && !t.match),
+            `the whole copy lands; the row (Bo's invite, so a count short) and the values (four takers) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
         assert(before5.lastMismatchResyncAt === null && record5.lastWhole?.exact === false && record5.lastWhole.differs?.includes('invite_codes')
             && record5.lastWhole.resyncAsked === false && record5.lastMismatchResyncAt === null,
             `its record: not exact, invite_codes differing, and no force-resync asked (${JSON.stringify(record5.lastWhole)})`);

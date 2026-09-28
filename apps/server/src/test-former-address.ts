@@ -191,7 +191,7 @@ function call(node: Node, method: string, reqPath: string, headers: Record<strin
             let text = '';
             res.on('data', (c) => { text += c; });
             res.on('end', () => {
-                let parsed: any = null;
+                let parsed: any;
                 try { parsed = JSON.parse(text); } catch { parsed = text; }
                 resolve({ status: res.statusCode || 0, body: parsed, text });
             });

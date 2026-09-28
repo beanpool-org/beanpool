@@ -45,6 +45,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => {
         const value = mem.secure.get(key) ?? null;
         const slow = mem.slowSecureReads;

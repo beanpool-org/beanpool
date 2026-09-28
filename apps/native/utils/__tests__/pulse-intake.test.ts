@@ -20,6 +20,7 @@ vi.mock('expo-crypto', () => ({
 }));
 
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),

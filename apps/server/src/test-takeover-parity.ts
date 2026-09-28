@@ -67,9 +67,12 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * and the last one deletes the line, which the suite then requires.
  *
  * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
- * preferences, keepers and pledges), G3 (in-flight money and governance, on the plain-table path), G5 (the community's own
- * settings) and G9 (a new standby's first pull, which this suite found) are closed, and so are G1b's listing, deal, photo
- * and project columns: a difference in any of them is new.
+ * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this
+ * suite found) are closed, and so are G1b's listing, deal, photo and project columns and G3's tables (in-flight money and
+ * governance, on the plain-table path): a difference in any of them is new. G3 is not closed whole: its one setting, the
+ * Commons project proposals still waiting for a decision (node_config `commons_projects`, a `community` gap in
+ * engine/replication-manifest.ts NODE_CONFIG_KEYS), stays behind on a take-over, and the preview names it. This scenario
+ * makes no such proposal, so nothing here differs by it; one that did would need its line here.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).

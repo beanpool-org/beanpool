@@ -350,12 +350,14 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     }
 
     it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
-        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(/g;
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(/g;
         const doors: Record<string, number> = {
             // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
             'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
-            // Sign Out (Device Only) and Permanent Node Purge: authenticateUser first, as they always have.
-            'app/(tabs)/settings.tsx:signOutOfThisPhone(': 2,
+            // Sign Out (Device Only), and Permanent Node Purge (which wipes the phone at the member's last community,
+            // utils/delete-here.ts): authenticateUser first, as they always have.
+            'app/(tabs)/settings.tsx:signOutOfThisPhone(': 1,
+            'app/(tabs)/settings.tsx:deleteAccountHere(': 1,
             // The replace screen's Show (above); Safety Backup's Show for the phone's own key (join-words-behind-lock.test.ts).
             'app/welcome.tsx:readWordsBehindLock(': 2,
             // Replace Account (account-removal-behind-lock.test.ts).
@@ -391,16 +393,16 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
 
     it("Sign Out and Permanent Node Purge ask the check before anything goes, as they always have", () => {
         const s = source('(tabs)/settings.tsx');
-        for (const [start, reason] of [
-            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.'],
-            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.'],
+        for (const [start, reason, removal] of [
+            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.', 'await signOutOfThisPhone(identity);'],
+            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await deleteAccountHere(identity, plan);'],
         ] as const) {
             const body = slice(s, start, '\n    }\n');
             const asked = body.indexOf(`const success = await authenticateUser('${reason}');`);
             const refused = body.indexOf('if (!success) return;');
             expect(asked).toBeGreaterThan(-1);
             expect(refused).toBeGreaterThan(asked);
-            expect(body.indexOf('await signOutOfThisPhone(identity);')).toBeGreaterThan(refused);
+            expect(body.indexOf(removal)).toBeGreaterThan(refused);
         }
     });
 

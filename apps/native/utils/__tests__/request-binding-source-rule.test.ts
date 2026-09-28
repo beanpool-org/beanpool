@@ -223,6 +223,9 @@ describe('the phone\'s community address is written only after the plain-address
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.
         'services/pillar-sync.ts discoverAnchor': /isPlainNodeAddress\(url\)/,
+        // Delete account, while another saved community keeps the key: the phone moves there (the plan only picks plain
+        // saved addresses; this is the write's own check).
+        'utils/delete-here.ts leaveThisCommunity': /assertPlainNodeAddress\(next\);[\s\S]*storage\.setItem\(ANCHOR_STORE_KEY, next\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {

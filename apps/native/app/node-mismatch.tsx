@@ -13,6 +13,10 @@ import { hasMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
+import {
+    NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, deletePlanFailedLine, otherCommunitiesKeeping, stillKeptLine,
+    type KeptCommunity,
+} from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -34,7 +38,8 @@ export default function NodeMismatchScreen() {
     // The delete asks each community to stop the push alerts first, which can take a few seconds (UNREGISTER_TIMEOUT_MS):
     // nothing else on the screen may start meanwhile.
     const [deleting, setDeleting] = useState(false);
-    const busy = loading || deleting;
+    const [checking, setChecking] = useState(false);
+    const busy = loading || deleting || checking;
     const [error, setError] = useState<string | null>(null);
 
     // nodeUrl can resolve after first render; prefill once it's known.
@@ -50,6 +55,9 @@ export default function NodeMismatchScreen() {
     const [words, setWords] = useState<string[] | null>(null);
     const [showWipe, setShowWipe] = useState(false);
     const lockBusyRef = useRef(false);
+    // The delete takes the key off this phone only when no saved community keeps it (delete-here.ts): asked at each
+    // tap, before the lock (`checking`). One that does is where the member is sent instead, and nothing is removed.
+    const [keptBy, setKeptBy] = useState<KeptCommunity[] | null>(null);
 
     const [otherNodes, setOtherNodes] = useState<SavedNode[]>([]);
     useEffect(() => {
@@ -101,6 +109,24 @@ export default function NodeMismatchScreen() {
         if (lockBusyRef.current) return;
         lockBusyRef.current = true;
         try {
+            // Another saved community that says the key is a member, or can't be asked, still needs it: the screen
+            // offers to switch there instead, and takes nothing off the phone.
+            setError(null);
+            setChecking(true);
+            let keeping: KeptCommunity[];
+            try {
+                keeping = identity?.publicKey ? await otherCommunitiesKeeping(nodeUrl, identity.publicKey) : [];
+            } catch (e) {
+                setError(deletePlanFailedLine(e instanceof Error ? e.message : String(e)));
+                return;
+            } finally {
+                setChecking(false);
+            }
+            if (keeping.length > 0) {
+                setKeptBy(keeping);
+                return;
+            }
+            setKeptBy(null);
             // The phone's lock first, with the words or without, as Settings' Sign Out asks it before the same removal: a
             // check that does not pass opens nothing and reads nothing. An account with no words is the one that can't
             // come back, so it asks too (PR #1205 review 4112404471). With words, this is also the check before they show.
@@ -125,8 +151,8 @@ export default function NodeMismatchScreen() {
             hasWords
                 ? "Only do this if you have written your 12 words down. They are the only way back in, " +
                   "apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n" +
-                  "This erases the key for every community, not just this one."
-                : `${noWordsBeforeWipe()}\n\nThis erases the key for every community, not just this one.\n\n` +
+                  `${NO_OTHER_COMMUNITY_LINE}`
+                : `${noWordsBeforeWipe()}\n\n${NO_OTHER_COMMUNITY_LINE}\n\n` +
                   "Switching communities is almost certainly what you want instead.",
             [
                 { text: 'Cancel', style: 'cancel' },
@@ -199,10 +225,31 @@ export default function NodeMismatchScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Reconnect</Text>}
                         </Pressable>
 
+                        {keptBy && keptBy.length > 0 && !showWipe && (
+                            <View style={styles.keptBox} accessibilityLiveRegion="polite">
+                                <Text style={styles.keptText}>🔑 {stillKeptLine(keptBy)}</Text>
+                                <SavedNodePicker
+                                    nodes={keptBy.map((c) => ({ url: c.url, alias: c.name }))}
+                                    onPick={switchToNode}
+                                    disabled={busy}
+                                    label={keptBy.length === 1 ? 'Your community' : 'Your communities'}
+                                    actionLabel="Switch to"
+                                    hint={SIGN_OUT_FROM_SETTINGS_LINE}
+                                />
+                                <Pressable style={styles.secondaryBtn} onPress={() => setKeptBy(null)} disabled={busy} accessibilityRole="button">
+                                    <Text style={styles.cancelWipeText}>Close</Text>
+                                </Pressable>
+                            </View>
+                        )}
+
                         {!showWipe ? (
-                            <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
-                                <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>
-                            </Pressable>
+                            !keptBy?.length && (
+                                <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
+                                    {checking
+                                        ? <ActivityIndicator color={colors.text.secondary} />
+                                        : <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>}
+                                </Pressable>
+                            )
                         ) : (
                             <View style={styles.wipeWrap}>
                                 {words ? (
@@ -247,6 +294,11 @@ export default function NodeMismatchScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     wipeWrap: { marginTop: 4 },
+    keptBox: {
+        marginTop: 4, padding: 12, borderRadius: 12, borderWidth: 1,
+        backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border,
+    },
+    keptText: { color: colors.text.body, fontSize: 14, lineHeight: 20, marginBottom: 12 },
     wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
     wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
     wordsBox: {

@@ -122,6 +122,25 @@ export function putBackOnRecord(communities: readonly string[], storage: Pick<St
     return changeRecord(() => addToRecord(communities, storage));
 }
 
+/**
+ * Take `communities` off the record: the account deleted itself there and stays on the phone (delete-here.ts
+ * `leaveThisCommunity`). That node dropped the key's push tokens with the account (server `purgeMemberSelf`), so no
+ * leave is ever sent there. Never throws: a record that can't be changed is logged, and a later leave asks that node
+ * for nothing it still holds.
+ */
+export async function dropFromRecord(communities: readonly string[], storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<void> {
+    const dropped = new Set(communities.map(communityAddress).filter((c): c is string => c !== null));
+    try {
+        await changeRecord(async () => {
+            const recorded = parseRecord(await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY));
+            const kept = recorded.filter((c) => !dropped.has(c));
+            if (kept.length !== recorded.length) await storage.setItem(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify(kept));
+        });
+    } catch (e) {
+        console.warn('[Push] Could not take the community left off the record', e);
+    }
+}
+
 // ── The push stamp ──────────────────────────────────────────────────────────────────────────────────────────────
 
 type StampCopy = Pick<Storage, 'getItem' | 'setItem'>;

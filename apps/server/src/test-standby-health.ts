@@ -26,7 +26,9 @@
  *     refused, and the real copy after it lands and is exact. The standby mended it by itself, so nobody was told: no
  *     incident, no push (Marty's answer 2). Planted again, and the standby restarts between asking for its held resync and
  *     taking it, M answering its first pull after with a 503: it still takes that resync, the copy heals, nobody is told,
- *     and another restart takes it no more (review 4119011899). Six hours on (a restart, the record's last resync moved back), planted
+ *     and another restart takes it no more (review 4119011899). Planted again, and the held resync's copy comes without
+ *     M's hashes: it counts as mending itself for an hour at most (HEALING_MS, review 4119012097), then M opens an incident
+ *     with one push; the next exact copy ends it. Six hours on (a restart, the record's last resync moved back), planted
  *     again: the held resync lands a copy M signed whose members aren't M's, the check after it still differs, and that is
  *     when the incident opens, with one push. A restart then allows no sooner force-resync (the record keeps when the last was),
  *     the incident stays, and the banner and the preview say what didn't match. Then a whole copy the main
@@ -154,6 +156,17 @@ async function child(): Promise<void> {
             if (!row) return false;
             const r = JSON.parse(row.value);
             r.lastMismatchResyncAt = Date.now() - a.agoMs;
+            db.prepare("UPDATE node_config SET value = ? WHERE key = 'standby_copy_record'").run(JSON.stringify(r));
+            return true;
+        },
+        /** Move the standby's last whole-copy verdict back by `agoMs`, as if it were checked that long ago. */
+        'whole-check-at': async (a: { agoMs: number }) => {
+            const { db } = await import('./db/db.js');
+            const row = db.prepare("SELECT value FROM node_config WHERE key = 'standby_copy_record'").get() as { value: string } | undefined;
+            if (!row) return false;
+            const r = JSON.parse(row.value);
+            if (!r.lastWhole) return false;
+            r.lastWhole.at = Date.now() - a.agoMs;
             db.prepare("UPDATE node_config SET value = ? WHERE key = 'standby_copy_record'").run(JSON.stringify(r));
             return true;
         },
@@ -660,6 +673,46 @@ async function main(): Promise<void> {
         const afterTaken = await pull();
         assert(afterTaken.ok && afterTaken.mode !== 'resync', `a resync taken is taken: S restarts again, and its next pull is a ${afterTaken.mode}, not another`);
 
+        // The review's case (4119012097): a held resync whose copy gives no verdict (M sent it without its hashes) counts as
+        // mending itself for an hour at most (HEALING_MS). Past that, S's report says so no more, and M tells the owners, once.
+        require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
+        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted, then no verdict' }) === 1, 'planted again');
+        await main.send('touch');
+        const asksAgain = await pull(true);
+        rec = await standby.send('record');
+        require_(asksAgain.ok && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === true, `it asks for its held force-resync (${brief(rec?.lastWhole)})`);
+        door.next({ status: 200, body: await main.send('copy-without-hashes') });
+        const noVerdict = await pull();
+        rec = await standby.send('record');
+        assert(noVerdict.mode === 'resync' && noVerdict.ok && rec?.lastUncompared?.notCompared?.includes('content') === true
+            && rec.lastWhole?.exact === false && rec.lastWhole.resyncAsked === true,
+            `that force-resync lands a copy M sent without its hashes: no verdict, the last one still the difference it asked for (${brief({ uncompared: rec?.lastUncompared?.notCompared, whole: rec?.lastWhole })})`);
+        await pull();
+        health = await main.send('health');
+        const stillMending = health?.state.standbys.find((x: any) => x.id === rec?.id);
+        assert(stillMending?.exact === false && stillMending.healing === true && health?.state.incident === null,
+            `inside the hour, S reports it as mending by itself: no incident (${brief(stillMending && { exact: stillMending.exact, healing: stillMending.healing })})`);
+        require_(await standby.send('whole-check-at', { agoMs: HOUR + 60_000 }) === true, "S's check that asked for it, in its record, is more than an hour ago");
+        await pull();
+        health = await main.send('health');
+        pushes = await pushesSoFar();
+        const incidentHealing = health?.state.incident;
+        const pastHealing = health?.state.standbys.find((x: any) => x.id === rec?.id);
+        assert(pastHealing?.healing === false
+            && incidentHealing?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members']))
+            && pushes.length === 3 && JSON.stringify(pushes[2].to) === JSON.stringify([OWNER_TOKEN]),
+            `past the hour, S reports it as mending no more: M opens an incident, "inexact", with one push to the owner (${brief({ problems: incidentHealing?.problems, pushes: pushes.length })})`);
+        // S's next whole copy is exact (the resync mended it; its copy could not say so) and ends it. M's clock then moves
+        // past the hour in which a new incident is not pushed.
+        await main.send('touch');
+        const exactAgain = await pull(true);
+        await pull();
+        health = await main.send('health');
+        assert(exactAgain.ok && health?.state.incident === null && health.state.lastIncident?.id === incidentHealing?.id,
+            `S's next whole copy is exact: that incident is over (${brief(health?.state.lastIncident)})`);
+        await main.send('health-clock', { offsetMs: 8 * HOUR });
+        assert((await pull()).ok, 'hours later, S pulls: healthy');
+
         // One the held resync doesn't cure. Six hours on (S restarted, its record's last force-resync moved back past the
         // limit), a difference again; the resync it asks for is served a copy M signed whose members aren't M's (its ledger
         // M's), so the check after it still differs. That is when the owners are told.
@@ -685,7 +738,7 @@ async function main(): Promise<void> {
         const incident3 = health?.state.incident;
         assert(toldUncured.ok && toldUncured.mode !== 'resync' && incident3?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members'])),
             `the pull after (a ${toldUncured.mode}) reports it: the held resync did not cure it, and M opens an incident, "inexact", members (${brief(incident3?.problems)})`);
-        assert(pushes.length === 3 && JSON.stringify(pushes[2].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${pushes.length})`);
+        assert(pushes.length === 4 && JSON.stringify(pushes[3].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${pushes.length})`);
 
         // A restart allows no sooner force-resync: S's record keeps when it last asked for one, so a difference a resync
         // doesn't mend never loops.
@@ -699,11 +752,11 @@ async function main(): Promise<void> {
         rec = await standby.send('record');
         assert(afterRestart4.ok && afterRestart4.whole && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === false && next4.ok && next4.mode !== 'resync',
             `S restarts: its next whole copy still differs, and asks for no force-resync (the pull after is a ${next4.mode}; ${brief(rec?.lastWhole)})`);
-        assert(pulls.filter((p) => p.mode === 'resync').length === 5,
-            `force-resyncs in all: the new standby's first copy, and one for each of the three copies that didn't match, six hours apart, one of them tried twice (M answered its first with a 503) (${pulls.map((p) => p.mode).join(',')})`);
+        assert(pulls.filter((p) => p.mode === 'resync').length === 6,
+            `force-resyncs in all: the new standby's first copy, and one for each of the four copies that didn't match, six hours apart, one of them tried twice (M answered its first with a 503) (${pulls.map((p) => p.mode).join(',')})`);
         health = await main.send('health');
         pushes = await pushesSoFar();
-        assert(health?.state.incident?.id === incident3?.id && pushes.length === 3, `the incident stays open, and nothing is pushed again (${pushes.length})`);
+        assert(health?.state.incident?.id === incident3?.id && pushes.length === 4, `the incident stays open, and nothing is pushed again (${pushes.length})`);
         const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN })).body?.standbyHealth;
         assert(bannerNow?.incident?.lines.some((l: string) => /did not match it: members differed\. Last exact copy: \d{4}-/.test(l))
             && bannerNow.incident.whatToDo.some((w: string) => /copies this server afresh by itself, at most every six hours, and its copy still did not match/.test(w)),

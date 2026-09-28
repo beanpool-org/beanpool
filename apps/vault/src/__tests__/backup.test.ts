@@ -301,3 +301,38 @@ describe('a restore from backup is finished before anything sees it', () => {
         expect(existsSync(path.join(c.dataDir, 'vault.db'))).toBe(false);
     });
 });
+
+describe('holds across a restore from backup', () => {
+    it('a Stop made after the backup is not undone: every open hold is held a fresh 24 hours from the restore, and the member is told again', async () => {
+        const PHONE = 'ExponentPushToken[member-phone]';
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'stopped-later', { pushToken: PHONE });
+        const { e, reply } = await startRestore(a, 'google', 'stopped-later');
+        const holdId = reply.body.holdId as string;
+        a.clock.advance(60 * 60 * 1000);
+        const backup = await a.api.runBackup();
+        a.clock.advance(60 * 60 * 1000);
+        expect((await signed(a, '/v1/holds/cancel', { holdId }, member.seed)).body).toEqual({ status: 'stopped' });
+        a.clock.advance(60 * 60 * 1000);
+
+        const b = await restoredFrom(a, backup);
+        await a.api.idle();
+        a.stub.pushes.length = 0;
+        const restoredAt = b.clock.now();
+        await unlockWith(b, g.shares, [0, 1]);
+        await b.api.idle();
+        expect(b.stub.pushes.flatMap(p => p.messages).map(m => [m.to, m.data.type])).toEqual([[PHONE, 'vault-hold']]);
+        const status = await signed(b, '/v1/copies/status', {}, member.seed);
+        expect(status.body.holds).toEqual([{ holdId, provider: 'google', openedAt: expect.any(Number), releaseAt: restoredAt + 86_400_000 }]);
+
+        // The hold's first release time passes: still held.
+        b.clock.advance(reply.body.until - b.clock.now());
+        expect((await signed(b, '/v1/restore/collect', { holdId }, e)).body).toEqual({ status: 'held', until: restoredAt + 86_400_000 });
+        // The member, told again, stops it again: never released.
+        expect((await signed(b, '/v1/holds/cancel', { holdId }, member.seed)).body).toEqual({ status: 'stopped' });
+        b.clock.advance(86_400_000);
+        expect((await signed(b, '/v1/restore/collect', { holdId }, e)).body).toEqual({ status: 'stopped' });
+    });
+});

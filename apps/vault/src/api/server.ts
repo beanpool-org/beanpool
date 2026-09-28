@@ -330,6 +330,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * A record the backup already holds is older than the backup and is left alone: a copy deposited again after it
      * must survive. The keyholder forgets the backup (`restoreDone`) only once the built database is in place: a crash
      * before that builds it again; a crash after finds the restore done.
+     *
+     * Stops and approvals don't ride in backups, so a restore can't know what a member said about a hold after the
+     * backup was made. Every hold still open is held again for a fresh 24 hours from the restore, and the member's
+     * devices are told again: a Stop is never silently undone.
      */
     async function completeRestore(): Promise<VaultDb> {
         const file = readFileSync(pendingPath);
@@ -343,6 +347,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         writeFileSync(buildPath, opened.binary, { mode: 0o600 });
         opened.binary.fill(0);
         const built = VaultDb.open(opts.dataDir, RESTORE_BUILD);
+        let reheld: HoldRow[];
         try {
             const newer = (await store.list()).filter(n => compareBackupNames(n, opened.result.header.name) > 0).sort(compareBackupNames);
             for (const name of newer) {
@@ -357,6 +362,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                     }
                 });
             }
+            reheld = built.reholdOpen(clock() + HOLD_MS);
         } catch (e) {
             built.close();
             removeBuild();
@@ -369,7 +375,14 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         renameSync(buildPath, dbPath);
         await call('restoreDone');
         rmSync(pendingPath, { force: true });
-        return VaultDb.open(opts.dataDir);
+        const restored = VaultDb.open(opts.dataDir);
+        track((async () => {
+            for (const hold of reheld) {
+                const row = restored.copyById(hold.copy_id);
+                if (row) notify(await memberTokens(restored, row.pk_index), 'vault-hold', hold.provider);
+            }
+        })());
+        return restored;
     }
 
     /** Every envelope under the current K_wrap (after a reshare, or resuming one cut short by a restart). */

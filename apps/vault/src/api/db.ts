@@ -172,6 +172,15 @@ export class VaultDb {
             .get(copyId) as HoldRow | undefined;
     }
 
+    /**
+     * After a restore from backup, every hold still open is held again until `releaseAt`: a Stop (or a "Yes, it's me")
+     * made after the backup isn't in it, so none can be trusted. Returns those holds.
+     */
+    reholdOpen(releaseAt: number): HoldRow[] {
+        this.db.prepare('UPDATE holds SET release_at = ? WHERE cancelled_at IS NULL AND released_at IS NULL').run(releaseAt);
+        return this.db.prepare('SELECT * FROM holds WHERE cancelled_at IS NULL AND released_at IS NULL ORDER BY opened_at').all() as unknown as HoldRow[];
+    }
+
     setHoldReleaseAt(id: string, at: number): void {
         this.db.prepare('UPDATE holds SET release_at = ? WHERE id = ?').run(at, id);
     }

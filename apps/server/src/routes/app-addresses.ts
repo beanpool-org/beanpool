@@ -6,6 +6,11 @@
  *   GET  /api/local/admin/app-addresses          this community's addresses, where each comes from (`former`: a
  *                                                 registrar name this key held before, accepted but not published), how many
  *                                                 people's apps signed for it today and on the busiest day of the last 7;
+ *                                                 for a registrar name the address service no longer gives this community,
+ *                                                 `standing` (services/registrar-name-watch.ts nameStandings: at risk and
+ *                                                 still accepted, contradicted by its own key still answering there, or
+ *                                                 `lost`); a lost one is marked `lost`, with how many members' apps were
+ *                                                 refused there (`tried`);
  *                                                 whether any of them names the community (`named`: a loopback name
  *                                                 listed for an SSH tunnel doesn't); on a node that knows none of its
  *                                                 names, the addresses apps reached it at, each with its count and
@@ -18,6 +23,8 @@
  *                                                 the switch date.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
+ *                                                 A lost name is refused (409, with why): confirming it would not bring it
+ *                                                 back, since the mark is per host, whatever lists it.
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
  *
  * An address is only ever added by an owner or admin here, or by config the operator set (the registrar's name,
@@ -27,8 +34,10 @@
 import Router from '@koa/router';
 import { updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
+    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
+import { registrarNames } from '../engine/registrar-names.js';
+import { nameStandings } from '../services/registrar-name-watch.js';
 import {
     signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
 } from '../engine/member-signature.js';
@@ -48,9 +57,16 @@ export const MAX_OWNER_ADDRESSES = 20;
 export function appAddressesReport(pageHost?: unknown) {
     const usage = signatureUsage();
     const count = (kind: string, address: string) => usage.find((u) => u.kind === kind && u.address === address);
+    const standings = nameStandings();
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
-        return { address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0 };
+        const tried = a.lost ? count('lost', a.address) : undefined;
+        const standing = standings.get(a.address);
+        return {
+            address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
+            ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
+            ...(standing ? { standing } : {}),
+        };
     });
     // Hosts apps signed for while this node knew none of its names (accepted until the switch). Any the owner has since
     // confirmed drop off both lists, as they are on the one above.
@@ -101,6 +117,17 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         if (!address) {
             ctx.status = 400;
             ctx.body = { error: 'Send { "address": "community.example.org" }: a web address, with no path.' };
+            return;
+        }
+        if (isLostAddress(address)) {
+            const why = registrarNames().find((e) => e.address === address)?.lost?.why;
+            ctx.status = 409;
+            ctx.body = {
+                code: 'lost_address',
+                error: why === 'released'
+                    ? `${address} was this community's name until it released it, and the hold is over. It can't be confirmed; claim it again, or choose another address.`
+                    : `Another community holds ${address} and answers there, so this community refuses what apps sign for it. It can't be confirmed; choose another address.`,
+            };
             return;
         }
         const current = ownerConfirmedAddresses();

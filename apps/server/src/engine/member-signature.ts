@@ -27,7 +27,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { BAD_KEY_CODE, BAD_SIGNER_KEY_ERROR, provenKeySpelling } from './member-key.js';
 import { isNodeAdmin } from './node-roles.js';
-import { audienceStanding } from './own-addresses.js';
+import { audienceStanding, isLostAddress } from './own-addresses.js';
 
 // ─── The switch ─────────────────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,9 @@ function ed25519Verify(bytes: Uint8Array, signature: string, pubKeyHex: string, 
 
 /**
  * Whether a host named in a format-2 signature is this community's: null when it is, the refusal when not. A node that
- * knows none of its names accepts any host until the switch, and logs and counts it for Settings to offer.
+ * knows none of its names accepts any host until the switch, and logs and counts it for Settings to offer. A refusal
+ * for one of this community's LOST names (engine/own-addresses.ts) is counted too, and asks the watcher to look at the
+ * name again: a name that comes back is accepted within seconds of the first refused request.
  */
 export function audienceRefusal(host: string, signer: string | null, now = clock()): SignatureRefusal | null {
     const standing = audienceStanding(host);
@@ -195,7 +197,33 @@ export function audienceRefusal(host: string, signer: string | null, now = clock
         noteUnconfirmedAudience(host, signer);
         return null;
     }
+    noteLostAudience(host, signer);
     return { ok: false, status: 421, error: WRONG_COMMUNITY_ERROR, code: WRONG_COMMUNITY_CODE };
+}
+
+let lostRefusedHandler: ((host: string) => void) | null = null;
+
+/**
+ * services/registrar-name-watch.ts: told of each refusal for a lost name (it rate-limits its own re-checks). Set on
+ * every node; a node that doesn't run the watcher leaves it null.
+ */
+export function setLostAddressRefusedHandler(h: ((host: string) => void) | null): void {
+    lostRefusedHandler = h;
+}
+
+/** A refusal for a lost name: counted for Settings ("n apps tried today", members' apps only) and handed to the watcher. */
+function noteLostAudience(host: string, signer: string | null): void {
+    try {
+        if (!isLostAddress(host)) return;
+    } catch {
+        return; // noting a refusal never changes it
+    }
+    try {
+        if (signer && isNodeMember(db, signer)) countSignature('lost', host, signer);
+    } catch { /* a count never changes a refusal */ }
+    try {
+        lostRefusedHandler?.(host);
+    } catch { /* nor does a re-check */ }
 }
 
 /** Null while the old format is accepted, the refusal once the switch has passed. */
@@ -295,8 +323,9 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
 
 /**
  * How many members' apps signed here, per day (UTC): for each of this community's addresses (`own`), for each address
- * a node with no configured names was reached at (`unconfirmed`, offered to the owner: engine/address-offers.ts), and
- * in the old format (`old_app`, "N members are on an old app"). Members' keys only (countAcceptedSignature), so a
+ * a node with no configured names was reached at (`unconfirmed`, offered to the owner: engine/address-offers.ts), in
+ * the old format (`old_app`, "N members are on an old app"), and for each of this community's LOST names (`lost`: the
+ * apps refused there, "n apps tried today"). Members' keys only (countAcceptedSignature), so a
  * stranger's keys move none of them. Counts only, no key is stored: the day's distinct keys are held in memory as
  * salted hashes. A request never writes to the database: the counts are written when Settings reads them and every 15
  * minutes (flushSignatureCounts), each as the most this process has seen that day. After a restart a day's count
@@ -317,7 +346,7 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  *     when its app first signed for the address that day: an admin made later counts from the next day it signs for
  *     it, and one removed still counts for the rest of the week.
  */
-export type SignatureKind = 'own' | 'unconfirmed' | 'old_app';
+export type SignatureKind = 'own' | 'unconfirmed' | 'old_app' | 'lost';
 
 /**
  * Bounds on what one day can hold in memory: addresses per kind (past which only an owner's or admin's app adds an

@@ -18,15 +18,21 @@
  *  - Take offline (this node's own release) records when, and until when the registrar holds the name for this key:
  *    its answer's `held_until`, and nothing when the answer gives none. A release answer without one means the registrar
  *    freed the name at once (a withdrawn gated claim, an older Worker's `revoked`), so no hold is invented here (#1247's
- *    review, 4115220670). The name stays accepted either way (decision D-B, pending Marty; stopping it needs L3).
+ *    review, 4115220670). The name stays accepted through the hold, then stops (decision D-B, Marty 2026-09-28): the
+ *    watcher marks it lost 30 days after the release, or at the end of a longer recorded hold, once the registrar no
+ *    longer holds it for this key. Taking it back (a claim) clears the release, and the mark.
  *  - Only real registrar names are recorded: one label of 3-32 characters under beanpool.org, as the registrar's own
  *    NAME_RE allows (apps/registrar/src/index.js). A host any answer, stored address or take-over envelope names outside
  *    that is never recorded, so a misbehaving or mis-pointed registrar can't make one permanent (4115220781); such a host
  *    is still accepted while it is the stored `publicAddress` (item 1 of own-addresses.ts), as before.
  *
  * engine/own-addresses.ts accepts every entry, current and former, whatever its status (item 4), and publishes only
- * the current one. The record travels in the take-over envelope beside `ownerAddresses`, so a promoted standby
- * accepts the same names.
+ * the current one, until the entry is marked `lost` (L3): then it is refused, never published, and still one of this
+ * community's names, so a node never becomes `unconfigured` by losing one. Only services/registrar-name-watch.ts marks
+ * a name lost (setRegistrarNameLost), on proof that another key holds it and answers at it, or when this node released
+ * it and the hold is over. A registrar answer that gives the name to this key again (a claim, a stored status, a
+ * holding status naming it) clears the mark. The record, `lost` included, travels in the take-over envelope beside
+ * `ownerAddresses`, so a promoted standby accepts, and refuses, the same names.
  *
  * Bounded: at most MAX_REGISTRAR_NAMES entries (a name is recorded only after the registrar gave it to this key, so
  * reaching that takes as many successful claims), each field a short string. A full record adds no new name, and
@@ -58,6 +64,23 @@ export interface RegistrarName {
     releasedByUsAt: string | null;
     /** When this node's own claim of another name made it former, or null. */
     renamedByUsAt: string | null;
+    /** Set when this name stopped counting here (services/registrar-name-watch.ts), or null while it counts. */
+    lost: RegistrarNameLost | null;
+}
+
+/** Why a name stopped counting here. */
+export interface RegistrarNameLost {
+    /** When (ISO). */
+    since: string;
+    /**
+     * `another-key`: the registrar named another key as its holder AND an origin reached through the name answered as
+     * someone other than this server, on every counting round of the confirmation period (design §3.4).
+     * `released`: this node released it itself (Take offline), the hold is over, and the registrar no longer holds it
+     * for this key (decision D-B).
+     */
+    why: 'another-key' | 'released';
+    /** The key the registrar named as its holder, when it named one. */
+    holderKey: string | null;
 }
 
 /**
@@ -73,6 +96,8 @@ export interface RegistrarName {
 export type RegistrarAnswerUse = 'stored' | 'claim' | 'status' | 'released';
 
 export const MAX_REGISTRAR_NAMES = 50;
+/** The registrar statuses of this key's own row in which the row holds the name for this key. */
+export const HOLDING_STATUSES: ReadonlySet<string> = new Set(['live', 'pending', 'paused', 'blocked']);
 /** The registrar's hold on a name its owner released (RELEASE_COOLOFF_S), when its answer doesn't say. */
 const REGISTRAR_ZONE = 'beanpool.org';
 
@@ -117,6 +142,16 @@ const isoOrNull = (v: unknown): string | null => {
     return Number.isFinite(t) ? new Date(t).toISOString() : null;
 };
 
+/** A stored `lost` mark, or null for anything that isn't one (a malformed mark never refuses a name). */
+function lostOf(v: unknown): RegistrarNameLost | null {
+    if (!v || typeof v !== 'object') return null;
+    const l = v as Record<string, unknown>;
+    const since = isoOrNull(l.since);
+    if (!since || (l.why !== 'another-key' && l.why !== 'released')) return null;
+    const key = typeof l.holderKey === 'string' && /^[0-9a-f]{64}$/i.test(l.holderKey) ? l.holderKey.toLowerCase() : null;
+    return { since, why: l.why, holderKey: key };
+}
+
 /** The registrar's `held_until` (unix seconds), as an ISO time, or null when it gave none that could be one. */
 function heldUntilOf(v: unknown, now: number): string | null {
     if (typeof v !== 'number' || !Number.isFinite(v)) return null;
@@ -140,6 +175,7 @@ function entryOf(raw: unknown): RegistrarName | null {
         heldUntil: isoOrNull(r.heldUntil),
         releasedByUsAt: isoOrNull(r.releasedByUsAt),
         renamedByUsAt: isoOrNull(r.renamedByUsAt),
+        lost: lostOf(r.lost),
     };
 }
 
@@ -169,7 +205,7 @@ export function registrarNames(config: NodeConfig = getNodeConfig(), now = Date.
         const current = !list.some((e) => e.role === 'current');
         list.push({
             address: host, role: current ? 'current' : 'former', status: word((pa as any)?.status, 'unknown'), reason: null,
-            since: new Date(now).toISOString(), formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null,
+            since: new Date(now).toISOString(), formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null,
         });
     }
     return list;
@@ -205,7 +241,7 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
                     logger.warn('AUTH', `Registrar names: ${host} was not recorded, because ${MAX_REGISTRAR_NAMES} names already are. `
                         + 'None of them is forgotten; this one is accepted while it is the stored address.');
                 } else {
-                    entry = { address: host, role: 'former', status, reason, since: at, formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null };
+                    entry = { address: host, role: 'former', status, reason, since: at, formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null };
                     list.push(entry);
                 }
             }
@@ -223,6 +259,8 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
                 entry.releasedByUsAt = null;
                 entry.heldUntil = null;
                 entry.renamedByUsAt = null;
+                // The registrar gave it to this key: it counts here again, whatever marked it lost.
+                entry.lost = null;
             }
         }
     } else if (use === 'status') {
@@ -233,6 +271,8 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
             entry.reason = reason;
             const held = heldUntilOf(a.held_until, now);
             if (held) entry.heldUntil = held;
+            // This key's own row, naming this name, in a state that holds it: the registrar says it is this key's.
+            if (host && HOLDING_STATUSES.has(status)) entry.lost = null;
         }
     } else {
         const entry = find(host) ?? current();
@@ -250,4 +290,21 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
         version++;
     }
     return list;
+}
+
+/**
+ * The one write services/registrar-name-watch.ts makes to the record: set or clear the `lost` mark on a recorded name.
+ * Never adds or deletes an entry. Returns whether the mark changed.
+ */
+export function setRegistrarNameLost(address: string, lost: RegistrarNameLost | null): boolean {
+    const config = getNodeConfig();
+    const list = registrarNames(config);
+    const entry = list.find((e) => e.address === address);
+    if (!entry) return false;
+    const next = lost ? lostOf(lost) : null;
+    if (JSON.stringify(entry.lost) === JSON.stringify(next)) return false;
+    entry.lost = next;
+    updateNodeConfig({ registrarNames: list });
+    version++;
+    return true;
 }

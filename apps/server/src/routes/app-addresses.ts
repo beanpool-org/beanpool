@@ -14,8 +14,11 @@
  *                                                 (`?host=`, on all three), and `heldBack`, every other one, each with
  *                                                 its reason (engine/address-offers.ts; a Settings from before that
  *                                                 shows `unconfirmed` only, so it never offers a held-back one); how
- *                                                 many signed in the old format (apps too old to name a community); and
- *                                                 the switch date.
+ *                                                 many signed in the old format (apps too old to name a community); the
+ *                                                 switch date; where the community lives now (`primaryAddress`, as
+ *                                                 /api/community/info says it); and how many members' apps signed for any
+ *                                                 of its former names, today and on the busiest day of the last 7
+ *                                                 (`formerApps`, lost-name L4: the members still to move).
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
@@ -27,10 +30,10 @@
 import Router from '@koa/router';
 import { updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
+    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses, primaryAddress,
 } from '../engine/own-addresses.js';
 import {
-    signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
+    ownAddressesUsage, signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
 } from '../engine/member-signature.js';
 import { offerablePageHost, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
@@ -74,6 +77,8 @@ export function appAddressesReport(pageHost?: unknown) {
     }
     const old = count('old_app', '');
     return {
+        primaryAddress: primaryAddress(),
+        formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
         addresses,
         named: knowsItsNames(),
         unconfirmed,

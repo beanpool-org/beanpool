@@ -1225,8 +1225,9 @@ async function main(): Promise<void> {
         // 4111438819: which of its pushes reach its phone, and nothing more. The push settings the apps send are hers to set.
         const pushSettings = { notify_chat: true, notify_marketplace: false, notify_escrow: true, notify_recovery: true, eventReminderOffsets: [60] };
         // A preference save also stamps her own members row's updated_at, so a standby's delta carries it (#1276, G2b):
-        // that, and nothing else in members, may change.
-        const membersRows = () => db.prepare('SELECT * FROM members ORDER BY public_key').all() as Record<string, unknown>[];
+        // that, and nothing else in members, may change (last_active_at left out, as snapshot() does: the activity stamp).
+        const membersRows = () => (db.prepare('SELECT * FROM members ORDER BY public_key').all() as Record<string, unknown>[])
+            .map(({ last_active_at: _activity, ...row }) => row);
         const membersBefore = membersRows();
         const set = await measured(() => call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: pushSettings }));
         const membersAfter = membersRows();

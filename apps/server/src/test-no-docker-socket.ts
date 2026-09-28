@@ -49,8 +49,22 @@ function serviceBlock(compose: string, name: string): string[] | null {
     return out;
 }
 
-const composeFiles = execSync('git ls-files', { cwd: ROOT, encoding: 'utf-8' }).split('\n')
-    .filter((f) => /(?:^|\/)(?:(?:docker-)?compose[^/]*\.ya?ml|[^/]*\.compose\.ya?ml)$/.test(f));
+/** Every file in the repository: git's list, or (no git, as in an exported tree) a walk that skips what git ignores here. */
+function repoFiles(): string[] {
+    try { return execSync('git ls-files', { cwd: ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { /* no git */ }
+    const out: string[] = [];
+    const walkRepo = (rel: string) => {
+        for (const e of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+            if (e.name.startsWith('.') || ['node_modules', 'dist', 'scratch', 'builds'].includes(e.name)) continue;
+            const p = rel ? `${rel}/${e.name}` : e.name;
+            if (e.isDirectory()) walkRepo(p); else out.push(p);
+        }
+    };
+    walkRepo('');
+    return out;
+}
+
+const composeFiles = repoFiles().filter((f) => /(?:^|\/)(?:(?:docker-)?compose[^/]*\.ya?ml|[^/]*\.compose\.ya?ml)$/.test(f));
 
 console.log('— compose —');
 assert(composeFiles.includes('docker-compose.yml'), `the compose files are found (${composeFiles.join(', ')})`);
@@ -89,8 +103,11 @@ const socketUsers = source.filter((p) => /socketPath\s*:\s*['"`]\/var\/run\/dock
 assert(socketUsers.length === 0, `no server code sends a request to Docker's socket (${socketUsers.map((p) => path.relative(SRC, p)).join(', ') || 'none'})`);
 const mentions = source.filter((p) => fs.readFileSync(p, 'utf-8').includes('docker.sock')).map((p) => path.relative(SRC, p));
 assert(mentions.every((p) => p === 'services/tunnel-connector.ts'), `docker.sock appears only where the server warns that it is mounted (${mentions.join(', ') || 'none'})`);
-const connector = fs.readFileSync(path.join(SRC, 'services', 'tunnel-connector.ts'), 'utf-8');
-assert(!/\bsocketPath\b/.test(connector) && !/from 'node:https?'/.test(connector), 'and the connector opens no socket of Docker\'s: it only checks that the file exists');
+const connectorFile = path.join(SRC, 'services', 'tunnel-connector.ts');
+const connector = fs.existsSync(connectorFile) ? fs.readFileSync(connectorFile, 'utf-8') : null;
+assert(connector !== null, 'the tunnel runs inside the server (services/tunnel-connector.ts)');
+assert(connector !== null && !/\bsocketPath\b/.test(connector) && !/from 'node:https?'/.test(connector),
+    'and the connector opens no socket of Docker\'s: it only checks that the file exists');
 const agent = fs.readFileSync(path.join(SRC, 'services', 'public-address-agent.ts'), 'utf-8');
 assert(!/restartSidecar|writeToken|removeToken|CLOUDFLARED_CONTAINER_NAME|PUBLIC_ADDRESS_ORIGIN/.test(agent), 'the agent has no sidecar restart, token file or origin override left');
 

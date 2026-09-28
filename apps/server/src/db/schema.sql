@@ -908,9 +908,9 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- to the `members` table above, add it to this whitelist too — otherwise
 -- mutations to that column won't be picked up by cursor-based delta sync.
 -- db.ts drops this trigger at every boot before this file runs, so the list here is the one in force on an existing
--- node too (CREATE TRIGGER IF NOT EXISTS alone would keep an older list). earned_surplus and working_capital_ceiling are
--- an enterprise's standing a standby copies (engine/sync.ts importRemoteState, design G2a): Rule 6's surplus and the
--- admin's ceiling are each written alone.
+-- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus and working_capital_ceiling
+-- are an enterprise's standing a standby copies (engine/sync.ts importRemoteState, design G2a): Rule 6's surplus and the
+-- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,

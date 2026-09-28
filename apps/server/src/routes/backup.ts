@@ -25,7 +25,7 @@ import { getEnvelopeHolders } from '../services/takeover-envelope.js';
 import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js';
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
-    getAutoSnapshotConfig, updateAutoSnapshotConfig,
+    getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import {
@@ -889,6 +889,13 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
 router.post('/api/local/admin/snapshots/config', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
+    // Whole hours up to what the scheduler's timer can hold (services/snapshot-scheduler.ts isAutoSnapshotInterval): past
+    // it, or an interval that rounds to nothing, the timer takes a snapshot every millisecond until the disk is full.
+    if (body.intervalHours !== undefined && !isAutoSnapshotInterval(body.intervalHours)) {
+        ctx.status = 400;
+        ctx.body = { error: `intervalHours must be a whole number of hours from 1 to ${MAX_AUTOSNAPSHOT_INTERVAL_HOURS}` };
+        return;
+    }
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;
     const config = hasUpdate
         ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })

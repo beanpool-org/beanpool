@@ -17,7 +17,8 @@
  *     were: before, it published the contacts and member count M had turned off), and sets its gateway (other origins
  *     for its web app, a switch, the request limit, and an admin IP allowlist of its own): the next delta brings the new
  *     record, applied to nothing. Neither the route nor a kept record takes a directory push interval the publisher's
- *     timer can't hold (it would fire every millisecond).
+ *     timer can't hold, or a snapshot interval the scheduler's can't (either would fire every millisecond), and a
+ *     snapshot schedule row already held arms a timer that can.
  *  4. A standby S2 promoted by hand (its role changed in .env, no take-over) installs M's settings at its first boot as
  *     a main server, and its ledger audit holds the ledger to M's baseline; installed once: a later change on S2 stays.
  *     Before that, an install whose write of local-config.json fails (a full disk) stops with nothing of it applied or
@@ -167,6 +168,38 @@ async function child(): Promise<void> {
                 const parsed = parseCommunitySettings({ localConfig: {}, nodeConfig: {}, directory: { directoryPushIntervalHours: v } });
                 return !!parsed && 'directoryPushIntervalHours' in parsed.record.directory;
             });
+        },
+        /** Which snapshot intervals a kept record takes (config/community-settings.ts parseCommunitySettings). */
+        'record-takes-snapshot-interval': async (a: { values: unknown[] }) => {
+            const { parseCommunitySettings } = await import('./config/community-settings.js');
+            return a.values.map((v) => {
+                const row = JSON.stringify({ enabled: true, intervalHours: v, keep: 7 });
+                const parsed = parseCommunitySettings({ localConfig: {}, nodeConfig: { autosnapshot_config: row }, directory: {} });
+                return !!parsed && 'autosnapshot_config' in parsed.record.nodeConfig;
+            });
+        },
+        /**
+         * The delay the snapshot scheduler arms its timer with, from each schedule row given as the one this server holds
+         * (a row written before the bound, or brought back by a restore). The server's own row is put back after.
+         */
+        'snapshot-timer-from-rows': async (a: { rows: string[] }) => {
+            const { db } = await import('./db/db.js');
+            const { restartScheduler } = await import('./services/snapshot-scheduler.js');
+            const own = db.prepare("SELECT value FROM node_config WHERE key = 'autosnapshot_config'").get() as { value: string } | undefined;
+            const put = (value: string) => db.prepare("INSERT INTO node_config (key, value) VALUES ('autosnapshot_config', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(value);
+            const realSetInterval = globalThis.setInterval;
+            const delays: number[] = [];
+            try {
+                // Recorded, never run: a timer Node can't hold would take a snapshot every millisecond.
+                (globalThis as any).setInterval = (_fn: () => void, ms: number) => { delays.push(ms); return realSetInterval(() => {}, 60_000); };
+                for (const row of a.rows) { put(row); restartScheduler(); }
+            } finally {
+                globalThis.setInterval = realSetInterval;
+                if (own) put(own.value);
+                else db.prepare("DELETE FROM node_config WHERE key = 'autosnapshot_config'").run();
+                restartScheduler();
+            }
+            return delays;
         },
         /** Whether a password is this server's admin password now. */
         'admin-password-is': async (a: { password: string }) => {
@@ -457,6 +490,14 @@ async function main(): Promise<void> {
             const bad = await A('/api/local/admin/node/config', { directoryPushIntervalHours: every });
             assert(bad.status === 400, `the route refuses a directory push interval of ${j(every)} hours (${brief(bad)})`);
         }
+        // The snapshot scheduler's timer is the same kind: past 596 hours, or an interval that rounds to nothing, a
+        // VACUUM INTO every millisecond until the disk is full. The Backup tab sends 6 to 48.
+        for (const every of [0, -1, 0.5, 597, 24 * 30, 24 * 366, '12']) {
+            const bad = await A('/api/local/admin/snapshots/config', { intervalHours: every });
+            assert(bad.status === 400, `the route refuses a snapshot interval of ${j(every)} hours (${brief(bad)})`);
+        }
+        const mSchedule = (await main.send('settings')).rows.autosnapshot_config;
+        assert(JSON.parse(mSchedule ?? '{}').intervalHours === 6, `M's snapshot schedule is still every 6 hours (${mSchedule})`);
         // The last admin call on M's HTTPS server: its admin IP allowlist names an address this machine is not.
         built('it sets its gateway: another origin for its web app, messaging off, a request limit, an admin IP allowlist', await A('/api/local/admin/gateway', {
             corsAllowedOrigins: ['https://app.riverbend.example'], features: { messaging: false }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
@@ -483,6 +524,14 @@ async function main(): Promise<void> {
         const takes = await standby.send('record-takes-interval', { values: [0, 1, 24, 596, -1, 0.0001, 597, 24 * 366, '12'] });
         assert(j(takes) === j([true, true, true, true, false, false, false, false, false]),
             `a kept record takes the push intervals the route does, and none the publisher's timer can't hold (${j(takes)})`);
+        const takesSchedule = await standby.send('record-takes-snapshot-interval', { values: [1, 24, 596, 0, -1, 0.5, 597, 24 * 30, 24 * 366, '12'] });
+        assert(j(takesSchedule) === j([true, true, true, false, false, false, false, false, false, false]),
+            `a kept record takes the snapshot intervals the route does, and none the scheduler's timer can't hold (${j(takesSchedule)})`);
+        const armed = await standby.send('snapshot-timer-from-rows', {
+            rows: [{ enabled: true, intervalHours: 24 * 30, keep: 7 }, { enabled: true, intervalHours: 0.3, keep: 7 }].map((r) => JSON.stringify(r)),
+        });
+        assert(armed.length === 2 && armed.every((ms: number) => ms >= 3_600_000 && ms <= 2 ** 31 - 1),
+            `a schedule row already held (from before the bound, or a restore) arms a timer Node can hold, 1 to 596 hours (${j(armed)} ms)`);
 
         // ── 4. A standby promoted by hand ──
         console.log('\n— 4. a standby promoted by hand installs the settings at its first boot as a main server —');

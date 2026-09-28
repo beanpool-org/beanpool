@@ -33,6 +33,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig, type GatewayConfig } from './local-config.js';
 import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
+import { isAutoSnapshotInterval } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 
 export type { SyncCommunitySettings };
@@ -162,13 +163,16 @@ const gateway: Check<NonNullable<SyncCommunitySettings['localConfig']['gateway']
 /** A number, as the row stores it. */
 const baseline: Check<string> = (v) => (typeof v === 'string' && v.length <= 40 && v.trim() !== '' && Number.isFinite(Number(v)) ? v : BAD);
 
-/** The snapshot schedule as snapshot-scheduler.ts updateAutoSnapshotConfig writes it. */
+/**
+ * The snapshot schedule as snapshot-scheduler.ts updateAutoSnapshotConfig writes it: whole hours the scheduler's timer
+ * can hold (past 596, Node fires it every millisecond, a VACUUM INTO after another until the disk is full).
+ */
 const snapshotSchedule: Check<string> = (v) => {
     if (typeof v !== 'string' || v.length > 200) return BAD;
     let s: unknown;
     try { s = JSON.parse(v); } catch { return BAD; }
-    if (!isObject(s) || typeof s.enabled !== 'boolean' || !finite(s.intervalHours) || s.intervalHours < 1 || !finite(s.keep) || s.keep < 1) return BAD;
-    return JSON.stringify({ enabled: s.enabled, intervalHours: Math.round(s.intervalHours), keep: Math.round(s.keep) });
+    if (!isObject(s) || typeof s.enabled !== 'boolean' || !isAutoSnapshotInterval(s.intervalHours) || !finite(s.keep) || s.keep < 1) return BAD;
+    return JSON.stringify({ enabled: s.enabled, intervalHours: s.intervalHours, keep: Math.round(s.keep) });
 };
 
 const radius: Check<{ lat: number; lng: number; radiusKm: number }> = (v) => {

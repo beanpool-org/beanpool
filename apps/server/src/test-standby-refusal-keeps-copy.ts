@@ -368,7 +368,7 @@ async function main(): Promise<void> {
         require_(first1.ok === true && first1.mode === 'resync', `S's first pull is the format re-seed, and it lands (${JSON.stringify(first1)})`);
         const r1 = await standby.send('record');
         const m1: Snap = await main.send('snapshot', { tables: HASHED });
-        let s1: Snap = await standby.send('snapshot', { tables: HASHED });
+        const s1: Snap = await standby.send('snapshot', { tables: HASHED });
         require_(r1.lastWhole?.exact === true && s1.tables.messages.count === m1.tables.messages.count && s1.tables.messages.count >= 3 && s1.tables.transactions.count > 0 && s1.format !== null,
             `S's copy is M's, exact: ${counts(s1, 'members', 'posts', 'accounts', 'transactions', 'messages', 'invite_codes')} (M: ${counts(m1, 'members', 'posts', 'accounts', 'transactions', 'messages', 'invite_codes')}; verdict ${JSON.stringify(r1.lastWhole?.differs)})`);
 

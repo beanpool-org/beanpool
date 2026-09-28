@@ -164,7 +164,7 @@ describe('replace and delete', () => {
         expect((await signed(v, '/v1/copies/status', {}, next.seed)).body.copies).toHaveLength(1);
     });
 
-    it('delete removes the row and its bytes (after VACUUM), and a later restore finds no copy', async () => {
+    it('delete removes the row and its bytes (the vault\'s own secure_delete and auto_vacuum: no VACUUM here), and a later restore finds no copy', async () => {
         const member = newMember();
         await deposit(v, g, member, 'google', 'to-delete');
         await deposit(v, g, member, 'github', '777');
@@ -179,11 +179,14 @@ describe('replace and delete', () => {
         const status = await signed(v, '/v1/copies/status', {}, member.seed);
         expect(status.body.copies.map((c: { provider: string }) => c.provider)).toEqual(['github']);
 
-        const vac = new DatabaseSync(dbFile);
-        vac.exec('VACUUM');
-        const left = vac.prepare('SELECT id FROM copies').all() as { id: string }[];
-        const deletions = (vac.prepare('SELECT COUNT(*) AS n FROM deletions').get() as { n: number }).n;
-        vac.close();
+        // What the delete itself left on disk: the database and its journal, as the vault wrote them.
+        const after = new DatabaseSync(dbFile, { readOnly: true });
+        const left = after.prepare('SELECT id FROM copies').all() as { id: string }[];
+        const deletions = (after.prepare('SELECT COUNT(*) AS n FROM deletions').get() as { n: number }).n;
+        // auto_vacuum = FULL: the delete left no free page behind (secure_delete zeroes what it removes).
+        const pragmas = { ...after.prepare('PRAGMA auto_vacuum').get(), ...after.prepare('PRAGMA freelist_count').get() };
+        after.close();
+        expect(pragmas).toEqual({ auto_vacuum: 1, freelist_count: 0 });
         expect(left).toHaveLength(1);
         expect(deletions).toBe(1);
         const gone = rows.find(r => !left.some(l => l.id === r.id))!;

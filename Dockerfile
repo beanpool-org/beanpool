@@ -56,6 +56,21 @@ RUN cd apps/server && pnpm run build
 # Multi-stage Docker build for BeanPool node
 
 # =============================================================================
+# cloudflared — the Cloudflare tunnel connector the server runs for its <name>.beanpool.org address
+# (apps/server/src/services/tunnel-connector.ts). Only its static binary is copied into the runtime stage.
+# =============================================================================
+# Cloudflare's official image, pinned by version AND by the digest of its multi-arch index (linux/amd64 + linux/arm64),
+# so every build takes exactly the binary we reviewed, never whatever :latest is that day. A named stage, so a
+# dependency bot can bump it like any other FROM line.
+#
+# Cloudflare supports a cloudflared release for one year after its newest one, so bump this at least every few months:
+#   docker buildx imagetools inspect cloudflare/cloudflared:<new version>
+# and put that version and the "Digest:" it prints for the index (the first one, not a per-platform one) here. The
+# `cloudflared --version` below fails the build for a platform whose binary doesn't run. Release notes:
+# https://github.com/cloudflare/cloudflared/releases
+FROM cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c AS cloudflared
+
+# =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run
 # =============================================================================
 FROM node:22-alpine3.21 AS runtime
@@ -113,6 +128,11 @@ RUN (npm rebuild better-sqlite3 || npm rebuild better-sqlite3 --build-from-sourc
 
 # Install su-exec for dropping privileges
 RUN apk add --no-cache su-exec
+
+# The tunnel connector (the cloudflared stage above). A static Go binary, already mode 0755 in Cloudflare's image; owned by
+# root here so the server (uid 1000) can run it and never change it. The --version run fails the build if it can't run.
+COPY --from=cloudflared --chown=root:root /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+RUN cloudflared --version
 
 # Clean up build tools to reduce image size
 RUN apk del python3 make g++

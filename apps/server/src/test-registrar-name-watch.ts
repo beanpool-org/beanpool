@@ -78,15 +78,16 @@ const CF_EDGE_IP = '104.21.93.179';
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
 /**
- * No test node reaches Docker (writeToken restarts a cloudflared container through the Docker socket, and this machine
- * may have one) or Cloudflare's edge (Settings' claim and Take offline probe it). Their requests fail at once instead.
+ * No test node reaches Cloudflare's edge (Settings' claim and Take offline probe it): those requests fail at once instead.
+ * Nor Docker: a node no longer has any use for its socket (its tunnel runs inside it, here the fake cloudflared from
+ * takeover-test-harness.ts), and test-no-docker-socket.ts holds that no server code talks to it.
  */
-function refuseDockerAndEdge(): void {
+function refuseEdge(): void {
     const real = http.request;
     (http as any).request = function (this: unknown, ...args: any[]) {
         const o = args[0];
         const opts = o && typeof o === 'object' && !(o instanceof URL) ? o : null;
-        if (opts && (opts.socketPath || opts.hostname === CF_EDGE_IP || opts.host === CF_EDGE_IP)) {
+        if (opts && (opts.hostname === CF_EDGE_IP || opts.host === CF_EDGE_IP)) {
             const req: any = new EventEmitter();
             req.setTimeout = () => req;
             req.destroy = () => req;
@@ -126,7 +127,7 @@ async function start(): Promise<{ https: string; http: string; watch: boolean }>
 const watchModule = () => import('./services/registrar-name-watch.js').catch(() => null);
 
 async function child(): Promise<void> {
-    refuseDockerAndEdge();
+    refuseEdge();
     await runNodeChild({
         setup: async (a: { ownerSeedHex: string; replicationToken?: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
@@ -310,7 +311,7 @@ async function startRegistrar(): Promise<Registrar> {
             if (req.method === 'GET' && p === '/api/registrar/status') return send(200, reg.status);
             if (req.method === 'POST' && p === '/api/registrar/claim') {
                 const name = String(JSON.parse(text || '{}').name || '');
-                // One token for every name, so a claim never waits for the tunnel sidecar to restart.
+                // One token for every name, so a claim never waits for the tunnel inside the server to restart.
                 return send(200, { status: 'live', name, hostname: `${name}.beanpool.org`, tunnelToken: 'T-shared' });
             }
             if (req.method === 'POST' && (p === '/api/registrar/offline' || p === '/api/registrar/release')) return send(200, reg.release);

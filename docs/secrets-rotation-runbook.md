@@ -14,7 +14,7 @@ Two recorded security exposure events make this mandatory:
 1. **2026-09-03 (Meta / Instagram App Secret):** The Meta/Instagram application secret used for The Pulse creator channel integration was partially exposed during development.
 2. **2026-09-15 (Test VM Environment Echo):** Environment variable values from `/root/BeanPool-Test/.env` on `ssh-qld.beanpool.org` were echoed into a development session transcript.
 
-Because production deployment configurations (`deploy.sh`) shared Cloudflare credentials, admin passwords, and tunnel tokens across nodes, **every secret present in those `.env` files, repository configs, and third-party dashboards is treated as potentially known and must be replaced.**
+Because production deployment configurations (`deploy.sh`, until 2026-09-28) shared Cloudflare credentials, admin passwords, and tunnel tokens across nodes, **every secret present in those `.env` files, repository configs, and third-party dashboards is treated as potentially known and must be replaced.**
 
 ---
 
@@ -29,17 +29,17 @@ This inventory enumerates every secret the BeanPool system uses across all layer
 | **`INSTAGRAM_APP_ID`** | Node `.env`<br>`docker-compose.yml`<br>`apps/server/src/routes/channels.ts` | Meta Application ID for The Pulse. Associated with the app secret above. | Paired with exposed secret |
 | **`TIKTOK_CLIENT_SECRET`** | Node `.env`<br>`docker-compose.yml`<br>`apps/server/src/routes/channels.ts` | TikTok Open API client secret for The Pulse OAuth token relay. | In test VM `.env` |
 | **`TIKTOK_CLIENT_KEY`** (or `TIKTOK_CLIENT_ID`) | Node `.env`<br>`docker-compose.yml`<br>`apps/server/src/routes/channels.ts` | TikTok Open API client key. | In test VM `.env` |
-| **`ADMIN_PASSWORD`** | Node `/root/BeanPool-<Name>/.env`<br>Repo root `.env`<br>`deploy.sh`<br>`data/local-config.json` (scrypt hash) | Per-node root administrative password for `/api/local/admin/*`, backup pulls, and React manager login. | Echoed in 2026-09-15 transcript |
+| **`ADMIN_PASSWORD`** | `data/local-config.json` (scrypt hash)<br>Node `/root/BeanPool-<Name>/.env` only for a rotation's one start: since 2026-09-28 `deploy.sh` removes the line at the next deploy<br>Repo root `.env` (`deploy.sh` no longer sends it) | Per-node root administrative password for `/api/local/admin/*`, backup pulls, and React manager login. | Echoed in 2026-09-15 transcript |
 | **`BACKUP_ADMIN_PASSWORD`** (legacy — delete it) | Backup node `.env` (`test-mirror` / replicas), if still there | No longer used. A standby copies with a replication token (`BACKUP_REPLICATION_TOKEN`, or pasted under Live Backup Server); a leftover copy of the primary's admin password is swapped for a token on start and warned about. Delete the line. | Echoed in 2026-09-15 transcript |
-| **`CF_API_TOKEN` (Node / Repo)** | Repo root `.env`<br>Node `.env`<br>`deploy.sh` | Cloudflare API token with Zone DNS edit permissions used for dynamic record updates. | Echoed in 2026-09-15 transcript |
+| **`CF_API_TOKEN` (Node / Repo)** | Repo root `.env`. Not on our servers: since 2026-09-28 `deploy.sh` sends it to none and removes it from each server's `.env` | Cloudflare API token with Zone DNS edit permissions. A server uses it only for its own Let's Encrypt certificate; no tunnel of ours checks that certificate, so our servers run on a self-signed one. | Echoed in 2026-09-15 transcript |
 | **`CF_API_TOKEN` (Registrar)** | Cloudflare Worker secret (`wrangler secret put`) | Scoped Cloudflare API token with `Account·Cloudflare Tunnel·Edit` and `Zone·DNS·Edit` permissions. | Cloudflare Worker runtime |
-| **`CF_TUNNEL_TOKEN`** | Repo root `.env`<br>`deploy.sh`<br>Node `<node>/data/tunnel-token` | Cloudflare Zero Trust tunnel connector token for `cloudflared` sidecar container. | Echoed in 2026-09-15 transcript |
+| **`CF_TUNNEL_TOKEN`** | Repo root `.env`. Since 2026-09-28 `deploy.sh` no longer writes it to servers, and removes the copy earlier deploys left in `<node>/data/tunnel-token` (matched by sha256, so a server's own registrar token stays) | Fleet connector token for the compose `cloudflared` sidecar. Its tunnel no longer exists, and `deploy.sh` no longer starts the sidecar. | Echoed in 2026-09-15 transcript |
 | **`ADMIN_SECRET` (Registrar)** | Cloudflare Worker secret<br>`apps/registrar/src/admin-html.js` | Shared secret for registrar Worker administrative endpoints (`/api/local/admin/registrar/*`). | Cloudflare Worker runtime |
 | **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | **No longer used by CI.** `.github/workflows/deploy-website.yml` was removed on 2026-09-19 (#962); beanpool.org deploys through Cloudflare Pages' own Git connection. The secret was already empty. Delete it rather than rotate it. | GitHub Repo Secrets |
 | **`CLOUDFLARE_API_KEY`** | GitHub Actions Secret<br>Repo root `.env` | Global Cloudflare API Key (fallback credentials for legacy wrangler operations). | GitHub Repo Secrets |
 | **`CLOUDFLARE_EMAIL`** | GitHub Actions Secret<br>Repo root `.env` | Cloudflare account email associated with `CLOUDFLARE_API_KEY`. | GitHub Repo Secrets |
 | **`CLOUDFLARE_ACCOUNT_ID`** | GitHub Actions Secret<br>`apps/registrar/wrangler.toml` | Cloudflare Account ID (`151a28c4fd1e6ee09768f4226be76b4d`). | Public / semi-private identifier |
-| **`CF_ZONE_ID`** | Repo `.env`, Node `.env`, `wrangler.toml` | Cloudflare Zone ID for `beanpool.org` (`060a99ae34e53b26dcf3be6578722b31`). | Public / semi-private identifier |
+| **`CF_ZONE_ID`** | Repo `.env`, `wrangler.toml` (since 2026-09-28 `deploy.sh` removes it from each server's `.env`) | Cloudflare Zone ID for `beanpool.org` (`060a99ae34e53b26dcf3be6578722b31`). | Public / semi-private identifier |
 | **`BACKUP_REPLICATION_TOKEN`** | Shell env / shadow backup compose | Authentication token for shadow replica snapshot pulls (`docker-compose.shadow-backup.yml`). | Validation test rig |
 | **`GOOGLE_MAPS_API_KEY`** | `apps/native/eas.json` (build profile) | Android Google Maps API key restricted to package `org.beanpool.pillar`. | Client bundle / EAS build |
 | **`pc-api-key.json`** | Local maintainer machine<br>`apps/native/eas.json` | Google Play Console API service account private key for automated app submission. | Google Cloud service account |
@@ -143,7 +143,7 @@ flowchart TD
     4. Create Token C (Pages Deploy / CI):
        - Permissions: `Account` $\to$ `Cloudflare Pages` $\to$ `Edit`
 *   **Places to update:**
-    - Token A: Local repo `.env` (`CF_API_TOKEN`) and node fleet `.env`.
+    - Token A: Local repo `.env` (`CF_API_TOKEN`). Not on the nodes: since 2026-09-28 `deploy.sh` removes it from each node's `.env`.
     - Token B: Registrar Worker secret (`wrangler secret put CF_API_TOKEN`).
     - Token C: GitHub Actions Secret (`CLOUDFLARE_API_TOKEN`).
 
@@ -153,17 +153,16 @@ flowchart TD
     2. Locate existing tunnels (`qld`, `vic`, per-node tunnels).
     3. If rotating tunnel credentials: click **Configure**, rotate the connector token, or provision replacement tunnel connectors.
 *   **Places to update:**
-    - On target node: write token directly to `/root/BeanPool-<Name>/data/tunnel-token` with permissions `chmod 644` (required because the `cloudflared` container runs as non-root UID 65532), then restart the tunnel container:
+    - A community's own `<name>.beanpool.org` tunnel (since 2026-09-28): nothing to write by hand. It runs inside the node's container, on the token in the node's settings (node_config, never `data/tunnel-token`, which the node deletes at start). When the registrar re-makes the tunnel, the node picks up the new token itself within minutes. To restart it anyway: Settings → Public Address → **Restart tunnel**, or restart the node:
       ```bash
-      echo "<new_tunnel_token>" > /root/BeanPool-<Name>/data/tunnel-token
-      chmod 644 /root/BeanPool-<Name>/data/tunnel-token
-      docker compose -p beanpool-<name> restart cloudflared
+      docker compose -p beanpool-<name> restart beanpool-node
       ```
-    - Note: Only `test` and `yarravalley` currently run `cloudflared` container sidecars.
+    - Note: since 2026-09-28 `deploy.sh` starts no `cloudflared` sidecar on our servers (it used to on `test` and `yarravalley`, with the fleet token, whose tunnel no longer exists). Our servers are reached through their host's own tunnel (`qld`, `vic`, `global`).
 *   **How to verify:**
     ```bash
-    docker logs beanpool-test-cloudflared-1 --tail 20
-    # Must show: "Connection established" / "Registered tunnel connection"
+    docker exec beanpool-test-beanpool-node-1 wget -qO- http://127.0.0.1:20241/ready   # {"status":200,"readyConnections":4}
+    docker logs beanpool-test-beanpool-node-1 --tail 200 | grep '\[Tunnel\]'
+    # Must show: "[Tunnel] connected to Cloudflare (N connections)"; Settings → Public Address shows "Tunnel: connected"
     # Never: "Unauthorized: Tunnel not found" or HTTP 530 / Error 1033
     ```
 
@@ -219,8 +218,11 @@ To rotate `ADMIN_PASSWORD` on an existing node:
    ```
 2. Update `.env` using `scripts/rotate-node-env.sh` (handles atomic lock reset and container recreation in one step):
    ```bash
-   bash scripts/rotate-node-env.sh --nodes test ADMIN_PASSWORD="$NEW_PW" CF_API_TOKEN="<new_cf_token>"
+   bash scripts/rotate-node-env.sh --nodes test ADMIN_PASSWORD="$NEW_PW"
    ```
+   The server reads `ADMIN_PASSWORD` on that one start and keeps only its hash. Since 2026-09-28 the next `deploy.sh` removes
+   the line from the node's `.env`, so the plain password does not stay on the server. Do not add `CF_API_TOKEN` to a node:
+   `deploy.sh` removes that line too.
 3. If rotating manually without `rotate-node-env.sh`, atomically clear lock on node prior to container update:
    ```bash
    ssh root@ssh-qld.beanpool.org "node -e '

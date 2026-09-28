@@ -274,8 +274,9 @@ async function main(): Promise<void> {
         assert(pv.mainServer.answers === false && pv.mainServer.warning === null, 'the main server does not answer, and the preview says so (no warning)');
         assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
             `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
-        assert(pv.missing.some((m: string) => /invites/.test(m)) && pv.missing.some((m: string) => /Decisions/.test(m)) && pv.missing.some((m: string) => /notification/.test(m)),
-            'the preview lists what will be missing (Decisions and votes, pledges, invites, notification settings, …)');
+        assert(pv.missing.some((m: string) => /photos sent in chats/.test(m)) && pv.missing.some((m: string) => /Commons project proposals/.test(m))
+            && !pv.missing.some((m: string) => /Decisions|invites|keeper changes/.test(m)),
+            'the preview lists what will be missing (chat photos, Commons proposals, …), and no longer Decisions, invites or keeper changes, which the standby copies');
         assert(!JSON.stringify(opened.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(opened.body)),
             'the preview carries no secret from inside the keys');
 
@@ -328,7 +329,11 @@ async function main(): Promise<void> {
         assert(after.backupPrimaryUrl === null && after.backupReplicationToken === null, 'the pull settings are cleared');
         assert(after.publicAddress?.hostname === 'testtown.beanpool.org' && after.publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'the web address is back, with the tunnel token from the older envelope');
-        assert(after.tunnelTokenFile === TUNNEL_TOKEN, 'and the tunnel token is written for the cloudflared sidecar');
+        // Was: the token written to data/tunnel-token for a cloudflared sidecar. The tunnel now runs inside the server.
+        assert(after.tunnel.wantedToken === TUNNEL_TOKEN && after.tunnel.runningToken === TUNNEL_TOKEN && after.tunnel.childToken === TUNNEL_TOKEN
+            && ['starting', 'connected'].includes(after.tunnel.state),
+            `and the tunnel runs inside this server on that token (${after.tunnel.state})`);
+        assert(after.tunnelTokenFile === null, 'with no copy of it in data/tunnel-token');
         assert(after.envelope.state === 'sealed' && JSON.stringify(after.envelope.owners) === JSON.stringify(['Anna']) && JSON.stringify(after.envelope.codes) === '[1]'
             && after.envelope.envelopeId !== dropped.envelopeId,
             `the keys are locked again on this server, to @Anna and code #1 (${after.envelope.envelopeId?.slice(0, 8)})`);

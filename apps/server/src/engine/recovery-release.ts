@@ -46,6 +46,7 @@ import crypto from 'node:crypto';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
 import { db } from '../db/db.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getCurrentGeneration, openShareRow, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
 import {
@@ -402,6 +403,8 @@ function hubShareFor(collection: Collection): Record<string, unknown> {
 
 function recordRelease(args: {
     collectionId: string;
+    /** The collection's owner, whose account the fragment is of: the row names them (recovery_releases.owner_pubkey). */
+    ownerPubkey: string;
     shareId: number;
     holderType: KeeperType;
     shareIndex: number;
@@ -426,12 +429,12 @@ function recordRelease(args: {
     db.prepare(`
         INSERT OR IGNORE INTO recovery_releases
             (collection_id, share_id, holder_type, share_index,
-             payload, payload_iv, payload_tag, ephemeral_pubkey, kdf_params, released_by, released_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             payload, payload_iv, payload_tag, ephemeral_pubkey, kdf_params, released_by, released_at, owner_pubkey)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         args.collectionId, args.shareId, args.holderType, args.shareIndex,
         sealed.encryptedShare, sealed.shareIv, sealed.shareTag,
-        args.ephemeralPubkey, sealed.kdfParams, args.releasedBy, nowIso(),
+        args.ephemeralPubkey, sealed.kdfParams, args.releasedBy, nowIso(), args.ownerPubkey,
     );
 
     const released = listReleases(args.collectionId).find(r => r.shareId === args.shareId);
@@ -497,6 +500,7 @@ export async function releaseSsoFragmentForIdentity(
 }
 
 export function releaseSsoFragment(collectionId: string, ssoLookupHash: string): ReleasedFragment {
+    assertPlainTablesWritable();
     const collection = requireLive(collectionId);
     if (!ssoLookupHash) throw new RecoveryReleaseError('No sign-in fragment was identified.');
 
@@ -518,6 +522,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
     const copy = openShareRow(share);
     return recordRelease({
         collectionId,
+        ownerPubkey: collection.ownerPubkey,
         shareId: copy.id,
         holderType: 'sso',
         shareIndex: copy.shareIndex,
@@ -546,6 +551,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
  * secrecy of this row.
  */
 export function releaseHubFragment(collectionId: string): ReleasedFragment {
+    assertPlainTablesWritable();
     const collection = requireLive(collectionId);
     // By holder_type, not by the literal 'node' (CR). putShareGeneration now pins the ref, but a
     // row written before that check existed would be invisible to a lookup keyed on the string —
@@ -567,6 +573,7 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
     const copy = openShareRow(share);
     return recordRelease({
         collectionId,
+        ownerPubkey: collection.ownerPubkey,
         shareId: copy.id,
         holderType: 'hub',
         shareIndex: copy.shareIndex,

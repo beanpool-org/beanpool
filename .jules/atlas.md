@@ -140,3 +140,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `IS_FLEET_MODE` mode detection in `apps/manager/src/lib/mode.ts` was untested.
 **Learning:** Testing `IS_FLEET_MODE` required resetting Vitest modules (`vi.resetModules()`), stubbing environment variables (`vi.stubEnv`), and dynamically re-importing `mode.ts` to verify global build definition (`__FLEET_MODE__`) and `import.meta.env.VITE_FLEET_MODE` logic.
 **Action:** Continue identifying any remaining untested helper utilities or React components in `apps/manager/`.
+
+## 2026-09-18 - [manager tests] useSectionSubTab and sections helper unit tests
+**Gap:** `useSectionSubTab`, `isSettingsSection`, and edge cases in `defaultSubTab` & `subTabLabel` in `apps/manager/src/lib/sections.ts` lacked unit test coverage.
+**Learning:** `useSectionSubTab` hook requires `<string>` generic type argument in `renderHook` when testing subtab transitions across different sections to satisfy TypeScript type safety.
+**Action:** Check remaining utility files and components in `apps/manager/` for edge-case unit test coverage.

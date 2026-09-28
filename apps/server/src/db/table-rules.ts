@@ -176,7 +176,9 @@ export class RowRules {
         this.ruled = new Set(this.rules.flatMap((r) => r.columns));
         this.probe = `temp.${quoteName(`${table}_rules_probe`)}`;
         const defs = info.filter((c) => this.ruled.has(c.name))
-            .map((c) => `${quoteName(c.name)} ${c.type || ''}${c.dflt_value !== null ? ` DEFAULT ${c.dflt_value}` : ''}`);
+            // In brackets: PRAGMA table_info gives an expression default without them (`strftime(…)` of a NOT NULL stamp),
+            // which a CREATE TABLE takes only inside them; a constant one reads the same either way.
+            .map((c) => `${quoteName(c.name)} ${c.type || ''}${c.dflt_value !== null ? ` DEFAULT (${c.dflt_value})` : ''}`);
         this.db.exec(`DROP TABLE IF EXISTS ${this.probe}`);
         if (defs.length > 0) {
             this.db.exec(`CREATE TEMP TABLE ${quoteName(`${table}_rules_probe`)} (${defs.join(', ')})`);

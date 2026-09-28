@@ -29,6 +29,31 @@ export interface PublicAddressStatus {
      * engine/registrar-names.ts). Members' apps that use it are still accepted.
      */
     kept?: { hostname?: string; mode?: string | null };
+    /** The tunnel inside the server (apps/server services/tunnel-connector.ts): its real state, and why when it isn't up. */
+    tunnel?: TunnelStatus;
+    /** docker-compose.yml still mounts Docker's control socket into the server, which never uses it. */
+    dockerSocket?: boolean;
+}
+
+export interface TunnelStatus {
+    state: 'off' | 'starting' | 'connected' | 'retrying' | 'missing' | string;
+    since?: string;
+    connections?: number;
+    reason?: string | null;
+    version?: string | null;
+}
+
+/** "connected (4)", "retrying: <reason> since 10:02", "not running". */
+export function describeTunnel(t: TunnelStatus | undefined): string | null {
+    if (!t || typeof t.state !== 'string') return null;
+    const since = t.since && !Number.isNaN(Date.parse(t.since))
+        ? ` since ${new Date(t.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : '';
+    if (t.state === 'connected') return `connected (${t.connections ?? 0})`;
+    if (t.state === 'starting') return `starting${since}`;
+    if (t.state === 'off') return 'not running';
+    if (t.state === 'missing') return `can't run: ${t.reason || 'cloudflared is missing from this server'}`;
+    return `${t.state}${t.reason ? `: ${t.reason}` : ''}${since}`;
 }
 
 export interface PublicAddressPanelProps {
@@ -275,10 +300,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const requestRestartConfirmation = () => {
         setConfirmModal({
             isOpen: true,
-            title: 'Restart Tunnel Sidecar',
-            message: 'Are you sure you want to force-restart the Cloudflare tunnel sidecar process? Existing web connections may temporarily drop during container restart.',
+            title: 'Restart the tunnel',
+            message: 'Restart the Cloudflare tunnel inside this server? Visitors’ connections drop for a few seconds while it reconnects.',
             actionType: 'restart',
-            confirmButtonText: 'Restart Sidecar',
+            confirmButtonText: 'Restart now',
         });
     };
 
@@ -299,10 +324,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
         if (action === 'restart') {
             setRestarting(true);
-            setActionMessage({ text: '⚡ Force-restarting tunnel sidecar container...', type: 'info' });
+            setActionMessage({ text: '⚡ Restarting the tunnel inside this server...', type: 'info' });
             startLogMonitor();
             try {
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/restart-sidecar');
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/restart-tunnel');
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
@@ -313,7 +338,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    setActionMessage({ text: '⚡ Tunnel sidecar restarted cleanly!', type: 'success' });
+                    setActionMessage({ text: '⚡ Tunnel restarted. It reconnects to Cloudflare in a few seconds.', type: 'success' });
                     await loadStatus();
                 } else {
                     setActionMessage({ text: typeof data.error === 'string' ? data.error : 'Restart failed', type: 'error' });
@@ -388,6 +413,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const mode = typeof statusData?.mode === 'string' ? statusData.mode : 'tunnel';
     const tunnelToken = typeof statusData?.tunnelToken === 'string' ? statusData.tunnelToken : '';
     const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
+    const tunnelLine = mode === 'tunnel' ? describeTunnel(statusData?.tunnel) : null;
+    const tunnelOk = statusData?.tunnel?.state === 'connected';
     const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
     const currentStep = typeof lastLog?.step === 'string' ? lastLog.step : 'Ready';
 
@@ -449,6 +476,17 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         Current Registrar Status
                     </div>
 
+                    {statusData?.dockerSocket && (
+                        <div
+                            role="alert"
+                            data-testid="docker-socket-warning"
+                            className="p-3 rounded-xl border bg-red-950/70 border-red-800 text-red-200 text-xs font-semibold"
+                        >
+                            docker-compose.yml still mounts Docker&apos;s control socket (/var/run/docker.sock) into this server, which doesn&apos;t use it.
+                            Remove that line (or git pull the new docker-compose.yml) and start the server again: anything that can use the socket controls the whole machine.
+                        </div>
+                    )}
+
                     {loading && !statusData ? (
                         <div className="text-xs text-nature-400 flex items-center gap-2">
                             <span className="animate-spin text-terra-400">⏳</span>
@@ -486,6 +524,15 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 </div>
                             )}
 
+                            {tunnelLine && (
+                                <div
+                                    data-testid="public-address-tunnel"
+                                    className={`text-xs break-words ${tunnelOk ? 'text-emerald-400' : 'text-amber-400'}`}
+                                >
+                                    Tunnel: {tunnelLine}
+                                </div>
+                            )}
+
                             {/* Tunnel Token display (when live via tunnel) */}
                             {tunnelToken && (
                                 <div className="p-3 rounded-xl bg-nature-900 border border-nature-800 space-y-1.5">
@@ -494,7 +541,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                             Tunnel Token
                                         </label>
                                         <span className="text-[10px] text-nature-400">
-                                            Keep secret; used by the Cloudflare sidecar connector
+                                            Keep secret; the tunnel inside this server runs on it
                                         </span>
                                     </div>
                                     <div className="flex flex-col sm:flex-row gap-2">
@@ -570,7 +617,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             className="px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 text-xs font-bold border border-blue-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                         >
                             <span>⚡</span>
-                            <span>{restarting ? 'Restarting…' : 'Reset Tunnel'}</span>
+                            <span>{restarting ? 'Restarting…' : 'Restart tunnel'}</span>
                         </button>
 
                         {(isLive || isPending) && (
@@ -617,7 +664,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 >
                     {logs.length === 0 ? (
                         <div className="text-nature-400 italic text-[11px]">
-                            No propagation logs recorded yet. Initiating an address claim or tunnel reset will stream live steps here.
+                            No propagation logs recorded yet. Claiming an address or restarting the tunnel will stream live steps here.
                         </div>
                     ) : (
                         logs.map((entry, idx) => {
@@ -744,7 +791,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <div className="text-[10px] text-nature-400 mt-1 leading-normal">
                                 {claimMode === 'tunnel' ? (
                                     <span>
-                                        Outbound Cloudflare sidecar. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
+                                        The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
                                     </span>
                                 ) : (
                                     <span>

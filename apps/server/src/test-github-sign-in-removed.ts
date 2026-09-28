@@ -162,7 +162,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', ?, ?, NULL)`).run(a.pk, a.callsign, now, `open:${a.provider}`);
             db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
-            db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at) VALUES (?, ?, ?, ?, NULL, ?)`)
+            db.prepare(`INSERT OR IGNORE INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at) VALUES (?, ?, ?, ?, NULL, ?)`)
                 .run(a.pk, a.provider, crypto.randomBytes(32).toString('base64url'), now, now);
             return true;
         },

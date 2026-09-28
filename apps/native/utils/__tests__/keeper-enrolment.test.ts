@@ -169,19 +169,20 @@ describe('keeper-enrolment.ts', () => {
                 expect(await openedPublicKey('facebook', 'facebook-sub-restored')).toBe(WORDLESS.publicKey);
             });
 
-            it('deposits for GitHub with the node\'s session, and the sealed seed opens to this identity\'s key', async () => {
+            it('deposits for Apple, and the sealed seed opens to this identity\'s key', async () => {
                 mockNode();
 
                 const result = await enrolSsoKeeper({
                     identity: WORDLESS,
-                    provider: 'github',
-                    sub: '24680',
-                    proof: { sessionId: 'node-session-restored' },
+                    provider: 'apple',
+                    sub: 'apple-sub-restored',
+                    idToken: 'mock-jwt-token',
+                    nonce: 'mock-nonce',
                 });
 
                 expect(result.error).toBeUndefined();
                 expect(result.enrolled).toEqual(['sso']);
-                expect(await openedPublicKey('github', '24680')).toBe(WORDLESS.publicKey);
+                expect(await openedPublicKey('apple', 'apple-sub-restored')).toBe(WORDLESS.publicKey);
             });
 
             it('still refuses a key it cannot read, and sends nothing', async () => {
@@ -231,11 +232,11 @@ describe('keeper-enrolment.ts', () => {
                 expect(opened.wordsStatus).toBe('carried');
             });
 
-            it('seals them for GitHub too', async () => {
+            it.each(['apple', 'facebook'] as const)('seals them for %s too', async (provider) => {
                 mockNode();
-                const result = await enrolSsoKeeper({ identity: WORDED, provider: 'github', sub: '13579', proof: { sessionId: 's' } });
+                const result = await enrolSsoKeeper({ identity: WORDED, provider, sub: '13579', idToken: 'mock-jwt-token', nonce: 'mock-nonce' });
                 expect(result.wordsSealed).toBe(true);
-                expect((await openSeedFromSso(depositedSsoShare(), 'github', '13579')).words).toEqual(WORDS);
+                expect((await openSeedFromSso(depositedSsoShare(), provider, '13579')).words).toEqual(WORDS);
             });
 
             it('seals the key alone when the phone\'s words make a different key, and never logs the words', async () => {
@@ -460,47 +461,7 @@ describe('keeper-enrolment.ts', () => {
             expect(result.error).toContain('could not read the private key');
         });
 
-        // GitHub's proof is the node's own finished device-flow session (S2): a GitHub token proves
-        // nothing a node can check, so the deposit names the session and carries no token and no nonce.
-        it('a GitHub deposit carries proof: { sessionId } and no idToken or nonce', async () => {
-            mockNode();
-
-            const result = await enrolSsoKeeper({
-                identity: IDENTITY,
-                provider: 'github',
-                sub: '987654',
-                proof: { sessionId: 'node-session-1' },
-            });
-
-            expect(result.error).toBeUndefined();
-            expect(result.enrolled).toEqual(['sso']);
-            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-            expect(call[2].provider).toBe('github');
-            expect(call[2].proof).toEqual({ sessionId: 'node-session-1' });
-            expect(call[2]).not.toHaveProperty('idToken');
-            expect(call[2]).not.toHaveProperty('nonce');
-            // Sealed to the `sub` the node read from GitHub, which is what recovery opens it with.
-            const opened = await openShareFromSso(depositedSsoShare(), 'github', '987654');
-            expect(Array.from(opened)).toEqual(Array.from(new Uint8Array(32).fill(9)));
-        });
-
-        it('refuses a GitHub deposit that carries a token instead of the node session, and sends nothing', async () => {
-            mockNode();
-
-            const result = await enrolSsoKeeper({
-                identity: IDENTITY,
-                provider: 'github',
-                sub: '987654',
-                idToken: 'gho_token_from_anywhere',
-                nonce: 'mock-nonce',
-            } as any);
-
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toMatch(/GitHub/);
-            expect(signedPost).not.toHaveBeenCalled();
-        });
-
-        it('an Apple, Google or Facebook deposit sends its idToken and nonce, and no GitHub proof', async () => {
+        it('a deposit proves the sign-in with the provider\'s idToken and the nonce, and nothing else', async () => {
             mockNode();
 
             await enrolSsoKeeper({
@@ -513,7 +474,7 @@ describe('keeper-enrolment.ts', () => {
 
             const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
             expect(call[2]).toMatchObject({ provider: 'google', idToken: 'mock-jwt-token', nonce: 'mock-nonce' });
-            expect(call[2]).not.toHaveProperty('proof');
+            expect(Object.keys(call[2]).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
         });
     });
 

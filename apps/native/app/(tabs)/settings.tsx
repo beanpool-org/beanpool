@@ -44,7 +44,7 @@ import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
-import type { SsoProvider } from '../../utils/sso-signin';
+import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
 import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
@@ -466,7 +466,7 @@ export default function SettingsScreen() {
 
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
-        const provName = provider === 'apple' ? 'Apple' : provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'GitHub';
+        const provName = SSO_PROVIDER_NAMES[provider];
         // Name the community: this only ever affects recovery on THIS node, and saying
         // so plainly is the difference between a member knowing where they're covered
         // and assuming they're covered everywhere.

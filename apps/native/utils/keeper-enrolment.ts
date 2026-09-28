@@ -48,7 +48,7 @@ import {
 import { anchorUrl, signedPost, signedDelete } from './node-post';
 import { hexToBytes } from './crypto';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
-import type { SsoProvider } from './sso-signin';
+import { offeredProviders, type SsoProvider } from './sso-providers';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,14 +124,8 @@ interface SsoEnrolmentBase {
     sub: string;
 }
 
-/**
- * What the deposit proves the sign-in with. Apple, Google and Facebook: the provider's `id_token` and
- * the node's nonce inside it. GitHub: the node's own finished sign-in session (`proof: { sessionId }`),
- * because a GitHub token proves nothing a node can check — never a token.
- */
-export type SsoEnrolmentInput =
-    | SsoEnrolmentBase & { provider: Exclude<SsoProvider, 'github'>; idToken: string; nonce: string }
-    | SsoEnrolmentBase & { provider: 'github'; proof: { sessionId: string } };
+/** What the deposit proves the sign-in with: the provider's `id_token` and the node's nonce inside it. */
+export type SsoEnrolmentInput = SsoEnrolmentBase & { provider: SsoProvider; idToken: string; nonce: string };
 
 /**
  * Seal the member's entire seed (and the 12 words, when this phone has them) into a single
@@ -154,19 +148,6 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         return { enrolled: [], generation: null, skipped, available: 0, error };
     };
 
-    // Checked here as well as by the type: a GitHub deposit that carries a token rather than the
-    // node's session is exactly the credential the node must not be handed, so it is not sent.
-    let credential: { idToken: string; nonce: string } | { proof: { sessionId: string } };
-    if (input.provider === 'github') {
-        const sessionId = input.proof?.sessionId;
-        if (typeof sessionId !== 'string' || !sessionId) {
-            return nothing('GitHub is connected through your community\'s server, and this sign-in did not come from it');
-        }
-        credential = { proof: { sessionId } };
-    } else {
-        credential = { idToken: input.idToken, nonce: input.nonce };
-    }
-
     // The 12 words are never required: a phone restored from a sign-in copy made before copies carried
     // them holds none (they can't be rebuilt from the seed), and it belongs to exactly the member who
     // most needs a connected sign-in. Such a phone deposits the seed alone.
@@ -185,7 +166,8 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         const res = await signedPost(url, '/api/recovery/shares/sso', {
             provider,
             shares,
-            ...credential,
+            idToken: input.idToken,
+            nonce: input.nonce,
         }, identity);
         console.log(`[KEEPER] ${provider}: deposit responded ${res.status}`);
         if (!res.ok) {
@@ -273,8 +255,9 @@ export function enrolmentFromJoin(
         console.log(`[KEEPER] ${provider}: the join did not store the recovery copy — ${typeof r.error === 'string' ? r.error.slice(0, 200) : 'no reason given'}`);
         return null;
     }
-    const enrolledSso = Array.isArray(r.enrolledSso) && r.enrolledSso.every(p => typeof p === 'string')
-        ? r.enrolledSso as string[]
+    // Kept on the phone (onboarding-state.ts `joinEnrolment`), so only the sign-ins this app offers.
+    const enrolledSso: string[] = Array.isArray(r.enrolledSso) && r.enrolledSso.every(p => typeof p === 'string')
+        ? offeredProviders(r.enrolledSso)
         : [provider];
     return {
         enrolled: enrolledSso.map(() => 'sso' as const),

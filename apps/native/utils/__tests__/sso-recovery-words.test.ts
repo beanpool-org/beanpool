@@ -20,7 +20,6 @@ vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
     signInWithFacebook: vi.fn(),
-    signInWithGithubViaNode: vi.fn(),
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 // The real opener, wrapped so one test can make it misbehave and show the app checks the words itself.
@@ -76,7 +75,7 @@ function mockSignInAndNode(sealed: SealedShare) {
 
 async function restore() {
     return recoverAccountWithSso({
-        callsign: 'Marty', anchorUrl: 'https://test.beanpool.org', provider: 'google', onDeviceCode: () => {},
+        callsign: 'Marty', anchorUrl: 'https://test.beanpool.org', provider: 'google',
     });
 }
 

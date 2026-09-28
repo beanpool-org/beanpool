@@ -38,15 +38,15 @@
  * when there is a measurement for every provider we ship, not before.
  */
 
-import { Platform, DeviceEventEmitter, AppState } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import * as Crypto from 'expo-crypto';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { encodeBase64 } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
+import { offeredProviders, type SsoProvider } from './sso-providers';
+
+export type { SsoProvider } from './sso-providers';
 
 /**
  * Web client ID — the `aud` claim the node expects in a Google id_token.
@@ -58,9 +58,6 @@ import type { BeanPoolIdentity } from './identity';
  */
 export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 export const FACEBOOK_APP_ID = '818892721251369';
-// No GitHub client id here: the node runs GitHub's sign-in with its own (`signInWithGithubViaNode`).
-
-export type SsoProvider = 'apple' | 'google' | 'facebook' | 'github';
 
 /**
  * Why a sign-in did not produce a token.
@@ -89,9 +86,9 @@ export class SsoSignInError extends Error {
     }
 }
 
-/** A sign-in that ends in a token from the provider: Apple, Google and Facebook. */
+/** A sign-in: the provider's token, which the node verifies itself. */
 export interface SsoSignIn {
-    provider: Exclude<SsoProvider, 'github'>;
+    provider: SsoProvider;
     /** The provider's signed assertion. Opaque here; `verifyIdToken` on the node reads it. */
     idToken: string;
     /** The raw nonce, to be sent back alongside the token so the node can match its own. */
@@ -104,33 +101,11 @@ export interface SsoSignIn {
     email?: string;
 }
 
-/**
- * A GitHub sign-in the node ran itself. No GitHub token ever reaches the phone: the node collected
- * it, read who signed in, and dropped it. What the phone holds is the node's session id, which the
- * deposit or recovery that follows spends as `proof: { sessionId }`.
- */
-export interface GithubSignIn {
-    provider: 'github';
-    sessionId: string;
-    /** GitHub's numeric user id as the node read it: what the seed is sealed to. */
-    sub: string;
-    /** Display only. */
-    email?: string;
-}
-
-/**
- * What a node that runs GitHub's sign-in itself says in its nonce answer (`githubFlow`). A node that
- * does not say it is one no GitHub sign-in can be used with: it would want a GitHub token, and a
- * token handed to a node proves nothing (any app's token reads the same `/user`).
- */
-export const GITHUB_FLOW_NODE = 'node';
-
 /** The node's answer to a nonce request. `providers` is what this node will actually accept. */
 interface NonceResponse {
     nonce?: unknown;
     expiresInSeconds?: unknown;
     providers?: unknown;
-    githubFlow?: unknown;
 }
 
 /**
@@ -201,19 +176,13 @@ export function readNonceResponse(body: unknown): NodeNonce {
     if (typeof b.nonce !== 'string' || b.nonce.length === 0) {
         throw new SsoSignInError('nonce', 'Your node did not send a sign-in nonce.');
     }
-    const providers = Array.isArray(b.providers)
-        ? b.providers.filter((p): p is SsoProvider => p === 'apple' || p === 'google' || p === 'facebook' || p === 'github')
-        : [];
-    return b.githubFlow === GITHUB_FLOW_NODE
-        ? { nonce: b.nonce, providers, githubFlow: GITHUB_FLOW_NODE }
-        : { nonce: b.nonce, providers };
+    // Only providers this app offers: a name it does not know is one it cannot sign in with.
+    return { nonce: b.nonce, providers: offeredProviders(b.providers) };
 }
 
 export interface NodeNonce {
     nonce: string;
     providers: SsoProvider[];
-    /** Present only when the node runs GitHub's sign-in itself. */
-    githubFlow?: typeof GITHUB_FLOW_NODE;
 }
 
 /**
@@ -532,9 +501,6 @@ const GOOGLE_PAGE_TIMEOUT_MS = 9 * 60_000;
  */
 const SPURIOUS_CANCEL_GRACE_MS = Platform.OS === 'ios' ? 0 : 2_000;
 
-/** Give up on a request to the node rather than hanging the sign-in with no error and no UI change. */
-const EXCHANGE_TIMEOUT_MS = 20_000;
-
 const TIMED_OUT = Symbol('sso-timeout');
 
 interface AuthSessionOptions {
@@ -586,7 +552,7 @@ function callbackState(url: string): string | null {
  *
  * ## `state` is what makes the race safe
  *
- * Matching on a substring like `auth/github` was not enough, and that is the bug this replaces.
+ * Matching on a substring of the return path (`auth/<provider>`) was not enough, and that is the bug this replaces.
  * Any URL containing it satisfied the match — including a stale callback from an earlier attempt,
  * which `Linking.getInitialURL()` hands back for the entire life of the process. So the race could
  * resolve against an already-consumed authorization code, and which of the stale and fresh URLs
@@ -835,346 +801,6 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
     return { idToken, nonce, email };
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-    return encodeBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function generatePkcePair(): { verifier: string; challenge: string } {
-    const randomBytes = Crypto.getRandomBytes(32);
-    const verifier = toBase64Url(randomBytes);
-    const challengeBytes = sha256(new TextEncoder().encode(verifier));
-    const challenge = toBase64Url(challengeBytes);
-    return { verifier, challenge };
-}
-
-/**
- * Sleep that gives up early when the caller cancels, so a close is felt at once, and with `orForeground` when the
- * app comes back to the front.
- *
- * Why the foreground: Android runs JS timers off the Choreographer and stops them while the app's activity is
- * paused (React Native 0.83 JavaTimerManager.onHostPause removes its frame callback; nothing fires until
- * onHostResume). The app is paused the whole time GitHub's Custom Tab is in front of it, so a GitHub wait cannot
- * end, and no poll can learn the member finished, until they come back. Asking the moment they do shows them the
- * answer at once rather than after what is left of the interval (up to 120 s once GitHub has slowed the node
- * down). On iOS the in-app browser leaves the app active and its timers running, and nothing changes.
- */
-function sleep(ms: number, signal?: AbortSignal, orForeground = false): Promise<void> {
-    return new Promise((resolve) => {
-        if (signal?.aborted) return resolve();
-        let settled = false;
-        let foreground: { remove(): void } | null = null;
-        const t = setTimeout(done, ms);
-        function done() {
-            if (settled) return;
-            settled = true;
-            clearTimeout(t);
-            foreground?.remove();
-            signal?.removeEventListener('abort', done);
-            resolve();
-        }
-        signal?.addEventListener('abort', done, { once: true });
-        if (orForeground) {
-            foreground = AppState.addEventListener('change', (state) => { if (state === 'active') done(); });
-        }
-    });
-}
-
-/**
- * Bring BeanPool back to the front once a device-flow sign-in is done.
- *
- * `WebBrowser.dismissBrowser()` is `@platform ios`. On Android it throws, so the Custom Tab simply
- * stayed on GitHub's "Congratulations, you're all set!" page with the member stranded in front of
- * a finished web page while their account was already connected behind it. MEASURED 2026-08-28.
- *
- * Android gives an app no way to close a Custom Tab it launched. What it does allow is bringing our
- * own activity forward, which backgrounds the tab — and launching our own scheme does exactly that.
- * It is the same App Link foregrounding that broke the OAuth redirect flow all day; here it is the
- * mechanism that fixes it.
- *
- * `beanpool://foreground` is a no-op route: `+native-intent.ts` returns null for it, so the app
- * comes forward without navigating the member off whatever screen they were on.
- *
- * What it cannot do on Android (Marty's phone, 2026-09-25): run while GitHub's tab is in front. The
- * app is paused there and its JS timers with it (see `sleep`), so the poll that calls this only
- * learns GitHub said yes once the member is already back. Nothing reliable brings the app forward
- * from behind the tab without the member: no timer runs, and Android 10+ refuses an activity start
- * from an app in the background. So the member is told to tap ✕ (components/GithubCodeSteps.tsx),
- * and the poll asks the moment the app is in front again. This stays for iOS, where it closes the
- * page, and for an app that is not paused behind the tab (split screen).
- */
-export async function returnToApp(): Promise<void> {
-    if (Platform.OS === 'ios') {
-        try {
-            await WebBrowser.dismissBrowser();
-        } catch {}
-        return;
-    }
-    // Android only. On web a custom scheme raises a browser protocol prompt, and there is no
-    // Custom Tab to background there in any case — the PWA opens GitHub in a tab the member closes
-    // themselves.
-    if (Platform.OS !== 'android') return;
-    try {
-        await Linking.openURL('beanpool://foreground');
-    } catch (e) {
-        // Nothing to fall back to: the member is on a page that says it worked, and it did. Logged
-        // with the error because if this fails it will be on some OEM build with its own rules
-        // about background activity starts, and the reason is the only clue anyone will get.
-        console.warn('[SSO] could not bring the app back to the front:', e);
-    }
-}
-
-/** What the member has to be shown to complete a GitHub sign-in. */
-export interface GithubDevicePrompt {
-    /** The short code the member types at `verificationUri`. */
-    userCode: string;
-    /** Where they type it — `https://github.com/login/device`. */
-    verificationUri: string;
-}
-
-/** Where the node starts and polls a GitHub sign-in, and what both calls carry. */
-export interface GithubNodeRoutes {
-    start: string;
-    poll: string;
-    /** Sent with both calls: a recovering device's `collectionId`, nothing for a member. */
-    body?: Record<string, unknown>;
-}
-
-/** A signed POST to the node, as the member or as a recovering device's ephemeral key. */
-export type NodePost = (path: string, body: Record<string, unknown>) => Promise<Response>;
-
-/** The member's pair (routes/keepers.ts). A recovering device has its own, in sso-recovery.ts. */
-export const GITHUB_MEMBER_ROUTES: GithubNodeRoutes = {
-    start: '/api/recovery/sso/github/start',
-    poll: '/api/recovery/sso/github/poll',
-};
-
-export const GITHUB_NODE_UPDATE_MESSAGE =
-    "This community's server needs an update before GitHub sign-in works. Use Google, Apple or your 12 words for now.";
-const GITHUB_CODE_RAN_OUT = 'The GitHub code ran out before it was entered. Try again.';
-const GITHUB_UNAVAILABLE = 'GitHub could not be reached just now. Please try again in a minute.';
-
-/** The node's poll bucket is a one-minute window, so no honest Retry-After is longer. */
-const MAX_RETRY_AFTER_MS = 60_000;
-
-function cancelledSignIn(): SsoSignInError {
-    return new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-}
-
-/**
- * One request to the node that a cancel does not wait for. `null` when there was no answer: the
- * network failed, or nothing came back within EXCHANGE_TIMEOUT_MS.
- */
-async function askNode(request: () => Promise<Response>, signal?: AbortSignal): Promise<Response | null> {
-    if (signal?.aborted) throw cancelledSignIn();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    try {
-        return await Promise.race([
-            Promise.resolve().then(request).catch(() => null),
-            new Promise<null>((resolve) => {
-                timer = setTimeout(() => resolve(null), EXCHANGE_TIMEOUT_MS);
-            }),
-            new Promise<never>((_, reject) => {
-                onAbort = () => reject(cancelledSignIn());
-                signal?.addEventListener('abort', onAbort, { once: true });
-            }),
-        ]);
-    } finally {
-        if (timer) clearTimeout(timer);
-        if (onAbort) signal?.removeEventListener('abort', onAbort);
-    }
-}
-
-async function nodeAnswer(res: Response): Promise<Record<string, unknown>> {
-    const body = await res.json().catch(() => null);
-    return body && typeof body === 'object' ? body as Record<string, unknown> : {};
-}
-
-function nodeError(body: Record<string, unknown>): string | undefined {
-    return typeof body.error === 'string' && body.error ? body.error.slice(0, 300) : undefined;
-}
-
-/** The node's answer when GitHub could not be asked (#1129): the member did nothing wrong. */
-function isGithubOutage(status: number, body: Record<string, unknown>): boolean {
-    return status === 503 && body.code === 'sign_in_unavailable';
-}
-
-function secondsOr(value: unknown, fallback: number, max: number): number {
-    const n = typeof value === 'number' ? value : Number(value);
-    return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
-}
-
-function retryAfterMs(res: Response): number | undefined {
-    const raw = res.headers?.get?.('Retry-After');
-    const seconds = raw == null ? NaN : Number(raw);
-    return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : undefined;
-}
-
-function githubStartRefused(status: number, body: Record<string, unknown>): SsoSignInError {
-    const said = nodeError(body);
-    if (isGithubOutage(status, body)) return new SsoSignInError('provider', said ?? GITHUB_UNAVAILABLE);
-    // It said it runs GitHub's sign-in and has no route for it: it is the node it says it is not.
-    if (status === 404) return new SsoSignInError('unsupported', GITHUB_NODE_UPDATE_MESSAGE);
-    // GitHub, or the node's GitHub settings, would not start one ("not enabled for this app yet").
-    if (status === 400) return new SsoSignInError('provider', said ?? 'GitHub sign-in could not start. Try again.');
-    return new SsoSignInError('nonce', `Your node would not start a GitHub sign-in (${status})${said ? `: ${said}` : ''}`);
-}
-
-/** GitHub's device-flow page, the one `verification_uri` it ever sends (RFC 8628 §3.2). */
-const GITHUB_DEVICE_PAGE = 'https://github.com/login/device';
-
-/**
- * The node's `start` answer, checked before the member sees any of it. The address is opened on the
- * member's phone, so it has to be GitHub's device page and nothing else: a phone should not open
- * whatever a server names. Any github.com page is not enough. A node is run by someone else, and
- * github.com also hosts other apps' "Authorize" buttons and repo pages that can say anything,
- * "paste your 12 words here" included.
- */
-function readGithubStart(body: Record<string, unknown>): {
-    sessionId: string; prompt: GithubDevicePrompt; intervalMs: number; expiresMs: number;
-} {
-    const { sessionId, userCode, verificationUri } = body;
-    if (typeof sessionId !== 'string' || !sessionId
-        || typeof userCode !== 'string' || !userCode || userCode.length > 64
-        || verificationUri !== GITHUB_DEVICE_PAGE) {
-        throw new SsoSignInError('provider', 'Your node did not send a usable GitHub code. Try again.');
-    }
-    return {
-        sessionId,
-        prompt: { userCode, verificationUri },
-        intervalMs: secondsOr(body.intervalSeconds, 5, 60) * 1000,
-        expiresMs: secondsOr(body.expiresInSeconds, 900, 1800) * 1000,
-    };
-}
-
-function finishedGithubSignIn(sessionId: string, body: Record<string, unknown>): Omit<GithubSignIn, 'provider'> {
-    // Refuse rather than seal to a missing subject. `sealSeedToSso` keys on `provider:sub`, so an
-    // empty `sub` seals to `github:`: the deposit succeeds, the panel shows a tick, and recovery can
-    // never work because the real `sub` derives another key.
-    const sub = typeof body.sub === 'string' ? body.sub : '';
-    if (!sub) {
-        throw new SsoSignInError('provider', 'GitHub did not return a user id, so this sign-in cannot be used. Try again.');
-    }
-    const email = typeof body.email === 'string' && body.email ? body.email : undefined;
-    console.log(`[SSO] github: the node says signed in, email=${email ? 'yes' : 'no'}`);
-    return email ? { sessionId, sub, email } : { sessionId, sub };
-}
-
-/**
- * Sign in with GitHub, with the node running GitHub's device flow (design §2.4; the node's half is
- * S2, #1115).
- *
- * ## Why the device flow
- *
- * GitHub OAuth Apps are not an OIDC provider. Google and Apple hand back a signed `id_token` that any
- * node verifies against public keys; GitHub hands back an opaque token, and its web flow's code
- * exchange needs the app's `client_secret` (PKCE does not change that: GitHub "does not distinguish
- * between public and confidential clients"). A secret every node needs is no secret in a network of
- * nodes other people run. The device flow's token request takes no secret.
- *
- * ## Why the node runs it, not the phone
- *
- * The phone used to, and handed the node the token. But `api.github.com/user` answers for a token
- * minted for ANY app, so a node that trusts a token handed to it releases a member's sealed seed to
- * whoever holds one. The one proof a node can trust is a token it obtained itself. So the phone asks
- * the node to start, shows the member the code, and asks the node whether the member has finished;
- * the node answers `pending`, `ok` with the GitHub user id the seed is sealed to, `denied` or
- * `expired`, and the deposit or recovery that follows carries the node's session id. Not one request
- * goes to GitHub from here, and a node that does not run the flow (`githubFlow` absent) is refused
- * outright, never answered by running it here instead.
- *
- * ## A poll answered 429 is still pending
- *
- * The node's three GitHub poll routes share one bucket per address, 60 a minute
- * (github-poll-rate-limit.ts), and answer 429 with `Retry-After` past it. Six phones on one wifi must
- * each simply wait longer, so a 429 waits `Retry-After` (or the interval) and asks again. It is never
- * a failed sign-in, and the app coming to the front does not cut that wait short.
- *
- * ## Coming back from GitHub asks at once
- *
- * On Android the wait between polls does not run while GitHub's tab is in front (see {@link sleep}), so
- * the poll that would bring the app back never happens there: the member has to tap ✕, and the panel
- * says so (components/GithubCodeSteps.tsx). When the app comes to the front, the wait ends and the node
- * is asked straight away. The node answers `pending` without asking GitHub again inside the interval
- * (github-device.ts), so an early poll costs it nothing.
- *
- * Cancelling stops the polling at once. Nothing tells the node: an unfinished session proves nothing,
- * and it expires there.
- *
- * The browser is not opened here. MEASURED 2026-08-28: opening it the moment the code appeared
- * covered the code, and the member had to come back for it. The caller shows the code first.
- */
-export async function signInWithGithubViaNode(options: {
-    post: NodePost;
-    routes: GithubNodeRoutes;
-    /** The node's nonce answer's `githubFlow`. */
-    githubFlow: unknown;
-    onPrompt: (prompt: GithubDevicePrompt) => void;
-    signal?: AbortSignal;
-}): Promise<Omit<GithubSignIn, 'provider'>> {
-    const { post, routes, onPrompt, signal } = options;
-    if (options.githubFlow !== GITHUB_FLOW_NODE) {
-        throw new SsoSignInError('unsupported', GITHUB_NODE_UPDATE_MESSAGE);
-    }
-    const extra = routes.body ?? {};
-
-    console.log('[SSO] github: asking the node to start');
-    const started = await askNode(() => post(routes.start, extra), signal);
-    if (!started) {
-        throw new SsoSignInError('nonce', 'Could not reach your node to start the GitHub sign-in. Check your connection and try again.');
-    }
-    const startBody = await nodeAnswer(started);
-    if (!started.ok) throw githubStartRefused(started.status, startBody);
-    const start = readGithubStart(startBody);
-    const { sessionId } = start;
-    let intervalMs = start.intervalMs;
-    const deadline = Date.now() + start.expiresMs;
-
-    console.log(`[SSO] github: the node issued a code, expires in ${Math.round(start.expiresMs / 1000)}s`);
-    onPrompt(start.prompt);
-
-    let waitMs = intervalMs;
-    /** The node said 429: its Retry-After is waited out whatever the app does meanwhile. */
-    let backingOff = false;
-    for (;;) {
-        // Checked around the wait, not just before it: the sheet can close mid-interval, and a loop
-        // nobody is watching would otherwise keep polling the node until the code ran out.
-        await sleep(waitMs, signal, !backingOff);
-        if (signal?.aborted) throw cancelledSignIn();
-        const res = await askNode(() => post(routes.poll, { ...extra, sessionId }), signal);
-        waitMs = intervalMs;
-        backingOff = false;
-        if (res?.status === 429) {
-            waitMs = retryAfterMs(res) ?? intervalMs;
-            backingOff = true;
-        } else if (res) {
-            const body = await nodeAnswer(res);
-            if (isGithubOutage(res.status, body)) {
-                throw new SsoSignInError('provider', nodeError(body) ?? GITHUB_UNAVAILABLE);
-            }
-            if (res.ok) {
-                if (body.status === 'ok') return finishedGithubSignIn(sessionId, body);
-                if (body.status === 'denied') throw cancelledSignIn();
-                if (body.status === 'expired') throw new SsoSignInError('provider', GITHUB_CODE_RAN_OUT);
-                if (body.status === 'pending') {
-                    // Longer after GitHub said slow_down; the node has already taken it on.
-                    intervalMs = secondsOr(body.intervalSeconds, intervalMs / 1000, 120) * 1000;
-                    waitMs = intervalMs;
-                }
-            } else if (res.status < 500) {
-                // The node ended it: the session is gone (a restart, a refusal from GitHub) or is not
-                // this device's. Its message says to start again.
-                throw new SsoSignInError('provider', nodeError(body) ?? `Your node stopped the GitHub sign-in (${res.status}). Try again.`);
-            }
-            // Any other 5xx is a gateway in front of a node that is briefly away: no answer, like a
-            // dropped poll. The node's session outlives it, or the next poll says it did not.
-        }
-        // No answer, a gateway error, a 429 or pending: the member may still be typing. Ask again,
-        // unless the code has certainly run out by now.
-        if (Date.now() >= deadline) throw new SsoSignInError('provider', GITHUB_CODE_RAN_OUT);
-    }
-}
-
 /**
  * Nonce, then sheet, then hand both back — the whole client half of a sign-in.
  *
@@ -1182,24 +808,8 @@ export async function signInWithGithubViaNode(options: {
  * many pieces a member ends up with belongs to enrolment, and the split shape is changing
  * (docs/recovery-model.md); wiring this into a deposit today would mean writing it twice.
  */
-export function startSsoSignIn(
-    provider: 'github', url: string, identity: BeanPoolIdentity,
-    onGithubPrompt?: (prompt: GithubDevicePrompt) => void, signal?: AbortSignal,
-): Promise<GithubSignIn>;
-export function startSsoSignIn(
-    provider: Exclude<SsoProvider, 'github'>, url: string, identity: BeanPoolIdentity,
-    onGithubPrompt?: (prompt: GithubDevicePrompt) => void, signal?: AbortSignal,
-): Promise<SsoSignIn>;
-export function startSsoSignIn(
-    provider: SsoProvider, url: string, identity: BeanPoolIdentity,
-    onGithubPrompt?: (prompt: GithubDevicePrompt) => void, signal?: AbortSignal,
-): Promise<SsoSignIn | GithubSignIn>;
-export async function startSsoSignIn(
-    provider: SsoProvider, url: string, identity: BeanPoolIdentity,
-    onGithubPrompt?: (prompt: GithubDevicePrompt) => void,
-    signal?: AbortSignal,
-): Promise<SsoSignIn | GithubSignIn> {
-    const { nonce, providers, githubFlow } = await fetchSsoNonce(url, identity);
+export async function startSsoSignIn(provider: SsoProvider, url: string, identity: BeanPoolIdentity): Promise<SsoSignIn> {
+    const { nonce, providers } = await fetchSsoNonce(url, identity);
     // The node's list, not a local constant: nodes may be configured with different audiences, and
     // offering a provider this one will refuse produces a sign-in that succeeds and is then thrown
     // away — the worst possible order to discover it in.
@@ -1215,17 +825,37 @@ export async function startSsoSignIn(
     if (provider === 'facebook') {
         return { provider, ...await signInWithFacebook(nonce) };
     }
-    if (provider === 'github') {
-        // The nonce goes unused: GitHub's proof is the node's session, already bound to this member
-        // and single use. What this answer was asked for is `githubFlow`.
-        const signin = await signInWithGithubViaNode({
-            post: (path, body) => signedPost(url, path, body, identity),
-            routes: GITHUB_MEMBER_ROUTES,
-            githubFlow,
-            onPrompt: onGithubPrompt ?? (() => {}),
-            signal,
-        });
-        return { provider, ...signin };
+    throw new SsoSignInError('unsupported', `Provider ${String(provider)} is not supported on this device.`);
+}
+
+/**
+ * Bring BeanPool back to the front once a sign-in is done: after every provider in the connect sheet
+ * (components/SsoEnrolSheet.tsx) and before the replace screen in a sign-in restore (app/welcome.tsx), so a
+ * sign-in page still showing never hides what comes next.
+ *
+ * `WebBrowser.dismissBrowser()` is `@platform ios`. On Android it throws, and an app has no way to close a
+ * Custom Tab it launched. What it does allow is bringing our own activity forward, which backgrounds the tab —
+ * and launching our own scheme does exactly that. MEASURED 2026-08-28.
+ *
+ * `beanpool://foreground` is a no-op route: `+native-intent.ts` returns null for it, so the app comes forward
+ * without navigating the member off whatever screen they were on.
+ */
+export async function returnToApp(): Promise<void> {
+    if (Platform.OS === 'ios') {
+        try {
+            await WebBrowser.dismissBrowser();
+        } catch {}
+        return;
     }
-    throw new SsoSignInError('unsupported', `Provider ${provider} is not supported on this device.`);
+    // Android only. On web a custom scheme raises a browser protocol prompt, and there is no Custom Tab to
+    // background there in any case.
+    if (Platform.OS !== 'android') return;
+    try {
+        await Linking.openURL('beanpool://foreground');
+    } catch (e) {
+        // Nothing to fall back to: the member is on a page that says it worked, and it did. Logged with the
+        // error because if this fails it will be on some OEM build with its own rules about background
+        // activity starts, and the reason is the only clue anyone will get.
+        console.warn('[SSO] could not bring the app back to the front:', e);
+    }
 }

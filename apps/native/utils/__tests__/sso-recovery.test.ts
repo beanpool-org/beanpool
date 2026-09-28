@@ -29,7 +29,6 @@ vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
     signInWithFacebook: vi.fn(),
-    signInWithGithubViaNode: vi.fn(),
 }));
 
 vi.mock('../node-post', () => ({
@@ -37,7 +36,7 @@ vi.mock('../node-post', () => ({
 }));
 
 import { signedPost } from '../node-post';
-import { signInWithGoogle, signInWithGithubViaNode } from '../sso-signin';
+import { signInWithGoogle, signInWithApple } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -52,7 +51,7 @@ describe('SSO Recovery Service', () => {
         await expect(recoverAccountWithSso({
             callsign: '',
             anchorUrl: 'https://test.beanpool.org',
-            provider: 'google', onDeviceCode: () => {},
+            provider: 'google',
         })).rejects.toThrow(/callsign/i);
     });
 
@@ -60,7 +59,7 @@ describe('SSO Recovery Service', () => {
         await expect(recoverAccountWithSso({
             callsign: 'Monnunit',
             anchorUrl: '',
-            provider: 'google', onDeviceCode: () => {},
+            provider: 'google',
         })).rejects.toThrow(/node address/i);
     });
 
@@ -69,7 +68,7 @@ describe('SSO Recovery Service', () => {
             await expect(recoverAccountWithSso({
                 callsign: 'Monnunit',
                 anchorUrl,
-                provider: 'google', onDeviceCode: () => {},
+                provider: 'google',
             }), anchorUrl).rejects.toThrow(/node address/i);
         }
         expect(signInWithGoogle).not.toHaveBeenCalled();
@@ -170,7 +169,7 @@ describe('SSO Recovery Service', () => {
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
-            provider: 'google', onDeviceCode: () => {},
+            provider: 'google',
             onProgress: (p) => progressSteps.push(p.step),
         });
 
@@ -273,7 +272,6 @@ describe('SSO Recovery Service', () => {
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'google',
-            onDeviceCode: () => {},
             onProgress: (p) => progressSteps.push(p.step),
         });
 
@@ -291,31 +289,29 @@ describe('SSO Recovery Service', () => {
         ]);
     });
 
-    it('successfully recovers account using GitHub run by the node (the sub the node read)', async () => {
+    it('recovers with Apple: the release carries Apple\'s token and the nonce, and the piece opens with the sub the token names', async () => {
         const originalSeed = new Uint8Array(32).fill(42);
         const originalKeypair = await seedToKeypair(originalSeed);
-        const memberCallsign = 'test-github-pilot';
+        const memberCallsign = 'test-apple-pilot';
 
         const { hubShare, otherHalf } = await splitHubAndWhole(originalSeed);
-        const githubSub = '987654321';
-        const ssoSealed = await sealShareToSso(otherHalf, 'github', githubSub);
+        const appleSub = '001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123';
+        const ssoSealed = await sealShareToSso(otherHalf, 'apple', appleSub);
         const hubRecorded = recordShareForHub(hubShare);
 
-        // The node ran GitHub's device flow: the app holds its session id and the `sub` it read,
-        // never a GitHub token. (The phone-run flow handed the node `gho_…` here, which is the hole
-        // S2/A2a close: a node cannot tell which app a GitHub token was minted for.)
-        (signInWithGithubViaNode as any).mockImplementation(async (opts: any) => {
-            opts.onPrompt({ userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device' });
-            return { sessionId: 'node-session-gh', sub: githubSub, email: 'damo@github.com' };
-        });
+        const b64 = (s: string) => Buffer.from(s).toString('base64url');
+        const appleToken = `${b64(JSON.stringify({ alg: 'RS256', kid: 'apple-kid' }))}.${b64(JSON.stringify({
+            iss: 'https://appleid.apple.com', sub: appleSub, nonce: 'apple-eph-nonce-456',
+        }))}.fake_signature`;
+        (signInWithApple as any).mockResolvedValue({ idToken: appleToken, nonce: 'apple-eph-nonce-456' });
 
         let released: any;
         (signedPost as any).mockImplementation(async (_url: string, path: string, body: any) => {
             if (path === '/api/recovery/collect') {
-                return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-gh-1' }) };
+                return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-apple-1' }) };
             }
             if (path === '/api/recovery/collect/sso-nonce') {
-                return { ok: true, status: 200, json: async () => ({ nonce: 'github-eph-nonce-456', githubFlow: 'node' }) };
+                return { ok: true, status: 200, json: async () => ({ nonce: 'apple-eph-nonce-456' }) };
             }
             if (path === '/api/recovery/collect/sso') {
                 released = body;
@@ -356,34 +352,23 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
-        // Asserted, not a formality: this is the GitHub path, and the device flow cannot finish
-        // unless the member is shown the code. Recovery previously called the sign-in with no
-        // handler at all and waited silently for fifteen minutes; this suite passed throughout,
-        // because the sign-in is mocked here. The type now makes the omission impossible.
-        const shown: string[] = [];
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
-            provider: 'github',
-            onDeviceCode: (p) => shown.push(p.userCode),
+            provider: 'apple',
         });
 
         expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
         expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
         expect(result.identity.callsign).toEqual(memberCallsign);
-        expect(result.provider).toBe('github');
-        expect(shown).toEqual(['ABCD-1234']);
-        // The recovering device's own routes, carrying its collection, and what the node said.
-        expect(signInWithGithubViaNode).toHaveBeenCalledWith(expect.objectContaining({
-            routes: {
-                start: '/api/recovery/collect/github/start',
-                poll: '/api/recovery/collect/github/poll',
-                body: { collectionId: 'coll-gh-1' },
-            },
-            githubFlow: 'node',
-        }));
-        // The release proves the sign-in with the node's session: no token, no nonce.
-        expect(released).toEqual({ collectionId: 'coll-gh-1', provider: 'github', proof: { sessionId: 'node-session-gh' } });
+        expect(result.provider).toBe('apple');
+        // Apple's sheet was handed the node's nonce, bound to this recovering device's ephemeral key.
+        expect(signInWithApple).toHaveBeenCalledWith('apple-eph-nonce-456');
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+        // The release proves the sign-in with the provider's token and the nonce inside it, and nothing else.
+        expect(released).toEqual({
+            collectionId: 'coll-apple-1', provider: 'apple', idToken: appleToken, nonce: 'apple-eph-nonce-456',
+        });
     });
 
     it('survives a malformed checksum (not 4 bytes) in kdfParams during legacy recovery', async () => {
@@ -461,7 +446,6 @@ describe('SSO Recovery Service', () => {
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'google',
-            onDeviceCode: () => {},
         });
 
         expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);

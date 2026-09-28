@@ -65,7 +65,7 @@ beforeEach(() => {
 
 describe('a sign-in return link while the app is running', () => {
     it('covers every return screen in app/auth/', () => {
-        expect(PROVIDERS).toEqual(['facebook', 'github', 'google', 'instagram', 'tiktok']);
+        expect(PROVIDERS).toEqual(['facebook', 'google', 'instagram', 'tiktok']);
     });
 
     for (const os of ['android', 'ios']) {
@@ -194,8 +194,8 @@ describe('the invite handler and a sign-in return link', () => {
             'beanpool:///auth/facebook?error=access_denied',
             'https://beanpool.org/auth/instagram?code=c&state=s',
             'https://beanpool.org/auth/tiktok?code=c&state=s',
-            '/auth/github?code=c&state=s',
-            'auth/github?code=c&state=s',
+            '/auth/google?code=c&state=s',
+            'auth/facebook?code=c&state=s',
             ...PROVIDERS.flatMap(returnLinks),
         ]) {
             expect(isAuthReturnLink(url), url).toBe(true);

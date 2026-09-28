@@ -8,7 +8,8 @@
  * Both also change when no invite has arrived, and welcome used to apply the invite again each time, switching
  * whatever the member was doing to the join form:
  * - `useURL()` changes on every link the app receives: a sign-in provider's return (the Android App Link), and
- *   `beanpool://foreground`, which follows every Android sign-in (utils/sso-signin.ts, `returnToApp`).
+ *   `beanpool://foreground`, which follows every Android sign-in (utils/sso-signin.ts, `returnToApp`) and node
+ *   Settings' "Back to the BeanPool app" (utils/settings-return.ts).
  * - `useGlobalSearchParams()` follows the focused route, so the params vanish while another screen is on top and come
  *   back when it closes.
  * A recovery in progress became the join form. Onboarding's step 3 was rebuilt, and its sign-in sheet started a

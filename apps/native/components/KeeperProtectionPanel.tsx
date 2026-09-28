@@ -2,22 +2,15 @@
  * KeeperProtectionPanel — SSO Enrolment Panel
  *
  * NOTE: Friend / keeper recovery has been removed. This panel now hosts SSO enrolment only
- * (Sign-In Recovery Providers: Apple, Google, Facebook, GitHub).
+ * (Sign-In Recovery Providers: Apple, Google, Facebook).
  */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
 import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
-import type { SsoProvider } from '../utils/sso-signin';
+import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
+import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
-
-const PROVIDER_NAMES: Record<SsoProvider, string> = {
-    apple: 'Apple',
-    google: 'Google',
-    facebook: 'Facebook',
-    github: 'GitHub',
-};
 
 /**
  * Under a connected sign-in: who can open the copy it keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a,
@@ -71,8 +64,8 @@ export function KeeperProtectionPanel({
 }): React.JSX.Element {
     const enrolledSso = protection.enrolledSso ?? [];
     const allProviders: SsoProvider[] = Platform.OS === 'ios'
-        ? ['apple', 'google', 'facebook', 'github']
-        : ['google', 'facebook', 'github'];
+        ? ['apple', 'google', 'facebook']
+        : ['google', 'facebook'];
 
     const community = formatCommunityName(communityName);
     const coveredHeading = community ? `🛡️ You're covered on ${community}` : "🛡️ You're covered";
@@ -162,21 +155,11 @@ export function KeeperProtectionPanel({
                             />
                         );
                     }
-                    if (prov === 'facebook') {
-                        return (
-                            <FacebookButton
-                                key="facebook"
-                                title="Protect with Facebook"
-                                onPress={() => onProtectSso('facebook')}
-                                style={{ marginTop: 8 }}
-                            />
-                        );
-                    }
                     return (
-                        <GitHubButton
-                            key="github"
-                            title="Protect with GitHub"
-                            onPress={() => onProtectSso('github')}
+                        <FacebookButton
+                            key="facebook"
+                            title="Protect with Facebook"
+                            onPress={() => onProtectSso('facebook')}
                             style={{ marginTop: 8 }}
                         />
                     );

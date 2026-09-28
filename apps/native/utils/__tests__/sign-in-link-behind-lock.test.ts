@@ -1,7 +1,7 @@
 /**
  * Linking a sign-in asks the phone's lock first (PR #1205 review 4112404429).
  *
- * Account Protection's "Protect with" Google/GitHub/… (and Connect again) seals the account's private key AND its 12
+ * Account Protection's "Protect with" Google/Facebook/… (and Connect again) seals the account's private key AND its 12
  * words to whichever sign-in account is used. With no check, anyone holding the unlocked phone could link THEIR OWN
  * Google account, then restore the account on their own phone with it. The global door does the same for the phone's
  * account when it joins with it: the join carries a recovery copy sealed to the door's sign-in.
@@ -24,7 +24,6 @@ import * as path from 'node:path';
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
-    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),
@@ -79,6 +78,7 @@ vi.mock('../identity', async (importOriginal) => {
 });
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as WebBrowser from 'expo-web-browser';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { authenticateUser } from '../LocalAuth';
@@ -86,8 +86,6 @@ import { getMnemonic } from '../identity';
 
 const NODE = 'https://test.example';
 const NONCE = '/api/recovery/sso-nonce';
-const START = '/api/recovery/sso/github/start';
-const POLL = '/api/recovery/sso/github/poll';
 const DEPOSIT = '/api/recovery/shares/sso';
 
 // Test phrase only (a BIP-39 vector), never a real account's.
@@ -128,24 +126,25 @@ function answer(status: number, body: unknown = {}): Response {
     } as unknown as Response;
 }
 
-/** The member's node, through a GitHub sign-in and a deposit. Every request is an event. */
+/** The member's node, through a Facebook sign-in and a deposit. Every request is an event, and so is the provider. */
 function installNode(): void {
     globalThis.fetch = vi.fn(async (input: any) => {
         const url = String(input);
         if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
         const p = url.slice(NODE.length);
         events.push(p);
-        if (p === NONCE) return answer(200, { nonce: 'n-1', expiresInSeconds: 600, providers: ['github'], githubFlow: 'node' });
-        if (p === START) {
-            return answer(200, {
-                sessionId: 'node-session-1', userCode: 'WXYZ-9876',
-                verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 5,
-            });
-        }
-        if (p === POLL) return answer(200, { status: 'ok', sub: '987654' });
-        if (p === DEPOSIT) return answer(200, { generation: 1, enrolledSso: ['github'], threshold: 1 });
+        if (p === NONCE) return answer(200, { nonce: 'n-1', expiresInSeconds: 600, providers: ['facebook'] });
+        if (p === DEPOSIT) return answer(200, { generation: 1, enrolledSso: ['facebook'], threshold: 1 });
         return answer(404, { error: 'Not Found' });
     }) as any;
+    // Facebook's dialog, answering with an id_token bound to the nonce it was asked with.
+    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementation(async (authUrl: string) => {
+        events.push('provider');
+        const nonce = new URL(authUrl).searchParams.get('nonce') ?? '';
+        const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+        const idToken = `${b64({ alg: 'RS256' })}.${b64({ sub: '10229876543210987', nonce })}.c2ln`;
+        return { type: 'success', url: `https://beanpool.org/auth/facebook#${new URLSearchParams({ id_token: idToken, state: nonce })}` } as any;
+    });
 }
 
 const REASON = 'Confirm authentication to link a sign-in to your account.';
@@ -153,11 +152,10 @@ const REASON = 'Confirm authentication to link a sign-in to your account.';
 /** The sheet's connect, handed the lock the sheet hands it. */
 async function connect(phoneLock: (() => Promise<boolean>) | null, signal = new AbortController().signal) {
     const outcome = connectAndDeposit({
-        provider: 'github',
+        provider: 'facebook',
         url: NODE,
         identity: MEMBER,
         phoneLock,
-        onGithubPrompt: () => {},
         onSignedIn: () => {},
         signal,
     }).then((value) => ({ value, error: undefined as unknown }), (error) => ({ value: undefined, error }));
@@ -189,7 +187,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         const { value, error } = await connect(settingsCheck);
 
         expect(error).toBeUndefined();
-        expect(value?.enrolledSso).toEqual(['github']);
+        expect(value?.enrolledSso).toEqual(['facebook']);
         expect(events[0]).toBe('prompt');
         expect(events.filter((e) => e === 'prompt')).toHaveLength(1);
         expect(events).toContain(DEPOSIT);
@@ -231,7 +229,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
             const { value, error } = await connect(settingsCheck);
 
             expect(error).toBeUndefined();
-            expect(value?.enrolledSso).toEqual(['github']);
+            expect(value?.enrolledSso).toEqual(['facebook']);
             expect(events[0]).toBe('prompt');
             expect(vi.mocked(LocalAuthentication.authenticateAsync).mock.calls[0][0]).toMatchObject({
                 promptMessage: REASON,
@@ -250,7 +248,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
 
             expect(settingsLetsThrough).toBe(true);
             expect(error).toBeUndefined();
-            expect(value?.enrolledSso).toEqual(['github']);
+            expect(value?.enrolledSso).toEqual(['facebook']);
             expect(LocalAuthentication.authenticateAsync).not.toHaveBeenCalled();
         },
     );
@@ -275,7 +273,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         const { value, error } = await connect(null);
 
         expect(error).toBeUndefined();
-        expect(value?.enrolledSso).toEqual(['github']);
+        expect(value?.enrolledSso).toEqual(['facebook']);
         expect(LocalAuthentication.authenticateAsync).not.toHaveBeenCalled();
     });
 });

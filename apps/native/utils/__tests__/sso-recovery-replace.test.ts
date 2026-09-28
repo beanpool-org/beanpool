@@ -37,7 +37,6 @@ vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
     signInWithFacebook: vi.fn(),
-    signInWithGithubViaNode: vi.fn(),
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 // A replace takes the old account's cached community copies (community-cache.ts): recorded, never the database.
@@ -133,7 +132,7 @@ function mockSignInAndNode(sealed: SealedShare) {
 
 function restore(confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>) {
     return recoverAccountWithSso({
-        callsign: 'Marty', anchorUrl: NODE, provider: 'google', onDeviceCode: () => {},
+        callsign: 'Marty', anchorUrl: NODE, provider: 'google',
         ...(confirmReplace ? { confirmReplace } : {}),
     });
 }
@@ -229,7 +228,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
 
         const failed = recoverAccountWithSso({
-            callsign: 'Marty', anchorUrl: NODE, provider: 'google', onDeviceCode: () => {}, confirmReplace,
+            callsign: 'Marty', anchorUrl: NODE, provider: 'google', confirmReplace,
             onProgress: (p) => progress.push(p.step),
         });
 

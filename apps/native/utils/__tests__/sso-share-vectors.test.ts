@@ -17,6 +17,7 @@ vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
 
 import { enrolSsoKeeper, sealSsoShares } from '../keeper-enrolment';
+import { isSsoProvider, type SsoProvider } from '../sso-providers';
 import { signedPost } from '../node-post';
 import {
     SSO_SHARE_VECTORS,
@@ -44,6 +45,11 @@ function phoneIdentity(v: SsoShareVector) {
     } as any;
 }
 
+/** The vectors for the sign-ins this app offers (utils/sso-providers.ts): the phone builds copies for those alone. */
+const PHONE_VECTORS = SSO_SHARE_VECTORS.filter(
+    (v): v is SsoShareVector & { provider: SsoProvider } => isSsoProvider(v.provider),
+);
+
 describe('sign-in recovery copy vectors (native)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -52,7 +58,11 @@ describe('sign-in recovery copy vectors (native)', () => {
         vi.restoreAllMocks();
     });
 
-    it.each(SSO_SHARE_VECTORS.map((v) => [v.name, v] as const))('%s: the join carries these shares', async (_name, v) => {
+    it('has a vector for a sign-in this app offers', () => {
+        expect(PHONE_VECTORS.length).toBeGreaterThan(0);
+    });
+
+    it.each(PHONE_VECTORS.map((v) => [v.name, v] as const))('%s: the join carries these shares', async (_name, v) => {
         vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(seededGetRandomValues(v.name) as never);
         const sealed = await sealSsoShares(phoneIdentity(v), v.provider, v.sub);
         expect(sealed.shares).toEqual(v.shares);
@@ -60,12 +70,11 @@ describe('sign-in recovery copy vectors (native)', () => {
         expect(sealed.wordsSealed).toBe(v.withWords);
     });
 
-    it.each(SSO_SHARE_VECTORS.map((v) => [v.name, v] as const))('%s: a deposit carries the same shares', async (_name, v) => {
+    it.each(PHONE_VECTORS.map((v) => [v.name, v] as const))('%s: a deposit carries the same shares', async (_name, v) => {
         vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(seededGetRandomValues(v.name) as never);
-        const credential = v.provider === 'github'
-            ? { provider: 'github' as const, proof: { sessionId: 'node-session' } }
-            : { provider: v.provider, idToken: 'fixture.jwt.token', nonce: 'fixture-nonce' };
-        const result = await enrolSsoKeeper({ identity: phoneIdentity(v), sub: v.sub, ...credential } as any);
+        const result = await enrolSsoKeeper({
+            identity: phoneIdentity(v), sub: v.sub, provider: v.provider, idToken: 'fixture.jwt.token', nonce: 'fixture-nonce',
+        });
         expect(result.error).toBeUndefined();
         const [, path, body] = (signedPost as any).mock.calls[0];
         expect(path).toBe('/api/recovery/shares/sso');

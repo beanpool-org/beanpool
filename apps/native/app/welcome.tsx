@@ -25,27 +25,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useGlobalSearchParams, router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
+import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
 import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
-import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
-import { GithubCodeSteps } from '../components/GithubCodeSteps';
+import { recoverAccountWithSso } from '../utils/sso-recovery';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
-import { type SsoProvider } from '../utils/sso-signin';
+import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
+import { returnToApp } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
@@ -90,8 +88,8 @@ export default function WelcomeScreen() {
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
     // Only a link that carries an invite concerns this screen (utils/welcome-invite.ts). `useURL()` also changes on a
-    // sign-in provider's return and on the `beanpool://foreground` after every Android sign-in, and the invite and
-    // resume effects below used to re-run for those in the middle of a recovery or of step 3.
+    // sign-in provider's return and on `beanpool://foreground`, and the invite and resume effects below used to re-run
+    // for those in the middle of a recovery or of step 3.
     const [inviteLink, setInviteLink] = useState<string | null>(null);
     const latestLink = latestInviteLink(inviteLink, incomingUrl);
     if (latestLink !== inviteLink) setInviteLink(latestLink);
@@ -129,8 +127,6 @@ export default function WelcomeScreen() {
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
     const [ssoCallsign, setSsoCallsign] = useState('');
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
-    /** The GitHub device code, held so recovery can show it properly rather than as a sentence. */
-    const [recoveryCode, setRecoveryCode] = useState<GithubDevicePrompt | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
     const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
@@ -173,8 +169,7 @@ export default function WelcomeScreen() {
         }, 400);
         return () => { cancelled = true; clearTimeout(t); };
     }, [ssoCallsign, recoveryAnchorUrl]);
-    const [recoveryCodeCopied, setRecoveryCodeCopied] = useState(false);
-    /** Stops a GitHub recovery that is waiting on the member at GitHub. */
+    /** Stops a sign-in restore whose sign-in has finished and not yet been released, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
     useEffect(() => () => recoveryAbortRef.current?.abort(), []);
 
@@ -218,11 +213,6 @@ export default function WelcomeScreen() {
     const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
     /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
     const [joinBeansOn, setJoinBeansOn] = useState(true);
-    const [globalCode, setGlobalCode] = useState<GithubDevicePrompt | null>(null);
-    const [globalCodeCopied, setGlobalCodeCopied] = useState(false);
-    /** Stops a GitHub sign-in at the door that is waiting on the member at GitHub. */
-    const globalAbortRef = useRef<AbortController | null>(null);
-    useEffect(() => () => globalAbortRef.current?.abort(), []);
     /** Stops the name step's check when the member leaves it (Back to Home, Use a different sign-in). */
     const nameCheckRef = useRef<AbortController | null>(null);
     useEffect(() => () => nameCheckRef.current?.abort(), []);
@@ -967,7 +957,7 @@ export default function WelcomeScreen() {
      */
     function askToReplace(from: 'recover' | 'ssoRecover'): ConfirmReplace {
         return async (outgoing) => {
-            // A sign-in may still have its page in front of the app (GitHub on iOS): this screen must be seen.
+            // A sign-in may still have its page in front of the app: this screen must be seen.
             if (from === 'ssoRecover') await returnToApp();
             return new Promise<boolean>((resolve) => {
                 replaceAnswerRef.current?.(false);
@@ -1031,8 +1021,6 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         setSsoProgressMessage('Connecting to recovery session...');
-        setRecoveryCode(null);
-        setRecoveryCodeCopied(false);
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
@@ -1041,30 +1029,13 @@ export default function WelcomeScreen() {
                 callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
-                onProgress: (p) => {
-                    setSsoProgressMessage(p.message);
-                    // Past GitHub the code, Open GitHub and Cancel no longer apply: from the
-                    // release on a cancel can't be honoured. The steps that follow show instead.
-                    if (!waitingOnGithub(p.step)) setRecoveryCode(null);
-                },
-                // GitHub's device flow cannot finish unless the member sees this. Copy it and show it,
-                // with what to do on GitHub (GithubCodeSteps).
-                // - Android: the member opens GitHub with the button, as the Account Protection sheet has
-                //   done since 2026-08-28. Opened here at once, the tab hid the steps, and on Android
-                //   nothing brings the app back from GitHub unless the member knows to tap ✕.
-                // - iOS: unchanged. GitHub opens at once, and returnToApp dismisses it once GitHub says yes.
-                onDeviceCode: (prompt) => {
-                    setRecoveryCode(prompt);
-                    copyRecoveryCode(prompt);
-                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
-                },
+                onProgress: (p) => setSsoProgressMessage(p.message),
                 signal: abort.signal,
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
             });
-            // Same reason the enrolment sheet does it, and the same platform trap: GitHub's
-            // confirmation page says nothing about returning, and `dismissBrowser` is iOS-only.
+            // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
             await returnToApp();
             await clearPendingOnboarding();
             setOutgoingIdentity(null);
@@ -1085,16 +1056,7 @@ export default function WelcomeScreen() {
             if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
             setLoading(false);
             setSsoProgressMessage(null);
-            setRecoveryCode(null);
         }
-    }
-
-    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
-    function copyRecoveryCode(prompt: GithubDevicePrompt) {
-        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-            () => setRecoveryCodeCopied(true),
-            () => setRecoveryCodeCopied(false),
-        );
     }
 
     // --- THE GLOBAL COMMUNITY'S DOOR (utils/global-join.ts; design §2.3) ---
@@ -1116,10 +1078,8 @@ export default function WelcomeScreen() {
     function leaveGlobalDoor() {
         // A tap that lands in the frame before the join's spinner replaces this button: the join is out, and its answer decides.
         if (joinSendingRef.current) return;
-        globalAbortRef.current?.abort();
         nameCheckRef.current?.abort();
         setDoorSignIn(null);
-        setGlobalCode(null);
         setCallsignSuggestions([]);
         goBack();
     }
@@ -1134,23 +1094,10 @@ export default function WelcomeScreen() {
         setGlobalPhase('signIn');
     }
 
-    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
-    function copyGlobalCode(prompt: GithubDevicePrompt) {
-        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-            () => setGlobalCodeCopied(true),
-            () => setGlobalCodeCopied(false),
-        );
-    }
-
     /** Step one at the door: sign in, with the key the join will be signed by. */
     async function handleGlobalSignIn(provider: SsoProvider) {
         setLoading(true);
         setError(null);
-        setGlobalCode(null);
-        setGlobalCodeCopied(false);
-        globalAbortRef.current?.abort();
-        const abort = new AbortController();
-        globalAbortRef.current = abort;
         try {
             // Asked again each time: the phone may have stored a key since this door made one (an invite join).
             const key = await joinKeyForThisPhone(globalKey);
@@ -1159,16 +1106,7 @@ export default function WelcomeScreen() {
             // sign-in, so the phone's lock first, as Account Protection's connect asks it. A check that doesn't pass starts
             // nothing (PR #1205 review 4112404429).
             if (!key.createdHere && !(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
-            const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
-                // As GitHub recovery does: Android opens GitHub from the button; iOS at once.
-                onGithubPrompt: (prompt) => {
-                    setGlobalCode(prompt);
-                    copyGlobalCode(prompt);
-                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
-                },
-                signal: abort.signal,
-            });
-            if (provider === 'github') await returnToApp();
+            const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity);
             if (result.kind === 'answered') {
                 await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign }, 'signIn');
                 return;
@@ -1181,9 +1119,7 @@ export default function WelcomeScreen() {
             const failure = e as { reason?: string; message?: string } | null;
             setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
         } finally {
-            if (globalAbortRef.current === abort) globalAbortRef.current = null;
             setLoading(false);
-            setGlobalCode(null);
         }
     }
 
@@ -2125,10 +2061,8 @@ export default function WelcomeScreen() {
 
     // --- THE GLOBAL COMMUNITY'S DOOR: sign in once, choose a name, join (utils/global-join.ts) ---
     if (mode === 'globalJoin') {
-        const signedInWith = doorSignIn
-            ? { apple: 'Apple', google: 'Google', facebook: 'Facebook', github: 'GitHub' }[doorSignIn.provider]
-            : null;
-        const doorWays = doorWaysOut(globalPhase, loading, !!globalCode);
+        const signedInWith = doorSignIn ? SSO_PROVIDER_NAMES[doorSignIn.provider] : null;
+        const doorWays = doorWaysOut(globalPhase, loading);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -2198,66 +2132,7 @@ export default function WelcomeScreen() {
 
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                            {globalCode ? (
-                                                <>
-                                                    <GithubCodeSteps />
-                                                    <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                        Enter this code at{' '}
-                                                        <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
-                                                            {globalCode.verificationUri.replace(/^https:\/\//, '')}
-                                                        </Text>
-                                                        {' '}to finish:
-                                                    </Text>
-                                                    <View style={{
-                                                        marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
-                                                        borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
-                                                        backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
-                                                        alignItems: 'center',
-                                                    }}>
-                                                        {/* One line, shrunk to fit at 320dp and 1.3x, as on the recovery screen. */}
-                                                        <Text
-                                                            selectable
-                                                            numberOfLines={1}
-                                                            adjustsFontSizeToFit
-                                                            minimumFontScale={0.5}
-                                                            accessibilityLabel={`Code ${globalCode.userCode.split('').join(' ')}`}
-                                                            style={{ fontSize: 30, fontWeight: 'bold', letterSpacing: 5, color: colors.text.heading, textAlign: 'center' }}
-                                                        >{globalCode.userCode}</Text>
-                                                        <Pressable
-                                                            onPress={() => copyGlobalCode(globalCode)}
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel={globalCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
-                                                            hitSlop={8}
-                                                            style={{ marginTop: 10, paddingVertical: 8, paddingHorizontal: 22, borderRadius: 8, borderWidth: 1, borderColor: palette.blue600 }}
-                                                        >
-                                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
-                                                                {globalCodeCopied ? '✓ Copied' : 'Copy'}
-                                                            </Text>
-                                                        </Pressable>
-                                                    </View>
-                                                    <Pressable
-                                                        onPress={() => { WebBrowser.openBrowserAsync(globalCode.verificationUri).catch(() => {}); }}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel="Open GitHub to enter the code"
-                                                        style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
-                                                    >
-                                                        <Text style={styles.primaryBtnText}>Open GitHub →</Text>
-                                                    </Pressable>
-                                                    <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
-                                                    {/* Stops waiting here; the node's unfinished session runs out on its own. */}
-                                                    <Pressable
-                                                        onPress={() => globalAbortRef.current?.abort()}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel="Cancel the GitHub sign-in"
-                                                        hitSlop={8}
-                                                        style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
-                                                    >
-                                                        <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
-                                                    </Pressable>
-                                                </>
-                                            ) : (
-                                                <ActivityIndicator size="large" color={palette.blue600} />
-                                            )}
+                                            <ActivityIndicator size="large" color={palette.blue600} />
                                         </View>
                                     )}
 
@@ -2270,7 +2145,6 @@ export default function WelcomeScreen() {
                                             )}
                                             <GoogleButton title="Continue with Google" onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
                                             <FacebookButton title="Continue with Facebook" onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
-                                            <GitHubButton title="Continue with GitHub" onPress={() => handleGlobalSignIn('github')} style={{ marginBottom: 10, width: '100%' }} />
                                         </>
                                     )}
                                 </>
@@ -2385,7 +2259,6 @@ export default function WelcomeScreen() {
                                     {Platform.OS === 'ios' && <AppleLogo size={16} color="#1D4ED8" />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
-                                    <GitHubLogo size={16} color="#24292F" />
                                 </View>
                             </View>
                         </Pressable>
@@ -2728,85 +2601,10 @@ export default function WelcomeScreen() {
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    {recoveryCode ? (
-                                        <>
-                                            {/* What to do on GitHub, first: Paste, then how to come back. */}
-                                            <GithubCodeSteps />
-                                            {/* Shown the way the enrolment sheet shows it. As a sentence inside the
-                                                progress line it could not be selected or copied, so it had to be
-                                                written down and retyped — reported from a real recovery. */}
-                                            <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                Enter this code at{' '}
-                                                <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
-                                                    {recoveryCode.verificationUri.replace(/^https:\/\//, '')}
-                                                </Text>
-                                                {' '}to finish:
-                                            </Text>
-                                            <View style={{
-                                                marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
-                                                borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
-                                                backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
-                                                alignItems: 'center',
-                                            }}>
-                                                {/* One line, shrunk to fit: at 320dp this box is 170dp inside and
-                                                    WDJB-MJHT needs 221dp at 1.0x, 287dp at 1.3x (see SsoEnrolSheet).
-                                                    Android shrinks until it fits; iOS stops at 0.5, which fits any
-                                                    code but an all-M/W one at 1.3x (needs 0.49). */}
-                                                <Text
-                                                    selectable
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.5}
-                                                    accessibilityLabel={`Code ${recoveryCode.userCode.split('').join(' ')}`}
-                                                    style={{
-                                                        fontSize: 30, fontWeight: 'bold', letterSpacing: 5,
-                                                        color: colors.text.heading, textAlign: 'center',
-                                                    }}
-                                                >{recoveryCode.userCode}</Text>
-                                                <Pressable
-                                                    onPress={() => copyRecoveryCode(recoveryCode)}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={recoveryCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
-                                                    hitSlop={8}
-                                                    style={{
-                                                        marginTop: 10, paddingVertical: 8, paddingHorizontal: 22,
-                                                        borderRadius: 8, borderWidth: 1, borderColor: palette.blue600,
-                                                    }}
-                                                >
-                                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
-                                                        {recoveryCodeCopied ? '✓ Copied' : 'Copy'}
-                                                    </Text>
-                                                </Pressable>
-                                            </View>
-                                            <Pressable
-                                                onPress={() => { WebBrowser.openBrowserAsync(recoveryCode.verificationUri).catch(() => {}); }}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Open GitHub to enter the code"
-                                                style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
-                                            >
-                                                <Text style={styles.primaryBtnText}>Open GitHub →</Text>
-                                            </Pressable>
-                                            <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
-                                            {/* Stops waiting here. The session the node started is
-                                                left to run out on its own: unfinished, it proves nothing. */}
-                                            <Pressable
-                                                onPress={() => recoveryAbortRef.current?.abort()}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Cancel GitHub recovery"
-                                                hitSlop={8}
-                                                style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
-                                            >
-                                                <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
-                                            </Pressable>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ActivityIndicator size="large" color={palette.blue600} />
-                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                {ssoProgressMessage || 'Verifying sign-in...'}
-                                            </Text>
-                                        </>
-                                    )}
+                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        {ssoProgressMessage || 'Verifying sign-in...'}
+                                    </Text>
                                 </View>
                             )}
 
@@ -2829,11 +2627,6 @@ export default function WelcomeScreen() {
                                     <FacebookButton
                                         title="Recover with Facebook"
                                         onPress={() => handleSsoRecover('facebook')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <GitHubButton
-                                        title="Recover with GitHub"
-                                        onPress={() => handleSsoRecover('github')}
                                         style={{ marginBottom: 10, width: '100%' }}
                                     />
                                 </>

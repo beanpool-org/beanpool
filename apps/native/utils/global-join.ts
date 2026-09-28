@@ -52,11 +52,8 @@ import {
     signInWithApple,
     signInWithGoogle,
     signInWithFacebook,
-    signInWithGithubViaNode,
     SsoSignInError,
     type SsoProvider,
-    type GithubDevicePrompt,
-    type GithubNodeRoutes,
 } from './sso-signin';
 import { extractSub } from './sso-sheet-connect';
 import { sealSsoShares, enrolmentFromJoin, type KeeperEnrolmentResult } from './keeper-enrolment';
@@ -65,11 +62,6 @@ import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
 
 export const JOIN_NONCE_PATH = '/api/join/sso-nonce';
 export const JOIN_PATH = '/api/join';
-/** The door's own GitHub pair: the session is bound to the joining key, like the door's nonce. */
-export const GITHUB_JOIN_ROUTES: GithubNodeRoutes = {
-    start: '/api/join/github/start',
-    poll: '/api/join/github/poll',
-};
 
 /** The name the server keeps: `/api/join` cuts a longer one at 20 characters. */
 export const MAX_JOIN_NAME = 20;
@@ -81,9 +73,13 @@ export const MAX_JOIN_NAME = 20;
 export const JOIN_TIMEOUT_MS = 30_000;
 
 /** A sign-in done at the door: what the join proves itself with, and the subject the recovery copy is sealed to. */
-export type DoorSignIn =
-    | { provider: Exclude<SsoProvider, 'github'>; idToken: string; nonce: string; sub: string; email?: string }
-    | { provider: 'github'; sessionId: string; sub: string; email?: string };
+export interface DoorSignIn {
+    provider: SsoProvider;
+    idToken: string;
+    nonce: string;
+    sub: string;
+    email?: string;
+}
 
 /** What the door said, as the member will meet it. */
 export type DoorAnswer =
@@ -155,7 +151,7 @@ export function retryAfterSeconds(res: { headers?: { get?(name: string): string 
 }
 
 /**
- * Read one answer from a door route (the nonce, GitHub start/poll, or the join) into what the member
+ * Read one answer from a door route (the nonce, or the join) into what the member
  * meets. The node's own words are kept where they are about the member (already joined, removed, the
  * limit); its "This community is invite-only." is not, and is replaced.
  */
@@ -205,13 +201,12 @@ export type DoorPhase = 'checking' | 'unavailable' | 'signIn' | 'name' | 'joinin
  * - The name step never closes them, not even while its check is out: leaving stops the check (`checkNameAtDoor`).
  * - While the join itself is out, neither is offered. The key is on the phone and the join is counted, and its
  *   answer, bounded by JOIN_TIMEOUT_MS, decides where the member goes.
- * - At the sign-in, Back waits for the nonce (bounded too) and the provider's own sheet. GitHub's code has its
- *   own Cancel, and Back stays open beside it.
+ * - At the sign-in, Back waits for the nonce (bounded too) and the provider's own sheet.
  */
-export function doorWaysOut(phase: DoorPhase, busy: boolean, showingGithubCode: boolean): { back: boolean; otherSignIn: boolean } {
+export function doorWaysOut(phase: DoorPhase, busy: boolean): { back: boolean; otherSignIn: boolean } {
     if (phase === 'joining') return { back: false, otherSignIn: false };
     if (phase === 'name') return { back: true, otherSignIn: true };
-    return { back: !busy || showingGithubCode, otherSignIn: !busy };
+    return { back: !busy, otherSignIn: !busy };
 }
 
 /** What the door's name step found (`checkNameAtDoor`). */
@@ -321,15 +316,14 @@ export async function joinKeyForThisPhone(held: JoinKey | null = null): Promise<
 
 /**
  * Sign in at the door with `identity`'s key: the node's nonce (signed, bound to that key), then the
- * provider, or GitHub run by the node. `answered` is the door refusing before any sign-in (shut, a
- * limit), or `joined` when this key is already a member (an earlier join landed). A provider that
- * fails or is cancelled throws `SsoSignInError`, as everywhere else.
+ * provider. `answered` is the door refusing before any sign-in (shut, a limit), or `joined` when this
+ * key is already a member (an earlier join landed). A provider that fails or is cancelled throws
+ * `SsoSignInError`, as everywhere else.
  */
 export async function signInAtDoor(
     provider: SsoProvider,
     url: string,
     identity: BeanPoolIdentity,
-    options: { onGithubPrompt?: (prompt: GithubDevicePrompt) => void; signal?: AbortSignal } = {},
 ): Promise<{ kind: 'signed_in'; signin: DoorSignIn } | { kind: 'answered'; answer: DoorAnswer }> {
     let res: Response | null;
     try {
@@ -341,20 +335,10 @@ export async function signInAtDoor(
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return { kind: 'answered', answer: readDoorAnswer(res.status, body, retryAfterSeconds(res)) };
 
-    const { nonce, providers, githubFlow } = readNonceResponse(body);
+    const { nonce, providers } = readNonceResponse(body);
     // The node's list: offering a provider it will refuse is a sign-in that succeeds and is then thrown away.
     if (providers.length > 0 && !providers.includes(provider)) {
         throw new SsoSignInError('unsupported', `The global community does not accept ${provider} sign-in.`);
-    }
-    if (provider === 'github') {
-        const signin = await signInWithGithubViaNode({
-            post: (path, postBody) => signedPost(url, path, postBody, identity),
-            routes: GITHUB_JOIN_ROUTES,
-            githubFlow,
-            onPrompt: options.onGithubPrompt ?? (() => {}),
-            signal: options.signal,
-        });
-        return { kind: 'signed_in', signin: { provider, ...signin } };
     }
     const signin = provider === 'apple'
         ? await signInWithApple(nonce)
@@ -440,13 +424,11 @@ export async function submitJoin(
         console.log(`[JOIN] ${signin.provider}: no recovery copy with the join — ${(e as Error).message}`);
     }
 
-    const proof = signin.provider === 'github'
-        ? { proof: { sessionId: signin.sessionId } }
-        : { idToken: signin.idToken, nonce: signin.nonce };
     const body = {
         callsign: callsign.trim().slice(0, MAX_JOIN_NAME).trim(),
         provider: signin.provider,
-        ...proof,
+        idToken: signin.idToken,
+        nonce: signin.nonce,
         ...(recovery ? { recovery } : {}),
     };
 

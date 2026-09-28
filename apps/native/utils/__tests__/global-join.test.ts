@@ -15,7 +15,6 @@ import { randomBytes } from 'node:crypto';
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
-    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),
@@ -99,8 +98,6 @@ import {
 const NODE = 'https://global.beanpool.org';
 const NONCE = '/api/join/sso-nonce';
 const JOIN = '/api/join';
-const GH_START = '/api/join/github/start';
-const GH_POLL = '/api/join/github/poll';
 
 type Answer = { status: number; body?: unknown; headers?: Record<string, string> };
 interface Seen { url: string; path: string; body: any; headers: Record<string, string> }
@@ -131,7 +128,7 @@ function installDoor(routes: Partial<Record<string, Answer | (() => Answer) | 'o
     return seen;
 }
 
-const NONCE_OK: Answer = { status: 200, body: { nonce: 'door-nonce-1', expiresInSeconds: 600, providers: ['apple', 'google', 'facebook', 'github'], githubFlow: 'node', clientIds: {} } };
+const NONCE_OK: Answer = { status: 200, body: { nonce: 'door-nonce-1', expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'], clientIds: {} } };
 
 function joinedAnswer(extra: Record<string, unknown> = {}): Answer {
     return {
@@ -287,29 +284,25 @@ describe('one sign-in, two jobs: the join carries the recovery copy, and nothing
         expect(protectionFrom(null).state).toBe('words-only');
     });
 
-    it('GitHub: the door runs it, the join carries the node\'s session (never a token), sealed to the id GitHub gave the node', async () => {
+    it("Apple: the join carries Apple's token and the door's nonce, and nothing else, sealed to the sub the token names", async () => {
         const seen = installDoor({
             [NONCE]: NONCE_OK,
-            [GH_START]: { status: 200, body: { sessionId: 'door-gh-1', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 0.01 } },
-            [GH_POLL]: { status: 200, body: { status: 'ok', sub: '5550001' } },
-            [JOIN]: joinedAnswer({ provider: 'github', recovery: { enrolled: true, generation: 1, enrolledSso: ['github'], threshold: 1 } }),
+            [JOIN]: joinedAnswer({ provider: 'apple', recovery: { enrolled: true, generation: 1, enrolledSso: ['apple'], threshold: 1 } }),
         });
-        const prompts: string[] = [];
-        const result = await signInAtDoor('github', NODE, joiner, { onGithubPrompt: p => prompts.push(p.userCode) });
+        const result = await signInAtDoor('apple', NODE, joiner);
         if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
-        expect(prompts).toEqual(['ABCD-1234']);
+        expect(signInWithApple).toHaveBeenCalledWith('door-nonce-1');
         const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
-        expect(a.kind).toBe('joined');
+        expect(a).toMatchObject({ kind: 'joined', enrolment: { enrolledSso: ['apple'] } });
 
         const join = seen.find(s => s.path === JOIN)!;
-        expect(join.body.proof).toEqual({ sessionId: 'door-gh-1' });
-        expect(join.body.idToken).toBeUndefined();
-        const opened = await openSeedFromSso(join.body.recovery.shares[0], 'github', '5550001');
+        expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider', 'recovery']);
+        expect(join.body).toMatchObject({ provider: 'apple', nonce: 'door-nonce-1' });
+        const opened = await openSeedFromSso(join.body.recovery.shares[0], 'apple', 'apple-sub-7');
         expect(opened.words).toEqual(joiner.mnemonic);
-        // Both GitHub calls are the door's pair, signed by the joining key.
-        for (const p of [GH_START, GH_POLL]) {
-            expect(seen.find(s => s.path === p)!.headers['X-Public-Key']).toBe(joiner.publicKey);
-        }
+        // The door's nonce and the join, both signed by the joining key, and nothing else asked of the node.
+        expect(seen.map(s => s.path)).toEqual([NONCE, JOIN]);
+        for (const s of seen) expect(s.headers['X-Public-Key']).toBe(joiner.publicKey);
     });
 
     it('enrolmentFromJoin reads only an answer that says the copy is stored', () => {
@@ -815,13 +808,12 @@ describe('the name step at the door: never a spinner for good, and it can always
     });
 
     it('while the check is out, every way off the name step stays open; only the join itself holds the screen', () => {
-        expect(doorWaysOut('name', true, false)).toEqual({ back: true, otherSignIn: true });
-        expect(doorWaysOut('name', false, false)).toEqual({ back: true, otherSignIn: true });
-        expect(doorWaysOut('joining', true, false)).toEqual({ back: false, otherSignIn: false });
-        // Unchanged elsewhere: the sign-in's own wait (bounded since 3e513312), and GitHub's code, which has its Cancel.
-        expect(doorWaysOut('signIn', true, false).back).toBe(false);
-        expect(doorWaysOut('signIn', true, true).back).toBe(true);
-        expect(doorWaysOut('signIn', false, false).back).toBe(true);
+        expect(doorWaysOut('name', true)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('name', false)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('joining', true)).toEqual({ back: false, otherSignIn: false });
+        // Unchanged elsewhere: the sign-in's own wait (bounded since 3e513312).
+        expect(doorWaysOut('signIn', true).back).toBe(false);
+        expect(doorWaysOut('signIn', false).back).toBe(true);
     });
 
     it('a taken name: the free suggestions, no longer than the join keeps', async () => {

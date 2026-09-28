@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
+import { offeredProviders } from './sso-providers';
 
 /**
  * Mid-wizard onboarding state.
@@ -226,8 +227,22 @@ export function resumePlan(
         identity: pending.step === 'create' ? null : stored,
         freshKey: flow === 'global' && typeof pending.freshKey === 'string' && pending.freshKey === stored.publicKey,
         newKey: keyMadeForThisJoin(pending, stored.publicKey),
-        joinEnrolment: flow === 'global' ? pending.joinEnrolment ?? null : null,
+        joinEnrolment: flow === 'global' ? savedJoinEnrolment(pending.joinEnrolment) : null,
     };
+}
+
+/**
+ * The join's enrolment as the record kept it, naming only sign-ins this app offers (utils/sso-providers.ts): the
+ * record is read back from storage, like any input. Its keepers are its sign-ins (keeper-enrolment.ts
+ * `enrolmentFromJoin`), so they are counted again from what is left. Null when none is: Safety Backup then offers the
+ * ordinary connect rather than saying a sign-in protects the member.
+ */
+function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): KeeperEnrolmentResult | null {
+    if (!saved || !Array.isArray(saved.enrolledSso)) return saved ?? null;
+    const enrolledSso = offeredProviders(saved.enrolledSso);
+    if (enrolledSso.length === saved.enrolledSso.length) return saved;
+    if (enrolledSso.length === 0) return null;
+    return { ...saved, enrolledSso, enrolled: enrolledSso.map(() => 'sso' as const), available: enrolledSso.length };
 }
 
 /** Subscribe to changes made through this module (used by the root gatekeeper). */

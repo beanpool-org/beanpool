@@ -34,7 +34,6 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     }
 
     const isAuthCallback =
-        path.includes('auth/github') ||
         path.includes('auth/facebook') ||
         path.includes('auth/google') ||
         path.includes('auth/tiktok') ||

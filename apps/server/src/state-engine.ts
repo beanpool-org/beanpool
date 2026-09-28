@@ -28,7 +28,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
-import { pruneOldActivity } from './db/activity-feed-db.js';
+import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
@@ -7065,6 +7065,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 updated_at = ?
             WHERE public_key = ?
         `).run(now, now, now, publicKey);
+        // The activity feed's own copies of their name (its join line, a ruling's other party): every other line reads it
+        // from the row above.
+        renameMemberInActivity(publicKey, 'Deleted Member');
 
         // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`

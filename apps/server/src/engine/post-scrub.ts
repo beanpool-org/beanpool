@@ -9,9 +9,10 @@
  *   - every photo: the row, with a `post_photos` tombstone per slot so a standby deletes its copy too, and the object in
  *     the image store once the deletion has committed (storage design §7: row first);
  *   - its place: the pin (lat, lng) and, for an event, the place name and the private note for the people going.
- * An event's replies go (with an `event_rsvps` tombstone each, as the 30-day scrub writes them): the event is cancelled,
- * so nobody is reminded of it again, and nothing counts or lists them. Its chat keeps its messages until the 30-day
- * scrub, as a cancelled event's does, under the neutral title.
+ * An event's replies stay until the 30-day scrub (engine/posts.ts scrubEndedEvents), as a cancelled event's do: they are
+ * the people going's own, and what lets them read the event's chat (engine/event-thread.ts canReadEventThread), which
+ * holds their messages too and stays readable, read-only, until then. Nobody is reminded of a cancelled event. The chat
+ * takes the neutral title.
  *
  * A poll is left as it is: a closed poll is the community's record, its question and votes stay, and its author already
  * reads as Deleted Member. An admin's removal (adminPruneUser) keeps the posts' words, photos and places: a vote can
@@ -24,21 +25,18 @@
 import { generateSearchKeywords } from '@beanpool/engine';
 import { db, afterTransactionCommit } from '../db/db.js';
 import { deleteStoredObjects } from '../storage/image-columns.js';
-import { bumpActivityVersion } from './versions.js';
+import { retitlePostsInActivity } from '../db/activity-feed-db.js';
 
 /** What a deleted member's post is called from then on. Its description is empty. */
 export const DELETED_POST_TITLE = 'Deleted post';
 
-/** The name the anonymised profile takes (state-engine.ts purgeMemberSelf), for the copies of it this wipes. */
-const DELETED_MEMBER = 'Deleted Member';
-
 /**
- * A tombstone stamped no earlier than the row it deletes: a standby deletes its copy only when the tombstone is not older
- * than the row (engine/sync.ts), and an RSVP can be stamped a millisecond ahead of the clock (engine/posts.ts rsvpEvent).
+ * A photo's tombstone, stamped no earlier than the row it deletes: a standby deletes its copy only when the tombstone is
+ * not older than the row (engine/sync.ts).
  */
-function tombstoneRow(table: 'post_photos' | 'event_rsvps', rowKey: string, at: string, rowStamp: string | null): void {
+function tombstonePhoto(rowKey: string, at: string, rowStamp: string | null): void {
     const deletedAt = rowStamp && rowStamp > at ? rowStamp : at;
-    db.prepare('INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES (?, ?, ?)').run(table, rowKey, deletedAt);
+    db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('post_photos', ?, ?)`).run(rowKey, deletedAt);
 }
 
 /**
@@ -60,8 +58,6 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
                lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL,
                updated_at = ?
          WHERE id = ?`);
-    const repliesTo = db.prepare('SELECT member_pubkey, updated_at FROM event_rsvps WHERE post_id = ?');
-    const dropReplies = db.prepare('DELETE FROM event_rsvps WHERE post_id = ?');
     const renameChat = db.prepare(`UPDATE conversations SET name = ? WHERE id = ? AND type = 'event_thread'`);
     const doomed: string[] = [];
 
@@ -70,47 +66,31 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
         if (photos.length > 0) {
             dropPhotos.run(p.id);
             for (const ph of photos) {
-                tombstoneRow('post_photos', `${p.id}|${ph.order_num}`, at, ph.updated_at);
+                tombstonePhoto(`${p.id}|${ph.order_num}`, at, ph.updated_at);
                 if (ph.storage_key) doomed.push(ph.storage_key);
             }
         }
         // The words an edit to this text would give it (engine/posts.ts updatePost): never empty, so the boot backfill
         // (state-engine.ts backfillSearchKeywords) leaves the row alone.
         wipe.run(DELETED_POST_TITLE, generateSearchKeywords(DELETED_POST_TITLE, '', p.category || 'general'), at, p.id);
-        if (p.type === 'event') {
-            const replies = repliesTo.all(p.id) as { member_pubkey: string; updated_at: string | null }[];
-            dropReplies.run(p.id);
-            for (const r of replies) tombstoneRow('event_rsvps', `${p.id}|${r.member_pubkey}`, at, r.updated_at);
-            // This node's own delivery log, never replicated (engine/posts.ts scrubEndedEvents).
-            try { db.prepare('DELETE FROM event_reminders_sent WHERE post_id = ?').run(p.id); } catch { }
-            // The chat's id is the post's, and its name the title the event had when the chat was made. A standby's delta
-            // carries it with the event (@beanpool/engine sync.ts, the conversations of the events in a delta).
-            renameChat.run(DELETED_POST_TITLE, p.id);
-        }
+        // An event's chat: its id is the post's, and its name the title the event had when the chat was made. A standby's
+        // delta carries it with the event (@beanpool/engine sync.ts, the conversations of the events in a delta).
+        if (p.type === 'event') renameChat.run(DELETED_POST_TITLE, p.id);
     }
 
-    const ids = JSON.stringify(posts.map(p => p.id));
-    // The activity feed (this server's own, never replicated) names a post by its title as it was: a new listing's
-    // `title`, a deal's and a ruling's `postTitle`. A ruling also names the other party of the deal as they were then.
-    const feed = db.prepare(`
-        UPDATE activity_feed SET metadata = json_replace(metadata, '$.title', ?, '$.postTitle', ?)
-         WHERE json_valid(metadata) AND json_extract(metadata, '$.postId') IN (SELECT value FROM json_each(?))`)
-        .run(DELETED_POST_TITLE, DELETED_POST_TITLE, ids).changes;
-    const named = db.prepare(`
-        UPDATE activity_feed SET metadata = json_replace(metadata, '$.counterpartyCallsign', ?)
-         WHERE json_valid(metadata) AND json_extract(metadata, '$.counterpartyPubkey') = ?`)
-        .run(DELETED_MEMBER, publicKey).changes;
-    if (feed + named > 0) bumpActivityVersion();
+    const ids = posts.map(p => p.id);
+    // The activity feed (this server's own, never replicated) names a post by its title as it was.
+    retitlePostsInActivity(ids, DELETED_POST_TITLE);
     // A pricing guide item's picture, when the aggregator took it from one of these posts. The next run finds another.
     db.prepare(`
         UPDATE pricing_guide_items SET thumbnail_url = NULL, updated_at = ?
          WHERE thumbnail_url IS NOT NULL
            AND EXISTS (SELECT 1 FROM json_each(?) WHERE instr(thumbnail_url, '/api/marketplace/posts/' || value || '/photos/') > 0)`)
-        .run(at, ids);
+        .run(at, JSON.stringify(ids));
 
     if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomed));
     afterTransactionCommit(dropSearchLeftovers);
-    return posts.map(p => p.id);
+    return ids;
 }
 
 /**

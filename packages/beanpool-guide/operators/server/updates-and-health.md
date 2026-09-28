@@ -23,6 +23,19 @@ Take the new docker-compose.yml with each update, not only the image. The server
 
 The image carries its own copy of cloudflared, the program that runs your tunnel. Cloudflare supports each version for a year after its newer releases come out, so a server left without updates for about a year can stop connecting. Updating the server updates it.
 
+## Updating with deploy.sh
+
+If you update your servers from a copy of the BeanPool source code with deploy.sh, this is what it does on each one: it stops the server, moves the data folder and .env out of the way into the home folder (as beanpool-data-backup and beanpool-env-backup, each followed by the server's folder name), puts the new code in place, moves both back, and only then starts the server. It needs the flock command on the server, which comes with almost every Linux; if it says flock is missing, install util-linux.
+
+- **One update at a time.** A second deploy.sh to the same server folder while one is running stops at once, saying another deploy is running there. It changes nothing and leaves that machine alone. Let the first one finish.
+- **If an update stops part-way** (the connection drops, or you stop it), run it again. If the data folder is still waiting in the home folder, the next run says it is "this node's data, parked by a deploy that did not finish" and puts it back before the server starts.
+- **"this node's data is in two places"**: the next run found a data folder and a waiting copy as well. It changes nothing and lists both: when each database last changed and how big it is, which community each holds and when that community was founded, and a fingerprint of each community key (never the key itself). Your community is normally the one founded long ago that changed last; one founded minutes ago is a new, empty community a server made on an empty folder. Set the other one aside with the dated command it prints, then run the update again.
+- **"data is missing, and a copy of this node's data was set aside"**: there is no data folder, but an older copy sits beside it, such as one whose name ends in .stale. Starting would make a new, empty community, so it stops. Move the right copy back with the command it prints; or, if you really do want a new community there, make an empty data folder first.
+- **".env is in two places"**: the same, for the settings file.
+- **A container that "will not stop"**: something still running is using the data folder. Nothing was moved, and your server is stopped. Stop that container, then run the update again. Do not start the server while the other one runs: two servers on one database can damage it.
+
+deploy.sh never deletes a copy of your data. Once your server runs well on the right copy, delete any copies you set aside yourself, when you no longer need them.
+
 ## Is there a new version?
 
 The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now.

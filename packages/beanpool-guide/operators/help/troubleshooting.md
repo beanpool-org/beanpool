@@ -1,7 +1,7 @@
 ---
 slug: troubleshooting
 title: When things go wrong
-summary: The server has stopped answering, members see "too many requests", the disk is full, or you cannot sign in.
+summary: The server has stopped answering, an update stopped part-way, members see "too many requests", the disk is full, or you cannot sign in.
 related: updates-and-health, rate-limits, backups-and-replicas, signing-in
 ---
 
@@ -17,6 +17,10 @@ Stay calm and take a copy before you fix anything. Most problems are fixed by a 
 ### A watchdog
 
 The BeanPool source code has a small watchdog for Linux machines (ops/watchdog). It checks the server every 20 seconds, and after 3 failures saves a report and restarts it, at most 4 times an hour. Set BEANPOOL_WATCH_CONTAINERS to your container's name: its built-in names are the BeanPool project's own servers.
+
+## An update with deploy.sh stopped part-way, or stopped with FATAL
+
+Run it again: a data folder it had moved out of the way is put back before the server starts. If it says FATAL, it changed nothing; read what it printed, and see Updating with deploy.sh under Updates, health checks and disk space. Never delete a copy of the data folder to make it go on.
 
 ## Members see "too many requests"
 

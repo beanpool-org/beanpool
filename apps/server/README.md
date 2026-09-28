@@ -526,6 +526,10 @@ bash deploy.sh 5         # Test only
 bash deploy.sh 6         # Test Mirror only
 ```
 
+One deploy at a time per server folder: a second one refuses and changes nothing. A deploy cut off part-way is safe to run
+again (it puts the data/ it had parked back before the node starts), and a FATAL changes nothing and says what to check.
+Operator manual: Updates, health checks and disk space → Updating with deploy.sh.
+
 ### SSH Access
 ```bash
 ssh -i ~/.ssh/id_azure_lattice azureuser@20.211.27.68   # Mullum 1 (Azure)

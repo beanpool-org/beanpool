@@ -68,6 +68,7 @@ import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
+import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
@@ -279,6 +280,9 @@ async function main() {
     // (the global profile's default), for "communities near you" and place watches. Set on every node, because each
     // tick reads the role and the switch: a no-op elsewhere, and a standby a take-over promotes starts on its own.
     initDirectoryMirror();
+    // Step 10.2: The watch on this server's standbys (design G8): when one stops copying or copies wrongly, the community's
+    // owners are told. Set on every node like the mirror: each tick reads the role.
+    startStandbyHealthWatch();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
         // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org

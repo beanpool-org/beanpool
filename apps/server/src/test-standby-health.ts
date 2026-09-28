@@ -1,0 +1,548 @@
+/**
+ * Test Suite: a community's owners are told when its standby stops copying or copies wrongly (standby PR 5: G8 of
+ * scratch/global-node/DESIGN-standby-takeover-gaps-opus.md, with Marty's answers of 2026-09-28: owners told in the app, one
+ * push and a Settings banner per incident; the standby re-seeds itself when it can; a take-over from a copy known to be
+ * stale or wrong goes ahead with a plain warning).
+ *
+ * Every node is its own process with its own data dir (takeover-test-harness.ts). The standby pulls through its real puller
+ * (services/backup-puller.ts `pullNow`, the loop's own step) from the main server's real backup routes, through a door here
+ * that passes every request on, headers and all, except that a step can have the next copy the standby asks for answered
+ * with a payload the main server signed. Pushes are handed to a stub of the push service here; nothing leaves this machine.
+ * The main server's watch runs on a clock a step moves forward (setStandbyHealthClockForTests).
+ *
+ *  1. A healthy standby: its first copy, a delta, a whole copy. The main server sends its table hashes with the whole copy
+ *     (signed with the rest), the standby finds every table and every account equal, and reports it. No incident, no push,
+ *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>".
+ *  2. The standby stops for an hour (the main server's clock): one incident, one push, to the owner's phone only (not the
+ *     admin's, the moderator's or a member's); the owner's admin queue and Settings banner show it, an admin's and a
+ *     moderator's queue don't. A second check pushes nothing more. The standby pulls again: the incident ends.
+ *  3. Three copies in a row refused (payloads the main server signed that make Beans): the standby's record says so, and its
+ *     preview; its next pull reports it and an incident opens, with one push; the pull after ends it.
+ *  4. A whole copy that isn't the main server's (a planted change in a table, the ledger fine): recorded with what differed,
+ *     one force-resync asked for, and the incident with one push. That resync is held to the ledger (not a seed): a forged
+ *     payload that makes Beans is refused, and the real copy after it lands and is exact, which ends the incident. Planted
+ *     again at once: recorded, and no second force-resync inside the limit; the incident opens again without a push (it
+ *     flaps: the last one ended less than an hour ago) and the banner says what didn't match.
+ *  5. The report can't be forged into anything: too long, not JSON, a field out of shape, sent with the admin password
+ *     instead of the replication token, or with a wrong token: ignored. A well-formed one with the token from a second
+ *     standby is kept (so the refusals aren't vacuous), and an owner stops watching it.
+ *  6. The main server dies; the standby, whose last whole copy did not match, is taken over with the recovery code. The
+ *     preview says in plain words what didn't match and when the last exact copy was, and the take-over goes ahead.
+ *
+ * Run:
+ *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-health.ts
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import crypto from 'node:crypto';
+import type { AddressInfo } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+
+delete process.env.CF_RECORD_NAME;
+delete process.env.NODE_PROFILE;
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed certificates
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const PW_MAIN = 'Standby-Health-Main-Pw-4471!';
+const PW_STANDBY = 'Standby-Health-Standby-Pw-902!';
+const HOUR = 60 * 60_000;
+
+// ── The node processes' commands ───────────────────────────────────────────────────────────
+
+/** No node reaches anything but this machine: a push is answered here and kept, anything else refused and counted. */
+function guardFetch(): { blocked: string[]; pushes: { to: string[]; title: string; body: string }[] } {
+    const seen = { blocked: [] as string[], pushes: [] as { to: string[]; title: string; body: string }[] };
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
+        if (url.hostname === 'exp.host') {
+            const batch = JSON.parse(String(init?.body ?? '[]')) as { to: string; title: string; body: string }[];
+            seen.pushes.push({ to: batch.map((m) => m.to), title: batch[0]?.title ?? '', body: batch[0]?.body ?? '' });
+            return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        seen.blocked.push(url.hostname);
+        throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
+    }) as typeof fetch;
+    return seen;
+}
+
+/** A module this branch adds, or null on a server without it (so the suite runs, and fails, on one). */
+async function optional<T>(load: () => Promise<T>): Promise<T | null> {
+    try { return await load(); } catch { return null; }
+}
+
+async function child(): Promise<void> {
+    const fetches = guardFetch();
+    await runNodeChild({
+        ...serveCommands,
+        'setup-primary': async (a: { replicationToken: string; gwen: string; ann: string; bo: string; cy: string }) => {
+            const { seedGenesisMember } = await import('./engine/members.js');
+            const { grantNodeRole } = await import('./engine/node-roles.js');
+            const { payFromCommons } = await import('./state-engine.js');
+            const { setReplicationToken } = await import('./config/local-config.js');
+            const { makeRecoveryCode, flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            const { db } = await import('./db/db.js');
+            seedGenesisMember(a.gwen, 'Gwen');
+            for (const [pk, callsign] of [[a.ann, 'Ann'], [a.bo, 'Bo'], [a.cy, 'Cy']]) {
+                db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
+                    .run(pk, callsign, new Date().toISOString(), a.gwen, 'TEST');
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+            }
+            grantNodeRole(a.ann, 'admin', a.gwen);
+            grantNodeRole(a.bo, 'moderator', a.gwen);
+            // Beans that moved, so a copy that makes more is one the ledger check refuses.
+            payFromCommons(a.cy, 5, 'a commons grant', { allowDeficit: true });
+            // Every one of them has a phone that registered with this server.
+            for (const [pk, token] of [[a.gwen, 'ExponentPushToken[gwen-owner]'], [a.ann, 'ExponentPushToken[ann-admin]'],
+                [a.bo, 'ExponentPushToken[bo-moderator]'], [a.cy, 'ExponentPushToken[cy-member]']]) {
+                db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')").run(pk, token);
+            }
+            setReplicationToken(a.replicationToken);
+            const made = await makeRecoveryCode();
+            await flushTakeoverChecks();
+            return { code: made.code };
+        },
+        'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
+            const { addConnector } = await import('./connector-manager.js');
+            const { updateLocalConfig } = await import('./config/local-config.js');
+            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
+            return true;
+        },
+        /** One pull of the kind the loop makes next (and the take-over envelope, as the loop fetches it); `whole` asks the loop's routine whole copy. */
+        pull: async (a: { whole?: boolean }) => {
+            const { pullNow, getBackupStatus, pullTakeoverEnvelopeNow } = await import('./services/backup-puller.js');
+            const before = getBackupStatus().lastFullReconcileAt;
+            if (a.whole) process.env.BACKUP_RECONCILE_EVERY_MS = '1';
+            await new Promise((r) => setTimeout(r, 5));
+            const result = await pullNow();
+            process.env.BACKUP_RECONCILE_EVERY_MS = '86400000';
+            const envelope = await pullTakeoverEnvelopeNow();
+            const after = getBackupStatus();
+            return { ...result, mode: after.lastPullMode, whole: after.lastFullReconcileAt !== before, envelope };
+        },
+        /** The standby's record of its copies (services/standby-copy-record.ts), or null on a server without one. */
+        record: async () => {
+            const m = await optional(() => import('./services/standby-copy-record.js'));
+            return m ? m.readCopyRecord() : null;
+        },
+        /** The take-over preview's words on the copy, as if it were `offsetMs` later on this standby. */
+        'preview-words': async (a: { offsetMs?: number }) => {
+            const m = await optional(() => import('./services/standby-copy-record.js'));
+            const { getBackupStatus } = await import('./services/backup-puller.js');
+            return m ? m.copyCheckForPreview(getBackupStatus().lastSuccessAt, Date.now() + (a.offsetMs ?? 0)) : null;
+        },
+        /** A change in a copied table, made on the standby alone, as a bug would make it: the ledger untouched. */
+        plant: async (a: { publicKey: string; value: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('UPDATE members SET contact_value = ? WHERE public_key = ?').run(a.value, a.publicKey).changes;
+        },
+        /** A write on the main server, so the next whole copy isn't the bodiless "unchanged" 304. */
+        touch: async () => {
+            const { db } = await import('./db/db.js');
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('test_touch', ?)").run(new Date().toISOString());
+            return true;
+        },
+        /** A payload the main server signs that makes 50 Beans for one account: only the ledger's check stands in its way. */
+        'forge-mint': async (a: { publicKey: string }) => {
+            const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
+            const { getPrivateKey } = await import('./p2p.js');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            delete payload.signature;
+            delete payload.publicKey;
+            payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
+            payload.generatedAt = new Date().toISOString();
+            return signSyncPayload(payload);
+        },
+        /** The main server's watch (services/standby-health.ts), or null on a server without one. */
+        health: async () => {
+            const m = await optional(() => import('./services/standby-health.js'));
+            return m ? { state: m.readStandbyHealthForTests(), banner: m.getStandbyHealthBanner() } : null;
+        },
+        /** Move the watch's clock, then run its check as its timer does. */
+        'health-check': async (a: { offsetMs?: number }) => {
+            const m = await optional(() => import('./services/standby-health.js'));
+            if (!m) return null;
+            if (typeof a.offsetMs === 'number') m.setStandbyHealthClockForTests(a.offsetMs);
+            m.checkStandbyHealth();
+            return m.readStandbyHealthForTests();
+        },
+        'health-clock': async (a: { offsetMs: number }) => {
+            const m = await optional(() => import('./services/standby-health.js'));
+            if (m) m.setStandbyHealthClockForTests(a.offsetMs);
+            return !!m;
+        },
+        /** The admin queue as each role gets it (engine/admin-queue.ts). */
+        queue: async () => {
+            const { getAdminQueue } = await import('./engine/admin-queue.js');
+            const q = getAdminQueue as (opts?: { forModerator?: boolean; forOwner?: boolean }) => { total: number; items: { kind: string; count: number; section: string; settingsPath: string; label: string }[] };
+            return { owner: q({ forOwner: true }), admin: q({}), moderator: q({ forModerator: true }) };
+        },
+        fetches: async () => fetches,
+        checkpoint: async () => {
+            const { db } = await import('./db/db.js');
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            return true;
+        },
+    });
+}
+
+// ── The orchestrator ───────────────────────────────────────────────────────────────────────
+
+let testsRun = 0;
+let testsPassed = 0;
+function assert(cond: unknown, msg: string): void {
+    testsRun++;
+    if (cond) {
+        testsPassed++;
+        console.log(`✓ ${msg}`);
+    } else {
+        console.error(`✗ ${msg}`);
+    }
+}
+function require_(cond: unknown, msg: string): void {
+    assert(cond, msg);
+    if (!cond) throw new Error(`cannot go on: ${msg}`);
+}
+
+interface Id { pk: string; priv: crypto.KeyObject; name: string }
+function newId(name: string): Id {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pk: (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex'), priv: privateKey, name };
+}
+
+interface Answer { status: number; body: any }
+
+/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+    const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
+    const headers: Record<string, string> = {};
+    if (opts.as) {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        headers['X-Public-Key'] = opts.as.pk;
+        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Timestamp'] = String(ts);
+        headers['X-Nonce'] = nonce;
+    }
+    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (method !== 'GET') headers['Content-Type'] = 'application/json';
+    const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    const text = await res.text();
+    let body: any = text;
+    try { body = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, body };
+}
+
+/**
+ * The main server as its standby reaches it: every request passed to its real backup routes, with its headers, except that
+ * a step can have the next copy the standby asks for answered with a payload M signed.
+ */
+interface MainServerDoor { url: string; next: (answer: { status: number; body?: unknown }) => void; waiting: () => number; close: () => Promise<void> }
+async function mainServerDoor(target: string): Promise<MainServerDoor> {
+    const queued: { status: number; body?: unknown }[] = [];
+    const server = http.createServer((req, res) => {
+        void (async () => {
+            try {
+                const answer = req.url?.startsWith('/api/local/admin/sync-') ? queued.shift() : undefined;
+                if (answer) {
+                    res.writeHead(answer.status, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' });
+                    res.end(answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body));
+                    return;
+                }
+                const chunks: Buffer[] = [];
+                for await (const c of req) chunks.push(c as Buffer);
+                const headers: Record<string, string> = {};
+                for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string' && (k.startsWith('x-') || k === 'content-type')) headers[k] = v;
+                const r = await fetch(target + req.url, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+                const out: Record<string, string> = { 'Content-Type': r.headers.get('content-type') ?? 'application/json' };
+                const role = r.headers.get('x-node-role');
+                if (role) out['X-Node-Role'] = role;
+                res.writeHead(r.status, out);
+                res.end(Buffer.from(await r.arrayBuffer()));
+            } catch (e: any) {
+                res.writeHead(502);
+                res.end(String(e?.message || e));
+            }
+        })();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    return {
+        url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+        next: (answer) => { queued.push(answer); },
+        waiting: () => queued.length,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+    };
+}
+
+const brief = (v: unknown) => JSON.stringify(v)?.slice(0, 240);
+const kinds = (q: { items: { kind: string }[] } | undefined) => (q?.items ?? []).map((i) => i.kind);
+
+async function main(): Promise<void> {
+    const root = process.env.BEANPOOL_DATA_DIR;
+    if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+    const dir = (n: string) => path.join(root, n);
+    const nodes: NodeProc[] = [];
+    const doors: MainServerDoor[] = [];
+    const started = Date.now();
+    const replicationToken = crypto.randomBytes(32).toString('hex');
+    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const [gwen, ann, bo, cy] = ['Gwen', 'Ann', 'Bo', 'Cy'].map(newId);
+    const OWNER_TOKEN = 'ExponentPushToken[gwen-owner]';
+
+    try {
+        // ── 1. A healthy standby ──
+        console.log('\n— 1. a healthy standby —');
+        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        nodes.push(main);
+        const setup = await main.send('setup-primary', { replicationToken, gwen: gwen.pk, ann: ann.pk, bo: bo.pk, cy: cy.pk });
+        const m = `https://localhost:${await main.send('serve')}`;
+        fs.mkdirSync(dir('standby'), { recursive: true });
+        fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
+        let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        const door = await mainServerDoor(main.base);
+        doors.push(door);
+        await standby.send('setup-standby', { primaryUrl: door.url, replicationToken, primaryPeerId: main.ready.peerId });
+        const pulls: { mode: string; ok: boolean }[] = [];
+        const pull = async (whole = false) => {
+            const p = await standby.send('pull', { whole });
+            pulls.push({ mode: p.mode, ok: p.ok });
+            return p;
+        };
+        const first = await pull();
+        const delta = await pull();
+        await main.send('touch');
+        const whole = await pull(true);
+        require_(first.ok && delta.ok && whole.ok && whole.whole, `S copies M: its first copy, a delta and a whole copy land (${brief([first, delta, whole])})`);
+
+        const snap = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Replication-Token': replicationToken } }).then((r) => r.json());
+        const hashed = snap?.tableHashes?.tables ?? {};
+        assert(snap?.tableHashes?.v === 1 && ['members', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+            && !('tombstones' in hashed) && typeof snap.signature === 'string',
+            `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
+        let rec = await standby.send('record');
+        assert(rec?.lastWhole?.exact === true && rec.lastWhole.hashed === true && rec.lastWhole.differs.length === 0 && rec.lastOutcome === 'ok',
+            `S's whole-copy check found every table's rows and every account equal, hashes compared (${brief(rec?.lastWhole)})`);
+        let health = await main.send('health');
+        assert(health?.state.standbys.length === 1 && health.state.standbys[0].exact === true && health.state.standbys[0].hashed === true
+            && health.state.standbys[0].id === rec?.id, `M keeps S's report: its last whole copy was exact (${brief(health?.state.standbys)})`);
+        assert(health?.state.incident === null, 'no incident');
+        let queue = await main.send('queue');
+        assert(!kinds(queue.owner).includes('standby'), `nothing in the owner's admin queue (${brief(kinds(queue.owner))})`);
+        let pushes = (await main.send('fetches')).pushes;
+        assert(pushes.length === 0, `no push (${pushes.length})`);
+        let words = await standby.send('preview-words', {});
+        assert(words?.warning === false && /^Last exact copy of the main server: \d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/.test(words.lines[0] ?? '') && words.lines.length === 1,
+            `the take-over preview says "${words?.lines?.[0]}", and nothing more`);
+
+        // ── 2. Stopped for an hour ──
+        console.log('\n— 2. the standby stops for an hour —');
+        health = await main.send('health-check', { offsetMs: HOUR + 60_000 });
+        const incident1 = health?.incident;
+        assert(incident1 && incident1.problems.length === 1 && incident1.problems[0].kind === 'stopped',
+            `an hour on M's clock with no copy: one incident, "stopped" (${brief(incident1?.problems)})`);
+        pushes = (await main.send('fetches')).pushes;
+        assert(pushes.length === 1 && JSON.stringify(pushes[0].to) === JSON.stringify([OWNER_TOKEN]) && /standby/i.test(pushes[0].title),
+            `one push, to the owner's phone only: not the admin's, the moderator's or a member's (${brief(pushes)})`);
+        queue = await main.send('queue');
+        const item = queue.owner.items.find((i: any) => i.kind === 'standby');
+        assert(item?.count === 1 && item.section === 'home' && item.settingsPath === '/settings#section=home',
+            `the owner's admin queue has it, opening Settings' home (${brief(item)})`);
+        assert(!kinds(queue.admin).includes('standby') && !kinds(queue.moderator).includes('standby'),
+            `an admin's and a moderator's queue don't (${brief([kinds(queue.admin), kinds(queue.moderator)])})`);
+        const qOwner = await api(m, 'GET', '/api/node-admin/queue', { as: gwen });
+        const qAdmin = await api(m, 'GET', '/api/node-admin/queue', { as: ann });
+        const qMod = await api(m, 'GET', '/api/node-admin/queue', { as: bo });
+        assert(qOwner.status === 200 && kinds(qOwner.body).includes('standby') && qAdmin.status === 200 && !kinds(qAdmin.body).includes('standby')
+            && qMod.status === 200 && !kinds(qMod.body).includes('standby'),
+            `the app's queue route, signed by each: the owner sees it, the admin and the moderator don't (${brief([kinds(qOwner.body), kinds(qAdmin.body), kinds(qMod.body)])})`);
+        const diag = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
+        const banner = diag.body?.standbyHealth;
+        assert(banner?.incident?.lines?.length === 1 && /has not made a copy of this server since/.test(banner.incident.lines[0]) && banner.incident.pushed === true
+            && banner.incident.whatToDo.some((w: string) => /running and can reach this one/.test(w)),
+            `Settings (the owner, by the node password) shows the banner: "${banner?.incident?.lines?.[0]}"`);
+        health = await main.send('health-check', {});
+        pushes = (await main.send('fetches')).pushes;
+        assert(health?.incident?.id === incident1?.id && pushes.length === 1, `a second check: the same incident, no second push (${pushes.length})`);
+        const back = await pull();
+        health = await main.send('health');
+        queue = await main.send('queue');
+        assert(back.ok && health?.state.incident === null && health.state.lastIncident?.id === incident1?.id && !kinds(queue.owner).includes('standby'),
+            `S pulls again: the incident is over, and gone from the queue (${brief(health?.state.lastIncident)})`);
+        const diag2 = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
+        assert(diag2.body?.standbyHealth?.incident === null && diag2.body.standbyHealth.standbys.length === 1 && diag2.body.standbyHealth.standbys[0].healthy === true,
+            'and from the banner');
+
+        // ── 3. Three refused copies in a row ──
+        console.log('\n— 3. three copies in a row refused —');
+        await main.send('health-clock', { offsetMs: 3 * HOUR });
+        assert((await pull()).ok, 'hours later, S pulls: healthy');
+        for (let i = 0; i < 3; i++) door.next({ status: 200, body: await main.send('forge-mint', { publicKey: cy.pk }) });
+        const refused = [await pull(), await pull(), await pull()];
+        assert(refused.every((p) => !p.ok && /conservation/i.test(p.error ?? '')), `three copies M signed that make Beans: each refused by the ledger check (${brief(refused.map((p) => p.error?.slice(0, 60)))})`);
+        rec = await standby.send('record');
+        assert(rec?.failedImportsInARow === 3 && rec.lastOutcome === 'refused' && rec.lastWhy === 'conservation',
+            `S's record: 3 refused in a row, by the ledger check (${brief(rec && { fails: rec.failedImportsInARow, last: rec.lastOutcome, why: rec.lastWhy })})`);
+        words = await standby.send('preview-words', {});
+        assert(words?.warning === true && words.lines.some((l: string) => l === "Its last 3 copies were refused: the copy would have changed the ledger's total, so the ledger check refused it.")
+            && words.lines.at(-1)?.startsWith('The take-over goes ahead all the same'),
+            `the preview says so: ${brief(words?.lines)}`);
+        health = await main.send('health');
+        assert(health?.state.incident === null, 'M has not heard yet (those answers never reached it)');
+        const told = await pull();
+        health = await main.send('health');
+        pushes = (await main.send('fetches')).pushes;
+        const incident2 = health?.state.incident;
+        assert(told.ok && incident2?.problems.some((p: any) => p.kind === 'refused' && p.count === 3 && p.why === 'conservation'),
+            `S's next pull reports it: an incident, "refused" (${brief(incident2?.problems)})`);
+        assert(pushes.length === 2 && JSON.stringify(pushes[1].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${brief(pushes.map((p: any) => p.to))})`);
+        await pull();
+        health = await main.send('health');
+        assert(health?.state.incident === null && health.state.lastIncident?.id === incident2?.id, 'the pull after reports it landed: the incident is over');
+
+        // ── 4. A whole copy that isn't the main server's ──
+        console.log('\n— 4. a whole copy that is not the main server\'s —');
+        await main.send('health-clock', { offsetMs: 6 * HOUR });
+        assert((await pull()).ok, 'hours later, S pulls: healthy');
+        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted on the standby' }) === 1, "a change planted on S alone: Cy's contact, the ledger untouched");
+        await main.send('touch');
+        const inexact = await pull(true);
+        rec = await standby.send('record');
+        assert(inexact.ok && inexact.whole && rec?.lastWhole?.exact === false && JSON.stringify(rec.lastWhole.differs) === JSON.stringify(['members'])
+            && rec.lastWhole.hashed === true && rec.lastWhole.ledgerDiffering === 0,
+            `S's whole copy lands but isn't M's: the members table's content differs, and only it (${brief(rec?.lastWhole)})`);
+        door.next({ status: 200, body: await main.send('forge-mint', { publicKey: cy.pk }) });
+        const heldResync = await pull();
+        assert(heldResync.mode === 'resync' && !heldResync.ok && /conservation/i.test(heldResync.error ?? ''),
+            `the next pull is the force-resync it asked for, held to the ledger (not a seed): a copy that makes Beans is refused (${heldResync.mode}: ${heldResync.error?.slice(0, 90)})`);
+        const mended = await pull();
+        rec = await standby.send('record');
+        health = await main.send('health');
+        pushes = (await main.send('fetches')).pushes;
+        const incident3 = health?.state.incident;
+        assert(mended.ok && rec?.lastWhole?.exact === true, `M's real copy after it lands, and is exact (${mended.mode}; ${brief(rec?.lastWhole)})`);
+        assert(incident3?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members'])),
+            `that pull reported the inexact copy: an incident, "inexact", members (${brief(incident3?.problems)})`);
+        assert(pushes.length === 3 && JSON.stringify(pushes[2].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${pushes.length})`);
+        await pull();
+        health = await main.send('health');
+        assert(health?.state.incident === null && health.state.lastIncident?.id === incident3?.id, 'the pull after reports the exact copy: the incident is over');
+
+        assert(await standby.send('plant', { publicKey: cy.pk, value: 'planted again' }) === 1, 'planted again at once');
+        await main.send('touch');
+        const again = await pull(true);
+        const after = await pull();
+        rec = await standby.send('record');
+        assert(again.ok && rec?.lastWhole?.exact === false && after.mode !== 'resync' && after.ok,
+            `recorded, and no second force-resync inside the limit (the pull after is a ${after.mode})`);
+        assert(pulls.filter((p) => p.mode === 'resync').length === 2,
+            `force-resyncs in all: the new standby's first copy and the one the mismatch asked for (${pulls.map((p) => p.mode).join(',')})`);
+        health = await main.send('health');
+        pushes = (await main.send('fetches')).pushes;
+        const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN })).body?.standbyHealth;
+        assert(health?.state.incident?.pushedAt === null && pushes.length === 3,
+            `M opens an incident again but pushes nothing: the last one ended less than an hour ago (pushes ${pushes.length})`);
+        assert(bannerNow?.incident?.lines.some((l: string) => /did not match it: members differed\. Last exact copy: \d{4}-/.test(l))
+            && bannerNow.incident.whatToDo.some((w: string) => /copies this server afresh by itself/.test(w)),
+            `the banner says what didn't match: ${brief(bannerNow?.incident?.lines)}`);
+        words = await standby.send('preview-words', {});
+        assert(words?.warning === true && words.lines.some((l: string) => /^This server's last whole copy of the main server, at .* UTC, did not match it: members differed\.$/.test(l))
+            && words.lines.some((l: string) => /^Last exact copy of the main server: \d{4}-.* UTC\.$/.test(l)),
+            `the preview says what didn't match and when the last exact copy was: ${brief(words?.lines)}`);
+        const stale = await standby.send('preview-words', { offsetMs: 2 * HOUR });
+        assert(stale?.lines.some((l: string) => /^Its last copy of the main server was at .* UTC: anything that changed there after that is not here\.$/.test(l)),
+            `two hours on, it says its last copy is old: ${brief(stale?.lines)}`);
+
+        // ── 5. The report can't be forged into anything ──
+        console.log('\n— 5. a report that is not one —');
+        const standbysNow = async () => ((await main.send('health'))?.state.standbys ?? []).map((s: any) => s.id).sort();
+        const known = await standbysNow();
+        const good = (id: string) => JSON.stringify({ v: 1, id, last: 'ok', why: null, fails: 0, okAgo: 1000, wholeAgo: 1000, exact: true, exactAgo: 1000, differs: [], hashed: true });
+        const newIdHex = () => crypto.randomBytes(16).toString('hex');
+        const deltaWith = (headers: Record<string, string>) => fetch(`${main.base}/api/local/admin/sync-delta`, { headers: { 'X-Since-Cursor': new Date().toISOString(), ...headers } });
+        const forged: [string, Record<string, string>][] = [
+            ['too long', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('}', `,"pad":"${'x'.repeat(2100)}"}`) }],
+            ['not JSON', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': '{"v":1,"id":' }],
+            ['an id that is not one', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good('__proto__') }],
+            ['a count out of range', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"fails":0', '"fails":-1') }],
+            ['a table that is not copied', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"differs":[]', '"differs":["sqlite_master"]') }],
+            ['free text for a reason', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"why":null', '"why":"call +61 555 0100"') }],
+            ['the admin password, not the token', { 'X-Admin-Password': PW_MAIN, 'X-Standby-Report': good(newIdHex()) }],
+        ];
+        // A main server takes the admin password for a pull only with token-only off (its default is on): off, so that
+        // pull is served and only its report is left unheard.
+        const tokenOnlyOff = await post(main.base, '/api/local/admin/replication-token/mode', { tokenOnly: false }, { 'X-Admin-Password': PW_MAIN });
+        require_(tokenOnlyOff.status === 200 && tokenOnlyOff.body?.tokenOnly === false, `M takes the admin password for pulls, for this step (${brief(tokenOnlyOff.body)})`);
+        const statuses: string[] = [];
+        for (const [what, headers] of forged) {
+            const r = await deltaWith(headers);
+            statuses.push(`${what} ${r.status}${r.ok ? '' : ` ${(await r.text()).slice(0, 80)}`}`);
+        }
+        const wrongToken = await deltaWith({ 'X-Replication-Token': 'f'.repeat(64), 'X-Standby-Report': good(newIdHex()) });
+        assert(statuses.every((s) => s.endsWith(' 200')) && wrongToken.status === 401,
+            `each pull is answered as ever: a report never fails one (${statuses.join('; ')}; a wrong token ${wrongToken.status})`);
+        assert(JSON.stringify(await standbysNow()) === JSON.stringify(known), `and none of those reports is kept: no new standby, the one there unchanged (${brief(await standbysNow())})`);
+        const second = newIdHex();
+        const kept = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(second) });
+        assert(kept.status === 200 && (await standbysNow()).includes(second), 'a well-formed report with the token, from a second standby, is kept');
+        const forgot = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: PW_MAIN, body: { id: second } });
+        const forgotAgain = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: PW_MAIN, body: { id: second } });
+        assert(forgot.status === 200 && !(await standbysNow()).includes(second) && forgotAgain.status === 404,
+            `the owner stops watching it from Settings (${forgot.status}; again ${forgotAgain.status})`);
+
+        // ── 6. A take-over from a copy that didn't match ──
+        console.log('\n— 6. the main server dies; a take-over from the copy that did not match —');
+        rec = await standby.send('record');
+        require_(rec?.lastWhole?.exact === false, 'S\'s last whole copy is the one that did not match');
+        await standby.send('checkpoint');
+        await main.kill('SIGKILL');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const pv = opened.body?.preview;
+        assert(opened.status === 200 && pv?.copy?.warning === true
+            && pv.copy.lines.some((l: string) => /did not match it: members differed/.test(l))
+            && pv.copy.lines.some((l: string) => /^Last exact copy of the main server: /.test(l))
+            && pv.copy.lines.at(-1)?.startsWith('The take-over goes ahead all the same'),
+            `the preview says, in plain words, what didn't match and when the last exact copy was (${brief(pv?.copy?.lines)})`);
+        assert(typeof pv?.mainServer?.lastCopyAt === 'number' && pv.mainServer.lastCopyAt === rec?.lastOkAt,
+            `and when S last copied M (${pv?.mainServer?.lastCopyAt})`);
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv?.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        assert(confirmed.status === 200, `the confirm goes ahead: never blocked by the copy (${confirmed.status} ${brief(confirmed.body)})`);
+        if (confirmed.status === 200) {
+            const exit = await standby.exited;
+            standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+            nodes.push(standby);
+            assert(exit === 0 && standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId,
+                `S restarted as the main server, with M's identity (${standby.ready.role})`);
+        }
+
+        const blocked = [...(await Promise.all(nodes.filter((n) => n.proc.exitCode === null && n.proc.signalCode === null).map((n) => n.send('fetches'))))]
+            .flatMap((f: any) => f.blocked);
+        assert(blocked.length === 0, `nothing reached off this machine (refused: ${blocked.join(', ') || 'none'})`);
+    } catch (e: any) {
+        console.error(`\n💥 ${e?.message || e}`);
+        testsRun++;
+    } finally {
+        for (const d of doors) await d.close().catch(() => {});
+        for (const n of nodes) await n.kill().catch(() => {});
+    }
+
+    console.log(`\n${testsPassed}/${testsRun} checks passed in ${Math.round((Date.now() - started) / 1000)} s.`);
+    if (testsPassed !== testsRun) {
+        console.error(`❌ Test failed: ${testsRun - testsPassed} check(s) failed`);
+        process.exit(1);
+    }
+    console.log('✅ A community\'s owners are told when its standby stops copying or copies wrongly.');
+    process.exit(0);
+}
+
+if (process.argv.includes('--child')) {
+    child().catch((e) => { console.error(e); process.exit(1); });
+} else {
+    main().catch((e) => { console.error(e); process.exit(1); });
+}

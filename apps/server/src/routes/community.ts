@@ -1541,8 +1541,8 @@ router.post('/api/push-tokens', async (ctx) => {
         return;
     }
     const success = registration === 'registered';
-    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
-    // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
+    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, one the old main
+    // server didn't have) is told now (services/directory-mirror.ts). Never fails the registration.
     if (success) {
         try {
             tellOwedWatcher(activeKey);

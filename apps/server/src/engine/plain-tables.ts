@@ -8,8 +8,8 @@
  * never judged by a stamp of this server's: the main server is a standby's only writer of these tables
  * (config/node-role.ts assertPlainTablesWritable), and the puller refuses a copy older than the last one. So a row that
  * differs in any column is the main server's newer one. A whole copy names every row the main server holds (of a table
- * with a RowRule, every one that travels), and one here it doesn't name is deleted. A row the main server deleted between two deltas comes as its tombstone (engine/sync.ts
- * applyTombstoneLocally, deletePlainRow).
+ * with a RowRule, every one that travels), and one here it doesn't name is deleted. A row the main server deleted between
+ * two deltas comes as its tombstone (engine/sync.ts applyTombstoneLocally, deletePlainRow).
  *
  * A copy never puts a name into SQL unchecked: only this table's own columns (PRAGMA table_info) are written. And one
  * bad value never wedges copying: a value this table's own rules refuse (its CHECKs and NOT NULLs, db/table-rules.ts) is

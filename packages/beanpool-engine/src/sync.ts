@@ -710,9 +710,9 @@ const SQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * The rows of each plain table, `SELECT *`: those whose watermark is at or after `since`, or every row for a whole copy
- * (no `since`); only the ones its `where` holds, when it has one. In the watermark's order, then the key's, so a standby writes them in the order this server did: a
- * Decision closed before its author opened the next arrives before it, whatever the unique index on open ones would make
- * of the other order. Never a column the spec leaves out. A table this database doesn't have, or a name that isn't a
+ * (no `since`); only the ones its `where` holds, when it has one. In the watermark's order, then the key's, so a standby
+ * writes them in the order this server did: a Decision closed before its author opened the next arrives before it,
+ * whatever the unique index on open ones would make of the other order. Never a column the spec leaves out. A table this database doesn't have, or a name that isn't a
  * plain identifier, is left out of the answer, never sent empty: a standby keeps its own rows of a table no copy carries.
  */
 export function exportPlainTables(db: Db, specs: readonly PlainTableSpec[], since?: string | null): PlainTableRows {

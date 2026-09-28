@@ -51,7 +51,7 @@ Turn on Holiday Mode in Settings. Your Offers are hidden and nobody can send you
 
 ## How do I leave?
 
-You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words.
+You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words. It deletes your account only in the community you are using. If another community on the phone still has you, the phone keeps your key for it; the key goes only when you delete at your last one.
 
 ## Something is wrong or could be better. Who do I tell?
 

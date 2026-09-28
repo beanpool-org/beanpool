@@ -427,6 +427,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
+    registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
     replication_access: { kind: 'per-server', reason: "this server's replication access log" },

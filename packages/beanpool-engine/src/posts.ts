@@ -111,6 +111,8 @@ export interface MarketplacePost {
     hiddenByReportsAt?: string | null;
     /** A moderator took it down (G3). Carried by the replication export only. */
     removedByModeratorAt?: string | null;
+    /** The server's search words for it, synonyms included (generateSearchKeywords). Carried by the replication export only. */
+    searchKeywords?: string;
     /**
      * Great-circle km from the point the reader gave (`PostFilter.near`), to 0.1 km; null for a post with no place.
      * Absent when no point was given (G4).
@@ -1164,6 +1166,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
     resentAt: 'drop',
+    // The replication export's only: no read sends it.
+    searchKeywords: 'drop',
 };
 
 /**

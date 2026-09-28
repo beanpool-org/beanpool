@@ -433,7 +433,7 @@ async function main(): Promise<void> {
         const o5: Rows = await old.send('rows');
         assert(reseed.ok === true && reseed.mode === 'resync', `its next pull is one re-seed, and it lands (${JSON.stringify({ ok: reseed.ok, mode: reseed.mode, error: reseed.error })})`);
         assert(rowsDiff(m5, o5).length === 0, `it ends equal to M, every row and stamp (differences ${first(rowsDiff(m5, o5))})`);
-        assert(o5.format === '4', `and records format 4 (${o5.format})`);
+        assert(o5.format === '5', `and records format 5, the importer's (${o5.format})`);
         const after = await old.send('pull', {});
         assert(after.ok === true && after.mode === 'delta', `the pull after it is a delta, not a second re-seed (${JSON.stringify({ ok: after.ok, mode: after.mode, error: after.error })})`);
         // A main server whose older database holds a photo and a project unstamped: the copy stamps each from M's own rows,

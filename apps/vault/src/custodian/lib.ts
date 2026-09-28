@@ -3,7 +3,9 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { buildBoundRequestHeaders, ed25519Signer, vaultB64, vaultUnb64 } from '@beanpool/core';
 import type { FetchLike } from '@beanpool/signin';
 import {
+    buildConfirmation,
     buildShareSubmission,
+    cancelStatement,
     genesisStatement,
     openCustodianShare,
     restoreStatement,
@@ -111,4 +113,24 @@ export async function restoreFromBackup(baseUrl: string, key: CustodianKey, back
     requireAccepted(h, opts.acceptNoHardwareProof ?? false);
     const sig = signStatement(key.seed, restoreStatement(h.hello.bootId, h.hello.helloPub, backup));
     return signedPost(baseUrl, '/v1/unlock/restore', { backup, sig }, key, opts);
+}
+
+/**
+ * After a genesis or a reshare: show the vault this custodian holds their new share (open it, sign a check of its
+ * words). The vault switches to the new shares at two. Send it only once the share is saved where it will be kept.
+ */
+export async function confirmShare(baseUrl: string, key: CustodianKey, share: CustodianShare, opts: CallOptions = {}): Promise<CustodianCall> {
+    return signedPost(baseUrl, '/v1/unlock/confirm', { confirmation: buildConfirmation(share, key.seed) }, key, opts);
+}
+
+/** This custodian's new share of the genesis or reshare waiting, again (a lost answer), while the vault still has it. */
+export async function fetchPendingShare(baseUrl: string, key: CustodianKey, opts: CallOptions = {}): Promise<{ call: CustodianCall; share: CustodianShare | null }> {
+    const call = await signedPost(baseUrl, '/v1/unlock/pending', {}, key, opts);
+    return { call, share: call.status === 200 ? (call.body.share as CustodianShare | null) : null };
+}
+
+/** Drop the genesis or reshare waiting (`pendingId`, from its answer or the pending call). Two current custodians must. */
+export async function cancelPending(baseUrl: string, key: CustodianKey, pendingId: string, opts: CallOptions = {}): Promise<CustodianCall> {
+    const sig = signStatement(key.seed, cancelStatement(pendingId));
+    return signedPost(baseUrl, '/v1/unlock/cancel', { cancel: { custodian: key.publicKey, pendingId, sig } }, key, opts);
 }

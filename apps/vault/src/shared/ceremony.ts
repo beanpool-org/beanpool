@@ -87,6 +87,51 @@ export function openCustodianShare(share: CustodianShare, custodianSeed: Uint8Ar
     }
 }
 
+// ─── Proof that a new share arrived (custodian → vault) ─────────────────────────────────────
+
+/**
+ * A genesis or a reshare makes new shares, but the vault switches to them only once two of their custodians have
+ * shown they hold theirs (key vault design §2.1, §2.4): until then every unlock uses the shares that already exist.
+ * A custodian shows it by opening their share and signing a hash of its words. The hash gives nothing away: a share's
+ * value is 256 random bits.
+ */
+export const SHARE_CHECK_TAG = 'beanpool-vault-share-check/1';
+export const CONFIRM_TAG = 'beanpool-vault-confirm/1';
+export const CANCEL_TAG = 'beanpool-vault-cancel/1';
+
+/** base64url(SHA-256(tag ‖ vaultId ‖ generation ‖ index ‖ words)): one share, at its place in one split. */
+export function shareCheck(words: string, vaultId: string, generation: number, index: number): string {
+    return vaultB64(sha256(utf8ToBytes(`${SHARE_CHECK_TAG}\n${vaultId}\n${generation}\n${index}\n${words}`)));
+}
+
+export interface ShareConfirmation {
+    custodian: string;
+    vaultId: string;
+    generation: number;
+    index: number;
+    shareCheck: string;
+    sig: string;
+}
+
+export function confirmStatement(c: Omit<ShareConfirmation, 'sig'>): Uint8Array {
+    return utf8ToBytes(`${CONFIRM_TAG}\n${c.vaultId}\n${c.generation}\n${c.custodian}\n${c.index}\n${c.shareCheck}`);
+}
+
+/** The custodian's side: open the share (so it is known to have arrived whole) and sign its check. */
+export function buildConfirmation(share: CustodianShare, custodianSeed: Uint8Array): ShareConfirmation {
+    const words = openCustodianShare(share, custodianSeed);
+    const body = {
+        custodian: share.custodian, vaultId: share.vaultId, generation: share.generation, index: share.index,
+        shareCheck: shareCheck(words, share.vaultId, share.generation, share.index),
+    };
+    return { ...body, sig: signStatement(custodianSeed, confirmStatement(body)) };
+}
+
+/** Two current custodians drop a genesis or reshare nobody finished. `pendingId` names that one, so a signature can't drop a later one. */
+export function cancelStatement(pendingId: string): Uint8Array {
+    return utf8ToBytes(`${CANCEL_TAG}\n${pendingId}`);
+}
+
 // ─── A share presented to the keyholder (custodian → vault) ─────────────────────────────────
 
 export const SHARE_TAG = 'beanpool-vault-share/1';

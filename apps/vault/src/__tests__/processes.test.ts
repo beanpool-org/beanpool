@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { custodianKey, genesis, presentShare } from '../custodian/lib.js';
+import { confirmShare, custodianKey, genesis, presentShare } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
 
 /**
@@ -92,6 +92,9 @@ describe('the two programs', () => {
         const g = await genesis(url, custodians[0], { acceptNoHardwareProof: true });
         expect(g.status).toBe(200);
         const shares = g.body.custodianShares as CustodianShare[];
+        expect(await health()).toBe('locked');
+        await confirmShare(url, custodians[0], shares[0], { acceptNoHardwareProof: true });
+        expect((await confirmShare(url, custodians[1], shares[1], { acceptNoHardwareProof: true })).body.state).toBe('open');
         expect(await health()).toBe('open');
 
         expect(await stop(keyholder.child)).toBe(0);

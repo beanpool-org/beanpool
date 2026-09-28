@@ -95,6 +95,8 @@ interface KeyholderStatus {
     state: 'fresh' | 'locked' | 'open';
     since: number;
     custodians: string[];
+    /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
+    pending: { purpose: string; generation: number; custodians: string[]; confirmed: string[] } | null;
     generation: number | null;
     platform: string;
     releaseHash: string;
@@ -263,7 +265,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             return { ...(await call<Omit<KeyholderStatus, 'reachable'>>('status')), reachable: true };
         } catch {
             return {
-                state: 'locked', since: startedAt, custodians: [], generation: null, platform: 'none', releaseHash: 'unknown',
+                state: 'locked', since: startedAt, custodians: [], pending: null, generation: null, platform: 'none', releaseHash: 'unknown',
                 restorePending: false, publicKeys: null, wrapVersion: null, reachable: false,
             };
         }
@@ -676,6 +678,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return json(200, await call('hello', { custodianNonce: ctx.body.custodianNonce }));
     });
 
+    /** Nothing is in force after a genesis until two custodians confirm their shares (/v1/unlock/confirm). */
     route('POST', '/v1/unlock/genesis', 'custodian', true, async ctx => {
         if (ctx.status.state !== 'fresh') throw new HttpError(409, 'already_set_up', 'This vault already has its keys.');
         if (existsSync(dbPath)) {
@@ -684,17 +687,42 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             leftover.close();
             if (n > 0) throw new HttpError(409, 'data_without_keys', 'The data directory holds copies but the keyholder has no keys: restore a backup instead.');
         }
-        const result = await call('genesis', { custodian: ctx.key, sig: ctx.body.sig });
-        await ensureDb();
-        return json(200, result);
+        return json(200, await call('genesis', { custodian: ctx.key, sig: ctx.body.sig }));
     });
+
+    /** The vault is open once the keyholder is; a restart that cut a re-wrap short is picked up here. */
+    async function unlocked(): Promise<void> {
+        await ensureDb();
+        track(rewrapAll());
+    }
 
     route('POST', '/v1/unlock/share', 'custodian', true, async ctx => {
         const submission = ctx.body.submission as { custodian?: unknown } | undefined;
         if (!submission || submission.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A share is sent by the custodian it belongs to.');
         const result = await call<{ state: string }>('share', { submission });
-        if (result.state === 'open') await ensureDb();
+        if (result.state === 'open') await unlocked();
         return json(200, result);
+    });
+
+    /*
+     * A genesis or a reshare waiting for its custodians (keyholder.ts): each new custodian fetches their own sealed share
+     * again, and confirms it; two current custodians can drop one nobody finished. Under /v1/unlock/ because they answer
+     * while locked too: a restart in the middle of a reshare must not strand it.
+     */
+    route('POST', '/v1/unlock/pending', 'custodian', true, async ctx => json(200, await call('pendingShare', { custodian: ctx.key })));
+
+    route('POST', '/v1/unlock/confirm', 'custodian', true, async ctx => {
+        const confirmation = ctx.body.confirmation as { custodian?: unknown } | undefined;
+        if (!confirmation || confirmation.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A share is confirmed by the custodian it belongs to.');
+        const result = await call<{ state: string; switched: boolean }>('confirm', { confirmation });
+        if (result.switched && result.state === 'open') await unlocked();
+        return json(200, result);
+    });
+
+    route('POST', '/v1/unlock/cancel', 'custodian', true, async ctx => {
+        const cancel = ctx.body.cancel as { custodian?: unknown } | undefined;
+        if (!cancel || cancel.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A cancel is sent by the custodian who signs it.');
+        return json(200, await call('cancelPending', { cancel }));
     });
 
     route('POST', '/v1/unlock/restore', 'custodian', true, async ctx => {
@@ -731,9 +759,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const submission = ctx.body.submission as { custodian?: unknown } | undefined;
         if (!submission || submission.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A share is sent by the custodian it belongs to.');
         await ensureDb();
-        const result = await call<{ custodianShares?: unknown }>('share', { submission });
-        if (result.custodianShares) track(rewrapAll());
-        return json(200, result);
+        // The new shares wait for their custodians' confirmations; the re-wrap follows the switch.
+        return json(200, await call('share', { submission }));
     });
 
     // ─── Backups ────────────────────────────────────────────────────────────────────────────
@@ -844,6 +871,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const map: Record<string, number> = {
                 locked: 503, bad_request: 400, unknown_custodian: 403, bad_signature: 403, bad_share: 400, bad_box: 400,
                 bad_backup: 400, already_set_up: 409, open: 409, fresh: 409, proposal_mismatch: 409, no_custodians: 409,
+                no_pending: 404, bad_confirmation: 400, restore_pending: 409,
             };
             const status = map[e.code] ?? 500;
             if (status === 500) counters.counts.errors++;
@@ -883,7 +911,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 if (!check.ok) throw new HttpError(check.status, check.code, check.error);
                 key = check.key;
                 if (r.auth === 'custodian') {
-                    if (!status.custodians.includes(key)) throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians.');
+                    if (!status.custodians.includes(key) && !status.pending?.custodians.includes(key)) {
+                        throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians.');
+                    }
                     limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
                 }
             }

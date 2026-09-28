@@ -30,6 +30,9 @@ const HANDLERS: Record<string, Handler> = {
         return { state: kh.status().state };
     },
     share: (kh, a) => kh.submitShare(a.submission),
+    pendingShare: (kh, a) => kh.pendingShare(a),
+    confirm: (kh, a) => kh.confirmShare(a.confirmation),
+    cancelPending: (kh, a) => kh.cancelPending(a.cancel),
     index: (kh, a) => ({ index: kh.index(a) }),
     depositWrap: (kh, a) => kh.depositWrap(a as Parameters<Keyholder['depositWrap']>[0]),
     readMeta: (kh, a) => kh.readMeta(a as Parameters<Keyholder['readMeta']>[0]),

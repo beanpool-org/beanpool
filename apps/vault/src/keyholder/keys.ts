@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
@@ -15,6 +15,11 @@ import { isVaultKeyHex, vaultB64, vaultDepositKeyId, vaultUnb64 } from '@beanpoo
  * On disk, `state.json` in the keyholder's state directory:
  *
  *   {v, vaultId, generation, custodians, threshold, mCheck, dk: {n, ct}}
+ *
+ * and, while a genesis or a reshare waits for two of its custodians to show they hold their shares, `state.next.json`
+ * beside it ({@link PendingStateFile}): the new state, a check of each new share, and who has confirmed. The switch
+ * rewrites `state.json` and then removes `state.next.json`; a `state.next.json` equal to `state.json` is a switch that
+ * finished.
  *
  * - `mCheck = HMAC-SHA256(M, "beanpool-vault-m-check/1" ‖ vaultId)`: how the keyholder tells a wrong `M` (shares from
  *   another split) from a tampered file.
@@ -32,6 +37,7 @@ import { isVaultKeyHex, vaultB64, vaultDepositKeyId, vaultUnb64 } from '@beanpoo
  */
 
 export const STATE_FILE = 'state.json';
+export const PENDING_FILE = 'state.next.json';
 const DK_MAGIC = Buffer.from('BVDK');
 const DK_INFO = Buffer.from('beanpool-vault-dk/1');
 const M_CHECK_LABEL = Buffer.from('beanpool-vault-m-check/1');
@@ -247,11 +253,11 @@ export function readStateFile(dir: string): VaultStateFile | null {
 }
 
 /** Written whole or not at all: a temp file, fsync, rename, fsync of the directory. */
-export function writeStateFile(dir: string, state: VaultStateFile): void {
+function writeJsonFile(dir: string, name: string, value: unknown): void {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const file = path.join(dir, STATE_FILE);
+    const file = path.join(dir, name);
     const tmp = `${file}.tmp`;
-    writeFileSync(tmp, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+    writeFileSync(tmp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
     const fd = openSync(tmp, 'r+');
     try {
         fsyncSync(fd);
@@ -259,6 +265,10 @@ export function writeStateFile(dir: string, state: VaultStateFile): void {
         closeSync(fd);
     }
     renameSync(tmp, file);
+    syncDir(dir);
+}
+
+function syncDir(dir: string): void {
     try {
         const dfd = openSync(dir, 'r');
         try {
@@ -269,4 +279,50 @@ export function writeStateFile(dir: string, state: VaultStateFile): void {
     } catch {
         // Some filesystems can't fsync a directory; the rename is still atomic.
     }
+}
+
+export function writeStateFile(dir: string, state: VaultStateFile): void {
+    writeJsonFile(dir, STATE_FILE, state);
+}
+
+// ─── A genesis or reshare waiting for its custodians ───────────────────────────────────────
+
+export type PendingPurpose = 'genesis' | 'reshare';
+
+export interface PendingStateFile {
+    v: 1;
+    purpose: PendingPurpose;
+    /** The state the vault switches to. */
+    state: VaultStateFile;
+    /** `shareCheck` (shared/ceremony.ts) of each new share, in custodian order. */
+    shareChecks: string[];
+    /** The new custodians who have shown they hold their share. */
+    confirmed: string[];
+}
+
+export function readPendingFile(dir: string): PendingStateFile | null {
+    const file = path.join(dir, PENDING_FILE);
+    if (!existsSync(file)) return null;
+    const p = JSON.parse(readFileSync(file, 'utf8')) as Partial<PendingStateFile> | null;
+    const state = asStateFile(p?.state);
+    if (!p || p.v !== 1 || (p.purpose !== 'genesis' && p.purpose !== 'reshare') || !state
+        || !Array.isArray(p.shareChecks) || p.shareChecks.length !== state.custodians.length || !p.shareChecks.every(c => typeof c === 'string')
+        || !Array.isArray(p.confirmed) || !p.confirmed.every(c => state.custodians.includes(c))) {
+        throw new Error(`${file} is not a pending vault state.`);
+    }
+    return { v: 1, purpose: p.purpose, state, shareChecks: [...p.shareChecks], confirmed: [...new Set(p.confirmed)] };
+}
+
+export function writePendingFile(dir: string, pending: PendingStateFile): void {
+    writeJsonFile(dir, PENDING_FILE, pending);
+}
+
+export function removePendingFile(dir: string): void {
+    rmSync(path.join(dir, PENDING_FILE), { force: true });
+    syncDir(dir);
+}
+
+/** The same sealed state: the same `M` check and the same sealed `DK`. */
+export function sameState(a: VaultStateFile, b: VaultStateFile): boolean {
+    return a.vaultId === b.vaultId && a.generation === b.generation && a.mCheck === b.mCheck && a.dk.n === b.dk.n && a.dk.ct === b.dk.ct;
 }

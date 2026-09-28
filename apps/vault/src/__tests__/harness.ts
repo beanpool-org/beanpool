@@ -19,7 +19,7 @@ import {
 } from '@beanpool/signin';
 import { LocalDirectoryStore } from '../api/backup-store.js';
 import { createVaultApi, type VaultApi } from '../api/server.js';
-import { custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
+import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import { Keyholder } from '../keyholder/keyholder.js';
 import { listenKeyholder, type KeyholderServer } from '../keyholder/server.js';
 import type { CustodianShare } from '../shared/ceremony.js';
@@ -210,12 +210,28 @@ export interface Genesis {
     depositKey: string;
 }
 
-/** Genesis by custodian 0, returning the three sealed shares and the public keys the app would pin. */
+/**
+ * Genesis by custodian 0, confirmed by custodians 0 and 1 (so the vault is open), returning the three sealed shares
+ * and the public keys the app would pin.
+ */
 export async function doGenesis(v: VaultUnderTest): Promise<Genesis> {
     const r = await genesis(v.baseUrl, v.custodians[0], v.call());
     if (r.status !== 200) throw new Error(`genesis failed: ${JSON.stringify(r.body)}`);
     const pk = r.body.publicKeys as { ticket: string[]; deposit: { key: string }[] };
-    return { shares: r.body.custodianShares as CustodianShare[], ticketKey: pk.ticket[0], depositKey: pk.deposit[0].key };
+    const shares = r.body.custodianShares as CustodianShare[];
+    const confirmed = await confirmWith(v, shares, [0, 1]);
+    if (confirmed[1].body.state !== 'open') throw new Error(`genesis not confirmed: ${JSON.stringify(confirmed[1].body)}`);
+    return { shares, ticketKey: pk.ticket[0], depositKey: pk.deposit[0].key };
+}
+
+/** Custodians (indexes into `custodians`, v.custodians by default) confirm they hold their new share. */
+export async function confirmWith(v: VaultUnderTest, shares: CustodianShare[], who: number[], custodians = v.custodians): Promise<Reply[]> {
+    const out: Reply[] = [];
+    for (const i of who) {
+        const share = shares.find(s => s.custodian === custodians[i].publicKey) as CustodianShare;
+        out.push(await confirmShare(v.baseUrl, custodians[i], share, v.call()));
+    }
+    return out;
 }
 
 /** Two custodians present their shares (indexes into v.custodians and shares). */

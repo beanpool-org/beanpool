@@ -24,6 +24,13 @@ share sealed to one custodian's pinned Ed25519 key. `M` opens `DK`, the working 
 `pk_index` HMACs), `K_wrap` (envelopes), `K_disk` (V3's data partition), `K_backup`, the Ed25519 ticket key and the
 X25519 deposit key. The apps pin the last two. A reshare changes `M`, `K_wrap` and `K_backup` and keeps the rest.
 
+A genesis or a reshare is two steps. The new state waits beside the old one (`state.next.json`), and the new shares,
+sealed to their custodians, can be fetched again (`/v1/unlock/pending`). The vault switches only when two of the new
+custodians show they hold their share: each signs a check of its words (`/v1/unlock/confirm`), or two of them unlock
+with the new shares. Until then the old shares are the ones in force, so no lost answer or restart can leave a vault
+that nobody can open. Two current custodians can drop a reshare nobody finished (`/v1/unlock/cancel`); a genesis
+nobody finished is replaced by the next one.
+
 ## Routes
 
 | route | signed by | does |
@@ -36,7 +43,7 @@ X25519 deposit key. The apps pin the last two. A reshare changes `M`, `K_wrap` a
 | `POST /v1/restore`, `/v1/restore/collect` | the throwaway key | every restore is held 24 hours (D2), then released sealed to that key |
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
 | `GET /v1/report` | nobody | signed daily totals, nothing per member |
-| `POST /v1/unlock/*`, `/v1/reshare/*` | a custodian key | hello, genesis, share, restore-from-backup; reshare |
+| `POST /v1/unlock/*`, `/v1/reshare/*` | a custodian key | hello, genesis, share, restore-from-backup; pending, confirm, cancel (a genesis or reshare waiting); reshare |
 
 Requests are signed in BeanPool's request format 2 (`@beanpool/core` `request-signing.ts`) for the vault's own host
 name. The wire formats the phone shares (tickets, deposit boxes, releases) are `@beanpool/core` `vault-wire.ts`.

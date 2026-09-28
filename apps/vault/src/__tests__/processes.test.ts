@@ -41,9 +41,12 @@ interface Started {
     out: () => string;
 }
 
-/** Starts `script` with `--config`, core dumps off, and resolves once it says it is listening (or rejects if it exits). */
-function start(script: string, config: string, env: Record<string, string> = {}): Promise<Started> {
-    const child = spawn('/bin/sh', ['-c', 'ulimit -c 0 && exec "$@"', 'sh', process.execPath, '--import', 'tsx', script, '--config', config], {
+/**
+ * Starts `script` with `--config`, core dumps off and (as V3's unit will) `--disable-sigusr1`, and resolves once it
+ * says it is listening (or rejects if it exits).
+ */
+function start(script: string, config: string, env: Record<string, string> = {}, nodeFlags = ['--disable-sigusr1']): Promise<Started> {
+    const child = spawn('/bin/sh', ['-c', 'ulimit -c 0 && exec "$@"', 'sh', process.execPath, ...nodeFlags, '--import', 'tsx', script, '--config', config], {
         cwd: VAULT_ROOT, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     children.push(child);
@@ -120,5 +123,24 @@ describe('the two programs', () => {
         );
         expect(refused.code).toBe(1);
         expect(refused.output).toContain('not starting');
+    });
+
+    it('the keyholder will not start unless SIGUSR1 is kept from opening an inspector, and with that kept, the signal opens none', async () => {
+        const config = path.join(dir, 'keyholder-3.json');
+        writeFileSync(config, JSON.stringify({ stateDir: path.join(dir, 'state-3'), socketPath: path.join(dir, 'kh3.sock'), genesisCustodians: [] }));
+        const refused = await start('src/keyholder/main.ts', config, {}, []).then(
+            () => { throw new Error('it started'); },
+            (e: { output: string; code: number }) => e,
+        );
+        expect(refused.code).toBe(1);
+        expect(refused.output).toContain('--disable-sigusr1');
+
+        // Without the flag Node prints "Debugger listening" at once; with it, the signal is ignored.
+        const running = await start('src/keyholder/main.ts', config);
+        running.child.kill('SIGUSR1');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(running.out()).not.toContain('Debugger listening');
+        expect(running.child.exitCode).toBeNull();
+        expect(await stop(running.child)).toBe(0);
     });
 });

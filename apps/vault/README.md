@@ -56,8 +56,11 @@ row is `{id, sub_index, pk_index, envelope, updated_day}`.
 ## What V3's image must provide
 
 The keyholder refuses to start on Linux when a core file is possible, and anywhere with a debugger or heap-snapshot
-flag. Plain Node can't `mlockall`, and the vault ships no native module, so memory is kept off disk by the image:
+flag or without `--disable-sigusr1`. Plain Node can't `mlockall`, and the vault ships no native module, so memory is
+kept off disk by the image:
 
+- the keyholder started as `node --disable-sigusr1 dist/keyholder/main.js` (Node 22.14 or later): otherwise SIGUSR1
+  opens an unauthenticated inspector inside it;
 - no swap partition or file, no hibernation, no crash kernel (kdump);
 - `LimitCORE=0` on the keyholder's unit; `kernel.yama.ptrace_scope = 3`;
 - the keyholder and the API under their own users, the socket and state directory readable by those two only;

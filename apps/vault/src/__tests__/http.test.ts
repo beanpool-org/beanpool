@@ -104,8 +104,12 @@ describe('the HTTP surface', () => {
     });
 
     it('memory hygiene: refuses debugger flags anywhere and a possible core file on Linux', () => {
-        const clean = { mlock: 'unavailable' as const, coreDumps: 'off' as const, swap: 'none' as const, kdump: 'off' as const, ptraceScope: 3, debugFlags: [] };
+        const clean = {
+            mlock: 'unavailable' as const, coreDumps: 'off' as const, swap: 'none' as const, kdump: 'off' as const, ptraceScope: 3, debugFlags: [],
+            sigusr1: 'disabled' as const,
+        };
         expect(hygieneRefusal(clean, 'linux')).toBeNull();
+        expect(hygieneRefusal({ ...clean, sigusr1: 'enabled' }, 'darwin')).toMatch(/--disable-sigusr1/);
         expect(hygieneRefusal({ ...clean, coreDumps: 'on' }, 'linux')).toMatch(/LimitCORE=0/);
         expect(hygieneRefusal({ ...clean, coreDumps: 'unknown' }, 'darwin')).toBeNull();
         expect(hygieneRefusal({ ...clean, debugFlags: ['--inspect'] }, 'darwin')).toMatch(/--inspect/);

@@ -110,4 +110,13 @@ describe('FormerAddressBanner', () => {
         const { container } = await renderBanner(new Error('offline'));
         expect(container.innerHTML).toBe('');
     });
+
+    it('a read that fails at once takes nothing down with it: the page around it still renders', async () => {
+        openedAt('oldname.beanpool.org');
+        vi.mocked(communityInfoOnce).mockImplementation(() => { throw new Error('no such export on the mock'); });
+        render(<div data-testid="page"><FormerAddressBanner signedIn /><p>the page</p></div>);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(screen.getByTestId('page').innerHTML).toBe('<p>the page</p>');
+    });
 });

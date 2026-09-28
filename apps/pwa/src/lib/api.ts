@@ -253,6 +253,15 @@ export interface CommunityInfo {
      * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
      */
     features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean };
+    /** This community's own names, published (apps/server engine/own-addresses.ts). */
+    addresses?: string[];
+    /**
+     * Where the community lives now: its live BeanPool name, else the first of `addresses`; null when it has none.
+     * Absent on a node from before it (lib/former-address.ts).
+     */
+    primaryAddress?: string | null;
+    /** The BeanPool names it had before, still accepted: the web app opened at one says it has moved. */
+    formerAddresses?: string[];
 }
 
 export interface Member {

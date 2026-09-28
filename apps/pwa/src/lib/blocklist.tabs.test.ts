@@ -805,6 +805,26 @@ describe('two tabs, and a node that takes time to answer', () => {
         expect(node.sent).toEqual([`add ${K2}`, how === 'Unblock All' ? 'clear' : `remove ${K1}`]);
     });
 
+    it('an Unblock All that reaches the node after a later block: once both answer, one more read shows what the node holds', async () => {
+        const T = await oneTabRead([K1], null);
+        // Unblock All is slow on its way and reaches the node at 100 ms, after the block of K2 made at 10 ms (there at 11 ms,
+        // answered at 12 ms, K1 and K2). Its answer, nobody blocked, was asked for first but is the node's newest.
+        node.thereQueue = { clear: [100] };
+        node.there = { add: 1, read: 1 };
+        node.back = { clear: 1, add: 1, read: 1 };
+        const clearing = T.clearBlocklist();
+        await vi.advanceTimersByTimeAsync(10);
+        const blocking = T.blockUser(K2);
+        await vi.advanceTimersByTimeAsync(5);
+        await expect(blocking).resolves.toBe(true);
+        expect([...T.getBlockedUsers()].sort()).toEqual([K1, K2].sort());
+        await vi.advanceTimersByTimeAsync(3000);
+        await clearing;
+        expect(node.list).toEqual([]);
+        expect(T.getBlockedUsers()).toEqual([]);
+        expect(node.sent).toEqual(['clear', `add ${K2}`, 'read']);
+    });
+
     it('an older answer never shows again a block the member lifted here since: an unblock of K1 answered slowly, then Unblock All', async () => {
         const T = await oneTabRead([K1, K2], null);
         // The unblock of K1 reaches the node at 1 ms, and its answer (K2 blocked) comes back at 201 ms. At 10 ms the member

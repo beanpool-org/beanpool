@@ -25,7 +25,9 @@
  * Nothing leaves the screens before the node says so. A block another tab added to that list shows at once; one it took
  * off stays shown until the node answers a request this page made after seeing it go (that tab may have moved it up, and
  * the node's list this page holds is older). And a read that was on its way when the member blocked, unblocked or cleared
- * here drops its answer, which may be older than the node's answer to that change, and reads again.
+ * here drops its answer, which may be older than the node's answer to that change, and reads again. The answer to a change
+ * that comes back after the answer to a request made later is older too: the newer stands, and a block only the older
+ * holds stays shown until the read that follows (takeNodeAnswer).
  *
  * An unblock or Unblock All the member makes in this page while the move is on its way stands, even when it reaches the
  * node before the move's list does: the move sends no key the member is unblocking here, and once one of its adds has
@@ -114,6 +116,17 @@ let ticks = 0;
  * moved may be older than what was taken meanwhile: it drops its answer, and one more read follows.
  */
 let answers = 0;
+/**
+ * The tick the newest answer this page has taken was asked at. The answer to a request made before it that comes back
+ * after it (that request was slower) is older, and is not taken over it (takeNodeAnswer).
+ */
+let takenAsked = 0;
+/**
+ * The member's last word here on each key they blocked or unblocked in this page (Unblock All: each key it lifted) that the
+ * node took, with the tick it was asked at. An older answer that still holds a key they unblocked here since doesn't show
+ * that key again. In this page's memory only.
+ */
+const lastWordHere = new Map<string, { asked: number; unblock: boolean }>();
 /** What the screens see: the node's list, anything still waiting to move up, and anything `leaving`. */
 let current: string[] = [];
 
@@ -263,14 +276,48 @@ function emit(): void {
     }
 }
 
-/** The node's answer to a request made at tick `asked`: it settles every block that joined `leaving` before then. */
-function takeNodeAnswer(res: BlockList, asked: number): void {
-    nodeList = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
+/**
+ * The node's answer to a request made at tick `asked`, taken when that request was made after the one whose answer was
+ * taken last: it settles every block that joined `leaving` before then. Answers whether it was taken.
+ *
+ * An answer to a request made before that one, coming back after it (its request was slower), is older: the newer answer
+ * stands, and a block it holds is never taken off the screens by the older (#1269's review, 5861163950). The two requests
+ * may still have crossed on the way, the older reaching the node last, so a block the older answer holds that the newer
+ * doesn't stays shown (`leaving`), unless the member has unblocked that key here since: then it is their last word. When
+ * the older answer says anything else the newer doesn't, one more read, asked after both, settles which is right.
+ */
+function takeNodeAnswer(res: BlockList, asked: number): boolean {
+    const keys = Array.isArray(res?.blocked) ? res.blocked.map(b => b.publicKey).filter((k): k is string => typeof k === 'string') : [];
+    if (asked < takenAsked) {
+        const newer = new Set(nodeList);
+        const older = new Set(keys);
+        const tick = ++ticks;
+        let differs = false;
+        for (const k of older) {
+            if (newer.has(k)) continue;
+            const word = lastWordHere.get(k);
+            if (word?.unblock && word.asked > asked) continue;
+            leaving.set(k, tick);
+            differs = true;
+        }
+        for (const k of newer) if (!older.has(k)) differs = true;
+        if (differs) loadBlocklist().catch(() => { /* told through getBlocklistStatus */ });
+        return false;
+    }
+    nodeList = keys;
     nodeMax = typeof res?.max === 'number' ? res.max : 0;
     loaded = true;
     readError = null;
     answers++;
+    takenAsked = asked;
     for (const [k, left] of leaving) if (left < asked) leaving.delete(k);
+    return true;
+}
+
+/** Notes the member's block (or unblock) of `k` here, asked at tick `asked`, once the node has taken it. */
+function noteLastWord(k: string, asked: number, unblock: boolean): void {
+    const had = lastWordHere.get(k);
+    if (!had || had.asked < asked) lastWordHere.set(k, { asked, unblock });
 }
 
 /** The keys this member has blocked, for the screens that hide them. */
@@ -509,6 +556,7 @@ export function startBlocklist(ownerPubkey: string): () => void {
         leaving.clear();
         // What the account before is owed is for its list, and every request now changes this one's.
         owed.clear();
+        lastWordHere.clear();
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
@@ -562,6 +610,7 @@ export async function blockUser(
         throw toBlocklistError(e, 'block');
     }
     settle(true);
+    noteLastWord(targetPubkey, asked, false);
     takeNodeAnswer(res, asked);
     emit();
     if (reporterPubkey && Array.isArray(res.added) && res.added.includes(targetPubkey)) {
@@ -588,6 +637,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
         throw toBlocklistError(e, 'unblock');
     }
     settle(true);
+    noteLastWord(targetPubkey, asked, true);
     // A block still waiting to move up from this browser goes too, or it would be moved up again; so do those the node now
     // holds. Whatever else is there stays, whoever wrote it.
     const held = heldBy(res);
@@ -613,6 +663,7 @@ export async function clearBlocklist(): Promise<void> {
         throw toBlocklistError(e, 'clear');
     }
     settle(true);
+    for (const k of shown) noteLastWord(k, asked, true);
     const held = heldBy(res);
     keepStoredList(k => shown.has(k) || held.has(k));
     takeNodeAnswer(res, asked);
@@ -702,6 +753,8 @@ export function resetBlocklistForTests(): void {
     leaving.clear();
     ticks = 0;
     answers = 0;
+    takenAsked = 0;
+    lastWordHere.clear();
     current = [];
     reading = null;
     readAgain = false;

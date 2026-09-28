@@ -399,7 +399,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // the Market, which says so with the way to the global community (utils/members-only-listings.ts).
                 const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
                 const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
-                await noteMembersOnly(anchorUrl, membersOnly);
+                // A 401 (an unsigned read) leaves the note as it was: it says nothing about membership, and the Market's
+                // members-only card must never show a member for it (PR #1286). A key-holding phone always signs, so a
+                // real non-member gets the 403.
+                if (postsRes.status !== 401) await noteMembersOnly(anchorUrl, membersOnly);
                 // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
                 // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
                 // switch in flight), which says nothing about membership: the cache stays (PR #1286 review 4125870399).

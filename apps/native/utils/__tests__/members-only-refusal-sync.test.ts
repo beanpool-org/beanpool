@@ -172,6 +172,8 @@ describe("a community's members_only refusal", () => {
         expect(votes()).toEqual(['post-mine', 'post-poll']);
         expect(rsvps()).toEqual(['post-party']);
         expect(store.has(LAST_SYNC_KEY)).toBe(true);
+        // Nor does it note the community as members-only: the Market's card never shows a member for an unsigned read.
+        expect(store.has(MEMBERS_ONLY_KEY)).toBe(false);
     });
 
     it("a 403 while the phone can't read its own key drops nothing (it can't tell its own posts from the others')", async () => {

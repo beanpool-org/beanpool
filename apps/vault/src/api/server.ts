@@ -50,6 +50,9 @@ export const GLOBAL_ORIGIN = 'https://global.beanpool.org';
 export const BACKUP_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 const RESTORE_PENDING = 'restore-pending.bin';
+const RESTORE_BUILD = `${DB_FILE}.restore`;
+/** After a restore from backup failed to finish, the next try waits this long (requests meanwhile get 503 at once). */
+export const RESTORE_RETRY_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -273,14 +276,44 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     // ─── The database, a restore in progress, and re-wrapping ───────────────────────────────
 
+    let restoreRetryAt = 0;
+
+    function restoreWaiting(why: string): HttpError {
+        return new HttpError(503, 'restoring', `The key vault is finishing a restore from backup: ${why}. It will try again.`, { locked: true });
+    }
+
+    /**
+     * The database, opened once the keyholder is open. While the keyholder still names a backup it was restored from,
+     * that restore is finished first (built completely, then put in place), and nothing opens until it is: never an
+     * empty database, never the backup's without the deletions made after it. A failure leaves the restore pending,
+     * answers 503, and is tried again.
+     */
     async function ensureDb(): Promise<VaultDb> {
         if (db) return db;
         if (opening) return opening;
         opening = (async () => {
-            if (existsSync(pendingPath)) await completeRestore();
-            else db = VaultDb.open(opts.dataDir);
+            const status = await keyholderStatus();
+            if (status.state !== 'open') throw new KeyholderUnavailable();
+            if (status.restorePending) {
+                // A crash after the keyholder took the backup's state but before the file got its name.
+                if (!existsSync(pendingPath) && existsSync(`${pendingPath}.part`)) renameSync(`${pendingPath}.part`, pendingPath);
+                if (!existsSync(pendingPath)) throw restoreWaiting('the backup it was started from is missing from the data directory');
+                if (clock() < restoreRetryAt) throw restoreWaiting('the last try failed');
+                try {
+                    db = await completeRestore();
+                } catch (e) {
+                    restoreRetryAt = clock() + RESTORE_RETRY_MS;
+                    counters.counts.errors++;
+                    throw restoreWaiting(e instanceof KeyholderCallError || e instanceof Error ? e.message.slice(0, 200) : 'it failed');
+                }
+            } else {
+                // No restore, or one that finished (the keyholder forgot its backup) and stopped before tidying up.
+                rmSync(pendingPath, { force: true });
+                rmSync(`${pendingPath}.part`, { force: true });
+                db = VaultDb.open(opts.dataDir);
+            }
             track(rewrapAll());
-            return db as VaultDb;
+            return db;
         })().finally(() => {
             opening = null;
         });
@@ -288,35 +321,55 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     }
 
     /**
-     * After the unlock of a vault restored from a backup: the backup's database goes into place, then every newer
-     * backup's deletion records are applied, so a copy deleted after that backup was made is dropped again (§1.7).
+     * After the unlock of a vault restored from a backup: the backup's database is built beside the vault's file, every
+     * newer backup's deletion records are applied to it, so a copy deleted after that backup was made is dropped again
+     * (§1.7), and only then does it go into place. A newer backup that can't be listed, fetched or opened fails the
+     * whole restore, which is tried again: skipping one would bring back copies its members deleted. (A file of another
+     * vault in the same store is not one of this vault's backups and says nothing about its copies.)
+     *
      * A record the backup already holds is older than the backup and is left alone: a copy deposited again after it
-     * must survive.
+     * must survive. The keyholder forgets the backup (`restoreDone`) only once the built database is in place: a crash
+     * before that builds it again; a crash after finds the restore done.
      */
-    async function completeRestore(): Promise<void> {
+    async function completeRestore(): Promise<VaultDb> {
         const file = readFileSync(pendingPath);
-        const opened = await kh.call<{ header: { name: string } }>('openBackup', {}, file, 300_000);
+        const opened = await kh.call<{ header: { name: string; vaultId: string } }>('openBackup', {}, file, 300_000);
+        const buildPath = path.join(opts.dataDir, RESTORE_BUILD);
+        const removeBuild = () => {
+            rmSync(buildPath, { force: true });
+            rmSync(`${buildPath}-journal`, { force: true });
+        };
+        removeBuild();
+        writeFileSync(buildPath, opened.binary, { mode: 0o600 });
+        opened.binary.fill(0);
+        const built = VaultDb.open(opts.dataDir, RESTORE_BUILD);
+        try {
+            const newer = (await store.list()).filter(n => compareBackupNames(n, opened.result.header.name) > 0).sort(compareBackupNames);
+            for (const name of newer) {
+                const bytes = await store.get(name);
+                if (parseBackupFile(bytes).header.vaultId !== opened.result.header.vaultId) continue;
+                const d = await call<{ deletions: string }>('openBackupDeletions', {}, bytes, 300_000);
+                const records = JSON.parse(d.deletions) as WireDeletion[];
+                built.transaction(() => {
+                    for (const w of records) {
+                        const rec: DeletionRow = { copy_id: w.id, pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
+                        if (!built.hasDeletion(rec)) built.applyDeletion(rec);
+                    }
+                });
+            }
+        } catch (e) {
+            built.close();
+            removeBuild();
+            throw e;
+        }
+        built.close();
         db?.close();
         db = null;
         rmSync(`${dbPath}-journal`, { force: true });
-        writeFileSync(`${dbPath}.restore`, opened.binary, { mode: 0o600 });
-        renameSync(`${dbPath}.restore`, dbPath);
-        const restored = VaultDb.open(opts.dataDir);
-        db = restored;
-        const newer = (await store.list()).filter(n => compareBackupNames(n, opened.result.header.name) > 0).sort(compareBackupNames);
-        for (const name of newer) {
-            try {
-                const d = await call<{ deletions: string }>('openBackupDeletions', {}, await store.get(name), 300_000);
-                for (const w of JSON.parse(d.deletions) as WireDeletion[]) {
-                    const rec: DeletionRow = { copy_id: w.id, pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
-                    if (!restored.hasDeletion(rec)) restored.applyDeletion(rec);
-                }
-            } catch {
-                counters.counts.errors++;
-            }
-        }
+        renameSync(buildPath, dbPath);
         await call('restoreDone');
         rmSync(pendingPath, { force: true });
+        return VaultDb.open(opts.dataDir);
     }
 
     /** Every envelope under the current K_wrap (after a reshare, or resuming one cut short by a restart). */
@@ -430,8 +483,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         routes[`${method} ${p}`] = { auth, whenLocked, handler };
     };
 
+    // A vault still finishing a restore from backup serves nothing yet: locked, to the outside.
     route('GET', '/v1/health', 'none', true, async ctx => json(200, {
-        state: ctx.status.state === 'open' ? 'open' : 'locked',
+        state: ctx.status.state === 'open' && !ctx.status.restorePending ? 'open' : 'locked',
         release: ctx.status.releaseHash,
         since: new Date(ctx.status.since).toISOString(),
     }));

@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
-import { HOLD_MS } from '../api/server.js';
+import type { BackupStore } from '../api/backup-store.js';
+import { HOLD_MS, RESTORE_RETRY_MS } from '../api/server.js';
 import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.js';
 import { splitMasterSecret } from '../keyholder/slip39.js';
 import { compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
@@ -175,5 +176,128 @@ describe('backups', () => {
         await a.api.runBackup();
         expect(readdirSync(a.storeDir)).not.toContain(first);
         expect(readdirSync(a.storeDir)).toHaveLength(2);
+    });
+});
+
+describe('a restore from backup is finished before anything sees it', () => {
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    /**
+     * Vault `a`: a member's copy with a restore waiting on it, the backup `older`, then the member deletes the copy
+     * and a newer backup carries the deletion record.
+     */
+    async function deletedAfterBackup() {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'deleted-later');
+        const hold = await startRestore(a, 'google', 'deleted-later');
+        a.clock.advance(HOLD_MS);
+        const older = await a.api.runBackup();
+        a.clock.advance(60 * 60 * 1000);
+        expect((await signed(a, '/v1/copies/delete', { provider: 'google' }, member.seed)).body).toEqual({ deleted: 1 });
+        const newer = await a.api.runBackup();
+        return { a, g, member, hold, older, newer };
+    }
+
+    /** A fresh vault on `a`'s store, custodians, providers and clock, its store wrapped, told to restore `backup`. */
+    async function restoring(a: VaultUnderTest, backup: string, store: (inner: BackupStore) => BackupStore) {
+        const b = await vault({ stub: a.stub, clock: a.clock, custodians: a.custodians, storeDir: a.storeDir, store });
+        expect((await restoreFromBackup(b.baseUrl, b.custodians[0], backup, b.call())).body).toMatchObject({ state: 'locked' });
+        return b;
+    }
+
+    function wrap(inner: BackupStore, over: Partial<BackupStore>): BackupStore {
+        return {
+            put: (n, bytes) => inner.put(n, bytes), get: n => inner.get(n), list: () => inner.list(), delete: n => inner.delete(n), ...over,
+        };
+    }
+
+    it('a slow store: a request during the restore never sees the backup before its newer deletions are applied', async () => {
+        const { a, g, hold, older } = await deletedAfterBackup();
+        const b = await restoring(a, older, inner => wrap(inner, { get: async n => { await sleep(400); return inner.get(n); } }));
+        await unlockWith(b, g.shares, [0]);
+        const unlocking = unlockWith(b, g.shares, [1]);
+        // As soon as a database is in place, or being built beside it.
+        while (!existsSync(path.join(b.dataDir, 'vault.db')) && !existsSync(path.join(b.dataDir, 'vault.db.restore'))) await sleep(5);
+        const during = await signed(b, '/v1/restore/collect', { holdId: hold.reply.body.holdId }, hold.e);
+        expect(during.body.status).not.toBe('released');
+        expect(during.body).toMatchObject({ code: 'no_hold' });
+        expect((await unlocking)[0].body.state).toBe('open');
+        await expectNoCopy(b, 'google', 'deleted-later');
+    });
+
+    it('a newer backup that can\'t be read: the vault answers 503 and keeps the restore, and finishes it once the backup reads', async () => {
+        const { a, g, older, newer } = await deletedAfterBackup();
+        let broken = true;
+        const b = await restoring(a, older, inner => wrap(inner, {
+            get: async n => {
+                if (broken && n === newer) throw new Error('the store timed out');
+                return inner.get(n);
+            },
+        }));
+        await unlockWith(b, g.shares, [0]);
+        const [unlocked] = await unlockWith(b, g.shares, [1]);
+        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring', locked: true } });
+        const { reply } = await startRestore(b, 'google', 'deleted-later');
+        expect(reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        expect((await get(b, '/v1/health')).body.state).toBe('locked');
+        expect(readdirSync(b.dataDir)).toContain('restore-pending.bin');
+        expect(b.keyholder().status().restorePending).toBe(true);
+        // The keys are open, but no reshare while the restore waits: the restore opens only its own generation.
+        expect((await presentShare(b.baseUrl, b.custodians[0], g.shares[0], { ...b.call(), purpose: 'reshare', newCustodians: b.custodians.map(c => c.publicKey) })).status).toBe(503);
+
+        broken = false;
+        expect((await startRestore(b, 'google', 'deleted-later')).reply.body.code).toBe('restoring');
+        b.clock.advance(RESTORE_RETRY_MS);
+        await expectNoCopy(b, 'google', 'deleted-later');
+        expect((await get(b, '/v1/health')).body.state).toBe('open');
+        expect(readdirSync(b.dataDir)).not.toContain('restore-pending.bin');
+        expect(b.keyholder().status().restorePending).toBe(false);
+    });
+
+    it('a failing list: nothing is served and nothing written until the restore finishes, and an API restart after it doesn\'t run it again', async () => {
+        const { a, g, older } = await deletedAfterBackup();
+        let failing = true;
+        const b = await restoring(a, older, inner => wrap(inner, {
+            list: async () => {
+                if (failing) throw new Error('the store is unreachable');
+                return inner.list();
+            },
+        }));
+        await unlockWith(b, g.shares, [0]);
+        expect((await unlockWith(b, g.shares, [1]))[0]).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        const late = newMember();
+        expect((await deposit(b, g, late, 'apple', 'after-restore')).status).toBe(503);
+        expect((await startRestore(b, 'google', 'deleted-later')).reply.status).toBe(503);
+        expect(existsSync(path.join(b.dataDir, 'vault.db'))).toBe(false);
+
+        failing = false;
+        b.clock.advance(RESTORE_RETRY_MS);
+        await expectNoCopy(b, 'google', 'deleted-later');
+        expect((await deposit(b, g, late, 'apple', 'after-restore')).body).toMatchObject({ ok: true });
+        await b.restartApi();
+        await expectCopy(b, 'apple', 'after-restore', late);
+        await expectNoCopy(b, 'google', 'deleted-later');
+    });
+
+    it('never opens an empty database while the keyholder still names a backup', async () => {
+        const { a, g, member, older } = await deletedAfterBackup();
+        // The API died after the keyholder took the backup's state, before the file got its final name.
+        const b = await restoring(a, older, inner => inner);
+        renameSync(path.join(b.dataDir, 'restore-pending.bin'), path.join(b.dataDir, 'restore-pending.bin.part'));
+        await b.restartApi();
+        await unlockWith(b, g.shares, [0, 1]);
+        await expectNoCopy(b, 'google', 'deleted-later');
+        expect((await signed(b, '/v1/copies/status', {}, member.seed)).body.copies).toEqual([]);
+
+        // And with the file gone altogether: 503, and no database at all, rather than an empty one.
+        const c = await restoring(a, older, inner => inner);
+        rmSync(path.join(c.dataDir, 'restore-pending.bin'));
+        await c.restartApi();
+        await unlockWith(c, g.shares, [0]);
+        expect((await unlockWith(c, g.shares, [1]))[0]).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        expect((await deposit(c, g, newMember(), 'apple', 'into-nothing')).status).toBe(503);
+        expect(existsSync(path.join(c.dataDir, 'vault.db'))).toBe(false);
     });
 });

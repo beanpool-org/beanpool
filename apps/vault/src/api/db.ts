@@ -87,10 +87,11 @@ export const HOLD_KEEP_AFTER_END_MS = 7 * 24 * 60 * 60 * 1000;
 export class VaultDb {
     private constructor(readonly db: DatabaseSync, readonly file: string) {}
 
-    static open(dir: string): VaultDb {
+    /** `name` other than the vault's own file: a restore being built beside it. */
+    static open(dir: string, name = DB_FILE): VaultDb {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
         const { DatabaseSync: Database } = require('node:sqlite') as typeof import('node:sqlite');
-        const file = path.join(dir, DB_FILE);
+        const file = path.join(dir, name);
         const db = new Database(file);
         // auto_vacuum must be set before the first table exists; on an existing file it is already set.
         db.exec('PRAGMA auto_vacuum = FULL; PRAGMA secure_delete = ON; PRAGMA journal_mode = TRUNCATE; PRAGMA temp_store = MEMORY;');

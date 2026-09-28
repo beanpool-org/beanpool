@@ -17,7 +17,7 @@ import {
     type FetchLike,
     type SsoProvider,
 } from '@beanpool/signin';
-import { LocalDirectoryStore } from '../api/backup-store.js';
+import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { createVaultApi, type VaultApi } from '../api/server.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import { Keyholder } from '../keyholder/keyholder.js';
@@ -141,6 +141,8 @@ export interface VaultUnderTest {
     keyholder(): Keyholder;
     /** A reboot of the keyholder: everything in its memory is gone; it comes back locked. */
     restartKeyholder(): Promise<void>;
+    /** A restart of the API alone (a crash, or a new release): on a new port, so `baseUrl` changes. */
+    restartApi(): Promise<void>;
     close(): Promise<void>;
     call(opts?: Partial<CallOptions>): CallOptions;
 }
@@ -151,6 +153,8 @@ export async function startVault(opts: {
     custodians?: CustodianKey[];
     storeDir?: string;
     trustProxy?: boolean;
+    /** Wraps the backup store (a slow or failing one). */
+    store?: (inner: BackupStore) => BackupStore;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -163,14 +167,18 @@ export async function startVault(opts: {
     const makeKeyholder = () => new Keyholder({ stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0 });
     let kh = makeKeyholder();
     let server: KeyholderServer = await listenKeyholder(kh, socketPath);
-    const api = createVaultApi({
-        dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store: new LocalDirectoryStore(storeDir), fetch: stub.fetch, clock: clock.now,
-        trustProxy: opts.trustProxy,
-    });
-    const port = await api.listen(0, '127.0.0.1');
-    const baseUrl = `http://127.0.0.1:${port}`;
-    return {
-        dir, stateDir, dataDir, storeDir, socketPath, baseUrl, clock, stub, api, custodians,
+    const inner = new LocalDirectoryStore(storeDir);
+    const store = opts.store ? opts.store(inner) : inner;
+    const makeApi = async () => {
+        const api = createVaultApi({
+            dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy,
+        });
+        const port = await api.listen(0, '127.0.0.1');
+        return { api, baseUrl: `http://127.0.0.1:${port}` };
+    };
+    const first = await makeApi();
+    const v: VaultUnderTest = {
+        dir, stateDir, dataDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians,
         keyholder: () => kh,
         restartKeyholder: async () => {
             await server.close();
@@ -178,14 +186,21 @@ export async function startVault(opts: {
             kh = makeKeyholder();
             server = await listenKeyholder(kh, socketPath);
         },
+        restartApi: async () => {
+            await v.api.close();
+            const next = await makeApi();
+            v.api = next.api;
+            v.baseUrl = next.baseUrl;
+        },
         close: async () => {
-            await api.close();
+            await v.api.close();
             await server.close();
             kh.lock();
             rmSync(dir, { recursive: true, force: true });
         },
         call: (extra = {}) => ({ now: clock.now, acceptNoHardwareProof: true, ...extra }),
     };
+    return v;
 }
 
 // ─── Talking to the vault ────────────────────────────────────────────────────────────────────

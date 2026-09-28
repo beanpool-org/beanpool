@@ -91,6 +91,7 @@ printf '#!/bin/bash\nexit 1\n' > "$BIN/docker"
 printf '#!/bin/bash\ncase "$*" in */tmp/beanpool-deploy.tar.gz*) exit 0 ;; esac\nexec /bin/rm "$@"\n' > "$BIN/rm"
 chmod +x "$BIN"/*
 
+: > "$APP/.deploy-package.tar.gz"   # GNU tar: "file changed as we read it" when gzip creates it mid-read
 PATH="$BIN:$PATH" HEALTH_INTERVAL=0 HEALTH_STREAK=1 HEALTH_TIMEOUT=5 bash "$APP/deploy.sh" 1 > "$SB/deploy-output.log" 2>&1
 rc=$?
 assert "the stubbed deploy ran to the end" "$rc" "0"
@@ -164,6 +165,11 @@ assert "a server with no .env is fine" "$(strip_fleet_secrets_env "$SB/missing.e
 printf 'ADMIN_PASSWORD=only-line\n' > "$ENVF"
 strip_fleet_secrets_env "$ENVF" > /dev/null
 assert "a .env that held only a fleet secret is left empty, not failed" "$(wc -c < "$ENVF" | tr -d ' ')" "0"
+# A byte that isn't valid UTF-8, stripped under a UTF-8 locale (Ubuntu's default, and ssh passes the Mac's LANG/LC_*).
+printf 'NODE_PROFILE=global\nCF_API_TOKEN=val-a\nCOMMUNITY_NOTE=Caf\351 owner\nADMIN_PASSWORD=p\344ss-val\nIMAGE_S3_BUCKET=keep\n' > "$ENVF"
+out=$(LANG=C.UTF-8 LC_ALL=C.UTF-8 strip_fleet_secrets_env "$ENVF" 2>&1)
+assert "an invalid UTF-8 byte: only the fleet names go, the other lines stay" "$(cat "$ENVF")" "$(printf 'NODE_PROFILE=global\nCOMMUNITY_NOTE=Caf\351 owner\nIMAGE_S3_BUCKET=keep')"
+assert "an invalid UTF-8 byte: both names reported, no value printed" "$(echo "$out" | grep -c 'Removed ADMIN_PASSWORD CF_API_TOKEN from')|$(echo "$out" | grep -acE 'val-a|ss-val')" "1|0"
 
 TOK="$SB/tunnel-token"
 echo "sentinel-cf-tunnel-token-b2e4c8" > "$TOK"   # as earlier deploys wrote it: echo, with a newline

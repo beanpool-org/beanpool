@@ -64,12 +64,14 @@ strip_fleet_secrets_env() {
   local env_file=$1 re removed tmp
   sudo test -f "$env_file" || return 0
   re="^[[:space:]]*(export[[:space:]]+)?($(fleet_secret_names | tr ' ' '|'))[[:space:]]*([=:]|$)"
-  removed=$(sudo grep -E "$re" "$env_file" | sed -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_]+).*/\2/' | sort -u | tr '\n' ' ')
+  # LC_ALL=C on all three: in a UTF-8 locale GNU grep drops a line holding an invalid byte (deleting an unrelated line, or
+  # missing a secret), and a UTF-8 sed stops .* at that byte and would print the tail of a value.
+  removed=$(sudo env LC_ALL=C grep -aE "$re" "$env_file" | LC_ALL=C sed -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_]+).*/\2/' | sort -u | tr '\n' ' ')
   [ -n "$removed" ] || return 0
   tmp="$env_file.fleet-strip"
   # grep -v exits 1 when it keeps no line at all, which is a result, not a failure; 2 is a failure.
   if ! sudo cp -p "$env_file" "$tmp" \
-    || ! sudo sh -c 'grep -vE "$1" "$2" > "$3"; [ $? -le 1 ]' _ "$re" "$env_file" "$tmp" \
+    || ! sudo sh -c 'LC_ALL=C grep -avE "$1" "$2" > "$3"; [ $? -le 1 ]' _ "$re" "$env_file" "$tmp" \
     || ! sudo mv -f "$tmp" "$env_file"; then
     sudo rm -f "$tmp"
     echo "⚠️  Could not remove ${removed% } from $env_file: the file is as it was. Delete those lines by hand."

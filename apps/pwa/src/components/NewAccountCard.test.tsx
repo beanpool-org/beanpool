@@ -128,12 +128,14 @@ describe('NewAccountCard: "Your account is new" (G11-e)', () => {
         }
     });
 
-    it('has a close button only where one is given, and reads again when refreshKey changes', async () => {
+    it('has a close button only where one is given, with accessible touch target size and focus ring, and reads again when refreshKey changes', async () => {
         const read = vi.spyOn(api, 'getCommunityMe').mockResolvedValue(standing());
         const onClose = vi.fn();
         const { rerender } = render(<NewAccountCard onClose={onClose} refreshKey={1} />);
         await screen.findByTestId('new-account-card');
-        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
+        const closeBtn = screen.getByRole('button', { name: 'Hide this for now' });
+        expect(closeBtn).toHaveClass('min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2');
+        fireEvent.click(closeBtn);
         expect(onClose).toHaveBeenCalledTimes(1);
         rerender(<NewAccountCard onClose={onClose} refreshKey={2} />);
         await waitFor(() => expect(read).toHaveBeenCalledTimes(2));

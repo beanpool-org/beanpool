@@ -1286,11 +1286,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     : null;
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by,
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1317,6 +1317,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.updatedAt || rp.createdAt,
                         pollOptionsJson,
                         pollClosesAtVal,
+                        // A poll's ballot as the main server holds it: anonymous unless it says open (one before the
+                        // choice existed says nothing, and its polls stay anonymous here).
+                        rp.pollOpenVote === true ? 1 : 0,
                         rp.createdBy ?? null,
                         rp.eventStartAt ?? null,
                         rp.eventEndAt ?? null,
@@ -1351,6 +1354,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         lng = ?,
                         poll_options = COALESCE(?, poll_options),
                         poll_closes_at = COALESCE(?, poll_closes_at),
+                        poll_open_vote = ?,
                         created_by = COALESCE(?, created_by),
                         event_start_at = ?,
                         event_end_at = ?,
@@ -1386,6 +1390,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.lng ?? null,
                         pollOptionsJson,
                         pollClosesAtVal,
+                        rp.pollOpenVote === true ? 1 : 0,
                         rp.createdBy ?? null,
                         // Plain assignment, not COALESCE: an edit that clears the place name or note must
                         // clear it on the replica too. Non-event rows carry none of these, so they stay null.

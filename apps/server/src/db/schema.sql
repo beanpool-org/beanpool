@@ -221,6 +221,10 @@ CREATE TABLE IF NOT EXISTS posts (
     -- Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
     poll_options TEXT,
     poll_closes_at DATETIME,
+    -- A poll's ballot (Marty, 2026-09-28): 0, anonymous, everyone sees the counts only (the default, and every poll an
+    -- app that predates the choice makes); 1, an open vote, members also see who chose what. Set when the poll is made;
+    -- fixed once its first vote is cast (engine/posts.ts updatePost).
+    poll_open_vote INTEGER NOT NULL DEFAULT 0,
     -- Audience scoping on posts (docs/the-commons.md §9, Item 10)
     audience_scope TEXT NOT NULL DEFAULT 'public' CHECK (audience_scope IN ('public', 'group', 'direct')),
     target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,

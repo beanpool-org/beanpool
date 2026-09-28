@@ -81,6 +81,12 @@ export interface MarketplacePost {
     createdBy?: string;
     pollOptions?: PollOption[];
     pollClosesAt?: string;
+    /**
+     * A poll's ballot (Marty, 2026-09-28): false, anonymous (the default), where everyone sees only the counts; true, an
+     * open vote, where members also see who chose what (`pollVotes`). Chosen when the poll is made, fixed once anyone
+     * has voted. Polls only.
+     */
+    pollOpenVote?: boolean;
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
@@ -158,9 +164,10 @@ export interface PostFilter {
      */
     includeHidden?: boolean;
     /**
-     * Who voted for what in each poll (`pollVotes`), for a reader who reads as a member of this node (readsAsMember)
-     * only: the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's
-     * `votes` and `percentage`) and no voters, so a read nobody vouched for can never leak them.
+     * Who voted for what in each open-vote poll (`pollVotes`, `pollOpenVote`), for a reader who reads as a member of this
+     * node (readsAsMember) only: an open vote is open to members. An anonymous poll never carries its voters, with this
+     * or without. Without it a poll carries its counts (`totalVotes`, each option's `votes` and `percentage`) and no
+     * voters, so a read nobody vouched for can never leak them.
      */
     includeVoters?: boolean;
     /**
@@ -336,6 +343,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        ...(row.type === 'poll' ? { pollOpenVote: row.poll_open_vote === 1 } : {}),
         audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
         targetGroupId: row.target_group_id || undefined,
         targetGroupName: row.target_group_name || undefined,
@@ -1090,7 +1098,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                     return { ...opt, votes: count, percentage };
                 });
             }
-            if (filter?.includeVoters) {
+            // Only an open vote names its voters, and only to a member (includeVoters). An anonymous poll names nobody,
+            // to anyone: its author, a moderator and the voters themselves included.
+            if (filter?.includeVoters && post.pollOpenVote === true) {
                 post.pollVotes = votes.map((v: any) => ({
                     voterPubkey: v.voter_pubkey,
                     voterCallsign: v.voter_callsign || 'Anonymous',
@@ -1160,7 +1170,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
-    pollOptions: 'keep', pollClosesAt: 'keep', totalVotes: 'keep',
+    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
@@ -1207,10 +1217,11 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
  * to the viewer the post was read for, so the viewer-only fields come off first: an event's note, RSVP list
  * and the reader's own RSVP, and — for every type — `reachPeers`, which `getPosts` gives to the author alone.
  * These posts are read for the author (or the voter, for a poll vote), and the apps now keep what the feed
- * sends them (@beanpool/core `livePostChange`).
+ * sends them (@beanpool/core `livePostChange`). So the reader's own poll vote (`userVotedOptionId`) comes off too: sent
+ * with a vote's `post_updated`, it told every socket what the voter just chose, on an anonymous poll as on any.
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
-    const { reachPeers: _peers, ...shared } = post;
+    const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
     const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
     return rest;

@@ -799,6 +799,8 @@ export function exportSyncState(
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
             : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        // A poll's ballot: an open vote or anonymous (the default), as its creator chose.
+        ...(row.type === 'poll' ? { pollOpenVote: row.poll_open_vote === 1 } : {}),
         // Who may see it. Without these a replica takes the column defaults — 'public' and 'local' — so a
         // group-only or direct post would be shown to everyone on a restored node.
         audienceScope: row.audience_scope || 'public',

@@ -338,7 +338,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -388,7 +388,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo }
+            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo }
         );
         if (!post) {
             ctx.status = 400;

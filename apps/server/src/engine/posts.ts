@@ -300,6 +300,8 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        /** A poll's ballot: true for an open vote (members see who chose what). Anything else, or absent, is anonymous. */
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -483,14 +485,17 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to,
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
             pollClosesAt,
+            // Polls are anonymous unless their creator chose an open vote (Marty, 2026-09-28). Only `true` opens one: an
+            // app that predates the choice sends nothing, and its poll is anonymous.
+            type === 'poll' && options?.pollOpenVote === true ? 1 : 0,
             audienceScope,
             audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
@@ -685,6 +690,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             if (updates.pollOptions !== undefined) {
                 throw new Error('Cannot edit poll options once votes have been cast');
             }
+            // Whether it is an open vote is what every voter was told when they voted: never changed after the first.
+            if (updates.pollOpenVote !== undefined && (updates.pollOpenVote === true) !== !!existingPost.pollOpenVote) {
+                throw new Error('Cannot change whether a poll is an open vote once votes have been cast');
+            }
         }
         // Enforce poll isolation during updates
         delete updates.credits;
@@ -808,6 +817,12 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
+
+    // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
+    if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {
+        fields.push('poll_open_vote = ?');
+        values.push(updates.pollOpenVote === true ? 1 : 0);
+    }
 
     if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
         const rawOpts = updates.pollOptions;

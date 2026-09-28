@@ -4442,6 +4442,7 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;

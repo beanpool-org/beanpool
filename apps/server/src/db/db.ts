@@ -667,6 +667,8 @@ export function initSchema() {
     // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
+    // A poll's ballot: 0 anonymous (every poll made before the choice existed), 1 an open vote (schema.sql).
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }

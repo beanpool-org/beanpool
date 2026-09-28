@@ -550,6 +550,9 @@ const PUBLIC_ADDRESS_STATUS = {
     cached: false,
     communityName: COMMUNITY_NAME,
     contact: `admin@${NODE_HOSTNAME}`,
+    // The tunnel inside the server (apps/server services/tunnel-connector.ts).
+    tunnel: { state: 'connected', since: '2026-09-28T10:00:00.000Z', connections: 4, reason: null, version: '2026.9.3' },
+    dockerSocket: false,
 };
 
 const PUBLIC_ADDRESS_LOGS = [
@@ -953,7 +956,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/public-address/status') return ok(PUBLIC_ADDRESS_STATUS);
     if (pathname === '/api/local/admin/public-address/logs') return ok({ logs: PUBLIC_ADDRESS_LOGS });
     if (pathname === '/api/local/admin/public-address/claim') return ok({ success: true, status: 'pending' });
-    if (pathname === '/api/local/admin/public-address/restart-sidecar') return ok({ success: true });
+    if (pathname === '/api/local/admin/public-address/restart-tunnel') return ok({ success: true, tunnel: PUBLIC_ADDRESS_STATUS.tunnel });
     if (pathname === '/api/local/admin/public-address/offline') return ok({ success: true });
 
     // ---- connectors ----

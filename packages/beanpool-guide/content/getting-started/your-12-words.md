@@ -21,7 +21,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 - A photo or screenshot of the words is easy for someone else to find. Paper is safer.
 - While the phone app shows your 12 words, or while you type them, it blocks screenshots and screen recordings of that screen: the phone refuses the screenshot, or the picture comes out blank. Nothing stops a photo of the screen taken with another phone.
 - **Copy** puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone.
-- In the web app, the copy clears after a minute if you stay on that screen. Once you leave it, your browser may not let the app clear it: copy something else over it.
+- In the web app, the copy clears after a minute if you stay on that screen. On an iPhone or iPad, in Safari or in Firefox, the browser lets the app clear it only when you tap or press a key, so it clears at your first tap or key press after the minute. If you leave that screen or switch to another app or tab first, the app can't tell whether you copied something else, so it leaves your clipboard alone: copy something else over the words.
 - If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer.
 
 ## Where to see them again

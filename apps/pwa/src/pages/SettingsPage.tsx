@@ -393,7 +393,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity, mode]);
 
-    // On the clipboard for a minute, then cleared if the page can tell it still holds them (lib/words-clipboard.ts).
+    // On the clipboard for a minute, then cleared if nothing else can have been copied since (lib/words-clipboard.ts).
     const handleCopySeed = async () => {
         const words = await getMnemonic(identity);
         if (!words) return;

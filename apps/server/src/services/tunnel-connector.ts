@@ -197,6 +197,8 @@ function onLine(raw: string): void {
     if (!line) return;
     let entry: any = null;
     try { entry = JSON.parse(line); } catch { /* cloudflared prints a start-up failure as plain text */ }
+    // After a start-up failure it prints a pointer to its help: the line before it says what went wrong.
+    if (!entry && /^See 'cloudflared\b.*--help'\.?$/.test(line)) return;
     const level = typeof entry?.level === 'string' ? entry.level : (entry ? 'info' : 'error');
     if (level === 'debug' || level === 'trace') return;
     const message = entry ? String(entry.message ?? '') : line;

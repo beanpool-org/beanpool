@@ -220,14 +220,19 @@ async function main(): Promise<void> {
             fake.say({ level: 'debug', message: 'request headers: Cookie SECRET-HEADER-cookie-77' });
             for (let i = 0; i < 20; i++) fake.say({ level: 'error', error: 'dial tcp: lookup region1.v2.argotunnel.com: no such host', message: 'Failed to dial' });
             fake.say({ level: 'warn', message: `echoing ${T1} back` });
-            await until(() => tunnelLogs().some((l) => l.message.includes('echoing')), 3_000);
+            // As the real one ends a start-up failure: the error in plain text, then a pointer to its help.
+            fake.say('Provided Tunnel token is not valid.', "See 'cloudflared tunnel run --help'.");
+            await until(() => tunnelLogs().some((l) => l.message.includes('not valid')), 3_000);
             const rows = tunnelLogs().slice(before);
             assert(getTunnelStatus().version === '2026.9.3', `the version it printed is known (${getTunnelStatus().version})`);
             assert(rows.filter((l) => l.message.includes('no such host')).length === 1, `20 identical errors → one line (${rows.filter((l) => l.message.includes('no such host')).length})`);
             assert(!tunnelLogs().some((l) => l.message.includes('SECRET-HEADER')), 'a debug line is never forwarded');
             assert(!tunnelLogs().some((l) => l.message.includes(T1)) && rows.some((l) => l.message.includes('[tunnel token]')), 'the token is never logged');
+            await sleep(150);
             const st = getTunnelStatus();
-            assert(st.state === 'retrying' && /no such host|echoing/.test(st.reason || ''), `not connected yet, and why (${st.state}: ${st.reason})`);
+            assert(st.state === 'retrying' && st.reason === 'Provided Tunnel token is not valid.', `not connected yet, and why: the error, not the pointer to help after it (${st.state}: ${st.reason})`);
+            assert(tunnelLogs().some((l) => l.level === 'ERROR' && l.message === '[Tunnel] Provided Tunnel token is not valid.')
+                && !tunnelLogs().some((l) => l.message.includes('--help')), 'a plain-text start-up failure is logged as an error; the help pointer is not');
         });
 
         await section('10. a tunnel set before it moved inside the server moves to loopback once', async () => {

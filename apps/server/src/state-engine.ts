@@ -7308,15 +7308,15 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
     return host ? `https://${host}` : null;
 }
 
+/**
+ * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
+ * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
+ * directory gets the community's name and web address, so people on the global node can find it and ask to join, with
+ * every switch off. The switches leave out only what each covers, sent as null so the directory drops what it had.
+ */
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
-    if (!config.publishLocation && !config.publishMembers && !config.publishContactEmail && !config.publishContactPhone && !config.publishHealth) {
-        return null;
-    }
-    
     const localConfig = getLocalConfig();
-    // The name is how the directory lists a community, so it is sent whatever the contact switches say (the publisher's
-    // `callsign` always carried it anyway).
     const info: any = {
         name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
         publicUrl: resolvePublicNodeUrl(config),

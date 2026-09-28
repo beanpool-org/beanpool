@@ -10,6 +10,8 @@
  *     - Verifies JSON payload contents (`nodeId`, `callsign`, `timestamp`, `memberCount`, `postCount`, etc.).
  *     - Verifies `lastDirectoryPush` timestamp update in node config.
  *     - A community's contact email and phone are not sent until its owner turns each on; its name always is.
+ *  3d. With every switch off, the push still sends the community's name and web address: being unlisted is the push
+ *     interval 0 (section 5) or the profile's publishToDirectory, not the switches.
  *  3e. A node that holds the old single contacts switch, stored as true by every save whether anyone chose it or not:
  *     no contact is sent (a stored default is not a choice), and each is sent once the owner turns it on.
  *  4. `pushDirectoryNow()` error handling when directory registry returns non-2xx status code.
@@ -183,18 +185,30 @@ async function main() {
     assert(bodyObj4.nodeVersion === null, 'Payload omits/nulls nodeVersion when publishHealth is off');
     assert(bodyObj4.version === null, 'Payload omits/nulls version when publishHealth is off');
 
-    // ── 3d. All Flags Turned Off: Publishes Nothing ─────────────────────────
-    updateNodeConfig({ publishLocation: false, publishMembers: false, publishContactEmail: false, publishContactPhone: false, publishHealth: false });
-    assert(getDirectoryInfo() === null, 'getDirectoryInfo returns null when all publish flags are off');
+    // ── 3d. Every Switch Off: Still Listed by Name and Address ──────────────
+    // Whether the community is listed at all is the push interval (0 = never, section 5) and the profile's
+    // publishToDirectory. While it pushes, the directory always gets its name and web address, so people on the global
+    // node can find it and ask to join; the switches leave out only what they cover.
+    updateNodeConfig({
+        publicAddress: { name: 'quiet', hostname: 'quiet.beanpool.org' } as any,
+        publishLocation: false, publishMembers: false, publishContactEmail: false, publishContactPhone: false, publishHealth: false,
+    });
+    const quietInfo = getDirectoryInfo();
+    assert(quietInfo !== null && quietInfo.name === 'Mullum Creek' && quietInfo.communityName === 'Mullum Creek' && quietInfo.publicUrl === 'https://quiet.beanpool.org',
+        `getDirectoryInfo still names the community and its address with every switch off (${JSON.stringify(quietInfo)})`);
     const pushAllOffRes = await pushDirectoryNow();
     assert(pushAllOffRes.success === true, 'pushDirectoryNow succeeds when all publish flags are off');
     assert(receivedRequests.length === 6, 'Mock directory registry received 6th request');
     const bodyObj5 = receivedRequests[5].body as Record<string, unknown>;
-    assert(bodyObj5.publicUrl === undefined, 'Payload omits publicUrl when node publishes nothing');
-    assert(bodyObj5.communityName === undefined, 'Payload omits communityName when node publishes nothing');
-    assert(bodyObj5.nodeVersion === undefined, 'Payload omits nodeVersion when node publishes nothing');
-    assert(bodyObj5.contactEmail === null && bodyObj5.contactPhone === null,
+    assert(bodyObj5.name === 'Mullum Creek' && bodyObj5.communityName === 'Mullum Creek',
+        `Payload holds the community's name with every switch off (${JSON.stringify({ name: bodyObj5.name, communityName: bodyObj5.communityName })})`);
+    assert(bodyObj5.publicUrl === 'https://quiet.beanpool.org', `Payload holds its web address with every switch off (${bodyObj5.publicUrl})`);
+    assert(bodyObj5.serviceRadius === null && bodyObj5.memberCount === null,
+        `Payload holds no service area and no member count (${JSON.stringify({ serviceRadius: bodyObj5.serviceRadius, memberCount: bodyObj5.memberCount })})`);
+    assert(bodyObj5.nodeVersion === null && bodyObj5.version === null && bodyObj5.status === null, 'Payload holds no version or health');
+    assert(bodyObj5.contactEmail === null && bodyObj5.contactPhone === null && !/hello@mullum|6684/.test(JSON.stringify(bodyObj5)),
         'and says it has no contact email or phone, so the directory holds none it was sent before');
+    updateNodeConfig({ publicAddress: null });
 
     // ── 3e. A node from before: the old single contacts switch, stored as true ──
     // Every save wrote the whole config back with each switch read as "publish" when unset, so a stored true is what
@@ -247,7 +261,7 @@ async function main() {
 
     // ── 5. Disabled publisher check ───────────────────────────────────────
     updateNodeConfig({ directoryPushIntervalHours: 0 });
-    initDirectoryPublisher();
+    assert(initDirectoryPublisher() === false, 'with the push interval at 0 no timer is set: this is how a community is not listed');
     assert(getNodeConfig().directoryPushIntervalHours === 0, 'directoryPushIntervalHours can be set to 0');
 
     // Cleanup

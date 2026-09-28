@@ -321,16 +321,10 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     ctx.body = result;
 });
 
-// Local directory info endpoint (used by settings preview)
+// Local directory info endpoint (used by settings preview): what a push sends, which holds only what the switches publish.
 // No CORS headers - should only be called from same origin (admin PWA)
 router.get('/api/directory/info', async (ctx) => {
-    const info = getDirectoryInfo();
-    if (!info) {
-        ctx.status = 403;
-        ctx.body = { error: 'This node has opted out of the directory' };
-        return;
-    }
-    ctx.body = info;
+    ctx.body = getDirectoryInfo();
 });
 
 

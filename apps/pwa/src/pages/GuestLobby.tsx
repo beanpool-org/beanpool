@@ -21,6 +21,7 @@ import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { WelcomePage } from './WelcomePage';
 import { TOO_OLD } from '../components/WebJoin';
+import { FormerAddressBanner } from '../components/FormerAddressBanner';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
@@ -159,6 +160,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             </aside>
 
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
+                <FormerAddressBanner />
                 {/* The mobile header, as a member's: the page's name in the middle, Join where Settings sits. */}
                 <header className="relative shadow-md md:hidden" style={{
                     display: 'flex',

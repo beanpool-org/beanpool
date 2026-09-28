@@ -2457,6 +2457,34 @@ export interface AppAddress {
     former?: boolean;
     today: number;
     busiestDay: number;
+    /**
+     * Another community holds it and answers there, or this community released it and the hold is over: refused, never
+     * published (apps/server services/registrar-name-watch.ts). Absent from a server before 2026-09-28.
+     */
+    lost?: boolean;
+    /** With `lost`: members' apps refused there, today and on the busiest day of the last 7. */
+    tried?: { today: number; busiestDay: number };
+    /** A BeanPool name the address service no longer gives this community, and what that means here. */
+    standing?: NameStanding;
+}
+
+/** apps/server services/registrar-name-watch.ts NameStanding. */
+export interface NameStanding {
+    /**
+     * at-risk: the address service says it isn't this community's, and it is still accepted; contradiction: it says
+     * another community holds it, but it still leads to this server; lost.
+     */
+    state: 'at-risk' | 'contradiction' | 'lost';
+    /** other, free, released (by this community), or the address service's latest word (none, revoked…). */
+    registrarSays: string | null;
+    releasedOn: string | null;
+    /** Until when a name this community released is still accepted. */
+    acceptedUntil: string | null;
+    /** This server's own key answered at the name the last time it was asked. */
+    leadsHere: boolean;
+    lostSince: string | null;
+    why: 'another-key' | 'released' | null;
+    checkedAt: string | null;
 }
 
 export interface AddressSighting {
@@ -2501,6 +2529,16 @@ export interface AppAddressesReport {
     /** The day (UTC) old apps stop working here, or null when they already don't. */
     unboundSignaturesUntil: string | null;
     unboundSignaturesAccepted: boolean;
+    /**
+     * Where the community lives now, as /api/community/info says it: its live BeanPool name, else the first of its
+     * published addresses; null with none. Absent from a server before 2026-09-28 (lost-name L4).
+     */
+    primaryAddress?: string | null;
+    /**
+     * Members' apps that signed for any of its former BeanPool names, today and on the busiest day of the last 7: the
+     * members still to move. Absent from a server before 2026-09-28.
+     */
+    formerApps?: { today: number; busiestDay: number };
 }
 
 /**

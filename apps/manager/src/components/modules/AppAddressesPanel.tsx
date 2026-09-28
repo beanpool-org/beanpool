@@ -4,8 +4,9 @@
  * A member's app signs every request for the address it reaches the community at, and the node accepts only its own
  * addresses, so a request someone copied from another community can't be used here (apps/server
  * engine/own-addresses.ts, engine/member-signature.ts). This lists those addresses with where each comes from and how
- * many apps used it; lets the owner confirm an address the node doesn't know (a self-hoster's custom domain behind a
- * proxy); and says how many apps too old to name a community still reach it before the switch date.
+ * many apps used it; how many apps still reach it by a name it had before, and where it lives now (lost-name L4); lets
+ * the owner confirm an address the node doesn't know (a self-hoster's custom domain behind a proxy); and says how many
+ * apps too old to name a community still reach it before the switch date.
  *
  * An owner or admin confirms; nothing here is ever learned from a request by itself. Only the address this page is
  * open at is offered with one tap (apps/server engine/address-offers.ts): members' keys can all be one person's, and
@@ -14,6 +15,11 @@
  * admin's did) and confirmed only once the owner ticks that it is this community's. One the BeanPool directory lists
  * as a community's is named and warned about too, on a node that holds the directory. Another community's
  * beanpool.org name can't be confirmed here at all.
+ *
+ * A BeanPool name the address service no longer gives this community says so (design
+ * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.4): still accepted while it may be this community's, and why;
+ * or lost (another community holds it and answers there, or this community released it and the hold is over), with how
+ * many apps were refused there today and what to do.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { audienceOf } from '@beanpool/core';
@@ -55,6 +61,21 @@ function pageOfferText(host: string, s: AddressSighting | undefined): string {
     return `This page reached the community at ${host}${also}. Is that the address members' apps use?`;
 }
 
+/**
+ * Members' apps still reaching the community by a name it had before (lost-name L4), and what to do about it: the web
+ * app there says where the community lives now; phone apps are moved by hand, so the owner tells those members.
+ * Nothing on a node with no former names, or from a server too old to count them.
+ */
+function formerAppsText(report: AppAddressesReport): string | null {
+    const f = report.formerApps;
+    if (!f || !report.addresses.some((a) => a.former)) return null;
+    if (f.busiestDay === 0) return 'No app reached this community by a name it had before this week.';
+    const count = `${apps(f.today)} reached this community by a name it had before today (most in one day this week: ${f.busiestDay}).`;
+    return report.primaryAddress
+        ? `${count} The web app there tells its members the community has moved to ${report.primaryAddress}. Tell members on the phone app in a community post.`
+        : count;
+}
+
 /** The directory's name for the community at an address, or words for one it gives no name. */
 const listedName = (h: HeldBackAddress) => h.directory?.name || 'another community';
 
@@ -62,6 +83,51 @@ const listedName = (h: HeldBackAddress) => h.directory?.name || 'another communi
 function asReport(r: unknown): AppAddressesReport | null {
     const x = r as AppAddressesReport | null;
     return x && Array.isArray(x.addresses) && Array.isArray(x.unconfirmed) && x.oldApps && typeof x.oldApps === 'object' ? x : null;
+}
+
+/** A moment as a day, as Settings shows dates (UTC), or '' for none. */
+function formatDay(iso: string | null | undefined): string {
+    const t = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+}
+
+/** What a BeanPool name's standing means here, in words (design §4.4), or null when there is nothing to say. */
+export function standingText(a: AppAddress): { text: string; lost: boolean } | null {
+    const s = a.standing;
+    const n = a.address;
+    if (a.lost || s?.state === 'lost') {
+        const tried = a.tried ? ` ${apps(a.tried.today)} tried it today.` : '';
+        if (s?.why === 'released') {
+            return {
+                lost: true,
+                text: `This community released ${n}${s.releasedOn ? ` on ${formatDay(s.releasedOn)}` : ''} and its hold is over, so it no longer accepts what apps sign for ${n}.${tried} Ask members who still use it to add this community again at its current address, or claim ${n} again.`,
+            };
+        }
+        return {
+            lost: true,
+            text: `${s?.lostSince ? `Since ${formatDay(s.lostSince)} a` : 'A'}nother community holds ${n} and answers there. Members' apps that still use ${n} are talking to that community, so this one refuses what they sign for ${n}.${tried} Ask them to add this community again at its current address, or choose a new name for it.`,
+        };
+    }
+    if (!s) return null;
+    if (s.state === 'contradiction') {
+        return { lost: false, text: `The address service says another community holds ${n}, but ${n} still leads to this server. It stays accepted.` };
+    }
+    const accepted = s.leadsHere ? `${n} still leads to this server, so members' apps that use it are still accepted.` : "Members' apps that use it are still accepted.";
+    switch (s.registrarSays) {
+        case 'released':
+            return {
+                lost: false,
+                text: `This community released ${n}${s.releasedOn ? ` on ${formatDay(s.releasedOn)}` : ''}, and it is held for this community${s.acceptedUntil ? ` until ${formatDay(s.acceptedUntil)}` : ''}. ${s.leadsHere ? `${n} still leads to this server, and m` : 'M'}embers' apps that use it are accepted until then.`,
+            };
+        case 'other':
+            return { lost: false, text: `The address service says another community holds ${n}. ${accepted} This server checks what answers there before it stops accepting it.` };
+        case 'free':
+            return { lost: false, text: `The address service says no community holds ${n}. ${accepted}` };
+        case 'none':
+            return { lost: false, text: `The address service has no record of ${n}. ${accepted}` };
+        default:
+            return { lost: false, text: `The address service says ${n} is ${s.registrarSays ?? 'not this community’s'}. ${accepted}` };
+    }
 }
 
 export function formatSwitchDay(day: string | null): string {
@@ -137,6 +203,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const toTick = others.filter((h) => h.reason === 'not-this-page')
         .sort((a, b) => Number(!!b.ownerOrAdmin) - Number(!!a.ownerOrAdmin) || b.busiestDay - a.busiestDay);
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);
+    const formerLine = formerAppsText(report);
     const button = 'min-h-[44px] max-w-full break-words text-left px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
     const confirmButton = `${button} bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600`;
 
@@ -156,27 +223,41 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
             )}
             {report.addresses.length > 0 && (
                 <ul className="m-0 p-0 list-none space-y-3">
-                    {report.addresses.map((a) => (
-                        <li key={a.address} className="text-sm text-nature-200 break-words" data-testid="app-address">
-                            <strong className="text-white break-all">{a.address}</strong>
-                            <span className="text-nature-400"> · {a.former ? 'a BeanPool name it had before, still accepted' : SOURCE_TEXT[a.source] ?? a.source}</span>
-                            <span className="block text-xs text-nature-400">
-                                used by {apps(a.today)} today · most in one day this week: {a.busiestDay}
-                            </span>
-                            {a.source === 'owner' && (
-                                <button
-                                    type="button"
-                                    className={`${button} mt-2 bg-nature-950 border-nature-700 text-nature-200 hover:bg-nature-800`}
-                                    disabled={busy !== null}
-                                    onClick={() => act(a.address, 'remove')}
-                                >
-                                    Remove {a.address}
-                                </button>
-                            )}
-                        </li>
-                    ))}
+                    {report.addresses.map((a) => {
+                        const standing = standingText(a);
+                        return (
+                            <li key={a.address} className="text-sm text-nature-200 break-words" data-testid="app-address">
+                                <strong className="text-white break-all">{a.address}</strong>
+                                <span className="text-nature-400"> · {a.lost ? 'no longer accepted' : a.former ? 'a BeanPool name it had before, still accepted' : SOURCE_TEXT[a.source] ?? a.source}</span>
+                                <span className="block text-xs text-nature-400">
+                                    used by {apps(a.today)} today · most in one day this week: {a.busiestDay}
+                                </span>
+                                {standing && (
+                                    <span
+                                        className={`block mt-1 text-sm leading-relaxed break-words ${standing.lost ? 'text-red-300' : 'text-amber-300'}`}
+                                        data-testid="app-address-standing"
+                                        data-state={standing.lost ? 'lost' : a.standing?.state}
+                                    >
+                                        {standing.text}
+                                    </span>
+                                )}
+                                {a.source === 'owner' && (
+                                    <button
+                                        type="button"
+                                        className={`${button} mt-2 bg-nature-950 border-nature-700 text-nature-200 hover:bg-nature-800`}
+                                        disabled={busy !== null}
+                                        onClick={() => act(a.address, 'remove')}
+                                    >
+                                        Remove {a.address}
+                                    </button>
+                                )}
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
+
+            {formerLine && <p className="text-sm text-nature-300 m-0 leading-relaxed break-words" data-testid="former-apps">{formerLine}</p>}
 
             {pageOffered && pageHost && (
                 <div className="p-3 rounded-xl bg-nature-950/60 border border-amber-700/60 space-y-2" data-testid="app-address-offer">

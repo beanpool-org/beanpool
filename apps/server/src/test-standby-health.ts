@@ -169,11 +169,12 @@ async function child(): Promise<void> {
             const m = await optional(() => import('./services/standby-health.js'));
             return m ? { state: m.readStandbyHealthForTests(), banner: m.getStandbyHealthBanner() } : null;
         },
-        /** Move the watch's clock, then run its check as its timer does. */
-        'health-check': async (a: { offsetMs?: number }) => {
+        /** Move the watch's clock (by `offsetMs`, or to `atMs`), then run its check as its timer does. */
+        'health-check': async (a: { offsetMs?: number; atMs?: number }) => {
             const m = await optional(() => import('./services/standby-health.js'));
             if (!m) return null;
             if (typeof a.offsetMs === 'number') m.setStandbyHealthClockForTests(a.offsetMs);
+            if (typeof a.atMs === 'number') m.setStandbyHealthClockForTests(a.atMs - Date.now());
             m.checkStandbyHealth();
             return m.readStandbyHealthForTests();
         },
@@ -248,8 +249,16 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
  * The main server as its standby reaches it: every request passed to its real backup routes, with its headers, except that
  * a step can have the next copy the standby asks for answered with a payload M signed.
  */
-interface MainServerDoor { url: string; next: (answer: { status: number; body?: unknown }) => void; waiting: () => number; close: () => Promise<void> }
-async function mainServerDoor(target: string): Promise<MainServerDoor> {
+interface MainServerDoor {
+    url: string;
+    next: (answer: { status: number; body?: unknown }) => void;
+    waiting: () => number;
+    /** The main server restarted on another port. */
+    retarget: (to: string) => void;
+    close: () => Promise<void>;
+}
+async function mainServerDoor(initialTarget: string): Promise<MainServerDoor> {
+    let target = initialTarget;
     const queued: { status: number; body?: unknown }[] = [];
     const server = http.createServer((req, res) => {
         void (async () => {
@@ -281,11 +290,13 @@ async function mainServerDoor(target: string): Promise<MainServerDoor> {
         url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
         next: (answer) => { queued.push(answer); },
         waiting: () => queued.length,
+        retarget: (to) => { target = to; },
         close: () => new Promise<void>((r) => server.close(() => r())),
     };
 }
 
 const brief = (v: unknown) => JSON.stringify(v)?.slice(0, 240);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const kinds = (q: { items: { kind: string }[] } | undefined) => (q?.items ?? []).map((i) => i.kind);
 
 async function main(): Promise<void> {
@@ -303,10 +314,10 @@ async function main(): Promise<void> {
     try {
         // ── 1. A healthy standby ──
         console.log('\n— 1. a healthy standby —');
-        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        let main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, gwen: gwen.pk, ann: ann.pk, bo: bo.pk, cy: cy.pk });
-        const m = `https://localhost:${await main.send('serve')}`;
+        let m = `https://localhost:${await main.send('serve')}`;
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
         let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
@@ -314,6 +325,9 @@ async function main(): Promise<void> {
         const door = await mainServerDoor(main.base);
         doors.push(door);
         await standby.send('setup-standby', { primaryUrl: door.url, replicationToken, primaryPeerId: main.ready.peerId });
+        // Every push M handed the push service, across its restarts (each process keeps its own).
+        const pushesBefore: { to: string[]; title: string; body: string }[] = [];
+        const pushesSoFar = async () => [...pushesBefore, ...(await main.send('fetches')).pushes];
         const pulls: { mode: string; ok: boolean }[] = [];
         const pull = async (whole = false) => {
             const p = await standby.send('pull', { whole });
@@ -340,7 +354,7 @@ async function main(): Promise<void> {
         assert(health?.state.incident === null, 'no incident');
         let queue = await main.send('queue');
         assert(!kinds(queue.owner).includes('standby'), `nothing in the owner's admin queue (${brief(kinds(queue.owner))})`);
-        let pushes = (await main.send('fetches')).pushes;
+        let pushes = await pushesSoFar();
         assert(pushes.length === 0, `no push (${pushes.length})`);
         let words = await standby.send('preview-words', {});
         assert(words?.warning === false && /^Last exact copy of the main server: \d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/.test(words.lines[0] ?? '') && words.lines.length === 1,
@@ -371,7 +385,7 @@ async function main(): Promise<void> {
         const incident1 = health?.incident;
         assert(incident1 && incident1.problems.length === 1 && incident1.problems[0].kind === 'stopped',
             `an hour on M's clock with no copy: one incident, "stopped" (${brief(incident1?.problems)})`);
-        pushes = (await main.send('fetches')).pushes;
+        pushes = await pushesSoFar();
         assert(pushes.length === 1 && JSON.stringify(pushes[0].to) === JSON.stringify([OWNER_TOKEN]) && /standby/i.test(pushes[0].title),
             `one push, to the owner's phone only: not the admin's, the moderator's or a member's (${brief(pushes)})`);
         queue = await main.send('queue');
@@ -392,8 +406,26 @@ async function main(): Promise<void> {
             && banner.incident.whatToDo.some((w: string) => /running and can reach this one/.test(w)),
             `Settings (the owner, by the node password) shows the banner: "${banner?.incident?.lines?.[0]}"`);
         health = await main.send('health-check', {});
-        pushes = (await main.send('fetches')).pushes;
+        pushes = await pushesSoFar();
         assert(health?.incident?.id === incident1?.id && pushes.length === 1, `a second check: the same incident, no second push (${pushes.length})`);
+
+        // M restarts with the incident open. In a main server's first hour up a standby isn't found to have stopped (it
+        // may only have been unable to reach it); one already found stays found: a restart is no all-clear.
+        const quietSince: number = health?.standbys?.[0]?.lastCopyAt ?? Date.now();
+        pushesBefore.push(...(await main.send('fetches')).pushes);
+        await sleep(2000);
+        await main.send('checkpoint');
+        await main.kill();
+        main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        nodes.push(main);
+        m = `https://localhost:${await main.send('serve')}`;
+        door.retarget(main.base);
+        const checkAt = quietSince + HOUR + 500;
+        const restarted = await main.send('health-check', { atMs: checkAt });
+        pushes = await pushesSoFar();
+        assert(restarted && restarted.bootAt > quietSince + 1500 && checkAt - restarted.bootAt < HOUR
+            && restarted.incident?.id === incident1?.id && restarted.incident.problems.some((p: any) => p.kind === 'stopped') && pushes.length === 1,
+            `M restarts: in its first hour up it keeps the open incident, and pushes nothing again (${brief(restarted?.incident?.problems)}; pushes ${pushes.length})`);
         const back = await pull();
         health = await main.send('health');
         queue = await main.send('queue');
@@ -421,7 +453,7 @@ async function main(): Promise<void> {
         assert(health?.state.incident === null, 'M has not heard yet (those answers never reached it)');
         const told = await pull();
         health = await main.send('health');
-        pushes = (await main.send('fetches')).pushes;
+        pushes = await pushesSoFar();
         const incident2 = health?.state.incident;
         assert(told.ok && incident2?.problems.some((p: any) => p.kind === 'refused' && p.count === 3 && p.why === 'conservation'),
             `S's next pull reports it: an incident, "refused" (${brief(incident2?.problems)})`);
@@ -448,7 +480,7 @@ async function main(): Promise<void> {
         const mended = await pull();
         rec = await standby.send('record');
         health = await main.send('health');
-        pushes = (await main.send('fetches')).pushes;
+        pushes = await pushesSoFar();
         const incident3 = health?.state.incident;
         assert(mended.ok && rec?.lastWhole?.exact === true, `M's real copy after it lands, and is exact (${mended.mode}; ${brief(rec?.lastWhole)})`);
         assert(incident3?.problems.some((p: any) => p.kind === 'inexact' && JSON.stringify(p.differs) === JSON.stringify(['members'])),
@@ -468,7 +500,7 @@ async function main(): Promise<void> {
         assert(pulls.filter((p) => p.mode === 'resync').length === 2,
             `force-resyncs in all: the new standby's first copy and the one the mismatch asked for (${pulls.map((p) => p.mode).join(',')})`);
         health = await main.send('health');
-        pushes = (await main.send('fetches')).pushes;
+        pushes = await pushesSoFar();
         const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN })).body?.standbyHealth;
         assert(health?.state.incident?.pushedAt === null && pushes.length === 3,
             `M opens an incident again but pushes nothing: the last one ended less than an hour ago (pushes ${pushes.length})`);

@@ -23,6 +23,7 @@ import { logger } from '../logger.js';
 import { getNodeRole } from '../config/node-role.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { dispatchPushNotification } from '../state-engine.js';
+import { getReplacedInfo } from './identity-epoch.js';
 import { differsInWords, parseStandbyReport, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
@@ -160,9 +161,14 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
 
 function problemsOf(s: HealthState, t: number): Problem[] {
     const out: Problem[] = [];
+    // In this server's first hour up, a standby that hasn't copied it isn't found to have stopped: it may only have been
+    // unable to reach this server while it was down. One already found stays found until the standby copies again, so a
+    // restart never reads as an all-clear.
+    const stillStopped = new Set((s.incident?.problems ?? []).filter((p) => p.kind === 'stopped').map((p) => p.standby));
+    const justStarted = t - bootAt < STOPPED_AFTER_MS;
     for (const x of s.standbys) {
-        const since = Math.max(x.lastCopyAt ?? x.firstSeenAt, bootAt);
-        if (t - since >= STOPPED_AFTER_MS) out.push({ standby: x.id, kind: 'stopped', since: x.lastCopyAt ?? x.firstSeenAt });
+        const since = x.lastCopyAt ?? x.firstSeenAt;
+        if (t - since >= STOPPED_AFTER_MS && (!justStarted || stillStopped.has(x.id))) out.push({ standby: x.id, kind: 'stopped', since });
         if (x.failedInARow >= REFUSED_IN_A_ROW) out.push({ standby: x.id, kind: 'refused', count: x.failedInARow, why: x.lastWhy });
         if (x.exact === false) out.push({ standby: x.id, kind: 'inexact', at: x.lastWholeAt, differs: x.differs, lastExactAt: x.lastExactAt });
     }
@@ -176,8 +182,18 @@ function owners(): string[] {
     ).all() as { pk: string }[]).map((r) => r.pk);
 }
 
+/** Whether another server took this one's identity over (services/identity-epoch.ts): it is no main server now. */
+function replaced(): boolean {
+    try { return getReplacedInfo() !== null; } catch { return false; }
+}
+
 /** Open, update or close the incident for what the reports say now, and write the state. */
 function evaluate(s: HealthState, t: number): void {
+    // A server another took over from is read-only and no main server: nothing of its old standby is told from here.
+    if (replaced()) {
+        write(s);
+        return;
+    }
     const problems = problemsOf(s, t);
     if (problems.length === 0) {
         if (s.incident) {
@@ -326,7 +342,7 @@ export function getStandbyHealthBanner(): StandbyHealthBanner {
     };
 }
 
-/** The whole state, for a suite. */
-export function readStandbyHealthForTests(): HealthState {
-    return read();
+/** The whole state, and when this process started, for a suite. */
+export function readStandbyHealthForTests(): HealthState & { bootAt: number } {
+    return { ...read(), bootAt };
 }

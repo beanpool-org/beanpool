@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 71,
-  "hash": "17026c6b1764d2ba5c35992e713a498666c5fc6f42bf003a76a5f70c034cc872",
+  "version": 72,
+  "hash": "bd84548d7fefb33bedc3eac1dd218383737e16f481be7cbac85a1702c578a36a",
   "sections": [
     {
       "id": "about",
@@ -4909,7 +4909,10 @@
             "You cannot delete while you have a deal under way. Finish or cancel it first.",
             "If you hold beans, they go to the Commons.",
             "If you are below zero, the Commons covers the debt.",
-            "Your profile becomes \"Deleted Member\", and your posts come down.",
+            "Your profile becomes \"Deleted Member\".",
+            "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
+            "Events you host are cancelled and wiped the same way. The people going can still read the event's chat until 30 days after the event.",
+            "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
             "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
             "It deletes your account only in the community you are using. Your accounts in other communities stay.",
@@ -4931,7 +4934,7 @@
         {
           "type": "ul",
           "items": [
-            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased.",
+            "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.",
             "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
             "If a deal of yours is still under way, the other member or an admin must close it first."
           ]

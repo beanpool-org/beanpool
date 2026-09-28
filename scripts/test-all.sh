@@ -375,6 +375,7 @@ run_federation_suites() {
       test-open-join-failover
       test-standby-visitor-marks
       test-standby-owner-deleted
+      test-delete-scrubs-posts
       test-standby-board-standing
       test-place-watch-failover
       test-standby-rekey

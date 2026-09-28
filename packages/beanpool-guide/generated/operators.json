@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 62,
-  "hash": "5c6b85f140a0085997a92a21819a4eef4bb0c4dfcd6dad6272cc1e63d15758ef",
+  "version": 63,
+  "hash": "8524112de837d91bcb5db4015d7fd26a8b563d6020a3a4dc500fefcac7bda46f",
   "sections": [
     {
       "id": "setup",
@@ -994,7 +994,7 @@
             "**Grant Operator**: lets them act for enterprises they are a keeper of.",
             "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.",
             "**Offboard**: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.",
-            "**Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts, role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database.",
+            "**Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts come down, and their role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database, and so do the words, photos and places of their posts.",
             "**Prune Branch**: removes them and everyone they invited, and everyone those people invited. You type their name to confirm."
           ]
         },
@@ -1009,6 +1009,7 @@
         {
           "type": "ul",
           "items": [
+            "A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as \"Deleted post\".",
             "A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.",
             "The trust score shown on a member's page is not calculated yet. Do not act on it.",
             "Suspended members can still make invites from their app.",
@@ -1845,7 +1846,7 @@
           "items": [
             "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.",
             "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
-            "The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy.",
+            "The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy. When a member deletes their account, the standby wipes the words, photos and places of their posts at its next copy too.",
             "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
             "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
             "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",

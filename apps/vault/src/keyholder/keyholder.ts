@@ -248,6 +248,8 @@ export class Keyholder {
         if (!verifyStatement(custodian, genesisStatement(this.bootIdB64, this.helloPubB64), args.sig)) {
             fail('bad_signature', 'The genesis request is not signed by that custodian for this boot.');
         }
+        // A restore that never got as far as a state file left nothing to finish.
+        rmSync(path.join(this.opts.stateDir, RESTORE_PENDING_FILE), { force: true });
         const m = crypto.randomBytes(32);
         const keys = WorkingKeys.fresh(1);
         try {
@@ -288,9 +290,15 @@ export class Keyholder {
             fail('bad_signature', 'The restore request is not signed by that custodian for this boot.');
         }
         mkdirSync(this.opts.stateDir, { recursive: true, mode: 0o700 });
-        writeFileSync(path.join(this.opts.stateDir, RESTORE_PENDING_FILE),
-            `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)) })}\n`, { mode: 0o600 });
-        writeStateFile(this.opts.stateDir, state);
+        const pendingFile = path.join(this.opts.stateDir, RESTORE_PENDING_FILE);
+        // Which backup, before the state: a state on disk always has its backup named beside it.
+        writeFileSync(pendingFile, `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)) })}\n`, { mode: 0o600 });
+        try {
+            writeStateFile(this.opts.stateDir, state);
+        } catch (e) {
+            rmSync(pendingFile, { force: true });
+            throw e;
+        }
         this.stateFile = state;
         this.setState('locked');
     }

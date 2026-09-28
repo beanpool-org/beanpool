@@ -49,6 +49,9 @@ export async function isLocalAuthEnrolled(): Promise<boolean> {
 }
 
 /**
+ * Authenticates the user using biometric authentication (Face ID / Touch ID)
+ * with a fallback to the device passcode, PIN, or pattern.
+ *
  * The phone's lock, before a step that shows or moves the account (the 12 words, pairing a computer, linking a sign-in,
  * taking the account off the phone) and for App Lock.
  *

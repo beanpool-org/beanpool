@@ -678,7 +678,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             adminRevokeTreasuryOperator(treasury, pubkey);
             ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke keeper' }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
+            ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke keeper' };
+        }
     });
 
     // Admin (password): post an Offer / Need as a treasury — a bootstrap convenience so a community
@@ -1327,6 +1330,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const res = approveKeeperRequest(requestId, actor);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to approve keeper request' };
@@ -1478,6 +1482,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const res = proposeKeeperRemoval(ctx.params.treasury, actor, ctx.params.pubkey);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /Only the lead keeper/.test(e?.message || '') ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to remove keeper' };
         }
@@ -1508,6 +1513,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const res = stepDownAsKeeper(ctx.params.treasury, actor);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /not a keeper/.test(e?.message || '') ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to step down' };
         }

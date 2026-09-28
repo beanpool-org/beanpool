@@ -24,7 +24,12 @@
  *     both re-keys and the whole set of keepers together, and ends equal to M.
  *  6. A standby as the old importer left it (no standing, no preferences, keepers or pledges, the withdrawn vouch kept,
  *     format 3) re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta.
- *  7. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
+ *  7. A standby writes no pledge of its own (#1276 review 4118882837): on S, a keeper's release (by every alias), a new
+ *     pledge, a step-down and an admin's unbind that would settle a pledge each answer 409 standby, and its engine refuses
+ *     a pledge and a release under the routes; nothing is written. A pledge S holds that M doesn't (as its own release
+ *     route wrote one before it refused) is counted by the whole-copy check, and a whole copy deletes it: Probe Co's
+ *     floor, allowance and backing on S are M's again (before, it stayed through every copy and a take-over).
+ *  8. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
  *     vouch gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
  *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
  *     with; the enterprises pay no demurrage; the opt-outs hold; the appointed voucher vouches; the enterprise is on the
@@ -175,6 +180,42 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');
             return true;
+        },
+        /** A pledge or a release asked of the engine itself, under the routes (state-engine.ts). */
+        'engine-pledge': async (a: { kind: 'pledge' | 'release'; enterprise: string; keeper: string; amount: number }) => {
+            const se = await import('./state-engine.js');
+            try {
+                if (a.kind === 'pledge') se.pledgeEnterpriseBacking(a.enterprise, a.keeper, a.amount);
+                else se.releaseEnterpriseBacking(a.enterprise, a.keeper, a.amount);
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, code: e?.code ?? null, error: e?.message || String(e) };
+            }
+        },
+        /**
+         * A pledge of this server's own, as a keeper's release on a standby's route wrote one before its pledge writers
+         * refused there: a partial release pledges the rest again under a new id, which no copy names.
+         */
+        'plant-pledge': async (a: { keeper: string; enterprise: string; amount: number }) => {
+            const { db } = await import('./db/db.js');
+            const { clearEnterpriseFloorCache } = await import('./state-engine.js');
+            db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                        VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL)`).run(crypto.randomUUID(), a.keeper, a.enterprise, a.amount);
+            clearEnterpriseFloorCache(a.enterprise);
+            return true;
+        },
+        /** The whole-copy check's counts on M's current whole copy, fetched with the replication token and not imported. */
+        'check-copy': async () => {
+            const { getLocalConfig } = await import('./config/local-config.js');
+            const { getReplicaConsistency } = await import('./state-engine.js');
+            const c = getLocalConfig();
+            const res = await fetch(`${c.backupPrimaryUrl}/api/local/admin/sync-snapshot`, { headers: { 'X-Replication-Token': c.backupReplicationToken! } });
+            return getReplicaConsistency(await res.json());
+        },
+        /** What the last whole-copy check after a pull found (services/backup-puller.ts checkWholeCopy). */
+        consistency: async () => {
+            const { getBackupStatus } = await import('./services/backup-puller.js');
+            return getBackupStatus().consistency ?? null;
         },
         fetches: async () => fetches,
     });
@@ -459,20 +500,76 @@ async function main(): Promise<void> {
         refused.push(...(await old.send('fetches')).blocked);
         await old.kill('SIGTERM');
 
-        // ── 7. The take-over ──
-        console.log('\n— 7. M dies; S takes over with the recovery code —');
+        // ── 7. A standby writes no pledge of its own ──
+        console.log('\n— 7. on the standby, a keeper\'s pledge and release are refused; one it holds that M doesn\'t is gone after a whole copy —');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup')); // its own clock again
         nodes.push(standby);
+        const sb = `https://localhost:${await standby.send('serve')}`;
+        const boardOn = async (base: string) => {
+            const b = await api(base, 'GET', '/api/marketplace/posts');
+            return (Array.isArray(b.body) ? b.body : b.body?.posts ?? []).map((p: any) => p.id).sort();
+        };
+        const backingOn = async (base: string) => {
+            const b = (await api(base, 'GET', `/api/treasury/${probe.publicKey}/pledges`, { as: cy })).body ?? {};
+            return { floor: b.floor, allowance: b.allowance, derived: b.derivedAllowance, legacy: b.legacyFloor, pledges: Array.isArray(b.pledges) ? b.pledges.length : null };
+        };
+        const caught7 = await standby.send('pull', {});
+        const m7: Rows = await main.send('rows');
+        let s7: Rows = await standby.send('rows');
+        require_(caught7.ok === true && rowsDiff(m7, s7).length === 0 && m7.enterprise_pledges.some((p) => p.keeper === kip2.pk && p.released_at === null)
+            && m7.treasury_operators.filter((o) => o.treasury_pubkey === probe.publicKey).length === 2,
+            `S has caught up with M, where Kip is one of Probe Co's two keepers and holds a pledge (${caught7.ok ? caught7.mode : caught7.error}; differences ${first(rowsDiff(m7, s7))})`);
+        const pledgeWrites: [string, Answer][] = [
+            ['Kip releases 1 of his backing (the review\'s sequence)', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/release`, { as: kip2, body: { amount: 1 } })],
+            ['by /pledge/release', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge/release`, { as: kip2, body: { amount: 1 } })],
+            ['by /backing/release', await api(sb, 'POST', `/api/enterprise/${probe.publicKey}/backing/release`, { as: kip2, body: { amount: 1 } })],
+            ['by DELETE /pledge', await api(sb, 'DELETE', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: {} })],
+            ['by DELETE /backing', await api(sb, 'DELETE', `/api/enterprise/${probe.publicKey}/backing`, { as: kip2, body: {} })],
+            ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount: 1 } })],
+            ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount: 1 } })],
+            ['Kip steps down, which releases his pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/keepers/step-down`, { as: kip2, body: {} })],
+            ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: PW_STANDBY })],
+        ];
+        const through = pledgeWrites.filter(([, a]) => !(a.status === 409 && a.body?.code === 'standby')).map(([w, a]) => `${w}: ${brief(a)}`);
+        assert(through.length === 0, `on S every write of a pledge answers 409 standby (${through.length} did not: ${through.join(' | ') || 'none'})`);
+        const engine7 = [
+            await standby.send('engine-pledge', { kind: 'release', enterprise: probe.publicKey, keeper: kip2.pk, amount: 1 }),
+            await standby.send('engine-pledge', { kind: 'pledge', enterprise: probe.publicKey, keeper: kip2.pk, amount: 1 }),
+        ];
+        assert(engine7.every((r) => r.ok === false && r.code === 'standby'), `and its engine under the routes refuses a release and a pledge (${JSON.stringify(engine7)})`);
+        s7 = await standby.send('rows');
+        assert(rowsDiff(m7, s7).length === 0, `nothing was written: S's keepers and pledges are still M's (differences ${first(rowsDiff(m7, s7))})`);
+
+        const unplanted7 = await backingOn(sb);
+        await standby.send('plant-pledge', { keeper: kip2.pk, enterprise: probe.publicKey, amount: 1 });
+        const planted7 = { m: await backingOn(m), s: await backingOn(sb) };
+        require_(planted7.s.derived === (unplanted7.derived ?? NaN) + 1 && planted7.s.pledges === (unplanted7.pledges ?? NaN) + 1,
+            `S holds a pledge of its own, as its release route wrote one before it refused: Probe Co has 1 Bean more backing there (${JSON.stringify({ before: unplanted7, ...planted7 })})`);
+        const audit7 = await standby.send('check-copy');
+        const counted7 = (audit7?.tables ?? []).filter((t: any) => ['treasury_operators', 'enterprise_pledges', 'member_preferences'].includes(t.name));
+        const pledgeRow7 = counted7.find((t: any) => t.name === 'enterprise_pledges');
+        assert(audit7?.ok === false && pledgeRow7?.match === false && pledgeRow7.backup === pledgeRow7.primary + 1
+            && counted7.filter((t: any) => t.name !== 'enterprise_pledges').length === 2 && counted7.every((t: any) => t.name === 'enterprise_pledges' || t.match),
+            `the whole-copy check counts pledges: on M's whole copy it finds S's extra one; keepers and preferences are counted and equal (${JSON.stringify(counted7)})`);
+        const whole7 = await standby.send('pull', { whole: true });
+        const m7b: Rows = await main.send('rows');
+        s7 = await standby.send('rows');
+        assert(whole7.ok === true && whole7.whole === true && rowsDiff(m7b, s7).length === 0,
+            `a whole copy deletes S's own pledge: its pledges are M's (${whole7.ok ? whole7.mode : whole7.error}; differences ${first(rowsDiff(m7b, s7))})`);
+        const after7 = { m: await backingOn(m), s: await backingOn(sb) };
+        assert(JSON.stringify(after7.s) === JSON.stringify(after7.m), `and Probe Co's floor, allowance and backing on S are M's (${JSON.stringify(after7)})`);
+        const check7 = await standby.send('consistency');
+        assert(check7?.ok === true && check7.tables.some((t: any) => t.name === 'enterprise_pledges' && t.match),
+            `the whole-copy check after it finds the copy exact, pledges counted (${JSON.stringify(check7?.tables?.filter((t: any) => !t.match))})`);
+
+        // ── 8. The take-over ──
+        console.log('\n— 8. M dies; S takes over with the recovery code —');
         const last = await standby.send('pull', {});
         require_(last.ok === true && last.envelope !== undefined, `S: a last pull, and the take-over envelope (${last.ok ? last.mode : last.error})`);
         const everyone: [string, string][] = [gwen, ann, bo, cy, kip2, lou, eve, fay, dee2, hal].map((w) => [w.name, w.pk]);
         everyone.push(['Probe Co', probe.publicKey], ['Seed Fund', seed.publicKey]);
         const standingOn = async (base: string) => Object.fromEntries(await Promise.all(
             everyone.map(async ([n, pk]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: gwen }))])));
-        const boardOn = async (base: string) => {
-            const b = await api(base, 'GET', '/api/marketplace/posts');
-            return (Array.isArray(b.body) ? b.body : b.body?.posts ?? []).map((p: any) => p.id).sort();
-        };
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
         require_((onMain.standing as any).Eve?.elderVouchedBy === bo.pk && (onMain.standing as any).Lou?.elderVouchedBy === null
@@ -495,7 +592,7 @@ async function main(): Promise<void> {
         const p = `https://localhost:${await standby.send('serve')}`;
         const P_ = (who: Id, route: string, body: unknown = {}) => api(p, 'POST', route, { as: who, body });
 
-        console.log('\n— 7. the promoted server holds every member\'s and enterprise\'s standing —');
+        console.log('\n— 8. the promoted server holds every member\'s and enterprise\'s standing —');
         await standby.send('fresh-trust');
         const promoted = { standing: await standingOn(p), board: await boardOn(p) };
         const floorsDiffer = Object.keys(onMain.standing).filter((n) => JSON.stringify((onMain.standing as any)[n]) !== JSON.stringify((promoted.standing as any)[n]));

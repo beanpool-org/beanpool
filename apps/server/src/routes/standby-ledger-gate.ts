@@ -11,6 +11,8 @@
  * - `POST /api/local/admin/stranded-escrows/:id/write-off` answers its own 409 `standby` (engine/escrow-write-off.ts).
  * - Routes that write no Bean: a listing, a profile, an enterprise's settings or keepers, a Commons project's proposal.
  *   A zero-balance account row that comes with a new member's or enterprise's row isn't refused (config/node-role.ts).
+ *   A keeper's binding or unbinding that would write a pledge (an approval with backing, a step-down, a removal) is
+ *   refused by the engine under it (state-engine.ts assertPledgeWritable), and its route answers the same 409.
  */
 import type { Context, Next } from 'koa';
 import { getNodeRole, STANDBY_CODE, STANDBY_LEDGER_MESSAGE } from '../config/node-role.js';
@@ -25,6 +27,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject)\/?$/,
     // An enterprise's sweep to the Commons, a pledge to it (a crowdfund's moves Beans), and its wind-up's final sweep.
     /^\/api\/(treasury|enterprise)\/[^/]+\/(sweep|pledge|wind-up\/finalise)\/?$/,
+    // A keeper's backing pledged or released (every alias, and DELETE .../pledge above): a pledge makes the enterprise's
+    // credit floor, and a standby writes none of its own (state-engine.ts assertPledgeWritable).
+    /^\/api\/(treasury|enterprise)\/[^/]+\/(backing|release|pledge\/release|backing\/release)\/?$/,
     // A crowdfund pledge, and a crowdfund's delete, which refunds its backers.
     /^\/api\/crowdfund\/projects\/(delete|[^/]+\/pledge)\/?$/,
     // Decisions: a vote can carry one out, and a Decision can grant Beans from the Commons, write them off or remove a

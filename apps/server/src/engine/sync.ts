@@ -785,6 +785,11 @@ export interface ImportOptions {
      * own (a whole copy that didn't match), and this is the total it had before that clear (clearForResync).
      */
     heldToSum?: number | null;
+    /**
+     * The copy is a whole one (the puller asked for the snapshot, not a delta), so the sets it carries whole are the main
+     * server's entire sets: the keepers' pledges it doesn't name are deleted here (mergeEnterprisePledges).
+     */
+    whole?: boolean;
 }
 
 /**
@@ -918,10 +923,14 @@ function replaceTreasuryOperators(rows: unknown[]): { changes: number; skipped: 
 }
 
 /**
- * Keepers' pledges as the main server holds them (design G2c), each row by its id, every column. A pledge is made and then
- * released, never deleted, so nothing here is deleted either. A malformed row is left out and counted.
+ * Keepers' pledges as the main server holds them (design G2c), each row by its id, every column. The main server deletes
+ * none (a pledge is made and then released), so a delta only upserts. A whole copy (`whole`) carries every pledge the main
+ * server holds, and one it doesn't name is deleted here: a pledge this standby wrote itself (a release on its own route
+ * before its writers refused on a standby, state-engine.ts assertPledgeWritable, pledged the rest again under a new id no
+ * copy ever names) would otherwise stay active through every copy and a take-over, and make the enterprise's credit floor
+ * deeper than the main server's. A malformed row is left out and counted, and names no row to keep.
  */
-function mergeEnterprisePledges(rows: unknown[]): { changes: number; skipped: number } {
+function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: number; skipped: number } {
     const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
     const upsert = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
                                VALUES (?, ?, ?, ?, ?, ?)
@@ -932,6 +941,7 @@ function mergeEnterprisePledges(rows: unknown[]): { changes: number; skipped: nu
                                   OR enterprise_pledges.amount IS NOT excluded.amount OR enterprise_pledges.pledged_at IS NOT excluded.pledged_at
                                   OR enterprise_pledges.released_at IS NOT excluded.released_at`);
     let changes = 0, skipped = 0;
+    const named = new Set<string>();
     for (const raw of rows) {
         const r = raw as Record<string, unknown> | null;
         if (!r || !text(r.id) || !text(r.keeper) || !text(r.enterprise) || typeof r.amount !== 'number' || !(r.amount > 0) || !Number.isFinite(r.amount)
@@ -939,7 +949,14 @@ function mergeEnterprisePledges(rows: unknown[]): { changes: number; skipped: nu
             skipped++;
             continue;
         }
+        named.add(r.id);
         changes += upsert.run(r.id, r.keeper, r.enterprise, r.amount, r.pledgedAt, r.releasedAt).changes;
+    }
+    if (whole) {
+        const drop = db.prepare('DELETE FROM enterprise_pledges WHERE id = ?');
+        for (const { id } of db.prepare('SELECT id FROM enterprise_pledges').all() as { id: string }[]) {
+            if (!named.has(id)) changes += drop.run(id).changes;
+        }
     }
     return { changes, skipped };
 }
@@ -1211,7 +1228,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 conflictsSkipped += kept.skipped;
             }
             if (Array.isArray(remote.enterprisePledges)) {
-                const pledged = mergeEnterprisePledges(remote.enterprisePledges);
+                const pledged = mergeEnterprisePledges(remote.enterprisePledges, opts.whole === true);
                 standingChanges += pledged.changes;
                 conflictsSkipped += pledged.skipped;
             }

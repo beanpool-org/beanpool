@@ -2076,6 +2076,7 @@ export async function fetchEscrowDisputes(
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', params);
     const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -2103,6 +2104,7 @@ export async function resolveEscrowDisputeApi(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ action, reason }),
     });
     if (!res.ok) {

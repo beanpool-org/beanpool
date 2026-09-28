@@ -113,3 +113,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `deleteNodePost` omitted `credentials: "same-origin"` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized when attempting to delete posts.
 **Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omitting `credentials: "same-origin"` prevents the browser from attaching session cookies on fetch requests.
 **Prevention:** Always include `credentials: "same-origin"` on fetch calls to admin or moderator endpoints that support cookie authentication.
+
+## 2026-11-03 - Missing Cookie Credentials Forwarding in Dispute Action Helpers
+**Vulnerability:** `fetchEscrowDisputes` and `resolveEscrowDisputeApi` omitted `credentials: 'same-origin'` from `fetch` options, causing cookie-authenticated admin key sessions to fail with 401 Unauthorized when viewing or resolving escrow disputes.
+**Learning:** Endpoints supporting key-session authentication rely on ambient HTTP cookies; omitting `credentials: 'same-origin'` prevents the browser from forwarding session cookies during fetch requests.
+**Prevention:** Always include `credentials: 'same-origin'` on fetch requests to administrative or moderation endpoints that support cookie authentication.

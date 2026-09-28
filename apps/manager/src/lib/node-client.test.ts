@@ -33,6 +33,8 @@ import {
     fetchReports,
     dismissNodeReport,
     removeReportedPulseItem,
+    fetchEscrowDisputes,
+    resolveEscrowDisputeApi,
     getAppAddresses,
     confirmAppAddress,
     removeAppAddress,
@@ -139,6 +141,22 @@ describe('resolveNodeApiUrl', () => {
 
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/diagnostics');
         expect(url).toBe('https://node.beanpool.org/api/local/admin/diagnostics');
+
+        vi.unstubAllGlobals();
+    });
+
+    it('fetchEscrowDisputes and resolveEscrowDisputeApi include credentials same-origin for key sessions', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ disputes: [], success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await fetchEscrowDisputes('https://node.example');
+        expect(fetchMock.mock.calls[0][1].credentials).toBe('same-origin');
+
+        await resolveEscrowDisputeApi('https://node.example', 'disp_123', 'release_to_seller');
+        expect(fetchMock.mock.calls[1][1].credentials).toBe('same-origin');
 
         vi.unstubAllGlobals();
     });

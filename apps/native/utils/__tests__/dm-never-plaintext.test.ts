@@ -271,6 +271,15 @@ describe('a chat the node reads stays readable, as designed', () => {
         expect(sent.nonce).toBe('plaintext-v1');
         expect(Buffer.from(sent.ciphertext, 'base64').toString('utf8')).toBe('swap day on Saturday');
     });
+
+    it('a group chat the phone hasn\'t stored yet (opened from a push) goes on the first Send, as plaintext-v1', async () => {
+        nodeConversation = { id: CONV, type: 'group_thread', participants: [me.publicKey, peer.publicKey], createdBy: peer.publicKey };
+        await insertMessage(CONV, me.publicKey, 'see you at the garden');
+        await vi.waitFor(() => expect(calls('POST', '/api/messages/send')).toHaveLength(1));
+        const [sent] = sentBodies('/api/messages/send');
+        expect(sent.nonce).toBe('plaintext-v1');
+        expect(Buffer.from(sent.ciphertext, 'base64').toString('utf8')).toBe('see you at the garden');
+    });
 });
 
 describe('what the member is told', () => {

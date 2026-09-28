@@ -3623,7 +3623,13 @@ function lockWith(ctx: DMKeyContext, text: string): { ciphertext: string; nonce:
 
 async function isNodeReadableConversation(conversationId: string): Promise<boolean> {
     const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    if (!row) {
+        // Not on this phone yet (a group chat opened from a push): ask the node what it is before deciding, or a
+        // group chat's first line would be taken for a DM and refused as unlockable.
+        await refreshConversationFromNode(conversationId);
+        row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    }
     return isNodeReadableChatType(row?.type);
 }
 

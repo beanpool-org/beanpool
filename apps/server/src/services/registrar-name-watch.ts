@@ -52,7 +52,8 @@
  *
  * Cadence: every 5 minutes for a name at risk (lost, evidence being gathered, the registrar naming another key, a
  * former name, or a latest status that doesn't hold it for this key: none, released, revoked, …, unless the registrar's
- * own latest answer is that this key holds it in a state that holds a name); every 6 hours for the rest (the registrar
+ * own latest answer is that this key holds it in a state that holds a name, and no status or rename was written on the
+ * name after that answer); every 6 hours for the rest (the registrar
  * alone is asked then, and only `other` leads further), so a node whose admin never opens Settings still learns. Only on the main server, and only when the record has a name: a node that never had a registrar name
  * asks nothing.
  *
@@ -140,6 +141,11 @@ export interface NameWatch {
     ownAt: number | null;
     /** Whether this server's own attest verified, the last time it was asked. */
     selfOk: boolean | null;
+    /**
+     * The name's role and status on the record (entryWord) when the registrar last said `you`. Once either has changed
+     * since, that `you` no longer says the name is safe (heldForUs): a newer status wins over an older `you`.
+     */
+    entryAtYou: string | null;
     /** The evidence being gathered, or null. */
     streak: Streak | null;
     /** The name carried a `lost` mark when the last round ended: if it has none now, a claim or a status cleared it. */
@@ -150,7 +156,7 @@ export interface NameWatch {
 
 const blank = (): NameWatch => ({
     checkedAt: null, registrar: null, registrarAt: null, holderKey: null, state: null, heldUntil: null, old: false,
-    edge: null, edgeAt: null, ownAt: null, selfOk: null, streak: null, marked: false, logged: null,
+    edge: null, edgeAt: null, ownAt: null, selfOk: null, entryAtYou: null, streak: null, marked: false, logged: null,
 });
 
 // ── The evidence row ────────────────────────────────────────────────────────────────────────
@@ -174,8 +180,8 @@ function watchOf(raw: unknown): NameWatch {
         checkedAt: num(r.checkedAt), registrar, registrarAt: num(r.registrarAt), holderKey: str(r.holderKey, KEY_RE),
         state: str(r.state, WORD_RE), heldUntil: num(r.heldUntil), old: r.old === true,
         edge: EDGE_WORDS.includes(r.edge) ? r.edge : null, edgeAt: num(r.edgeAt), ownAt: num(r.ownAt),
-        selfOk: typeof r.selfOk === 'boolean' ? r.selfOk : null, streak, marked: r.marked === true,
-        logged: typeof r.logged === 'string' ? r.logged.slice(0, 40) : null,
+        selfOk: typeof r.selfOk === 'boolean' ? r.selfOk : null, entryAtYou: typeof r.entryAtYou === 'string' ? r.entryAtYou.slice(0, 80) : null,
+        streak, marked: r.marked === true, logged: typeof r.logged === 'string' ? r.logged.slice(0, 40) : null,
     };
 }
 
@@ -360,6 +366,16 @@ export function ownReleaseEndsAt(entry: RegistrarName): number {
 
 /** A recorded name as the record holds it, but for `since` (registrarNames() stamps a name it adds from the stored address now). */
 const entryMark = (e: RegistrarName): string => JSON.stringify({ ...e, since: null });
+/** What a later status or rename changes on a recorded name: its role and the registrar's status word. */
+const entryWord = (e: RegistrarName): string => `${e.role}/${e.status}`;
+
+/**
+ * The registrar's latest word on the name is `you`, and nothing written on the record since (a status, a rename, a
+ * release) says otherwise. `holding`: only a `you` in a state that holds a name (live, pending, paused, blocked).
+ */
+function saidYouSince(entry: RegistrarName, w: NameWatch, holding: boolean): boolean {
+    return w.registrar === 'you' && w.entryAtYou === entryWord(entry) && (!holding || (!!w.state && HOLDING_STATUSES.has(w.state)));
+}
 
 /**
  * One round's outcome: the evidence as it now stands, and the `lost` mark to write (undefined: unchanged). Pure: the
@@ -381,6 +397,8 @@ export function decide(entry: RegistrarName, prev: NameWatch, holder: HolderAnsw
         w.holderKey = holder.held === 'other' ? holder.key : null;
         w.state = holder.held === 'you' || holder.held === 'other' ? holder.state : null;
         w.heldUntil = holder.held === 'you' ? holder.heldUntil : null;
+        // As the record held the name when the registrar was asked: a status written during the round is newer.
+        w.entryAtYou = holder.held === 'you' ? entryWord(asked) : null;
     }
     if (selfOk !== null) w.selfOk = selfOk;
     if (edge) {
@@ -531,17 +549,20 @@ async function runRound(host: string, opts: { now?: number; loopbackOrigin?: str
 /**
  * When a name's next round is due (ms). A former name, or one whose latest status doesn't hold it for this key, is
  * watched closely until the registrar's own answer says this key holds it in a state that holds a name (live, pending,
- * paused, blocked): then it is as safe as a current live name, and asked about as rarely.
+ * paused, blocked): then it is as safe as a current live name, and asked about as rarely, until a status or a rename
+ * written on the record after that answer says otherwise (design §3.4: a status of `none` is watched every 5 minutes).
  */
 function dueAt(entry: RegistrarName, w: NameWatch): number {
     if (w.checkedAt === null) return 0;
-    const heldForUs = w.registrar === 'you' && !!w.state && HOLDING_STATUSES.has(w.state);
-    const atRisk = (entry.role === 'former' || !HOLDING_STATUSES.has(entry.status)) && !heldForUs;
+    const atRisk = (entry.role === 'former' || !HOLDING_STATUSES.has(entry.status)) && !saidYouSince(entry, w, true);
     const close = !!entry.lost || !!w.streak || w.registrar === 'other' || atRisk;
     return w.checkedAt + (close ? CLOSE_EVERY_MS : QUIET_EVERY_MS);
 }
 
-/** A round for every recorded name that is due, one after another. On the main server only. */
+/**
+ * A round for every recorded name that is due, one after another. On the main server only. `now` (tests): the rule's
+ * clock, for what is due and for each round; unset, each round runs at its own time.
+ */
 export async function checkDueRegistrarNames(opts: { now?: number } = {}): Promise<NameRound[]> {
     const now = opts.now ?? Date.now();
     if (getNodeRole() !== 'primary') return [];
@@ -552,7 +573,9 @@ export async function checkDueRegistrarNames(opts: { now?: number } = {}): Promi
     for (const e of names) {
         const w = all[e.address] ?? blank();
         // A round from a clock that has since gone back more than an hour is due now.
-        if (dueAt(e, w) <= now || (w.checkedAt !== null && w.checkedAt > now + 3_600_000)) out.push(await checkRegistrarName(e.address));
+        if (dueAt(e, w) <= now || (w.checkedAt !== null && w.checkedAt > now + 3_600_000)) {
+            out.push(await checkRegistrarName(e.address, opts.now !== undefined ? { now: opts.now } : {}));
+        }
     }
     return out;
 }
@@ -649,8 +672,9 @@ export function nameStandings(): Map<string, NameStanding> {
         const w = all[e.address] ?? blank();
         const ends = ownReleaseEndsAt(e);
         const released = Number.isFinite(ends);
-        // The registrar's own latest answer first: `you` (outside this community's own release) leaves nothing to say.
-        const says = w.registrar === 'other' ? 'other' : released ? 'released' : w.registrar === 'you' ? null : w.registrar === 'free' ? 'free'
+        // The registrar's own latest answer first: `you` (outside this community's own release) leaves nothing to say,
+        // unless a status or a rename written since says otherwise.
+        const says = w.registrar === 'other' ? 'other' : released ? 'released' : saidYouSince(e, w, false) ? null : w.registrar === 'free' ? 'free'
             : !HOLDING_STATUSES.has(e.status) && e.status !== 'unknown' ? e.status : null;
         const leadsHere = w.edge === 'own';
         const base = {

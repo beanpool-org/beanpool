@@ -197,13 +197,24 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     autosnapshot_config: orNull(snapshotSchedule),
 };
 
+/**
+ * How often the directory is told, in whole hours; 0 is never. The publisher's timer (services/directory-publisher.ts)
+ * can't wait longer than 2^31 - 1 ms: past that, below zero, or a fraction of an hour that rounds to nothing, and Node
+ * fires it every millisecond, a flood on the directory registry every community shares. The admin route
+ * (routes/settings.ts) takes the same, and both Settings screens offer 0 to 24.
+ */
+export const MAX_DIRECTORY_PUSH_INTERVAL_HOURS = Math.floor((2 ** 31 - 1) / 3_600_000);
+export function isDirectoryPushInterval(v: unknown): v is number {
+    return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_DIRECTORY_PUSH_INTERVAL_HOURS;
+}
+
 const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Check<unknown>> = {
     serviceRadius: orNull(radius),
     publishLocation: bool,
     publishMembers: bool,
     publishContacts: bool,
     publishHealth: bool,
-    directoryPushIntervalHours: (v) => (finite(v) && v >= 0 && v <= 24 * 366 ? v : BAD),
+    directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) ? v : BAD),
 };
 
 /**

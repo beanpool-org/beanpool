@@ -16,7 +16,8 @@
  *  3. M changes its phone and stops publishing its health (a save of that one switch, which leaves the others as they
  *     were: before, it published the contacts and member count M had turned off), and sets its gateway (other origins
  *     for its web app, a switch, the request limit, and an admin IP allowlist of its own): the next delta brings the new
- *     record, applied to nothing.
+ *     record, applied to nothing. Neither the route nor a kept record takes a directory push interval the publisher's
+ *     timer can't hold (it would fire every millisecond).
  *  4. A standby S2 promoted by hand (its role changed in .env, no take-over) installs M's settings at its first boot as
  *     a main server, and its ledger audit holds the ledger to M's baseline; installed once: a later change on S2 stays.
  *     Before that, an install whose write of local-config.json fails (a full disk) stops with nothing of it applied or
@@ -158,6 +159,14 @@ async function child(): Promise<void> {
                 (fs as any).writeFileSync = realWrite;
             }
             return { threw, ...(await readSettings()) };
+        },
+        /** Which directory push intervals a kept record takes (config/community-settings.ts parseCommunitySettings). */
+        'record-takes-interval': async (a: { values: unknown[] }) => {
+            const { parseCommunitySettings } = await import('./config/community-settings.js');
+            return a.values.map((v) => {
+                const parsed = parseCommunitySettings({ localConfig: {}, nodeConfig: {}, directory: { directoryPushIntervalHours: v } });
+                return !!parsed && 'directoryPushIntervalHours' in parsed.record.directory;
+            });
         },
         /** Whether a password is this server's admin password now. */
         'admin-password-is': async (a: { password: string }) => {
@@ -441,6 +450,13 @@ async function main(): Promise<void> {
         console.log('\n— 3. the main server changes its settings; a delta brings them —');
         built('M changes its phone number', await A('/api/local/update-identity', { contactPhone: '+61 2 5550 0199' }));
         built('and stops publishing its health', await A('/api/local/admin/node/config', { publishHealth: false }));
+        // The publisher's timer can't wait longer than 2^31 - 1 ms (596 hours). Longer, below zero, or a fraction of an hour
+        // that rounds to nothing, and Node fires it every millisecond: a flood on the directory registry every community
+        // shares. Both Settings screens send whole hours from 0 (off) to 24.
+        for (const every of [-1, 0.0001, 597, 24 * 366, '12']) {
+            const bad = await A('/api/local/admin/node/config', { directoryPushIntervalHours: every });
+            assert(bad.status === 400, `the route refuses a directory push interval of ${j(every)} hours (${brief(bad)})`);
+        }
         // The last admin call on M's HTTPS server: its admin IP allowlist names an address this machine is not.
         built('it sets its gateway: another origin for its web app, messaging off, a request limit, an admin IP allowlist', await A('/api/local/admin/gateway', {
             corsAllowedOrigins: ['https://app.riverbend.example'], features: { messaging: false }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
@@ -464,6 +480,9 @@ async function main(): Promise<void> {
             && sNow.kept?.record?.localConfig?.gateway?.corsAllowedOrigins?.[0] === 'https://app.riverbend.example'
             && !('adminIpAllowlist' in (sNow.kept?.record?.localConfig?.gateway ?? {})),
             `the kept record is M's new one, its gateway without M's admin IP allowlist (${j(sNow.kept?.record?.localConfig?.gateway)})`);
+        const takes = await standby.send('record-takes-interval', { values: [0, 1, 24, 596, -1, 0.0001, 597, 24 * 366, '12'] });
+        assert(j(takes) === j([true, true, true, true, false, false, false, false, false]),
+            `a kept record takes the push intervals the route does, and none the publisher's timer can't hold (${j(takes)})`);
 
         // ── 4. A standby promoted by hand ──
         console.log('\n— 4. a standby promoted by hand installs the settings at its first boot as a main server —');

@@ -23,6 +23,7 @@ import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, typ
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
+import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
@@ -275,6 +276,13 @@ router.post('/api/local/admin/node/config', async (ctx) => {
     if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'acceptKnocks must be true or false' };
+        return;
+    }
+    // Whole hours up to what the publisher's timer can hold (config/community-settings.ts isDirectoryPushInterval): past
+    // it, below zero or a sliver of an hour, the timer fires every millisecond at the directory registry.
+    if (directoryPushIntervalHours !== undefined && !isDirectoryPushInterval(directoryPushIntervalHours)) {
+        ctx.status = 400;
+        ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
     console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });

@@ -51,7 +51,7 @@ Whoever holds the database and that key can open a member's copy, though, with t
 
 ## What your server sends elsewhere
 
-- The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Switch any part of it, or all of it, off under Node Identity.
+- The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or leave the directory altogether.
 - GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.
 - Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.
 - Members' Pulse channels are fetched from the sites they link to.

@@ -36,7 +36,7 @@ import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
-import { guestPost } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, type MarketplacePost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -320,7 +320,13 @@ router.get('/api/marketplace/posts', async (ctx) => {
         id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
         includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
     });
-    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost) : posts);
+    // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
+    // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
+    const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
+        || (!!reader && isTreasury(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
+        || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
+    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost)
+        : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p));
 
     ctx.status = 200;
     ctx.type = 'application/json';

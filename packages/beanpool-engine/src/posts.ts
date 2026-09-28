@@ -1122,6 +1122,23 @@ export function withoutPollVoters(post: MarketplacePost): MarketplacePost {
 }
 
 /**
+ * The post without who took it (`acceptedBy`, `acceptedByCallsign`) or the deal it is in (`pendingTransactionId`), for a
+ * reader or a socket that is neither its author nor the member who took it. Balances and trades are private (Marty,
+ * 2026-09-28): a trade shows only its two people. Everyone else still sees that it is spoken for or done (its status and
+ * dates), as a visitor does (guestPost). Any post nobody has taken comes back as it was.
+ */
+export function withoutTradeParty(post: MarketplacePost): MarketplacePost {
+    if (!('acceptedBy' in post) && !('acceptedByCallsign' in post) && !('pendingTransactionId' in post)) return post;
+    const { acceptedBy: _by, acceptedByCallsign: _byName, pendingTransactionId: _deal, ...rest } = post;
+    return rest;
+}
+
+/** Whether `reader` is one of a post's trade's two people: its author, or the member who took it. */
+export function isTradeParty(post: Pick<MarketplacePost, 'authorPublicKey' | 'acceptedBy'>, reader: string | null | undefined): boolean {
+    return !!reader && (reader === post.authorPublicKey || (!!post.acceptedBy && reader === post.acceptedBy));
+}
+
+/**
  * The author every post names to a visitor (guestPost): one constant, never a per-post token, which would link one
  * person's listings together. Not empty, so an app that writes it into a NOT NULL column (the phone's local posts
  * table) still can. The phone knows it (apps/native utils/posts-view.ts HIDDEN_AUTHOR) and opens no profile for it.

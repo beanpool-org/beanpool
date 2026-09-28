@@ -196,17 +196,44 @@ function rowToDecision(r: any): Decision {
 export type PublicDecision = Omit<Decision, 'adminHaltedBy'>;
 
 /**
+ * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
+ * opens (createDecision), so its voters can weigh them. Balances are private (Marty, 2026-09-28): those voters see them,
+ * inside that Decision only (decisionForReader), and nobody else does.
+ */
+const MEMBER_BALANCE_PARAMS = ['balance', 'debt'] as const;
+
+function carriesMemberBalance(params: unknown): params is Record<string, unknown> {
+    return !!params && typeof params === 'object' && MEMBER_BALANCE_PARAMS.some(k => k in (params as object));
+}
+
+/**
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
  * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
+ * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
  * Admin routes (/api/local/admin/*) serve the full Decision.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
-    if (rest.params && typeof rest.params === 'object' && 'suspendedBy' in rest.params) {
-        const { suspendedBy: _suspendedBy, ...params } = rest.params;
+    if (rest.params && typeof rest.params === 'object' && ('suspendedBy' in rest.params || carriesMemberBalance(rest.params))) {
+        const { suspendedBy: _suspendedBy, balance: _balance, debt: _debt, ...params } = rest.params;
         return { ...rest, params };
     }
     return rest;
+}
+
+/**
+ * A Decision as `reader`, the verified signer, sees it: publicDecision, and for a Decision about a member that records
+ * their balance, that balance and debt to those who may vote in it (checkVoterEligibility for this Decision: active,
+ * not frozen, joined before it opened) and to the member themselves. Nowhere else: not the list's other cards, not a
+ * broadcast, not a visitor, a non-member or an unsigned reader.
+ */
+export function decisionForReader(decision: Decision, reader: string | null | undefined): PublicDecision {
+    const shown = publicDecision(decision);
+    if (!reader || !carriesMemberBalance(decision.params)) return shown;
+    if (reader !== decision.subject && !checkVoterEligibility(reader, decision).ok) return shown;
+    const params: Record<string, unknown> = { ...(shown.params || {}) };
+    for (const k of MEMBER_BALANCE_PARAMS) if (k in decision.params) params[k] = decision.params[k];
+    return { ...shown, params };
 }
 
 /**

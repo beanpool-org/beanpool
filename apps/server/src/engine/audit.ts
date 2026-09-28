@@ -229,3 +229,32 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     
     return { balancesCsv, transactionsCsv };
 }
+
+/**
+ * The ledger export a member downloads from the app (GET /api/ledger/export): the same two files as the node's audit
+ * above, holding only what is theirs. Balances and trades are private (Marty, 2026-09-28): a member sees their own
+ * balance and history and nobody else's, so the files carry the Community Pool (a community total, public), their own
+ * balance, the Beans they hold in their own pending trades, and every transaction they are a party to. The full audit
+ * above stays with the operator, who holds the database.
+ */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as { callsign: string } | undefined;
+    const account = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(publicKey) as { balance: number } | undefined;
+
+    let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
+    balancesCsv += `commons,Community Pool,System,${Math.round(COMMONS_BALANCE * 100) / 100}\n`;
+    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${Math.round((account?.balance ?? 0) * 100) / 100}\n`;
+    const pendingTxs = db.prepare("SELECT id, credits FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; credits: number }[];
+    for (const tx of pendingTxs) {
+        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${(member?.callsign || 'you').replace(/,/g, '')}),Pending_Trade,${tx.credits}\n`;
+    }
+
+    let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
+    const txHistory = db.prepare("SELECT * FROM transactions WHERE from_pubkey = ? OR to_pubkey = ? ORDER BY timestamp ASC").all(publicKey, publicKey) as any[];
+    for (const tx of txHistory) {
+        const memoSafe = (tx.memo || '').replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
+        transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
+    }
+
+    return { balancesCsv, transactionsCsv };
+}

@@ -10,7 +10,7 @@ import type { Libp2p } from 'libp2p';
 import { isPeerTrusted } from './connector-manager.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
-import { getMember, getBalance, createConversation, sendMessage, registerVisitor } from './state-engine.js';
+import { getMember, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
@@ -255,11 +255,11 @@ export function registerFederationHandler(node: Libp2p): void {
                 if (!member) {
                     response = { isMember: false };
                 } else {
-                    const balance = getBalance(publicKey);
+                    // Never the member's balance: balances are private to their owner (Marty, 2026-09-28). Nothing
+                    // ever read the `homeBalance` this used to carry.
                     response = {
                         isMember: true,
                         callsign: member.callsign,
-                        homeBalance: balance?.balance ?? 0,
                     };
                 }
             } 

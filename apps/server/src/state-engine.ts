@@ -82,6 +82,7 @@ import {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -117,6 +118,7 @@ export {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -153,6 +155,7 @@ import {
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
+    exportLedgerFor as exportLedgerForEngine,
     persistDecayEvents as persistDecayEventsEngine,
     persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
@@ -218,6 +221,8 @@ import {
     type FriendEntry,
     getPosts as getPostsEngine,
     withoutPollVoters,
+    withoutTradeParty,
+    isTradeParty,
     getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
@@ -1243,6 +1248,11 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     return row.audience_scope === null || row.audience_scope === 'public';
 }
 
+/** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
+function isTreasuryKey(pk: string): boolean {
+    return !!(db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1').get(pk));
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1312,6 +1322,15 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
         && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
     let withoutVoters: string | null = null;
+    // Who took a listing, and its deal, go to that trade's two people only (withoutTradeParty): its author or the member
+    // who took it, and an enterprise's keepers for its side. Every other socket's copy leaves them off.
+    const tradePost = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && (!!event.post.acceptedBy || !!event.post.pendingTransactionId)
+        ? event.post as MarketplacePost : null;
+    const tradeSide = (pk: string | null | undefined): boolean => !!tradePost && (isTradeParty(tradePost, pk)
+        || (!!pk && [tradePost.authorPublicKey, tradePost.acceptedBy].some(side => !!side && isTreasuryKey(side) && canOperateTreasury(pk, side))));
+    let withoutParty: string | null = null;
+    let withoutPartyNorVoters: string | null = null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
@@ -1346,6 +1365,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
+        }
+        if (tradePost && (out === msg || out === withoutVoters) && !tradeSide(ws._memberPubkey)) {
+            out = out === msg
+                ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
+                : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
         }
         try {
             ws.send(out);
@@ -7353,6 +7377,11 @@ export function getDirectoryInfo(): any {
 // ===================== AUDIT EXPORT =====================
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
     return exportLedgerAuditEngine();
+}
+
+/** One member's own ledger export (engine/audit.ts exportLedgerFor): the Community Pool, their balance, their trades. */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    return exportLedgerForEngine(publicKey);
 }
 
 // ===================== COMMUNITY COMMONS =====================

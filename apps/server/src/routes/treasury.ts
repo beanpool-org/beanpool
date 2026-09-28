@@ -38,7 +38,7 @@ import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -338,14 +338,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
         ).all(treasury) as any[];
-        const flow = (db.prepare(
-            'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
-        ).all(treasury, treasury) as any[]).map(f => ({
-            amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
-        }));
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+        // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
+        // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
+        const flow = (db.prepare(
+            'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
+        ).all(treasury, treasury) as any[]).map(f => ({
+            amount: f.amount,
+            memo: isOperator || (!!actor && (f.from_pubkey === actor || f.to_pubkey === actor)) ? f.memo : '',
+            timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
+        }));
 
         // PR #775 review: Sensitive worker wage history (keeper_pubkey, transaction_id, historical payouts)
         // must not leak to unauthenticated / non-operator clients. Public view only sees pending claims without worker identifiers.
@@ -1090,6 +1094,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.delete('/api/local/admin/treasury/:treasury/location', clearLocationHandler);
 
     // Read-only accountability ledger (public to all node members)
+    /**
+     * An enterprise's book as `reader` may read it. Its Beans are the community's business (docs/the-commons.md §2.2:
+     * "a visible ledger of what it took in and paid out"), so every member reads every amount, the running balance and
+     * the totals. Who paid it or was paid, what they wrote and who signed are a trade's, and a trade shows only its two
+     * people (Marty, 2026-09-28): the enterprise's side is its keepers (canOperateTreasury), the other side the member
+     * named, who reads their own lines in full. To anyone else an entry with a member, or a deal in escrow, says "A
+     * member" or "A deal", with no key, memo or signer. The Commons Pool, the genesis grant, a federation bridge and
+     * another enterprise or treasury are no person and stay named.
+     */
+    const ledgerForReader = (ledger: ReturnType<typeof getEnterpriseLedger>, treasury: string, reader: string | undefined) => {
+        if (reader && canOperateTreasury(reader, treasury)) return ledger;
+        return {
+            ...ledger,
+            entries: ledger.entries.map(e => {
+                if (e.counterparty === reader) return e;
+                if (e.counterparty === 'COMMONS_POOL' || e.counterparty === 'genesis' || e.counterparty.startsWith('bridge_')) return e;
+                if (!isSyntheticAccount(e.counterparty) && isTreasury(e.counterparty)) return e;
+                return { ...e, counterparty: '', counterpartyName: e.counterparty.startsWith('escrow_') ? 'A deal' : 'A member', memo: '', authSigner: null };
+            }),
+        };
+    };
+
     const getLedgerHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
@@ -1100,7 +1126,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 until: until ? String(until) : undefined,
                 limit: limit ? Number(limit) : undefined,
             });
-            ctx.body = ledger;
+            // Varies by reader (a keeper reads names), so no shared cache keeps it.
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = ledgerForReader(ledger, treasury, ctx.state?.actor as string | undefined);
         } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e.message || 'Failed to retrieve enterprise ledger' };

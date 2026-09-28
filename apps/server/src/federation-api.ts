@@ -11,7 +11,7 @@
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
-import { getMembers, getPosts, getBalance, createConversation, sendMessage, registerVisitor, getCommunityInfo, getActivePostCount } from './state-engine.js';
+import { getMembers, getPosts, createConversation, sendMessage, registerVisitor, getCommunityInfo, getActivePostCount } from './state-engine.js';
 import { getLocalConfig } from './config/local-config.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './engine/member-key.js';
 
@@ -99,13 +99,11 @@ export function mountFederationRoutes(router: Router): void {
             return;
         }
 
-        // Get balance info for the member
-        const balance = getBalance(publicKey);
-
+        // Never the member's balance: balances are private to their owner (Marty, 2026-09-28), and any key can sign
+        // this request. Nothing ever read the `homeBalance` this used to carry.
         ctx.body = {
             isMember: true,
             callsign: member.callsign,
-            homeBalance: balance?.balance ?? 0,
         };
     });
 

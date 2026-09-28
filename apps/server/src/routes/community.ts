@@ -21,11 +21,11 @@ import {
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
-    exportLedgerAudit,
     registerPushToken, removePushToken, applyPushLeave,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
     dispatchPushNotification,
+    exportLedgerFor, canOperateTreasury,
     getNodeRole, exportSyncState,
     createTreasury,
     purgeMemberSelf,
@@ -1269,10 +1269,46 @@ router.get('/api/profile/:publicKey', async (ctx) => {
     ctx.body = profile;
 });
 
-// ===================== LEDGER API (PUBLIC) =====================
+// ===================== LEDGER API (EACH MEMBER'S OWN) =====================
+
+// Balances and trades are private (Marty, 2026-09-28, reversing 2026-09-18's "members can see each other's balance and
+// history"): a member reads their own balance, trust figures and history, and nobody else's. An enterprise or community
+// treasury is no person: its balance is on the public treasuries list already, and its keepers read its history. A
+// Decision about a member shows that member's balance to its voters inside that Decision (routes/commons.ts). Held here
+// whatever ENFORCE_READ_AUTH says, as /api/community/me is: the reader is the verified signer only, never a parameter.
+// Both apps have only ever asked for their own, and read a refusal as "nothing": the phone keeps what it holds.
+const OWN_LEDGER_ERROR = 'Balances and trades are private: you can see only your own.';
+const OWN_LEDGER_CODE = 'own_only';
+
+const isTreasuryAccount = (pk: string): boolean =>
+    !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ? AND is_treasury = 1").get(pk) as { is_treasury: number } | undefined);
+
+/** The verified reader of a ledger read, or undefined once it has answered 401. */
+function ledgerReader(ctx: any): string | undefined {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return undefined;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    return actor;
+}
+
+function refuseOthersLedger(ctx: any): void {
+    ctx.status = 403;
+    ctx.body = { error: OWN_LEDGER_ERROR, code: OWN_LEDGER_CODE };
+}
 
 router.get('/api/ledger/balance/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    // Before the lookup, so a refusal says nothing about whether the key is a member here.
+    if (reader !== publicKey && !isTreasuryAccount(publicKey)) {
+        refuseOthersLedger(ctx);
+        return;
+    }
     const member = getMember(publicKey);
     if (!member) {
         ctx.status = 404;
@@ -1483,13 +1519,27 @@ router.post('/api/ledger/transfer', async (ctx) => {
 
 router.get('/api/ledger/transactions', async (ctx) => {
     const publicKey = ctx.query.publicKey as string | undefined;
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    // No key used to mean every transaction on the node, with its memo. Now: the reader's own, or an enterprise's for
+    // one of its keepers (as /api/marketplace/transactions), and nothing else.
+    const own = typeof publicKey === 'string' && publicKey === reader;
+    const keeper = typeof publicKey === 'string' && isTreasuryAccount(publicKey) && canOperateTreasury(reader, publicKey);
+    if (!own && !keeper) {
+        refuseOthersLedger(ctx);
+        return;
+    }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
     ctx.body = getTransactions(publicKey, limit, offset);
 });
 
+// The member's own export: the Community Pool, their balance and every transaction they are a party to. The whole node's
+// audit (every balance and every memo) stays with the operator, who holds the database.
 router.get('/api/ledger/export', async (ctx) => {
-    ctx.body = exportLedgerAudit();
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    ctx.body = exportLedgerFor(reader);
 });
 
 

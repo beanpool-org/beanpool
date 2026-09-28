@@ -218,7 +218,7 @@ async function main(): Promise<void> {
     assert(kept === 1, `the leaves recorded more than a day ago are cleared as the next one is applied (${kept} left)`);
     // That clearing runs on every leave applied, and keys with no row here can add leaves: it must read an index on
     // applied_at, never scan the table (#1258 review 4116631125: a full scan per leave let one address stall the node).
-    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN ${PUSH_LEAVE_PRUNE_SQL}`).all('-1 day') as Array<{ detail: string }>).map((r) => r.detail).join('; ');
+    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN ${PUSH_LEAVE_PRUNE_SQL}`).all('-1 day', kim.pub, PHONE) as Array<{ detail: string }>).map((r) => r.detail).join('; ');
     assert(/SEARCH push_token_leaves USING (COVERING )?INDEX idx_push_token_leaves_applied_at/.test(prunePlan) && !/SCAN push_token_leaves/.test(prunePlan),
         `clearing old leaves searches idx_push_token_leaves_applied_at, never scans the table (${prunePlan})`);
 

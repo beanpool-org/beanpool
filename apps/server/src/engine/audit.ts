@@ -19,6 +19,7 @@ import {
     type AuditSyncPayload
 } from '@beanpool/engine';
 import { mainLedgerAtLastCopy, type MainLedgerRecord } from './sync.js';
+import { PLAIN_TABLES } from './replication-manifest.js';
 
 export type { ReplicaConsistency, AuditSyncPayload };
 
@@ -138,11 +139,16 @@ export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNea
 }
 
 /**
- * Compare local replica state against the primary's sync payload.
+ * Compare local replica state against the primary's sync payload: a plain table's rows only as far as they travel (the
+ * manifest's RowRule, engine/replication-manifest.ts).
  */
 export function getReplicaConsistency(payload: AuditSyncPayload): ReplicaConsistency {
-    return engineGetReplicaConsistency(db, payload, COMMONS_BALANCE);
+    return engineGetReplicaConsistency(db, payload, COMMONS_BALANCE, PLAIN_ROWS);
 }
+
+/** Each plain table's condition on the rows that travel, by table. */
+const PLAIN_ROWS: Readonly<Record<string, string>> = Object.fromEntries(
+    PLAIN_TABLES.flatMap((t) => (t.where ? [[t.table, t.where] as [string, string]] : [])));
 
 /**
  * Failover promotion sanity check run before taking live writes.

@@ -155,15 +155,22 @@ export function writeTombstone(tableName: string, rowKey: string): void {
 /**
  * Deletes the rows of a plain table (engine/replication-manifest.ts PLAIN_TABLES) that `where` matches, each with a
  * tombstone keyed by its primary key's values joined with `|` (engine/plain-tables.ts plainRowKey), so a standby deletes
- * them too: a delta carries a delete only as its tombstone. `table` and `where` are the caller's own SQL, never a value;
- * `args` fill the `where`. Returns how many rows went.
+ * them too: a delta carries a delete only as its tombstone. A row the table's RowRule doesn't hold (a phone of a key that
+ * isn't a member's) never travelled, and goes with none, so no key can fill a copy with them. `table` and `where` are
+ * the caller's own SQL, never a value; `args` fill the `where`. Returns how many rows went.
  */
 export function deletePlainRows(table: string, where: string, ...args: unknown[]): number {
     const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk').all(table) as { name: string }[]).map((c) => c.name);
-    if (!PLAIN_TABLES.some((t) => t.table === table) || key.length === 0) throw new Error(`${table} is no plain table with a key`);
-    const gone = db.prepare(`DELETE FROM ${table} WHERE ${where} RETURNING ${key.join(', ')}`).raw().all(...args) as unknown[][];
-    for (const values of gone) writeTombstone(table, values.map((v) => String(v)).join('|'));
-    return gone.length;
+    const spec = PLAIN_TABLES.find((t) => t.table === table);
+    if (!spec || key.length === 0) throw new Error(`${table} is no plain table with a key`);
+    const travelled = spec.where ? `(${spec.where})` : '1';
+    return db.transaction(() => {
+        // Which rows travelled, read before the delete: the rule may read the row's own columns.
+        const rows = db.prepare(`SELECT ${key.join(', ')}, ${travelled} AS travelled FROM ${table} WHERE ${where}`).raw().all(...args) as unknown[][];
+        const gone = db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...args).changes;
+        for (const r of rows) if (r[key.length]) writeTombstone(table, r.slice(0, key.length).map((v) => String(v)).join('|'));
+        return gone;
+    })();
 }
 
 /**

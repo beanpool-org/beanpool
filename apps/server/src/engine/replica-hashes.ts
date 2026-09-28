@@ -11,7 +11,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
-import { TABLES, BOOT_STAMPED } from './replication-manifest.js';
+import { TABLES, BOOT_STAMPED, travellingRows } from './replication-manifest.js';
 
 export interface TableHash {
     rows: number;
@@ -68,9 +68,12 @@ export interface HashOptions {
     membersLeftOut?: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 }
 
-/** Every copied table this server has, with the columns hashed and the order its rows are hashed in. */
-function hashedTables(): { table: string; columns: string[]; order: string[] }[] {
-    const out: { table: string; columns: string[]; order: string[] }[] = [];
+/**
+ * Every copied table this server has, with the columns hashed, the order its rows are hashed in, and the condition on the
+ * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server.
+ */
+function hashedTables(): { table: string; columns: string[]; order: string[]; where: string | null }[] {
+    const out: { table: string; columns: string[]; order: string[]; where: string | null }[] = [];
     for (const [table, entry] of Object.entries(TABLES)) {
         if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
         const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
@@ -81,7 +84,7 @@ function hashedTables(): { table: string; columns: string[]; order: string[] }[]
         // By its key when the key is among the columns hashed (a total order); otherwise by every column hashed, so two
         // servers' rows come in the same order whatever local ids they carry.
         const order = key.length > 0 && key.every((c) => columns.includes(c)) ? key : columns;
-        out.push({ table, columns, order });
+        out.push({ table, columns, order, where: travellingRows(table) });
     }
     return out;
 }
@@ -93,7 +96,7 @@ function hashedTables(): { table: string; columns: string[]; order: string[] }[]
  */
 export function tableContentHashes(opts: HashOptions = {}): TableHashes {
     const tables: Record<string, TableHash> = {};
-    for (const { table, columns, order } of hashedTables()) {
+    for (const { table, columns, order, where } of hashedTables()) {
         if (opts.only && !opts.only.includes(table)) continue;
         const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
         const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
@@ -106,7 +109,8 @@ export function tableContentHashes(opts: HashOptions = {}): TableHashes {
         }).join(', ');
         const h = crypto.createHash('sha256');
         let rows = 0;
-        for (const row of db.prepare(`SELECT ${select} FROM ${q(table)} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
+        const held = where ? ` WHERE (${where})` : '';
+        for (const row of db.prepare(`SELECT ${select} FROM ${q(table)}${held} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
             if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) continue;
             const copied = asCopied && keyAt >= 0 ? asCopied.get(row[keyAt] as string) : undefined;
             if (copied) {

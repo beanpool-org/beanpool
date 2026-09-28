@@ -156,10 +156,10 @@ async function child(): Promise<void> {
             const envelope = await pullTakeoverEnvelopeNow();
             return { ...result, whole: getBackupStatus().lastFullReconcileAt !== before, envelope };
         },
-        /** Every table the manifest compares, in its compared columns, ordered by its key. */
+        /** Every table the manifest compares, in its compared columns, ordered by its key: the rows that travel (RowRule). */
         dump: async () => {
             const { db } = await import('./db/db.js');
-            const { TABLES, BOOT_STAMPED, comparedColumns } = await import('./engine/replication-manifest.js');
+            const { TABLES, BOOT_STAMPED, comparedColumns, travellingRows } = await import('./engine/replication-manifest.js');
             const q = (n: string) => `"${n.replace(/"/g, '""')}"`;
             const out: DbDump = {};
             for (const table of Object.keys(TABLES)) {
@@ -175,7 +175,9 @@ async function child(): Promise<void> {
                     return stamped.length === 0 ? q(c)
                         : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END AS ${q(c)}`;
                 }).join(', ');
-                const rows = db.prepare(`SELECT ${select} FROM ${q(table)} ORDER BY ${key.map(q).join(', ')}`).all() as Record<string, unknown>[];
+                // A row the manifest's RowRule doesn't hold (a phone of a key that isn't a member's) is the server's own.
+                const held = travellingRows(table);
+                const rows = db.prepare(`SELECT ${select} FROM ${q(table)}${held ? ` WHERE (${held})` : ''} ORDER BY ${key.map(q).join(', ')}`).all() as Record<string, unknown>[];
                 out[table] = { key, columns, rows, ...(entry.kind === 'local' && entry.gap ? { notCopied: entry.gap } : {}) };
             }
             return out;

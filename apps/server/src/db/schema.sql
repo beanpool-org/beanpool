@@ -530,6 +530,20 @@ CREATE TABLE IF NOT EXISTS push_token_leaves (
 -- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
 -- leaves: a search on this, never a scan of the table per leave.
 CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
+-- A new token of a key with no row here prunes such keys' tokens not registered again for a month (state-engine.ts
+-- STRANGER_PUSH_RULES): a search on this too.
+CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
+
+-- 11c. Where each new push token of a key with no row here came from, for a day (state-engine.ts STRANGER_PUSH_RULES):
+-- what one address, and every address together, may add in a day. `ip_hash` is the address as a keyed hash
+-- (engine/open-join.ts pushAddressHash), NULL for this server's own code. This server's own, never copied, and deleted
+-- once a day old (engine/open-join.ts forgetOldJoinAddresses).
+CREATE TABLE IF NOT EXISTS push_token_addresses (
+    ip_hash TEXT,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_token_addresses_ip_hash ON push_token_addresses(ip_hash);
+CREATE INDEX IF NOT EXISTS idx_push_token_addresses_made_at ON push_token_addresses(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

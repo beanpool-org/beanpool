@@ -1495,11 +1495,21 @@ router.get('/api/ledger/export', async (ctx) => {
 
 // ===================== PUSH NOTIFICATION TOKENS =====================
 
+/** A push platform as the apps name it (React Native's Platform.OS: 'ios', 'android'): a short word, never a payload. */
+const PUSH_PLATFORM = /^[A-Za-z0-9_-]{1,16}$/;
+
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform, registeredAt } = (ctx as any).requestBody || {};
     if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
+        return;
+    }
+    // A token a leave statement can name (at most 512 characters, one line), as Expo's are (ExponentPushToken[…], about
+    // 41): anything else is no phone's, and would be stored and copied as it came (#1295 review 4126286269).
+    if (!isPushLeaveToken(token) || (platform !== undefined && platform !== null && (typeof platform !== 'string' || !PUSH_PLATFORM.test(platform)))) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a push token this server can store' };
         return;
     }
     // The phone's stamp for this registration (state-engine.ts registerPushToken); none from an app before it.
@@ -1514,11 +1524,20 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null);
+    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null, clientLimiterKey(ctx));
     if (registration === 'left') {
         // Sent before this key's leave statement for the token and delivered after it: the phone no longer wants it.
         ctx.status = 409;
         ctx.body = { error: 'This phone left this account after sending this registration', code: 'push_token_left' };
+        return;
+    }
+    if (registration === 'rate_limited' || registration === 'busy') {
+        // A key with no row here, over its address's day or the node's (state-engine.ts STRANGER_PUSH_RULES): the app
+        // tries again later, and lands once its row is made.
+        ctx.status = 429;
+        ctx.body = registration === 'busy'
+            ? { error: 'This community is not taking new phones from people who have not joined right now. Please try again later.', code: 'busy' }
+            : { error: 'Too many new phones from this network today. Please try again tomorrow, or once you have joined.', code: 'rate_limited' };
         return;
     }
     const success = registration === 'registered';

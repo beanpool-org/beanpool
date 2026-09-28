@@ -7,8 +7,8 @@
  * moved past the cursor, a whole copy every row. Here each row is written as it is, the main server's stamp included, and
  * never judged by a stamp of this server's: the main server is a standby's only writer of these tables
  * (config/node-role.ts assertPlainTablesWritable), and the puller refuses a copy older than the last one. So a row that
- * differs in any column is the main server's newer one. A whole copy names every row the main server holds, and one here
- * it doesn't name is deleted. A row the main server deleted between two deltas comes as its tombstone (engine/sync.ts
+ * differs in any column is the main server's newer one. A whole copy names every row the main server holds (of a table
+ * with a RowRule, every one that travels), and one here it doesn't name is deleted. A row the main server deleted between two deltas comes as its tombstone (engine/sync.ts
  * applyTombstoneLocally, deletePlainRow).
  *
  * A copy never puts a name into SQL unchecked: only this table's own columns (PRAGMA table_info) are written. And one
@@ -154,11 +154,13 @@ function importTable(spec: PlainTable, shape: Shape, rows: unknown[], whole: boo
     }
 
     // A whole copy's deletes first: a row here the main server doesn't hold can't then stand in a unique index's way of
-    // one it does (a pending request here it has since answered and a new one it holds).
+    // one it does (a pending request here it has since answered and a new one it holds). Only among the rows that travel
+    // (the manifest's RowRule, `spec.where`): the copy names none of the rest, and deletes none.
     if (whole) {
         const keep = new Set(named.map((n) => plainRowKey(n.key)));
         const drop = db.prepare(`DELETE FROM ${table} WHERE ${where}`);
-        for (const here of db.prepare(`SELECT ${shape.key.map(q).join(', ')} FROM ${table}`).raw().all() as unknown[][]) {
+        const held = spec.where ? ` WHERE (${spec.where})` : '';
+        for (const here of db.prepare(`SELECT ${shape.key.map(q).join(', ')} FROM ${table}${held}`).raw().all() as unknown[][]) {
             if (!keep.has(plainRowKey(here))) result.changes += drop.run(...here).changes;
         }
     }

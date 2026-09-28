@@ -19,9 +19,16 @@
  *  5. Day zero: rows as an older version wrote them (addresses 8 to 30 days old, and fresh ones), and a log line
  *     with an address from before this version. The first boot's sweep clears the old ones and every address in the
  *     old log line, keeps the fresh ones, and the hourly timer clears one that comes of age later.
- *  6. A snapshot (writeDbSnapshot makes every snapshot and backup) holds no address, even a fresh one; the live
- *     database keeps its fresh one; nothing is left beside the file. A snapshot made before this version (a plain
- *     copy, addresses in it), downloaded as a backup: the backup's database holds none.
+ *  6. A snapshot (writeDbSnapshot makes every snapshot and backup) holds no address, even a fresh one, read through
+ *     SQL or in the file's bytes (its free space included); nor the sign-up and knock limiters' address hashes, whose
+ *     key is in the same file; the live database keeps its fresh address and its hashes; nothing is left beside the
+ *     file. A snapshot made before this version (a plain copy, addresses in it), downloaded as a backup: the backup's
+ *     database holds none, in its bytes either.
+ *  6b. Copies already on disk from before this version: a snapshot holding addresses of any age, hashes and an old
+ *     log line, the same database as a fleet harvester's latest and daily copies of a server, a clean snapshot, and a
+ *     twin a crash left. The boot run takes every address out of each (bytes too), keeps each file's name, mode and
+ *     mtime (so the snapshot list and its rotation are unchanged), removes the twin, and leaves the clean one unread
+ *     and unwritten; a second boot rewrites nothing.
  *  7. The daily hash: the same address, the same tag all day; another address, another tag; the next day, another tag.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-address-retention.ts
@@ -76,8 +83,10 @@ const { logger } = await import('./logger.js');
 const { db } = await import('./db/db.js');
 // This change's own modules: absent on a build from before it, where the checks that need them fail instead of crashing.
 const retention = await import('./services/address-retention.js').catch(() => null) as null | {
-    forgetOldAddresses(now?: number): number; startForgettingOldAddresses(everyMs?: number): void;
+    forgetOldAddresses(now?: number): number; startForgettingOldAddresses(everyMs?: number): Promise<number> | void;
 };
+const { listSnapshots } = await import('./services/snapshot-scheduler.js');
+const { openJoinAddressHash, knockAddressHash } = await import('./engine/open-join.js');
 const logTag = await import('./log-address.js').catch(() => null) as null | { logAddressTag(key: string, now?: number): string };
 
 let run = 0, passed = 0;
@@ -95,6 +104,12 @@ const logText = () => (db.prepare(`SELECT group_concat(message || ' ' || COALESC
 const configRow = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? '';
 const ADDRESS_ROWS = ['replication_access', 'standby_health', 'takeover_envelope_holders'];
 const addressRowsText = () => ADDRESS_ROWS.map(configRow).join('\n');
+/** A file's bytes as text, free pages and freed cells included: what `strings` on it would find. */
+const bytesOf = (file: string) => fs.readFileSync(file).toString('latin1');
+/** The two limiters' address hashes, as the rows of `conn` hold them. */
+const addressHashes = (conn: Database.Database) => (conn.prepare(
+    "SELECT ip_hash FROM open_joins WHERE ip_hash IS NOT NULL UNION ALL SELECT ip_hash FROM join_requests WHERE ip_hash IS NOT NULL",
+).all() as { ip_hash: string }[]).map((r) => r.ip_hash);
 const resetBrakes = () => { resetAdminAuthTarpit(); resetPasswordBrake(); };
 
 /** A report from a standby whose last three copies were refused: the owners' incident opens on it. */
@@ -322,16 +337,43 @@ async function main() {
         say('\n— 6. a snapshot —');
         await get('/api/local/admin/sync-snapshot', from('203.0.113.70', { 'X-Replication-Token': TOKEN }));
         assert(configRow('replication_access').includes('203.0.113.70'), '6. the live database has a fresh address');
+        // A sign-up and a knock from the last day: the limiters' keyed hashes of their addresses. The key, openJoinSalt,
+        // is in node_config, so from a copy anyone can try every IPv4 address against them.
+        const signupHash = openJoinAddressHash('203.0.113.57');
+        const knockHash = knockAddressHash('203.0.113.58');
+        const fkWas = db.pragma('foreign_keys', { simple: true });
+        db.pragma('foreign_keys = OFF');
+        db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, ip_hash) VALUES (?, ?, ?, ?)')
+            .run('address-retention-member', 'google', 'address-retention-join-hash', signupHash);
+        db.prepare("INSERT INTO join_requests (id, pubkey, callsign, message, status, ip_hash) VALUES (?, ?, ?, ?, 'pending', ?)")
+            .run('address-retention-knock', 'address-retention-knocker', 'Knocker', 'hello', knockHash);
+        db.pragma(`foreign_keys = ${fkWas ? 'ON' : 'OFF'}`);
+        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash), '6. (the live database has a sign-up\'s and a knock\'s address hash)');
+        // Take-over keys' holders enough that the row spills onto overflow pages. Cleaning it in the copy frees those
+        // pages whole: without secure_delete their bytes, addresses and all, stay in the copy's free list, where SQL
+        // never looks and `strings` does. (A row inside one page can leave its old cell behind too, depending on the
+        // page's layout: #1289's review found one.)
+        const fleet = Array.from({ length: 60 }, (_, i) => ({
+            ip: `198.51.100.${100 + i}`, envelopeId: `env-fleet-${i}`, sealedAt: '2026-09-29T00:00:00.000Z', lastFetchAt: Date.now() - 60_000, how: 'confirmed',
+        }));
+        db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('takeover_envelope_holders', JSON.stringify(fleet));
         const snapDir = fs.mkdtempSync(path.join(DATA_DIR!, 'snapcheck-'));
         const snapFile = path.join(snapDir, 'copy.db');
         writeDbSnapshot(snapFile);
         const copy = new Database(snapFile, { readonly: true });
         const copyRows = (copy.prepare(`SELECT value FROM node_config WHERE key IN (${ADDRESS_ROWS.map(() => '?').join(', ')})`).all(...ADDRESS_ROWS) as { value: string }[]).map((r) => r.value).join('\n');
         const copyLogs = (copy.prepare(`SELECT group_concat(message || ' ' || COALESCE(metadata, ''), '\n') AS t FROM system_logs`).get() as { t: string | null }).t ?? '';
+        const copyHashes = addressHashes(copy);
+        const copyJoins = (copy.prepare("SELECT (SELECT COUNT(*) FROM open_joins WHERE member_pubkey = 'address-retention-member') + (SELECT COUNT(*) FROM join_requests WHERE id = 'address-retention-knock') AS n").get() as { n: number }).n;
         copy.close();
         assert(copyRows.includes('"auth":"token"') && addressesIn(copyRows).length === 0, `6. the copy keeps the entries and no address (${addressesIn(copyRows).join(', ') || 'none'})`);
         assert(addressesIn(copyLogs).length === 0, "6. …nor in its log lines");
+        assert(copyJoins === 2 && copyHashes.length === 0, `6. …nor a limiter's address hash: the sign-up and the knock are kept, their hashes are not (${copyHashes.length} left)`);
+        const copyBytes = bytesOf(snapFile);
+        assert(addressesIn(copyBytes).length === 0 && !copyBytes.includes(signupHash) && !copyBytes.includes(knockHash),
+            `6. the copy's FILE holds no address and no hash, free space included (${[...addressesIn(copyBytes), ...[signupHash, knockHash].filter((h) => copyBytes.includes(h))].join(', ') || 'none'})`);
         assert(configRow('replication_access').includes('203.0.113.70'), '6. the live database still has its fresh one');
+        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash), '6. …and its hashes, which the sign-up and knock limits count for a day');
         assert(fs.readdirSync(snapDir).join(',') === 'copy.db', `6. nothing left beside the copy (${fs.readdirSync(snapDir).join(', ')})`);
 
         // A snapshot from before this version: a plain copy, with the live addresses in it.
@@ -347,13 +389,79 @@ async function main() {
         execFileSync('tar', ['-xzf', tarFile, '-C', unpacked]);
         const fromBackup = new Database(path.join(unpacked, 'state.db'), { readonly: true });
         const backupRows = (fromBackup.prepare(`SELECT value FROM node_config WHERE key IN (${ADDRESS_ROWS.map(() => '?').join(', ')})`).all(...ADDRESS_ROWS) as { value: string }[]).map((r) => r.value).join('\n');
+        const backupHashes = addressHashes(fromBackup);
         fromBackup.close();
         const oldCopy = new Database(oldSnap, { readonly: true });
         const oldRows = (oldCopy.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
         oldCopy.close();
         assert(oldRows.includes('203.0.113.70'), '6. (the old snapshot has the address in it)');
-        assert(backupRows.includes('"auth":"token"') && addressesIn(backupRows).length === 0,
-            `6. downloaded as a backup, its database holds none (${addressesIn(backupRows).join(', ') || 'none'})`);
+        assert(backupRows.includes('"auth":"token"') && addressesIn(backupRows).length === 0 && backupHashes.length === 0,
+            `6. downloaded as a backup, its database holds none (${addressesIn(backupRows).join(', ') || 'none'}; ${backupHashes.length} hash(es))`);
+        const backupBytes = bytesOf(path.join(unpacked, 'state.db'));
+        assert(addressesIn(backupBytes).length === 0 && !backupBytes.includes(signupHash) && !backupBytes.includes(knockHash),
+            `6. …and the backup's database FILE holds none either (${addressesIn(backupBytes).join(', ') || 'none'})`);
+
+        // ── 6b. Copies already on disk ──
+        say('\n— 6b. copies kept on disk from before this version —');
+        const snapshotsDir = path.join(DATA_DIR!, 'snapshots');
+        fs.mkdirSync(snapshotsDir, { recursive: true });
+        // A snapshot as an older version made it: the live addresses, the hashes, an address two months old (main never
+        // expired them) and a log line with one (written before logs were sanitized).
+        const planted = path.join(snapshotsDir, 'snapshot-2026-09-26T02-00-00-000Z.db');
+        db.exec(`VACUUM INTO '${planted.replace(/'/g, "''")}'`);
+        const plant = new Database(planted);
+        const access = JSON.parse((plant.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value);
+        access.recent.push({ at: Date.now() - 60 * DAY, ip: '198.51.100.61', auth: 'rejected', reason: 'no credentials' });
+        plant.prepare("UPDATE node_config SET value = ? WHERE key = 'replication_access'").run(JSON.stringify(access));
+        plant.prepare("INSERT INTO system_logs (level, category, message) VALUES ('SECURITY', 'AUTH', ?)")
+            .run('[password-brake] 6 wrong admin passwords from 198.51.100.62; that address now backs off');
+        plant.close();
+        // The same database as a fleet harvester holds a server's: the latest, and one day of its history.
+        const heldLatest = path.join(DATA_DIR!, 'backups', 'node-a', 'state.db');
+        const heldDay = path.join(DATA_DIR!, 'backups', 'node-a', 'history', 'beanpool-2026-09-20.db');
+        fs.mkdirSync(path.dirname(heldDay), { recursive: true });
+        fs.copyFileSync(planted, heldLatest);
+        fs.copyFileSync(planted, heldDay);
+        // A snapshot this version made, and a twin a crash left part-way.
+        const clean = path.join(snapshotsDir, 'snapshot-2026-09-28T02-00-00-000Z.db');
+        writeDbSnapshot(clean);
+        const leftTwin = path.join(snapshotsDir, 'snapshot-2026-09-27T02-00-00-000Z.db.forgetting-addresses.tmp');
+        fs.copyFileSync(planted, leftTwin);
+        const secs = (ms: number) => ms / 1000;
+        const kept = [planted, heldLatest, heldDay];
+        kept.forEach((f, i) => { fs.chmodSync(f, 0o640); fs.utimesSync(f, secs(Date.now() - (3 + i) * DAY), secs(Date.now() - (3 + i) * DAY)); });
+        fs.utimesSync(clean, secs(Date.now() - DAY), secs(Date.now() - DAY));
+        const statsBefore = new Map([...kept, clean].map((f) => [f, fs.statSync(f)]));
+        const listBefore = listSnapshots();
+        assert(kept.every((f) => addressesIn(bytesOf(f)).includes('198.51.100.61') && bytesOf(f).includes(signupHash)),
+            '6b. (each old copy has addresses of any age and a hash in it)');
+
+        const swept = await retention?.startForgettingOldAddresses();
+        for (const f of kept) {
+            const bytes = bytesOf(f);
+            const left = [...addressesIn(bytes), ...[signupHash, knockHash].filter((h) => bytes.includes(h))];
+            const conn = new Database(f, { readonly: true });
+            const entries = (conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
+            conn.close();
+            assert(left.length === 0 && entries.includes('"auth":"token"'),
+                `6b. the boot run took every address and hash out of ${path.relative(DATA_DIR!, f)}, file bytes included, and kept its entries (${left.join(', ') || 'none'})`);
+            const was = statsBefore.get(f)!, now = fs.statSync(f);
+            assert(Math.abs(now.mtimeMs - was.mtimeMs) < 1 && (now.mode & 0o777) === 0o640,
+                `6b. …and it keeps its mtime and mode (${new Date(now.mtimeMs).toISOString()} vs ${new Date(was.mtimeMs).toISOString()}, ${(now.mode & 0o777).toString(8)})`);
+        }
+        const listAfter = listSnapshots();
+        assert(JSON.stringify(listAfter.map((x) => x.name)) === JSON.stringify(listBefore.map((x) => x.name))
+            && listAfter.every((x, i) => Math.abs(x.createdAt - listBefore[i].createdAt) < 1),
+            `6b. the snapshot list, its order and its dates are unchanged (${listAfter.map((x) => x.name).join(', ')})`);
+        assert(!fs.existsSync(leftTwin) && fs.readdirSync(snapshotsDir).every((n) => n.endsWith('.db'))
+            && fs.readdirSync(path.dirname(heldDay)).join(',') === 'beanpool-2026-09-20.db',
+            `6b. the twin a crash left is gone, and nothing is left beside the copies (${fs.readdirSync(snapshotsDir).join(', ')})`);
+        assert(fs.statSync(clean).ino === statsBefore.get(clean)!.ino && fs.statSync(clean).mtimeMs === statsBefore.get(clean)!.mtimeMs,
+            '6b. a snapshot that holds none is only read, not rewritten');
+        assert(swept === 3, `6b. three copies were rewritten (${swept})`);
+        const inodes = kept.map((f) => fs.statSync(f).ino);
+        const again = await retention?.startForgettingOldAddresses();
+        assert(again === 0 && kept.every((f, i) => fs.statSync(f).ino === inodes[i]), `6b. the next boot rewrites none of them (${again})`);
 
         // ── 7. The daily hash (last: a new day's key replaces today's) ──
         say('\n— 7. the daily hash —');

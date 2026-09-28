@@ -86,7 +86,7 @@ import {
 import Database from 'better-sqlite3';
 import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
-import { forgetAddressesInCopy } from './address-retention.js';
+import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
@@ -539,7 +539,7 @@ export async function createSealedBackup(opts: BackupSource = {}): Promise<Seale
         if (opts.dbFile) {
             fs.copyFileSync(opts.dbFile, dbPath);
             // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
-            forgetAddressesInCopy(dbPath);
+            forgetAddressesInStoredCopy(dbPath);
         } else writeDbSnapshot(dbPath);
         const configPath = path.join(dataDir(), 'node_config.json');
         if (fs.existsSync(configPath)) {
@@ -612,7 +612,7 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
         if (opts.dbFile) {
             fs.copyFileSync(opts.dbFile, dbPath);
             // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
-            forgetAddressesInCopy(dbPath);
+            forgetAddressesInStoredCopy(dbPath);
         } else writeDbSnapshot(dbPath);
         const configPath = path.join(dataDir(), 'node_config.json');
         if (fs.existsSync(configPath)) {

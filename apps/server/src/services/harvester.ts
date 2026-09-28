@@ -39,6 +39,7 @@ import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
 import { sealFileVerified, checkBackupArchive, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
+import { forgetAddressesInStoredCopy } from './address-retention.js';
 
 export interface FleetNodeConfig {
     id: string;
@@ -479,6 +480,9 @@ function keepPlainBackup(node: FleetNodeConfig, tarPath: string): KeptBackup {
         const extractedDb = path.join(extract, 'state.db');
         if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) throw new Error('Downloaded backup did not contain state.db');
         const destDb = path.join(nodeDir, 'state.db');
+        // A server older than this one sends its internet addresses in its backup: they are not kept here either
+        // (services/address-retention.ts). One that holds none is kept byte for byte, as before.
+        forgetAddressesInStoredCopy(extractedDb);
         fs.copyFileSync(extractedDb, destDb);
         // The objects that database's rows name, and the manifest naming the ones the node could not send.
         // Without them this is the harvester's only copy of a node with no photos and no attachments in it —

@@ -499,3 +499,25 @@ describe('MarketplacePage: links in a post stay plain text (G11-e)', () => {
         expect(phishLinks(document.body)).toHaveLength(0);
     });
 });
+
+// A local community's listings are its members' (2026-09-28): the node refuses them to anyone else with code members_only,
+// and the Market says so, with the way to the global community, instead of an error or an empty board.
+describe('MarketplacePage: a local community refuses its listings to a non-member', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        const refusal = Object.assign(new Error("Refused by the node."), { status: 403, code: 'members_only' });
+        vi.spyOn(api, 'getMarketplacePosts').mockRejectedValue(refusal);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('shows the members-only card with a link to the global community, and no error box', async () => {
+        render(<MarketplacePage identity={identity} isMember={false} />);
+        const card = await screen.findByTestId('members-only-listings');
+        expect(card.textContent).toContain("This community's listings are for its members");
+        expect(screen.getByTestId('look-around-global').getAttribute('href')).toBe('https://global.beanpool.org');
+        expect(screen.queryByText('Refused by the node.')).not.toBeInTheDocument();
+    });
+});

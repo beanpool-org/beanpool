@@ -75,6 +75,8 @@ export interface MarketplacePost {
     lng?: number;
     pollOptions?: PollOption[];
     pollClosesAt?: string;
+    /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
+    pollOpenVote?: boolean;
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];

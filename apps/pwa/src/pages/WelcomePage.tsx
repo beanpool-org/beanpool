@@ -24,6 +24,7 @@ import {
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
+import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
@@ -272,6 +273,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
     const [door, setDoor] = useState<Door>(() => (initialInfo ? doorOf(initialInfo) : 'checking'));
+    // A local community (every node but the global one, an older node that says no profile included): its listings are
+    // its members' (2026-09-28), so this page points a stranger to the global community to look around.
+    const [localCommunity, setLocalCommunity] = useState(() => !!initialInfo && initialInfo.profile !== 'global');
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
         // The lobby read it a moment ago: asked again only on Try again.
@@ -279,8 +283,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) setDoor(doorOf(info)); })
-            .catch((e) => { if (!cancelled) setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); });
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); } })
+            .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
@@ -2434,6 +2438,20 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             >
                                 {loading ? 'Creating...' : 'Create Identity & Join →'}
                             </button>
+
+                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28) ===== */}
+                            {localCommunity && (
+                                <div data-testid="welcome-no-invite" style={{
+                                    marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', textAlign: 'center',
+                                    background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
+                                }}>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 0.65rem', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                                        No invite? This community's listings are for its members. Look around the global community, where anyone can join,
+                                        and ask a community near you to let you in from there.
+                                    </p>
+                                    <LookAroundGlobal compact />
+                                </div>
+                            )}
 
                             {/* ===== FAQs ===== */}
                             <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-primary, #333)', paddingTop: '1.25rem' }}>

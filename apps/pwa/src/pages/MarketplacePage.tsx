@@ -10,6 +10,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
+import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { YourEvents } from '../components/YourEvents';
@@ -193,6 +194,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The node refused its listings: this reader is no member of this local community (MembersOnlyListings).
+    const [membersOnly, setMembersOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Federation — multi-toggle (home always on, peers toggled independently)
@@ -506,12 +509,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter)));
                 setError(null);
+                setMembersOnly(false);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
-                setError(e.message || 'Failed to load');
+                if (isMembersOnlyRefusal(e)) {
+                    setMembersOnly(true);
+                    setError(null);
+                } else {
+                    setError(e.message || 'Failed to load');
+                }
                 throw e;
             } finally {
                 setLoading(false);
@@ -2498,6 +2507,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
+            {/* Not a member here: a local community's listings are its members' */}
+            {membersOnly && <MembersOnlyListings />}
+
             {/* Error */}
             {error && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-red-600 text-sm text-center shadow-sm">
@@ -2509,7 +2521,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {/* Posts */}
             {loading ? (
                 <p className="text-nature-500 text-center py-8">Loading...</p>
-            ) : (() => {
+            ) : membersOnly ? null : (() => {
                 let filtered = posts.filter(p => {
                     if (p.type === 'poll') {
                         return p.status === 'active' || p.status === 'completed';

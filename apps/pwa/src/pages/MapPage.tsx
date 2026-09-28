@@ -172,6 +172,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
+    // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
+    const [pollOpenVote, setPollOpenVote] = useState(false);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
@@ -853,6 +855,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     repeatable: false,
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
+                    pollOpenVote,
                     audienceScope,
                     ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 });
@@ -860,6 +863,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 setNewPostDescription('');
                 setPollOptions(['', '']);
                 setPollDurationDays(7);
+                setPollOpenVote(false);
                 setAudienceScope('public');
                 setTargetGroupId('');
                 setShowNewPost(false);
@@ -2260,12 +2264,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             </div>
                         </div>
 
-                        <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-purple-800 dark:text-purple-300">
-                            <p className="font-bold mb-0.5">🗳️ Transparent Village Polling</p>
-                            <p className="m-0 leading-relaxed">
-                                Votes are signed and publicly visible to all community members. Open accountability creates trust.
-                            </p>
-                        </div>
+                        <label className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-purple-800 dark:text-purple-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pollOpenVote}
+                                onChange={(e) => setPollOpenVote(e.target.checked)}
+                                className="mt-0.5 w-5 h-5 shrink-0 accent-purple-600"
+                                data-testid="poll-open-vote"
+                            />
+                            <span className="min-w-0" style={{ overflowWrap: 'anywhere' }}>
+                                <span className="block font-bold mb-0.5">👁️ Open vote</span>
+                                <span className="block leading-relaxed">
+                                    {pollOpenVote
+                                        ? 'Members will see who chose what. You can\'t change this once someone has voted.'
+                                        : 'Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can\'t change it once someone has voted.'}
+                                </span>
+                            </span>
+                        </label>
                     </div>
                 ) : (
                     <>

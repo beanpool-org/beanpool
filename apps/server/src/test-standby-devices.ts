@@ -13,21 +13,28 @@
  *
  *  1. The main server M: members register their phones (one phone two accounts share, #1184; Kip leaves a phone with a
  *     stamped leave, #1258, and signs back in on it), mute chats, a keeper reads the enterprise's thread, an event
- *     reminder is sent, the activity list fills (a line older than a month pruned), the admin edits the pricing guide and
- *     a member reports a price.
+ *     reminder is sent, the activity list fills (a line older than a month pruned, with no tombstone), the admin edits the
+ *     pricing guide and a member reports a price.
  *  2. The standby S's first copy: every G4 table is M's, row for row and stamp for stamp, and its copy is format 6.
  *  3. More on M, then a delta: Ann unmutes one chat and is re-keyed (her phone goes, her mute moves to her new key) and
  *     registers again; Bo leaves a phone; a custom pricing item is made and deleted; another activity line. S is M's
  *     again, each delete by its tombstone, the unmute's applied before S follows the re-key.
  * 3b. Kip leaves his first phone again, a day after his first leave of it (review 4126285975): M renews his leave and
- *     clears Bo's day-old one, with no tombstone; a delta brings Kip's renewed leave, stamp for stamp, and a whole copy
- *     drops Bo's, exact.
+ *     clears Bo's day-old one, with no tombstone; a delta brings Kip's renewed leave, stamp for stamp; S drops Bo's by the
+ *     age rule after the delta that brought it (design §6.1); a whole copy is exact.
  * 3c. Keys with no member's row here (review 4126286269), with S refusing a table of more than STANDBY_ROW_CAP rows as
  *     the review scaled it: a 1.9 MB token (and a 513-character one, one that is no string, an empty one, one on two lines,
  *     a 1.9 MB platform) is refused; five fresh keys' phones and a visitor's stay on M, and neither a delta nor a whole
  *     copy carries them, which stays exact with S's routine whole copies on, while a member's phone and leave copy
- *     verbatim; a stranger who joins has its phone copied by the next whole copy; 160 fresh keys' leaves, and their prune
- *     a day later, change nothing on S.
+ *     verbatim; a stranger who joins has its phone copied by the next whole copy; 160 fresh keys' leaves (from eight
+ *     addresses, each a day's 20), and their prune a day later, change nothing on S.
+ * 3d. #1295's own tables, bounded (review round 2: 4126894855, 4126900225, 4126901144; design
+ *     scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1): 160 anonymous price reports stay on M, and neither a
+ *     delta nor a whole copy is refused; deleting their item writes no tombstone for them; an address's 21st of the day
+ *     and the node's 201st are refused, a member's 21st too. A member keeps 10 phones (the stalest dropped, by its
+ *     tombstone on S too) and adds 20 a day; 20 leaves a day. Keys with no row here: 20 leaves an address, 2,000 the node.
+ *     An activity line a month old goes on S by the age rule after a delta, and on M by its prune, with no tombstone; a
+ *     whole copy never names one M hasn't pruned yet, and stays exact.
  *  4. On S, every writer of these tables refuses (the routes with 409 `standby`, the engine's functions before they
  *     write), the side writes of a read or a listing write nothing, and its G4 tables are exactly as before.
  *  5. A whole copy with a plain row and values S's table refuses (a stricter, older standby's CHECKs on invites): the
@@ -268,6 +275,32 @@ async function child(): Promise<void> {
                 .run(a.actor, new Date(Date.now() - a.days * DAY).toISOString()).lastInsertRowid);
         },
         'prune-activity': async () => (await import('./db/activity-feed-db.js')).pruneOldActivity(30),
+        /**
+         * The activity line `id` as `days` old, on this server as on the other (the same write on each, which moves no
+         * stamp and so no copy carries): a line both held going past the month.
+         */
+        'age-activity-line': async (a: { id: number; days: number }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(`UPDATE activity_feed SET created_at = ?, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`)
+                .run(new Date(Date.now() - a.days * DAY).toISOString(), a.id).changes;
+        },
+        /** The auth limiter's minute (15 an address, auth-rate-limit.ts) over, as a minute passing would leave it. */
+        'forget-auth-attempts': async () => {
+            (await import('./auth-rate-limit.js')).pruneAuthAttempts(Date.now() + 3_600_000);
+            return true;
+        },
+        /**
+         * Leaves of fresh keys with no row here, each from its own address, until the node's day refuses one (engine, as
+         * the route calls it): how many were applied, and what refused the next.
+         */
+        'fill-stranger-leaves': async (a: { upTo: number }) => {
+            const { applyPushLeave } = await import('./state-engine.js');
+            for (let i = 0; i < a.upTo; i++) {
+                const r = applyPushLeave(crypto.randomBytes(32).toString('hex'), `ExponentPushToken[far-${i}]`, 1, `far-address-${i}`);
+                if (typeof r !== 'number') return { applied: i, refused: r };
+            }
+            return { applied: a.upTo, refused: null };
+        },
         /**
          * Every writer of these tables, called on this server as a route would call it: each answer (a refusal's code, or
          * what it returned), then the writes on the side of a read, a listing or a timer, and every G4 table before and after.
@@ -583,8 +616,8 @@ async function main(): Promise<void> {
             && !has(m1.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1') }) && m1.tables.push_token_leaves.length === 1,
             `M: seven phones (the shared one under both keys), Kip's first gone by his leave, which is kept (${count(m1.tables)})`);
         assert(m1.tables.activity_feed.length > 0 && !m1.tables.activity_feed.some((r: any) => r.id === oldLine)
-            && m1.tombstones.some((t: any) => t.table_name === 'activity_feed' && t.row_key === String(oldLine)),
-            `M: the month-old activity line is pruned, with a tombstone (${JSON.stringify(priced)})`);
+            && !m1.tombstones.some((t: any) => t.table_name === 'activity_feed'),
+            `M: the month-old activity line is pruned, with no tombstone: an age rule S applies itself (${JSON.stringify(priced)})`);
 
         // ── 2. S's first copy ──
         console.log('\n— 2. the standby, its clock an hour ahead, takes its first copy —');
@@ -649,8 +682,8 @@ async function main(): Promise<void> {
             && !has(s.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1') }),
             `S after the delta: Kip's renewed leave, stamp for stamp, and his phone gone (${JSON.stringify(s.tables.push_token_leaves)})`);
         const afterSecond = tablesDiff(m3b.tables, s.tables);
-        assert(afterSecond.length === 1 && afterSecond[0].startsWith('push_token_leaves') && afterSecond[0].includes(bo.pk.slice(0, 20)) && afterSecond[0].endsWith('extra'),
-            `every other G4 row is M's, but for Bo's day-old leave, which M cleared without a tombstone and which refuses nothing (${first(afterSecond)})`);
+        assert(afterSecond.length === 0 && !has(s.tables, 'push_token_leaves', { public_key: bo.pk }),
+            `every other G4 row is M's: Bo's day-old leave, which M cleared without a tombstone, went on S by the same age rule, after the delta that brought it (${first(afterSecond)})`);
         const whole3b = await standby.send('pull', { whole: true });
         const record3b = await standby.send('record');
         s = await standby.send('rows');
@@ -708,10 +741,14 @@ async function main(): Promise<void> {
         assert(joinedWhole.ok === true && has(s.tables, 'push_tokens', { public_key: strangers[0].pk, token: longest('stranger-0') })
             && tablesDiff(mJoined.tables, s.tables).length === 0 && (await standby.send('record')).lastWhole?.exact === true,
             `once a member, the newcomer's phone reaches S with the next whole copy, verbatim, and the copy is exact (differences ${first(tablesDiff(mJoined.tables, s.tables))})`);
-        // 160 leaves from fresh keys, more than S takes of one table, then their prune a day later.
+        // 160 leaves from fresh keys, more than S takes of one table (from eight addresses: a day's 20 each), then their
+        // prune a day later.
         const leavers = Array.from({ length: STANDBY_ROW_CAP + 10 }, (_, i) => newId(`Leaver ${i + 1}`));
         const leaves: number[] = [];
-        for (const [i, lv] of leavers.entries()) leaves.push((await S_(lv, '/api/push-tokens', { publicKey: lv.pk, token: token(`leaver-${i}`), leftAt: 100 }, 'DELETE')).status);
+        for (const [i, lv] of leavers.entries()) {
+            leaves.push((await api(m, 'DELETE', '/api/push-tokens', { as: lv, body: { publicKey: lv.pk, token: token(`leaver-${i}`), leftAt: 100 },
+                headers: { 'CF-Connecting-IP': `203.0.113.${200 + Math.floor(i / 20)}` } })).status);
+        }
         const mLeaves = await main.send('rows');
         require_(leaves.every((st) => st === 200) && mLeaves.outside.push_token_leaves === leavers.length,
             `M: ${leavers.length} fresh keys each leave a phone (${mLeaves.outside.push_token_leaves} leaves outside the rule)`);
@@ -734,6 +771,165 @@ async function main(): Promise<void> {
         assert(wPruned.ok === true && wPruned.whole === true && tablesDiff(mPruned.tables, s.tables).length === 0 && Object.values(s.outside).every((n) => n === 0)
             && rPruned.lastWhole?.exact === true && rPruned.lastMismatchResyncAt === null,
             `and so does a whole copy, exact (${wPruned.ok ? wPruned.mode : wPruned.error}; ${JSON.stringify(rPruned.lastWhole)})`);
+        // ── 3d. #1295's own tables, bounded (review round 2; design §6.1) ──
+        console.log('\n— 3d. price reports, a member\'s phones and leaves, strangers\' leaves and the activity list: bounded, and no copy refused —');
+        const from = (address: string) => ({ 'CF-Connecting-IP': address });
+        const anonReport = (itemId: string, address: string) => api(m, 'POST', '/api/pricing-guide/report', {
+            body: { itemId, reportType: 'too_high', comment: 'x'.repeat(500) }, headers: from(address) });
+        const forgetAuth = () => main.send('forget-auth-attempts');
+        const pricingTombstones = (r: any) => r.tombstones.filter((t: any) => t.table_name === 'pricing_reports').length;
+        // Anonymous price reports (review 4126894855): 160 from sixteen addresses, more than S takes of one table.
+        const target = built('the admin adds a pricing item', await A('POST', '/api/pricing-guide/admin/item', { category: edited.category, emoji: '🪣', name: 'Bucket', description: 'Tin', priceBeans: 3 }));
+        await forgetAuth();
+        const anon: number[] = [];
+        for (let i = 0; i < STANDBY_ROW_CAP + 10; i++) anon.push((await anonReport(target.item.id, `203.0.113.${1 + Math.floor(i / 10)}`)).status);
+        const mAnon = await main.send('rows');
+        require_(anon.every((st) => st === 200) && mAnon.outside.pricing_reports === anon.length,
+            `M: ${anon.length} anonymous price reports, with 500-character comments, from sixteen addresses, all taken and outside the rule (${mAnon.outside.pricing_reports})`);
+        const dAnon = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dAnon.ok === true && dAnon.mode === 'delta' && tablesDiff(mAnon.tables, s.tables).length === 0 && s.outside.pricing_reports === 0,
+            `a delta lands and carries none of them: only members' reports travel (${dAnon.ok ? dAnon.mode : dAnon.error}; outside ${JSON.stringify(s.outside)})`);
+        const wAnon = await standby.send('pull', { whole: true });
+        const rAnon = await standby.send('record');
+        s = await standby.send('rows');
+        assert(wAnon.ok === true && wAnon.whole === true && tablesDiff(mAnon.tables, s.tables).length === 0 && s.outside.pricing_reports === 0
+            && rAnon.lastWhole?.exact === true && rAnon.reconcileDisabledForSize === false,
+            `and so does a whole copy, exact, with S's routine whole copies still on (${wAnon.ok ? wAnon.mode : wAnon.error}; ${JSON.stringify(rAnon.lastWhole)})`);
+        built('the admin deletes the item, with its reports', await A('DELETE', `/api/pricing-guide/admin/item/${target.item.id}`));
+        const mCleared = await main.send('rows');
+        assert(mCleared.outside.pricing_reports === 0 && pricingTombstones(mCleared) === pricingTombstones(mAnon),
+            `M deletes the ${anon.length} with no tombstone: they never travelled (${pricingTombstones(mAnon)} → ${pricingTombstones(mCleared)} report tombstones)`);
+        const dCleared = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dCleared.ok === true && dCleared.mode === 'delta' && tablesDiff(mCleared.tables, s.tables).length === 0,
+            `the next delta lands (${dCleared.ok ? dCleared.mode : dCleared.error}; differences ${first(tablesDiff(mCleared.tables, s.tables))})`);
+        // A day's reports without a member's key: 20 an address, 200 the node; a member's: 20.
+        await forgetAuth();
+        const oneAddress: number[] = [];
+        for (let i = 0; i < 20; i++) {
+            if (i === 10) await forgetAuth();
+            oneAddress.push((await anonReport(edited.id, '203.0.113.100')).status);
+        }
+        const overAddress = await anonReport(edited.id, '203.0.113.100');
+        assert(oneAddress.every((st) => st === 200) && overAddress.status === 429 && overAddress.body?.code === 'rate_limited',
+            `one address sends 20 anonymous reports in a day; its 21st is refused, 429 rate_limited (${brief(overAddress)})`);
+        const toNodeDay: number[] = [];
+        for (let i = 0; i < 20; i++) toNodeDay.push((await anonReport(edited.id, `203.0.113.${101 + i}`)).status);
+        const overNode = await anonReport(edited.id, '198.51.100.1');
+        assert(toNodeDay.every((st) => st === 200) && overNode.status === 429 && overNode.body?.code === 'busy',
+            `the node takes 200 in a day from every address together; the 201st, from a new address, is refused, 429 busy (${brief(overNode)})`);
+        await forgetAuth();
+        const boReports: number[] = [];
+        for (let i = 0; i < 20; i++) {
+            if (i === 10) await forgetAuth();
+            boReports.push((await S_(bo, '/api/pricing-guide/report', { itemId: edited.id, reportType: 'too_low', comment: `Report ${i}` })).status);
+        }
+        const boOver = await S_(bo, '/api/pricing-guide/report', { itemId: edited.id, reportType: 'too_low' });
+        assert(boReports.every((st) => st === 200) && boOver.status === 429 && boOver.body?.code === 'rate_limited',
+            `Bo, a member, sends 20 signed reports while the node takes no more anonymous ones; his 21st that day is refused, 429 rate_limited (${brief(boOver)})`);
+
+        // A member's own phones and leaves (review 4126900225).
+        await forgetAuth();
+        const lu = newId('Lu');
+        built('Lu joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: lu.pk, callsign: 'Lu' } }));
+        const luToken = (i: number) => token(`lu-${String(i).padStart(2, '0')}`);
+        const luPhones: number[] = [];
+        for (let i = 0; i < 10; i++) {
+            luPhones.push((await phone(lu, luToken(i), 100 + i)).status);
+            await sleep(3);
+        }
+        built('Lu\'s first phone registers again (the app starting)', await phone(lu, luToken(0), 200));
+        await sleep(3);
+        built('Lu registers an 11th phone', await phone(lu, luToken(10), 300));
+        const mLu = await main.send('rows');
+        const luHolds = (t: Tables) => t.push_tokens.filter((r: any) => r.public_key === lu.pk).map((r: any) => r.token as string);
+        const luTombstones = (r: any) => r.tombstones.filter((t: any) => t.table_name === 'push_tokens' && t.row_key.startsWith(`${lu.pk}|`)).map((t: any) => t.row_key.slice(lu.pk.length + 1));
+        assert(luPhones.every((st) => st === 200) && luHolds(mLu.tables).length === 10 && !luHolds(mLu.tables).includes(luToken(1))
+            && luHolds(mLu.tables).includes(luToken(0)) && JSON.stringify(luTombstones(mLu)) === JSON.stringify([luToken(1)]),
+            `M: Lu holds 10 phones; the 11th dropped his stalest (the second), with a tombstone (${JSON.stringify(luTombstones(mLu))})`);
+        const dLu = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dLu.ok === true && dLu.mode === 'delta' && tablesDiff(mLu.tables, s.tables).length === 0 && luHolds(s.tables).length === 10,
+            `a delta: S holds Lu's 10, the dropped one gone by its tombstone (${dLu.ok ? dLu.mode : dLu.error}; differences ${first(tablesDiff(mLu.tables, s.tables))})`);
+        const luMore: number[] = [];
+        for (let i = 11; i < 20; i++) {
+            luMore.push((await phone(lu, luToken(i), 300 + i)).status);
+            await sleep(3);
+        }
+        const luOver = await phone(lu, luToken(20), 400);
+        const luAgain = await phone(lu, luToken(19), 401);
+        const mLuDay = await main.send('rows');
+        assert(luMore.every((st) => st === 200) && luOver.status === 429 && luOver.body?.code === 'rate_limited' && luAgain.status === 200
+            && luHolds(mLuDay.tables).length === 10 && luTombstones(mLuDay).length === 10,
+            `Lu's 20 new phones in a day are taken, his 21st refused, 429 rate_limited, and one he holds registers again; he holds 10, with 10 tombstones (${brief(luOver)})`);
+        const luLeaves: number[] = [];
+        for (let i = 0; i < 20; i++) luLeaves.push((await S_(lu, '/api/push-tokens', { publicKey: lu.pk, token: token(`lu-gone-${i}`), leftAt: 500 + i }, 'DELETE')).status);
+        const luLeaveOver = await S_(lu, '/api/push-tokens', { publicKey: lu.pk, token: token('lu-gone-20'), leftAt: 600 }, 'DELETE');
+        const mLuLeaves = await main.send('rows');
+        const luLeft = (t: Tables) => t.push_token_leaves.filter((r: any) => r.public_key === lu.pk).length;
+        assert(luLeaves.every((st) => st === 200) && luLeaveOver.status === 429 && luLeaveOver.body?.code === 'rate_limited' && luLeft(mLuLeaves.tables) === 20,
+            `Lu leaves 20 phones in a day, for tokens no phone registered; his 21st is refused, 429 rate_limited (${brief(luLeaveOver)})`);
+        const dLuLeaves = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dLuLeaves.ok === true && dLuLeaves.mode === 'delta' && tablesDiff(mLuLeaves.tables, s.tables).length === 0,
+            `a delta lands, and S's G4 tables are M's (${dLuLeaves.ok ? dLuLeaves.mode : dLuLeaves.error}; differences ${first(tablesDiff(mLuLeaves.tables, s.tables))})`);
+
+        // Strangers' leaves (review 4126901144): 20 an address, 2,000 the node.
+        const strangersLeaving = Array.from({ length: 21 }, (_, i) => newId(`Passer ${i + 1}`));
+        const fromOne: Answer[] = [];
+        for (const [i, lv] of strangersLeaving.entries()) {
+            fromOne.push(await api(m, 'DELETE', '/api/push-tokens', { as: lv, body: { publicKey: lv.pk, token: token(`passer-${i}`), leftAt: 7 }, headers: from('198.51.100.200') }));
+        }
+        const lastOne = fromOne[fromOne.length - 1];
+        assert(fromOne.slice(0, -1).every((r) => r.status === 200) && lastOne.status === 429 && lastOne.body?.code === 'rate_limited',
+            `20 keys with no row here leave a phone from one address; the 21st is refused, 429 rate_limited (${brief(lastOne)})`);
+        const filled = await main.send('fill-stranger-leaves', { upTo: 2500 });
+        const lateLeaver = newId('Late');
+        const nodeBusy = await api(m, 'DELETE', '/api/push-tokens', { as: lateLeaver, body: { publicKey: lateLeaver.pk, token: token('late'), leftAt: 7 }, headers: from('198.51.100.201') });
+        const cyLeaves = await S_(cy, '/api/push-tokens', { publicKey: cy.pk, token: token('cy-gone'), leftAt: 3100 }, 'DELETE');
+        const mBusy = await main.send('rows');
+        assert(filled.refused === 'busy' && nodeBusy.status === 429 && nodeBusy.body?.code === 'busy' && cyLeaves.status === 200,
+            `the node's day fills at 2,000 leaves of keys with no row (${JSON.stringify(filled)} more, after the ones above); the next, from a new address, is refused, 429 busy; Cy's still lands (${brief(nodeBusy)})`);
+        const dBusy = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(dBusy.ok === true && dBusy.mode === 'delta' && tablesDiff(mBusy.tables, s.tables).length === 0 && s.outside.push_token_leaves === 0,
+            `a delta lands with none of the ${mBusy.outside.push_token_leaves} strangers' leaves (${dBusy.ok ? dBusy.mode : dBusy.error}; outside ${JSON.stringify(s.outside)})`);
+
+        // The activity list's age rule, with S taking deltas only (its routine whole copies off).
+        const monthLine = await main.send('old-activity-line', { actor: dee.pk, days: 29 });
+        const dLine = await standby.send('pull', {});
+        s = await standby.send('rows');
+        require_(dLine.ok === true && dLine.mode === 'delta' && has(s.tables, 'activity_feed', { id: monthLine }),
+            `S copies an activity line 29 days old (${dLine.ok ? dLine.mode : dLine.error})`);
+        require_(await main.send('age-activity-line', { id: monthLine, days: 31 }) === 1 && await standby.send('age-activity-line', { id: monthLine, days: 31 }) === 1,
+            'two days pass: the line is 31 days old on both servers');
+        const dAged = await standby.send('pull', {});
+        s = await standby.send('rows');
+        const mAged = await main.send('rows');
+        assert(dAged.ok === true && dAged.mode === 'delta' && dAged.whole === false && !has(s.tables, 'activity_feed', { id: monthLine })
+            && has(mAged.tables, 'activity_feed', { id: monthLine }),
+            `S's next delta deletes it by the age rule, by the copy's time, before M's own prune has run (${dAged.ok ? dAged.mode : dAged.error})`);
+        await main.send('prune-activity');
+        const mPrunedLine = await main.send('rows');
+        const dAfterPrune = await standby.send('pull', {});
+        s = await standby.send('rows');
+        assert(!has(mPrunedLine.tables, 'activity_feed', { id: monthLine }) && !mPrunedLine.tombstones.some((t: any) => t.table_name === 'activity_feed')
+            && dAfterPrune.ok === true && tablesDiff(mPrunedLine.tables, s.tables).length === 0,
+            `M's prune deletes it too, with no tombstone, and S's G4 tables are M's (differences ${first(tablesDiff(mPrunedLine.tables, s.tables))})`);
+        const unpruned = await main.send('old-activity-line', { actor: dee.pk, days: 30.5 });
+        const wLine = await standby.send('pull', { whole: true });
+        const rLine = await standby.send('record');
+        const mLine = await main.send('rows');
+        s = await standby.send('rows');
+        assert(wLine.ok === true && wLine.whole === true && !has(mLine.tables, 'activity_feed', { id: unpruned }) && !has(s.tables, 'activity_feed', { id: unpruned })
+            && !mLine.tombstones.some((t: any) => t.table_name === 'activity_feed') && tablesDiff(mLine.tables, s.tables).length === 0
+            && rLine.lastWhole?.exact === true && rLine.lastMismatchResyncAt === null,
+            `a line M holds past the month, its prune not yet run, is pruned before M makes a whole copy: the copy is exact, with no tombstone (${JSON.stringify(rLine.lastWhole)})`);
+        // A line of today's, so M's last line is again one S copies (the backdated ones above were the newest ids, gone on
+        // both): step 8 checks the promoted server numbers its next line after it.
+        await offer(cy, 'Seed potatoes', 2);
+
         const ids: Record<string, string> = {
             gwen: gwen.pk, ann2: ann2.pk, bo: bo.pk, cy: cy.pk, dee: dee.pk, kip: kip.pk, probe: probe.publicKey, chatAB, chatAC,
             sharedToken: SHARED, itemEdited: edited.id, report: report.reportId, post: tuneUp.id, remindAt: String(hourBefore),
@@ -777,9 +973,9 @@ async function main(): Promise<void> {
         const record5 = await standby.send('record');
         const c5 = record5.consistency;
         assert(whole5.ok === true && whole5.whole === true && JSON.stringify(c5?.plainTablesLeftOut?.tables) === '["invite_codes"]' && c5.ok === false
-            && c5.plainTablesLeftOut.count === 6 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
+            && c5.plainTablesLeftOut.count === 7 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
             && c5.tables.some((t: any) => t.name === 'invite_codes' && !t.match),
-            `the whole copy lands; the row (Bo's invite, so a count short) and the values (five takers: four members' and the newcomer's, 3c) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
+            `the whole copy lands; the row (Bo's invite, so a count short) and the values (six takers: four members', the newcomer's, 3c, and Lu's, 3d) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
         assert(before5.lastMismatchResyncAt === null && record5.lastWhole?.exact === false && record5.lastWhole.differs?.includes('invite_codes')
             && record5.lastWhole.resyncAsked === false && record5.lastMismatchResyncAt === null,
             `its record: not exact, invite_codes differing, and no force-resync asked (${JSON.stringify(record5.lastWhole)})`);
@@ -860,8 +1056,9 @@ async function main(): Promise<void> {
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
-        assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide/.test(line)) && missing.some((line) => /photos sent in chats/.test(line)),
-            `the preview no longer says phones or members' conveniences will be missing, and still names chat photos (${JSON.stringify(missing).slice(0, 200)})`);
+        assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide/.test(line)) && missing.some((line) => /photos sent in chats/.test(line))
+            && missing.some((line) => /price reports sent without signing in, or by someone who hadn't joined/.test(line)),
+            `the preview no longer says phones or members' conveniences will be missing, and still names chat photos, and the price reports that stay on M (${JSON.stringify(missing).slice(0, 260)})`);
         refused.push(...(await standby.send('fetches')).blocked);
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);

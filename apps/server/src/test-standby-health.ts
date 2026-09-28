@@ -28,6 +28,8 @@
  *     standby is kept (so the refusals aren't vacuous), and an owner stops watching it.
  *  6. The main server dies; the standby, whose last whole copy did not match, is taken over with the recovery code. The
  *     preview says in plain words what didn't match and when the last exact copy was, and the take-over goes ahead.
+ *  7. The old main server comes back as a standby, still holding the incident it had open: its owner's admin queue and
+ *     Settings show none (it watches no standby now, so the owner could never clear it).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-health.ts
@@ -576,6 +578,20 @@ async function main(): Promise<void> {
             assert(exit === 0 && standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId,
                 `S restarted as the main server, with M's identity (${standby.ready.role})`);
         }
+
+        // ── 7. The old main server comes back as a standby ──
+        console.log('\n— 7. the old main server comes back as a standby —');
+        const demoted = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'backup'));
+        nodes.push(demoted);
+        const d = `https://localhost:${await demoted.send('serve')}`;
+        const heldThere = await demoted.send('health');
+        require_(heldThere?.state.incident, `M still holds the incident it had open as the main server (${brief(heldThere?.state.incident?.problems)})`);
+        const demotedQueue = await demoted.send('queue');
+        const demotedDiag = await api(d, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
+        const demotedBanner = await api(d, 'POST', '/api/local/admin/standby-health', { admin: PW_MAIN });
+        assert(!kinds(demotedQueue.owner).includes('standby') && demotedDiag.status === 200 && demotedDiag.body?.standbyHealth === null
+            && demotedBanner.status === 200 && demotedBanner.body?.incident === null && demotedBanner.body.standbys.length === 0,
+            `a standby now, it tells its owner of none: nothing in the admin queue, no Settings banner (${brief([kinds(demotedQueue.owner), demotedDiag.body?.standbyHealth, demotedBanner.body])})`);
 
         const blocked = [...(await Promise.all(nodes.filter((n) => n.proc.exitCode === null && n.proc.signalCode === null).map((n) => n.send('fetches'))))]
             .flatMap((f: any) => f.blocked);

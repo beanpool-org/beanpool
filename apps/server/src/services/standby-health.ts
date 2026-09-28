@@ -266,9 +266,18 @@ export function forgetStandby(id: unknown): boolean {
     return true;
 }
 
+/**
+ * Whether this server watches standbys now: a main server no other took over from. What an owner is shown (the admin
+ * queue's item, the Settings banner) asks this first, so a server demoted to standby, or replaced, never shows an incident
+ * it kept from when it was the main one, which nothing there could ever end.
+ */
+export function watchesStandbys(): boolean {
+    try { return getNodeRole() === 'primary' && !replaced(); } catch { return false; }
+}
+
 /** Whether an incident is open: the admin queue's item (engine/admin-queue.ts), for owners only. */
 export function standbyIncidentOpen(): boolean {
-    try { return read().incident !== null; } catch { return false; }
+    try { return watchesStandbys() && read().incident !== null; } catch { return false; }
 }
 
 // ── Words ──────────────────────────────────────────────────────────────────────────────────
@@ -323,8 +332,9 @@ export interface StandbyHealthBanner {
     }[];
 }
 
-/** For the Settings banner (owners only: routes/admin.ts diagnostics). */
+/** For the Settings banner (owners only: routes/admin.ts diagnostics). Empty on a server that watches no standby now. */
 export function getStandbyHealthBanner(): StandbyHealthBanner {
+    if (!watchesStandbys()) return { incident: null, standbys: [] };
     const s = read();
     const problems = s.incident?.problems ?? [];
     const sick = new Set(problems.map((p) => p.standby));

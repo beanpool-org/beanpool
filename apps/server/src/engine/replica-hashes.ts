@@ -37,6 +37,17 @@ export const NOT_HASHED: Record<string, string> = {
     tombstones: "each server prunes its own on its own daily timer, so they differ for up to a day on a healthy standby",
 };
 
+/**
+ * Copied columns left out, and why: each server makes its own value from the row's other columns, on its own schedule, so
+ * a healthy standby differs there for a while, and a force-resync would mend nothing for long.
+ */
+export const COLUMNS_NOT_HASHED: Record<string, Record<string, string>> = {
+    posts: {
+        search_keywords: "this server's own search index: a linked community's listing is cached with none, and each server's "
+            + 'boot fills them in (state-engine.ts backfillSearchKeywords), so a standby restarted on its own holds them first',
+    },
+};
+
 const q = (n: string) => `"${n.replace(/"/g, '""')}"`;
 
 /** Every copied table this server has, with the columns hashed and the order its rows are hashed in. */
@@ -47,7 +58,7 @@ function hashedTables(): { table: string; columns: string[]; order: string[] }[]
         const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
         if (info.length === 0) continue;
         const have = new Set(info.map((c) => c.name));
-        const columns = entry.columns.filter((c) => have.has(c));
+        const columns = entry.columns.filter((c) => have.has(c) && !COLUMNS_NOT_HASHED[table]?.[c]);
         const key = entry.key ?? info.filter((c) => c.pk > 0).sort((x, y) => x.pk - y.pk).map((c) => c.name);
         // By its key when the key is among the columns hashed (a total order); otherwise by every column hashed, so two
         // servers' rows come in the same order whatever local ids they carry.

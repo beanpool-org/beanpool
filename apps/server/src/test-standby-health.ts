@@ -141,6 +141,11 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             return db.prepare('UPDATE members SET contact_value = ? WHERE public_key = ?').run(a.value, a.publicKey).changes;
         },
+        /** A linked community's listing in the cache, as the federation pull writes it (no route: the libp2p pull loop). */
+        'cache-peer-listing': async (a: { peerId: string; listing: Record<string, unknown> }) => {
+            const { cacheRemoteListings } = await import('./federation-listings.js');
+            return cacheRemoteListings(a.peerId, 'https://neighbours.example', [a.listing]);
+        },
         /** A write on the main server, so the next whole copy isn't the bodiless "unchanged" 304. */
         touch: async () => {
             const { db } = await import('./db/db.js');
@@ -340,6 +345,25 @@ async function main(): Promise<void> {
         let words = await standby.send('preview-words', {});
         assert(words?.warning === false && /^Last exact copy of the main server: \d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/.test(words.lines[0] ?? '') && words.lines.length === 1,
             `the take-over preview says "${words?.lines?.[0]}", and nothing more`);
+
+        // What each server makes for itself doesn't read as a copy gone wrong: a linked community's listing is cached with
+        // no search keywords, and a standby restarted on its own fills them in at its boot, before its main server does.
+        const cachedListing = await main.send('cache-peer-listing', {
+            peerId: '12D3KooWHealthNeighbourPeer000000000000000000000',
+            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', credits: 2,
+                priceType: 'fixed', authorPublicKey: newId('Nia').pk, authorCallsign: 'Nia', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        });
+        require_(cachedListing?.cached === 1, `M caches a linked community's listing (${brief(cachedListing)})`);
+        require_((await pull()).ok, 'S copies it');
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        await main.send('touch');
+        const afterRestart = await pull(true);
+        rec = await standby.send('record');
+        assert(afterRestart.ok && afterRestart.whole && rec?.lastWhole?.exact === true,
+            `S restarts on its own; its next whole copy is still exact (${afterRestart.mode}; ${brief(rec?.lastWhole)})`);
 
         // ── 2. Stopped for an hour ──
         console.log('\n— 2. the standby stops for an hour —');

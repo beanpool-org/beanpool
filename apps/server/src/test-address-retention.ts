@@ -20,7 +20,8 @@
  *     with an address from before this version. The first boot's sweep clears the old ones and every address in the
  *     old log line, keeps the fresh ones, and the hourly timer clears one that comes of age later.
  *  6. A snapshot (writeDbSnapshot makes every snapshot and backup) holds no address, even a fresh one; the live
- *     database keeps its fresh one; nothing is left beside the file.
+ *     database keeps its fresh one; nothing is left beside the file. A snapshot made before this version (a plain
+ *     copy, addresses in it), downloaded as a backup: the backup's database holds none.
  *  7. The daily hash: the same address, the same tag all day; another address, another tag; the next day, another tag.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-address-retention.ts
@@ -30,6 +31,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import vm from 'node:vm';
+import { execFileSync } from 'node:child_process';
+import { pipeline } from 'node:stream/promises';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import Database from 'better-sqlite3';
@@ -68,6 +71,7 @@ const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelop
 const { getStandbyHealthBanner } = await import('./services/standby-health.js');
 const { noteEnvelopeFetch, getEnvelopeHolders } = await import('./services/takeover-envelope.js');
 const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
+const { createPlainBackup } = await import('./services/sealed-backup.js');
 const { logger } = await import('./logger.js');
 const { db } = await import('./db/db.js');
 // This change's own modules: absent on a build from before it, where the checks that need them fail instead of crashing.
@@ -329,6 +333,27 @@ async function main() {
         assert(addressesIn(copyLogs).length === 0, "6. …nor in its log lines");
         assert(configRow('replication_access').includes('203.0.113.70'), '6. the live database still has its fresh one');
         assert(fs.readdirSync(snapDir).join(',') === 'copy.db', `6. nothing left beside the copy (${fs.readdirSync(snapDir).join(', ')})`);
+
+        // A snapshot from before this version: a plain copy, with the live addresses in it.
+        const oldSnap = path.join(snapDir, 'old-version.db');
+        db.exec(`VACUUM INTO '${oldSnap.replace(/'/g, "''")}'`);
+        const oldImages = path.join(snapDir, 'old-version.db.images');
+        fs.mkdirSync(oldImages);
+        const plain = await createPlainBackup({ dbFile: oldSnap, imagesDir: oldImages });
+        const tarFile = path.join(snapDir, 'backup.tar.gz');
+        try { await pipeline(plain.body, fs.createWriteStream(tarFile)); } finally { plain.cleanup(); }
+        const unpacked = path.join(snapDir, 'unpacked');
+        fs.mkdirSync(unpacked);
+        execFileSync('tar', ['-xzf', tarFile, '-C', unpacked]);
+        const fromBackup = new Database(path.join(unpacked, 'state.db'), { readonly: true });
+        const backupRows = (fromBackup.prepare(`SELECT value FROM node_config WHERE key IN (${ADDRESS_ROWS.map(() => '?').join(', ')})`).all(...ADDRESS_ROWS) as { value: string }[]).map((r) => r.value).join('\n');
+        fromBackup.close();
+        const oldCopy = new Database(oldSnap, { readonly: true });
+        const oldRows = (oldCopy.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
+        oldCopy.close();
+        assert(oldRows.includes('203.0.113.70'), '6. (the old snapshot has the address in it)');
+        assert(backupRows.includes('"auth":"token"') && addressesIn(backupRows).length === 0,
+            `6. downloaded as a backup, its database holds none (${addressesIn(backupRows).join(', ') || 'none'})`);
 
         // ── 7. The daily hash (last: a new day's key replaces today's) ──
         say('\n— 7. the daily hash —');

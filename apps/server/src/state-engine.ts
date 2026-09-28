@@ -11,6 +11,7 @@ import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
+import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
@@ -569,6 +570,10 @@ export function initStateEngine(): void {
     // global refuses to start under another profile (config/node-profile.ts). Before the ledger is loaded: a node
     // that must not open never reads it.
     mirrorNodeProfileAtBoot(getNodeRole());
+    // A standby promoted by hand (its role changed in .env, no take-over) installs the community's own settings it kept
+    // from its main server, once (config/community-settings.ts): before the ledger audit below holds the ledger to the
+    // community's baseline, and before anything publishes the community's name or directory choices. Never throws.
+    installCommunitySettingsAtBoot(getNodeRole());
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();

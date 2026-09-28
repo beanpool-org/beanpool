@@ -227,7 +227,7 @@ beanpool/
 │   └── vault/         # Key vault — keeps sign-in recovery copies (vault-keyholder + vault-api); not in the node's image
 ├── packages/
 │   ├── beanpool-engine/# Shared node engine: DB-backed business logic (members, trust, escrow, posts, messaging, sync, audit)
-│   ├── beanpool-signin/# Sign-in checks (Google/Apple/Facebook id_tokens, GitHub device flow), shared by the node and the key vault
+│   ├── beanpool-signin/# Sign-in checks (Google/Apple/Facebook id_tokens), shared by the node and the key vault
 │   └── beanpool-core/  # Shared protocol constants: Ledger, Merkle, Passport, Governance
 ├── scripts/           # Utility and verification scripts (incl. verify-auth-boundary.mjs)
 ├── branding/          # Bean icon assets (16x16 → 512x512)

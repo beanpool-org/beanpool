@@ -165,7 +165,7 @@ PWA members are strictly **sovereign tier**: 12 words, nothing stored on the nod
 SSO recovery is native-only.
 
 **Except on the global community (G11-c, decided 2026-09-25, D-1 = a).** A browser member of
-`global.beanpool.org` joins with a sign-in (Google, Apple, GitHub or Facebook), and the same join
+`global.beanpool.org` joins with a sign-in (Google, Apple or Facebook), and the same join
 enrols that sign-in as their recovery: the page seals the account's seed and its 12 words to the
 sign-in's `sub` with `sealSeedToSso`, and the door stores the copy from the sign-in it has just
 verified, exactly as the phone's global join does (the two clients build the same bytes; see
@@ -173,8 +173,7 @@ verified, exactly as the phone's global join does (the two clients build the sam
 there is shipped by us, on a domain we run, so "a hostile operator can ship JavaScript" is the
 custodial trade-off every SSO member already accepts on a phone, not a new one: the copy is the
 same single-blob seal (`scrypt-xc20p-single-v1`) the phone has made since #750, with no hub
-fragment, and its only secret is `provider:sub`, which the operator receives on every sign-in.
-For GitHub that `sub` is public, so a GitHub-sealed copy is open to anyone holding the database
+fragment, and its only secret is `provider:sub`, which the operator receives on every sign-in
 (see [What each party can reach](#what-each-party-can-reach)). And it is one fixed domain, not a
 dynamic community domain, so the providers' redirect and Services ID rules are met once, in their
 consoles. Local communities' web apps stay 12-words only. A seal that fails, or a copy the node
@@ -186,7 +185,7 @@ community gets the account back with the sign-in it joined with, through the sam
 routes the phone uses (`routes/recovery-collect.ts`, unchanged): the public callsign lookup names
 the account and its public key, a throwaway key made for the restore opens the session and signs
 every call in it, Google/Apple/Facebook leave the page and return to the join's own return page
-(`/app/auth/<provider>`, Apple via the node's 303), GitHub is the node's device flow, and core's
+(`/app/auth/<provider>`, Apple via the node's 303), and core's
 `openSeedFromSso` opens the released copy in the page (`apps/pwa/src/lib/web-restore.ts`). The
 restored key must equal the public key the lookup named, or nothing is saved: a check the phone's
 restore does not make. The 12 words are kept only when the web app's own derivation of them makes
@@ -203,7 +202,7 @@ said plainly, with the words and the phone as the ways back.
 
 ```
 1  enter callsign
-2  sign in (Google, Apple, Facebook or GitHub)
+2  sign in (Google, Apple or Facebook)
 3  the node verifies it, unwraps the copy and releases it; the device opens it with the sub → in
 ```
 
@@ -253,17 +252,14 @@ With the recovery seal (S1 #1178, S2 #1185), on a server that has run the upgrad
 | | SSO tier (phones; the global node's browsers) | Sovereign (12 words) |
 |---|---|---|
 | A copy of the database: a stolen or decommissioned disk, a snapshot, a plain backup, a standby's disk | **nothing**, for every provider | nothing |
-| The sign-in provider (Google, Apple, GitHub, Facebook), from what it holds | nothing: it has the `sub` but none of our data | nothing |
+| The sign-in provider (Google, Apple, Facebook), from what it holds | nothing: it has the `sub` but none of our data | nothing |
 | Node operator, passively | nothing | nothing |
 | **Node operator, deliberately** | **the account**, and its 12 words when the copy carries them | nothing |
 | **A hijacked sign-in account** (or a provider signing in as the member) | **the account**, through the recovery routes while the server runs: the sign-in is the authentication. The member's devices are told a recovery started | nothing |
 
 **Why the operator, deliberately.** The operator's process holds `data/recovery-seal.key` and
 receives the `sub` in every id_token it verifies (`apps/server/src/sso.ts`), so logging one
-sign-in is enough to open that member's copy. For GitHub it does not even need a sign-in: the
-node's `sub` is the public numeric user id (`readGithubUser` in
-`apps/server/src/engine/github-device.ts`), one lookup from the member's GitHub name. Google's
-`sub` is the same value every OAuth client the person has used receives. Apple's is scoped to
+sign-in is enough to open that member's copy. Google's `sub` is the same value every OAuth client the person has used receives. Apple's is scoped to
 BeanPool's developer team. (Facebook's scope is not checked here.) "The operator" is anyone who
 holds the database **and** the key:
 
@@ -281,7 +277,7 @@ takes over. What such a copy holds opens only with the key and the `sub` togethe
 
 - **Copies made before the upgrade.** Snapshots, backups and copies of the data folder made
   before a server first booted with the seal hold the copies as the app sealed them, openable with
-  the `sub` alone (for GitHub, by anyone who holds the file). No code reaches files that already exist; the operator
+  the `sub` alone (for a GitHub copy, by anyone who holds the file: see below). No code reaches files that already exist; the operator
   manual (`operators/server/backups-and-replicas.md`, "Backups made before the recovery seal")
   tells operators to delete them.
 - **Disconnecting a sign-in deletes its row in `recovery_shares`, not the copies earlier
@@ -326,6 +322,23 @@ GitHub-linked account in it. D-1 = a: the node locks every copy with a key kept 
 database, with no app change (S1 #1178, S2 #1185). D-2 = a: say plainly that the server's
 operators can open the copy (S3). D-3 = a: a passkey lock later, not now.
 
+**GitHub is no longer a sign-in — taken 2026-09-29 (Marty).** GitHub's `sub` is the account's
+public, sequential user id (one lookup from the account's name), unlike Google's and Apple's
+id-token `sub`. So a GitHub-sealed copy was locked to nothing its owner controls: whoever holds
+the database and the recovery-seal key opened it without the member's sign-in, and anyone holding
+a copy of the data could tell from the lookup hash (and the global node's open-door hash) which
+GitHub account was which member. GitHub left the provider table in `@beanpool/signin`, both apps
+and the key vault, and the device-flow routes went. At every start a main server removes every
+GitHub recovery copy (the other copies go into the next generation, as a disconnect does; a
+member with no other sign-in loses them all, with the tombstone), every released copy holding one
+(matched by opening it with the server's key), and its GitHub open-door records; a standby removes
+its own open-door records, and takes the rest from its main server
+(`apps/server/src/engine/github-sign-in-removal.ts`). The key vault drops the copies of any
+provider it no longer keeps when its database opens. A member keeps their 12 words, and links
+Google, Apple or Facebook. Still open: a released copy of a GitHub copy the member had disconnected
+before this cannot be told from any other and stays (wrapped with the server's key), and backups
+and snapshots made before the upgrade hold the GitHub rows as they were.
+
 **A mandatory PIN in front of `A` — rejected.** It would have locked out more members through
 forgetting than it ever protected. The PIN table is unused and no recovery route checks it.
 
@@ -335,7 +348,7 @@ forgetting than it ever protected. The PIN table is unused and no recovery route
 
 - **12-word seed phrase**: BIP-39 mnemonic recovery implemented across both Native (`apps/native`)
   and PWA (`apps/pwa`). Sovereign, node-independent, works everywhere.
-- **SSO recovery (phones; the global node's browsers)**: Google, Apple, Facebook and GitHub, one
+- **SSO recovery (phones; the global node's browsers)**: Google, Apple and Facebook, one
   single-blob copy per sign-in (`sealSeedToSso`), wrapped on the node with
   `data/recovery-seal.key` (see [The construction](#the-construction)). Copies made before #750
   are two-part (`A ⊕ B`) and still served.
@@ -351,7 +364,8 @@ forgetting than it ever protected. The PIN table is unused and no recovery route
 
 1. ~~**Does the node persist the raw `sub`?**~~ **Answered 2026-08-11: it does not.**
    `ssoLookupHash` stores a scrypt hash with a per-share random salt and the raw value is
-   never written. That alone never protected a GitHub copy (its `sub` is public); since the
+   never written. That alone never protected a GitHub copy (its `sub` is public; GitHub is no
+   longer a sign-in, see above); since the
    recovery seal (2026-09-26) the cold-database protection rests on `data/recovery-seal.key`,
    for every provider. The `sub` still arrives in plaintext during verification, which is why
    the operator is not locked out.

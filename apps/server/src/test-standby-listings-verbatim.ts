@@ -19,7 +19,9 @@
  *  3. After the first copy, on M: a listing recategorised, a cash note switched on, the dispute resolved, the lingering
  *     deal nudged, two of the three photos taken off the listing, a request made and not yet approved, a pledge into the
  *     project. A delta brings every one, the photos' delete included, with S's clock ahead.
- *  4. A whole copy leaves every row and stamp as M's (before, the deals' upsert restamped every deal it sent again).
+ *  4. A whole copy leaves every row and stamp as M's (before, the deals' upsert restamped every deal it sent again). A
+ *     copy that throws after the listings are written leaves S's rows, and the touch triggers the import sets aside, as
+ *     they were.
  *  5. A standby as the old importer left it (M's PeerId on every local listing, its own stamps, the first copy's
  *     category, no cash note, no dispute resolution or reminder, a photo M took off, a project not migrated, format 1)
  *     re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta.
@@ -126,7 +128,32 @@ async function child(): Promise<void> {
                 marketplace_transactions: db.prepare('SELECT * FROM marketplace_transactions ORDER BY id').all(),
                 projects: db.prepare('SELECT * FROM projects ORDER BY id').all(),
                 format: (db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined)?.value ?? null,
+                touch: (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE '%touch_updated_at' ORDER BY name`).all() as { name: string }[]).map((r) => r.name),
             };
+        },
+        /**
+         * M's whole copy, signed with its own key, with every listing retitled and one more deal that names no listing: the
+         * import writes the listings, then throws on the deal (as a disk error there would).
+         */
+        'forge-throws': async () => {
+            const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
+            const { getPrivateKey } = await import('./p2p.js');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            delete payload.signature;
+            delete payload.publicKey;
+            const later = new Date(Date.now() + 1000).toISOString();
+            payload.posts = payload.posts.map((x: any) => ({ ...x, title: `${x.title} (forged)`, updatedAt: later }));
+            payload.marketplaceTransactions = [...(payload.marketplaceTransactions ?? []), {
+                id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: 'x', sellerPubkey: 'y', credits: 1, status: 'pending', createdAt: later,
+            }];
+            payload.generatedAt = new Date().toISOString();
+            return signSyncPayload(payload);
+        },
+        /** Import a payload as the puller does, straight into this standby. */
+        import: async (a: { payload: any }) => {
+            const { importRemoteState } = await import('./state-engine.js');
+            try { await importRemoteState(a.payload); return { ok: true }; } catch (e: any) { return { ok: false, error: e?.message || String(e) }; }
         },
         /** A linked community's listing in the cache, as the federation pull writes it (no route: the libp2p pull loop). */
         'cache-peer-listing': async (a: { listing: Record<string, unknown> }) => {
@@ -214,15 +241,16 @@ function built(what: string, a: Answer): any {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
-type Rows = { posts: any[]; post_photos: any[]; marketplace_transactions: any[]; projects: any[]; format: string | null };
-const TABLE_KEYS: Record<Exclude<keyof Rows, 'format'>, string[]> = {
+type Rows = { posts: any[]; post_photos: any[]; marketplace_transactions: any[]; projects: any[]; format: string | null; touch: string[] };
+const TOUCH = ['marketplace_transactions_touch_updated_at', 'post_photos_touch_updated_at', 'posts_touch_updated_at', 'projects_touch_updated_at'];
+const TABLE_KEYS: Record<Exclude<keyof Rows, 'format' | 'touch'>, string[]> = {
     posts: ['id'], post_photos: ['post_id', 'order_num'], marketplace_transactions: ['id'], projects: ['id'],
 };
 
 /** Where S's rows differ from M's: each table row for row and column for column. */
 function rowsDiff(m: Rows, s: Rows): string[] {
     const out: string[] = [];
-    for (const [table, key] of Object.entries(TABLE_KEYS) as [Exclude<keyof Rows, 'format'>, string[]][]) {
+    for (const [table, key] of Object.entries(TABLE_KEYS) as [Exclude<keyof Rows, 'format' | 'touch'>, string[]][]) {
         const k = (r: any) => key.map((c) => String(r[c])).join('|');
         const ms = new Map(m[table].map((r) => [k(r), r]));
         const ss = new Map(s[table].map((r) => [k(r), r]));
@@ -356,6 +384,12 @@ async function main(): Promise<void> {
         s = await standby.send('rows');
         assert(whole.ok === true && whole.whole === true, `the whole copy lands (${whole.ok ? whole.mode : whole.error}; whole ${whole.whole})`);
         assert(rowsDiff(m4, s).length === 0, `every row and stamp is still M's: a deal sent again unchanged is not restamped with S's clock (differences ${first(rowsDiff(m4, s))})`);
+        assert(TOUCH.every((t) => s.touch.includes(t)), `the touch triggers the import set aside are back (${s.touch.join(', ')})`);
+        const thrown = await standby.send('import', { payload: await main.send('forge-throws') });
+        const s4: Rows = await standby.send('rows');
+        assert(thrown.ok === false && /NOT NULL/.test(thrown.error ?? ''), `a copy that throws on a deal after its listings is refused (${thrown.error?.slice(0, 100)})`);
+        assert(rowsDiff(m4, s4).length === 0 && TOUCH.every((t) => s4.touch.includes(t)),
+            `and leaves S's rows and its touch triggers as they were (differences ${first(rowsDiff(m4, s4))}; triggers ${s4.touch.length})`);
 
         // ── 5. A standby as the old importer left it ──
         console.log('\n— 5. a standby holding the old importer\'s rows re-seeds itself once —');

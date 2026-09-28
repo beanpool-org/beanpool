@@ -219,6 +219,23 @@ describe.each(CASES)('$label id_token', ({ provider, label, iss, aud }) => {
         expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
     });
 
+    // The key set just fetched for a cold or expired cache IS the refetch: an unknown kid there costs one fetch, not two,
+    // so a made-up kid can't double what the vault asks of a provider (the `refetched` guard in jwks.ts, CR on #218).
+    it('refuses an unknown kid against a cold cache with one fetch, not two', async () => {
+        const nonce = issueNonce(SUBJECT);
+        expectRefused(await refusal(verify(mint(claims(nonce), { header: { kid: 'rotated-away' } }), nonce)),
+            `${label} token signed by unknown key (kid=rotated-away)`);
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+    });
+
+    it('refuses an unknown kid against an expired cache with one fetch, not two', async () => {
+        jwks.reset(provider, { keys: [publicJwk as Jwk], expiresAt: now - 1 });
+        const nonce = issueNonce(SUBJECT);
+        expectRefused(await refusal(verify(mint(claims(nonce), { header: { kid: 'rotated-away' } }), nonce)),
+            `${label} token signed by unknown key (kid=rotated-away)`);
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+    });
+
     it('refuses a token with no kid', async () => {
         const nonce = issueNonce(SUBJECT);
         expectRefused(await refusal(verify(mint(claims(nonce), { header: { kid: undefined } }), nonce)),

@@ -218,8 +218,19 @@
             <li><strong>Approximate pins</strong>, and whether to share your rough area (section 5).</li>
             <li><strong>Which notifications you get</strong> (section 6).</li>
             <li><strong>Sign out</strong> takes your account off this device only.</li>
-            <li><strong>Delete your account:</strong> in Settings, tap <strong>Permanently Delete Account</strong>. It deletes your account at the community you are using and clears this phone. Your profile is erased (your name becomes "Deleted Member"), with your picture, bio, contact details and rough area. Your listings are cancelled. Your notification addresses, place alerts, blocks, settings, Pulse channels and any sign-in copy held by that community are deleted. Any balance is settled with the community's Commons pool. You can't delete an account while one of your deals is in escrow.</li>
-            <li><strong>What stays after you delete:</strong> the ledger entries of your trades (amounts, dates and any note on them), because other members' balances depend on them; messages you sent; ratings; reports; your poll votes; and the text, photos and pins of your cancelled listings. They are shown under "Deleted Member" instead of your name, but anything written in them stays as it was written.</li>
+            <li><strong>Delete your account:</strong> in Settings, under <strong>Account Deletion &amp; Sign Out</strong>, tap <strong>Permanently Delete Account</strong>. It deletes your account at the community you are using and clears this phone. Your profile is erased (your name becomes "Deleted Member"), with your picture, bio, contact details and rough area. Your listings and the events you host are cancelled, and your open polls are closed. Your notification addresses, place alerts, blocks, friends, settings, Pulse channels, and any sign-in copy held by that community and its record of restores, are deleted. If you keep an enterprise, you stop keeping it and your pledge to it is settled. Any balance is settled with the community's Commons pool. You can't delete an account while one of your deals is in escrow.</li>
+            <li><strong>What stays after you delete:</strong>
+                <ul>
+                    <li>the ledger entries of your trades and crowdfund pledges (amounts, dates and any note on them), because other members' balances depend on them;</li>
+                    <li>messages you sent, in direct messages and in group, event and enterprise chats;</li>
+                    <li>ratings you gave and got, and reports you made;</li>
+                    <li>your votes in polls and in community Decisions;</li>
+                    <li>the text, photos and pins of your cancelled listings and events, and your closed polls;</li>
+                    <li>the groups you were in, including a group you led, which then has no lead;</li>
+                    <li>your replies to events, until 30 days after each event;</li>
+                    <li>the invites you made, and who invited you and whom you invited.</li>
+                </ul>
+                They are shown under "Deleted Member" instead of your name, but anything written in them stays as it was written. <!-- state-engine.ts purgeMemberSelf (~6939-7132) touches none of group_members, event_rsvps, decision_votes, poll votes, invites/members.invited_by, transactions --></li>
             <li><strong>Deleting is per community.</strong> It does not delete your account at your other communities: delete it in each one. It does not delete your copy in the key vault: tap <strong>Disconnect</strong> next to each sign-in account first. <!-- DEPENDS: vault V4 (Disconnect goes to the vault). Delete account does not call the vault as designed: see the PR body --></li>
             <li><strong>Ask us:</strong> for anything BeanPool holds, email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>. For a community run by someone else, ask its operator. If you can't reach them, email us and we will pass your request on. See also <a href="data-deletion.html">Data Deletion</a>.</li>
         </ul>

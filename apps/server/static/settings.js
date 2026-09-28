@@ -312,16 +312,16 @@
         });
 
         document.getElementById('pubaddr-restart-btn')?.addEventListener('click', async () => {
-            showStatus('pubaddr-status', '⚡ Force-restarting sidecar container…', 'info');
+            showStatus('pubaddr-status', '⚡ Restarting the tunnel inside this server…', 'info');
             startLiveMonitor();
             try {
-                const res = await fetch(`${API}/admin/public-address/restart-sidecar`, {
+                const res = await fetch(`${API}/admin/public-address/restart-tunnel`, {
                     method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    showStatus('pubaddr-status', '⚡ Tunnel Sidecar restarted cleanly!', 'success');
+                    showStatus('pubaddr-status', '⚡ Tunnel restarted. It reconnects to Cloudflare in a few seconds.', 'success');
                     loadPublicAddress();
                 } else showStatus('pubaddr-status', d.error || 'Restart failed', 'error');
             } catch (e) { showStatus('pubaddr-status', 'Restart failed', 'error'); }

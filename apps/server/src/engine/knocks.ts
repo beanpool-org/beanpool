@@ -546,16 +546,17 @@ const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
 /**
  * The main server's knocks as a copy carries them (SyncPayload.joinRequests), merged into this standby's database in
  * one transaction, oldest change first (so a key's decided knock is written before the newer one that replaced it,
- * which the one-open-knock index needs). A row is written when it is new here or newer than the copy here. For an
- * approved row the standby also makes the invite it names, when it has no such code: the same code, by the member who
- * approved it, for the applicant's key, dated at the approval. Invite codes do not replicate, and a server that takes
+ * which the one-open-knock index needs). A row is written when it is new here or newer than the copy here. The invite an
+ * approved row names comes as the main server's own row, with the rest of its invites (a plain table, engine/plain-tables.ts).
+ * Only from a main server older than that (`invitesCopied` false) does the standby make it, when it has no such code:
+ * the same code, by the member who approved it, for the applicant's key, dated at the approval, since a server that takes
  * over must not tell the applicant about an invite it cannot redeem. A row this database has a tombstone for was
  * deleted by the main server's tidy-up, and ids are never used again, so a copy that still carries it is older: it stays
  * deleted (`removed`). The import applies the copy's own `join_requests` tombstones before calling this
  * (engine/sync.ts), so a key's deleted knock is gone before its newer one arrives. A malformed row, or one this
  * database refuses, is left out and counted; it never fails the copy it came in.
  */
-export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
+export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): KnockMerge {
     const merge: KnockMerge = { written: 0, kept: 0, removed: 0, invitesMade: 0, invalid: 0 };
     if (!Array.isArray(rows) || rows.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM join_requests WHERE id = ?');
@@ -595,7 +596,7 @@ export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
                 upsert.run(r.id, r.pubkey, r.callsign, r.message, r.avatar ?? null, r.fromNode ?? null, r.status, r.createdAt,
                     r.decidedBy ?? null, r.inviteCode ?? null, r.decidedAt ?? null, r.updatedAt);
                 merge.written++;
-                if (r.status === 'approved' && r.inviteCode && r.decidedBy && memberExists.get(r.decidedBy)) {
+                if (!invitesCopied && r.status === 'approved' && r.inviteCode && r.decidedBy && memberExists.get(r.decidedBy)) {
                     merge.invitesMade += makeInvite.run(r.inviteCode, r.decidedBy, r.decidedAt ?? r.updatedAt, r.pubkey).changes;
                 }
             } catch (e: any) {

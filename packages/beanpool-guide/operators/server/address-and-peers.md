@@ -10,7 +10,8 @@ related: what-the-server-sees, rate-limits, updates-and-health, backups-and-repl
 **Appliance & Data**, then **Public Address**. Members' apps need an address to reach your server.
 
 - You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.
-- The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.
+- The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.
+- The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.
 - The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away.
 
 ![Public Address configuration in Settings](images/appliance-network.webp)

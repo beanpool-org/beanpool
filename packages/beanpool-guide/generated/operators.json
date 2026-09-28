@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 61,
-  "hash": "8e21cb690b76828732b3dcfe3afce4c5f6a0dc36cd4b601302581d8c57491885",
+  "version": 63,
+  "hash": "ebd2e121339350105b194c6a78a626ca037e828e26cead7a48c1efff2c9fc7b1",
   "sections": [
     {
       "id": "setup",
@@ -1858,7 +1858,7 @@
             "On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys \"from before the latest change\" until it next copies, about a minute later.",
             "**Replication Access** shows the internet address each copy came from, and each refused try, for 7 days. After that it says \"address no longer kept\", and keeps the time and whether it was let in. The same goes for which standby holds which keys, and for the standby watch. Snapshots and backups never hold these addresses (a server updated to this version takes them out of the snapshots it already has), so a server restored from one shows none. See Privacy and what your server can see.",
             "A main server running a BeanPool from before this has nothing to send. The standby says \"the main server is too old to send a take-over envelope\" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.",
-            "**A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well. (The roles come back when it takes over: they are in the locked keys.)",
+            "**A standby is not a complete copy.** It copies which members are enterprises, who keeps each one and their pledges; members' holiday and notification settings, vouches, granted credit and credit freezes; Decisions and their votes, keepers' wages owed, keeper and lead votes, invites, replacement-phone codes and links with other communities. It does not copy: who holds which role; the phones members get notifications on; photos sent in chats; muted chats, what members have read in enterprise threads, the activity list and event reminders already sent; the pricing guide's own prices and members' price reports; or Commons project proposals still waiting for a decision. Keep file backups as well. (The roles come back when it takes over: they are in the locked keys.)",
             "If your main server is gone for good, the standby can take over as the main server. See the next part."
           ]
         },
@@ -1897,7 +1897,7 @@
         {
           "type": "ul",
           "items": [
-            "**Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, Commons project proposals still waiting for a decision, the admin IP allowlist if the community had one, and anything that changed after the standby last copied. The community's own settings come with the take-over: its name, place and contacts, currency display, thresholds, directory choices, service area, ledger audit baseline, pricing guide and snapshot schedule. The admin IP allowlist is the exception, because it names addresses on the old server's network: the standby keeps its own, so set the community's again afterwards. If the keys were locked before they carried recovery-seal.key, members' sign-in recovery copies are on the list too. If the main server ran a BeanPool from before its settings travelled to its standbys, the community's own settings are on the list: the standby keeps its own name, contacts and directory choices until you change them. Press **I understand: use an owner's phone**, or **I understand, continue** for the recovery code.",
+            "**Step 1.** The first screen says what will happen and **what will be missing**: the phones members get notifications on (nobody gets one until they open the app again); photos sent in chats; muted chats, read marks, the activity list, event reminders already sent, and the pricing guide's own prices and reports; Commons project proposals still waiting for a decision; the admin IP allowlist if the community had one; and, on top of all that, anything that changed after the standby last copied. Which members are enterprises, who keeps each one and their pledges, members' holiday and notification settings, vouches, granted credit and credit freezes come with it, and so do Decisions and their votes, keepers' wages owed, keeper and lead votes, invites, replacement-phone codes and links with other communities. The community's own settings come with the take-over: its name, place and contacts, currency display, thresholds, directory choices, service area, ledger audit baseline, pricing guide and snapshot schedule. The admin IP allowlist is the exception, because it names addresses on the old server's network: the standby keeps its own, so set the community's again afterwards. If the keys were locked before they carried recovery-seal.key, members' sign-in recovery copies are on the list too. If the main server ran a BeanPool from before its settings travelled to its standbys, the community's own settings are on the list: the standby keeps its own name, contacts and directory choices until you change them. Press **I understand: use an owner's phone**, or **I understand, continue** for the recovery code.",
             "**Step 2, with a phone.** A code appears, with the owners who can open the keys. The owner opens the BeanPool app, **Settings**, **Community keys**, **Take over or restore with this phone**, and scans it (or opens the link under it on their phone, or pastes it into the web app). Their phone shows the community, this server, and warns in red if the main server still answers; then it asks for its own unlock. The phone opens its own part of the keys and hands it to the standby, locked so only the standby can read it: **the phone never sees the keys**. Your screen moves on by itself. The code works once, for 10 minutes: **Make a new code** if it runs out. The standby offers only the newest copy of the keys it holds. If that copy has no owner (the main server had none when it last locked them), no phone can open it: use the printed recovery code. An older copy is never offered, because an owner removed since then could still open it. Opened from a link rather than scanned, the owner's app says so in red: open it only if you started this yourself. If the dashboard reaches the server at its own computer's address (localhost), the code points there too and a phone can't reach it: the screen says so. Open the server by its public web address and start again.",
             "**Step 2, with the recovery code.** Type the code and press **Open the keys**. A mistyped letter is caught at once. A wrong code counts like a wrong password, and after a few the standby makes you wait before the next try, whatever admin password you signed in with.",
             "**Step 3.** The next screen shows what the keys hold: when they were locked and who opened them (the code's number, or the owner's phone), the identity the server will keep, the owners, how many admins, how many links with other communities, the web address, whether the tunnel for it comes back, whether the main server still answers, and when the standby last copied from it. If the main server still answers, it says so in amber: stop and check. Tick **The main server is gone, and nobody will start it again**, then press **Take over now**.",
@@ -2020,6 +2020,14 @@
         {
           "type": "p",
           "text": "The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared"
+        },
+        {
+          "type": "p",
+          "text": "Take the new docker-compose.yml with each update, not only the image. The server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server."
+        },
+        {
+          "type": "p",
+          "text": "The image carries its own copy of cloudflared, the program that runs your tunnel. Cloudflare supports each version for a year after its newer releases come out, so a server left without updates for about a year can stop connecting. Updating the server updates it."
         },
         {
           "type": "h2",
@@ -2155,7 +2163,8 @@
           "type": "ul",
           "items": [
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
-            "The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
             "The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away."
           ]
         },

@@ -3,8 +3,11 @@
  *
  *   A2-10 the JSON body parser rejects an over-limit body with 413 (incl. on the
  *         unauthenticated /api/invite/redeem path) instead of buffering unbounded.
- *   A2-11 importRemoteState rejects a payload whose any category exceeds the
- *         per-category row cap, before entering the single sync transaction.
+ *   A2-11 importRemoteState holds every category to the per-category row cap, before entering the single sync
+ *         transaction: a table of the ledger set over it refuses the whole payload (OversizedCopyError, naming it); any
+ *         other is left out of the import, named in `tablesLeftOut`, and the rest lands (design
+ *         scratch/global-node/DESIGN-replica-flood-bounds-opus.md §5, D). Before D, any category over the cap refused
+ *         the payload, which let one flooded table stop every copy.
  *
  * Run (override the cap low so the test stays fast):
  *   MAX_IMPORT_ROWS_PER_CATEGORY=100 ENFORCE... not needed
@@ -18,6 +21,7 @@ process.env.NODE_ROLE = 'backup';                 // importRemoteState only runs
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, type SyncPayload } from './state-engine.js';
+import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
@@ -56,15 +60,36 @@ async function main() {
         });
         assert(big.status === 413, `A2-10: a >2MB body is rejected with 413 (got ${big.status})`);
 
-        // A2-11 — an oversized import category is rejected before the transaction.
+        // A2-11 — a table of the ledger set over the cap refuses the payload before the transaction.
         setNodeRole('backup');
         addConnector(`/ip4/127.0.0.1/tcp/4023/p2p/${nodeId}`, 'mirror', 'self');
+        const now = new Date().toISOString();
+        const hex = () => crypto.randomBytes(32).toString('hex');
+        const membersBefore = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
         const fat: SyncPayload = await signSyncPayload({
             nodeId,
+            members: Array.from({ length: 101 }, (_v, i) => ({ publicKey: hex(), callsign: `flood-${i}`, joinedAt: now, updatedAt: now, status: 'active' })) as any,
+        });
+        const err = await assertRejects(() => importRemoteState(fat), 'A2-11: members (the ledger set) over the cap (>100) refuses the payload');
+        assert(/rows/i.test(err) && /members/.test(err), `A2-11: the refusal names the table (${err.slice(0, 120)})`);
+        const membersAfter = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
+        assert(membersAfter === membersBefore, `A2-11: nothing of it was written (${membersBefore} → ${membersAfter} members)`);
+
+        // A2-11 — any other table over the cap is left out of the import, named, and the rest lands.
+        const zed = hex();
+        const messagesBefore = (db.prepare('SELECT COUNT(*) AS c FROM messages').get() as { c: number }).c;
+        const partial: SyncPayload = await signSyncPayload({
+            nodeId,
+            members: [{ publicKey: zed, callsign: 'Zed', joinedAt: now, updatedAt: now, status: 'active' }] as any,
+            messages: Array.from({ length: 101 }, (_v, i) => ({ id: `m${i}`, conversationId: 'c', authorPubkey: zed, ciphertext: 'x', nonce: 'n', timestamp: now, updatedAt: now })) as any,
+            // A category nothing imports any more (always empty on a main server): not held to the cap, never written.
             recoveryApprovals: Array.from({ length: 101 }, (_v, i) => ({ requestId: 'r' + i, guardianPubkey: 'g', decision: 'approve', createdAt: '2026-01-01T00:00:00Z' })) as any,
         });
-        const err = await assertRejects(() => importRemoteState(fat), 'A2-11: oversized import category (>100) is rejected');
-        assert(/oversized|rows/i.test(err), 'A2-11: rejection cites the oversized payload');
+        const landed = await importRemoteState(partial);
+        const zedHere = !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(zed);
+        const messagesAfter = (db.prepare('SELECT COUNT(*) AS c FROM messages').get() as { c: number }).c;
+        assert(JSON.stringify(landed.tablesLeftOut) === JSON.stringify(['messages']) && zedHere && messagesAfter === messagesBefore,
+            `A2-11: messages over the cap are left out and named, and the member in the same payload lands (${JSON.stringify({ leftOut: landed.tablesLeftOut, zedHere, messagesBefore, messagesAfter })})`);
 
         // A small import still works (sanity — the cap is not over-zealous).
         const ok = await exportSyncState(nodeId);

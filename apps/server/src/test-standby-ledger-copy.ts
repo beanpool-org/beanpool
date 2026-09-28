@@ -36,10 +36,15 @@
  * 11. On a second pair whose ledger sums to 0: a copy M0 signs naming no account carries no ledger, and the copy after it,
  *     minting 1000 for a new key, is refused; the standby keeps M0's ledger and the next real copy lands (before, the
  *     first emptied the ledger and the second went in as a seed).
- * 12. The force-resync a mismatch asks for is not a seed: a mint served to it is refused, and the next copies, across a
- *     restart, are held to the ledger's total before its clear until M's real copy lands.
- * 13. The format re-seed is used up when it clears: one whose fetch the main server refuses is asked for again at the
- *     next pull (before, not until the next boot); one whose import fails is not, and the next pull, a seed, lands.
+ * 12. The force-resync a mismatch asks for is not a seed: a mint served to it is refused, and it clears nothing: its clear
+ *     is in the copy's own transaction (scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2, N), so the standby's
+ *     ledger is as it was, and nothing is held (before: the clear committed first, and the next copies, across a restart,
+ *     were held to a `replica_held_sum` until one landed). The next copies, across a restart, are held to that ledger: the
+ *     same mint is refused, a copy that names no account changes none, and M's real copy lands.
+ * 13. The format re-seed: one whose fetch the main server refuses is asked for again at the next pull (before, not until
+ *     the next boot). One whose import fails clears nothing, and isn't used up: the next pull is a delta from the cursor
+ *     the standby kept, which records no format, and the re-seed is asked for again after the retry time
+ *     (BACKUP_RESYNC_RETRY_MS) and lands (before: used up, having cleared the standby, and the next pull a whole seed).
  * 14. On M0's ledger: the guard measures the ledger's total after a copy's writes against before, as SQLite sums it (with
  *     compensation), not a running sum of doubles in the copy's order. The review's pair (+1e20, Eve 1000, −1e20, then
  *     Eve alone) and 1000 Beans hidden in 2,500 accounts between 20,000 of ±9e11 that cancel are refused (before, each
@@ -47,7 +52,7 @@
  * 15. A copy naming no account that re-keys a member: memory follows the rows, so a read of the old key and the standby's
  *     own flush move nothing, and the next copy lands (before, memory kept the old key: the flush wrote a Commons credit
  *     with no debit, and every later copy was refused). An account list whose every entry is unreadable names no account:
- *     it changes none, the whole-copy check reads no ledger in it, and a held force-resync refuses it.
+ *     it changes none, the whole-copy check reads no ledger in it, and a held force-resync refuses it, clearing nothing.
  * 16. A standby's own demurrage flush writes nothing: its trades are its main server's after a copy (before, a decay it
  *     flushed over another window than the main server's stayed in its history through every copy). A standby holding
  *     such a trade under the last importer format re-seeds at its first pull, and its trades are its main server's.
@@ -130,6 +135,14 @@ async function child(): Promise<void> {
             process.env.BACKUP_RECONCILE_EVERY_MS = '86400000';
             const after = getBackupStatus() as any;
             return { ...result, whole: after.lastFullReconcileAt !== before.lastFullReconcileAt, mode: after.lastPullMode ?? null, consistency: after.consistency };
+        },
+        /** The puller's start as index.ts makes it (initBackupPuller): it resumes from the cursor this database saved. Its
+         *  loop is stopped at once: the suite pulls by hand. */
+        'boot-puller': async () => {
+            const { initBackupPuller, stopBackupPuller, getBackupStatus } = await import('./services/backup-puller.js');
+            initBackupPuller();
+            stopBackupPuller();
+            return getBackupStatus().cursor;
         },
         /** The force-resync an operator runs from Settings. */
         resync: async () => {
@@ -849,26 +862,30 @@ async function main(): Promise<void> {
         const c12 = await heldS.send('check-copy');
         const n12 = JSON.parse((await heldS.send('ledger') as Ledger).mismatch ?? 'null');
         require_(c12.consistency?.ledger?.differing === 2 && n12?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n12)})`);
+        const planted12: Ledger = await heldS.send('ledger');
         door.next({ status: 200, body: await main.send('forge', { kind: 'mint', publicKey: kip.pk }) });
         const heldMint = await heldS.send('pull', {});
         let h: Ledger = await heldS.send('ledger');
         assert(heldMint.mode === 'resync' && heldMint.ok === false && /Conservation violation/.test(heldMint.error ?? ''),
             `that force-resync, served a copy M signed that gives Kip 50 Beans from nowhere, refuses it (${JSON.stringify({ mode: heldMint.mode, ok: heldMint.ok, error: heldMint.error })})`);
-        assert(h.held !== null && Math.abs(Number(h.held) - m12.sum) < 1e-6,
-            `the total it holds copies to is the ledger's before its clear, kept until one lands (${h.held}; M ${m12.sum})`);
-        await heldS.send('persist'); // its own flush, into the cleared rows
+        assert(ledgerDiff(planted12, h).length === 0 && h.members === planted12.members && h.posts === planted12.posts && h.held === null,
+            `and clears nothing: S's ledger is as it was (the plant included), its members and listings too, and nothing is held (differences ${first(ledgerDiff(planted12, h))}; ${h.members} members, ${h.posts} listings; held ${h.held}; before: cleared, and held to replica_held_sum)`);
+        await heldS.send('persist'); // its own flush, which writes nothing on a standby
         await heldS.send('checkpoint');
         refused.push(...(await heldS.send('fetches')).blocked);
         await heldS.kill('SIGTERM');
         heldS = await spawnNode(SCRIPT, dir('held'), env(PW_STANDBY, 'backup'));
         nodes.push(heldS);
+        require_(!!(await heldS.send('boot-puller')), 'the restarted standby starts from the cursor it kept, as index.ts starts it');
         door.next({ status: 200, body: await main.send('forge', { kind: 'mint', publicKey: kip.pk }) });
         const heldMint2 = await heldS.send('pull', {});
         assert(heldMint2.ok === false && /Conservation violation/.test(heldMint2.error ?? ''),
-            `after a restart the next copy is still held: the same mint is refused (${JSON.stringify({ mode: heldMint2.mode, ok: heldMint2.ok, error: heldMint2.error })})`);
+            `after a restart the next copy is still held to that ledger: the same mint is refused (${JSON.stringify({ mode: heldMint2.mode, ok: heldMint2.ok, error: heldMint2.error })})`);
         door.next({ status: 200, body: await main.send('forge', { kind: 'empty' }) });
         const heldEmpty = await heldS.send('pull', {});
-        assert(heldEmpty.ok === false, `and so is a copy that names no account, which would keep the ledger the clear emptied (${heldEmpty.ok ? 'imported' : heldEmpty.error})`);
+        const hEmpty: Ledger = await heldS.send('ledger');
+        assert(heldEmpty.ok === true && ledgerDiff(planted12, hEmpty).length === 0,
+            `a copy that names no account, no force-resync having cleared anything, carries no ledger and changes no account (${heldEmpty.ok ? 'imported' : heldEmpty.error}; differences ${first(ledgerDiff(planted12, hEmpty))}; before: refused, the ledger the clear emptied)`);
         const heldReal = await heldS.send('pull', {});
         h = await heldS.send('ledger');
         const m12b: Ledger = await main.send('ledger');
@@ -896,16 +913,27 @@ async function main(): Promise<void> {
         await reseed.kill('SIGTERM');
         copyDir(dir('audit'), dir('reseed-throws'));
         withDb(dir('reseed-throws'), noFormat);
-        const reseedT = await spawnNode(SCRIPT, dir('reseed-throws'), env(PW_STANDBY, 'backup'));
+        const RESYNC_RETRY_MS = 2000;
+        const reseedT = await spawnNode(SCRIPT, dir('reseed-throws'), { ...env(PW_STANDBY, 'backup'), BACKUP_RESYNC_RETRY_MS: String(RESYNC_RETRY_MS) });
         nodes.push(reseedT);
+        require_(!!(await reseedT.send('boot-puller')), 'the standby starts from the cursor it saved, as index.ts starts it');
+        const pre13: Ledger = await reseedT.send('ledger');
         door.next({ status: 200, body: await main.send('forge', { kind: 'throws-later', publicKey: ann.pk }) });
         const broke = await reseedT.send('pull', {});
-        require_(broke.ok === false && broke.mode === 'resync', `the format re-seed's import fails after its clear (${JSON.stringify({ ok: broke.ok, mode: broke.mode, error: broke.error })})`);
-        await reseedT.send('persist'); // its own flush, into the cleared rows
+        require_(broke.ok === false && broke.mode === 'resync', `the format re-seed's import fails, after its clear in the same transaction (${JSON.stringify({ ok: broke.ok, mode: broke.mode, error: broke.error })})`);
+        await reseedT.send('persist'); // its own flush, which writes nothing on a standby
+        const b13: Ledger = await reseedT.send('ledger');
+        assert(ledgerDiff(pre13, b13).length === 0 && b13.members === pre13.members && b13.posts === pre13.posts && b13.format === null,
+            `it clears nothing: the ledger, members and listings are as they were, and the format record too (differences ${first(ledgerDiff(pre13, b13))}; format ${b13.format}; before: every row cleared)`);
         const after13 = await reseedT.send('pull', {});
         const t13: Ledger = await reseedT.send('ledger');
-        assert(after13.ok === true && after13.mode === 'full' && Number(t13.format) >= 1 && ledgerDiff(m13, t13).length === 0,
-            `it is used up all the same: the next pull is a whole copy, not another clear, and, no copy having landed since the clear, a seed that lands (${JSON.stringify({ ok: after13.ok, mode: after13.mode, error: after13.error, format: t13.format })}; differences ${first(ledgerDiff(m13, t13))})`);
+        assert(after13.ok === true && after13.mode === 'delta' && t13.format === null && ledgerDiff(m13, t13).length === 0,
+            `the next pull is a delta from the cursor it kept, which lands and records no format: it repairs nothing an older importer got wrong (${JSON.stringify({ ok: after13.ok, mode: after13.mode, error: after13.error, format: t13.format })}; differences ${first(ledgerDiff(m13, t13))}; before: a whole seed after the clear)`);
+        await new Promise((r) => setTimeout(r, RESYNC_RETRY_MS + 300));
+        const retry13 = await reseedT.send('pull', {});
+        const u13: Ledger = await reseedT.send('ledger');
+        assert(retry13.ok === true && retry13.mode === 'resync' && Number(u13.format) >= 1 && ledgerDiff(m13, u13).length === 0,
+            `after the retry time the re-seed is asked for again, lands, and records the format (${JSON.stringify({ ok: retry13.ok, mode: retry13.mode, error: retry13.error, format: u13.format })}; differences ${first(ledgerDiff(m13, u13))})`);
         refused.push(...(await reseedT.send('fetches')).blocked);
         await reseedT.kill('SIGTERM');
 
@@ -1003,10 +1031,11 @@ async function main(): Promise<void> {
         const c15 = await standby0.send('check-copy');
         const n15 = JSON.parse((await standby0.send('ledger') as Ledger).mismatch ?? 'null');
         require_(c15.consistency?.ledger?.differing === 2 && n15?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n15)})`);
+        const planted15: Ledger = await standby0.send('ledger');
         const heldUnreadable = await pull0({ status: 200, body: await main0.send('forge', { kind: 'unreadable-only' }) });
         r15 = await standby0.send('ledger');
-        assert(heldUnreadable.mode === 'resync' && heldUnreadable.ok === false && r15.held !== null,
-            `that force-resync, served such a copy, refuses it: it carries no ledger to put back the one the clear took, whose total was 0 (${JSON.stringify({ mode: heldUnreadable.mode, ok: heldUnreadable.ok, error: heldUnreadable.error, held: r15.held })})`);
+        assert(heldUnreadable.mode === 'resync' && heldUnreadable.ok === false && ledgerDiff(planted15, r15).length === 0 && r15.held === null,
+            `that force-resync, served such a copy, refuses it: it carries no ledger to put back the one its clear takes, whose total was 0; and the clear, in the same transaction, took nothing (${JSON.stringify({ mode: heldUnreadable.mode, ok: heldUnreadable.ok, error: heldUnreadable.error, held: r15.held })}; differences ${first(ledgerDiff(planted15, r15))}; before: refused after a clear that had committed)`);
         const heldReal15 = await standby0.send('pull', {});
         r15 = await standby0.send('ledger');
         z15 = await main0.send('ledger');

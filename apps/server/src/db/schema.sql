@@ -134,7 +134,9 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- Who issued an admin (seed) invite: the owner/admin's pubkey under a key session, 'owner:password' under the
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
     -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
-    issued_by TEXT
+    issued_by TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- 3. Ledger Accounts & Transactions
@@ -691,9 +693,15 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     released_by TEXT,
     released_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose account the fragment is of: the collection's owner, written with the release (engine/recovery-release.ts
+    -- recordRelease) and copied to a standby with the row. The sessions (recovery_collections) stay each server's own, so
+    -- on a server that took over this is the only thing naming the owner, and the owner's own account delete finds
+    -- their releases by it (state-engine.ts purgeMemberSelf). db.ts fills it at boot for a release whose session is here.
+    owner_pubkey TEXT,
     UNIQUE(collection_id, share_id)
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_releases_owner ON recovery_releases(owner_pubkey);
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
 
 -- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.
@@ -1159,7 +1167,9 @@ CREATE TABLE IF NOT EXISTS suspended_node_roles (
     granted_at       DATETIME,
     granted_by       TEXT,
     session_epoch    INTEGER NOT NULL DEFAULT 0,
-    break_glass_hash TEXT
+    break_glass_hash TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
@@ -1175,7 +1185,9 @@ CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     amount            REAL NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    paid_at           DATETIME
+    paid_at           DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
 ON deferred_wage_claims(transaction_id)
@@ -1293,12 +1305,30 @@ CREATE TABLE IF NOT EXISTS federation_links (
     -- Starts at 0 — a link with no ceiling can hold a balance and show it, but cannot spend. Deliberate:
     -- the link is created automatically, so anything it could do unattended must start switched off.
     commission_ceiling REAL NOT NULL DEFAULT 0 CHECK (commission_ceiling >= 0),
-    created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- Answers "is this treasury a federation link?" for the Commons list, which reads every treasury and
 -- would otherwise scan this table per row. UNIQUE because one treasury backs exactly one peer: sharing
 -- one across two links would pool two separate obligations into one pot.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_links_treasury ON federation_links(treasury_pubkey);
+
+-- Which treasury was made as the link for which peer: written by ensureFederationLink (federation-link.ts) in the same
+-- transaction that creates the link's treasury, and by nothing else, so no route or member path can set it. It is the
+-- only evidence findLinkTreasury takes that a treasury no link row names is a link's, for this peer: never its name,
+-- its callsign or a missing photo, which a member's own enterprise can have. It outlives a lost link row, and it is
+-- copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a promoted server has it too.
+CREATE TABLE IF NOT EXISTS federation_link_treasuries (
+    treasury_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
+    -- The libp2p peer id the treasury was made for (federation_links.peer_id). Not unique: a peer whose linked
+    -- treasury was pruned gets a new one.
+    peer_id         TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_federation_link_treasuries_peer ON federation_link_treasuries(peer_id);
 
 -- Onboarding funnel: how many people try to join, and where they stop. Counts only the steps the node
 -- cannot reconstruct afterwards — a rejected invite code leaves no row behind, so it has to be counted
@@ -1715,7 +1745,9 @@ CREATE TABLE IF NOT EXISTS group_convenor_proposals (
     deadline_at      DATETIME NOT NULL,
     executed_at      DATETIME,
     -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'candidate_ineligible', 'no_longer_needed'.
-    closed_reason    TEXT
+    closed_reason    TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_group_convenor_proposals_active_unique
 ON group_convenor_proposals(group_id) WHERE status = 'active';
@@ -1728,6 +1760,8 @@ CREATE TABLE IF NOT EXISTS group_convenor_votes (
     voter_pubkey TEXT NOT NULL,
     choice       TEXT NOT NULL CHECK (choice IN ('yes', 'no')),
     voted_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (proposal_id, voter_pubkey)
 );
 
@@ -1743,7 +1777,9 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     expires_at       DATETIME NOT NULL,
-    completed_at     DATETIME
+    completed_at     DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);
@@ -1779,7 +1815,9 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_at        DATETIME,
-    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL
+    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_enterprise ON enterprise_keeper_requests(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_member ON enterprise_keeper_requests(member_pubkey, status);
@@ -1801,7 +1839,9 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
     deadline_at       DATETIME,
     -- Why a cancelled proposal closed: 'rejected' (a yes majority is out of reach), 'expired',
     -- 'lead_returned', 'candidate_gone'.
-    closed_reason     TEXT
+    closed_reason     TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
 -- recordActivity looks up a lead's active proposals on every signed write.
@@ -1816,6 +1856,8 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_votes (
     voter_pubkey      TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     voted_at          DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     choice            TEXT NOT NULL DEFAULT 'yes' CHECK (choice IN ('yes', 'no')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (proposal_id, voter_pubkey)
 );
 
@@ -1835,7 +1877,9 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_changes (
     applies_at        DATETIME NOT NULL,
     resolved_at       DATETIME,
     resolved_by       TEXT,
-    reason            TEXT
+    reason            TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_changes_enterprise ON enterprise_keeper_changes(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_keeper_changes_due ON enterprise_keeper_changes(applies_at) WHERE status = 'pending';

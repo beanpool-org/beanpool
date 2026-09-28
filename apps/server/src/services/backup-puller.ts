@@ -407,7 +407,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // Verify the replica matches what the primary sent. Never let a
             // consistency-check error mask an otherwise-successful pull.
             try {
-                checkWholeCopy(payload, result.valuesLeftOut);
+                checkWholeCopy(payload, result.valuesLeftOut, result.plainTablesLeftOut);
             } catch (e: any) {
                 logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
             }
@@ -457,12 +457,25 @@ function recordQuietly(write: () => void): void {
  * brings such rows into the table's rules, and the next whole copy is exact again. The members table's content is
  * compared with those values read as the copy names them, so it differs only where the import copied a row other than
  * verbatim, which a force-resync mends.
+ * `plainTablesLeftOut`: the same for the plain tables (engine/plain-tables.ts, `<table>:<key>` for a row this standby's
+ * table refuses whatever is left out, or its unique indexes refuse; `<table>:<key>.<column>` for a value). Each such
+ * table is not exact, reported, and asks for no force-resync: a whole copy deletes every row it doesn't name before it
+ * writes, so the refusal is of the main server's own rows, and a force-resync reads the same ones (review 4123472786).
+ * Such a table's other rows are not compared on their own: its count and content differ by the rows left out.
  * Exported so a suite can run it on a copy it fetched.
  */
-export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly ValueLeftOut[] = []): ReplicaConsistency {
+export function checkWholeCopy(
+    payload: SyncPayload, valuesLeftOut: readonly ValueLeftOut[] = [], plainTablesLeftOut: readonly string[] = [],
+): ReplicaConsistency {
     const c = getReplicaConsistency(payload);
     if (valuesLeftOut.length > 0) {
         c.valuesLeftOut = { count: valuesLeftOut.length, examples: valuesLeftOut.slice(0, 5).map(valueLeftOutName) };
+        c.ok = false;
+    }
+    // The plain tables a row or value was left out of, by the table's name before the `:`.
+    const plainLeftOut = new Set(plainTablesLeftOut.map((x) => x.slice(0, x.indexOf(':'))).filter((t) => t.length > 0));
+    if (plainTablesLeftOut.length > 0) {
+        c.plainTablesLeftOut = { count: plainTablesLeftOut.length, tables: [...plainLeftOut].sort(), examples: plainTablesLeftOut.slice(0, 5) };
         c.ok = false;
     }
     lastConsistency = c;
@@ -499,11 +512,12 @@ export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly Val
     // an account's balance (or an account only one side holds), the Commons. Never the accounts' count or sum: each account
     // is compared on its own, or the copy doesn't carry them all.
     const differs = new Set<string>();
-    for (const t of c.tables) if (!t.match && t.name !== 'accounts') differs.add(t.name);
+    for (const t of c.tables) if (!t.match && t.name !== 'accounts' && !plainLeftOut.has(t.name)) differs.add(t.name);
     for (const d of contents?.differing ?? []) {
         // The accounts' content only with the ledger compared whole and alike: a balance that differs is the ledger's line
         // below, and entries this server can't hold differ on every copy.
         if (d.table === 'accounts' && (!ledgerWhole || ledgerDiffering > 0)) continue;
+        if (plainLeftOut.has(d.table)) continue;
         differs.add(d.table);
     }
     if (c.commons && !c.commons.match) differs.add(LEDGER_DIFFERS.commons);
@@ -513,6 +527,8 @@ export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly Val
     // Values of this copy's members rows this standby's table refuses, left out by the import (#1276): the copy isn't the
     // main server's, so never exact, but no force-resync mends it (one would leave the same values out): after `wrong`.
     if (c.valuesLeftOut) differs.add('members');
+    // And each plain table a row or value of the copy was left out of, the same way (review 4123472786).
+    for (const t of plainLeftOut) differs.add(t);
     // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
     // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
     // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
@@ -525,6 +541,10 @@ export function checkWholeCopy(payload: SyncPayload, valuesLeftOut: readonly Val
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
         for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
         if (c.valuesLeftOut) bad.push(`${c.valuesLeftOut.count} members value(s) this server's table refuses, left out (${c.valuesLeftOut.examples.join(', ')})`);
+        if (c.plainTablesLeftOut) {
+            bad.push(`${c.plainTablesLeftOut.count} row(s) or value(s) of ${c.plainTablesLeftOut.tables.join(', ')} this server's tables refuse, left out `
+                + `(${c.plainTablesLeftOut.examples.join(', ')})`);
+        }
         logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
     }
     const now = Date.now();

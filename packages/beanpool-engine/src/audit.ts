@@ -58,6 +58,12 @@ export interface ReplicaConsistency {
      * which its import left out (`<member key>.<column>`, the first few in `examples`). Any makes the copy not exact.
      */
     valuesLeftOut?: { count: number; examples: string[] } | null;
+    /**
+     * Set by the same check: the rows and values of the copy's plain tables (apps/server engine/plain-tables.ts) this
+     * standby's tables refuse, which its import left out (`<table>:<key>` or `<table>:<key>.<column>`), and the tables
+     * they are in. Any makes the copy not exact, and asks for no force-resync.
+     */
+    plainTablesLeftOut?: { count: number; tables: string[]; examples: string[] } | null;
     ok: boolean;
 }
 

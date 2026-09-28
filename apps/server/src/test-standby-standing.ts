@@ -54,7 +54,11 @@ const FORMAT = '4';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
-/** No node reaches anything but this machine: a push to Expo is answered here, anything else refused and counted. */
+/**
+ * No node reaches anything but this machine: a push to Expo is answered here, and so is the update check's ask of GitHub
+ * for the latest release (routes/settings.ts, 30 s after a node serves, as test-standby-ledger-copy answers it);
+ * anything else is refused and counted.
+ */
 function guardFetch(): { blocked: string[] } {
     const seen = { blocked: [] as string[] };
     const real = globalThis.fetch;
@@ -62,6 +66,7 @@ function guardFetch(): { blocked: string[] } {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        if (url.hostname === 'api.github.com' && url.pathname.startsWith('/repos/beanpool-org/beanpool/')) return new Response('{}', { status: 404 });
         seen.blocked.push(url.hostname);
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;

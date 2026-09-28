@@ -375,7 +375,7 @@ async function main(): Promise<void> {
             db.prepare(`UPDATE posts SET category = 'food' WHERE id = ?`).run(seedlings.id);
             // Its photos stamped with its own clock, and one M took off, which never reached it.
             db.prepare('UPDATE post_photos SET updated_at = ?').run(ahead);
-            db.prepare('INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 1, ?)').run(honey.id, TINY_PNG, ahead);
+            db.prepare('INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 1, ?)').run(honey.id, TINY_PNG, ahead);
             // Its deals with no resolution or nudge, stamped with its clock; the project as ten columns left it.
             db.prepare('UPDATE marketplace_transactions SET dispute_resolution = NULL, dispute_resolved_at = NULL, dispute_resolved_by = NULL, last_reminded_at = NULL, updated_at = ?').run(ahead);
             db.prepare('UPDATE projects SET migrated_at = NULL, enterprise_pubkey = NULL, updated_at = ?').run(ahead);

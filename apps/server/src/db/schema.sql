@@ -1710,7 +1710,7 @@ CREATE TABLE IF NOT EXISTS group_convenor_proposals (
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     deadline_at      DATETIME NOT NULL,
     executed_at      DATETIME,
-    -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'no_longer_needed'.
+    -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'candidate_ineligible', 'no_longer_needed'.
     closed_reason    TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_group_convenor_proposals_active_unique

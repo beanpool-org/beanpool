@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 71,
-  "hash": "965b6edde881192d318e1855f08a1e97564704465d88aef8585894a9b8dfaa08",
+  "version": 72,
+  "hash": "ccaed4861e27f65453ac5bf6a00fe1562f35c69393ec6f5a67e1f6848ed2db64",
   "sections": [
     {
       "id": "about",
@@ -731,7 +731,7 @@
           "type": "ul",
           "items": [
             "**Your balance and trades are yours.** Nobody else in your community can read your balance or your history. A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.",
-            "**Listings are for members.** Someone who has not joined can't see your community's listings. They are shown the way to the global community instead, where anyone can look around.",
+            "**Listings are for members.** Someone who has not joined can't see your community's listings or their photos. They are shown the way to the global community instead, where anyone can look around.",
             "**Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.",
             "**Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see."
           ]
@@ -4527,7 +4527,7 @@
         {
           "type": "ul",
           "items": [
-            "**On your community:** nothing of your posts. Its listings are for its members. Someone who opens your community's address without joining is shown the way to the global community instead.",
+            "**On your community:** nothing of your posts. Its listings, and their photos, are for its members. Each photo opens only from the link that comes with its listing, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.",
             "**On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.",
             "Anything you share to the Pulse can be seen by anyone who opens it. See \"Sharing your channels\"."
           ]

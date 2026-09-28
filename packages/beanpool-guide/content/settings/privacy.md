@@ -25,7 +25,7 @@ The owners and admins who run your community's server can still see what is stor
 
 ## People who have not joined
 
-- **On your community:** nothing of your posts. Its listings are for its members. Someone who opens your community's address without joining is shown the way to the global community instead.
+- **On your community:** nothing of your posts. Its listings, and their photos, are for its members. Each photo opens only from the link that comes with its listing, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.
 - **On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.
 - Anything you share to the Pulse can be seen by anyone who opens it. See "Sharing your channels".
 

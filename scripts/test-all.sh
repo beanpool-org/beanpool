@@ -425,6 +425,8 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-tunnel-connector
+      test-no-docker-socket
       test-node-config-public
       test-registrar-contract
       test-invite-trampoline

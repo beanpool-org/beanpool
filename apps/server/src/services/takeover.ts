@@ -43,7 +43,7 @@
  * envelope may carry none. When the web address is a tunnel with no token, the take-over looks in the older held
  * envelopes the same code opens, for the same name, and uses the newest token found, saying so. None found: the
  * result says the tunnel did not come back and what brings it back. An owner's phone opens one envelope only (it
- * re-wraps that one data key), so after a take-over by phone there is no older copy to look in. public-address-agent.ts now keeps the last
+ * re-wraps that one data key), so after a take-over by phone there is no older copy to look in. tunnel-connector.ts now keeps the last
  * token when the registrar leaves it out, so new envelopes stop losing it.
  */
 
@@ -69,7 +69,7 @@ import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
-import { restartSidecar } from './public-address-agent.js';
+import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
 import { getReplacedInfo, forgetSyncEpochHeaderValue, type ReplacedInfo } from './identity-epoch.js';
 import {
@@ -242,6 +242,15 @@ function mark(j: Journal, step: TakeoverStep, detail?: string): void {
     writeJournal(j);
     logger.info('SYS', `[Takeover] ✔ ${step}${detail ? `: ${detail}` : ''}`);
     crashPoint(step);
+}
+
+/**
+ * A take-over that has restarted this server but not yet reached its tunnel step: the tunnel waits for it
+ * (services/tunnel-connector.ts), so the web address comes back after the community is told and the keys are locked again.
+ */
+export function takeoverHoldsTunnel(): boolean {
+    const j = readJournal();
+    return !!j && j.state !== 'complete' && !!j.steps.restart && !j.steps.tunnel;
 }
 
 function readPlan(journalId: string): Plan | null {
@@ -649,7 +658,8 @@ function bundleEpoch(bundle: TakeoverBundle): number {
 
 // recovery-seal.key: a standby holds none of its own unless it was once a main server; then its key is kept here too,
 // byte for byte (and beside the carried one, installCarriedRecoverySealKey), so undoing puts back exactly what was there.
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', 'tunnel-token', RECOVERY_SEAL_KEY_FILE];
+// No tunnel-token: the tunnel runs from publicAddress in node_config (services/tunnel-connector.ts), which is kept below.
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
@@ -1024,9 +1034,11 @@ export async function finishTakeoverAfterBoot(): Promise<void> {
             } else if (step === 'tunnel') {
                 const token = tunnelTokenOf((getNodeConfig() as any).publicAddress);
                 if (token) {
-                    writeAtomic(dataPath('tunnel-token'), token.trim(), 0o644);
-                    void restartSidecar(); // a no-op without Docker's socket
-                    detail = 'tunnel token written for the cloudflared sidecar';
+                    // Until this step the journal holds the tunnel back (takeoverHoldsTunnel), so it starts here, in order.
+                    const t = await startTunnelForTakeover();
+                    detail = t.state === 'missing' || t.state === 'off'
+                        ? `the tunnel did not start: ${t.reason || t.state}`
+                        : 'the tunnel for the web address runs inside this server';
                 } else {
                     detail = j.result.tunnel?.message || 'no tunnel token';
                 }

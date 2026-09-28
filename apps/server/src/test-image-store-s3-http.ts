@@ -236,7 +236,14 @@ async function main(): Promise<void> {
         'the bucket holds exactly the photo bytes');
     assert(listFiles(imagesDir(dataDir)).length === 0, 'and nothing was written to the node\'s own disk');
 
-    const urlA = `${BASE}/api/marketplace/posts/${post.id}/photos/0`;
+    // A photo's URL is the one a read of its listing hands out, its key included on a local community, whose listings
+    // are its members' (engine/photo-keys.ts): the URL of the photo as its row is now.
+    const { postPhotoUrl } = await import('@beanpool/engine');
+    const photoUrlOf = (postId: string, orderNum: number): string => {
+        const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
+        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at)}`;
+    };
+    const urlA = photoUrlOf(post.id, 0);
     const resA = await fetch(urlA);
     const servedA = Buffer.from(await resA.arrayBuffer());
     assert(resA.status === 200 && servedA.equals(photoA), 'the photo URL serves the exact bytes, streamed from the bucket');
@@ -263,17 +270,20 @@ async function main(): Promise<void> {
     const photoD = makePhoto('d');
     const post2 = createPost('offer', 'food', 'Jam', 'Plum', 2, 'fixed', author, undefined, undefined, [dataUrl(photoD)], true)!;
     const rowD = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post2.id) as any;
+    const urlD = photoUrlOf(post2.id, 0);
+    assert((await fetch(urlD)).status === 200, 'setup: the photo about to be removed serves at its URL');
     updatePost(post2.id, author, { photos: [] } as any);
     assert(!(await fake.objects()).has(rowD.storage_key), 'removing a post\'s last photo removes its object from the bucket');
-    assert((await fetch(`${BASE}/api/marketplace/posts/${post2.id}/photos/0`)).status === 404, 'and its URL is a 404');
+    assert((await fetch(urlD)).status === 404, 'and its URL is a 404');
 
     // The row decides, never the bucket: a row gone while its object lingers is never served.
     const photoE = makePhoto('e');
     const post3 = createPost('offer', 'food', 'Eggs', 'A dozen', 2, 'fixed', author, undefined, undefined, [dataUrl(photoE)], true)!;
     const rowE = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post3.id) as any;
+    const urlE = photoUrlOf(post3.id, 0);
     db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(post3.id);
     assert((await fake.objects()).has(rowE.storage_key), 'setup: the object is still in the bucket with its row gone');
-    assert((await fetch(`${BASE}/api/marketplace/posts/${post3.id}/photos/0`)).status === 404,
+    assert((await fetch(urlE)).status === 404,
         'a photo whose row is gone is a 404 even though the bucket still has it');
 
     // Replaced WHILE it is being read. The read is async; an edit writes a new row at the same (post, order)
@@ -284,12 +294,14 @@ async function main(): Promise<void> {
     const rowF = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
     await fake.clearLog();
     await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${rowF.storage_key}`, delayMs: 1_500, count: 1 });
-    const raced = fetch(`${BASE}/api/marketplace/posts/${post4.id}/photos/0`);
+    const raced = fetch(photoUrlOf(post4.id, 0));
     // The bucket has the read (and is holding it) before the photo is replaced under it.
+    let bucketHoldsRead = false;
     for (let i = 0; i < 200; i++) {
-        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(rowF.storage_key))) break;
+        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(rowF.storage_key))) { bucketHoldsRead = true; break; }
         await new Promise((r) => setTimeout(r, 10));
     }
+    assert(bucketHoldsRead, 'setup: the request passed the row and its key, and the bucket is holding its read');
     updatePost(post4.id, author, { photos: [dataUrl(makePhoto('g'))] } as any);
     const rowG = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
     assert(rowG.storage_key !== rowF.storage_key && !(await fake.objects()).has(rowF.storage_key),
@@ -352,7 +364,7 @@ async function main(): Promise<void> {
         assert(!degraded.photos.some((p: any) => p.post_id === post.id && p.order_num === 1)
             && degraded.photosOmitted?.includes(`${post.id}|1`),
             'a photo the bucket no longer has is omitted and named, so a replica keeps its own copy');
-        assert((await fetch(keptUrl)).status === 503, 'and its URL is a 503 — the row says it exists and the bucket does not have it');
+        assert((await fetch(photoUrlOf(post.id, 1))).status === 503, 'and its URL is a 503 — the row says it exists and the bucket does not have it');
     }
 
     // ── 6. the orphan sweep, on the bucket ─────────────────────────────────────────────────────

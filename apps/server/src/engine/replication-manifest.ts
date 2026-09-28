@@ -434,6 +434,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
             + 'so in-flight governance, not a setting',
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
+    photoKeySecret: { kind: 'per-server', reason: "the key behind listings' photo URLs, made at boot (engine/photo-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },

@@ -13,6 +13,7 @@ import {
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -582,6 +583,9 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
+    // A listing's photos behind a key in every photo URL, where the listings are members' (a local community with reads
+    // enforced, engine/photo-keys.ts): an <img> cannot sign. Decided here, once, as the faces are.
+    installPhotoKeysAtBoot(READ_AUTH_ON);
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -5399,7 +5403,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const isStalled = daysInEscrow >= 7;
 
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
-        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at));
 
     // Chat context between buyer and seller
     const convRow = db.prepare(`

@@ -317,7 +317,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
     /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
-    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
+    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed where the listings are members' (engine/photo-keys.ts)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
@@ -359,9 +359,10 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
 // should be public now that we have a global node"), so these fall to the ordinary gate: a signed read by a member of this
 // node (passesReadGate, a suspended member included), and nobody else, a visitor's row and a signed non-member included.
 // The refusal names the global community (LISTINGS_MEMBERS_ONLY), where the apps send a stranger to look around. A
-// listing's photos keep their public route: an `<img>` cannot sign, and a photo's URL is made of its listing's random
-// id, which only a read of the listing gives out. A linked peer's app browsing here unsigned (routes/marketplace.ts
-// isPeerRequest) is refused too, until linked communities get signed access of their own.
+// listing's photos keep their public route, because an `<img>` cannot sign, but here each is served only to a URL
+// carrying its key, which only a read of the listing hands out (engine/photo-keys.ts). A linked peer's app browsing
+// here unsigned (routes/marketplace.ts isPeerRequest) is refused too, until linked communities get signed access of
+// their own.
 export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/marketplace/posts',
 ]);

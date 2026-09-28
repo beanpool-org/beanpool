@@ -13,6 +13,7 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey } from './members.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
+import { postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -330,7 +331,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         completedAt: row.completed_at,
         lat: row.lat,
         lng: row.lng,
-        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`),
+        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at)),
         originNode: row.origin_node,
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays

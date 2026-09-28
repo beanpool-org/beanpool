@@ -15,8 +15,11 @@
  *   5. Who took a listing: the author and the taker read it, on the board and on the live feed; nobody else does.
  *   6. A local community's listings: a stranger (unsigned), a key that is no member here and a visitor's row are refused
  *      the board, one listing, a sync and a delta, with code members_only and the global community's address; a member
- *      reads them, a suspended one included. No public read hands a stranger a listing's id (a photo's URL is made of
- *      it), an enterprise's public page lists no listings to one, and a key-less socket hears no listing doorbell.
+ *      reads them, a suspended one included. No public read hands a stranger a listing's id, the pricing guide's
+ *      thumbnails included, an enterprise's public page lists no listings to one, and a key-less socket hears no listing
+ *      doorbell. A listing's photo opens only at the keyed URL a read of the listing hands out (an <img> cannot sign): not
+ *      without its key, signed or not, nor with a wrong key, another photo's, or its own after the photo changed. The
+ *      pricing guide shows a listing's photo to a member, by its keyed URL, and to nobody else.
  *   7. Polls: one made without the choice (every app before this one) is anonymous, and nobody gets its voters, the
  *      author and the voter included, on a read or on the live feed, which no longer carries the voter's own choice
  *      either. An open vote gives members its voters, and a suspended member none. The choice can change until the
@@ -123,6 +126,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { recordActivity } = await import('./db/activity-feed-db.js');
     const { getProfileSwitches, setSwitchOverride } = await import('./config/node-profile.js');
+    const { runPricingAggregationCycle } = await import('./pricing-aggregator.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -402,20 +406,80 @@ async function main() {
         const takeDown = await post('/api/marketplace/posts/remove', { id: 'priv-vera-old', authorPublicKey: vera.pk }, vera);
         assert(takeDown.status === 200, `and takes it down (got ${takeDown.status} ${takeDown.text.slice(0, 100)})`);
 
-        // No public read gives a stranger a listing's id, the one thing its photo's URL is made of.
+        // The pricing guide, public on every node, takes a matching listing's photo as an item's thumbnail: a listing whose
+        // title is a catalogue item's name (#1286's open question 3, measured).
+        const eggs = await post('/api/marketplace/posts', {
+            type: 'offer', category: 'food', title: 'Free-range Eggs (Dozen)', description: 'Sentinel eggs', credits: 6, authorPublicKey: alice.pk,
+            lat: -28.5, lng: 153.5, photos: [TINY_PNG],
+        }, alice);
+        const eggsId = eggs.body?.post?.id as string;
+        runPricingAggregationCycle();
+        const thumb = (db.prepare("SELECT thumbnail_url FROM pricing_guide_items WHERE id = 'fp-001'").get() as { thumbnail_url: string | null } | undefined)?.thumbnail_url;
+        assert(eggs.status === 200 && !!eggsId && typeof thumb === 'string' && thumb.includes(eggsId),
+            `setup: Alice lists eggs with a photo, and the pricing guide takes it as the eggs' thumbnail (${thumb})`);
+
+        // No public read gives a stranger a listing's id, or a URL of its photo.
         let leaks = 0;
+        const carriesListing = (text: string) => [offerId!, takenId, eggsId].some(id => text.includes(id));
         for (const path of PUBLIC_READ_EXACT) {
             const r = await get(path);
-            if (r.text.includes(offerId!) || r.text.includes(takenId)) { leaks++; console.error(`  ${path} carries a listing id`); }
+            if (carriesListing(r.text)) { leaks++; console.error(`  ${path} carries a listing id`); }
         }
-        for (const path of [`/api/treasury/${enterprise}`, `/api/enterprise/${enterprise}`, `/api/community/membership/${alice.pk}`]) {
-            const r = await get(path);
-            if (r.text.includes(offerId!) || r.text.includes(takenId)) { leaks++; console.error(`  ${path} carries a listing id`); }
+        for (const path of [`/api/treasury/${enterprise}`, `/api/enterprise/${enterprise}`, `/api/community/membership/${alice.pk}`, '/api/pricing-guide?category=food']) {
+            for (const id of [undefined, outsider, vera]) {
+                const r = await get(path, id);
+                if (carriesListing(r.text)) { leaks++; console.error(`  ${path} carries a listing id to ${id ? 'a non-member' : 'a stranger'}`); }
+            }
         }
-        assert(leaks === 0, `no public read hands a stranger a listing's id (${leaks} did)`);
+        assert(leaks === 0, `no public read hands a stranger, a key that is no member here or a visitor's row a listing's id (${leaks} did)`);
+
+        // A listing's photo is its listing's: its URL carries a key (132 bits) that only a read of the listing hands out,
+        // and the photo is served to that URL only, unsigned, as an <img> asks.
         const guessed = await get(`/api/marketplace/posts/${crypto.randomUUID()}/photos/0`);
-        assert(guessed.status === 404, `a photo is served only at its listing's id (a made-up one: ${guessed.status})`);
-        assert(typeof photoUrl === 'string' && photoUrl.includes(offerId!), 'the photo\'s URL is made of its listing\'s id');
+        assert(guessed.status === 404, `a made-up listing's photo is 404 (${guessed.status})`);
+        assert(typeof photoUrl === 'string' && photoUrl.includes(offerId!) && /[?&]k=[A-Za-z0-9_-]{22}$/.test(photoUrl),
+            `the photo's URL Alice is answered with carries its key (${photoUrl})`);
+        const withKey = await get(photoUrl!);
+        assert(withKey.status === 200 && withKey.text.length > 0, `that URL opens the photo, unsigned (${withKey.status})`);
+        const bare = `/api/marketplace/posts/${offerId}/photos/0`;
+        const v = new URL(photoUrl!, BASE).searchParams.get('v')!;
+        const eggsUrl = (await get(`/api/marketplace/posts?id=${eggsId}`, carol)).body?.[0]?.photos?.[0] as string | undefined;
+        const eggsKey = eggsUrl ? new URL(eggsUrl, BASE).searchParams.get('k') : null;
+        for (const [what, path, id] of [
+            ['with no key, unsigned', bare, undefined],
+            ['with no key, signed by a member', bare, carol],
+            ['with its version and no key', `${bare}?v=${v}`, undefined],
+            ['with a wrong key', `${bare}?v=${v}&k=${'A'.repeat(22)}`, undefined],
+            ["with another listing's photo key", `${bare}?v=${v}&k=${eggsKey}`, undefined],
+        ] as const) {
+            const r = await get(path, id);
+            assert(r.status === 404 && r.body?.error === 'Photo not found', `the photo ${what} is 404, as no photo (${r.status})`);
+        }
+        const memberRead = await get(`/api/marketplace/posts?id=${offerId}`, carol);
+        const memberUrl = memberRead.body?.[0]?.photos?.[0] as string | undefined;
+        assert(memberUrl === photoUrl && (await get(memberUrl!)).status === 200, 'a member reading the listing gets the same keyed URL, which opens it');
+        const synced = await get('/api/marketplace/posts?sync=true', sam);
+        const samUrl = (synced.body as any[] | undefined)?.find(p => p.id === offerId)?.photos?.[0];
+        assert(samUrl === photoUrl, "a suspended member's sync, which reads the board, gets it too");
+
+        // A photo replaced is a new key: the old one opens nothing.
+        db.prepare("UPDATE post_photos SET updated_at = '2031-01-01T00:00:00.000Z' WHERE post_id = ? AND order_num = 0").run(eggsId);
+        const staleEggs = await get(eggsUrl!);
+        const freshEggs = (await get(`/api/marketplace/posts?id=${eggsId}`, carol)).body?.[0]?.photos?.[0] as string | undefined;
+        assert(staleEggs.status === 404 && !!freshEggs && freshEggs !== eggsUrl && (await get(freshEggs)).status === 200,
+            `after a photo changes, its old URL and key are 404 and the listing's new one opens it (${staleEggs.status})`);
+
+        // The pricing guide's thumbnail of a listing's photo: for a member, its keyed URL; for nobody else, none.
+        const eggsItem = (r: Res) => (r.body?.items ?? []).find((i: any) => i.id === 'fp-001');
+        const guideMember = await get('/api/pricing-guide?category=food', carol);
+        const memberThumb = eggsItem(guideMember)?.thumbnailUrl as string | undefined;
+        assert(memberThumb === freshEggs && (await get(memberThumb!)).status === 200,
+            `a member's pricing guide shows the eggs listing's photo, by its keyed URL (${memberThumb})`);
+        for (const [who, id] of [['a stranger (unsigned)', undefined], ['a key that is no member here', outsider], ["a visitor's row", vera]] as const) {
+            const r = await get('/api/pricing-guide?category=food', id);
+            assert(r.status === 200 && !!eggsItem(r) && eggsItem(r).thumbnailUrl === undefined && !r.text.includes(eggsId),
+                `${who} reads the pricing guide's eggs, without the listing's photo (${r.status} ${JSON.stringify(eggsItem(r)?.thumbnailUrl)})`);
+        }
 
         const entPost = se.createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
         assert(!!entPost?.id, 'setup: the enterprise lists a loaf');

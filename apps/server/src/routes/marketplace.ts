@@ -19,6 +19,7 @@ import {
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { photoKeyMatches, photoKeysRequired } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -82,10 +83,13 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
     const photo = db.prepare(
-        `SELECT photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = ?`
-    ).get(id, Number(orderNum)) as PostPhotoRow | undefined;
+        `SELECT photo_data, storage_key, sha256, bytes, mime, updated_at FROM post_photos WHERE post_id = ? AND order_num = ?`
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null }) | undefined;
 
-    if (!photo) {
+    // Where the listings are members' (a local community with reads enforced), a photo goes only to a URL carrying the
+    // key the node hands out with its listing (engine/photo-keys.ts): an <img> cannot sign. Anything else is answered as
+    // no photo, so neither says whether there is one.
+    if (!photo || (photoKeysRequired() && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;

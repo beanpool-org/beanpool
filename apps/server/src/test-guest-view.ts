@@ -39,9 +39,9 @@
  *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
  *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
  *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
- *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
- *      the landing card's count is a member's from each listing's place and anyone else's from its area, so bisecting
- *      it finds the area; a non-member signer reads a trust
+ *      carry no `k=` (a listing's photo URL carries its key: the listings are members'), and the recovery lookup matches
+ *      a prefix with photos; where an operator keeps the directory there, the landing card's count is a member's from
+ *      each listing's place and anyone else's from its area, so bisecting it finds the area; a non-member signer reads a trust
  *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
  *      as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
@@ -1586,8 +1586,14 @@ async function main(): Promise<void> {
         }
         const members = await call('GET', bob, '/api/members');
         const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
-        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
+        // A local community's listings are its members', so their photos are keyed here (engine/photo-keys.ts); faces are not.
+        const keyedFace = /\/api\/avatar\/[^"]*&k=/;
+        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !keyedFace.test(members.text) && !keyedFace.test(posts.text),
             'avatar URLs carry no key here');
+        const offerPhoto = ((posts.body as any[]) ?? []).find(p => p.id === offer.id)?.photos?.[0] as string | undefined;
+        assert(!!offerPhoto && /&k=[A-Za-z0-9_-]{22}$/.test(offerPhoto) && (await call('GET', null, offerPhoto)).status === 200
+            && (await call('GET', null, `/api/marketplace/posts/${offer.id}/photos/0`)).status === 404,
+            `and a listing's photo URL carries its key, which opens it unsigned, and nothing else does (${offerPhoto})`);
 
         // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, and a
         // code's holder still gets a member's card. A pruned account is refused every read it signs, here as on every node

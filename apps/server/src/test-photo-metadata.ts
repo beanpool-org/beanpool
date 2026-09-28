@@ -41,6 +41,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
+import { postPhotoUrl } from '@beanpool/engine';
 
 const PORT = 8757;
 const BASE = `https://localhost:${PORT}`;
@@ -616,6 +617,15 @@ async function signed(method: string, path: string, body: unknown, signer: Ident
     return { status: res.status, json };
 }
 
+/**
+ * A listing photo's address as a read of its listing hands it out, its key included on a local community, whose
+ * listings are its members' (engine/photo-keys.ts): the address of the photo as its row is now.
+ */
+function photoPathOf(postId: string, orderNum: number): string {
+    const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
+    return postPhotoUrl(postId, orderNum, row?.updated_at);
+}
+
 /** What an anonymous <img> gets. */
 async function fetchBytes(path: string): Promise<{ status: number; bytes: Buffer; type: string }> {
     const res = await fetch(`${BASE}${path}`);
@@ -668,7 +678,7 @@ async function partTwo(): Promise<void> {
     if (postId) {
         const photos = [[CAMERA_JPEG_STRIPPED, 'image/jpeg'], [CLEAN_PNG, 'image/png'], [CAMERA_WEBP_STRIPPED, 'image/webp']] as const;
         for (const [n, [expected, mime]] of photos.entries()) {
-            const got = await fetchBytes(`/api/marketplace/posts/${postId}/photos/${n}`);
+            const got = await fetchBytes(photoPathOf(postId, n));
             assert(got.status === 200 && got.type.startsWith(mime), `photo ${n} is served as ${mime} (${got.status} ${got.type})`);
             await served(`post photo ${n} (${mime})`, got.bytes, expected);
         }
@@ -679,8 +689,8 @@ async function partTwo(): Promise<void> {
             id: postId, authorPublicKey: member.pub, photos: [kept, dataUrl('image/jpeg', CAMERA_PROGRESSIVE_JPEG)],
         }, member);
         assert(edit.status === 200, `the edit is saved (${edit.status} ${edit.json?.error ?? ''})`);
-        await served('the photo the edit kept', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
-        await served('the photo the edit added', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`)).bytes, CLEAN_PROGRESSIVE_JPEG);
+        await served('the photo the edit kept', (await fetchBytes(photoPathOf(postId, 0))).bytes, CAMERA_JPEG_STRIPPED);
+        await served('the photo the edit added', (await fetchBytes(photoPathOf(postId, 1))).bytes, CLEAN_PROGRESSIVE_JPEG);
     }
 
     console.log('\n── 2c. An event\'s photo: POST /api/marketplace/posts (type event) ──');
@@ -691,7 +701,7 @@ async function partTwo(): Promise<void> {
     }, member);
     const eventId = event.json?.post?.id as string | undefined;
     assert(event.status === 200 && !!eventId, `the event is created (${event.status} ${event.json?.error ?? ''})`);
-    if (eventId) await served('event photo', (await fetchBytes(`/api/marketplace/posts/${eventId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
+    if (eventId) await served('event photo', (await fetchBytes(photoPathOf(eventId, 0))).bytes, CAMERA_JPEG_STRIPPED);
 
     // The photo route serves the stored bytes under the declared type without looking at them, so bytes that are not
     // a picture the strip knows are refused, whatever the data URL says they are.
@@ -717,8 +727,8 @@ async function partTwo(): Promise<void> {
             id: postId, authorPublicKey: member.pub, photos: [`/api/marketplace/posts/${postId}/photos/0`, mislabelled],
         }, member);
         assert(heicEdit.status === 400, `and on an edit (${heicEdit.status} ${heicEdit.json?.error ?? ''})`);
-        await served('the post photo after the refused edit', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
-        const second = await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`);
+        await served('the post photo after the refused edit', (await fetchBytes(photoPathOf(postId, 0))).bytes, CAMERA_JPEG_STRIPPED);
+        const second = await fetchBytes(photoPathOf(postId, 1));
         assert(leak(second.bytes) === null && second.bytes.equals(CLEAN_PROGRESSIVE_JPEG), `the refused edit left the second photo as it was (${second.status})`);
     }
 
@@ -1005,7 +1015,7 @@ async function partTwo(): Promise<void> {
         }, member);
         const id = post.json?.post?.id as string | undefined;
         assert(post.status === 200 && !!id, `a post photo with ${label} is saved (${post.status} ${post.json?.error ?? ''})`);
-        if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(`/api/marketplace/posts/${id}/photos/0`)).bytes, expected);
+        if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(photoPathOf(id, 0))).bytes, expected);
 
         const ent = await signed('POST', '/api/treasury', {
             name: `${tag} Orchard Co-op`, purpose: 'We grow pears', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', camera),
@@ -1055,7 +1065,10 @@ async function partTwo(): Promise<void> {
     const guideItem = async () => ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
     const readBack = await guideItem();
     const photoLink = `/api/marketplace/posts/${listingId}/photos/0`;
-    assert(readBack?.thumbnailUrl === photoLink, `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
+    // To a member, the link is the listing's own, with its key on this local community (routes/pricing-guide.ts).
+    const listingsLink = listing.json?.post?.photos?.[0] as string | undefined;
+    assert(!!listingsLink?.startsWith(`${photoLink}?v=`) && readBack?.thumbnailUrl === listingsLink,
+        `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
     if (readBack) {
         const { id, category, emoji, name, description, priceBeans, unit, seasonalityHint, thumbnailUrl } = readBack;
         const resaved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
@@ -1066,7 +1079,7 @@ async function partTwo(): Promise<void> {
         assert(resaved.status === 200, `the item, read back and saved with a new price and its own photo link, is saved (${resaved.status})`);
         const after = await guideItem();
         assert(after?.priceBeans === priceBeans + 1 && after?.isPinned === true, `the new price and pin are saved (${after?.priceBeans}, ${after?.isPinned})`);
-        assert(after?.thumbnailUrl === photoLink, `the photo link is kept (${after?.thumbnailUrl})`);
+        assert(after?.thumbnailUrl === listingsLink, `the photo link is kept (${after?.thumbnailUrl})`);
     }
     for (const link of [`${photoLink}?v=1`, `${BASE}${photoLink}`]) {
         const res = await saveThumbnail(link);

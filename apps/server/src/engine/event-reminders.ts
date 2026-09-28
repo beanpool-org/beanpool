@@ -41,6 +41,7 @@
  * (event, member, offset), for the life of the event.
  */
 
+import { postPhotoUrl } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 
@@ -216,7 +217,7 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
         rsvp: r.status as 'going' | 'interested',
         photo: r.photo_order == null
             ? null
-            : `/api/marketplace/posts/${r.id}/photos/${r.photo_order}?v=${r.photo_updated_at ? new Date(r.photo_updated_at).getTime() : 0}`,
+            : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
     }));
 }

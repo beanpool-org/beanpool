@@ -12,6 +12,8 @@
  *   2. it still carries every field each of its readers uses, with the saved values
  *   3. the admin route the manager reads the public address from still returns it (token and contact included),
  *      and refuses a caller without the admin password
+ *   4. the contact email and phone switches are the owner's alone: a Settings save turns each on and off, and a save
+ *      from a page that still sends the old single contacts switch turns neither on
  *
  * Contacts no registrar: REGISTRAR_URL points at a closed local port, so the admin status route answers from the
  * saved address, as it does whenever the registrar is unreachable.
@@ -46,6 +48,15 @@ async function getRaw(path: string, headers: Record<string, string> = {}): Promi
     return { status: res.status, text: await res.text() };
 }
 
+async function postAdmin(path: string, body: unknown): Promise<{ status: number; text: string }> {
+    const res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PASSWORD },
+        body: JSON.stringify(body),
+    });
+    return { status: res.status, text: await res.text() };
+}
+
 function signedHeaders(path: string): Record<string, string> {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
@@ -67,6 +78,7 @@ async function main() {
     const { withKeptTunnelToken } = await import('./services/public-address-agent.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
+    const { db } = await import('./db/db.js');
 
     await initTls();
     initAdminPassword();
@@ -79,7 +91,7 @@ async function main() {
     const serviceRadius = { lat: -28.55, lng: 153.5, radiusKm: 25 };
     const lastDirectoryPush = '2026-09-20T10:00:00.000Z';
     updateNodeConfig({
-        serviceRadius, publishLocation: true, publishMembers: false, publishContacts: true, publishHealth: false,
+        serviceRadius, publishLocation: true, publishMembers: false, publishContactEmail: true, publishContactPhone: false, publishHealth: false,
         directoryPushIntervalHours: 6, lastDirectoryPush,
     });
 
@@ -119,7 +131,9 @@ async function main() {
     assert(body.serviceRadius?.radiusKm === serviceRadius.radiusKm, 'serviceRadius.radiusKm (web map, web marketplace, phone map, manager, settings.js)');
     assert(body.publishLocation === true, 'publishLocation (manager, settings.js)');
     assert(body.publishMembers === false, 'publishMembers (manager, settings.js)');
-    assert(body.publishContacts === true, 'publishContacts (manager, settings.js)');
+    assert(body.publishContactEmail === true, 'publishContactEmail (manager, settings.js)');
+    assert(body.publishContactPhone === false, 'publishContactPhone (manager, settings.js)');
+    assert(!('publishContacts' in body), 'no old single contacts switch');
     assert(body.publishHealth === false, 'publishHealth (manager, settings.js)');
     assert(body.directoryPushIntervalHours === 6, 'directoryPushIntervalHours (manager, settings.js)');
     assert(body.lastDirectoryPush === lastDirectoryPush, 'lastDirectoryPush (manager, settings.js)');
@@ -139,6 +153,27 @@ async function main() {
     assert(pa.status === 'live', 'admin status: status');
     assert(pa.contact === CONTACT, 'admin status: contact');
     assert(pa.tunnelToken === TUNNEL_TOKEN, 'admin status: tunnelToken (the operator screen shows it)');
+
+    console.log('\n── 4. the contact switches are the owner\'s choice ──');
+    const CONFIG = '/api/local/admin/node/config';
+    const switches = async () => {
+        const b = JSON.parse((await getRaw('/api/node/config')).text);
+        return { email: b.publishContactEmail, phone: b.publishContactPhone };
+    };
+    const off = await postAdmin(CONFIG, { publishContactEmail: false });
+    assert(off.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: false }),
+        `the owner turns the email off: both read off (${off.status} ${JSON.stringify(await switches())})`);
+    const oldPage = await postAdmin(CONFIG, { publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true });
+    assert(oldPage.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: false }),
+        `a page that still sends the old single switch as true turns neither on (${oldPage.status} ${JSON.stringify(await switches())})`);
+    const stored = JSON.parse((db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string }).value);
+    assert(!('publishContacts' in stored), `the old switch is not stored (${Object.keys(stored).join(', ')})`);
+    const phoneOn = await postAdmin(CONFIG, { publishContactPhone: true });
+    assert(phoneOn.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: true }),
+        `the owner turns the phone on: only the phone reads on (${phoneOn.status} ${JSON.stringify(await switches())})`);
+    const notBool = await postAdmin(CONFIG, { publishContactEmail: 'yes' });
+    assert(notBool.status === 400 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: true }),
+        `a switch that isn't true or false is refused, and nothing changes (${notBool.status} ${JSON.stringify(await switches())})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

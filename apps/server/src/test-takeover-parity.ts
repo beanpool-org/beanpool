@@ -473,8 +473,8 @@ async function main(): Promise<void> {
         built('the community names itself and its place', await A('/api/local/update-identity', {
             callsign: 'parityville', communityName: 'Parityville', lat: -28.55, lng: 153.5, contactEmail: 'hello@parityville.example', contactPhone: '+61 2 5550 1234',
         }));
-        built('it keeps its contacts and members out of the directory', await A('/api/local/admin/node/config', {
-            publishContacts: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
+        built('it publishes its contact email but not its phone, and keeps its members out of the directory', await A('/api/local/admin/node/config', {
+            publishContactEmail: true, publishContactPhone: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
         }));
         built('and sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45 }));
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {

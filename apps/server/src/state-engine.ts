@@ -532,7 +532,14 @@ export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
     publishLocation?: boolean;
     publishMembers?: boolean;
-    publishContacts?: boolean;
+    /**
+     * Whether the directory is sent the community's contact email, and its phone. Off unless an owner turned each on: only
+     * a stored `true` under these keys publishes. They replace `publishContacts`, one switch for both that read unset as
+     * "publish" and was written back as true by every save, so a stored true there was no choice anyone made; it is
+     * dropped on read, and nothing of it publishes a contact.
+     */
+    publishContactEmail?: boolean;
+    publishContactPhone?: boolean;
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
@@ -7209,7 +7216,6 @@ export function getNodeConfig(): NodeConfig {
         const pub = config.publishToDirectory !== false;
         config.publishLocation = pub;
         config.publishMembers = pub;
-        config.publishContacts = pub;
         config.publishHealth = pub;
         delete config.publishToDirectory;
         delete config.password;
@@ -7219,7 +7225,8 @@ export function getNodeConfig(): NodeConfig {
         serviceRadius: config.serviceRadius,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
-        publishContacts: config.publishContacts !== false,
+        publishContactEmail: config.publishContactEmail === true,
+        publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -7303,14 +7310,17 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
 
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
-    if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
+    if (!config.publishLocation && !config.publishMembers && !config.publishContactEmail && !config.publishContactPhone && !config.publishHealth) {
         return null;
     }
     
     const localConfig = getLocalConfig();
+    // The name is how the directory lists a community, so it is sent whatever the contact switches say (the publisher's
+    // `callsign` always carried it anyway).
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
         publicUrl: resolvePublicNodeUrl(config),
+        communityName: localConfig.communityName || null,
     };
 
     if (config.publishLocation) {
@@ -7325,16 +7335,9 @@ export function getDirectoryInfo(): any {
         info.memberCount = null;
     }
 
-    if (config.publishContacts) {
-        if (localConfig.communityName) info.name = localConfig.communityName;
-        info.communityName = localConfig.communityName || null;
-        if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
-        if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
-    } else {
-        info.communityName = null;
-        info.contactEmail = null;
-        info.contactPhone = null;
-    }
+    // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
+    info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
+    info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
 
     if (config.publishHealth) {
         const realVersion = getVersion();

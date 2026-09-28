@@ -1199,6 +1199,46 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 21. A link's treasury carries its peer's marker (review 4122266160) ──────────────────────────────────────────────
+    // federation_link_treasuries is the only evidence a lost link row's treasury is found by (federation-link.ts
+    // findLinkTreasury). A link made before it gets the marker at boot, from its link row, on a main server; a standby
+    // writes none (its rows are its main server's), and a member's enterprise named like a link gets none.
+    console.log('\n--- 21. A link made before the marker gets it at boot, on a main server only ---');
+    {
+        const plant = (dir: string) => {
+            assert(bootInto(dir).ok, 'a fresh node boots');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.pragma('foreign_keys = OFF');
+            d.exec('DROP TABLE federation_link_treasuries');
+            for (const [key, name] of [['link-treasury', 'eastgippy Link'], ['her-enterprise', 'riverbend Link']]) {
+                d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, is_treasury)
+                           VALUES (?, ?, '2025-01-01T00:00:00.000Z', 'x', 'x', '', 'active', 1)`).run(key, name);
+            }
+            d.prepare(`INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES ('12D3KooWEastGippy', 'link-treasury')`).run();
+            d.close();
+        };
+        const marks = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            const rows = d.prepare('SELECT treasury_pubkey, peer_id, updated_at FROM federation_link_treasuries ORDER BY treasury_pubkey').all() as any[];
+            d.close();
+            return rows;
+        };
+        const mainDir = tmp('legacy-link-marker');
+        plant(mainDir);
+        assert(bootInto(mainDir).ok, 'a main server from before the marker boots');
+        const marked = marks(mainDir);
+        assert(marked.length === 1 && marked[0].treasury_pubkey === 'link-treasury' && marked[0].peer_id === '12D3KooWEastGippy' && !!marked[0].updated_at,
+            `its link's treasury is marked with the link's peer, stamped, and the enterprise no link names is not (${JSON.stringify(marked)})`);
+        assert(bootInto(mainDir).ok && JSON.stringify(marks(mainDir)) === JSON.stringify(marked), 'booting it again changes nothing');
+        fs.rmSync(mainDir, { recursive: true, force: true });
+
+        const standbyDir = tmp('legacy-link-marker-standby');
+        plant(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the marker boots');
+        assert(marks(standbyDir).length === 0, 'and marks nothing itself: its markers are its main server\'s, which its next copy brings');
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

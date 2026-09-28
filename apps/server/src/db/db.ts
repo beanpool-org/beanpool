@@ -1246,6 +1246,24 @@ export function initSchema() {
 
     // Last: a rebuild above (deferred_wage_claims' unique index, ripOutLegacyVoting's decisions) drops a table's triggers.
     stampPlainTables();
+    markLinkTreasuries();
+}
+
+/**
+ * Every link's treasury carries its peer's marker (federation_link_treasuries, which ensureFederationLink writes when it
+ * makes one): a link made before the marker gets it here, from its link row, on a main server only (a standby's rows are
+ * its main server's, and its import alone writes them). Every link row this server holds was made by
+ * ensureFederationLink, so each names a treasury made for its peer. Idempotent: a treasury already marked is left alone.
+ */
+function markLinkTreasuries(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        const marked = db.prepare(`INSERT OR IGNORE INTO federation_link_treasuries (treasury_pubkey, peer_id)
+                                   SELECT treasury_pubkey, peer_id FROM federation_links`).run().changes;
+        if (marked > 0) console.log(`[DB] Marked ${marked} link treasur${marked === 1 ? 'y' : 'ies'} with its peer`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not mark the link treasuries with their peers:', e);
+    }
 }
 
 /**

@@ -320,6 +320,9 @@ export const TABLES: Record<string, TableEntry> = {
     recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at'),
     // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
     federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
+    // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
+    // its treasury again, never a member's enterprise of the same name.
+    federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
 
     // ── Not copied today, and the design says they should be ──
     push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },

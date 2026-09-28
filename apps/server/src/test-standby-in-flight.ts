@@ -33,7 +33,7 @@
  *     and passes at its deadline; the open Decision counts M's three ballots and a new one, passes and is carried out;
  *     the removal is carried out after its grace; the unkept suspension ends and the owner has her role back; the
  *     keeper's wage is paid, once; the unused invite and the re-key code work; the releases are M's; no second link
- *     treasury, and a link row lost finds its treasury again.
+ *     treasury, and a link row lost finds its treasury again, by the marker M made with it and S copied (never by name).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-in-flight.ts
@@ -64,7 +64,7 @@ const FORMAT_BEFORE = '4';
 const PLAIN = [
     'deferred_wage_claims', 'decisions', 'decision_votes', 'suspended_node_roles', 'enterprise_keeper_requests',
     'enterprise_keeper_changes', 'enterprise_succession_proposals', 'enterprise_succession_votes', 'group_convenor_proposals',
-    'group_convenor_votes', 'invite_codes', 'rekey_requests', 'recovery_releases', 'federation_links',
+    'group_convenor_votes', 'invite_codes', 'rekey_requests', 'recovery_releases', 'federation_links', 'federation_link_treasuries',
 ] as const;
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -193,6 +193,7 @@ async function child(): Promise<void> {
                 treasuries: db.prepare(`SELECT m.public_key, m.callsign, a.balance FROM members m LEFT JOIN accounts a ON a.public_key = m.public_key
                                         WHERE m.callsign LIKE '%Link%' ORDER BY m.rowid`).all(),
                 rows: db.prepare('SELECT peer_id, treasury_pubkey, commission_ceiling FROM federation_links ORDER BY peer_id').all(),
+                markers: db.prepare('SELECT treasury_pubkey, peer_id, created_at FROM federation_link_treasuries ORDER BY treasury_pubkey').all(),
             };
         },
         'drop-link-row': async () => {
@@ -567,6 +568,8 @@ async function main(): Promise<void> {
         await sleep(Math.max(0, new Date(removal.closesAt).getTime() - Date.now() + 200));
         await main.send('tick-decisions', {});
         const m3: Tables = (await main.send('rows')).tables;
+        require_(m3.federation_link_treasuries.length === 1 && m3.federation_link_treasuries[0].treasury_pubkey === linked.link.treasuryPubkey
+            && m3.federation_link_treasuries[0].peer_id === LINK_PEER, `M: the link's treasury is marked as made for Eastgippy (${JSON.stringify(m3.federation_link_treasuries)})`);
         const removalRow = m3.decisions.find((d) => d.id === removal.id);
         require_(removalRow?.status === 'execution_pending_grace', `M: the removal passed and waits out its grace period (${removalRow?.status})`);
         require_(m3.suspended_node_roles.length === 1 && m3.suspended_node_roles[0].member_pubkey === lou.pk,
@@ -742,6 +745,8 @@ async function main(): Promise<void> {
         assert(refound.created === 0 && relinked.treasuries.length === 1 && relinked.rows.length === 1
             && relinked.rows[0].treasury_pubkey === linked.link.treasuryPubkey,
             `a link row lost finds its treasury again, not a second one (${JSON.stringify(relinked).slice(0, 200)})`);
+        assert(JSON.stringify(relinked.markers) === JSON.stringify(onMain.federation_link_treasuries.map((r) => ({ treasury_pubkey: r.treasury_pubkey, peer_id: r.peer_id, created_at: r.created_at }))),
+            `found by the marker M made with it, which S copied: the only one, unchanged (${JSON.stringify(relinked.markers).slice(0, 200)})`);
         refused.push(...(await standby.send('fetches')).blocked);
         assert(refused.length === 0, `nothing reached off this machine (refused: ${refused.join(', ') || 'none'})`);
     } finally {

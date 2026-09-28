@@ -107,11 +107,12 @@ export function ensureFederationLink(
         return existing;
     }
 
-    // The link's treasury this community already has, with no link row naming it: a server that took over from a standby
-    // whose copy predates links travelling to standbys, or a row lost some other way. Its account holds the link's Beans,
-    // so it is the link again, not a second treasury beside it (named with the peer's suffix, the first one's balance
-    // stranded with nothing pointing at it). Its commissioning ceiling starts at 0 again, as a new link's does.
-    const adopted = findLinkTreasury(peerId, callsign);
+    // The link's treasury this community already has, with no link row naming it: a link row lost (by hand, or by a copy
+    // that predates it). Its account holds the link's Beans, so it is the link again, not a second treasury beside it
+    // (named with the peer's suffix, the first one's balance stranded with nothing pointing at it). Only a treasury this
+    // code marked as made for THIS peer (findLinkTreasury): never one by its name, which a member's own enterprise can
+    // have. Its commissioning ceiling starts at 0 again, as a new link's does.
+    const adopted = findLinkTreasury(peerId);
     if (adopted) {
         db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)').run(peerId, adopted);
         logger.info('P2P', `[Link] Found the link treasury for peer ${peerId.slice(-8)} (${adopted.slice(0, 12)}…) with no link naming it: it is the link again, ceiling 0`);
@@ -151,6 +152,9 @@ export function ensureFederationLink(
         }
         db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)')
             .run(peerId, created.publicKey);
+        // The marker that this treasury was made as this peer's link, which outlives the link row (findLinkTreasury).
+        db.prepare('INSERT INTO federation_link_treasuries (treasury_pubkey, peer_id) VALUES (?, ?)')
+            .run(created.publicKey, peerId);
 
         if (op) {
             const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
@@ -168,17 +172,19 @@ export function ensureFederationLink(
 }
 
 /**
- * A treasury this code made as the link for this peer (ensureFederationLink below: named for the peer, its suffixed name
- * when that was taken, and no photo, which every enterprise an operator makes has) that no link names. Null when none.
+ * A treasury this code made as the link for this peer that no link names, or null. Found only by the marker
+ * ensureFederationLink writes when it makes the treasury (federation_link_treasuries), matched on the peer id exactly:
+ * a member can make an enterprise named "<peer> Link" with no photo, and two peers can share a callsign, so a name, a
+ * callsign or a missing photo proves nothing. Nothing else writes the marker (db.ts markLinkTreasuries copies it from the
+ * link rows ensureFederationLink made). The oldest when there is more than one.
  */
-function findLinkTreasury(peerId: string, callsign: string | undefined): string | null {
-    const name = linkNameFor(callsign, peerId);
-    const row = db.prepare(`SELECT public_key FROM members
-                            WHERE is_treasury = 1 AND COALESCE(avatar_url, '') = '' AND status NOT IN ('migrated', 'pruned')
-                              AND lower(callsign) IN (lower(?), lower(?))
-                              AND public_key NOT IN (SELECT treasury_pubkey FROM federation_links)
-                            ORDER BY rowid ASC LIMIT 1`).get(name, `${name} (${peerId.slice(-6)})`) as { public_key: string } | undefined;
-    return row?.public_key ?? null;
+function findLinkTreasury(peerId: string): string | null {
+    const row = db.prepare(`SELECT t.treasury_pubkey FROM federation_link_treasuries t
+                            JOIN members m ON m.public_key = t.treasury_pubkey
+                            WHERE t.peer_id = ? AND m.is_treasury = 1 AND m.status NOT IN ('migrated', 'pruned')
+                              AND t.treasury_pubkey NOT IN (SELECT treasury_pubkey FROM federation_links)
+                            ORDER BY t.created_at ASC, t.rowid ASC LIMIT 1`).get(peerId) as { treasury_pubkey: string } | undefined;
+    return row?.treasury_pubkey ?? null;
 }
 
 /** The link for a peer, or null. */
@@ -307,7 +313,7 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
         }
         try {
             // A treasury found again is no new one (ensureFederationLink): it isn't counted as made.
-            const foundAgain = findLinkTreasury(peerId, connector.callsign) !== null;
+            const foundAgain = findLinkTreasury(peerId) !== null;
             if (ensureFederationLink(peerId, connector.callsign, createTreasury) && !foundAgain) created++;
         } catch (e: any) {
             // One bad link must not stop the others, and must not stop boot. Logged loudly because a

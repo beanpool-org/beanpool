@@ -1308,6 +1308,22 @@ CREATE TABLE IF NOT EXISTS federation_links (
 -- one across two links would pool two separate obligations into one pot.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_links_treasury ON federation_links(treasury_pubkey);
 
+-- Which treasury was made as the link for which peer: written by ensureFederationLink (federation-link.ts) in the same
+-- transaction that creates the link's treasury, and by nothing else, so no route or member path can set it. It is the
+-- only evidence findLinkTreasury takes that a treasury no link row names is a link's, for this peer: never its name,
+-- its callsign or a missing photo, which a member's own enterprise can have. It outlives a lost link row, and it is
+-- copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a promoted server has it too.
+CREATE TABLE IF NOT EXISTS federation_link_treasuries (
+    treasury_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
+    -- The libp2p peer id the treasury was made for (federation_links.peer_id). Not unique: a peer whose linked
+    -- treasury was pruned gets a new one.
+    peer_id         TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_federation_link_treasuries_peer ON federation_link_treasuries(peer_id);
+
 -- Onboarding funnel: how many people try to join, and where they stop. Counts only the steps the node
 -- cannot reconstruct afterwards — a rejected invite code leaves no row behind, so it has to be counted
 -- as it happens. Steps that ARE already recorded elsewhere (join dates, first posts) are derived on

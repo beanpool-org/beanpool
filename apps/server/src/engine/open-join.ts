@@ -97,23 +97,23 @@ export function knockAddressHash(limiterKey: string): string {
 }
 
 /**
- * What `push_token_addresses.ip_hash` holds for an address (state-engine.ts registerPushToken): the same key, its own
- * domain again.
+ * What `writes_by_address.ip_hash` holds for an address (db/writes-by-address.ts: a stranger's push token or leave, a
+ * price report without a member's key): the same key, its own domain again.
  */
-export function pushAddressHash(limiterKey: string): string {
-    return keyedHash('beanpool-push-ip/v1', [limiterKey]);
+export function writeAddressHash(limiterKey: string): string {
+    return keyedHash('beanpool-write-ip/v1', [limiterKey]);
 }
 
 /**
- * Clear the address from rows older than a day, the door's and the knocks' (engine/knocks.ts), and the push tokens'
- * record of where a stranger's came from (state-engine.ts registerPushToken): past the longest window, no limiter reads
+ * Clear the address from rows older than a day, the door's and the knocks' (engine/knocks.ts), and the record of where
+ * the writes a day cap by address bounds came from (db/writes-by-address.ts): past the longest window, no limiter reads
  * them again. Neither of the first two stamps `updated_at` for it: the hash never travels, and the third is local.
  */
 export function forgetOldJoinAddresses(now = Date.now()): number {
     const dayAgo = new Date(now - DAY_MS).toISOString();
     return db.prepare('UPDATE open_joins SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND joined_at < ?').run(dayAgo).changes
         + db.prepare('UPDATE join_requests SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND created_at < ?').run(dayAgo).changes
-        + db.prepare('DELETE FROM push_token_addresses WHERE made_at < ?').run(dayAgo).changes;
+        + db.prepare('DELETE FROM writes_by_address WHERE made_at < ?').run(dayAgo).changes;
 }
 
 let addressSweep: ReturnType<typeof setInterval> | null = null;

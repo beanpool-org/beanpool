@@ -17,6 +17,10 @@
  * same token again are not; the address kept only as a keyed hash, for a day; its tokens not registered again for a
  * month pruned as the next one registers, with no tombstone, and a member's and a visitor's kept.
  *
+ * And what any key, a member's too, keeps and adds (state-engine.ts KEY_PUSH_RULES, review 4126900225): at most 10
+ * tokens, a new one past that dropping the stalest with a tombstone; at most 20 new a day, then 429, while a token it
+ * holds is always registered again.
+ *
  * Local only: it talks to the server it starts on localhost and nothing else. No push service is contacted.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-push-token-own-rows.ts
@@ -26,7 +30,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { STRANGER_PUSH_RULES, getPushTokens, initStateEngine, isNodeMember, registerPushToken } from './state-engine.js';
+import { KEY_PUSH_RULES, STRANGER_PUSH_RULES, getPushTokens, initStateEngine, isNodeMember, registerPushToken } from './state-engine.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
@@ -179,7 +183,7 @@ async function main(): Promise<void> {
     // ── 6. What a key with no row here can store ──────────────────────────────────────────────
     console.log('\n── A key with no row here: its new tokens are capped, and pruned after a month');
     const { perAddressPerDay, perNodePerDay, keptDays } = STRANGER_PUSH_RULES;
-    const addresses = () => db.prepare('SELECT ip_hash FROM push_token_addresses').all() as { ip_hash: string | null }[];
+    const addresses = () => db.prepare(`SELECT ip_hash FROM writes_by_address WHERE kind = 'push_token'`).all() as { ip_hash: string | null }[];
     const register = (id: Identity, token: string) => answer('POST', '/api/push-tokens', { publicKey: id.pub, token, platform: 'android' }, id);
     const tokenOf = (id: Identity) => `ExponentPushToken[${id.name}]`;
     const before = addresses();
@@ -202,7 +206,7 @@ async function main(): Promise<void> {
     assert(benMore.status === 200 && visitorPhone.status === 200 && addresses().length === perAddressPerDay,
         `a member and a visitor's row register new tokens from the same address, uncounted (${benMore.status}, ${visitorPhone.status})`);
     // A day later the address's count starts again, and the day-old addresses are gone.
-    db.prepare(`UPDATE push_token_addresses SET made_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours')`).run();
+    db.prepare(`UPDATE writes_by_address SET made_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours')`).run();
     const nextDay = await register(fresh[0], tokenOf(fresh[0]));
     assert(nextDay.status === 200 && addresses().length === 1, `a day later the address may register again, and only today's is kept (${JSON.stringify(nextDay)}, ${addresses().length})`);
     // The node's day, from every address together: an address costs nothing.
@@ -237,6 +241,49 @@ async function main(): Promise<void> {
         AND public_key NOT IN (SELECT m.public_key FROM members m)`).all(monthAgo) as { detail: string }[]).map((r) => r.detail).join('; ');
     assert(/SEARCH push_tokens USING INDEX idx_push_tokens_created_at/.test(plan) && !/SCAN push_tokens/.test(plan),
         `the prune runs at each stranger's new token, so it searches idx_push_tokens_created_at, never scans the table (${plan})`);
+
+    // ── 7. What one key keeps and adds, a member's too ────────────────────────────────────────
+    console.log('\n── One key: at most 10 tokens, the stalest dropped; at most 20 new a day');
+    const { liveTokens, newTokensPerDay } = KEY_PUSH_RULES;
+    const cy = member('cy');
+    const cyToken = (i: number) => `ExponentPushToken[cy-${String(i).padStart(2, '0')}]`;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const cyTombstones = () => (db.prepare(`SELECT row_key FROM tombstones WHERE table_name = 'push_tokens' AND row_key LIKE ? ORDER BY row_key`)
+        .pluck().all(`${cy.pub}|%`) as string[]).map((k) => k.slice(cy.pub.length + 1));
+    const tenth: number[] = [];
+    for (let i = 0; i < liveTokens; i++) {
+        tenth.push((await register(cy, cyToken(i))).status);
+        await sleep(3);
+    }
+    assert(tenth.every((st) => st === 200) && alertTokensOf(cy).length === liveTokens, `Cy, a member, registers ${liveTokens} phones (${tenth.join(', ')})`);
+    assert((await register(cy, cyToken(0))).status === 200, 'and his first again (the app starting on it): now his freshest');
+    await sleep(3);
+    const eleventh = await register(cy, cyToken(liveTokens));
+    assert(eleventh.status === 200 && alertTokensOf(cy).length === liveTokens && alertTokensOf(cy).includes(cyToken(0))
+        && !alertTokensOf(cy).includes(cyToken(1)) && alertTokensOf(cy).includes(cyToken(liveTokens)),
+        `an ${liveTokens + 1}th phone is registered and his stalest (the second, not registered again) goes: still ${liveTokens} (${JSON.stringify(eleventh)})`);
+    assert(same(cyTombstones(), [cyToken(1)]), `with a tombstone, so a standby drops it too (${JSON.stringify(cyTombstones())})`);
+    const more: number[] = [];
+    for (let i = liveTokens + 1; i < newTokensPerDay; i++) {
+        more.push((await register(cy, cyToken(i))).status);
+        await sleep(3);
+    }
+    assert(more.every((st) => st === 200) && alertTokensOf(cy).length === liveTokens,
+        `${newTokensPerDay} new phones in a day are taken (${more.length} more), and he still holds ${liveTokens}`);
+    const overDay = await register(cy, cyToken(newTokensPerDay));
+    assert(overDay.status === 429 && overDay.code === 'rate_limited' && !alertTokensOf(cy).includes(cyToken(newTokensPerDay)),
+        `the ${newTokensPerDay + 1}st new one that day is refused, 429 rate_limited, and stores nothing (${JSON.stringify(overDay)})`);
+    const held = alertTokensOf(cy)[0];
+    const heldAgain = await register(cy, held);
+    assert(heldAgain.status === 200, `a phone he holds registers again all the same (${JSON.stringify(heldAgain)})`);
+    assert(cyTombstones().length === newTokensPerDay - liveTokens,
+        `his tombstones: one per phone dropped, ${newTokensPerDay - liveTokens} (at most about 30 a day for any key)`);
+    assert(registerPushToken(cy.pub, 'ExponentPushToken[cy-from-code]', 'android', null, null) === 'key_rate_limited',
+        "the key's day holds for this server's own code too");
+    db.prepare(`UPDATE push_tokens SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours') WHERE public_key = ?`).run(cy.pub);
+    db.prepare(`UPDATE tombstones SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours') WHERE table_name = 'push_tokens' AND row_key LIKE ?`).run(`${cy.pub}|%`);
+    const nextDayCy = await register(cy, cyToken(newTokensPerDay));
+    assert(nextDayCy.status === 200 && alertTokensOf(cy).length === liveTokens, `a day later he may add phones again (${JSON.stringify(nextDayCy)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

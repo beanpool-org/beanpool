@@ -15,7 +15,10 @@
  *      back within its reach;
  *   5. a registration from an app before stamps (no `registeredAt`) is removed by any statement; a bad stamp is refused;
  *   6. the online form, K's own signed DELETE carrying the leave's stamp, does exactly what the statement does;
- *   7. clearing the day-old leaves, on every leave applied, reads an index, never a scan (keys with no row add leaves too).
+ *   7. clearing the day-old leaves, on every leave applied, reads an index, never a scan (keys with no row add leaves too);
+ *   8. what a day's leaves may add (#1295 reviews 4126900225, 4126901144): a key's 20 (a member's too), then 429, never
+ *      "refused for good", so the phone keeps presenting it, while the same one again is always confirmed; a key with no
+ *      row here, 20 an address and 2,000 the node; none of those travel.
  *
  * The statements are signed here byte for byte (0xFF, then the text), not with @beanpool/core's builder, so this suite
  * also pins the format the phone signs.
@@ -31,7 +34,8 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
+import { KEY_PUSH_RULES, STRANGER_LEAVE_RULES, applyPushLeave, initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
+import { travellingRows } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
@@ -71,9 +75,9 @@ const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(
 interface Answer { status: number; body: any }
 
 /** A request signed by `signer` for this community (request binding), or unsigned. */
-async function send(method: 'POST' | 'DELETE', path: string, body: unknown, signer: Identity | null): Promise<Answer> {
+async function send(method: 'POST' | 'DELETE', path: string, body: unknown, signer: Identity | null, extra: Record<string, string> = {}): Promise<Answer> {
     const bodyString = JSON.stringify(body);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
     if (signer) {
         const ts = String(Date.now());
         const nonce = crypto.randomBytes(16).toString('hex');
@@ -103,10 +107,13 @@ function statement(k: Identity, token: string, leftAt: number, opts: { host?: st
     return { key: k.pub, token, leftAt, signature: crypto.sign(null, bound(text), (opts.signer ?? k).priv).toString('base64'), signedFor: host };
 }
 
-/** Present a statement, unsigned (or signed by `presenter`, whose signature the route never reads). */
-function present(s: Statement, overrides: Record<string, unknown> = {}, presenter: Identity | null = null, pathKey = s.key): Promise<Answer> {
+/**
+ * Present a statement, unsigned (or signed by `presenter`, whose signature the route never reads), from this machine or
+ * from `from` (the address Cloudflare would name, which a request from this machine may give: client-ip.ts).
+ */
+function present(s: Statement, overrides: Record<string, unknown> = {}, presenter: Identity | null = null, pathKey = s.key, from?: string): Promise<Answer> {
     const body = { token: s.token, leftAt: s.leftAt, signature: s.signature, signedFor: s.signedFor, ...overrides };
-    return send('POST', `/api/push-tokens/leave/${pathKey}`, body, presenter);
+    return send('POST', `/api/push-tokens/leave/${pathKey}`, body, presenter, from ? { 'CF-Connecting-IP': from } : {});
 }
 
 interface Row { public_key: string; token: string; registered_at: number | null }
@@ -255,6 +262,52 @@ async function main(): Promise<void> {
     const unsignedDelete = await send('DELETE', '/api/push-tokens', { publicKey: kim.pub, token: TABLET }, null);
     assert(unsignedDelete.status === 401 && has(kim, TABLET), `an unsigned DELETE naming Kim is still refused 401 (${show(unsignedDelete)})`);
     assert(confirmed(await present(statement(kim, TABLET, 6))) && !has(kim, TABLET), 'and her tablet\'s own statement removes her tablet row');
+
+    // ── 8. What a day's leaves may add ────────────────────────────────────────────────────────
+    console.log('\n── A day\'s leaves: a key\'s 20; a key with no row here, 20 an address and 2,000 the node');
+    const { leavesPerDay } = KEY_PUSH_RULES;
+    const lee = member('lee');
+    const leeToken = (i: number) => `ExponentPushToken[lee-${i}]`;
+    const leeLeaves: Answer[] = [];
+    for (let i = 0; i < leavesPerDay; i++) leeLeaves.push(await present(statement(lee, leeToken(i), 100 + i), {}, null, lee.pub, '203.0.113.7'));
+    assert(leeLeaves.every(confirmed), `Lee, a member, has ${leavesPerDay} statements confirmed in a day, for phones no one registered (${leeLeaves.filter(confirmed).length})`);
+    const leeOver = await present(statement(lee, leeToken(leavesPerDay), 200), {}, null, lee.pub, '198.51.100.9');
+    assert(leeOver.status === 429 && leeOver.body?.code === 'rate_limited' && !refusedForGood(leeOver),
+        `the ${leavesPerDay + 1}st that day, from any address, is refused 429, not for good: the phone keeps it (${show(leeOver)})`);
+    const leeOnline = await send('DELETE', '/api/push-tokens', { publicKey: lee.pub, token: leeToken(leavesPerDay + 1), leftAt: 201 }, lee);
+    assert(leeOnline.status === 429 && leeOnline.body?.code === 'rate_limited', `so is the online form, Lee's own signed DELETE (${show(leeOnline)})`);
+    const leeAgain = await present(statement(lee, leeToken(0), 300), {}, null, lee.pub);
+    assert(confirmed(leeAgain), `one of the ${leavesPerDay} presented again is confirmed: it adds no row (${show(leeAgain)})`);
+    const leeRows = (db.prepare('SELECT COUNT(*) AS n FROM push_token_leaves WHERE public_key = ?').get(lee.pub) as { n: number }).n;
+    assert(leeRows === leavesPerDay, `Lee holds ${leavesPerDay} leaves (${leeRows})`);
+    db.prepare(`UPDATE push_token_leaves SET applied_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 hours') WHERE public_key = ?`).run(lee.pub);
+    assert(confirmed(await present(statement(lee, leeToken(leavesPerDay), 200), {}, null, lee.pub)), 'a day later his next is confirmed');
+
+    const leavers = Array.from({ length: STRANGER_LEAVE_RULES.perAddressPerDay + 1 }, (_, i) => keyPair(`leaver-${i}`));
+    const fromOne: Answer[] = [];
+    for (const [i, lv] of leavers.entries()) fromOne.push(await present(statement(lv, `ExponentPushToken[leaver-${i}]`, 1), {}, null, lv.pub, '203.0.113.50'));
+    const lastFromOne = fromOne[fromOne.length - 1];
+    assert(fromOne.slice(0, -1).every(confirmed) && lastFromOne.status === 429 && lastFromOne.body?.code === 'rate_limited' && !refusedForGood(lastFromOne),
+        `${STRANGER_LEAVE_RULES.perAddressPerDay} keys with no row here have a leave confirmed from one address; the next is refused 429, not for good (${show(lastFromOne)})`);
+    assert(confirmed(await present(statement(leavers[leavers.length - 1], `ExponentPushToken[leaver-${leavers.length - 1}]`, 1), {}, null, leavers[leavers.length - 1].pub, '203.0.113.51')),
+        'from another address it is confirmed');
+    const addressRows = (db.prepare(`SELECT COUNT(*) AS n FROM writes_by_address WHERE kind = 'push_leave' AND (ip_hash LIKE '%203.0.113%' OR ip_hash IS NULL)`).get() as { n: number }).n;
+    assert(addressRows === 0, 'the addresses are kept only as keyed hashes');
+    const nodeDay = STRANGER_LEAVE_RULES.perNodePerDay;
+    let applied = (db.prepare(`SELECT COUNT(*) AS n FROM writes_by_address WHERE kind = 'push_leave'`).get() as { n: number }).n;
+    for (let i = 0; applied < nodeDay; i++, applied++) {
+        const r = applyPushLeave(keyPair(`far-${i}`).pub, `ExponentPushToken[far-${i}]`, 1, `203.0.${Math.floor(i / 200)}.${i % 200}`);
+        if (typeof r !== 'number') throw new Error(`the node's day filled early, at ${applied}: ${r}`);
+    }
+    const late2001 = keyPair('late');
+    const busy = await present(statement(late2001, 'ExponentPushToken[late]', 1), {}, null, late2001.pub, '198.51.100.77');
+    assert(busy.status === 429 && busy.body?.code === 'busy' && !refusedForGood(busy),
+        `past ${nodeDay} leaves of keys with no row on this node today, from any address, one more is refused 429 busy (${show(busy)})`);
+    const kimAtCap = await present(statement(kim, 'ExponentPushToken[kims-watch]', 7000), {}, null, kim.pub, '198.51.100.77');
+    assert(confirmed(kimAtCap), `and a member's is still confirmed (${show(kimAtCap)})`);
+    const rule = travellingRows('push_token_leaves');
+    const outside = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE NOT (${rule})`).get() as { n: number }).n;
+    assert(outside === nodeDay, `the ${nodeDay} leaves of keys with no row stay on this server: none travel to a standby (${outside})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

@@ -6,7 +6,9 @@
  * 2. Recording events (member_joined, post_created, trade_completed, rating_given)
  * 3. Querying feed with actor & target callsign joins
  * 4. Pagination and metadata extraction
- * 5. Retention pruning
+ * 5. Retention pruning, with no tombstones (#1295 fix round 2, design §6.1): an age rule each server applies itself, the
+ *    main server before each whole copy too (engine/plain-tables.ts pruneAgedOut), a standby after each copy it imports,
+ *    by the copy's time (importPlainTables)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-activity-feed.ts
  */
@@ -20,6 +22,7 @@ import {
     getActivityFeed,
     pruneOldActivity,
 } from './db/activity-feed-db.js';
+import { importPlainTables, pruneAgedOut, AGED_OUT_SLACK_MS } from './engine/plain-tables.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -121,8 +124,38 @@ async function main() {
         VALUES ('member_joined', 'pubkey-old', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'))
     `).run();
 
+    const tombstones = () => (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'activity_feed'`).get() as { n: number }).n;
     const pruned = pruneOldActivity(30);
     assert(pruned === 1, 'Prunes 1 event older than 30 days');
+    assert(tombstones() === 0, 'with no tombstone: a standby applies the same age rule itself');
+
+    // 10. The same rule before a whole copy (routes/backup.ts), and nothing written when nothing is past it.
+    const DAY = 86_400_000;
+    const line = (actor: string, at: number) => Number(db.prepare(`INSERT INTO activity_feed (event_type, actor_pubkey, created_at) VALUES ('member_joined', ?, ?)`)
+        .run(actor, new Date(at).toISOString()).lastInsertRowid);
+    const old = line('pubkey-31-days', Date.now() - 31 * DAY);
+    const kept = line('pubkey-29-days', Date.now() - 29 * DAY);
+    const aged = pruneAgedOut();
+    const ids = () => (db.prepare('SELECT id FROM activity_feed').pluck().all() as number[]);
+    assert(aged.activity_feed === 1 && !ids().includes(old) && ids().includes(kept) && tombstones() === 0,
+        `before a whole copy, the main server deletes the lines past 30 days, with no tombstone (${JSON.stringify(aged)})`);
+    const changesBefore = (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const again = pruneAgedOut();
+    const changesAfter = (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    assert(Object.keys(again).length === 0 && changesAfter === changesBefore, 'with none past it, it writes nothing (a whole copy that has not changed is still "not modified")');
+
+    // 11. A standby's import deletes the copy's lines past the rule, by the copy's own time, with its slack.
+    const copiedAt = Date.now() - 2 * DAY; // the main server's clock, as the copy says
+    const row = (id: number, at: number) => ({ id, event_type: 'post_created', actor_pubkey: 'pubkey-copy', target_pubkey: null, metadata: null,
+        created_at: new Date(at).toISOString(), updated_at: new Date(copiedAt).toISOString() });
+    const cut = copiedAt - 30 * DAY - AGED_OUT_SLACK_MS;
+    const copy = { activity_feed: [row(9001, cut - 60_000), row(9002, cut + 60_000), row(9003, copiedAt - DAY)] };
+    const imported = importPlainTables(copy, false, new Date(copiedAt).toISOString());
+    assert(!ids().includes(9001) && ids().includes(9002) && ids().includes(9003) && tombstones() === 0,
+        `a copy's line past 30 days of the copy's time (and the slack) goes as it is imported; the newer ones stay; no tombstone (${JSON.stringify(imported)})`);
+    const beforeNoTime = ids().length;
+    importPlainTables({ activity_feed: [row(9004, cut - DAY)] }, false, null);
+    assert(ids().length === beforeNoTime + 1 && ids().includes(9004), 'a copy with no time of its own ages nothing out');
 
     console.log(`\n🎉 Living Activity Waterfall Test Summary: ${passed}/${run} assertions passed.\n`);
     process.exit(0);

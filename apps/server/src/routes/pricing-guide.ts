@@ -20,6 +20,8 @@ import {
     seedPricingGuideIfEmpty,
 } from '../db/pricing-guide-db.js';
 import { runPricingAggregationCycle } from '../pricing-aggregator.js';
+import { clientLimiterKey } from '../client-ip.js';
+import { writeAddressHash } from '../engine/open-join.js';
 
 export function createPricingGuideRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -69,8 +71,19 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const reportId = submitPricingReport(itemId, reportType, comment, reporterPubkey);
-        ctx.body = { success: true, reportId };
+        // A day's reports are capped: a member's by their key, the rest by address and for the node
+        // (db/pricing-guide-db.ts PRICE_REPORT_RULES, #1295 review 4126894855).
+        const report = submitPricingReport(itemId, reportType, comment, reporterPubkey, () => writeAddressHash(clientLimiterKey(ctx)));
+        if ('refused' in report) {
+            ctx.status = 429;
+            ctx.body = report.refused === 'busy'
+                ? { error: 'This community is taking no more price reports from people who are not signed in today. Please try again tomorrow.', code: 'busy' }
+                : report.refused === 'member_rate_limited'
+                    ? { error: 'You have sent a lot of price reports today. Please try again tomorrow.', code: 'rate_limited' }
+                    : { error: 'Too many price reports from this network today. Please try again tomorrow, or sign in first.', code: 'rate_limited' };
+            return;
+        }
+        ctx.body = { success: true, reportId: report.id };
     });
 
     /**

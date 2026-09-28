@@ -517,7 +517,8 @@ CREATE TABLE IF NOT EXISTS push_tokens (
 
 -- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
 -- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused. Copied
--- to a standby with the tokens, so a server that takes over refuses the same late registration.
+-- to a standby with the tokens, so a server that takes over refuses the same late registration. A key applies at most
+-- so many a day (state-engine.ts KEY_PUSH_RULES), counted from `applied_at`.
 CREATE TABLE IF NOT EXISTS push_token_leaves (
     public_key TEXT NOT NULL,
     token TEXT NOT NULL,
@@ -534,16 +535,19 @@ CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves
 -- STRANGER_PUSH_RULES): a search on this too.
 CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
 
--- 11c. Where each new push token of a key with no row here came from, for a day (state-engine.ts STRANGER_PUSH_RULES):
--- what one address, and every address together, may add in a day. `ip_hash` is the address as a keyed hash
--- (engine/open-join.ts pushAddressHash), NULL for this server's own code. This server's own, never copied, and deleted
--- once a day old (engine/open-join.ts forgetOldJoinAddresses).
-CREATE TABLE IF NOT EXISTS push_token_addresses (
+-- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
+-- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
+-- report without a member's key (db/pricing-guide-db.ts PRICE_REPORT_RULES). What one address, and every address
+-- together, may add of each `kind` in a day. `ip_hash` is the address as a keyed hash (engine/open-join.ts
+-- writeAddressHash), NULL for this server's own code. This server's own, never copied, and deleted once a day old
+-- (engine/open-join.ts forgetOldJoinAddresses).
+CREATE TABLE IF NOT EXISTS writes_by_address (
+    kind TEXT NOT NULL,
     ip_hash TEXT,
     made_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_push_token_addresses_ip_hash ON push_token_addresses(ip_hash);
-CREATE INDEX IF NOT EXISTS idx_push_token_addresses_made_at ON push_token_addresses(made_at);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_kind ON writes_by_address(kind, ip_hash);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
@@ -1438,6 +1442,10 @@ CREATE TABLE IF NOT EXISTS pricing_reports (
 
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_status ON pricing_reports(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
+-- A member's reports of the last day, counted at each one they send (db/pricing-guide-db.ts PRICE_REPORT_RULES), and the
+-- month-old reports without a member's key, pruned at each such report: searches, never a scan of the table.
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_reporter ON pricing_reports(reporter_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_created ON pricing_reports(created_at);
 
 -- ===================== LIVING ACTIVITY WATERFALL (#208) =====================
 -- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).

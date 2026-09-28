@@ -6,7 +6,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { assertLedgerWritable, assertPlainTablesWritable } from './config/node-role.js';
+import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing } from './config/node-role.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
@@ -25,7 +25,9 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
-import { pushAddressHash, releaseOpenJoin } from './engine/open-join.js';
+import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
+import { admitByAddress } from './db/writes-by-address.js';
+import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
@@ -5729,6 +5731,18 @@ export function exportSyncState(nodeId: string, since?: string | null): Promise<
     return exportSyncStateWrapper(getSyncCb(), nodeId, since, COMMONS_BALANCE);
 }
 
+/**
+ * Before a whole copy (routes/backup.ts): the plain tables' rows past their age rule go, with no tombstone
+ * (engine/plain-tables.ts pruneAgedOut), so the copy names none a standby's own age rule would take. On a main server
+ * only: a standby's are its main server's. Returns how many rows went.
+ */
+export function pruneAgedOutRows(): number {
+    if (standbyWritesNothing()) return 0;
+    const pruned = pruneAgedOut();
+    if (pruned.activity_feed) bumpActivityVersion();
+    return Object.values(pruned).reduce((n, k) => n + k, 0);
+}
+
 export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
     return signSyncPayloadEngine(getSyncCb(), payload);
 }
@@ -7842,8 +7856,10 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
  * (STRANGER_PUSH_RULES, #1295 review 4126286269): a new token of one, from `address` (the request's, as the limiters key
  * it, client-ip.ts), is refused past the address's day ('rate_limited') or the node's ('busy'), and its tokens not
  * registered again for a month are pruned as the next one registers. Its rows never go into a standby's copy either
- * (engine/replication-manifest.ts MEMBERS_OWN). Registering an existing (key, token) again is never refused: it adds
- * no row. `address` null (this server's own code) counts toward the node's day only.
+ * (engine/replication-manifest.ts MEMBERS_OWN). Every key, a member's too, keeps at most so many tokens and adds at most
+ * so many a day (KEY_PUSH_RULES, review 4126900225): past its day a new token is refused ('key_rate_limited'), and past
+ * its live tokens the stalest goes. Registering an existing (key, token) again is never refused: it adds no row.
+ * `address` null (this server's own code) counts toward the node's day only.
  */
 export function registerPushToken(
     publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null, address: string | null = null,
@@ -7860,11 +7876,18 @@ export function registerPushToken(
                     return 'left';
                 }
             }
-            if (!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey)) {
-                const refused = admitStrangersToken(publicKey, token, address);
-                if (refused) {
-                    console.log(`[Push] A new token for ${publicKey.slice(0, 8)}, a key with no row here, is over the ${refused === 'busy' ? "node's" : "address's"} day; not registered`);
-                    return refused;
+            const held = !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token = ?').get(publicKey, token);
+            if (!held) {
+                if (newTokensToday(publicKey) >= KEY_PUSH_RULES.newTokensPerDay) {
+                    console.log(`[Push] A new token for ${publicKey.slice(0, 8)} is over its key's day; not registered`);
+                    return 'key_rate_limited';
+                }
+                if (!hasMembersRow(publicKey)) {
+                    const refused = admitStrangersToken(address);
+                    if (refused) {
+                        console.log(`[Push] A new token for ${publicKey.slice(0, 8)}, a key with no row here, is over the ${refused === 'busy' ? "node's" : "address's"} day; not registered`);
+                        return refused;
+                    }
                 }
             }
             db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
@@ -7873,6 +7896,7 @@ export function registerPushToken(
                     registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
                 WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
                     OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
+            if (!held) dropStalestTokens(publicKey, token);
             console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
             return 'registered';
         })();
@@ -7882,7 +7906,60 @@ export function registerPushToken(
     }
 }
 
-export type PushRegistration = 'registered' | 'left' | 'rate_limited' | 'busy' | 'failed';
+export type PushRegistration = 'registered' | 'left' | 'key_rate_limited' | 'rate_limited' | 'busy' | 'failed';
+
+function hasMembersRow(publicKey: string): boolean {
+    return !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey);
+}
+
+/**
+ * What one key may keep and add of its push rows, a member's included (#1295 review 4126900225; design
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1). A member's rows go into every standby's copy
+ * (engine/replication-manifest.ts MEMBERS_OWN), and the leave route is charged to an address, not a key, so without these
+ * one member's key could fill every copy. An app registers the same token at every start, which is no new one; a
+ * reinstall makes one new token; an account leaving a phone presents one statement for it. No real account comes near
+ * them. Refused, a registration or a leave answers 429, and the app keeps it and tries again later
+ * (apps/native utils/push-registrations.ts, utils/push-leave.ts).
+ */
+export const KEY_PUSH_RULES = {
+    /**
+     * Tokens a key holds at once. A new one past this drops the key's stalest (registered again longest ago), with a
+     * tombstone (it travelled); a phone still in use registers again at its next start. An account on four phones, with a
+     * reinstall or two, is far inside it.
+     */
+    liveTokens: 10,
+    /**
+     * New tokens a key may register in any 24 hours, then 'key_rate_limited'. Counted as its tokens registered in the last
+     * day (a registration of a held token refreshes `created_at`, so those count too, though they are never refused) and
+     * its tokens removed in the last day (their tombstones): so what one key's churn writes to every copy is bounded as
+     * well, to about 30 tombstones a day.
+     */
+    newTokensPerDay: 20,
+    /**
+     * Leave statements a key may have applied in any 24 hours, then 'key_rate_limited': a new (key, token), counted from
+     * push_token_leaves.applied_at (the day-old ones are pruned anyway). The same one presented again is not new, and is
+     * never refused.
+     */
+    leavesPerDay: 20,
+} as const;
+
+/** A key's tokens registered in the last day and its tokens removed in the last day (KEY_PUSH_RULES.newTokensPerDay). */
+function newTokensToday(publicKey: string): number {
+    const dayAgo = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`;
+    // A tombstone of push_tokens is keyed `<key>|<token>` (db.ts deletePlainRows): this key's are a range of the primary key.
+    return (db.prepare(`SELECT
+            (SELECT COUNT(*) FROM push_tokens WHERE public_key = ? AND created_at > ${dayAgo})
+          + (SELECT COUNT(*) FROM tombstones WHERE table_name = 'push_tokens' AND row_key >= ? AND row_key < ? AND deleted_at > ${dayAgo}) AS n`)
+        .get(publicKey, `${publicKey}|`, `${publicKey}}`) as { n: number }).n;
+}
+
+/** Past KEY_PUSH_RULES.liveTokens, the key's stalest tokens go, never `kept` (the one just registered), each with a tombstone. */
+function dropStalestTokens(publicKey: string, kept: string): void {
+    const stale = db.prepare(`SELECT token FROM push_tokens WHERE public_key = ? AND token != ?
+        ORDER BY updated_at DESC, created_at DESC, token DESC LIMIT -1 OFFSET ?`).pluck().all(publicKey, kept, KEY_PUSH_RULES.liveTokens - 1) as string[];
+    for (const t of stale) deletePlainRows('push_tokens', 'public_key = ? AND token = ?', publicKey, t);
+    if (stale.length > 0) console.log(`[Push] ${publicKey.slice(0, 8)} holds more than ${KEY_PUSH_RULES.liveTokens} tokens: its ${stale.length} stalest removed`);
+}
 
 /**
  * What a key with no row here (neither a member's nor a visitor's) may store of push tokens (registerPushToken). Such a
@@ -7894,8 +7971,7 @@ export const STRANGER_PUSH_RULES = {
     /**
      * New tokens from one address in any 24 hours: a household, or a hall of newcomers setting up behind one address,
      * is well inside it; one address flooding stores at most 300 rows (about 200 KB) before the oldest are pruned.
-     * Counted over push_token_addresses.ip_hash, the knocks' keyed hash with its own domain (engine/open-join.ts), which
-     * is deleted once a day old.
+     * Counted over writes_by_address (db/writes-by-address.ts), which is deleted once a day old.
      */
     perAddressPerDay: 10,
     /**
@@ -7914,27 +7990,29 @@ export const STRANGER_PUSH_RULES = {
 
 /**
  * A new token of a key with no row here, or why not (STRANGER_PUSH_RULES): null when it may be stored, with its address
- * recorded; the day-old addresses and the month-old tokens of such keys go first. Only a new row counts: the same key
- * and token again adds none. Inside registerPushToken's transaction, on a main server.
+ * recorded; the month-old tokens of such keys go first. Only a new row counts: the same key and token again adds none.
+ * Inside registerPushToken's transaction, on a main server.
  */
-function admitStrangersToken(publicKey: string, token: string, address: string | null): 'rate_limited' | 'busy' | null {
-    if (db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token = ?').get(publicKey, token)) return null;
-    const now = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
-    const dayAgo = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`;
-    db.prepare(`DELETE FROM push_token_addresses WHERE made_at < ${dayAgo}`).run();
+function admitStrangersToken(address: string | null): 'rate_limited' | 'busy' | null {
     // No tombstones: a key with no row's tokens never travel (engine/replication-manifest.ts MEMBERS_OWN).
     deletePlainRows('push_tokens', `created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
         AND public_key NOT IN (SELECT m.public_key FROM members m)`, `-${STRANGER_PUSH_RULES.keptDays} days`);
-    const ipHash = address === null ? null : pushAddressHash(address);
-    if (ipHash !== null) {
-        const fromAddress = (db.prepare('SELECT COUNT(*) AS n FROM push_token_addresses WHERE ip_hash = ?').get(ipHash) as { n: number }).n;
-        if (fromAddress >= STRANGER_PUSH_RULES.perAddressPerDay) return 'rate_limited';
-    }
-    const today = (db.prepare('SELECT COUNT(*) AS n FROM push_token_addresses').get() as { n: number }).n;
-    if (today >= STRANGER_PUSH_RULES.perNodePerDay) return 'busy';
-    db.prepare(`INSERT INTO push_token_addresses (ip_hash, made_at) VALUES (?, ${now})`).run(ipHash);
-    return null;
+    return admitByAddress('push_token', address === null ? null : writeAddressHash(address), STRANGER_PUSH_RULES);
 }
+
+/**
+ * What a key with no row here may have applied of leave statements (applyPushLeave; #1295 review 4126901144). Such a
+ * key's leave only refuses a late registration of its own token, and never travels (engine/replication-manifest.ts
+ * MEMBERS_OWN), but the route is open to anyone with a key, charged only to an address, and each is kept a day: without
+ * these, one /64 could add about 270 MB a day. A phone presents one statement when an account leaves it; a key with no
+ * row here is an account that never joined. Refused, the phone keeps the statement and presents it again later.
+ */
+export const STRANGER_LEAVE_RULES = {
+    /** New leaves of keys with no row from one address in any 24 hours: a household's phones, many times over. */
+    perAddressPerDay: 20,
+    /** New leaves of keys with no row on this node in any 24 hours, from every address together ('busy'): about 3 MB. */
+    perNodePerDay: 2000,
+} as const;
 
 /** How long a leave statement applied here refuses a registration the phone sent before it (SQLite date modifier). */
 const PUSH_LEAVE_REMEMBERED = '-1 day';
@@ -7944,10 +8022,11 @@ const PUSH_LEAVE_REMEMBERED = '-1 day';
  * token `?` being applied: that row's upsert moves its stamp instead. Keys with no row here can add leaves too, so this
  * reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
  *
- * No tombstones. A leave applied more than a day ago refuses nothing, and a standby's next whole copy drops it. A
- * tombstone would share its millisecond with the same key and token's new row when that leave is applied again, and
- * a standby that applies it after the row would lose the new leave (#1295 review 4126285975). It would also let any key
- * fill every copy with tombstones for 30 days (review 4126286269).
+ * No tombstones. A leave applied more than a day ago refuses nothing, and a standby deletes it by the same age rule
+ * (engine/replication-manifest.ts `agedOut`) after each copy it imports. A tombstone would share its millisecond with the
+ * same key and token's new row when that leave is applied again, and a standby that applies it after the row would lose
+ * the new leave (#1295 review 4126285975). It would also let any key fill every copy with tombstones for 30 days
+ * (review 4126286269).
  */
 export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves
     WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) AND NOT (public_key = ? AND token = ?)`;
@@ -7958,11 +8037,27 @@ export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves
  * statements). A row stamped later is a registration made after the leave, on purpose (the same account back on the
  * same phone), and stays. No other key's row and no other token's is touched. For a day, a registration of the same key
  * and token stamped no later than `leftAt` is refused ({@link registerPushToken}). Returns how many rows went (0 or 1).
+ *
+ * A new (key, token) is refused past the key's day ('key_rate_limited', KEY_PUSH_RULES.leavesPerDay), and, for a key
+ * with no row here, past its address's day or the node's ('rate_limited', 'busy'; STRANGER_LEAVE_RULES), from `address`
+ * (the request's, as the limiters key it; null, this server's own code, counts toward the node's day only). Refused, it
+ * changes nothing. The same (key, token) again is never refused.
  */
-export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
+export function applyPushLeave(publicKey: string, token: string, leftAt: number, address: string | null = null): PushLeave {
     assertPlainTablesWritable();
-    return db.transaction((): number => {
+    return db.transaction((): PushLeave => {
         db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED, publicKey, token);
+        if (!db.prepare('SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ?').get(publicKey, token)) {
+            const today = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE public_key = ?
+                AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, PUSH_LEAVE_REMEMBERED) as { n: number }).n;
+            const refused = today >= KEY_PUSH_RULES.leavesPerDay ? 'key_rate_limited'
+                : hasMembersRow(publicKey) ? null
+                    : admitByAddress('push_leave', address === null ? null : writeAddressHash(address), STRANGER_LEAVE_RULES);
+            if (refused) {
+                console.log(`[Push] A leave statement for ${publicKey.slice(0, 8)} is over the ${refused === 'busy' ? "node's" : refused === 'rate_limited' ? "address's" : "key's"} day; not applied`);
+                return refused;
+            }
+        }
         // The phone's row goes with a tombstone, so a standby's copy drops it too (plain tables, design G4).
         const removed = deletePlainRows('push_tokens', 'public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)',
             publicKey, token, leftAt);
@@ -7973,6 +8068,9 @@ export function applyPushLeave(publicKey: string, token: string, leftAt: number)
         return removed;
     })();
 }
+
+/** How many registrations a leave removed, or why it was refused (applyPushLeave). */
+export type PushLeave = number | 'key_rate_limited' | 'rate_limited' | 'busy';
 
 export function removePushToken(publicKey: string, token?: string): boolean {
     assertPlainTablesWritable();

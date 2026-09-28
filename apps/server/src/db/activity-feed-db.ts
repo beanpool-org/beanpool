@@ -8,7 +8,7 @@
  * - New marketplace posts (post_created)
  */
 
-import { db, deletePlainRows } from './db.js';
+import { db } from './db.js';
 import { bumpActivityVersion } from '../engine/versions.js';
 import { standbyWritesNothing } from '../config/node-role.js';
 
@@ -120,12 +120,15 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
 
 /**
  * Prunes activity feed events older than specified retention days.
- * Kept lean (default 30 days) to prevent unbound table growth. Each with a tombstone, so a standby drops them too; on a
- * standby, nothing (its feed is its main server's).
+ * Kept lean (default 30 days) to prevent unbound table growth. With no tombstones: an age rule, which a standby applies
+ * itself after each copy it imports (engine/replication-manifest.ts `agedOut`, engine/plain-tables.ts), so a flood of
+ * lines never comes back a month later as a flood of tombstones in every copy (design
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1). On a standby, nothing (its feed is its main server's).
  */
 export function pruneOldActivity(days: number = 30): number {
     if (standbyWritesNothing()) return 0;
-    const pruned = deletePlainRows('activity_feed', `created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')`, Math.max(1, days));
+    const pruned = db.prepare(`DELETE FROM activity_feed WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')`)
+        .run(Math.max(1, days)).changes;
 
     if (pruned > 0) {
         bumpActivityVersion();

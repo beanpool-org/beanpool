@@ -1531,13 +1531,11 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'This phone left this account after sending this registration', code: 'push_token_left' };
         return;
     }
-    if (registration === 'rate_limited' || registration === 'busy') {
-        // A key with no row here, over its address's day or the node's (state-engine.ts STRANGER_PUSH_RULES): the app
-        // tries again later, and lands once its row is made.
+    if (registration === 'key_rate_limited' || registration === 'rate_limited' || registration === 'busy') {
+        // Over this key's day (state-engine.ts KEY_PUSH_RULES), or a key with no row here over its address's day or the
+        // node's (STRANGER_PUSH_RULES): the app tries again later, and a stranger's lands once its row is made.
         ctx.status = 429;
-        ctx.body = registration === 'busy'
-            ? { error: 'This community is not taking new phones from people who have not joined right now. Please try again later.', code: 'busy' }
-            : { error: 'Too many new phones from this network today. Please try again tomorrow, or once you have joined.', code: 'rate_limited' };
+        ctx.body = pushRefusal(registration, 'phone');
         return;
     }
     const success = registration === 'registered';
@@ -1552,6 +1550,28 @@ router.post('/api/push-tokens', async (ctx) => {
     }
     ctx.body = { success };
 });
+
+/**
+ * A push registration or leave refused for a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_PUSH_RULES,
+ * STRANGER_LEAVE_RULES): the 429's body. Never PUSH_LEAVE_REFUSED: the phone keeps a refused leave and presents it later.
+ */
+function pushRefusal(refused: 'key_rate_limited' | 'rate_limited' | 'busy', what: 'phone' | 'leave'): { error: string; code: string } {
+    if (refused === 'key_rate_limited') {
+        return {
+            error: what === 'phone' ? 'This account has added too many new phones here today. Please try again tomorrow.'
+                : 'This account has left too many phones here today. This phone will tell the community again later.',
+            code: 'rate_limited',
+        };
+    }
+    if (what === 'leave') {
+        return refused === 'busy'
+            ? { error: 'This community is taking no more of these right now. This phone will tell it again later.', code: 'busy' }
+            : { error: 'Too many of these from this network today. This phone will tell the community again later.', code: 'rate_limited' };
+    }
+    return refused === 'busy'
+        ? { error: 'This community is not taking new phones from people who have not joined right now. Please try again later.', code: 'busy' }
+        : { error: 'Too many new phones from this network today. Please try again tomorrow, or once you have joined.', code: 'rate_limited' };
+}
 
 router.delete('/api/push-tokens', async (ctx) => {
     const { publicKey, token, leftAt } = (ctx as any).requestBody || {};
@@ -1574,7 +1594,13 @@ router.delete('/api/push-tokens', async (ctx) => {
         return;
     }
     if (leftAt !== undefined && leftAt !== null) {
-        applyPushLeave(activeKey, token, leftAt);
+        const left = applyPushLeave(activeKey, token, leftAt, clientLimiterKey(ctx));
+        if (typeof left !== 'number') {
+            // Over a day cap: the phone keeps its leave statement and presents it later (apps/native utils/push-leave.ts).
+            ctx.status = 429;
+            ctx.body = pushRefusal(left, 'leave');
+            return;
+        }
         ctx.body = { success: true };
         return;
     }
@@ -1617,7 +1643,14 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         ctx.body = proof.status === 421 ? { error: proof.error, code: proof.code } : { error: proof.error, code: PUSH_LEAVE_REFUSED };
         return;
     }
-    applyPushLeave(key, token, leftAt);
+    const left = applyPushLeave(key, token, leftAt, clientLimiterKey(ctx));
+    if (typeof left !== 'number') {
+        // Over a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_LEAVE_RULES): never PUSH_LEAVE_REFUSED, so the phone keeps
+        // the statement and presents it again later.
+        ctx.status = 429;
+        ctx.body = pushRefusal(left, 'leave');
+        return;
+    }
     ctx.body = { left: true };
 });
 

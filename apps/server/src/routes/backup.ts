@@ -8,7 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import {
-    getNodeRole, exportSyncState, signSyncPayload, type SyncPayload,
+    getNodeRole, exportSyncState, signSyncPayload, pruneAgedOutRows, type SyncPayload,
     getConversationsByMember, getConversationMessages,
     recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
@@ -1052,6 +1052,10 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
     try {
+        // The plain tables' rows past their age rule go first, with no tombstone (engine/plain-tables.ts pruneAgedOut): the
+        // copy then names none the standby's own age rule would take after it imports it, and its check stays exact. It
+        // writes nothing when there is nothing to prune, and a prune that does write makes the check below build a copy.
+        pruneAgedOutRows();
         // Conditional pull: the mirror sends the generatedAt of its last successful
         // import. If the DB hasn't changed since we built that exact snapshot,
         // answer 304 with no body. Without this, every 60s pull exported, signed

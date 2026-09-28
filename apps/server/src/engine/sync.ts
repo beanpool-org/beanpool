@@ -2196,11 +2196,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests, Array.isArray(remote.plainTables?.invite_codes));
 
             // In-flight money and governance (design G3): each plain table the copy carries, the main server's rows verbatim
-            // (engine/plain-tables.ts); a whole copy deletes the rows it doesn't name. After the re-key follow above, which
+            // (engine/plain-tables.ts); a whole copy deletes the rows it doesn't name, and a table's rows past its age rule go
+            // by the copy's time, as the main server's go there with no tombstone. After the re-key follow above, which
             // moved this standby's rows to the new keys the main server's rows name, and before the tombstones below, which
             // leave a row the main server made again after its delete. A main server older than this sends none, and this
             // standby keeps the rows it has.
-            const plain = importPlainTables(remote.plainTables, opts.whole === true);
+            const plain = importPlainTables(remote.plainTables, opts.whole === true, remote.generatedAt);
             plainChanges += plain.changes;
             conflictsSkipped += plain.skipped;
             plainTablesLeftOut.push(...plain.leftOut);

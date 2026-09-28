@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 58,
-  "hash": "fc55247670dacbd5a899533c94448476c6f8bd2fe2128f75e5d8125730edfc21",
+  "version": 61,
+  "hash": "540a9a2044e25a9e2f95fa4ef477c9e785fe18cfc5b7cb727e781c1f6c69bb28",
   "sections": [
     {
       "id": "setup",
@@ -2021,6 +2021,14 @@
           "text": "The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared"
         },
         {
+          "type": "p",
+          "text": "Take the new docker-compose.yml with each update, not only the image. Since the 2026-09-28 update the server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server."
+        },
+        {
+          "type": "p",
+          "text": "The image carries its own copy of cloudflared, the program that runs your tunnel. Cloudflare supports each version for a year after its newer releases come out, so a server left without updates for about a year can stop connecting. Updating the server updates it."
+        },
+        {
           "type": "h2",
           "text": "Is there a new version?"
         },
@@ -2154,7 +2162,8 @@
           "type": "ul",
           "items": [
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
-            "The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
             "The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away."
           ]
         },

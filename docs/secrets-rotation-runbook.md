@@ -153,17 +153,16 @@ flowchart TD
     2. Locate existing tunnels (`qld`, `vic`, per-node tunnels).
     3. If rotating tunnel credentials: click **Configure**, rotate the connector token, or provision replacement tunnel connectors.
 *   **Places to update:**
-    - On target node: write token directly to `/root/BeanPool-<Name>/data/tunnel-token` with permissions `chmod 644` (required because the `cloudflared` container runs as non-root UID 65532), then restart the tunnel container:
+    - A community's own `<name>.beanpool.org` tunnel (since 2026-09-28): nothing to write by hand. It runs inside the node's container, on the token in the node's settings (node_config, never `data/tunnel-token`, which the node deletes at start). When the registrar re-makes the tunnel, the node picks up the new token itself within minutes. To restart it anyway: Settings → Public Address → **Restart tunnel**, or restart the node:
       ```bash
-      echo "<new_tunnel_token>" > /root/BeanPool-<Name>/data/tunnel-token
-      chmod 644 /root/BeanPool-<Name>/data/tunnel-token
-      docker compose -p beanpool-<name> restart cloudflared
+      docker compose -p beanpool-<name> restart beanpool-node
       ```
     - Note: Only `test` and `yarravalley` currently run `cloudflared` container sidecars.
 *   **How to verify:**
     ```bash
-    docker logs beanpool-test-cloudflared-1 --tail 20
-    # Must show: "Connection established" / "Registered tunnel connection"
+    docker exec beanpool-test-beanpool-node-1 wget -qO- http://127.0.0.1:20241/ready   # {"status":200,"readyConnections":4}
+    docker logs beanpool-test-beanpool-node-1 --tail 200 | grep '\[Tunnel\]'
+    # Must show: "[Tunnel] connected to Cloudflare (N connections)"; Settings → Public Address shows "Tunnel: connected"
     # Never: "Unauthorized: Tunnel not found" or HTTP 530 / Error 1033
     ```
 

@@ -90,4 +90,14 @@ describe('vault boxes', () => {
         expect(bytesToHex(ed25519.getPublicKey(seed))).toBe(memberKey);
         expect(() => openVaultRelease(release, randomBytes(32))).toThrow();
     });
+
+    it('opening a release leaves the caller\'s key as it was, even a Node Buffer (whose slice shares memory)', () => {
+        const eSeed = Buffer.from(randomBytes(32));
+        const kept = Buffer.from(eSeed);
+        const eKey = bytesToHex(ed25519.getPublicKey(eSeed));
+        const clientCopy = { encryptedShare: Buffer.alloc(32).toString('base64'), shareIv: Buffer.alloc(24).toString('base64'),
+            shareTag: Buffer.alloc(16).toString('base64'), kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"AA==","N":16384}' };
+        openVaultRelease(sealVaultRelease({ provider: 'google', pubkey: memberKey, clientCopy }, eKey), eSeed);
+        expect(eSeed.equals(kept)).toBe(true);
+    });
 });

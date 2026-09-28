@@ -256,9 +256,17 @@ export function vaultDepositKeyId(depositPublicKey: Uint8Array): string {
     return vaultB64(sha256(depositPublicKey).slice(0, 8));
 }
 
+/**
+ * The seed of a private key, in a buffer of its own that the caller may wipe. `toEd25519Seed` slices, and a Node
+ * Buffer's slice shares memory: wiping that would wipe the caller's key.
+ */
+function ownCopyOfSeed(privateKey: Uint8Array): Uint8Array {
+    return Uint8Array.from(toEd25519Seed(privateKey));
+}
+
 /** The Ed25519 public key of a 32-byte seed (or PKCS8), as hex. */
 export function vaultPublicKeyHex(privateKey: Uint8Array): string {
-    const seed = toEd25519Seed(privateKey);
+    const seed = ownCopyOfSeed(privateKey);
     try {
         return bytesToHex(ed25519.getPublicKey(seed));
     } finally {
@@ -372,7 +380,7 @@ export function sealVaultRelease(contents: VaultReleaseContents, requesterKey: s
 
 /** Open a release with the restoring device's Ed25519 private key (seed or PKCS8). */
 export function openVaultRelease(box: unknown, requesterPrivateKey: Uint8Array): VaultReleaseContents {
-    const seed = toEd25519Seed(requesterPrivateKey);
+    const seed = ownCopyOfSeed(requesterPrivateKey);
     const requesterKey = bytesToHex(ed25519.getPublicKey(seed));
     const secret = ed25519.utils.toMontgomerySecret(seed);
     seed.fill(0);

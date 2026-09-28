@@ -38,6 +38,10 @@ const OLD_IP = '198.51.100.1';     // the owner's node
 const MOVED_IP = '198.51.100.2';   // the owner's node, moved
 const NEW_IP = '203.0.113.9';      // the other key's node
 const direct = (ip) => ({ mode: 'direct', public_ip: ip });
+// The admin's release here is the one that frees the name at once ("free now"), as every admin release did when these
+// cases were written: its races with another key's claim are what they explore. The default release holds the name for
+// its key (decision D-C), as the owner's release (ownerRelease) does, through the same code.
+const FREE_NOW = { free_now: true };
 
 // A world whose nodes answer only where Cloudflare routes, and keep the tunnel tokens they are given.
 async function fuzzWorld(K) {
@@ -88,7 +92,7 @@ async function fuzzWorld(K) {
         claim: (key, body) => keeping(key)(w.claim(key, body)),
         heal: (key, body) => keeping(key)(w.heal(key, body)),
         release: (key, body) => keeping(key)(w.release(key, body)),
-        admin: async (action) => { const r = await w.admin(NAME, action); statuses.push(r.status); return r; },
+        admin: async (action, body) => { const r = await w.admin(NAME, action, body); statuses.push(r.status); return r; },
         // Every node polls /status, as its 5-minute reconcile does, and runs the token it is given.
         reconcile: async () => { for (const k of [K.owner, K.other, K.n1, K.n2]) await keeping(k)(w.status(k)); },
     };
@@ -109,7 +113,7 @@ const SETUPS = {
     },
     adminPaused: async (fz) => { await fz.claim(fz.K.owner, { name: NAME }); await fz.admin('pause'); },
     blocked: async (fz) => { await fz.claim(fz.K.owner, { name: NAME }); await fz.admin('block'); },
-    adminReleased: async (fz) => { await fz.claim(fz.K.owner, { name: NAME, ...direct(OLD_IP) }); await fz.admin('release'); },
+    adminReleased: async (fz) => { await fz.claim(fz.K.owner, { name: NAME, ...direct(OLD_IP) }); await fz.admin('release', FREE_NOW); },
     gatedPending: async (fz) => {
         fz.w.sqlite.prepare("INSERT INTO name_policy (pattern, tier) VALUES (?, 'gated')").run(NAME);
         await fz.claim(fz.K.owner, { name: NAME });
@@ -132,11 +136,11 @@ const ACTIONS = {
     pause: (fz) => fz.admin('pause'),
     block: (fz) => fz.admin('block'),
     resume: (fz) => fz.admin('resume'),
-    release: (fz) => fz.admin('release'),
+    release: (fz) => fz.admin('release', FREE_NOW),
     pauseResume: async (fz) => { await fz.admin('pause'); return fz.admin('resume'); },
     blockResume: async (fz) => { await fz.admin('block'); return fz.admin('resume'); },
-    relNew: async (fz) => { await fz.admin('release'); return fz.claim(fz.K.other, { name: NAME }); },
-    relNewDirect: async (fz) => { await fz.admin('release'); return fz.claim(fz.K.other, { name: NAME, ...direct(NEW_IP) }); },
+    relNew: async (fz) => { await fz.admin('release', FREE_NOW); return fz.claim(fz.K.other, { name: NAME }); },
+    relNewDirect: async (fz) => { await fz.admin('release', FREE_NOW); return fz.claim(fz.K.other, { name: NAME, ...direct(NEW_IP) }); },
     // The owner's node moves to a new address (nothing answers at OLD_IP any more), then heals, or claims, there. Once
     // the primary is done, OLD_IP is recycled: a web page that isn't a BeanPool node answers there, which isn't dark.
     healMoved: (fz) => { fz.move(); return fz.heal(fz.K.owner, { name: NAME, ...direct(MOVED_IP) }); },

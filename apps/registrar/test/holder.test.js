@@ -420,15 +420,18 @@ async function adminPage(w) {
     vm.createContext(ctx);
     vm.runInContext(script, ctx);
     const button = (attrs) => ({ getAttribute: (k) => attrs[k] ?? null });
+    // The tables as rendered: an action reloads them (and, with no secret in this stub, blanks them).
+    const shots = {};
+    const shoot = () => { for (const id of ['activeTableContainer', 'pendingTableContainer']) shots[id] = els[id]?.innerHTML ?? ''; };
     // Click a button as rendered: the attributes it carries in the table's HTML.
     const click = async (container, name, action) => {
-        const tag = new RegExp(`<button data-name="${name}" data-action="${action}"[^>]*>`).exec(els[container].innerHTML)?.[0];
+        const tag = new RegExp(`<button data-name="${name}" data-action="${action}"[^>]*>`).exec(shots[container] ?? '')?.[0];
         assert.ok(tag, `a ${action} button for ${name} in ${container}`);
         const attrs = Object.fromEntries([...tag.matchAll(/([a-z-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
         await ctx.adminAction(name, action, button(attrs));
     };
     const releases = () => sent.filter((s) => /\/release$/.test(s.url)).map((s) => ({ url: s.url, body: s.init.body === undefined ? undefined : JSON.parse(s.init.body) }));
-    return { ctx, els, boxes, confirms, click, releases };
+    return { ctx, els, boxes, confirms, shoot, click, releases };
 }
 
 test('the names page: Release has a "free now" box and sends free_now only when it is ticked; Reject and Free now free at once', async () => {
@@ -444,6 +447,7 @@ test('the names page: Release has a "free now" box and sends free_now only when 
             { name: 'livename', status: 'live', node_pubkey: key, mode: 'tunnel' },
         ]);
         p.ctx.renderPending([{ name: 'sydney', status: 'pending', node_pubkey: key, mode: 'tunnel', requested_at: 1 }]);
+        p.shoot();
         const table = p.els.activeTableContainer.innerHTML;
         assert.match(table, /<input type="checkbox" data-free-now-for="blockedname">/, 'the box sits by Release');
         assert.doesNotMatch(table, /data-free-now-for="(heldname|ownerheld|freedname|livename)"/, 'only by Release');

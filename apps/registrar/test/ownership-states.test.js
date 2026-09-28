@@ -15,6 +15,10 @@ import { nowS, migration, world, liveName, makeKey, attestsAs, routing } from '.
 
 const DAY = 86400;
 const COOLOFF = 30 * DAY;
+// The admin's release with "free now": the name is free at once, to any key. Without it the admin's release holds the
+// name 30 days for its key, as its owner's does (decision D-C, Marty 2026-09-28; test/holder.test.js). The tests here
+// that release a name for another key to take were written when every admin release freed at once, and tick it.
+const FREE_NOW = { free_now: true };
 
 test('a paused name is taken: available says so, another key\'s claim is 409, and nothing moves', async () => {
     const w = await world();
@@ -347,7 +351,7 @@ test('an admin pause survives the owner\'s release-then-claim: the release is re
         assert.equal((await w.admin('stillwater', 'resume')).body.status, 'live');
         assert.ok(w.cf.recordAt('stillwater.beanpool.org'));
         await w.admin('stillwater', 'pause');
-        assert.equal((await w.admin('stillwater', 'release')).body.status, 'released');
+        assert.equal((await w.admin('stillwater', 'release', FREE_NOW)).body.status, 'released');
         assert.equal((await w.available('stillwater')).body.available, true);
         assert.deepEqual(w.events('stillwater').map((e) => e.event), ['claimed', 'paused', 'resumed', 'paused', 'released']);
     } finally { w.restore(); }
@@ -437,8 +441,8 @@ test('admin block: the name is blocked — held, never free, and its owner canno
         assert.equal((await w.admin('otherbad', 'revoke')).body.status, 'blocked');
         assert.equal((await w.available('otherbad')).body.available, false);
 
-        // Only the admin's release frees a name — at once, to anyone.
-        assert.equal((await w.admin('badname', 'release')).body.status, 'released');
+        // Only the admin's release frees a name — with "free now", at once, to anyone.
+        assert.equal((await w.admin('badname', 'release', FREE_NOW)).body.status, 'released');
         assert.deepEqual((await w.available('badname')).body, { available: true, reason: 'free', tier: 'auto' });
         assert.equal((await w.claim(other, { name: 'badname' })).body.status, 'live');
         assert.deepEqual(w.events('badname').map((e) => e.event), ['claimed', 'blocked', 'released', 'claimed']);
@@ -468,7 +472,7 @@ test('the admin rejecting a pending (gated) claim frees the name; approving one 
     } finally { w.restore(); }
 });
 
-test('a gated name the admin released: its old key waits for approval again; the owner\'s own release does not', async () => {
+test('a gated name the admin freed now: its old key waits for approval again; the owner\'s own release does not', async () => {
     const w = await world();
     try {
         const owner = await makeKey();
@@ -481,8 +485,8 @@ test('a gated name the admin released: its old key waits for approval again; the
         assert.equal(back.body.status, 'live');
         assert.ok(back.body.tunnelToken);
 
-        // The admin's release: the name is not that key's any more, so it is just another claimant.
-        assert.equal((await w.admin('perth', 'release')).body.status, 'released');
+        // The admin's release, "free now": the name is not that key's any more, so it is just another claimant.
+        assert.equal((await w.admin('perth', 'release', FREE_NOW)).body.status, 'released');
         const from = w.cf.calls.length;
         const again = await w.claim(owner, { name: 'perth' });
         assert.equal(again.status, 200, JSON.stringify(again.body));
@@ -650,7 +654,7 @@ test('two keys racing for a freed name: exactly one wins; a lock that cannot cou
     try {
         const [owner, a, b] = await Promise.all([makeKey(), makeKey(), makeKey()]);
         await liveName(w, 'crossroads', owner);
-        await w.admin('crossroads', 'release');                          // free at once, to anyone
+        await w.admin('crossroads', 'release', FREE_NOW);                // free at once, to anyone
         const [ra, rb] = await Promise.all([w.claim(a, { name: 'crossroads' }), w.claim(b, { name: 'crossroads' })]);
         assert.deepEqual([ra.status, rb.status].sort(), [200, 409], JSON.stringify([ra.body, rb.body]));
         const winner = ra.status === 200 ? a : b;
@@ -761,7 +765,7 @@ async function stillAdministrable(w, name, action) {
     const again = await w.admin(name, action);
     assert.equal(again.status, 200, JSON.stringify(again.body));
     assert.equal(again.body.status, action === 'pause' ? 'paused' : 'blocked');
-    assert.equal((await w.admin(name, 'release')).body.status, 'released');
+    assert.equal((await w.admin(name, 'release', FREE_NOW)).body.status, 'released');
     assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'released: nothing left at Cloudflare');
     assert.equal((await w.available(name)).body.available, true);
 }
@@ -1208,7 +1212,7 @@ for (const [was, next] of [['tunnel', 'tunnel'], ['direct', 'direct'], ['direct'
             assert.equal((await w.claim(oldKey, { name, ...modeBody(was, OLD_IP) })).body.status, 'live');
             let released, claimed, theirs, mark;
             w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => {
-                released = await w.admin(name, 'release');
+                released = await w.admin(name, 'release', FREE_NOW);
                 claimed = await w.claim(newKey, { name, ...modeBody(next, NEW_IP) });
                 theirs = { ...w.cf.recordAt(host) };
                 mark = w.cf.calls.length;
@@ -1242,7 +1246,7 @@ test('race: a record the new owner adopted, re-pointed by the old key\'s heal ju
         let released, claimed;
         w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => {
             w.cf.fail.deleteDns = true;
-            released = await w.admin(name, 'release');
+            released = await w.admin(name, 'release', FREE_NOW);
             claimed = await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) });
             w.cf.fail.deleteDns = false;
         });
@@ -1269,7 +1273,7 @@ test('race: a record the old key\'s heal put up that the new owner\'s row doesn\
         let claimed;
         w.cf.during(/^DELETE \/zones\/zone\/dns_records\//, async () => {
             w.cf.fail.deleteDns = true;
-            await w.admin(name, 'release');
+            await w.admin(name, 'release', FREE_NOW);
             claimed = await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) });
             w.cf.fail.deleteDns = false;
         });
@@ -1589,7 +1593,7 @@ for (const action of ['pause', 'block']) {
             // As Cloudflare takes the decision's record delete, the admin releases the name and a new key claims it.
             let released, claimed;
             w.cf.during(/^DELETE \/zones\/zone\/dns_records\//, async () => {
-                released = await w.admin(name, 'release');
+                released = await w.admin(name, 'release', FREE_NOW);
                 claimed = await w.claim(newKey, { name });
             });
             const d = await w.admin(name, action);
@@ -1630,7 +1634,7 @@ test('a take-over whose tunnel delete Cloudflare refused: the sweep retries it, 
         await liveName(w, name, oldKey);
         const old = (await w.row(name)).tunnel_id;
         w.cf.fail.deleteTunnel = true;
-        assert.equal((await w.admin(name, 'release')).body.status, 'released');
+        assert.equal((await w.admin(name, 'release', FREE_NOW)).body.status, 'released');
         assert.equal((await w.row(name)).tunnel_id, old, 'the released row keeps the tunnel Cloudflare would not delete');
 
         // The new key's claim wins the name, but Cloudflare still refuses to delete the old bp-<name> tunnel, so no
@@ -1664,7 +1668,7 @@ test('a take-over whose tunnel delete was refused, claimed again once Cloudflare
         await liveName(w, name, oldKey);
         const old = (await w.row(name)).tunnel_id;
         w.cf.fail.deleteTunnel = true;
-        await w.admin(name, 'release');
+        await w.admin(name, 'release', FREE_NOW);
         assert.notEqual((await w.claim(newKey, { name })).status, 200);
         w.cf.fail.deleteTunnel = false;
         const after = await w.claim(newKey, { name });
@@ -1683,7 +1687,7 @@ test('a bp-<name> tunnel no row records: a claim deletes it when provably stale,
         const stray = (await w.row('strayed')).tunnel_id;
         await w.backdate('strayed', { tunnel_id: null });
         w.cf.tunnels.get(stray).created_at = new Date(Date.now() - 3600_000).toISOString();
-        await w.admin('strayed', 'release');
+        await w.admin('strayed', 'release', FREE_NOW);
         const r = await w.claim(newKey, { name: 'strayed' });
         assert.equal(r.status, 200, JSON.stringify(r.body));
         assert.equal(r.body.status, 'live');
@@ -1767,7 +1771,7 @@ test('a take-over that changes mode, the old record\'s delete refused: the old k
         const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
         assert.equal((await w.claim(oldKey, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
         w.cf.fail.deleteDns = true;
-        await w.admin(name, 'release');
+        await w.admin(name, 'release', FREE_NOW);
         assert.equal(routing(w, name).dns, OLD_IP, 'Cloudflare refused the release\'s delete');
 
         // The new key claims it for a tunnel: its CNAME must replace the old key's A record, whose delete is refused.
@@ -1867,7 +1871,7 @@ test('an owed record the live row records, re-pointed by a missed heal: the swee
         // The 'adopted' race above; Cloudflare refuses record deletes from the release on …
         w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => {
             w.cf.fail.deleteDns = true;
-            await w.admin(name, 'release');
+            await w.admin(name, 'release', FREE_NOW);
             assert.equal((await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) })).body.status, 'live');
             // … and the undo's PATCH-back, and every PATCH after it.
             w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => { w.cf.fail.patchDns = true; });

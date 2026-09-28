@@ -1,13 +1,14 @@
 // Beanpool node-address registrar — Cloudflare Worker.
-//   fetch:     claim / heal / status / release (signed by node key) + admin approve/pause/resume/block/release +
+//   fetch:     claim / heal / status / release / holder (signed by node key) + admin approve/pause/resume/block/release +
 //              switchboard
 //   scheduled: attestation sweep — pauses a live name's routing only on proof that ANOTHER node key answers at it,
 //              never on anything the registrar merely can't verify, and never when the sweep as a whole looks wrong;
 //              then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
 //              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried.
 // A name belongs to the node key that claimed it; the registrar can stop routing it but never hands it to another
-// key. It frees only when its owner releases it (after a 30-day hold for that key), when the admin releases it, or
-// (a later PR) after a long, warned abandonment. States: migrations/0002_states.sql.
+// key. It frees only when its owner releases it (after a 30-day hold for that key), when the admin releases it (the
+// same hold, unless the admin frees it now), or (a later PR) after a long, warned abandonment. States:
+// migrations/0002_states.sql, and releaseRow below for why a release holds.
 // Design: scratch/registrar/DESIGN-2026-09-24-fable.md, docs/node-dns-registrar.md. CF calls: src/cf.js.
 
 import * as cf from './cf.js';
@@ -32,13 +33,15 @@ export function releaseCooloffS(env) {
     return Number.isFinite(n) && n >= 0 ? n : 30 * 86400;
 }
 
-// A released row that holds nothing, not even for its old key: the admin's release, or a key withdrawing a gated
-// claim the admin never approved (the name was never that key's to hold).
+// A released row that holds nothing, not even for its old key: the admin's release with "free now" (and every admin
+// release before decision D-C), or a gated claim the admin never approved, withdrawn by its key or rejected by the
+// admin (the name was never that key's to hold). The admin's default release ('admin-held') holds, as its owner's does.
 const freedAtOnce = (row) => row.status === 'released' && (row.pause_reason === 'admin' || row.pause_reason === 'withdrawn');
 
 // Does `row` keep its name from every key but its owner's? Only three things let a name go: its owner's release
-// once the hold is over (at once for a claim nobody approved), the admin's release, and abandonment. Every other
-// state — including one this code does not know, like a legacy 'revoked' row — holds the name.
+// once the hold is over (at once for a claim nobody approved), the admin's release (the same hold, or at once with
+// "free now"), and abandonment. Every other state — including one this code does not know, like a legacy 'revoked'
+// row — holds the name.
 export function holdsName(env, row, now = nowS()) {
     if (!row || row.status === 'abandoned') return false;
     if (row.status === 'released') {
@@ -684,6 +687,41 @@ async function handleStatus(request, env) {
     return json(out);
 }
 
+// POST /api/registrar/holder {name} — who holds this name? (design scratch/registrar/DESIGN-lost-name-audience-opus.md
+// §5.1). A node asks about a name it held; it stops accepting that name only when this answer names ANOTHER key and
+// that key answers at the name too (the node's side, L3), so this answers from the same rules a claim is decided by
+// (holdsName, isOwnRow, policyTier), and nothing else:
+//   'you'      the asker's key holds it: any state that holds a name (blocked and paused included), or its own
+//              release still inside the hold;
+//   'other'    another key holds it, on the same terms: `holder_key` is that key — the only answer that names one;
+//   'reserved' nobody holds it, and policy keeps it from every claim (our fleet's names);
+//   'free'     nobody holds it: no row, a release past its hold or freed at once, abandoned.
+// With 'you' and 'other': `state` (the row's status), `since` (when that key's tenure began: its claim or its
+// take-back), and `held_until` for a release still inside its hold. A node's key is public already (its /api/attest
+// answers anyone), so naming the holder tells nobody anything new.
+// Signed like /status. A POST, so the name is inside the signed bytes (the signature covers the path, not the query).
+// Read-only: it writes nothing — not even the contact every other signed request records (the node's own /status
+// does that) — and asks nothing of Cloudflare or of any node. An older Worker answers 404: a node that gets that
+// learns nothing, and drops nothing.
+async function handleHolder(request, env, bodyText) {
+    const pubkey = await verifySignedRequest(request, bodyText);
+    if (!pubkey) return badSignature();
+    let b; try { b = JSON.parse(bodyText || '{}') || {}; } catch { return json({ error: 'bad json' }, 400); }
+    const name = typeof b.name === 'string' ? b.name.toLowerCase() : '';
+    if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
+    const now = nowS();
+    const row = await db.getAllocation(env, name);
+    if (holdsName(env, row, now)) {
+        const mine = isOwnRow(row, pubkey);
+        return json({
+            name, held: mine ? 'you' : 'other', ...(mine ? {} : { holder_key: row.node_pubkey }),
+            state: row.status, since: row.requested_at ?? null,
+            ...(row.status === 'released' ? { held_until: (row.released_at || 0) + releaseCooloffS(env) } : {}),
+        });
+    }
+    return json({ name, held: (await db.policyTier(env, name)) === 'blocked' ? 'reserved' : 'free' });
+}
+
 async function handleUpdate(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
     if (!pubkey) return badSignature();
@@ -705,17 +743,26 @@ async function handleUpdate(request, env, bodyText) {
     return json({ status: 'ok', name: a.name, ...updates });
 }
 
-// Tunnel and DNS go; the row stays, 'released'. By its owner ('owner'): held for the same key RELEASE_COOLOFF_S,
-// then free. By the admin ('admin'), or a gated claim nobody approved withdrawn by its key ('withdrawn'): free at
-// once (to anyone, the old key included). The row is written first (stopRouting); false, with nothing done, if it
-// changed since `a` was read.
+// Tunnel and DNS go; the row stays, 'released', and `by` (its pause_reason) says whether it holds the name:
+//   'owner'      its owner's release: held for the same key RELEASE_COOLOFF_S (that key may take it back), then free;
+//   'admin-held' the admin's release, by default: held the same way (decision D-C, Marty 2026-09-28 — a name the
+//                admin frees, by a misclick or otherwise, must not pass to another key while members' apps still
+//                use it);
+//   'admin'      the admin's release with "free now", for a name being freed for someone new — and a gated claim
+//                nobody approved, rejected by the admin: free at once (to anyone, the old key included);
+//   'withdrawn'  a gated claim nobody approved, withdrawn by its key: free at once.
+// 'admin' is what every admin release wrote before D-C, so those rows stay free, and a Worker rolled back past D-C
+// reads 'admin-held' as an owner's release: held. The row is written first (stopRouting); false, with nothing done,
+// if it changed since `a` was read.
 async function releaseRow(env, a, by, now) {
     const to = { status: 'released', released_at: now, pause_reason: by, paused_at: null, attest_fails: 0 };
     if (!(await stopRouting(env, a, to))) return false;
+    const held = `held ${Math.round(releaseCooloffS(env) / 86400)} days for`;
     await logEvent(env, a.name, 'released', ({
         admin: `released by the admin (was ${a.status}): free now`,
+        'admin-held': `released by the admin (was ${a.status}): ${held} key ${key16(a.node_pubkey)}, then free`,
         withdrawn: `withdrawn by its key ${key16(a.node_pubkey)} before the admin approved it: free now`,
-    })[by] ?? `released by its owner ${key16(a.node_pubkey)} (was ${a.status}): held ${Math.round(releaseCooloffS(env) / 86400)} days for that key, then free`);
+    })[by] ?? `released by its owner ${key16(a.node_pubkey)} (was ${a.status}): ${held} that key, then free`);
     return true;
 }
 
@@ -838,12 +885,12 @@ async function adminGoLive(env, a, event, detail, extra = {}) {
 }
 
 // Pause, block and release write the row first, and only while it is as read: if it changed in between, the action
-// is decided again on the row as it now is (onFreshRow).
-async function handleAdmin(env, name, action) {
-    return onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS()) : json({ error: 'unknown name' }, 404)));
+// is decided again on the row as it now is (onFreshRow). `opts.freeNow`: release frees the name at once.
+async function handleAdmin(env, name, action, opts = {}) {
+    return onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
 }
 
-async function adminAction(env, a, action, now) {
+async function adminAction(env, a, action, now, { freeNow = false } = {}) {
     const name = a.name;
     const was = `${a.status}${a.pause_reason ? `/${a.pause_reason}` : ''}`;
     switch (action) {
@@ -875,10 +922,18 @@ async function adminAction(env, a, action, now) {
             await logEvent(env, name, 'blocked', `blocked by the admin (was ${a.status}); key ${key16(a.node_pubkey)}`);
             return json({ status: 'blocked', name });
         }
-        case 'release':
+        case 'release': {
+            // Held for its key RELEASE_COOLOFF_S by default, as its owner's own release is, unless the admin frees it
+            // now (releaseRow). A gated claim nobody approved was never its key's: rejecting it frees the name at
+            // once, as its key's own withdrawal does. A release already held stays as it is, its hold running from
+            // when it began, until the admin frees it now.
             if (a.status === 'abandoned' || freedAtOnce(a)) return json({ status: 'released', name });
-            if (!(await releaseRow(env, a, 'admin', now))) return null;
-            return json({ status: 'released', name });
+            const atOnce = freeNow || await awaitingApproval(env, a);
+            const heldUntil = (at) => ({ held_until: at + releaseCooloffS(env) });
+            if (a.status === 'released' && !atOnce) return json({ status: 'released', name, ...heldUntil(a.released_at || 0) });
+            if (!(await releaseRow(env, a, atOnce ? 'admin' : 'admin-held', now))) return null;
+            return json({ status: 'released', name, ...(atOnce ? {} : heldUntil(now)) });
+        }
     }
     return json({ error: 'unknown action' }, 400);
 }
@@ -1143,6 +1198,7 @@ export default {
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
+            if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, await request.text());
             // `/offline` is release's old name; today's nodes still call it (keep it for at least one release).
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
@@ -1161,7 +1217,14 @@ export default {
             const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke)$/);
             if (m && method === 'POST') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return await handleAdmin(env, m[1], m[2]);
+                // Release takes { "free_now": true }; nothing else (no body, any other value) is the default hold.
+                let freeNow = false;
+                if (m[2] === 'release') {
+                    const text = await request.text();
+                    let b; try { b = JSON.parse(text || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                    freeNow = b?.free_now === true;
+                }
+                return await handleAdmin(env, m[1], m[2], { freeNow });
             }
 
             if (method === 'GET' && (p === '/admin' || p === '/admin/' || p === '/admin.html')) {

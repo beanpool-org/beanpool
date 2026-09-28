@@ -31,9 +31,11 @@ export interface PostPhoto {
     post_id: string;
     photo_data: string;
     order_num: number;
+    /** As the main server holds it: a standby writes it, never its own clock (apps/server engine/sync.ts importRemoteState). */
     updated_at?: string | null;
 }
 
+/** A crowdfund project's row as the main server holds it, every column: a standby's copy is the row verbatim. */
 export interface Project {
     id: string;
     creator_pubkey: string;
@@ -44,6 +46,9 @@ export interface Project {
     current_amount: number;
     deadline_at: string | null;
     status: string;
+    /** When the unify migration made it an enterprise (apps/server db/unify-projects-migration.ts), or when it was made as one. */
+    migrated_at?: string | null;
+    enterprise_pubkey?: string | null;
     created_at: string;
     updated_at?: string | null;
 }
@@ -171,6 +176,12 @@ export interface SyncMarketplaceTransaction {
     completedAt: string | null;
     completed_at?: string | null;
     updatedAt?: string | null;
+    /** The escrow hygiene's last nudge about a lingering deal: copied, or a promoted standby's first run nudges every one again. */
+    lastRemindedAt?: string | null;
+    /** An admin's resolution of a dispute over the deal, when, and by whom: copied, or it leaves the admin Disputes list. */
+    disputeResolution?: string | null;
+    disputeResolvedAt?: string | null;
+    disputeResolvedBy?: string | null;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
 }
@@ -632,7 +643,12 @@ export function exportSyncState(
         completedAt: row.completed_at,
         lat: row.lat,
         lng: row.lng,
+        // Null for this community's own listing, a linked community's address for one in its cache: a standby writes it as
+        // it is, so a promoted standby's listings are its own (apps/server engine/sync.ts importRemoteState, design G1).
         originNode: row.origin_node,
+        cashAlsoNeeded: !!row.cash_also_needed,
+        // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
+        searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,
         pollOptions: row.poll_options
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
@@ -723,6 +739,10 @@ export function exportSyncState(
         createdAt: row.created_at,
         completedAt: row.completed_at,
         updatedAt: row.updated_at || row.completed_at || row.created_at,
+        lastRemindedAt: row.last_reminded_at ?? null,
+        disputeResolution: row.dispute_resolution ?? null,
+        disputeResolvedAt: row.dispute_resolved_at ?? null,
+        disputeResolvedBy: row.dispute_resolved_by ?? null,
         ratedByBuyer: ratingTxKeys.has(`${row.id}|${row.buyer_pubkey}`),
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     }));

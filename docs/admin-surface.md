@@ -82,10 +82,11 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 
 **Phone button — built 2026-09-19 (Marty approved the flow 2026-09-19).**
 
-- *Who sees it:* Settings → "🛡️ Manage ‹community›" appears only when `GET /api/node-admin/me` (signed with
-  the member key, answers only for the signer) says `owner` or `admin`. Nothing is cached on the phone. The
-  node checks the live role again when it issues the token and again when the browser exchanges it, and a
-  key session's role follows `node_roles` on every request.
+- *Who sees it:* Settings → "🛡️ Manage ‹community›" ("🛡️ Moderate ‹community›" for a moderator, opening
+  the reports to review) appears when `GET /api/node-admin/me` (signed with the member key, answers only
+  for the signer) says `owner`, `admin` or `moderator`. Nothing is cached on the phone. The node checks the
+  live role again when it issues the token and again when the browser exchanges it, and a key session's role
+  follows `node_roles` on every request.
 - *Second factor:* the phone's own unlock (fingerprint, face or PIN) comes before the token is requested.
   A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock. The
   node's own TOTP, when turned on, is still asked for on top.
@@ -100,11 +101,12 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   That means `/settings`, `/app` and the website stay in the browser.
 - *Web app (PWA):* shows the same owner/admin-only entry, as a plain link to `/settings`, which then asks
   for the password. The browser does not mint key links, because it has no equivalent of the phone unlock.
-- *Admin queue:* `GET /api/node-admin/queue` (owner/admin, signed) returns counts only, each with its
-  `/settings#section=` target, for the header's "needs you" badge.
-- *Header 🛡️ icon (app):* owners/admins only, while the queue total is above 0. First in the needs-you
-  priority (rightmost, last to fold into "•••"), amber accent, label in words ("2 reports to review").
-  Tapping it is the Manage press (phone unlock → key sign-in link) landing at the first item's section.
+- *Admin queue:* `GET /api/node-admin/queue` (signed; owner/admin: every count; moderator: the reports alone)
+  returns counts only, each with its `/settings#section=` target, for the header's "needs you" badge.
+- *Header 🛡️ icon (app):* owners, admins and moderators, while the queue total is above 0 (for a moderator,
+  the reports queue alone). First in the needs-you priority (rightmost, last to fold into "•••"), amber accent,
+  label in words ("2 reports to review"). Tapping it is the Manage press (phone unlock → key sign-in link)
+  landing at the first item's section (for a moderator, the reports to review).
   The app remembers the role in memory for 10 minutes per node and key, and only then asks for the queue,
   on the header's existing refresh gate; a refused queue makes it ask the role again.
 

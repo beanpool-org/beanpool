@@ -1032,7 +1032,8 @@ async function main(): Promise<void> {
         await standby0.kill('SIGTERM');
         copyDir(dir('standby0'), dir('format1'));
         withDb(dir('format1'), (db) => {
-            db.prepare("UPDATE node_config SET value = '1' WHERE key = 'replica_format'").run();
+            // Format 2 (#1272's listings): the last one whose standby still flushed demurrage of its own.
+            db.prepare("UPDATE node_config SET value = '2' WHERE key = 'replica_format'").run();
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1.5, 0, 'Circulation fee (demurrage, 40d)', ?)`)
                 .run(`demurrage_${yan2.pk.slice(0, 16)}_1_41`, yan2.pk, new Date().toISOString());
         });
@@ -1041,7 +1042,7 @@ async function main(): Promise<void> {
         const healed16 = await format1.send('pull', {});
         const f16: Ledger = await format1.send('ledger');
         const z16b: Ledger = await main0.send('ledger');
-        assert(healed16.ok === true && healed16.mode === 'resync' && Number(f16.format) > 1 && ledgerDiff(z16b, f16).length === 0,
+        assert(healed16.ok === true && healed16.mode === 'resync' && Number(f16.format) > 2 && ledgerDiff(z16b, f16).length === 0,
             `its first pull is the format re-seed, and its trades are M0's (${JSON.stringify({ ok: healed16.ok, mode: healed16.mode, error: healed16.error, format: f16.format })}; differences ${first(ledgerDiff(z16b, f16))})`);
 
         // ── 17. A standby makes no Bean move of its own ──

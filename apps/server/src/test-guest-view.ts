@@ -993,6 +993,7 @@ async function main(): Promise<void> {
             if (tarpit) tarpitsAnsweredAtOnce++;
             return realSetTimeout(fn, tarpit ? 0 : ms, ...args);
         }) as unknown as typeof setTimeout;
+        try {
         // Bob brought Alice in and vouches for her as an elder, and they are friends: her trust profile names him, with his face.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         db.prepare('INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?), (?, ?)').run(alice.pk, bob.pk, bob.pk, alice.pk);
@@ -1404,8 +1405,10 @@ async function main(): Promise<void> {
             assert(clubEventNow() === clubEventBefore, `the group event it convenes has not moved (${clubEventNow()})`);
             assert(!db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(pruned.pk), 'and it made no invite');
         }
-        beforeCall = earlier;
-        globalThis.setTimeout = realSetTimeout;
+        } finally {
+            beforeCall = earlier;
+            globalThis.setTimeout = realSetTimeout;
+        }
     }
 
     /**

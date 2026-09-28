@@ -7,7 +7,9 @@ import {
 } from '@beanpool/core';
 import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
-import { CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
+import {
+    CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
+} from './storage-keys';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
@@ -261,6 +263,7 @@ interface WipeableStorage {
  * own reports out of it first). A node files a report as whoever signs it, whatever reporter the body names.
  * And the record of where the phone sent its push token for this key (push-registrations.ts): the account
  * leaving the phone has already unregistered there (account-leaves-phone.ts), and the next account starts its own.
+ * So do its registrations still due, which its leave has already dropped: none is ever tried for another key.
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
@@ -280,6 +283,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem('beanpool_offer_draft');
     await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
     await storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY);
+    await storage.removeItem(PUSH_REGISTRATIONS_DUE_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
     const accountKeys = allKeys.filter((k: string) =>

@@ -295,12 +295,10 @@ function backfillBoardStanding(): void {
         if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(BOARD_STANDING_FILLED)) return;
         db.transaction(() => {
             const filled = db.prepare(`
-                UPDATE members SET board_standing_changed_at = CASE
-                    WHEN public_key IN (${ON_HOLIDAY_SQL})
-                      OR public_key IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))
-                    THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                    ELSE NULL END
+                UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE board_standing_changed_at IS NULL
+                  AND (public_key IN (${ON_HOLIDAY_SQL})
+                    OR public_key IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL})))
             `).run().changes;
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(BOARD_STANDING_FILLED);
             if (filled > 0) console.log(`[DB] Board standing filled on ${filled} member row(s)`);

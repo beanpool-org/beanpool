@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 66,
-  "hash": "3f1d1af0d1e6abe5e6898e25ef13aeb2ce12b4db12a470c52553d560366e3d81",
+  "version": 67,
+  "hash": "ae1095a38867fb9101404ee2f338b769f2dc4d6b5063033559f8ebd7b279a2c5",
   "sections": [
     {
       "id": "about",
@@ -1722,6 +1722,10 @@
         },
         {
           "type": "p",
+          "text": "While the global community has only a few listings, its **Market** also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened. They go once there are enough real listings."
+        },
+        {
+          "type": "p",
           "text": "If you came from a link someone shared to a listing or an event, it opens first. Join from that page, and once you are in, it opens again, this time with who posted it."
         },
         {
@@ -1911,6 +1915,10 @@
         {
           "type": "p",
           "text": "Pull the list down to refresh it."
+        },
+        {
+          "type": "p",
+          "text": "On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings."
         },
         {
           "type": "p",

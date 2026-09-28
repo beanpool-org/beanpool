@@ -10,7 +10,7 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerForPushNotifications, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerForPushNotifications, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
@@ -593,7 +593,8 @@ function RootLayoutNav() {
         }
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
-    // Register for push notifications when identity is available
+    // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes
+    // back and with the 5-minute sync (RootLayout, retryPushRegistrations), not only at the next cold start.
     useEffect(() => {
         if (!identity?.publicKey) return;
         registerForPushNotifications(identity.publicKey).catch(console.warn);
@@ -790,12 +791,16 @@ export default function RootLayout() {
         // An account that left this phone with no connection: its push alerts stop once each of its communities has
         // its leave statement (utils/push-leave.ts). Now, on each return, and with the 5-minute sync below.
         presentLeaveStatements();
+        // A push registration that didn't land (no connection, no answer, an error) is tried again on each return and
+        // with the 5-minute sync, until it does (utils/push-registrations.ts `retryDueRegistrations`). At start, the
+        // account's own registration goes anyway (RootLayoutNav).
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {
             if (appState.current === 'active') {
                 requestSync();
                 presentLeaveStatements();
+                retryPushRegistrations();
             }
         }, 300000);
 
@@ -805,6 +810,7 @@ export default function RootLayout() {
                 requestSync();
                 retryPendingReports();
                 presentLeaveStatements();
+                retryPushRegistrations();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
                 if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
                     try {

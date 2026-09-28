@@ -4,8 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { NotificationResponse } from 'expo-notifications';
-import { loadIdentity } from '../utils/identity';
-import { registerPushTokenWithCommunity } from '../utils/push-registrations';
+import { registerAccountForPush, retryDueRegistrations } from '../utils/push-registrations';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -32,8 +31,30 @@ if (!isExpoGo) {
 /**
  * Registers for Expo Push Notifications and transmits the token to the BeanPool server.
  * Should be called once the user is logged in and has an identity.
+ *
+ * With the community the phone is set to, which the phone records first: as the account leaves the phone, only the
+ * communities it sent the token to are asked to drop it. One that doesn't land, the token not to be had yet included
+ * (no connection), stays due and is tried again as the app comes back ({@link retryPushRegistrations};
+ * utils/push-registrations.ts `registerAccountForPush`).
  */
 export async function registerForPushNotifications(publicKey: string): Promise<string | null> {
+    return registerAccountForPush(publicKey, () => phonePushToken(true), Platform.OS);
+}
+
+/**
+ * The registrations the account on the phone still needs, tried again as the app comes back and with the 5-minute sync
+ * (app/_layout.tsx; utils/push-registrations.ts `retryDueRegistrations`). Never asks for permission. Never throws.
+ */
+export function retryPushRegistrations(): Promise<void> {
+    return retryDueRegistrations(() => phonePushToken(false), Platform.OS);
+}
+
+/**
+ * This phone's Expo push token, fetched afresh and kept for the account's Sign Out (PUSH_TOKEN_STORE_KEY), then
+ * Android's notification channels set up. Null where push can't work here: Expo Go, a simulator, or permission not
+ * granted (asked for only when `ask`). Throws when the token can't be had, with no connection most often.
+ */
+async function phonePushToken(ask: boolean): Promise<string | null> {
     if (isExpoGo || !Notifications) {
         console.log('[Push] Push notifications are not available in Expo Go');
         return null;
@@ -50,7 +71,7 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
     let finalStatus = existingStatus;
 
     // Request permission if not already granted
-    if (existingStatus !== 'granted') {
+    if (existingStatus !== 'granted' && ask) {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
     }
@@ -60,30 +81,17 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
         return null;
     }
 
+    // Get the Expo Push Token
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: projectId || '17a2a61a-9cbe-457e-bb10-84d8a666e6eb',
+    });
+    const token = tokenData.data;
+
+    // Store locally
+    await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token);
+
     try {
-        // Get the Expo Push Token
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-            projectId: projectId || '17a2a61a-9cbe-457e-bb10-84d8a666e6eb',
-        });
-        const token = tokenData.data;
-
-        // Store locally
-        await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token);
-
-        // Register with the community the phone is set to, which the phone records first: as the account leaves the
-        // phone, only the communities it sent the token to are asked to drop it (utils/push-registrations.ts).
-        const account = await loadIdentity();
-        if (account?.publicKey === publicKey) {
-            try {
-                if (await registerPushTokenWithCommunity(account, token, Platform.OS)) console.log('[Push] Token registered with server');
-            } catch (e: any) {
-                console.warn('[Push] Failed to register token with server:', e?.message || e);
-            }
-        } else {
-            console.log('[Push] The account changed before its token was registered');
-        }
-
         // Set up Android notification channel
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
@@ -127,12 +135,11 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
                 description: 'Urgent alerts when someone tries to recover your account',
             });
         }
-
-        return token;
-    } catch (error) {
-        console.error('[Push] Error getting push token:', error);
-        return null;
+    } catch (e) {
+        // The token is had: the registration goes all the same.
+        console.warn('[Push] Could not set up the notification channels', e);
     }
+    return token;
 }
 
 // Unregistering is the leaving account's (utils/account-leaves-phone.ts `unregisterPushToken`): on each community the

@@ -44,13 +44,18 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *
  *  1. The ledger is the main server's exactly: every account as it holds it and no other, each trade's fee and project;
  *     and a standby seeds no BeanPool enterprise of its own (G0, G9). A standby with no record of a format is older.
- *  2. No trade the standby made itself. Its own demurrage flush, and a Bean move made on it (a send, a trade, a member's
+ *  2. Listings, deals, their photos and projects are the main server's rows verbatim (G1, G1b): a listing of this
+ *     community's own names no origin (before, the main server's PeerId, so a promoted standby took every one for another
+ *     community's), its category, cash note and search words follow each edit, a deal keeps its dispute resolution and
+ *     last reminder, and every stamp is the main server's (IMPORT_KEEPS_STAMPS). A copy made by format 1 holds those
+ *     rows under stamps no later copy moves past.
+ *  3. No trade the standby made itself. Its own demurrage flush, and a Bean move made on it (a send, a trade, a member's
  *     own delete), wrote trades the main server never made, which no copy removes: the import never deletes a trade a
  *     copy doesn't name. Now the flush writes nothing on a standby (engine/audit.ts persistDecayAndCommons) and every
  *     Bean move refuses there before it writes (config/node-role.ts assertLedgerWritable). The force-resync this format
- *     asks for clears the ones a standby already holds, of both kinds.
+ *     asks for clears the ones a standby already holds, of both kinds, a format 2 standby's included.
  */
-export const REPLICA_FORMAT = 2;
+export const REPLICA_FORMAT = 3;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -299,7 +304,7 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
  * and a first full snapshot carries every photo a peer holds — one blocking round trip each would hold the
  * node for minutes, and the host watchdog restarts a node that stops answering for one.
  */
-async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColumns>> {
+async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColumns & { updated_at: string | null }>> {
     const store = getImageStore();
     // Written a few at a time; results kept by index so "last one wins" below still means the payload's order.
     const written: (PhotoColumns | null)[] = new Array(photos.length).fill(null);
@@ -317,7 +322,7 @@ async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColu
         }
     };
     await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
-    const out = new Map<string, PhotoColumns>();
+    const out = new Map<string, PhotoColumns & { updated_at: string | null }>();
     for (let i = 0; i < photos.length; i++) {
         const ph = photos[i];
         // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here on the way
@@ -327,8 +332,10 @@ async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColu
         // the evacuation job skips and the photo route serves as a 404, and the peer's unchanged
         // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
         if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
-        // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice.
-        out.set(`${ph.post_id}|${ph.order_num}`, written[i]!);
+        // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice. With the
+        // main server's stamp: this standby's own would outrank a delete made there after it (a photo tombstone). Null
+        // when it holds none; the row's INSERT fills that from the listing.
+        out.set(`${ph.post_id}|${ph.order_num}`, { ...written[i]!, updated_at: typeof ph.updated_at === 'string' ? ph.updated_at : null });
     }
     return out;
 }
@@ -642,6 +649,15 @@ function postModeration(rp: any): [string | null, string | null] {
     return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
 }
 
+/**
+ * cash_also_needed, search_keywords (G1b), in that order: the cash note the "Beans only" filter reads, and the main
+ * server's search words, synonyms included. A payload without the words (an older main server) sends null, and the row
+ * keeps what it has (the INSERT's ''), which the boot backfill fills (state-engine.ts backfillSearchKeywords).
+ */
+function postSearch(rp: any): [number, string | null] {
+    return [rp.cashAlsoNeeded ? 1 : 0, typeof rp.searchKeywords === 'string' ? rp.searchKeywords : null];
+}
+
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
 // so a member who clears their area on the main server has none here either.
 
@@ -757,6 +773,30 @@ export interface ImportOptions {
     heldToSum?: number | null;
 }
 
+/**
+ * The touch triggers (db/schema.sql) of the tables whose rows this import writes with the main server's own stamps. Each
+ * stamps `updated_at` with this server's clock on an UPDATE that leaves it as it was, so a copy that sends a row again
+ * with its stamp unchanged (a whole copy, the deals' upsert) would restamp it here: after a take-over, phones' deltas and
+ * every later tombstone are judged against that stamp (design §4.1: no trigger writes a replicated table during an
+ * import). Set aside inside the import's transaction and put back exactly as the database held them, as the keyword
+ * backfill does (state-engine.ts backfillSearchKeywords); a copy that throws rolls the drop back with the rest.
+ */
+const IMPORT_KEEPS_STAMPS = [
+    'posts_touch_updated_at', 'post_photos_touch_updated_at', 'marketplace_transactions_touch_updated_at', 'projects_touch_updated_at',
+] as const;
+
+/** Drops IMPORT_KEEPS_STAMPS' triggers; the function it returns creates again the ones this database had. In a transaction. */
+function setTouchTriggersAside(): () => void {
+    const held: string[] = [];
+    for (const name of IMPORT_KEEPS_STAMPS) {
+        const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(name) as { sql: string } | undefined)?.sql;
+        if (!sql) continue;
+        held.push(sql);
+        db.exec(`DROP TRIGGER ${name}`);
+    }
+    return () => { for (const sql of held) db.exec(sql); };
+}
+
 export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, opts: ImportOptions = {}): Promise<ImportResult> {
     const seed = opts.seed === true;
     const heldToSum = typeof opts.heldToSum === 'number' && Number.isFinite(opts.heldToSum) ? opts.heldToSum : null;
@@ -851,6 +891,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
         db.transaction(() => {
             // The ledger's total before this copy writes anything, what the conservation guard holds it to (below).
             const totalBefore = ledgerTotal();
+            const putTouchTriggersBack = setTouchTriggersAside();
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -998,8 +1039,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
-                                hidden_by_reports_at, removed_by_moderator_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1013,7 +1054,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.repeatable ? 1 : 0,
                         rp.lat ?? null,
                         rp.lng ?? null,
-                        rp.originNode || remote.nodeId,
+                        // As the main server holds it (G1): null for this community's own listing, a linked community's
+                        // address for one in its cache. Filled with the payload's nodeId, the main server's PeerId, which a
+                        // take-over keeps, every listing was another community's on a promoted standby: none could be
+                        // accepted, none counted toward probation or reached a linked community.
+                        rp.originNode || null,
                         rp.priceType || 'fixed',
                         rp.acceptedBy || null,
                         rp.acceptedAt || null,
@@ -1029,7 +1074,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postScope(rp),
-                        ...postModeration(rp)
+                        ...postModeration(rp),
+                        ...postSearch(rp),
                     );
                     newPosts++;
                 } else {
@@ -1038,6 +1084,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         continue;
                     }
                     const res = db.prepare(`UPDATE posts SET
+                        category = ?,
+                        origin_node = ?,
                         title = ?,
                         description = ?,
                         credits = ?,
@@ -1067,8 +1115,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         reach_peers = ?,
                         hidden_by_reports_at = ?,
                         removed_by_moderator_at = ?,
+                        cash_also_needed = ?,
+                        search_keywords = COALESCE(?, search_keywords),
                         updated_at = ?
                         WHERE id = ?`).run(
+                        rp.category,
+                        rp.originNode || null,
                         rp.title,
                         rp.description,
                         rp.credits,
@@ -1094,6 +1146,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.eventState ?? null,
                         ...postScope(rp),
                         ...postModeration(rp),
+                        ...postSearch(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -1109,23 +1162,33 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 // nothing at all — the key is content-addressed, so it is the same key.
                 //
                 // The bytes are already on disk: `storeImportedPhotos` put them there before this
-                // transaction opened. All that is left in here is the row.
+                // transaction opened. All that is left in here is the row, stamped as the main server stamped it.
+                // A photo it holds unstamped (an older database's ALTER added the column with no default, and no backfill)
+                // takes its listing's stamp, the main server's too: a NULL one is in no delta, and every tombstone for the
+                // slot would outrank it. This server's clock only when the listing isn't here either.
                 const insertPhoto = db.prepare(
-                    `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)`
+                    `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
+                     VALUES (?, ?, ?, COALESCE(?, (SELECT updated_at FROM posts WHERE id = ?), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?, ?, ?, ?)`
                 );
                 for (const [key, cols] of importedPhotoColumns) {
                     const sep = key.lastIndexOf('|');
                     const postId = key.slice(0, sep);
                     const orderNum = Number(key.slice(sep + 1));
-                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
+                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.updated_at, postId, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
                 }
             }
 
             if (remote.projects) {
+                // Every column, as the main server holds it (G1b). The legacy crowdfund row is still live: a bounded
+                // enterprise writes one and its pledges count into it (routes/treasury.ts, db.ts pledgeToProject). Ten of
+                // its columns left `migrated_at` and `enterprise_pubkey` empty and the stamp this standby's, so its boot
+                // migrated each project again (db/unify-projects-migration.ts) and a project's delete could be skipped. One
+                // the main server holds unstamped (an older database's ALTER, no backfill) takes its `created_at`, as the
+                // stamp's own migration fills it (db.ts): a NULL one is in no delta, and any tombstone for it would win.
+                const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const pr of remote.projects) {
-                    db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, created_at) 
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    writeProject.run(
                         pr.id,
                         pr.creator_pubkey,
                         pr.title,
@@ -1135,7 +1198,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         pr.current_amount,
                         pr.deadline_at,
                         pr.status,
-                        pr.created_at
+                        pr.migrated_at ?? null,
+                        pr.enterprise_pubkey ?? null,
+                        pr.created_at,
+                        pr.updated_at ?? pr.created_at ?? new Date().toISOString(),
                     );
                 }
             }
@@ -1322,14 +1388,30 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             }
 
             if (remote.marketplaceTransactions) {
-                for (const mt of remote.marketplaceTransactions) {
-                    const res = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                // Every column, as the main server holds it, its stamp included (G1b): a resolved dispute stays resolved
+                // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
+                // stamp is the main server's, which phones' deltas read after a take-over.
+                const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at,
+                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
+                                    post_id = excluded.post_id,
+                                    buyer_pubkey = excluded.buyer_pubkey,
+                                    seller_pubkey = excluded.seller_pubkey,
+                                    created_at = excluded.created_at,
                                     status = excluded.status,
                                     completed_at = excluded.completed_at,
                                     hours = excluded.hours,
-                                    credits = excluded.credits`).run(
+                                    credits = excluded.credits,
+                                    updated_at = excluded.updated_at,
+                                    last_reminded_at = excluded.last_reminded_at,
+                                    dispute_resolution = excluded.dispute_resolution,
+                                    dispute_resolved_at = excluded.dispute_resolved_at,
+                                    dispute_resolved_by = excluded.dispute_resolved_by`);
+                for (const mt of remote.marketplaceTransactions) {
+                    const createdAt = mt.createdAt ?? mt.created_at ?? new Date().toISOString();
+                    const completedAt = mt.completedAt ?? mt.completed_at ?? null;
+                    const res = writeDeal.run(
                         mt.id,
                         mt.postId ?? mt.post_id ?? null,
                         mt.buyerPubkey ?? mt.buyerPublicKey ?? mt.buyer_pubkey ?? null,
@@ -1337,8 +1419,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         mt.credits ?? 0,
                         mt.hours ?? null,
                         mt.status ?? 'pending',
-                        mt.createdAt ?? mt.created_at ?? new Date().toISOString(),
-                        mt.completedAt ?? mt.completed_at ?? null
+                        createdAt,
+                        completedAt,
+                        mt.updatedAt ?? completedAt ?? createdAt,
+                        mt.lastRemindedAt ?? null,
+                        mt.disputeResolution ?? null,
+                        mt.disputeResolvedAt ?? null,
+                        mt.disputeResolvedBy ?? null,
                     );
                     if (res.changes > 0) marketplaceTxns++;
                 }
@@ -1807,6 +1894,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
 
             applyTombstones(tombstones.filter((ts) => ts.tableName !== 'join_requests' && ts.tableName !== 'recovery_shares'
                 && !appliedBeforeRekey.has(ts)));
+            putTouchTriggersBack();
         })();
     } finally {
         currentImportOrigin = null;

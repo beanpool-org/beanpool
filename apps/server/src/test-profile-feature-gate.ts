@@ -39,6 +39,7 @@ async function main() {
         directoryMirror: true,
         publishToDirectory: false,
         guestListingsOnly: true,
+        exampleListings: true,
         decisions: false,
     };
 

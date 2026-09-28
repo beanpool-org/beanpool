@@ -19,7 +19,7 @@ import {
 } from '@beanpool/core/sso-share-vectors';
 import { recoveryStored, sealJoinRecovery, signInNames } from './join-recovery';
 import { joinBody, type SignInProof } from './web-join';
-import { generateIdentity, importIdentity, type BeanPoolIdentity } from './identity';
+import { generateIdentity, importIdentity, isJoinProvider, type BeanPoolIdentity, type JoinProvider } from './identity';
 import { getSignInRecovery } from './api';
 import { memoryIndexedDB } from './memory-indexeddb';
 
@@ -38,15 +38,24 @@ function browserIdentity(v: SsoShareVector): BeanPoolIdentity {
     };
 }
 
-/** A fixture sign-in for the vector: a token that is never checked (nothing here reaches a node), or GitHub's session. */
-function fixtureProof(v: SsoShareVector): SignInProof {
-    return v.provider === 'github'
-        ? { provider: 'github', sessionId: 'node-session-1', sub: v.sub }
-        : { provider: v.provider, idToken: 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.c2ln', nonce: 'node-nonce-1', sub: v.sub };
+/**
+ * The vectors for the sign-ins this app offers. core's list is the format's, shared with every client: a vector for a
+ * sign-in this app does not offer is not one it can seal to, and is left to core's own test.
+ */
+const VECTORS = SSO_SHARE_VECTORS.flatMap((v) => (isJoinProvider(v.provider) ? [{ ...v, provider: v.provider }] : []));
+
+/** A fixture sign-in for the vector: a token that is never checked (nothing here reaches a node). */
+function fixtureProof(v: SsoShareVector & { provider: JoinProvider }): SignInProof {
+    return { provider: v.provider, idToken: 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.c2ln', nonce: 'node-nonce-1', sub: v.sub };
 }
 
 describe("the browser's copy is the phone's, byte for byte (@beanpool/core/sso-share-vectors)", () => {
-    it.each(SSO_SHARE_VECTORS.map((v) => [v.name, v] as const))('%s', async (_name, v) => {
+    it('there are vectors for Google and Apple, with the words and without', () => {
+        expect(VECTORS.map((v) => v.provider)).toEqual(expect.arrayContaining(['google', 'apple']));
+        expect(VECTORS.some((v) => !v.withWords)).toBe(true);
+    });
+
+    it.each(VECTORS.map((v) => [v.name, v] as const))('%s', async (_name, v) => {
         expect(browserIdentity(v).privateKey).toHaveLength(96);
         vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(seededGetRandomValues(v.name) as never);
         const sealed = await sealJoinRecovery(browserIdentity(v), v.provider, v.sub);
@@ -58,10 +67,7 @@ describe("the browser's copy is the phone's, byte for byte (@beanpool/core/sso-s
         // The join body, as the phone's utils/global-join.ts submitJoin builds it for the same sign-in: the same
         // fields in the same order, so even the serialised request bodies match.
         const proof = fixtureProof(v);
-        const credential = proof.provider === 'github'
-            ? { proof: { sessionId: proof.sessionId } }
-            : { idToken: proof.idToken, nonce: proof.nonce };
-        const phoneBody = { callsign: 'Vector', provider: v.provider, ...credential, recovery: { shares: v.shares } };
+        const phoneBody = { callsign: 'Vector', provider: v.provider, idToken: proof.idToken, nonce: proof.nonce, recovery: { shares: v.shares } };
         const body = joinBody('Vector', proof, { shares: sealed!.shares });
         expect(JSON.stringify(body)).toBe(JSON.stringify(phoneBody));
     });
@@ -82,7 +88,7 @@ describe('the key the browser holds as PKCS8 is sealed as the raw 32-byte seed',
     });
 
     it('a key brought here from the phone (the raw seed) is sealed the same way', async () => {
-        const v = SSO_SHARE_VECTORS[0];
+        const v = VECTORS[0];
         vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(seededGetRandomValues(v.name) as never);
         const sealed = await sealJoinRecovery({ ...browserIdentity(v), privateKey: SSO_SHARE_VECTOR_SEED_HEX }, v.provider, v.sub);
         expect(sealed!.shares).toEqual(v.shares);
@@ -138,8 +144,8 @@ describe("asking the node which sign-ins bring this account back (Settings)", ()
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         const me = await generateIdentity('Me');
         await importIdentity(me);
-        const fetchMock = answer(200, { enrolledSso: ['google', 7, 'github'], total: 1 });
-        expect(await getSignInRecovery()).toEqual(['google', 'github']);
+        const fetchMock = answer(200, { enrolledSso: ['google', 7, 'apple'], total: 1 });
+        expect(await getSignInRecovery()).toEqual(['google', 'apple']);
         const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         expect(url).toMatch(/\/api\/recovery\/shares\/status$/);
         expect(init.method).toBe('POST');
@@ -174,10 +180,10 @@ describe("the node's word on the copy", () => {
         expect(recoveryStored(undefined)).toBe(false);
     });
 
-    it('the sign-ins named as a member reads them; one this app has no name for is left out', () => {
+    it('the sign-ins named as a member reads them; one this app does not offer is left out', () => {
         expect(signInNames(['google'])).toBe('Google');
-        expect(signInNames(['google', 'github'])).toBe('Google and GitHub');
-        expect(signInNames(['google', 'apple', 'github'])).toBe('Google, Apple and GitHub');
+        expect(signInNames(['google', 'apple'])).toBe('Google and Apple');
+        expect(signInNames(['google', 'apple', 'facebook'])).toBe('Google, Apple and Facebook');
         expect(signInNames(['google', 'google'])).toBe('Google');
         expect(signInNames(['facebook', 'myspace'])).toBe('Facebook');
         expect(signInNames(['toString'])).toBeNull();

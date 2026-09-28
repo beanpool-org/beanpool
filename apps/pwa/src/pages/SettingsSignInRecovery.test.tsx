@@ -71,9 +71,9 @@ describe('Settings: sign-in recovery', () => {
     });
 
     it('two sign-ins (a phone connected another): both named', async () => {
-        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google', 'github']);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google', 'apple']);
         renderSettings();
-        expect(await screen.findByTestId('signin-recovery')).toHaveTextContent('Sign-in recovery: connected (Google and GitHub)');
+        expect(await screen.findByTestId('signin-recovery')).toHaveTextContent('Sign-in recovery: connected (Google and Apple)');
     });
 
     it('not connected: says so, and the words are the way back', async () => {

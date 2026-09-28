@@ -10,7 +10,7 @@
  * `<this origin>/app/auth/<provider>`. No provider script runs on this page, there is no popup and no third-party
  * cookie, which is what makes one flow work in every browser (design §3.5). On the way back the page reads the
  * fragment, takes it out of the address bar at once, matches `state` to the pending join, and sends the one signed
- * `POST /api/join`. GitHub needs no redirect: the node runs the device flow and the page shows the code.
+ * `POST /api/join`.
  *
  * ## What the return page trusts (design §5.1, §5.2)
  *
@@ -37,9 +37,9 @@
  *
  * ## Sign-in recovery (G11-c)
  *
- * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim, or GitHub's poll answer). The
- * join screens seal the key (and its 12 words) to that `sub` (lib/join-recovery.ts) and pass the shares as `joinBody`'s
- * `recovery`, so one sign-in both joins and becomes the member's way back, as on the phone.
+ * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim). The join screens seal the key
+ * (and its 12 words) to that `sub` (lib/join-recovery.ts) and pass the shares as `joinBody`'s `recovery`, so one
+ * sign-in both joins and becomes the member's way back, as on the phone.
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -47,6 +47,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
 import {
     isDefiniteJoinRefusal,
+    isJoinProvider,
     lastSentAt,
     SENT_JOIN_CAN_LAND_MS,
     type BeanPoolIdentity,
@@ -58,23 +59,10 @@ import {
 
 export { SENT_JOIN_CAN_LAND_MS };
 
-/** The sign-ins the browser leaves the page for. GitHub is the node's own device flow. */
-export type RedirectProvider = 'google' | 'apple' | 'facebook';
-export const REDIRECT_PROVIDERS: readonly RedirectProvider[] = ['google', 'apple', 'facebook'];
-
-export function isRedirectProvider(value: unknown): value is RedirectProvider {
-    return typeof value === 'string' && (REDIRECT_PROVIDERS as readonly string[]).includes(value);
-}
-
-const PROVIDER_LABELS: Record<JoinProvider, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };
+const PROVIDER_LABELS: Record<JoinProvider, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook' };
 
 export function providerLabel(provider: JoinProvider): string {
     return PROVIDER_LABELS[provider];
-}
-
-/** One of the four sign-ins by its own name: not `toString` or `constructor`, which `in` would find on any object. */
-function isJoinProvider(value: unknown): value is JoinProvider {
-    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PROVIDER_LABELS, value);
 }
 
 /** The door's cap on a joining name (apps/server/src/routes/open-join.ts MAX_JOIN_CALLSIGN). */
@@ -85,7 +73,7 @@ export const MAX_JOIN_CALLSIGN = 20;
 /** Where the provider sends the browser back: this web app's own origin, so the pending join is there to meet it. */
 export const RETURN_PATH_PREFIX = '/app/auth/';
 
-export function returnUri(origin: string, provider: RedirectProvider): string {
+export function returnUri(origin: string, provider: JoinProvider): string {
     return `${origin}${RETURN_PATH_PREFIX}${provider}`;
 }
 
@@ -152,7 +140,7 @@ export function facebookAuthUrl({ clientId, origin, nonce }: AuthRequest): strin
         + `&nonce=${encodeURIComponent(nonce)}&state=${encodeURIComponent(nonce)}`;
 }
 
-export function providerAuthUrl(provider: RedirectProvider, request: AuthRequest): string {
+export function providerAuthUrl(provider: JoinProvider, request: AuthRequest): string {
     switch (provider) {
         case 'google': return googleAuthUrl(request);
         case 'apple': return appleAuthUrl(request);
@@ -165,7 +153,7 @@ export function providerAuthUrl(provider: RedirectProvider, request: AuthRequest
 /** What came back in the fragment of `/app/auth/<provider>`, by name. Nothing else in it is read. */
 export interface AuthReturn {
     /** The provider the path names, or null when it names none this page redirects to. */
-    provider: RedirectProvider | null;
+    provider: JoinProvider | null;
     state: string | null;
     idToken: string | null;
     error: string | null;
@@ -182,7 +170,7 @@ export function readAuthReturn(pathname: string, hash: string): AuthReturn | nul
         return v ? v : null;
     };
     return {
-        provider: isRedirectProvider(named) ? named : null,
+        provider: isJoinProvider(named) ? named : null,
         state: field('state'),
         idToken: field('id_token'),
         error: field('error'),
@@ -236,7 +224,7 @@ export function jwtClaims(token: string): Record<string, unknown> | null {
  * Whether a token's `nonce` claim is this attempt's, as the node will judge it (apps/server/src/sso.ts): verbatim,
  * and for Apple also its SHA-256 in hex (`nonceMayBeHashed`), which is how Apple's native flow carries it.
  */
-export function nonceClaimMatches(provider: RedirectProvider, claim: unknown, nonce: string): boolean {
+export function nonceClaimMatches(provider: JoinProvider, claim: unknown, nonce: string): boolean {
     if (typeof claim !== 'string' || !nonce) return false;
     if (claim === nonce) return true;
     return provider === 'apple' && claim === bytesToHex(sha256(utf8ToBytes(nonce)));
@@ -259,9 +247,9 @@ export type ReturnRefusal =
     | 'no_subject';
 
 export type ReturnOutcome =
-    | { kind: 'token'; provider: RedirectProvider; idToken: string; nonce: string; sub: string }
-    | { kind: 'cancelled'; provider: RedirectProvider }
-    | { kind: 'provider_error'; provider: RedirectProvider; message: string }
+    | { kind: 'token'; provider: JoinProvider; idToken: string; nonce: string; sub: string }
+    | { kind: 'cancelled'; provider: JoinProvider }
+    | { kind: 'provider_error'; provider: JoinProvider; message: string }
     | { kind: 'refused'; reason: ReturnRefusal };
 
 /** OAuth error codes that mean the member backed out: said quietly, not as a failure. */
@@ -311,8 +299,6 @@ export function refusalMessage(reason: ReturnRefusal, provider: JoinProvider | n
 export interface DoorAnswer {
     status: number;
     body: Record<string, any>;
-    /** `Retry-After` in seconds, when the node sent one. */
-    retryAfterSeconds: number | null;
 }
 
 /** No answer at all: the node could not be reached, or the connection dropped before it answered. */
@@ -321,14 +307,6 @@ export class DoorUnreachableError extends Error {
         super(`Could not reach the community: ${(cause as Error)?.message || String(cause)}`);
         this.name = 'DoorUnreachableError';
     }
-}
-
-export function parseRetryAfter(value: string | null): number | null {
-    if (!value) return null;
-    const seconds = Number(value);
-    if (Number.isFinite(seconds) && seconds >= 0) return seconds;
-    const at = Date.parse(value);
-    return Number.isFinite(at) ? Math.max(0, Math.ceil((at - Date.now()) / 1000)) : null;
 }
 
 /**
@@ -356,7 +334,6 @@ export async function door(method: string, path: string, body: unknown, identity
         return {
             status: res.status,
             body: parsed && typeof parsed === 'object' ? parsed : {},
-            retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
         };
     } finally {
         clearTimeout(timer);
@@ -368,8 +345,7 @@ export interface JoinNonce {
     nonce: string;
     expiresInSeconds: number;
     providers: JoinProvider[];
-    githubFlow?: string;
-    clientIds: Partial<Record<RedirectProvider, string | null>>;
+    clientIds: Partial<Record<JoinProvider, string | null>>;
 }
 
 export async function requestJoinNonce(identity: BeanPoolIdentity): Promise<{ nonce: JoinNonce } | { answer: DoorAnswer }> {
@@ -381,148 +357,30 @@ export async function requestJoinNonce(identity: BeanPoolIdentity): Promise<{ no
             nonce: b.nonce,
             expiresInSeconds: typeof b.expiresInSeconds === 'number' ? b.expiresInSeconds : 600,
             providers: Array.isArray(b.providers) ? b.providers.filter(isJoinProvider) : [],
-            githubFlow: typeof b.githubFlow === 'string' ? b.githubFlow : undefined,
             clientIds: b.clientIds && typeof b.clientIds === 'object' ? b.clientIds : {},
         },
     };
 }
 
 /**
- * The sign-ins to offer, in the node's order: the ones it takes that a browser can do here. A redirect provider
- * needs the id the node told us to use (a node whose operator left one out answers null, and its button stays
- * hidden rather than sending the member to a sign-in the node would refuse); GitHub needs the node's own flow.
+ * The sign-ins to offer, in the node's order: the ones it takes that it gave a browser id for. A node whose operator
+ * left one out answers null, and its button stays hidden rather than sending the member to a sign-in the node would
+ * refuse.
  */
 export function offeredProviders(n: JoinNonce): JoinProvider[] {
-    return n.providers.filter((p) => p === 'github'
-        ? n.githubFlow === 'node'
-        : typeof n.clientIds[p] === 'string' && !!n.clientIds[p]);
-}
-
-export interface GithubStart {
-    sessionId: string;
-    userCode: string;
-    verificationUri: string;
-    expiresInSeconds: number;
-    intervalSeconds: number;
-}
-
-/** Where GitHub's device page is, if the node's answer names anything else. */
-export const GITHUB_DEVICE_PAGE = 'https://github.com/login/device';
-
-export async function startGithubJoin(identity: BeanPoolIdentity): Promise<{ start: GithubStart } | { answer: DoorAnswer }> {
-    const answer = await door('POST', '/api/join/github/start', {}, identity);
-    const b = answer.body;
-    if (answer.status !== 200 || typeof b.sessionId !== 'string' || typeof b.userCode !== 'string') return { answer };
-    return {
-        start: {
-            sessionId: b.sessionId,
-            userCode: b.userCode,
-            // A link the page will draw: GitHub's device page itself, whatever the answer says. Not any github.com
-            // address: another page there (an OAuth app asking for your repositories, say) would be one click from
-            // a member who thinks they are typing a code. The phone app accepts this page and nothing else too
-            // (apps/native/utils/sso-signin.ts).
-            verificationUri: GITHUB_DEVICE_PAGE,
-            expiresInSeconds: typeof b.expiresInSeconds === 'number' && b.expiresInSeconds > 0 ? b.expiresInSeconds : 900,
-            intervalSeconds: typeof b.intervalSeconds === 'number' && b.intervalSeconds > 0 ? b.intervalSeconds : 5,
-        },
-    };
-}
-
-export function pollGithubJoin(identity: BeanPoolIdentity, sessionId: string): Promise<DoorAnswer> {
-    return door('POST', '/api/join/github/poll', { sessionId }, identity);
-}
-
-export type GithubPollResult =
-    | { status: 'ok'; sub: string }
-    | { status: 'denied' }
-    | { status: 'expired' }
-    | { status: 'failed'; answer: DoorAnswer }
-    | { status: 'aborted' };
-
-export interface GithubPollOptions {
-    poll: () => Promise<DoorAnswer>;
-    /** Resolves after `ms`, or early once `signal` aborts. */
-    sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
-    intervalSeconds: number;
-    /** When the code stops working (ms since the epoch): past it the page says so rather than waiting on. */
-    expiresAt: number;
-    now?: () => number;
-    signal?: AbortSignal;
+    return n.providers.filter((p) => typeof n.clientIds[p] === 'string' && !!n.clientIds[p]);
 }
 
 /**
- * Wait for the member to enter the code at GitHub: poll the node at GitHub's interval until it says ok, denied or
- * expired. A 429 is "still waiting", and the next poll waits the `Retry-After` it came with (the poll's own
- * per-address bucket, apps/server/src/github-poll-rate-limit.ts), never less than the interval: a `Retry-After: 0`, or
- * a date already past, would otherwise ask again at once, and again. No answer, or a 503 (GitHub could not be asked), is
- * waited through too: the session has its own deadline, and a blip should not throw away a code being typed.
+ * The sign-in a join is sent with. `sub` is the provider's id for the account, read back from the token: the door does
+ * not need it from us, and it is not sent, but sign-in recovery (G11-c) seals to it.
  */
-export async function runGithubPoll(opts: GithubPollOptions): Promise<GithubPollResult> {
-    const now = opts.now ?? Date.now;
-    let intervalSeconds = opts.intervalSeconds;
-    let waitMs = intervalSeconds * 1000;
-    for (;;) {
-        await opts.sleep(waitMs, opts.signal);
-        if (opts.signal?.aborted) return { status: 'aborted' };
-        if (now() >= opts.expiresAt) return { status: 'expired' };
-        let answer: DoorAnswer;
-        try {
-            answer = await opts.poll();
-        } catch (e) {
-            if (!(e instanceof DoorUnreachableError)) throw e;
-            waitMs = intervalSeconds * 1000;
-            continue;
-        }
-        if (opts.signal?.aborted) return { status: 'aborted' };
-        if (answer.status === 429) {
-            waitMs = Math.max(answer.retryAfterSeconds ?? 0, intervalSeconds) * 1000;
-            continue;
-        }
-        if (answer.status === 503) {
-            waitMs = intervalSeconds * 1000;
-            continue;
-        }
-        if (answer.status !== 200) return { status: 'failed', answer };
-        const b = answer.body;
-        switch (b.status) {
-            case 'pending':
-                if (typeof b.intervalSeconds === 'number' && b.intervalSeconds > 0) intervalSeconds = b.intervalSeconds;
-                waitMs = intervalSeconds * 1000;
-                continue;
-            case 'ok':
-                if (typeof b.sub !== 'string' || !b.sub) return { status: 'failed', answer };
-                return { status: 'ok', sub: b.sub };
-            case 'denied':
-                return { status: 'denied' };
-            case 'expired':
-                return { status: 'expired' };
-            default:
-                return { status: 'failed', answer };
-        }
-    }
+export interface SignInProof {
+    provider: JoinProvider;
+    idToken: string;
+    nonce: string;
+    sub: string;
 }
-
-/** A real wait, cut short when `signal` aborts. */
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-        if (signal?.aborted) return resolve();
-        const done = () => {
-            clearTimeout(timer);
-            signal?.removeEventListener('abort', done);
-            resolve();
-        };
-        const timer = setTimeout(done, ms);
-        signal?.addEventListener('abort', done, { once: true });
-    });
-}
-
-/**
- * The sign-in a join is sent with. `sub` is the provider's id for the account, read back from the token (or GitHub's
- * poll answer): the door does not need it from us, and it is not sent, but sign-in recovery (G11-c) seals to it.
- */
-export type SignInProof =
-    | { provider: RedirectProvider; idToken: string; nonce: string; sub: string }
-    | { provider: 'github'; sessionId: string; sub: string };
 
 /** Sign-in recovery enrolled in the same request (G11-c): the body `POST /api/recovery/shares/sso` takes. */
 export interface JoinRecovery {
@@ -531,10 +389,7 @@ export interface JoinRecovery {
 
 /** The `POST /api/join` body. */
 export function joinBody(callsign: string, proof: SignInProof, recovery?: JoinRecovery): Record<string, unknown> {
-    const credential = proof.provider === 'github'
-        ? { proof: { sessionId: proof.sessionId } }
-        : { idToken: proof.idToken, nonce: proof.nonce };
-    return { callsign, provider: proof.provider, ...credential, ...(recovery ? { recovery } : {}) };
+    return { callsign, provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce, ...(recovery ? { recovery } : {}) };
 }
 
 export function submitJoin(identity: BeanPoolIdentity, body: Record<string, unknown>): Promise<DoorAnswer> {
@@ -675,7 +530,7 @@ export function joinVerdict(
     return { kind: 'unknown', outcome: status >= 400 && status < 600 && status !== 409 ? doorOutcome(answer, provider) : null };
 }
 
-/** The same judgement for a refused nonce request or GitHub start, before any sign-in. */
+/** The same judgement for a refused nonce request, before any sign-in. */
 export function doorRefusalMessage(answer: DoorAnswer): string {
     if (answer.status === 404) return DOOR_CLOSED;
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;

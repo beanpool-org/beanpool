@@ -1,6 +1,6 @@
 /**
  * Joining through the open door in a web browser: screens 0 to 4 of design G11 §2 (the lobby, "have you used
- * BeanPool before?", your name, the sign-in, GitHub's code, and the return). WelcomePage shows it on a node whose
+ * BeanPool before?", your name, the sign-in, and the return). WelcomePage shows it on a node whose
  * door is open, and takes over again for the steps every new member has (photo, 12 words, tour) once `onJoined` says
  * the node has said yes. The logic is lib/web-join.ts; the key waits in identity.ts's pending slot.
  *
@@ -43,23 +43,17 @@ import {
     joinVerdict,
     matchAuthReturn,
     offeredProviders,
-    pollGithubJoin,
     probeMembership,
     providerAuthUrl,
     providerLabel,
     refusalMessage,
     requestJoinNonce,
-    runGithubPoll,
-    sleep,
-    startGithubJoin,
     submitJoin,
     MAX_JOIN_CALLSIGN,
     type AuthReturn,
     type CallsignCheck,
     type DoorOutcome,
-    type GithubStart,
     type JoinNonce,
-    type RedirectProvider,
     type SignInProof,
 } from '../lib/web-join';
 import { recoveryStored, sealJoinRecovery, type SealedJoinRecovery } from '../lib/join-recovery';
@@ -135,7 +129,6 @@ type Screen =
     | { name: 'restore' }
     | { name: 'name' }
     | { name: 'providers' }
-    | { name: 'github'; start: GithubStart }
     /** `securing`: the sign-in recovery copy is being made (lib/join-recovery.ts), before the join goes. */
     | { name: 'joining'; securing?: boolean }
     | { name: 'unknown'; checking: boolean }
@@ -249,7 +242,6 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     const [nonceHeld, setNonceHeld] = useState<{ value: JoinNonce; at: number } | null>(null);
     const nonce = nonceHeld?.value ?? null;
     const [nonceProblem, setNonceProblem] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     // The last join sent, kept in memory only: a 503 is retried with the same sign-in (the node did not spend it).
     const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof } | null>(null);
     // The sign-in recovery copy made for that sign-in and key, so a retry sends the same join without sealing again.
@@ -261,7 +253,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         return () => { mounted.current = false; };
     }, []);
     // Held in a ref so every callback below stays the same function for the life of the screens: a parent re-render
-    // must not restart the GitHub wait or ask for another nonce.
+    // must not ask for another nonce.
     const onJoinedRef = useRef(onJoined);
     onJoinedRef.current = onJoined;
     const settleOnlyRef = useRef(settleOnly);
@@ -295,7 +287,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         setScreen({ name: 'failed' });
     }, []);
 
-    /** Every step after a join has gone runs through this, from a GitHub wait, a Try again or the return: none is left to fail unseen. */
+    /** Every step after a join has gone runs through this, from a Try again or the return: none is left to fail unseen. */
     const afterJoin = useCallback((step: () => Promise<unknown>) => {
         runStep(step, failed);
     }, [failed]);
@@ -638,20 +630,6 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         try {
             const held = await accountHeldElsewhere(p);
             if (held) return await showTaken(held, p, false);
-            if (provider === 'github') {
-                let got;
-                try {
-                    got = await startGithubJoin(p.identity);
-                } catch (e) {
-                    if (!(e instanceof DoorUnreachableError)) throw e;
-                    return toProviders(p, { tone: 'error', text: UNREACHABLE });
-                }
-                if ('answer' in got) return toProviders(p, { tone: 'error', text: doorRefusalMessage(got.answer) });
-                await keep({ ...p, provider: 'github', nonce: null });
-                setCopied(false);
-                setScreen({ name: 'github', start: got.start });
-                return;
-            }
             // A nonce is single use and lives ten minutes: every trip to a provider takes a fresh one.
             const n = fresh ?? await fetchNonce(p);
             if (!n) {
@@ -671,7 +649,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             };
             await savePendingJoin(next);
             setNonceHeld(null); // spent: this one is on its way to the provider
-            go(providerAuthUrl(provider as RedirectProvider, { clientId, origin: here, nonce: n.nonce }));
+            go(providerAuthUrl(provider, { clientId, origin: here, nonce: n.nonce }));
         } catch (e) {
             // A join with another key went out from this browser (another tab, say): that one is settled first.
             if (e instanceof PendingJoinHeldError) return settleSent(e.held);
@@ -680,7 +658,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         } finally {
             if (mounted.current) setBusy(false);
         }
-    }, [nonceHeld, fetchNonce, toProviders, keep, go, here, showTaken, settleSent]);
+    }, [nonceHeld, fetchNonce, toProviders, go, here, showTaken, settleSent]);
     signInRef.current = signIn;
 
     // ---------- where the page starts ----------
@@ -758,40 +736,6 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         if (screen.name !== 'providers' || !pending || nonce) return;
         void fetchNonce(pending);
     }, [screen.name, pending, nonce, fetchNonce]);
-
-    // GitHub: wait for the code to be entered.
-    useEffect(() => {
-        if (screen.name !== 'github' || !pending) return;
-        const start = screen.start;
-        const controller = new AbortController();
-        const p = pending;
-        runGithubPoll({
-            poll: () => pollGithubJoin(p.identity, start.sessionId),
-            sleep,
-            intervalSeconds: start.intervalSeconds,
-            expiresAt: Date.now() + start.expiresInSeconds * 1000,
-            signal: controller.signal,
-        }).then((result) => {
-            if (controller.signal.aborted) return;
-            switch (result.status) {
-                case 'ok':
-                    // From here the join's own screens take over, and this wait's cleanup aborts: whatever fails in
-                    // the join is caught there, never here (review 4106962149).
-                    afterJoin(() => submit(p, { provider: 'github', sessionId: start.sessionId, sub: result.sub }));
-                    return;
-                case 'denied':
-                    return toProviders(p, { tone: 'error', text: 'GitHub said no. Try again, or choose another way.' });
-                case 'expired':
-                    return toProviders(p, { tone: 'error', text: 'That GitHub code expired. Choose GitHub again for a new one.' });
-                case 'failed':
-                    return toProviders(p, { tone: 'error', text: doorRefusalMessage(result.answer) });
-            }
-        }).catch((e) => {
-            console.error('[WebJoin] GitHub wait failed:', e);
-            if (!controller.signal.aborted) toProviders(p, { tone: 'error', text: UNREACHABLE });
-        });
-        return () => controller.abort();
-    }, [screen, pending, submit, toProviders, afterJoin]);
 
     // ---------- the screens' actions ----------
 
@@ -898,15 +842,6 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
         } finally {
             if (mounted.current) setBusy(false);
-        }
-    }
-
-    async function copyCode(code: string) {
-        try {
-            await navigator.clipboard.writeText(code);
-            setCopied(true);
-        } catch {
-            setCopied(false);
         }
     }
 
@@ -1118,32 +1053,6 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 </>
             );
             break;
-
-        case 'github': {
-            const { start } = screen;
-            body = (
-                <>
-                    <h3 style={heading}>Your GitHub code</h3>
-                    <p style={lede}>Enter this code at GitHub, then come back here. We'll notice.</p>
-                    <p data-testid="join-github-code" style={{
-                        fontFamily: 'monospace', fontSize: 'min(1.4rem, 7.5vw)', fontWeight: 800, letterSpacing: '0.08em',
-                        margin: '0 0 0.75rem', overflowWrap: 'anywhere',
-                    }}>
-                        {start.userCode}
-                    </p>
-                    <button type="button" style={secondaryButton} onClick={() => void copyCode(start.userCode)}>
-                        {copied ? 'Copied ✓' : 'Copy code'}
-                    </button>
-                    <a href={start.verificationUri} target="_blank" rel="noopener noreferrer" data-testid="join-github-link"
-                        style={{ ...primaryButton, display: 'block', textDecoration: 'none', boxSizing: 'border-box' }}>
-                        Open GitHub
-                    </a>
-                    <p role="status" style={{ ...lede, marginBottom: '0.5rem' }}>Waiting for GitHub…</p>
-                    <button type="button" style={quietButton} onClick={() => pending && toProviders(pending, null)}>← Choose another way</button>
-                </>
-            );
-            break;
-        }
 
         case 'joining':
             body = (

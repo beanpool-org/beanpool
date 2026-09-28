@@ -63,6 +63,16 @@ interface SlotWrites<T> {
 }
 
 /**
+ * The pending join as stored. Its key is never dropped here (it may be a member's only copy); a sign-in it names that
+ * this app does not offer reads as none, so the page asks for one again.
+ */
+function storedPendingJoin(value: unknown): PendingJoin | undefined {
+    const p = (value ?? undefined) as PendingJoin | undefined;
+    if (!p || typeof p !== 'object' || p.provider == null || isJoinProvider(p.provider)) return p;
+    return { ...p, provider: null };
+}
+
+/**
  * Read the slots and decide what to write, in one readwrite transaction: `decide` sees what is stored at that moment,
  * never a tab's copy, and nothing else can write between its reading and its writing. Every write to any slot but
  * wipeIdentity's goes through here.
@@ -82,7 +92,7 @@ async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>
             try {
                 const decision = decide({
                     identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
-                    pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
+                    pending: storedPendingJoin(pendingReq.result),
                     restore: restoreReq.result ?? undefined,
                     inviteSent: inviteSentReq.result ?? undefined,
                 });
@@ -256,14 +266,19 @@ const NODE_NONCE_LIFE_MS = 10 * 60 * 1000;
 
 /**
  * How long after a join went out it can still land. The node writes the member only as it spends the sign-in the
- * join carried, and it spends none older than its nonce life. The nonce was issued before the join went, and a
- * GitHub result lives as long from before it (engine/github-device.ts), so ten minutes after `sentAt` nothing that
- * join carried can be spent. A minute more, for good measure.
+ * join carried, and it spends none older than its nonce life. The nonce was issued before the join went, so ten
+ * minutes after `sentAt` nothing that join carried can be spent. A minute more, for good measure.
  */
 export const SENT_JOIN_CAN_LAND_MS = NODE_NONCE_LIFE_MS + 60 * 1000;
 
-/** The sign-ins the open door takes (apps/server/src/routes/open-join.ts). */
-export type JoinProvider = 'google' | 'apple' | 'facebook' | 'github';
+/** The sign-ins the open door takes (apps/server/src/routes/open-join.ts), in the order they are offered. */
+export const JOIN_PROVIDERS = ['google', 'apple', 'facebook'] as const;
+export type JoinProvider = (typeof JOIN_PROVIDERS)[number];
+
+/** One of the sign-ins by its own name: anything else (a value an older build stored, `toString`) is not one. */
+export function isJoinProvider(value: unknown): value is JoinProvider {
+    return typeof value === 'string' && (JOIN_PROVIDERS as readonly string[]).includes(value);
+}
 
 /**
  * A join through the open door that has left the page, or may: the new key and its 12 words, the name, and the
@@ -622,7 +637,7 @@ function asPendingRestore(value: unknown): PendingRestore | null {
     if (!r || typeof r !== 'object' || r.kind !== 'restore') return null;
     if (typeof r.ephemeral?.privateKey !== 'string' || !r.ephemeral.privateKey || typeof r.ephemeral.publicKey !== 'string') return null;
     if (typeof r.account?.publicKey !== 'string' || !r.account.publicKey || typeof r.account.callsign !== 'string') return null;
-    if (typeof r.collectionId !== 'string' || !r.collectionId || typeof r.nonce !== 'string' || !r.nonce || typeof r.provider !== 'string') return null;
+    if (typeof r.collectionId !== 'string' || !r.collectionId || typeof r.nonce !== 'string' || !r.nonce || !isJoinProvider(r.provider)) return null;
     if (typeof r.expiresAt !== 'number' || typeof r.startedAt !== 'number') return null;
     return r as PendingRestore;
 }

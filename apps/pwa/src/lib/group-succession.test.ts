@@ -324,7 +324,7 @@ describe('only people in the group before the lead went quiet take part (2026-09
         expect(view.show).toBe(true);
         expect(view.outcomeOnly).toBe(false);
         expect(view.silenceLine).toBe(
-            "Marty hasn't been active for 44 days. Only members who joined by 10 Aug 2026 can choose a new lead, and there are none, so no vote can open.");
+            "Marty hasn't been active for 44 days. Only the members who were in the group by 10 Aug 2026 can choose a new lead, and there are none (convenors appointed after 10 Aug 2026 can't), so no vote can open.");
         expect(view.canPropose).toBe(false);
         expect(view.canVote).toBe(false);
         expect(view.whoVotesLine).toBeNull();

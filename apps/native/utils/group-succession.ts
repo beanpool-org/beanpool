@@ -29,7 +29,11 @@ export interface GroupSilence {
      * closed within the last fortnight.
      */
     isEligible: boolean;
-    /** Who votes: the lead's fellow convenors, or the members when the lead is the only convenor. */
+    /**
+     * Who votes: the lead's other convenors, or the members when none of the other convenors was made a convenor by
+     * the day the lead was last active (`votersJoinedBy`; on a node older than that rule, when the lead is the only
+     * convenor).
+     */
     electorate: 'convenors' | 'members';
     /**
      * Only people in the group by this UTC day (its midnight, ISO) take part — for the convenors' vote, people who
@@ -134,13 +138,13 @@ export function tallyLineText(p: GroupSuccessionProposal): string {
 }
 
 /**
- * Who takes part, in the server's own terms: "members who joined by 19 Aug 2026", or "convenors appointed by …" when
- * the convenors vote. Null from a node older than the rule, which sends no day.
+ * Who takes part, in the server's own terms: "members who were in the group by 19 Aug 2026", or "convenors appointed
+ * by …" when the convenors vote. Null from a node older than the rule, which sends no day.
  */
 export function electorateText(s: GroupSilence): string | null {
     const by = s.votersJoinedBy ? closingDateText(s.votersJoinedBy) : null;
     if (!by) return null;
-    return s.electorate === 'convenors' ? `convenors appointed by ${by}` : `members who joined by ${by}`;
+    return s.electorate === 'convenors' ? `convenors appointed by ${by}` : `members who were in the group by ${by}`;
 }
 
 /** "Only the members who were in the group by 19 Aug 2026 vote; convenors appointed after 19 Aug 2026 don't." */
@@ -165,7 +169,14 @@ export function silenceLineText(s: GroupSilence): string | null {
     const who = s.convenorCallsign || 'The lead convenor';
     const days = Math.floor(s.daysInactive);
     const quiet = `${who} hasn't been active for ${days} ${days === 1 ? 'day' : 'days'}.`;
-    if (nobodyCanVote(s)) return `${quiet} Only ${electorateText(s)} can choose a new lead, and there are none, so no vote can open.`;
+    if (nobodyCanVote(s)) {
+        // In a members' vote every convenor but the lead was appointed after the day (had one been appointed by then,
+        // the convenors would be voting), so the line says why they can't either, as whoVotesLineText does.
+        const by = closingDateText(s.votersJoinedBy as string);
+        return s.electorate === 'convenors'
+            ? `${quiet} Only convenors appointed by ${by} can choose a new lead, and there are none, so no vote can open.`
+            : `${quiet} Only the members who were in the group by ${by} can choose a new lead, and there are none (convenors appointed after ${by} can't), so no vote can open.`;
+    }
     if (!s.isEligible) return null;
     return `${quiet} The group can choose a new lead.`;
 }

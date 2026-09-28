@@ -274,7 +274,7 @@ describe('GroupSuccessionPanel — only people in the group before the lead went
         answer({ silence: silence({ electorate: 'members', isEligible: false, votersJoinedBy: '2026-08-10T00:00:00.000Z' }), voters: [] });
         panel();
         expect(await screen.findByText(
-            "Marty hasn't been active for 44 days. Only members who joined by 10 Aug 2026 can choose a new lead, and there are none, so no vote can open.",
+            "Marty hasn't been active for 44 days. Only the members who were in the group by 10 Aug 2026 can choose a new lead, and there are none (convenors appointed after 10 Aug 2026 can't), so no vote can open.",
         )).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Propose/ })).toBeNull();
         expect(screen.queryByLabelText('Propose a new lead')).toBeNull();

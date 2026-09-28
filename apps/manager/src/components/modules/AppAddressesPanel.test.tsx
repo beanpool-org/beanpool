@@ -377,6 +377,65 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect((await screen.findByRole('alert')).textContent).toMatch(/^Another community holds community\.example\.org and answers there/);
     });
 
+    it("says how many apps still reach the community by a name it had before today, and where it lives now (lost-name L4)", async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [
+                { address: 'newname.beanpool.org', source: 'public-address', today: 9, busiestDay: 12 },
+                { address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 4 },
+                { address: 'older.beanpool.org', source: 'registrar', former: true, today: 1, busiestDay: 1 },
+            ],
+            primaryAddress: 'newname.beanpool.org',
+            formerApps: { today: 3, busiestDay: 5 },
+        }));
+        render(<div style={{ width: 320 }}><AppAddressesPanel activeNode={node} /></div>);
+        const line = await screen.findByTestId('former-apps');
+        expect(line.textContent).toBe("3 apps reached this community by a name it had before today (most in one day this week: 5). "
+            + "The web app there tells its members the community has moved to newname.beanpool.org. Tell members on the phone app in a community post.");
+        // Long names break at phone width.
+        expect(line.className).toMatch(/break-words/);
+    });
+
+    it('former names nobody used this week: says so; with no address to send members to, says only the count', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [
+                { address: 'newname.beanpool.org', source: 'public-address', today: 9, busiestDay: 12 },
+                { address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 0, busiestDay: 0 },
+            ],
+            primaryAddress: 'newname.beanpool.org',
+            formerApps: { today: 0, busiestDay: 0 },
+        }));
+        const { unmount } = render(<AppAddressesPanel activeNode={node} />);
+        expect((await screen.findByTestId('former-apps')).textContent).toBe('No app reached this community by a name it had before this week.');
+        unmount();
+
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [{ address: 'gone.beanpool.org', source: 'registrar', former: true, today: 1, busiestDay: 2 }],
+            primaryAddress: null,
+            formerApps: { today: 1, busiestDay: 2 },
+        }));
+        render(<AppAddressesPanel activeNode={node} />);
+        expect((await screen.findByTestId('former-apps')).textContent).toBe('1 app reached this community by a name it had before today (most in one day this week: 2).');
+    });
+
+    it('no former names, or a server too old to count them: no such line', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [{ address: 'mullum.beanpool.org', source: 'public-address', today: 12, busiestDay: 30 }],
+            primaryAddress: 'mullum.beanpool.org',
+            formerApps: { today: 0, busiestDay: 0 },
+        }));
+        const { unmount } = render(<AppAddressesPanel activeNode={node} />);
+        await screen.findByTestId('app-address');
+        expect(screen.queryByTestId('former-apps')).toBeNull();
+        unmount();
+
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [{ address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 2 }],
+        }));
+        render(<AppAddressesPanel activeNode={node} />);
+        await screen.findByTestId('app-address');
+        expect(screen.queryByTestId('former-apps')).toBeNull();
+    });
+
     it('an older server (404) or a moderator shows nothing rather than an alarm', async () => {
         vi.mocked(nodeClient.getAppAddresses).mockRejectedValue(new Error('HTTP 404: Not Found'));
         const { container } = render(<AppAddressesPanel activeNode={node} />);

@@ -4,8 +4,9 @@
  * A member's app signs every request for the address it reaches the community at, and the node accepts only its own
  * addresses, so a request someone copied from another community can't be used here (apps/server
  * engine/own-addresses.ts, engine/member-signature.ts). This lists those addresses with where each comes from and how
- * many apps used it; lets the owner confirm an address the node doesn't know (a self-hoster's custom domain behind a
- * proxy); and says how many apps too old to name a community still reach it before the switch date.
+ * many apps used it; how many apps still reach it by a name it had before, and where it lives now (lost-name L4); lets
+ * the owner confirm an address the node doesn't know (a self-hoster's custom domain behind a proxy); and says how many
+ * apps too old to name a community still reach it before the switch date.
  *
  * An owner or admin confirms; nothing here is ever learned from a request by itself. Only the address this page is
  * open at is offered with one tap (apps/server engine/address-offers.ts): members' keys can all be one person's, and
@@ -58,6 +59,21 @@ function pageOfferText(host: string, s: AddressSighting | undefined): string {
         ? `, and so did ${membersApps(s.busiestDay)} this week${s.ownerOrAdmin ? ", an owner's or admin's among them" : ''}`
         : '';
     return `This page reached the community at ${host}${also}. Is that the address members' apps use?`;
+}
+
+/**
+ * Members' apps still reaching the community by a name it had before (lost-name L4), and what to do about it: the web
+ * app there says where the community lives now; phone apps are moved by hand, so the owner tells those members.
+ * Nothing on a node with no former names, or from a server too old to count them.
+ */
+function formerAppsText(report: AppAddressesReport): string | null {
+    const f = report.formerApps;
+    if (!f || !report.addresses.some((a) => a.former)) return null;
+    if (f.busiestDay === 0) return 'No app reached this community by a name it had before this week.';
+    const count = `${apps(f.today)} reached this community by a name it had before today (most in one day this week: ${f.busiestDay}).`;
+    return report.primaryAddress
+        ? `${count} The web app there tells its members the community has moved to ${report.primaryAddress}. Tell members on the phone app in a community post.`
+        : count;
 }
 
 /** The directory's name for the community at an address, or words for one it gives no name. */
@@ -187,6 +203,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const toTick = others.filter((h) => h.reason === 'not-this-page')
         .sort((a, b) => Number(!!b.ownerOrAdmin) - Number(!!a.ownerOrAdmin) || b.busiestDay - a.busiestDay);
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);
+    const formerLine = formerAppsText(report);
     const button = 'min-h-[44px] max-w-full break-words text-left px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
     const confirmButton = `${button} bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600`;
 
@@ -239,6 +256,8 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                     })}
                 </ul>
             )}
+
+            {formerLine && <p className="text-sm text-nature-300 m-0 leading-relaxed break-words" data-testid="former-apps">{formerLine}</p>}
 
             {pageOffered && pageHost && (
                 <div className="p-3 rounded-xl bg-nature-950/60 border border-amber-700/60 space-y-2" data-testid="app-address-offer">

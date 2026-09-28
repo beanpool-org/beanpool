@@ -40,6 +40,7 @@ import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
 import { ModerationPauseCard } from './components/ModerationPauseCard';
 import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
+import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
 
@@ -522,7 +523,12 @@ export function App() {
             return <GuestLobby info={visitorView.info} onComplete={setIdentity} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
-        return <WelcomePage onComplete={setIdentity} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />;
+        return (
+            <>
+                <FormerAddressBanner />
+                <WelcomePage onComplete={setIdentity} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
+            </>
+        );
     }
 
     const TABS: { id: Tab; label: string; emoji: string }[] = [
@@ -672,6 +678,9 @@ export function App() {
                         </button>
                     </div>
                 )}
+
+                {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
+                <FormerAddressBanner signedIn />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
                 <header className="relative shadow-md md:hidden" style={{

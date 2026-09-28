@@ -2767,7 +2767,9 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
  * The next sync that may read the listings is a whole one (pillar-sync drops the cursor).
  */
 async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfPubkey: string | null): Promise<void> {
-    const own = selfPubkey ?? '';
+    // Without the phone's own key it can't tell its own posts from the others': drop nothing.
+    if (!selfPubkey) return;
+    const own = selfPubkey;
     const others = 'SELECT id FROM posts WHERE author_pubkey IS NOT ?';
     await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${others})`, [own]);
     await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${others})`, [own]);

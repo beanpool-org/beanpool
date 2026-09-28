@@ -400,7 +400,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
                 const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
                 await noteMembersOnly(anchorUrl, membersOnly);
-                if (membersOnly) {
+                // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
+                // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
+                // switch in flight), which says nothing about membership: the cache stays (PR #1286 review 4125870399).
+                if (membersOnly && postsRes.status === 403) {
                     // What this phone cached of the community's listings before it was refused them (its key is no
                     // member there) is not its to keep showing: it goes, never another community's and never the phone's
                     // own posts (utils/db.ts applyDelta `postsRefused`), and the Market shows the members-only card. The

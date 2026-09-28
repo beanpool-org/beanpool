@@ -164,11 +164,28 @@ describe("a community's members_only refusal", () => {
         expect(store.has(LAST_SYNC_KEY)).toBe(false);
     });
 
-    it('an unsigned read refused 401 members_only drops them the same way', async () => {
+    it('an unsigned read refused 401 members_only drops nothing (a locked phone, or a switch in flight: not a verdict on membership)', async () => {
         await phoneThatCachedTheListings();
         node.status = 401;
         await sync();
-        expect(ids()).toEqual(['post-mine']);
+        expect(ids()).toEqual(['post-lemons', 'post-mine', 'post-party', 'post-poll']);
+        expect(votes()).toEqual(['post-mine', 'post-poll']);
+        expect(rsvps()).toEqual(['post-party']);
+        expect(store.has(LAST_SYNC_KEY)).toBe(true);
+    });
+
+    it("a 403 while the phone can't read its own key drops nothing (it can't tell its own posts from the others')", async () => {
+        await phoneThatCachedTheListings();
+        const { loadIdentity } = await import('../identity');
+        vi.mocked(loadIdentity).mockResolvedValue(null as any);
+        try {
+            node.status = 403;
+            await sync();
+            expect(ids()).toEqual(['post-lemons', 'post-mine', 'post-party', 'post-poll']);
+            expect(votes()).toEqual(['post-mine', 'post-poll']);
+        } finally {
+            vi.mocked(loadIdentity).mockResolvedValue({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        }
     });
 
     it("never touches another community's cache: switched to another community while the refusal was on its way, nothing goes", async () => {

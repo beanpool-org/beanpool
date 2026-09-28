@@ -30,7 +30,8 @@
  *     M's hashes: it counts as mending itself for an hour at most (HEALING_MS, review 4119012097), then M opens an incident
  *     with one push; the next exact copy ends it. Six hours on (a restart, the record's last resync moved back), planted
  *     again: the held resync lands a copy M signed whose members aren't M's, the check after it still differs, and that is
- *     when the incident opens, with one push. A restart then allows no sooner force-resync (the record keeps when the last was),
+ *     when the incident opens, with one push. Its retry six hours on keeps that same incident open while it runs (review
+ *     4119012188). A restart then allows no sooner force-resync (the record keeps when the last was),
  *     the incident stays, and the banner and the preview say what didn't match. Then a whole copy the main
  *     server sends without its hashes (as it does when written to while making one): recorded as not compared in full, it
  *     is no all-clear (review 4118340714): the incident stays open, and the preview still warns and names the older exact copy.
@@ -339,11 +340,12 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
 
 /**
  * The main server as its standby reaches it: every request passed to its real backup routes, with its headers, except that
- * a step can have the next copy the standby asks for answered with a payload M signed.
+ * a step can have the next copy the standby asks for answered with a payload M signed. M doesn't hear that pull (nor its
+ * report), unless the step says `heard`: then the pull goes on to M all the same, and M's own answer is dropped.
  */
 interface MainServerDoor {
     url: string;
-    next: (answer: { status: number; body?: unknown }) => void;
+    next: (answer: { status: number; body?: unknown; heard?: boolean }) => void;
     waiting: () => number;
     /** The main server restarted on another port. */
     retarget: (to: string) => void;
@@ -351,21 +353,23 @@ interface MainServerDoor {
 }
 async function mainServerDoor(initialTarget: string): Promise<MainServerDoor> {
     let target = initialTarget;
-    const queued: { status: number; body?: unknown }[] = [];
+    const queued: { status: number; body?: unknown; heard?: boolean }[] = [];
     const server = http.createServer((req, res) => {
         void (async () => {
             try {
-                const answer = req.url?.startsWith('/api/local/admin/sync-') ? queued.shift() : undefined;
-                if (answer) {
-                    res.writeHead(answer.status, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' });
-                    res.end(answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body));
-                    return;
-                }
                 const chunks: Buffer[] = [];
                 for await (const c of req) chunks.push(c as Buffer);
                 const headers: Record<string, string> = {};
                 for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string' && (k.startsWith('x-') || k === 'content-type')) headers[k] = v;
-                const r = await fetch(target + req.url, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+                const passOn = () => fetch(target + req.url, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+                const answer = req.url?.startsWith('/api/local/admin/sync-') ? queued.shift() : undefined;
+                if (answer) {
+                    if (answer.heard) await (await passOn()).arrayBuffer();
+                    res.writeHead(answer.status, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' });
+                    res.end(answer.body === undefined ? JSON.stringify({ error: 'refused by this step' }) : JSON.stringify(answer.body));
+                    return;
+                }
+                const r = await passOn();
                 const out: Record<string, string> = { 'Content-Type': r.headers.get('content-type') ?? 'application/json' };
                 const role = r.headers.get('x-node-role');
                 if (role) out['X-Node-Role'] = role;
@@ -740,6 +744,31 @@ async function main(): Promise<void> {
             `the pull after (a ${toldUncured.mode}) reports it: the held resync did not cure it, and M opens an incident, "inexact", members (${brief(incident3?.problems)})`);
         assert(pushes.length === 4 && JSON.stringify(pushes[3].to) === JSON.stringify([OWNER_TOKEN]), `one push for it, to the owner only (${pushes.length})`);
 
+        // The review's case (4119012188): one already told stays told while S tries again. Six hours on (its record's last
+        // force-resync moved back, and S restarted), a whole copy asks for the retry; that retry's pull reports the copy as mending by itself,
+        // and the incident stays open, the same one. The retry is served a copy whose members aren't M's again: not cured.
+        await standby.send('checkpoint');
+        await standby.kill();
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
+        await main.send('touch');
+        const retryAsked = await pull(true);
+        rec = await standby.send('record');
+        require_(retryAsked.ok && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === true,
+            `S's whole copy still differs, and asks for its held force-resync again (${brief(rec?.lastWhole)})`);
+        door.next({ status: 200, body: await main.send('forge-content', { publicKey: cy.pk, value: 'still not what M holds' }), heard: true });
+        const retry = await pull();
+        health = await main.send('health');
+        pushes = await pushesSoFar();
+        const retrying = health?.state.standbys.find((x: any) => x.id === rec?.id);
+        assert(retry.mode === 'resync' && retry.ok && retrying?.healing === true && health?.state.incident?.id === incident3?.id && pushes.length === 4,
+            `that retry's pull reports the copy as mending by itself, and the incident told stays open, the same one, with no push (${brief({ healing: retrying?.healing, incident: health?.state.incident?.id, pushes: pushes.length })})`);
+        await pull();
+        health = await main.send('health');
+        assert(health?.state.incident?.id === incident3?.id && health.state.incident.problems.some((p: any) => p.kind === 'inexact'),
+            `the retry did not cure it: the pull after reports so, and the incident is still the same one (${brief(health?.state.incident?.problems)})`);
+
         // A restart allows no sooner force-resync: S's record keeps when it last asked for one, so a difference a resync
         // doesn't mend never loops.
         await standby.send('checkpoint');
@@ -752,8 +781,8 @@ async function main(): Promise<void> {
         rec = await standby.send('record');
         assert(afterRestart4.ok && afterRestart4.whole && rec?.lastWhole?.exact === false && rec.lastWhole.resyncAsked === false && next4.ok && next4.mode !== 'resync',
             `S restarts: its next whole copy still differs, and asks for no force-resync (the pull after is a ${next4.mode}; ${brief(rec?.lastWhole)})`);
-        assert(pulls.filter((p) => p.mode === 'resync').length === 6,
-            `force-resyncs in all: the new standby's first copy, and one for each of the four copies that didn't match, six hours apart, one of them tried twice (M answered its first with a 503) (${pulls.map((p) => p.mode).join(',')})`);
+        assert(pulls.filter((p) => p.mode === 'resync').length === 7,
+            `force-resyncs in all: the new standby's first copy, and one for each of the five copies that didn't match, six hours apart, one of them tried twice (M answered its first with a 503) (${pulls.map((p) => p.mode).join(',')})`);
         health = await main.send('health');
         pushes = await pushesSoFar();
         assert(health?.state.incident?.id === incident3?.id && pushes.length === 4, `the incident stays open, and nothing is pushed again (${pushes.length})`);

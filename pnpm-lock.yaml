@@ -311,6 +311,9 @@ importers:
       '@types/react':
         specifier: ~19.2.14
         version: 19.2.14
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1(@noble/hashes@2.0.1)
       typescript:
         specifier: ~5.9.2
         version: 5.9.3

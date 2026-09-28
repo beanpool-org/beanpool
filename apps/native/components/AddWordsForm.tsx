@@ -71,8 +71,6 @@ export function AddWordsForm({
 
     return (
         <View style={styles.wrap}>
-            {/* The boxes show the words as they are typed. */}
-            <NoScreenCapture />
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
                 {ADD_WORDS_COPY.title}
             </Text>
@@ -88,6 +86,8 @@ export function AddWordsForm({
             </Pressable>
 
             <View style={styles.grid}>
+                {/* The boxes show the words as they are typed. */}
+                <NoScreenCapture>
                 {boxes.map((word, i) => {
                     const state = check.states[i];
                     const bad = state === 'unknown';
@@ -120,6 +120,7 @@ export function AddWordsForm({
                         </View>
                     );
                 })}
+                </NoScreenCapture>
             </View>
 
             <Text

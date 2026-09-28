@@ -1967,8 +1967,8 @@ export default function SettingsScreen() {
                                     </Pressable>
                                 ) : (
                                     <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
-                                        <NoScreenCapture />
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                            <NoScreenCapture>
                                             {mnemonicWords?.split(' ').map((word, idx) => (
                                                 <View
                                                     key={`${word}-${idx}`}
@@ -1980,6 +1980,7 @@ export default function SettingsScreen() {
                                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
                                                 </View>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
 
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -2569,7 +2570,6 @@ export default function SettingsScreen() {
                                 </>
                             ) : (
                                 <>
-                                    <NoScreenCapture />
                                     <Text style={[styles.infoText, { color: colors.feedback.danger.solid, fontWeight: 'bold' }]}>
                                         Never share this phrase with anyone. Write it down on paper and keep it secure.
                                     </Text>
@@ -2581,6 +2581,7 @@ export default function SettingsScreen() {
                                           twenty-four stops and leaves the listener to pair
                                           the numbers with the words themselves.
                                         */}
+                                        <NoScreenCapture>
                                         {seedWords?.map((word, i) => (
                                             <View
                                                 key={i}
@@ -2592,6 +2593,7 @@ export default function SettingsScreen() {
                                                 <Text style={styles.seedWordText}>{word}</Text>
                                             </View>
                                         ))}
+                                        </NoScreenCapture>
                                     </View>
                                     <Pressable
                                         style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, marginTop: 16 }]}

@@ -208,16 +208,17 @@ export default function NodeMismatchScreen() {
                             <View style={styles.wipeWrap}>
                                 {words ? (
                                     <>
-                                        <NoScreenCapture />
                                         <Text style={styles.wipeTitle}>Write these 12 words down first</Text>
                                         <Text style={styles.wipeBody}>
                                             They are the only way back into this account, apart from a linked
                                             sign-in on a community that holds a recovery piece for you.
                                         </Text>
                                         <View style={styles.wordsBox}>
+                                            <NoScreenCapture>
                                             {words.map((w, i) => (
                                                 <Text key={`${w}-${i}`} style={styles.word}>{i + 1}. {w}</Text>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
                                         <NoScreenLockNote style={[styles.wipeBody, { marginTop: 8 }]} />
                                     </>

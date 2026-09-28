@@ -5,11 +5,21 @@ import { loadScreenCapture } from './screen-capture-module';
 /**
  * No screenshots or screen recordings while an account's 12 words are on screen, and the rest of the app as it was.
  *
- * Every screen that draws the words, or the boxes a member types them into, holds this while they are there and the
- * screen is in front (components/WordsOnScreen.tsx `NoScreenCapture`, released when the screen loses focus): Safety
- * Backup's words (welcome.tsx), "Replace this phone's account?"'s outgoing words, Recover with 12 Words, Settings'
- * Account Protection and View Recovery Phrase, "Add your 12 words" (AddWordsForm), the owners' "Check your 12 words"
- * (owner-words-check.tsx) and node-mismatch's delete. __tests__/words-on-screen.test.ts lists every one.
+ * Every screen that draws the words, or the boxes a member types them into, draws them inside
+ * components/WordsOnScreen.tsx `NoScreenCapture`: Safety Backup's words (welcome.tsx), "Replace this phone's
+ * account?"'s outgoing words, Recover with 12 Words, Settings' Account Protection and View Recovery Phrase, "Add your
+ * 12 words" (AddWordsForm), the owners' "Check your 12 words" (owner-words-check.tsx) and node-mismatch's delete.
+ * __tests__/words-on-screen.test.ts lists every one.
+ *
+ * The block comes first and goes last. `NoScreenCapture` draws the words only once the library has answered the block
+ * (`answered` below: on both platforms the block is in place on the main thread before that answer), so not even the
+ * first frame of the words is drawn without it, and a recording or screen share already running when the member taps
+ * Show gets nothing. It lets go only after the words have left the screen: when they are put away, and when another
+ * screen comes in front (a screen left in the stack stays mounted, and the next one must stay screenshot-able). Coming
+ * back, the words wait for the block again.
+ *
+ * Never a gate: a build without the module, the web, or a library that refuses answers at once, and the words show as
+ * before; a library that never answers is given ANSWER_WAIT_MS, then the words show anyway.
  *
  * What expo-screen-capture 55 does (its source, read for this):
  * - Android: FLAG_SECURE on the app's window. A screenshot is refused (or comes out black, depending on the phone), a
@@ -26,30 +36,55 @@ import { loadScreenCapture } from './screen-capture-module';
  */
 const TAG = 'beanpool-12-words';
 
-const holders = new Set<object>();
+/** How long the words wait for the library's answer before they show anyway (never a gate). */
+export const ANSWER_WAIT_MS = 2_000;
 
-function ask(block: boolean): void {
+const holders = new Set<object>();
+/** The answer to the block now held (every holder while it is held waits on the same one). */
+let answered: Promise<void> = Promise.resolve();
+
+/** Settles when the library has answered, whatever it answered. Never rejects. */
+function ask(block: boolean): Promise<void> {
     const capture = loadScreenCapture();
-    if (!capture) return;
+    if (!capture) return Promise.resolve();
     try {
         const call = block ? capture.preventScreenCaptureAsync(TAG) : capture.allowScreenCaptureAsync(TAG);
-        call.catch(() => { /* the web, or a build without the module: the words show as before */ });
+        // A refusal (the web, or a build without the module) is an answer too: the words show as before.
+        return call.then(() => {}, () => {});
     } catch {
         // Same: nothing to block with.
+        return Promise.resolve();
     }
 }
 
-/** Blocks capture until the returned release is called (once is enough; more are ignored). */
-export function holdNoScreenCapture(): () => void {
+function withinWait(call: Promise<void>): Promise<void> {
+    return new Promise((resolve) => {
+        const timer = setTimeout(resolve, ANSWER_WAIT_MS);
+        void call.then(() => { clearTimeout(timer); resolve(); });
+    });
+}
+
+export interface ScreenCaptureHold {
+    /** Settles once the block is in force, or the library has said it can't (the words show then too). Never rejects. */
+    answered: Promise<void>;
+    /** Lets go (once is enough; more are ignored). Call it only once the words have left the screen. */
+    release: () => void;
+}
+
+/** Blocks capture until released. Draw the words only once `answered` has settled. */
+export function holdNoScreenCapture(): ScreenCaptureHold {
     const holder = {};
     holders.add(holder);
-    if (holders.size === 1) ask(true);
+    if (holders.size === 1) answered = withinWait(ask(true));
     let released = false;
-    return () => {
-        if (released) return;
-        released = true;
-        holders.delete(holder);
-        if (holders.size === 0) ask(false);
+    return {
+        answered,
+        release: () => {
+            if (released) return;
+            released = true;
+            holders.delete(holder);
+            if (holders.size === 0) void ask(false);
+        },
     };
 }
 

@@ -97,8 +97,6 @@ export default function OwnerWordsCheckScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-            {/* The box shows the words as they are typed. */}
-            <NoScreenCapture />
             <View style={styles.header}>
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.heading} />
@@ -110,6 +108,8 @@ export default function OwnerWordsCheckScreen() {
                 <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
                     <Text style={styles.body}>{COPY.why}</Text>
                     <Text style={styles.label}>YOUR 12 WORDS, IN ORDER</Text>
+                    {/* The box shows the words as they are typed. */}
+                    <NoScreenCapture>
                     <TextInput
                         accessibilityLabel="Your 12 words, in order, with spaces between them"
                         style={styles.input}
@@ -128,6 +128,7 @@ export default function OwnerWordsCheckScreen() {
                         keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
                         editable={!state.busy}
                     />
+                    </NoScreenCapture>
                     <Text style={styles.hint}>{count} of 12 words · {COPY.stays}</Text>
 
                     {state.outcome === 'match' ? (

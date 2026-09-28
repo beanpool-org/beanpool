@@ -1686,8 +1686,6 @@ export default function WelcomeScreen() {
                             </Pressable>
                         ) : (
                         <>
-                        {/* No screenshots while the words are here (a screenshot is the copy most easily found by someone else). */}
-                        <NoScreenCapture />
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             💡 Write them down on paper and keep it somewhere safe.
                         </Text>
@@ -1713,6 +1711,8 @@ export default function WelcomeScreen() {
                               hearing the phrase in order means twenty-four stops and working
                               out for yourself which number went with which word.
                             */}
+                            {/* No screenshots of the words (a screenshot is the copy most easily found by someone else): they wait for the block. */}
+                            <NoScreenCapture fallback={<ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />}>
                             {pendingWords ? pendingWords.map((word, i) => (
                                 <View
                                     key={i}
@@ -1726,6 +1726,7 @@ export default function WelcomeScreen() {
                             )) : (
                                 <ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />
                             )}
+                            </NoScreenCapture>
                         </View>
 
                         <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
@@ -2451,14 +2452,15 @@ export default function WelcomeScreen() {
                                         </Pressable>
                                     ) : (
                                         <>
-                                            <NoScreenCapture />
                                             <View style={styles.seedGrid}>
+                                                <NoScreenCapture>
                                                 {outgoingWords?.map((word, i) => (
                                                     <View key={i} style={styles.seedCell}>
                                                         <Text style={styles.seedIndex}>{i + 1}.</Text>
                                                         <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                                     </View>
                                                 ))}
+                                                </NoScreenCapture>
                                             </View>
                                             <Pressable
                                                 style={[styles.secondaryBtn, { marginBottom: 8 }]}
@@ -2533,8 +2535,6 @@ export default function WelcomeScreen() {
                 >
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
-                        {/* The boxes show the words as they are typed. */}
-                        <NoScreenCapture />
                         <Text style={styles.title}>🔑 Recover Identity</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <Text style={[styles.subtitle, { flex: 1, marginBottom: 0 }]}>Enter your 12 recovery words.</Text>
@@ -2558,6 +2558,8 @@ export default function WelcomeScreen() {
                         </View>
 
                         <View style={styles.recoveryGrid}>
+                            {/* The boxes show the words as they are typed (and pasted). */}
+                            <NoScreenCapture>
                             {recoveryWords.map((word, i) => (
                                 <TextInput
                                     key={i}
@@ -2584,6 +2586,7 @@ export default function WelcomeScreen() {
                                     autoCorrect={false}
                                 />
                             ))}
+                            </NoScreenCapture>
                         </View>
 
                         <TextInput

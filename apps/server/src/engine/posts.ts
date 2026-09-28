@@ -877,7 +877,12 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             const doomed = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id = ? AND storage_key IS NOT NULL`).all(id) as any[])
                 .map(r => r.storage_key as string)
                 .filter(k => !keeping.has(k));
+            // A slot the new set doesn't fill is deleted for good, so a standby is told (its import writes only the slots
+            // a copy names): without the tombstone a photo taken off a listing stayed there on the standby, and on the
+            // listing after a take-over. The slots refilled below are written again, stamped after it.
+            const dropped = db.prepare(`SELECT order_num FROM post_photos WHERE post_id = ? AND order_num >= ?`).all(id, nextPhotoColumns.length) as { order_num: number }[];
             db.prepare(`DELETE FROM post_photos WHERE post_id = ?`).run(id);
+            for (const d of dropped) writeTombstone('post_photos', `${id}|${d.order_num}`);
             const insertPhoto = db.prepare(
                 `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`

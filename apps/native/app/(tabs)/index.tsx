@@ -39,6 +39,8 @@ import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
 import { FindCommunityCard } from '../../components/FindCommunityCard';
+import { ExampleListings } from '../../components/ExampleListings';
+import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
@@ -898,6 +900,13 @@ export default function MarketScreen() {
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
 
+    // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
+    // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
+    // empty state's welcome, or after the real listings.
+    const showExamples = showExampleListings({
+        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: filteredPosts.length,
+    });
+
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active' || post.type === 'event') return false;
@@ -1587,6 +1596,7 @@ export default function MarketScreen() {
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
+                ListFooterComponent={showExamples && filteredPosts.length > 0 ? <ExampleListings /> : null}
                 contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
                 columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                 showsVerticalScrollIndicator={false}
@@ -1635,7 +1645,10 @@ export default function MarketScreen() {
                             </Pressable>
                         </View>
                     ) : !hasActiveFilters ? (
-                        <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
+                        <View>
+                            {showExamples && <ExampleListings />}
+                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
+                        </View>
                     ) : (
                     <View style={{ padding: 32, alignItems: 'center' }}>
                         <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 16 }}>🛒</Text>

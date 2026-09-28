@@ -19,6 +19,9 @@ import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
+import { ExampleListings } from '../components/ExampleListings';
+import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
@@ -224,6 +227,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Fetch config once on mount
     useEffect(() => {
         getNodeConfig().then(setNodeConfig).catch(console.error);
+    }, []);
+
+    // Whether this node asks for example cards on a nearly empty Market, from the page's one shared read of
+    // /api/community/info (the lobby has already made it). Unknown, or a read that fails, draws none.
+    const [examplesOn, setExamplesOn] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        communityInfoOnce()
+            .then(info => { if (!cancelled) setExamplesOn(exampleListingsOn(info)); })
+            .catch(() => {});
+        return () => { cancelled = true; };
     }, []);
 
     // Layout configuration — default to 'grid' (Card View)
@@ -2599,6 +2613,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     return new Date(post.createdAt).getTime() >= startOfToday.getTime();
                 }).length;
 
+                // A few example cards while the Market is nearly empty, where the node asks for them
+                // (lib/example-listings.ts): never under a search or a filter, and never in the posts themselves, so
+                // nothing counts them, opens them or pins them. Before the empty state, or after the real listings.
+                const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
+                    || groupFilter !== 'all' || beansOnly || foundingOnly;
+                const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: filtered.length })
+                    ? <ExampleListings />
+                    : null;
+
                 if (visitor) {
                     // One column on a phone (320px at 1.3x text), more from sm up. The Join card first, and the one line
                     // about what joining shows under the first card, not on every card. From sm up it spans the grid and
@@ -2612,6 +2635,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     return (
                         <div className="pb-32">
                             {visitor.joinCard}
+                            {filtered.length === 0 && examples}
                             {filtered.length === 0 ? (
                                 <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 mt-2 text-center">
                                     <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">
@@ -2645,6 +2669,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     ))}
                                 </div>
                             )}
+                            {filtered.length > 0 && examples}
                         </div>
                     );
                 }
@@ -2756,6 +2781,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             />
                         )}
 
+                        {filtered.length === 0 && examples}
                         {filtered.length === 0 ? (
                             (searchQuery.trim() || radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all' || beansOnly || foundingOnly || posts.length > 0) ? (
                                 <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
@@ -2975,6 +3001,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </>
                             );
                         })()}
+                        {filtered.length > 0 && examples}
                     </div>
                 );
             })()}

@@ -66,25 +66,12 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * its lines. Where a difference has more than one cause (a behaviour read), `gap` names each: a fix PR takes its id out,
  * and the last one deletes the line, which the suite then requires.
  *
- * G0 (the ledger), G5 (the community's own settings) and G9 (a new standby's first pull, which this suite found) are
- * closed: a difference in any of them is new.
+ * G0 (the ledger), G1 (listings another community's), G5 (the community's own settings) and G9 (a new standby's first
+ * pull, which this suite found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any
+ * of them is new.
  */
 const KNOWN_GAPS: KnownGap[] = [
-    // G1: listings become another community's.
-    { key: 'db:posts.origin_node', gap: 'G1', why: "every local listing names the main server's PeerId as its origin" },
-    { key: 'http:accept a listing from before the take-over', gap: 'G1', why: '"This listing belongs to another community" on the promoted server' },
-    { key: 'http:approve the pending request', gap: 'G1', why: 'the seller cannot approve a request made before the take-over: "belongs to another community"' },
-
-    // G1b: columns dropped inside tables that do replicate.
-    { key: 'db:posts.category', gap: 'G1b', why: 'a listing recategorised after its first copy keeps its old category' },
-    { key: 'db:posts.cash_also_needed', gap: 'G1b', why: 'every listing reads "no cash needed"' },
-    { key: 'db:posts.search_keywords', gap: 'G1b', why: "not exported; the standby's boot backfill writes its own" },
-    { key: 'db:marketplace_transactions.dispute_resolution', gap: 'G1b', why: 'a resolved dispute leaves the admin Disputes list' },
-    { key: 'db:marketplace_transactions.dispute_resolved_at', gap: 'G1b', why: 'not copied' },
-    { key: 'db:marketplace_transactions.dispute_resolved_by', gap: 'G1b', why: 'not copied' },
-    { key: 'db:marketplace_transactions.updated_at', gap: 'G1b', why: "the touch trigger stamps the standby's clock on every imported update" },
-    { key: 'db:projects.migrated_at', gap: 'G1b', why: "each copy wipes it, so the standby's boot migrates the project again" },
-    { key: 'db:projects.updated_at', gap: 'G1b', why: "restamped with the standby's clock" },
+    // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
     { key: 'db:groups.lead_pubkey', gap: 'G1b', why: "a group whose last convenor left keeps its old lead on the standby (the import keeps a lead over the main server's null)" },
     { key: 'db:conversations.name', gap: 'G1b', why: "a renamed group's chat keeps its old name until a whole copy (a rename moves no stamp; a delta picks conversations by created_at)" },
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
@@ -100,6 +87,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:members.wind_up_initiated_by', gap: 'G2a', why: 'not copied' },
     { key: 'db:members.purpose', gap: 'G2a', why: "an enterprise's purpose reads as none" },
     { key: 'db:members.lifecycle', gap: 'G2a', why: "a project's bounded lifecycle reads as ongoing" },
+    { key: 'db:members.goal_amount', gap: 'G2a', why: "a project's goal reads as none (before G1b's fix the standby's boot migrated the project again, which wrote it back)" },
     { key: 'db:members.lat', gap: 'G2a', why: "an enterprise's map pin disappears" },
     { key: 'db:members.lng', gap: 'G2a', why: 'not copied' },
     { key: 'db:members.location_auth_signer', gap: 'G2a', why: 'not copied' },
@@ -126,14 +114,15 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'http:a vouch by the voucher', gap: 'G2a', why: '"Only appointed vouchers can vouch for members"' },
     { key: "http:a frozen member's poll", gap: 'G2a', why: 'a frozen member can post a poll' },
     { key: 'http:a keeper posts for the enterprise', gap: 'G2a, G2c', why: '404 "Not a treasury" where the main server says the enterprise is paused' },
+    { key: 'http:approve the pending request', gap: 'G2a', why: 'the buyer is an Elder whose granted credit is lost: "Buyer has insufficient balance to cover escrow" (before G1\'s fix, "belongs to another community")' },
     { key: 'http:every balance', gap: 'G2a', why: "floors and tiers from granted credit and vouches lost (an Elder in debt is frozen below a floor of 0), and a withdrawn vouch's floor back" },
 
     // G2b: member_preferences.
     { key: 'db:member_preferences (not copied)', gap: 'G2b', why: 'holiday and notification opt-outs are forgotten' },
-    { key: "http:request a holiday member's listing", gap: 'G1, G2b', why: 'refused, but as another community\'s listing (G1) where the main server says the member is away (G2b)' },
+    { key: "http:request a holiday member's listing", gap: 'G2b', why: 'the promoted server lets it through where the main server says the member is away' },
 
     // G2c: keepers and pledges.
-    { key: 'db:treasury_operators (not copied)', gap: 'G2c', why: "no keeper can act for any enterprise; the standby's boot re-migration writes a binding of its own" },
+    { key: 'db:treasury_operators (not copied)', gap: 'G2c', why: 'no keeper can act for any enterprise' },
     { key: 'db:enterprise_pledges (not copied)', gap: 'G2c', why: "keepers' pledges vanish" },
 
     // G3: in-flight money and governance.
@@ -150,18 +139,17 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
     { key: 'db:activity_feed (not copied)', gap: 'G4', why: 'the activity waterfall starts empty' },
     { key: 'db:pricing_guide_items (not copied)', gap: 'G4', why: 'each server seeds its own guide at its first boot' },
-    { key: 'http:the pricing guide', gap: 'G1, G4', why: "the standby's hourly cycle counts only local listings, and every listing there is another community's (G1); the guide main priced is not copied (G4)" },
+    { key: 'http:the pricing guide', gap: 'G4, G2a, G2b', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices (G4); a paused enterprise's and a holiday member's listings count as active there (G2a, G2b)" },
     { key: 'http:a push of each category', gap: 'G4, G2b', why: 'no phone to push to (G4); behind it, a notification opt-out is forgotten (G2b)' },
 
     { key: 'http:the community, as the directory and apps see it', gap: 'G2a', why: 'one more member, its own BeanPool' },
 
     // Reads that several gaps change at once.
-    { key: 'http:the board, as a guest', gap: 'G1, G1b, G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, every listing marked as another community's, a listing's cash note lost" },
-    { key: 'http:the board, as a member', gap: 'G1, G1b, G2a, G2b', why: 'as the guest board' },
-    { key: 'http:the board, as a keeper', gap: 'G1, G1b, G2a, G2b', why: 'as the guest board' },
-    { key: "http:a phone's full sync", gap: 'G1, G1b, G2a, G2b', why: "originNode on every listing, paused listings active, a recategorised listing's old category and a lost cash note, authors' standing" },
-    { key: "http:a phone's delta from before the take-over", gap: 'G1, G2a', why: "each listing changed since is marked as another community's (G1), with its author's standing lost (G2a)" },
-    { key: "http:each member's own view (probation, standing)", gap: 'G1, G2a', why: 'no listing counts toward probation (G1); standing lost (G2a)' },
+    { key: 'http:the board, as a guest', gap: 'G2a, G2b', why: "a paused enterprise's and a holiday member's listings shown, authors' standing lost" },
+    { key: 'http:the board, as a member', gap: 'G2a, G2b', why: 'as the guest board' },
+    { key: 'http:the board, as a keeper', gap: 'G2a, G2b', why: 'as the guest board' },
+    { key: "http:a phone's full sync", gap: 'G2a, G2b', why: "a paused enterprise's and a holiday member's listings active, authors' standing lost" },
+    { key: "http:a phone's delta from before the take-over", gap: 'G2a', why: "each listing changed since has its author's standing lost" },
 ];
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────

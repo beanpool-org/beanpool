@@ -95,38 +95,36 @@ export const TABLES: Record<string, TableEntry> = {
             elder_vouched_by: { reason: 'the import keeps the first voucher it copied (COALESCE): a withdrawn vouch, a prune or a new voucher never reaches the standby', gap: 'G2a' },
         },
     },
+    // A listing, its photos, a deal and a crowdfund project are the main server's rows verbatim, stamps included: the
+    // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
+    // `search_keywords` is the main server's too; one it holds empty (a linked community's listing it cached) is filled
+    // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng updated_at reach reach_peers created_by poll_options poll_closes_at audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
         except: {
-            origin_node: { reason: "a local listing's NULL is written as the main server's PeerId (`rp.originNode || remote.nodeId`)", gap: 'G1' },
-            category: { reason: 'only the INSERT writes it; a recategorised listing keeps its old category', gap: 'G1b' },
-            cash_also_needed: { reason: 'neither exported nor imported', gap: 'G1b' },
-            search_keywords: { reason: "not exported: the standby's boot backfill (state-engine.ts backfillSearchKeywords) writes its own, leaving updated_at as it was, and keeps it when the main server's edit changes the words", gap: 'G1b' },
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
         },
     },
+    // A photo taken off a listing travels as a `post_photos` tombstone (engine/posts.ts updatePost), judged against the
+    // main server's stamp.
     post_photos: {
         kind: 'replicated-except', payload: 'photos', watermark: 'updated_at',
-        columns: cols('post_id order_num'),
+        columns: cols('post_id order_num updated_at'),
         except: {
             photo_data: { reason: 'how this server holds the bytes: inline until its image store has them (the payload carries the bytes)' },
             storage_key: { reason: "this server's image store object" },
             sha256: { reason: "this server's image store object" },
             bytes: { reason: "this server's image store object" },
             mime: { reason: "this server's image store object" },
-            updated_at: { reason: STAMPED_BY_STANDBY, gap: 'G1b' },
         },
     },
+    // The legacy crowdfund row, still live: a bounded enterprise writes one and its pledges count into it
+    // (routes/treasury.ts, db.ts pledgeToProject).
     projects: {
-        kind: 'replicated-except', payload: 'projects', watermark: 'updated_at',
-        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status created_at'),
-        except: {
-            enterprise_pubkey: { reason: 'the import writes 10 columns with INSERT OR REPLACE, wiping it on every copy', gap: 'G1b' },
-            migrated_at: { reason: 'the import writes 10 columns with INSERT OR REPLACE, wiping it on every copy', gap: 'G1b' },
-            updated_at: { reason: STAMPED_BY_STANDBY, gap: 'G1b' },
-        },
+        kind: 'replicated', payload: 'projects', watermark: 'updated_at',
+        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at'),
     },
     ratings: {
         kind: 'replicated-except', payload: 'ratings', watermark: 'created_at',
@@ -149,15 +147,8 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     marketplace_transactions: {
-        kind: 'replicated-except', payload: 'marketplaceTransactions', watermark: 'updated_at',
-        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at'),
-        except: {
-            updated_at: { reason: STAMPED_BY_STANDBY + ' (the touch trigger)', gap: 'G1b' },
-            last_reminded_at: { reason: 'neither exported nor imported', gap: 'G1b' },
-            dispute_resolution: { reason: 'neither exported nor imported', gap: 'G1b' },
-            dispute_resolved_at: { reason: 'neither exported nor imported', gap: 'G1b' },
-            dispute_resolved_by: { reason: 'neither exported nor imported', gap: 'G1b' },
-        },
+        kind: 'replicated', payload: 'marketplaceTransactions', watermark: 'updated_at',
+        columns: cols('id post_id buyer_pubkey seller_pubkey credits hours status created_at completed_at updated_at last_reminded_at dispute_resolution dispute_resolved_at dispute_resolved_by'),
     },
     friends: {
         kind: 'replicated-except', payload: 'friends', watermark: 'updated_at',

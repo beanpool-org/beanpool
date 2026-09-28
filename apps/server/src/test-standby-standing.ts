@@ -13,7 +13,7 @@
  *  1. The main server M: an enterprise, Probe Co, with a purpose, a map pin, a working capital ceiling, two keepers who
  *     each pledge backing, an external sale (earned surplus) and a legacy credit floor; a project with a goal and a
  *     deadline; Elders (granted credit), an appointed voucher and two members he vouched for (at 50 and 25), a frozen
- *     member, a member on holiday and one with a notification opt-out and a reminder default. A preference save moves the
+ *     Elder, a member on holiday and one with a notification opt-out and a reminder default. A preference save moves the
  *     member's row, as holiday does.
  *  2. The standby S's first copy: every members column (but last_active_at), every preference, keeper and pledge is M's,
  *     stamps included; the copy records the importer's format.
@@ -25,10 +25,10 @@
  *  6. A standby as the old importer left it (no standing, no preferences, keepers or pledges, the withdrawn vouch kept,
  *     format 3) re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta.
  *  7. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
- *     vouch gives no credit back); the enterprise's page answers for its keeper, paused; the board is M's (the paused
- *     enterprise's listing and the holiday member's stay off); the holiday member can't be traded with; the enterprises
- *     pay no demurrage; the opt-outs hold; the enterprise is on the map; its lead resumes it and a re-keyed keeper posts
- *     for it.
+ *     vouch gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
+ *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
+ *     with; the enterprises pay no demurrage; the opt-outs hold; the appointed voucher vouches; the enterprise is on the
+ *     map; its lead resumes it and a re-keyed keeper posts for it.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-standing.ts
@@ -121,7 +121,7 @@ async function child(): Promise<void> {
          */
         rows: async () => {
             const { db } = await import('./db/db.js');
-            const members = (db.prepare("SELECT * FROM members WHERE public_key != 'SYSTEM' ORDER BY public_key").all() as Record<string, unknown>[])
+            const members = (db.prepare('SELECT * FROM members ORDER BY public_key').all() as Record<string, unknown>[])
                 .map(({ last_active_at: _l, ...rest }) => rest);
             return {
                 members,
@@ -313,7 +313,7 @@ async function main(): Promise<void> {
             built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
             return tx.id as string;
         };
-        for (const who of [gwen, cy]) built(`the admin makes ${who.name} an Elder (granted credit)`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        for (const who of [gwen, cy, fay]) built(`the admin makes ${who.name} an Elder (granted credit)`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 6);
         await deal(gwen, ann, (await offer(ann, 'Honey', 8)).id); // Ann has Beans to buy with
@@ -341,7 +341,7 @@ async function main(): Promise<void> {
         built('the admin makes Bo a voucher', await A(`/api/local/admin/users/${bo.pk}/voucher`, { grant: true }));
         built('Bo vouches for Eve at 50', await S_(bo, '/api/profile/vouch', { targetPubkey: eve.pk, level: 2 }));
         built('and for Lou at 25', await S_(bo, '/api/profile/vouch', { targetPubkey: lou.pk, level: 1 }));
-        built('the admin freezes Fay\'s credit', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
+        built('the admin freezes Fay\'s credit (an Elder: her floor goes to 0)', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         built('Hal goes on holiday', await S_(hal, '/api/members/holiday', { enabled: true }));
         const annBefore = ((await main.send('rows')) as Rows).members.find((r) => r.public_key === ann.pk)?.updated_at;
         await sleep(5);
@@ -471,8 +471,9 @@ async function main(): Promise<void> {
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
         require_((onMain.standing as any).Eve?.elderVouchedBy === bo.pk && (onMain.standing as any).Lou?.elderVouchedBy === null
+            && (onMain.standing as any).Fay?.floor === 0 && (onMain.standing as any).Fay?.grantedCredit > 0
             && !onMain.board.includes(checkId) && !onMain.board.includes(walking.id),
-            `M: Eve is vouched and Lou no longer; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou })})`);
+            `M: Eve is vouched and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
@@ -509,6 +510,8 @@ async function main(): Promise<void> {
         const pushes = await standby.send('pushable');
         assert(!pushes.marketplace.includes(ann.pk) && !pushes.chat.includes(ann.pk) && pushes.escrow.includes(ann.pk) && pushes.marketplace.includes(bo.pk),
             `Ann's opt-outs hold: no marketplace or chat pushes, escrow still (${JSON.stringify(Object.fromEntries(Object.entries(pushes).map(([c, ks]) => [c, (ks as string[]).map((k) => (k === ann.pk ? 'Ann' : k === bo.pk ? 'Bo' : k.slice(0, 6)))])))})`);
+        const vouched = await P_(bo, '/api/profile/vouch', { targetPubkey: hal.pk, level: 1 });
+        assert(vouched.status === 200, `the appointed voucher vouches (${brief(vouched)})`);
         const pins = await api(p, 'GET', '/api/enterprises/map', { as: ann });
         assert(pins.status === 200 && JSON.stringify(pins.body).includes(probe.publicKey), `Probe Co is on the map (${brief(pins)})`);
         const resumed = await P_(cy, `/api/treasury/${probe.publicKey}/resume`);

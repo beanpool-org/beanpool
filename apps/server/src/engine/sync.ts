@@ -1198,8 +1198,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
 
             // Each member's preferences, with their row (design G2b): holiday, notification settings, reminder defaults.
             // A main server older than this sends none, and this standby keeps the rows it has.
+            const memberHere = db.prepare('SELECT 1 FROM members WHERE public_key = ?');
             for (const rm of remote.members ?? []) {
-                if (isPlainObject(rm.preferences) && replaceMemberPreferences(rm.publicKey, rm.preferences)) standingChanges++;
+                if (!isPlainObject(rm.preferences) || typeof rm.publicKey !== 'string' || !memberHere.get(rm.publicKey)) continue;
+                if (replaceMemberPreferences(rm.publicKey, rm.preferences)) standingChanges++;
             }
             // Who keeps each enterprise, the whole set, after the re-key follow above (design G2c, §5.3), and the keepers'
             // pledges. A main server older than this sends neither, and this standby keeps the rows it has.

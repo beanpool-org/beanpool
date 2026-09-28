@@ -26,7 +26,7 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '@beanpool/signin';
-import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, parseBackupFile } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import { NonceStore, verifySignedRequest } from './auth.js';
 import type { BackupStore } from './backup-store.js';
@@ -301,7 +301,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         renameSync(`${dbPath}.restore`, dbPath);
         const restored = VaultDb.open(opts.dataDir);
         db = restored;
-        for (const name of (await store.list()).filter(n => n > opened.result.header.name)) {
+        const newer = (await store.list()).filter(n => compareBackupNames(n, opened.result.header.name) > 0).sort(compareBackupNames);
+        for (const name of newer) {
             try {
                 const d = await call<{ deletions: string }>('openBackupDeletions', {}, await store.get(name), 300_000);
                 for (const w of JSON.parse(d.deletions) as WireDeletion[]) {

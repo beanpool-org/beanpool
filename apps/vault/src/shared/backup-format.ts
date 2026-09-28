@@ -56,6 +56,15 @@ export function backupTimeOf(name: string): number {
     return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
 }
 
+/**
+ * Backup names in the order they were made: by time, then by the `-N` a second backup in the same second gets. Plain
+ * string order would put `…Z-1.bin` before `…Z.bin`, since '-' sorts before '.'.
+ */
+export function compareBackupNames(a: string, b: string): number {
+    const seq = (n: string) => Number(/-(\d+)\.bin$/.exec(n)?.[1] ?? 0);
+    return (backupTimeOf(a) - backupTimeOf(b)) || (seq(a) - seq(b));
+}
+
 export function parseBackupFile(file: Uint8Array): ParsedBackup {
     const b = Buffer.from(file.buffer, file.byteOffset, file.byteLength);
     const fail = (why: string): never => {

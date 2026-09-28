@@ -7,7 +7,7 @@ import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
 import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.js';
 import { splitMasterSecret } from '../keyholder/slip39.js';
-import { parseBackupFile } from '../shared/backup-format.js';
+import { compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
 import {
     deposit,
     doGenesis,
@@ -146,6 +146,22 @@ describe('backups', () => {
         const missing = await restoreFromBackup(b.baseUrl, b.custodians[0], 'bv-20990101T000000Z.bin', b.call());
         expect(missing.status).toBe(404);
         expect(b.keyholder().status().state).toBe('fresh');
+    });
+
+    it('two backups in the same second keep their order: the second one\'s deletions still reach the first', async () => {
+        expect(['bv-20261001T120000Z-1.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T115959Z.bin'].sort(compareBackupNames))
+            .toEqual(['bv-20261001T115959Z.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T120000Z-1.bin']);
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'same-second');
+        const first = await a.api.runBackup();
+        await signed(a, '/v1/copies/delete', { provider: 'google' }, member.seed);
+        const second = await a.api.runBackup();
+        expect(second).toBe(first.replace('.bin', '-1.bin'));
+        const b = await restoredFrom(a, first);
+        await unlockWith(b, g.shares, [0, 1]);
+        await expectNoCopy(b, 'google', 'same-second');
     });
 
     it('keeps 30 days of backups', async () => {

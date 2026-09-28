@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_NAME_RE } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, compareBackupNames } from '../shared/backup-format.js';
 
 /**
  * Where backups go (key vault design §4): object storage at a second provider in another country. Every file is
@@ -37,7 +37,7 @@ export class LocalDirectoryStore implements BackupStore {
     }
 
     async list(): Promise<string[]> {
-        return readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n)).sort();
+        return readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n)).sort(compareBackupNames);
     }
 
     async delete(name: string): Promise<void> {

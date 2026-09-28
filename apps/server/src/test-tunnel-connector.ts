@@ -160,7 +160,7 @@ async function main(): Promise<void> {
         return f.length === 1 && f[0].env.TUNNEL_TOKEN === token && tunnelConnectorForTests().pid === f[0].pid;
     });
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
-    let app: http.Server | null = null;
+    const servers: { app: http.Server | null } = { app: null };
 
     try {
         await section('1, 8. at boot: no address, no child; a leftover token file is deleted and never run', async () => {
@@ -403,8 +403,8 @@ async function main(): Promise<void> {
             });
             const router = createPublicAddressRoutes(deps);
             k.use(router.routes());
-            app = http.createServer(k.callback());
-            await new Promise<void>((r) => app!.listen(0, '127.0.0.1', () => r()));
+            const app = servers.app = http.createServer(k.callback());
+            await new Promise<void>((r) => app.listen(0, '127.0.0.1', () => r()));
             const base = `http://127.0.0.1:${(app.address() as any).port}`;
             const post = async (p: string, body: unknown = {}) => {
                 const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -445,9 +445,9 @@ async function main(): Promise<void> {
     } finally {
         await resetTunnelConnectorForTests().catch(() => {});
         setTunnelConnectorForTests(undefined);
-        app?.close();
+        servers.app?.close();
         registrar.close();
-        await p2p.stop().catch(() => {});
+        await Promise.resolve(p2p.stop()).catch(() => {});
     }
     assert(fakes().length === 0, 'no fake cloudflared is left running');
     console.log(`\n${passed}/${run} checks passed.`);

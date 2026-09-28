@@ -7,6 +7,8 @@ related: your-12-words, leaving-or-deleting, communities, faq
 
 ## On a new phone
 
+Your account's key is not in your phone's backups. A new phone needs your 12 words or a sign-in account you linked, even an iPhone restored from a backup of your old one.
+
 - Install BeanPool and open it.
 - Tap **Already a Member? Restore Account**.
 - Choose **Recover with 12 Words** or **Recover with Social**.

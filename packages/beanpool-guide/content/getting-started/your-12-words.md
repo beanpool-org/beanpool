@@ -11,6 +11,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 
 - With the 12 words, you can get your account back on a new phone: your name, your beans and your trust.
 - Without them, a lost or broken phone can mean a lost account.
+- The key stays on the phone that holds it. It is not copied into your phone's backups, so a new phone, even an iPhone restored from a backup of your old one, needs your 12 words or a linked sign-in account (see "Getting your account back").
 - Anyone who has your 12 words can use your account. Never share them, never type them anywhere except the BeanPool app or your own community's BeanPool web app, and never send them in a message. Nobody from BeanPool or your community will ever ask for them.
 
 ## Write them down
@@ -18,6 +19,10 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 - Write the 12 words on paper, in order, and check the spelling.
 - Keep the paper somewhere safe, away from your phone.
 - A photo or screenshot of the words is easy for someone else to find. Paper is safer.
+- While the phone app shows your 12 words, or while you type them, it blocks screenshots and screen recordings of that screen: the phone refuses the screenshot, or the picture comes out blank. Nothing stops a photo of the screen taken with another phone.
+- **Copy** puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone.
+- In the web app, the copy clears after a minute if you stay on that screen. Once you leave it, your browser may not let the app clear it: copy something else over it.
+- If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer.
 
 ## Where to see them again
 

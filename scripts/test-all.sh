@@ -374,6 +374,7 @@ run_federation_suites() {
       test-takeover-parity
       test-replication-manifest
       test-standby-ledger-copy
+      test-standby-ledger-gate
       test-standby-community-settings
       test-standby-listings-verbatim
       test-standby-standing

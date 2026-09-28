@@ -24,7 +24,11 @@ import { loadScreenCapture } from './screen-capture-module';
  * What expo-screen-capture 55 does (its source, read for this):
  * - Android: FLAG_SECURE on the app's window. A screenshot is refused (or comes out black, depending on the phone), a
  *   screen recording or cast shows the window black, and the recent-apps preview is blank. A Modal copies the flag
- *   only as it opens (React Native's ReactModalHostView), so none of the screens above shows the words in one.
+ *   only as it opens (React Native's ReactModalHostView), so none of the screens above shows the words in one. The
+ *   library as published also listens for screenshots of the whole app from launch (on Android 14 and later, every
+ *   screenshot of BeanPool would say "BeanPool detected this screenshot"): patches/expo-screen-capture@55.0.18.patch
+ *   takes that out (package.json's expo.autolinking builds it from that source, not the library's prebuilt copy), and
+ *   app.json blocks its DETECT_SCREEN_CAPTURE permission.
  * - iPhone: the app's window is drawn inside a secure text field's layer, which iOS leaves out of screenshots and
  *   recordings (iOS 13 and later; this app needs 15.1), so the picture shows a blank screen, not the words; while the
  *   screen is being recorded or mirrored, a black cover goes over it as well. iOS still takes the screenshot, and this

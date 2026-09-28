@@ -259,6 +259,42 @@ describe('every screen that draws the words blocks capture with them', () => {
     });
 });
 
+describe('Android: no screenshot detection anywhere in the app (PR #1284 review 4124181957)', () => {
+    const REPO = path.resolve(NATIVE, '..', '..');
+    const LIB = path.dirname(require.resolve('expo-screen-capture/package.json', { paths: [NATIVE] }));
+    const json = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
+    const PATCHED = '55.0.18';
+
+    it('the library is patched at the version installed, and the build compiles the patched source', () => {
+        expect(json(path.join(LIB, 'package.json')).version).toBe(PATCHED);
+        const patch = json(path.join(REPO, 'package.json')).pnpm.patchedDependencies[`expo-screen-capture@${PATCHED}`];
+        expect(patch).toBe(`patches/expo-screen-capture@${PATCHED}.patch`);
+        expect(fs.existsSync(path.join(REPO, patch))).toBe(true);
+        // Without this, Gradle links the library's prebuilt AAR (its local-maven-repo) and the patch never reaches a phone.
+        expect(json(path.join(NATIVE, 'package.json')).expo.autolinking.android.buildFromSource).toContain('expo-screen-capture');
+    });
+
+    it('the installed module registers no screenshot callback or watcher, and still sets FLAG_SECURE', () => {
+        const kt = fs.readFileSync(path.join(LIB, 'android/src/main/java/expo/modules/screencapture/ScreenCaptureModule.kt'), 'utf8');
+        const block = (name: string) => {
+            const at = kt.indexOf(`${name} {`);
+            expect(at).toBeGreaterThan(-1);
+            return kt.slice(at, kt.indexOf('\n    }', at));
+        };
+        expect(block('OnCreate')).not.toMatch(/registerCallback\(|ScreenCaptureCallback|ScreenshotEventEmitter\(/);
+        expect(block('OnActivityEntersForeground')).not.toMatch(/registerCallback\(/);
+        expect(kt).toContain('currentActivity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)');
+        expect(kt).toContain('currentActivity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)');
+    });
+
+    it('asks for no screenshot permission: not in the library, and blocked in the app', () => {
+        const manifest = fs.readFileSync(path.join(LIB, 'android/src/main/AndroidManifest.xml'), 'utf8');
+        expect(manifest).not.toMatch(/uses-permission/);
+        const blocked: string[] = json(path.join(NATIVE, 'app.json')).expo.android.blockedPermissions;
+        expect(blocked).toContain('android.permission.DETECT_SCREEN_CAPTURE');
+    });
+});
+
 describe('nothing tells a member to keep the words in a screenshot or a photo', () => {
     const REPO = path.resolve(NATIVE, '..', '..');
     const roots = [

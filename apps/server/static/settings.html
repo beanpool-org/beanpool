@@ -769,7 +769,7 @@
                         </a>
                     </div>
                     <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.4;">
-                        <strong>How it works:</strong> Your node securely pushes directory data to <a href="https://beanpool.org" target="_blank" style="color:#3b82f6;text-decoration:none;font-weight:600;">beanpool.org ↗</a> on a schedule. No inbound API access is required — your node only makes outbound requests. <strong>Your node's URL is NEVER published.</strong> This ensures your private network remains secure from the outside internet.
+                        <strong>How it works:</strong> Your node securely pushes directory data to <a href="https://beanpool.org" target="_blank" style="color:#3b82f6;text-decoration:none;font-weight:600;">beanpool.org ↗</a> on a schedule. No inbound API access is required — your node only makes outbound requests. <strong>The directory is public.</strong> It always lists your community's name and web address, so people on the global community can find you and ask to join. The rest is up to you below; your contact email and phone are not published unless you turn them on.
                     </p>
 
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px solid #1e293b;">
@@ -794,7 +794,7 @@
                             <input type="checkbox" id="publish-location" checked /> 📍 Share Location &amp; Radius
                         </label>
                         <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
-                            Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow. Your URL is not shared.
+                            Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow.
                         </p>
                     </div>
 
@@ -809,10 +809,19 @@
 
                     <div style="margin-bottom: 1rem;">
                         <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
-                            <input type="checkbox" id="publish-contacts" checked /> 📧 Share Community Contacts
+                            <input type="checkbox" id="publish-contact-email" /> 📧 Share Email in Directory
                         </label>
                         <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
-                            Makes your Community Name, Email, and Phone visible on the directory so potential new users from outside the trust network can contact the admin to request an invite.
+                            Off unless you turn it on. Puts the Contact Email below in the public directory and on the map at beanpool.org, where anyone can read it, so people outside the community can ask you for an invite.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
+                            <input type="checkbox" id="publish-contact-phone" /> 📞 Share Phone in Directory
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
+                            Off unless you turn it on. Puts the Contact Phone below in the public directory and on the map at beanpool.org, where anyone can read it.
                         </p>
                     </div>
 

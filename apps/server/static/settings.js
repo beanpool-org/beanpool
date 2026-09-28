@@ -1681,12 +1681,13 @@
             const km = parseInt(document.getElementById('radius-km').value) || 0;
             const publishLocation = document.getElementById('publish-location').checked;
             const publishMembers = document.getElementById('publish-members').checked;
-            const publishContacts = document.getElementById('publish-contacts').checked;
+            const publishContactEmail = document.getElementById('publish-contact-email').checked;
+            const publishContactPhone = document.getElementById('publish-contact-phone').checked;
             const publishHealth = document.getElementById('publish-health').checked;
             const val = parseInt(document.getElementById('directory-push-interval').value);
             const directoryPushIntervalHours = isNaN(val) ? 12 : val;
             
-            const update = { publishLocation, publishMembers, publishContacts, publishHealth, directoryPushIntervalHours };
+            const update = { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours };
             if (!isNaN(lat) && !isNaN(lng)) {
                 update.serviceRadius = { lat, lng, radiusKm: Math.max(0, km) };
             } else {
@@ -1746,7 +1747,9 @@
                 }
                 document.getElementById('publish-location').checked = config.publishLocation !== false;
                 document.getElementById('publish-members').checked = config.publishMembers !== false;
-                document.getElementById('publish-contacts').checked = config.publishContacts !== false;
+                // Off unless the owner turned each on.
+                document.getElementById('publish-contact-email').checked = config.publishContactEmail === true;
+                document.getElementById('publish-contact-phone').checked = config.publishContactPhone === true;
                 document.getElementById('publish-health').checked = config.publishHealth !== false;
                 if (config.directoryPushIntervalHours !== undefined) {
                     document.getElementById('directory-push-interval').value = config.directoryPushIntervalHours;

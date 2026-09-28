@@ -46,7 +46,8 @@ describe('NodeIdentityPanel Component', () => {
                     json: () => Promise.resolve({
                         publishLocation: true,
                         publishMembers: true,
-                        publishContacts: false,
+                        publishContactEmail: false,
+                        publishContactPhone: true,
                         publishHealth: true,
                         directoryPushIntervalHours: 6,
                         lastDirectoryPush: 1700000000000,
@@ -140,7 +141,8 @@ describe('NodeIdentityPanel Component', () => {
         // Checkboxes
         expect(document.getElementById('publish-location')).toBeInTheDocument();
         expect(document.getElementById('publish-members')).toBeInTheDocument();
-        expect(document.getElementById('publish-contacts')).toBeInTheDocument();
+        expect(document.getElementById('publish-contact-email')).toBeInTheDocument();
+        expect(document.getElementById('publish-contact-phone')).toBeInTheDocument();
         expect(document.getElementById('publish-health')).toBeInTheDocument();
 
         // Community contacts
@@ -177,8 +179,59 @@ describe('NodeIdentityPanel Component', () => {
         const scheduleSelect = document.getElementById('directory-push-interval') as HTMLSelectElement;
         expect(scheduleSelect.value).toBe('6');
 
-        const publishContactsCheckbox = document.getElementById('publish-contacts') as HTMLInputElement;
-        expect(publishContactsCheckbox.checked).toBe(false);
+        const publishEmailCheckbox = document.getElementById('publish-contact-email') as HTMLInputElement;
+        const publishPhoneCheckbox = document.getElementById('publish-contact-phone') as HTMLInputElement;
+        expect(publishEmailCheckbox.checked).toBe(false);
+        expect(publishPhoneCheckbox.checked).toBe(true);
+    });
+
+    it('shows both contact switches off unless the node says the owner turned each on, and saves the one turned on', async () => {
+        // A node that doesn't name the switches, holding only the old single one as true: that was no owner's choice.
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/community-info')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ communityName: 'Quiet Valley', contactEmail: 'hi@quiet.example', contactPhone: '+61 400 111 222' }),
+                });
+            }
+            if (url.includes('/api/node/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true, directoryPushIntervalHours: 12, serviceRadius: null }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+        }));
+
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    onRefreshDiag={vi.fn()}
+                />
+            );
+        });
+        await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+
+        const email = document.getElementById('publish-contact-email') as HTMLInputElement;
+        const phone = document.getElementById('publish-contact-phone') as HTMLInputElement;
+        expect(email.checked).toBe(false);
+        expect(phone.checked).toBe(false);
+
+        await act(async () => {
+            fireEvent.click(email);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+        });
+
+        const configCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0].includes('/api/local/admin/node/config'));
+        expect(configCall).toBeDefined();
+        const body = JSON.parse(configCall[1].body);
+        expect(body.publishContactEmail).toBe(true);
+        expect(body.publishContactPhone).toBe(false);
+        expect('publishContacts' in body).toBe(false);
     });
 
     it('syncs service radius slider and km input', async () => {
@@ -502,7 +555,8 @@ describe('NodeIdentityPanel Component', () => {
                     password: mockProfile.adminPassword,
                     publishLocation: true,
                     publishMembers: true,
-                    publishContacts: false,
+                    publishContactEmail: false,
+                    publishContactPhone: true,
                     publishHealth: true,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },

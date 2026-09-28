@@ -41,7 +41,9 @@ export function NodeIdentityPanel({
     // Directory publishing flags
     const [publishLocation, setPublishLocation] = useState(true);
     const [publishMembers, setPublishMembers] = useState(true);
-    const [publishContacts, setPublishContacts] = useState(true);
+    // Off unless the node says the owner turned each on: a contact is published only by an owner's choice.
+    const [publishContactEmail, setPublishContactEmail] = useState(false);
+    const [publishContactPhone, setPublishContactPhone] = useState(false);
     const [publishHealth, setPublishHealth] = useState(true);
     const [directoryPushIntervalHours, setDirectoryPushIntervalHours] = useState(12);
     const [lastDirectoryPush, setLastDirectoryPush] = useState<number | string | null>(null);
@@ -116,7 +118,8 @@ export function NodeIdentityPanel({
                     }
                     if (cfg.publishLocation !== undefined) setPublishLocation(Boolean(cfg.publishLocation));
                     if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
-                    if (cfg.publishContacts !== undefined) setPublishContacts(Boolean(cfg.publishContacts));
+                    setPublishContactEmail(cfg.publishContactEmail === true);
+                    setPublishContactPhone(cfg.publishContactPhone === true);
                     if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
                     if (cfg.directoryPushIntervalHours !== undefined) {
                         const parsedHours = Number(cfg.directoryPushIntervalHours);
@@ -371,7 +374,8 @@ export function NodeIdentityPanel({
                     password: activeNode.adminPassword,
                     publishLocation,
                     publishMembers,
-                    publishContacts,
+                    publishContactEmail,
+                    publishContactPhone,
                     publishHealth,
                     directoryPushIntervalHours,
                     serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
@@ -619,7 +623,9 @@ export function NodeIdentityPanel({
                             beanpool.org ↗
                         </a>{' '}
                         on a schedule. No inbound API access is required — your node only makes outbound requests.{' '}
-                        <strong className="text-white">Your node&apos;s URL is NEVER published.</strong> This ensures your private network remains secure from the outside internet.
+                        <strong className="text-white">The directory is public.</strong> It always lists your community&apos;s name and web address, so
+                        people on the global community can find you and ask to join. The rest is up to you below; your contact email and phone
+                        are not published unless you turn them on.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-nature-950 p-4 rounded-2xl border border-nature-800">
@@ -670,7 +676,7 @@ export function NodeIdentityPanel({
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
                             <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow. Your URL is not shared.
+                                Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow.
                             </p>
                         </div>
 
@@ -693,16 +699,32 @@ export function NodeIdentityPanel({
                         <div>
                             <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
                                 <input
-                                    id="publish-contacts"
+                                    id="publish-contact-email"
                                     type="checkbox"
-                                    checked={publishContacts}
-                                    onChange={(e) => setPublishContacts(e.target.checked)}
+                                    checked={publishContactEmail}
+                                    onChange={(e) => setPublishContactEmail(e.target.checked)}
                                     className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
                                 />
-                                <span>📧 Share Community Contacts</span>
+                                <span>📧 Share Email in Directory</span>
                             </label>
                             <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Makes your Community Name, Email, and Phone visible on the directory so potential new users from outside the trust network can contact the admin to request an invite.
+                                Off unless you turn it on. Puts the Contact Email below in the public directory and on the map at beanpool.org, where anyone can read it, so people outside the community can ask you for an invite.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                <input
+                                    id="publish-contact-phone"
+                                    type="checkbox"
+                                    checked={publishContactPhone}
+                                    onChange={(e) => setPublishContactPhone(e.target.checked)}
+                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                />
+                                <span>📞 Share Phone in Directory</span>
+                            </label>
+                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
+                                Off unless you turn it on. Puts the Contact Phone below in the public directory and on the map at beanpool.org, where anyone can read it.
                             </p>
                         </div>
 

@@ -327,7 +327,8 @@ async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColu
         // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
         if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
         // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice. With the
-        // main server's stamp: this standby's own would outrank a delete made there after it (a photo tombstone).
+        // main server's stamp: this standby's own would outrank a delete made there after it (a photo tombstone). Null
+        // when it holds none; the row's INSERT fills that from the listing.
         out.set(`${ph.post_id}|${ph.order_num}`, { ...written[i]!, updated_at: typeof ph.updated_at === 'string' ? ph.updated_at : null });
     }
     return out;
@@ -1125,15 +1126,18 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 //
                 // The bytes are already on disk: `storeImportedPhotos` put them there before this
                 // transaction opened. All that is left in here is the row, stamped as the main server stamped it.
+                // A photo it holds unstamped (an older database's ALTER added the column with no default, and no backfill)
+                // takes its listing's stamp, the main server's too: a NULL one is in no delta, and every tombstone for the
+                // slot would outrank it. This server's clock only when the listing isn't here either.
                 const insertPhoto = db.prepare(
                     `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                     VALUES (?, ?, ?, COALESCE(?, (SELECT updated_at FROM posts WHERE id = ?), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), ?, ?, ?, ?)`
                 );
                 for (const [key, cols] of importedPhotoColumns) {
                     const sep = key.lastIndexOf('|');
                     const postId = key.slice(0, sep);
                     const orderNum = Number(key.slice(sep + 1));
-                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.updated_at, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
+                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.updated_at, postId, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
                 }
             }
 
@@ -1141,7 +1145,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 // Every column, as the main server holds it (G1b). The legacy crowdfund row is still live: a bounded
                 // enterprise writes one and its pledges count into it (routes/treasury.ts, db.ts pledgeToProject). Ten of
                 // its columns left `migrated_at` and `enterprise_pubkey` empty and the stamp this standby's, so its boot
-                // migrated each project again (db/unify-projects-migration.ts) and a project's delete could be skipped.
+                // migrated each project again (db/unify-projects-migration.ts) and a project's delete could be skipped. One
+                // the main server holds unstamped (an older database's ALTER, no backfill) takes its `created_at`, as the
+                // stamp's own migration fills it (db.ts): a NULL one is in no delta, and any tombstone for it would win.
                 const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const pr of remote.projects) {
@@ -1158,7 +1164,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         pr.migrated_at ?? null,
                         pr.enterprise_pubkey ?? null,
                         pr.created_at,
-                        pr.updated_at ?? null,
+                        pr.updated_at ?? pr.created_at ?? new Date().toISOString(),
                     );
                 }
             }

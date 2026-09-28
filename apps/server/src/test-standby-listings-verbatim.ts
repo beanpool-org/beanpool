@@ -24,7 +24,8 @@
  *     they were.
  *  5. A standby as the old importer left it (M's PeerId on every local listing, its own stamps, the first copy's
  *     category, no cash note, no dispute resolution or reminder, a photo M took off, a project not migrated, format 1)
- *     re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta.
+ *     re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta. A photo and a project M
+ *     holds unstamped (an older database's ALTER) take M's listing stamp and its created_at, never NULL.
  *  6. M dies, S takes over with the recovery code. On the promoted S: the request made before the take-over is approved;
  *     a listing from before is requested and approved; a linked community's cached listing is still refused; probation
  *     counts each member's old listings as M did; linked communities are offered what M offered; a member going on
@@ -176,6 +177,13 @@ async function child(): Promise<void> {
                 kept: Object.fromEntries(a.keys.map((k) => [k, keptPostCount(k)])),
                 offered: listingsForPeer(NEIGHBOUR_PEER).map((l) => l.id).sort(),
             };
+        },
+        /** A listing's photos and a project unstamped, as an older database holds them: its ALTER added `updated_at` with no default and no backfill (db.ts). */
+        unstamp: async (a: { postId: string; projectId: string }) => {
+            const { db } = await import('./db/db.js');
+            db.prepare('UPDATE post_photos SET updated_at = NULL WHERE post_id = ?').run(a.postId);
+            db.prepare('UPDATE projects SET updated_at = NULL WHERE id = ?').run(a.projectId);
+            return true;
         },
         checkpoint: async () => {
             const { db } = await import('./db/db.js');
@@ -428,6 +436,22 @@ async function main(): Promise<void> {
         assert(o5.format === '2', `and records format 2 (${o5.format})`);
         const after = await old.send('pull', {});
         assert(after.ok === true && after.mode === 'delta', `the pull after it is a delta, not a second re-seed (${JSON.stringify({ ok: after.ok, mode: after.mode, error: after.error })})`);
+        // A main server whose older database holds a photo and a project unstamped: the copy stamps each from M's own rows,
+        // never NULL (a NULL one is in no delta, and every tombstone for it wins).
+        await main.send('unstamp', { postId: honey.id, projectId: seed.publicKey });
+        const mNull: Rows = await main.send('rows');
+        const seedOnM = mNull.projects.find((p) => p.id === seed.publicKey);
+        require_(mNull.post_photos.some((p) => p.post_id === honey.id && p.updated_at === null) && seedOnM?.updated_at === null,
+            'M: Honey\'s photo and the project hold no stamp');
+        const unstamped = await old.send('pull', { whole: true });
+        const o6: Rows = await old.send('rows');
+        const honeyStamp = mNull.posts.find((p) => p.id === honey.id)?.updated_at;
+        const photoStamps = o6.post_photos.filter((p) => p.post_id === honey.id).map((p) => p.updated_at);
+        assert(unstamped.ok === true && unstamped.whole === true && photoStamps.length === 1 && typeof honeyStamp === 'string' && photoStamps[0] === honeyStamp,
+            `a photo M holds unstamped takes its listing's stamp, M's (${JSON.stringify(photoStamps)} against ${honeyStamp})`);
+        const seedStamp = o6.projects.find((p) => p.id === seed.publicKey)?.updated_at;
+        assert(typeof seedStamp === 'string' && seedStamp === seedOnM?.created_at,
+            `a project M holds unstamped takes its created_at (${seedStamp} against ${seedOnM?.created_at})`);
         refused.push(...(await old.send('fetches')).blocked);
         await old.kill('SIGTERM');
 

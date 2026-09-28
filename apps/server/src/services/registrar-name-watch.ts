@@ -48,9 +48,9 @@
  *     at most every 5 minutes per name, so a name that comes back is accepted again within seconds.
  *
  * Cadence: every 5 minutes for a name at risk (lost, evidence being gathered, the registrar naming another key, a
- * former name, or a latest status that doesn't hold it for this key: none, released, revoked, …); every 6 hours for the
- * rest (the registrar alone is asked then, and only `other` leads further), so a node whose admin never opens Settings
- * still learns. Only on the main server, and only when the record has a name: a node that never had a registrar name
+ * former name, or a latest status that doesn't hold it for this key: none, released, revoked, …, unless the registrar's
+ * own latest answer is that this key holds it in a state that holds a name); every 6 hours for the rest (the registrar
+ * alone is asked then, and only `other` leads further), so a node whose admin never opens Settings still learns. Only on the main server, and only when the record has a name: a node that never had a registrar name
  * asks nothing.
  *
  * What it can't catch (§3.6): a new holder that relays this server's own asks back to it, so it sees its own key,
@@ -512,10 +512,16 @@ async function runRound(host: string, opts: { now?: number; loopbackOrigin?: str
     return { host, registrar: holder.held, selfOk, edge, counted: d.counted, lost: lostNow, changed };
 }
 
-/** When a name's next round is due (ms). */
+/**
+ * When a name's next round is due (ms). A former name, or one whose latest status doesn't hold it for this key, is
+ * watched closely until the registrar's own answer says this key holds it in a state that holds a name (live, pending,
+ * paused, blocked): then it is as safe as a current live name, and asked about as rarely.
+ */
 function dueAt(entry: RegistrarName, w: NameWatch): number {
     if (w.checkedAt === null) return 0;
-    const close = !!entry.lost || !!w.streak || w.registrar === 'other' || entry.role === 'former' || !HOLDING_STATUSES.has(entry.status);
+    const heldForUs = w.registrar === 'you' && !!w.state && HOLDING_STATUSES.has(w.state);
+    const atRisk = (entry.role === 'former' || !HOLDING_STATUSES.has(entry.status)) && !heldForUs;
+    const close = !!entry.lost || !!w.streak || w.registrar === 'other' || atRisk;
     return w.checkedAt + (close ? CLOSE_EVERY_MS : QUIET_EVERY_MS);
 }
 
@@ -627,7 +633,8 @@ export function nameStandings(): Map<string, NameStanding> {
         const w = all[e.address] ?? blank();
         const ends = ownReleaseEndsAt(e);
         const released = Number.isFinite(ends);
-        const says = w.registrar === 'other' ? 'other' : released ? 'released' : w.registrar === 'free' ? 'free'
+        // The registrar's own latest answer first: `you` (outside this community's own release) leaves nothing to say.
+        const says = w.registrar === 'other' ? 'other' : released ? 'released' : w.registrar === 'you' ? null : w.registrar === 'free' ? 'free'
             : !HOLDING_STATUSES.has(e.status) && e.status !== 'unknown' ? e.status : null;
         const leadsHere = w.edge === 'own';
         const base = {

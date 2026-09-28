@@ -35,7 +35,7 @@
  * 11. own release (decision D-B): Take offline, then 29 days on → 200; 30 days on, the registrar saying free → 421 (main:
  *     200); claiming it again → 200. Taken back inside the hold → 200 at 31 days. An older registrar (404) → 200.
  * Node U (its only name is its registrar name):
- * 12. before it has a name it asks the registrar nothing. After the drop: uname → 421 (main: 200); random.example → 421,
+ * 12. before it has a name it asks the registrar nothing; its live name is asked about every 6 hours. After the drop: uname → 421 (main: 200); random.example → 421,
  *     never accepted as an unconfigured node's; Settings says it knows its names and offers nothing; uname is no longer
  *     published (main: published) nor its public address.
  * The take-over:
@@ -695,6 +695,11 @@ async function main(): Promise<void> {
             const firstDue = await U.send('due', { now: Date.now() });
             assert(Array.isArray(firstDue) && firstDue.length === 1 && firstDue[0]?.registrar === 'you' && !firstDue[0]?.lost,
                 `now it asks, and the registrar says uname is its own (${JSON.stringify(firstDue)})`);
+            // Its current, live name, which the registrar says is its own: asked about every 6 hours, not every 5 minutes.
+            const quiet = await U.send('due', { now: Date.now() + 10 * MIN });
+            const later = await U.send('due', { now: Date.now() + 6 * HOUR + MIN });
+            assert(Array.isArray(quiet) && quiet.length === 0 && Array.isArray(later) && later.length === 1,
+                `ten minutes on nothing is due; six hours on it is (${JSON.stringify(quiet)}, ${JSON.stringify(later)})`);
 
             other('uname');
             edgeKey('uname');

@@ -7,6 +7,10 @@ import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
+    WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, webDeleteFailedLine,
+    webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, type WebDeletePlan,
+} from '../lib/delete-here';
+import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, purgeAccountApi, getSignInRecovery,
@@ -442,6 +446,21 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [purgeError, setPurgeError] = useState<string | null>(null);
     const [purgeCallsignInput, setPurgeCallsignInput] = useState('');
     const [isPurging, setIsPurging] = useState(false);
+    // What Permanently Delete Account does in this browser (lib/delete-here): asked as the member opens it, so the
+    // screen says whether the key stays. Null while the page's own node is asked.
+    const [deletePlan, setDeletePlan] = useState<WebDeletePlan | null>(null);
+    const [purgedNote, setPurgedNote] = useState<string | null>(null);
+    const deletePlanTurn = useRef(0);
+    const openPurge = () => {
+        setDeletionMode('confirm_purge');
+        setPurgeError(null);
+        setPurgeCallsignInput('');
+        setDeletePlan(null);
+        const turn = ++deletePlanTurn.current;
+        void planWebDelete(identity.publicKey).then((plan) => {
+            if (turn === deletePlanTurn.current) setDeletePlan(plan);
+        });
+    };
 
     const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
     const [testingNode, setTestingNode] = useState(false);
@@ -1009,15 +1028,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="font-bold text-sm text-red-900 dark:text-red-300 flex items-center gap-2">
                                             <span>🗑️</span> Permanently Delete Account & Node Data
                                         </div>
-                                        <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                            Permanently purges your account from this community node and clears this device. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <strong>Cannot be undone, even with your 12-word phrase.</strong>
+                                        <p data-testid="delete-card-line" className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
+                                            {WEB_DELETE_CARD_LINE} <strong>Cannot be undone, even with your 12-word phrase.</strong>
                                         </p>
                                         <button
-                                            onClick={() => {
-                                                setDeletionMode('confirm_purge');
-                                                setPurgeError(null);
-                                                setPurgeCallsignInput('');
-                                            }}
+                                            onClick={openPurge}
                                             className="mt-2 w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             Permanently Delete Account
@@ -1091,6 +1106,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             className="w-full py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white font-mono text-xs disabled:opacity-50"
                                             autoCapitalize="none"
                                         />
+                                        {/* What stays in this browser: the key for the page's own community, or nothing. */}
+                                        <p data-testid="delete-key-plan" aria-live="polite" className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed m-0">
+                                            {!deletePlan
+                                                ? WEB_DELETE_CHECKING_LINE
+                                                : deletePlan.kind === 'this-one'
+                                                    ? `🔑 ${webKeepsKeyLine(deletePlan, hasWords)}`
+                                                    : webLastCommunityLine(hasWords)}
+                                        </p>
                                         {purgeError && (
                                             <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
                                                 {purgeError}
@@ -1110,21 +1133,40 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         setPurgeError(`Please type "${identity?.callsign || ''}" or "DELETE" exactly to confirm.`);
                                                         return;
                                                     }
+                                                    // The screen said what stays; exactly that happens.
+                                                    const plan = deletePlan;
+                                                    if (!plan) return;
                                                     setIsPurging(true);
                                                     setPurgeError(null);
                                                     try {
-                                                        await purgeAccountApi();
-                                                        await wipeIdentity();
-                                                        clearAccountStorage();
+                                                        // Until the node answers that it deleted the account, nothing in this browser changes.
+                                                        try {
+                                                            await purgeAccountApi();
+                                                        } catch (e) {
+                                                            setPurgeError(webDeleteFailedLine((e instanceof Error && e.message) || 'Failed to purge account from node. Active escrow deals may need to be resolved first.'));
+                                                            return;
+                                                        }
+                                                        if (plan.kind === 'this-one') {
+                                                            // The page's own community keeps the key: back to it, key and settings kept.
+                                                            leaveThisCommunity();
+                                                            setPurgedNote(`Account deleted at ${hostOf(plan.here)}. This browser keeps your key for ${hostOf(plan.keeps.url)}. Reloading app...`);
+                                                        } else {
+                                                            try {
+                                                                await wipeIdentity();
+                                                                clearAccountStorage();
+                                                            } catch (e) {
+                                                                setPurgeError(webDeletedButLine(e instanceof Error ? e.message : String(e)));
+                                                                return;
+                                                            }
+                                                            setPurgedNote(null);
+                                                        }
                                                         setDeletionMode('purged');
                                                         setTimeout(() => window.location.reload(), 1500);
-                                                    } catch (e: any) {
-                                                        setPurgeError(e.message || 'Failed to purge account from node. Active escrow deals may need to be resolved first.');
                                                     } finally {
                                                         setIsPurging(false);
                                                     }
                                                 }}
-                                                disabled={isPurging || !isPurgeConfirmed}
+                                                disabled={isPurging || !isPurgeConfirmed || !deletePlan}
                                                 className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:bg-red-700"
                                             >
                                                 {isPurging ? 'Purging...' : '🔥 Purge Account'}
@@ -1137,7 +1179,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {deletionMode === 'purged' && (
                                 <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">
                                     <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">
-                                        Account data purged. Reloading app...
+                                        {purgedNote ?? 'Account data purged. Reloading app...'}
                                     </p>
                                 </div>
                             )}

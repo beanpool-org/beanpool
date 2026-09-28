@@ -18,7 +18,7 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
 - the notices the server adds to a direct message about a deal: Beans placed in escrow or released, the amount, and how a dispute was settled and why;
-- who messaged whom, and when, even for direct messages;
+- who messaged whom, and when, and their emoji reactions, even for direct messages;
 - **how each member voted**.
 
 ## Secret ballots

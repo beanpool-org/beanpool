@@ -3,9 +3,9 @@
  * phone's replace after a take-over drops what only the old server had.
  *
  * Every boot, in every role, fills in the search keywords of the listings that have none (state-engine.ts
- * backfillSearchKeywords). A standby's import never writes them, so every listing it copied since its last boot has none.
- * That fill once moved each listing's `updated_at` to the booting server's clock (the posts touch trigger), with two
- * consequences this suite pins:
+ * backfillSearchKeywords). A standby's import writes the main server's (G1b, standby PR 2); a copy an older importer made
+ * has none, and this suite plants that copy's (no words, the main server's times) to boot on. That fill once moved each
+ * listing's `updated_at` to the booting server's clock (the posts touch trigger), with two consequences this suite pins:
  *
  *  1. A standby restarted between two pulls. The main server edits a listing's title and withdraws another while the
  *     standby is down. After the standby's boot and its pulls it holds the main server's values: the import skips a
@@ -125,6 +125,22 @@ async function child(): Promise<void> {
             const result = await pullNow();
             return { ...result, whole: getBackupStatus().lastFullReconcileAt !== before, envelope: await pullTakeoverEnvelopeNow() };
         },
+        /**
+         * The listings as a copy an older importer made holds them: no search keywords (it wrote none), each at the time
+         * it was copied with. The posts touch trigger is set aside for the write, so no stamp moves.
+         */
+        'clear-keywords': async (a: { ids: string[] }) => {
+            const { db } = await import('./db/db.js');
+            db.transaction(() => {
+                const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string }).sql;
+                db.exec('DROP TRIGGER posts_touch_updated_at');
+                const clear = db.prepare(`UPDATE posts SET search_keywords = '' WHERE id = ?`);
+                for (const id of a.ids) clear.run(id);
+                db.exec(touch);
+            })();
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            return true;
+        },
         /** Every listing as it lies. */
         rows: async () => {
             const { db } = await import('./db/db.js');
@@ -203,10 +219,15 @@ async function main(): Promise<void> {
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: mainPeerId });
         const first = await standby.send('resync');
         require_(first.resync.ok && first.envelope === 'stored', `S: the first copy and the keys (${JSON.stringify(first.resync).slice(0, 120)})`);
-        const copied = byId(await standby.send('rows'));
         const onMain = byId(await main.send('rows'));
+        const imported = byId(await standby.send('rows'));
+        require_([honey, eggs].every((id) => imported.get(id)?.updated_at === onMain.get(id)?.updated_at
+            && !!onMain.get(id)?.search_keywords && imported.get(id)?.search_keywords === onMain.get(id)?.search_keywords),
+        'S holds Honey and Eggs at the main server\'s times, with its search keywords (the import writes them)');
+        await standby.send('clear-keywords', { ids: [honey, eggs] });
+        const copied = byId(await standby.send('rows'));
         require_([honey, eggs].every((id) => copied.get(id)?.updated_at === onMain.get(id)?.updated_at && !copied.get(id)?.search_keywords),
-            'S holds Honey and Eggs at the main server\'s times, with no search keywords (the import writes none)');
+            'planted as an older importer copied them: the main server\'s times, no search keywords');
 
         await standby.kill();
         await main.send('edit', { id: honey, title: 'Honey, now 4 jars' });
@@ -238,9 +259,13 @@ async function main(): Promise<void> {
         const many = await main.send('list', { titles: Array.from({ length: COPIED }, (_, i) => `Jar ${i + 1}`), category: 'food' });
         const pulled = await standby.send('pull');
         require_(pulled.ok, `S copies the ${COPIED} new listings (${pulled.whole ? 'whole' : 'delta'})`);
+        const importedMany = byId(await standby.send('rows'));
+        require_(many.every((id: string) => !!importedMany.get(id)?.search_keywords),
+            `S holds all ${COPIED}, with the main server's search keywords (the import writes them)`);
+        await standby.send('clear-keywords', { ids: many });
         const heldBefore = byId(await standby.send('rows'));
-        require_(many.every((id: string) => heldBefore.get(id) && !heldBefore.get(id)!.search_keywords),
-            `S holds all ${COPIED}, none with search keywords yet`);
+        require_(many.every((id: string) => heldBefore.get(id) && !heldBefore.get(id)!.search_keywords && heldBefore.get(id)!.updated_at === importedMany.get(id)!.updated_at),
+            `planted as an older importer copied them: none with search keywords yet, each at its copied time`);
         await new Promise((r) => setTimeout(r, 20));
         const [tail] = await main.send('list', { titles: ['Firewood, a trailer load'], category: 'fuel' });
         // A phone that synced everything the main server had, the tail too, holds each listing at the main server's time.

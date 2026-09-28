@@ -1339,13 +1339,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             }
 
             if (remote.marketplaceTransactions) {
-                // Every column the main server moves, with its stamp (G1b): a resolved dispute stays resolved (the admin
-                // Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's stamp is the
-                // main server's, which phones' deltas read after a take-over.
+                // Every column, as the main server holds it, its stamp included (G1b): a resolved dispute stays resolved
+                // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
+                // stamp is the main server's, which phones' deltas read after a take-over.
                 const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at,
                                     updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
+                                    post_id = excluded.post_id,
+                                    buyer_pubkey = excluded.buyer_pubkey,
+                                    seller_pubkey = excluded.seller_pubkey,
+                                    created_at = excluded.created_at,
                                     status = excluded.status,
                                     completed_at = excluded.completed_at,
                                     hours = excluded.hours,

@@ -9,9 +9,12 @@ export class KeyholderCallError extends Error {
     }
 }
 
-/** The keyholder could not be reached or did not answer: to the outside, the vault is locked (design §3). */
+/**
+ * The keyholder could not be reached or did not answer: to the outside, the vault is locked (design §3). `dropped`:
+ * the connection closed under the call, which a keyholder does only by going away (a restart, a crash).
+ */
 export class KeyholderUnavailable extends Error {
-    constructor(message = 'The keyholder is not answering.') {
+    constructor(message = 'The keyholder is not answering.', readonly dropped = false) {
         super(message);
         this.name = 'KeyholderUnavailable';
     }
@@ -45,11 +48,15 @@ export class KeyholderClient {
             socket.once('connect', () => {
                 socket.off('error', onError);
                 socket.on('error', () => socket.destroy());
+                // The keyholder ended the connection: no new call goes on it, even before it is fully closed.
+                socket.on('end', () => {
+                    if (this.socket === socket) this.socket = null;
+                });
                 socket.on('close', () => {
                     if (this.socket === socket) this.socket = null;
                     for (const [id, p] of this.pending) {
                         clearTimeout(p.timer);
-                        p.reject(new KeyholderUnavailable('The keyholder went away mid-call.'));
+                        p.reject(new KeyholderUnavailable('The keyholder went away mid-call.', true));
                         this.pending.delete(id);
                     }
                 });
@@ -71,8 +78,24 @@ export class KeyholderClient {
         else p.reject(new KeyholderCallError(answer.error?.code ?? 'internal', answer.error?.message ?? 'The keyholder refused.'));
     }
 
-    /** Calls `op`; a binary payload goes along with `binary` and comes back in the answer's `binary`. */
+    /**
+     * Calls `op`; a binary payload goes along with `binary` and comes back in the answer's `binary`.
+     *
+     * A call made on a connection opened earlier that closes under it is made once more on a new one. That is the
+     * first call after a keyholder restart, sent before this side had seen the old connection close; the keyholder that
+     * would have answered it is gone, so nothing was done twice.
+     */
     async call<T = unknown>(op: string, args: Record<string, unknown> = {}, binary?: Uint8Array, timeoutMs = this.timeoutMs): Promise<{ result: T; binary: Buffer }> {
+        const reused = !!this.socket && !this.socket.destroyed;
+        try {
+            return await this.send<T>(op, args, binary, timeoutMs);
+        } catch (e) {
+            if (!reused || !(e instanceof KeyholderUnavailable) || !e.dropped) throw e;
+            return this.send<T>(op, args, binary, timeoutMs);
+        }
+    }
+
+    private async send<T>(op: string, args: Record<string, unknown>, binary: Uint8Array | undefined, timeoutMs: number): Promise<{ result: T; binary: Buffer }> {
         const socket = await this.connect();
         const id = this.nextId++;
         return new Promise((resolve, reject) => {

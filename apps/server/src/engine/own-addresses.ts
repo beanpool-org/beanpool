@@ -216,14 +216,19 @@ export function publishedAddresses(): string[] {
 /**
  * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
  * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
- * live, else the first of its published names; null on a node with none (one that knows none of its names, or whose
+ * live, else the first of its other published names; null on a node with none (one that knows none of its names, or whose
  * only name it released). Always one of publishedAddresses(), so never a former name or a loopback one.
  */
 export function primaryAddress(): string | null {
     const published = publishedAddresses();
-    const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live');
-    if (live && published.includes(live.address)) return live.address;
-    return published[0] ?? null;
+    const current = registrarNames().filter((r) => r.role === 'current');
+    const live = current.find((r) => r.status === 'live' && published.includes(r.address));
+    if (live) return live.address;
+    // A registrar name the registrar doesn't say is live (a gated rename still pending, paused, revoked) is never where
+    // members are sent, though a real node also has it as publicAddress (item 1): the next of its names, else none, so
+    // the web app says nothing rather than point at a name with no route yet (#1275 review 4118422613).
+    const notLive = new Set(current.filter((r) => r.status !== 'live').map((r) => r.address));
+    return published.find((a) => !notLive.has(a)) ?? null;
 }
 
 /**

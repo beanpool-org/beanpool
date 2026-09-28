@@ -115,26 +115,19 @@ services:
       # rather than from the first import. Supported since Node 22.13; the image
       # is node:22-alpine3.21 (22.21.1), measured.
       - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env
+    # No Docker socket, and no cloudflared service: the tunnel for a <name>.beanpool.org address runs INSIDE this container,
+    # started and restarted by the server itself (apps/server/src/services/tunnel-connector.ts). Anything that can use
+    # /var/run/docker.sock controls the whole machine, so it is never mounted here.
     volumes:
       - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+    # The tunnel runs inside this container; a tunnel whose settings still say `beanpool-node` (set before it moved in here)
+    # must reach THIS community's server, never another stack's on beanpool-shared, where every community's server has
+    # that name too and Docker can answer with any of them. This wins over Docker's DNS.
+    extra_hosts:
+      - "beanpool-node:127.0.0.1"
     networks:
       - default
       - beanpool-shared
-    restart: unless-stopped
-    logging: *default-logging
-
-  cloudflared:
-    profiles:
-      - tunnel
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token-file /data/tunnel-token
-    volumes:
-      - ./data:/data:ro
-    # NOTE: cloudflared must NOT join beanpool-shared — all node stacks use the
-    # same service name "beanpool-node", so Docker DNS round-robins across them.
-    # Keeping cloudflared on the project-default network ensures it always routes
-    # to this stack's node only.
     restart: unless-stopped
     logging: *default-logging
 

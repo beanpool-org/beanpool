@@ -44,8 +44,11 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *
  *  1. The ledger is the main server's exactly: every account as it holds it and no other, each trade's fee and project;
  *     and a standby seeds no BeanPool enterprise of its own (G0, G9). A standby with no record of a format is older.
- *  2. No trade the standby made itself: its own demurrage flush wrote a trade the main server never made, which no copy
- *     removes (engine/audit.ts persistDecayAndCommons). The force-resync clears the ones a standby already holds.
+ *  2. No trade the standby made itself. Its own demurrage flush, and a Bean move made on it (a send, a trade, a member's
+ *     own delete), wrote trades the main server never made, which no copy removes: the import never deletes a trade a
+ *     copy doesn't name. Now the flush writes nothing on a standby (engine/audit.ts persistDecayAndCommons) and every
+ *     Bean move refuses there before it writes (config/node-role.ts assertLedgerWritable). The force-resync this format
+ *     asks for clears the ones a standby already holds, of both kinds.
  */
 export const REPLICA_FORMAT = 2;
 

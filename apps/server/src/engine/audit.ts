@@ -6,7 +6,7 @@
 // Stated in apps/server/src/engine/audit.ts to decouple routes and state-engine.ts.
 
 import { db } from '../db/db.js';
-import { getNodeRole } from '../config/node-role.js';
+import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { COMMONS_BALANCE } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
@@ -40,15 +40,21 @@ export type { ReplicaConsistency, AuditSyncPayload };
  *
  * Wider precision here is safe for sync and backup: the column is REAL, and importers compare balances
  * rather than string forms.
+ *
+ * Throws on a standby (config/node-role.ts), as persistDecayEvents does: every caller is a move a standby refuses first,
+ * or the flush below, which returns before it, so reaching either there is a path that missed the rule.
  */
 export function persistCommonsBalance(): void {
+    assertLedgerWritable();
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
 }
 
 /**
- * Persist demurrage decay events as ledger transaction rows.
+ * Persist demurrage decay events as ledger transaction rows. Throws on a standby, before the queue is drained
+ * (persistCommonsBalance says why).
  */
 export function persistDecayEvents(): void {
+    assertLedgerWritable();
     const events = ledger.drainDecayEvents();
     if (events.length === 0) return;
 
@@ -85,7 +91,12 @@ export function persistDecayEvents(): void {
  * (a read here between two there), it was a second row for the same days, kept through every copy, because the import
  * never deletes a trade a copy doesn't name. The decay stays in memory, where a read here still sees it, until the next
  * copy that lands puts memory back to the rows (engine/sync.ts), and the promoted server's boot does the same. So the
- * timer, the ledger audit and `conservingTransaction`'s pre-flush write nothing on a standby.
+ * timer and the ledger audit write nothing on a standby.
+ *
+ * Nothing on a standby may lean on this flush for the half of a move it didn't write: `payFromCommons` left its Commons
+ * debit to it, and `conservingTransaction`'s failure path put back a pot holding decay no row had (review 4117546944).
+ * So every Bean move refuses on a standby before it starts (config/node-role.ts assertLedgerWritable), and this returns
+ * quietly only for the timer and the audit, which move nothing of their own.
  */
 export function persistDecayAndCommons(): void {
     if (getNodeRole() === 'backup') return;

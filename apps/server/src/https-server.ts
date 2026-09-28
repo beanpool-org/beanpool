@@ -116,6 +116,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
+import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
@@ -1412,6 +1413,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The routes a node profile switch has turned off (Beans, escrow, enterprises and treasuries, crowdfunds)
     // answer 404 feature_off before any handler runs (routes/profile-feature-gate.ts).
     app.use(profileFeatureGate);
+    // On a standby, a write that moves Beans or steps a trade answers 409 standby before any handler runs
+    // (routes/standby-ledger-gate.ts): its ledger is its main server's.
+    app.use(standbyLedgerGate);
 
     // Trust endpoint — only for self-signed mode
     if (!isUsingLetsEncrypt()) {

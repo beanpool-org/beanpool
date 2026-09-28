@@ -122,6 +122,139 @@ first_password_notice() {
   echo "   Sign in at /settings with it, then change it there; the file is deleted when you do."
 }
 
+# COPIES OF A NODE'S DATA. deploy.sh parks data/ at <home>/beanpool-data-backup-<DIR> and .env at
+# <home>/beanpool-env-backup-<DIR> while it replaces the project dir, and moves both back before the node starts. On
+# 2026-09-28 two deploys of test ran at once: the first parked data/; the second took the parked copy for a leftover, set it
+# aside as .stale ("the live data/ is authoritative"), found no data/ to keep, and the node started a new, empty community.
+# The next deploy down that path would have rm -rf'd the .stale copy, the only one left. So a deploy never guesses now: a
+# parked copy with nothing in its place IS the node's and is put back; a parked copy AND something in its place stop the
+# deploy before anything changes; and no copy is ever deleted. Older deploy.sh used the same parked names, so what an older
+# deploy left behind is found too.
+
+# check_data_copies <home> <DIR> <project dir>
+# Run on the server before anything there changes. Says what it found; returns 1 when the deploy must not go on:
+#   - data/ and a parked copy both exist: one of them is the community and deploy.sh will not pick. Both are described.
+#   - neither exists, but a copy was set aside earlier (<parked>.<anything>, such as the .stale an older deploy.sh made):
+#     starting now would make a new, empty community beside it.
+#   - .env and a parked .env both exist.
+# A parked copy with nothing in its place is fine: this deploy puts it back.
+check_data_copies() {
+  local home=$1 dir=$2 project=$3 parked parked_env stamp p rc=0
+  local aside=()
+  parked="$home/beanpool-data-backup-$dir"
+  parked_env="$home/beanpool-env-backup-$dir"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  if [ -e "$parked" ] || [ -L "$parked" ]; then
+    if [ -e "$project/data" ] || [ -L "$project/data" ]; then
+      echo "🛑 FATAL: this node's data is in two places, and deploy.sh will not choose between them. Nothing was changed."
+      echo "   data/ now:   $project/data"
+      describe_data_copy "$project/data"
+      echo "   parked copy: $parked"
+      describe_data_copy "$parked"
+      echo "   A deploy parks data/ there while it replaces the code and moves it back before the node starts, so finding both"
+      echo "   means an earlier deploy stopped part-way or two ran at once. One of them is your community. It is normally the one"
+      echo "   founded long ago whose state.db and state.db-wal changed last; one founded minutes ago is a new, empty community a"
+      echo "   node made on an empty data/. Set the OTHER one aside under a dated name (never delete it until the node runs well"
+      echo "   on the right one), then deploy again:"
+      echo "     if data/ is your community:      sudo mv $parked $parked.set-aside-$stamp"
+      echo "     if the parked copy is:           sudo mv $project/data $parked.set-aside-$stamp"
+      echo "   (after the second, the next deploy finds the parked copy with nothing in its place and puts it back)."
+      rc=1
+    else
+      echo "♻️  $parked is this node's data, parked by a deploy that did not finish. This deploy puts it back."
+    fi
+  elif ! [ -e "$project/data" ] && ! [ -L "$project/data" ]; then
+    for p in "$parked".*; do
+      if [ -e "$p" ] || [ -L "$p" ]; then aside+=("$p"); fi
+    done
+    if [ ${#aside[@]} -gt 0 ]; then
+      echo "🛑 FATAL: $project/data is missing, and a copy of this node's data was set aside beside it. Nothing was changed."
+      for p in "${aside[@]}"; do
+        echo "   $p"
+        describe_data_copy "$p"
+      done
+      echo "   Starting now would make a new, empty community. If one of these is your community, move it to where a deploy"
+      echo "   puts data/ back from, and deploy again:  sudo mv <that copy> $parked"
+      echo "   If you do want a new, empty community here, make the empty folder first:  sudo mkdir -p $project/data"
+      echo "   Either way the other copies stay where they are."
+      rc=1
+    fi
+  fi
+  if [ -e "$parked_env" ] || [ -L "$parked_env" ]; then
+    if [ -e "$project/.env" ] || [ -L "$project/.env" ]; then
+      echo "🛑 FATAL: this node's .env is in two places, and deploy.sh will not choose between them. Nothing was changed."
+      echo "   .env now:    $project/.env"
+      data_copy_file_line ".env        " "$project/.env"
+      echo "   parked copy: $parked_env"
+      data_copy_file_line ".env        " "$parked_env"
+      if sudo cmp -s "$project/.env" "$parked_env"; then
+        echo "   They are the same."
+      else
+        echo "   They differ; compare them with:  sudo diff $parked_env $project/.env"
+      fi
+      echo "   Set the one that is not this node's aside under a dated name, then deploy again, e.g.:"
+      echo "     sudo mv $parked_env $parked_env.set-aside-$stamp"
+      rc=1
+    else
+      echo "♻️  $parked_env is this node's .env, parked by a deploy that did not finish. This deploy puts it back."
+    fi
+  fi
+  return $rc
+}
+
+# describe_data_copy <dir>
+# What tells two copies of a node's data apart, for someone choosing between them: when state.db and its write-ahead file
+# last changed and how big they are, the community in genesis.json (its id, and when it was founded), and a fingerprint of
+# community.key: the first 16 hex digits of its sha256, which names the key without showing it.
+describe_data_copy() {
+  local dir=$1 id born
+  data_copy_file_line "state.db    " "$dir/state.db"
+  data_copy_file_line "state.db-wal" "$dir/state.db-wal"
+  if sudo test -f "$dir/genesis.json"; then
+    id=$(sudo sed -n 's/.*"communityId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/genesis.json" | head -n1)
+    born=$(sudo sed -n 's/.*"createdAt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/genesis.json" | head -n1)
+    echo "      community   : ${id:-?}, founded ${born:-?}"
+  else
+    echo "      community   : no genesis.json"
+  fi
+  if sudo test -f "$dir/community.key"; then
+    echo "      community.key fingerprint: $(sudo cat "$dir/community.key" | sha256_hex | cut -c1-16)"
+  else
+    echo "      community.key: none"
+  fi
+}
+
+# data_copy_file_line <label> <file> — "<label>: modified <when>, <n> bytes", or "none". GNU stat on the servers; BSD stat
+# (a Mac) for the tests.
+data_copy_file_line() {
+  local label=$1 file=$2 when size
+  if ! sudo test -e "$file"; then
+    echo "      $label: none"
+    return 0
+  fi
+  if when=$(sudo stat -c '%y' "$file" 2>/dev/null); then
+    size=$(sudo stat -c '%s' "$file")
+  else
+    when=$(sudo stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$file")
+    size=$(sudo stat -f '%z' "$file")
+  fi
+  echo "      $label: modified ${when%%.*}, $size bytes"
+}
+
+# containers_using <dir>
+# The names of the running containers that have <dir> (or a folder inside it) bind-mounted, one per line. Docker keeps the
+# path a mount was given, and a bind mount follows its folder when that is moved, so a container listed here would go on
+# writing into wherever <dir> is moved to (test, 2026-09-28).
+containers_using() {
+  local dir=$1 id
+  for id in $(sudo docker ps -q 2>/dev/null); do
+    if sudo docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" 2>/dev/null \
+      | awk -v d="$dir" '$0 == d || index($0, d "/") == 1 { found = 1 } END { exit !found }'; then
+      sudo docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's|^/||'
+    fi
+  done
+}
+
 # --- Local side. ---
 
 # http_status <url> — the HTTP status code, or 000 when nothing answered.

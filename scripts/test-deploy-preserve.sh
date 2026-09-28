@@ -40,6 +40,7 @@ assert "found the remote step deploy.sh sends over ssh" "$([ -s "$MAIN" ] && gre
 BT='`'
 hits=$(grep -n "$BT" "$MAIN" | head -3)
 assert "the remote step has no backtick (the local shell would run it, comments included)" "${hits:-none}" "none"
+# shellcheck disable=SC2016  # the dollar-parens here are text to find, not to run
 hits=$(grep -nE '(^|[^\\])\$\(' "$MAIN" | grep -v '^[0-9]*:[[:space:]]*\$(declare -f ' | head -3)
 assert "the remote step has no unescaped \$( but the declare -f that ships the helpers" "${hits:-none}" "none"
 # No code path deletes a copy of a node's data: not a parked copy, not a .stale one, not data/ or .env themselves.
@@ -198,7 +199,7 @@ case "$cmd" in
   run)  # docker run -d --name <name> -v <src>:<dst> <image>: a container started by hand, in no compose project
     name=""; mnt=""
     while [ $# -gt 0 ]; do case "$1" in --name) name=$2; shift ;; -v) mnt=${2%%:*}; shift ;; esac; shift; done
-    start_c "$(create_c "$name" "" "" "$mnt")" ;;
+    i=$(create_c "$name" "" "" "$mnt"); start_c "$i"; echo "$i" ;;
   stop) rc=0; for n in "$@"; do i=$(find_id "$n") && stop_c "$i" || rc=1; done; exit $rc ;;
   rm)
     [ "${1:-}" = "-f" ] && shift
@@ -268,9 +269,11 @@ stop_all_nodes() {
     while kill -0 "$p" 2>/dev/null; do sleep 0.02; done
   done
 }
-trap 'stop_all_nodes; /bin/rm -rf "$SB"' EXIT
+trap 'stop_all_nodes; [ -n "${KEEP_SANDBOX:-}" ] && echo "sandbox kept: $SB" || /bin/rm -rf "$SB"' EXIT
 
+# shellcheck disable=SC2086  # $1 is a docker command line, split on purpose
 dk() { (cd "${2:-$SB}" && PATH="$BIN:$PATH" docker $1); }
+home_names() { find "$HOME_L" -mindepth 1 -maxdepth 1 | sed 's#.*/##'; }
 fresh_server() { stop_all_nodes; /bin/rm -rf "$SRV" "$DOCKER_STATE"; mkdir -p "$HOME_L" "$DOCKER_STATE"; : > "$EVENTS"; }
 # A server that runs: the previous code, data/ holding a community, a .env, and the node running on it.
 live_server() {
@@ -327,8 +330,8 @@ assert "the node runs on data/" "$([ "$(node_pid)" != "$old_pid" ] && written_to
 assert "one deploy at a time: the lock is held at every move and at the start" \
   "$(grep -E '^(mv|start) ' "$EVENTS" | grep -vc 'lock=held$')|$(grep -cE '^(mv|start) ' "$EVENTS")" "0|5"
 assert "and let go when the deploy ends" "$(PATH="$BIN:$PATH" lockprobe "$LOCK_FILE")" "free"
-assert "nothing is left parked, nothing set aside" "$(ls "$HOME_L" | grep -cE 'backup|stale|set-aside')" "0"
-assert "the uploaded package is removed" "$(ls "$HOME_L" | grep -c 'tar.gz')" "0"
+assert "nothing is left parked, nothing set aside" "$(home_names | grep -cE 'backup|stale|set-aside')" "0"
+assert "the uploaded package is removed" "$(home_names | grep -c 'tar\.gz$')" "0"
 assert "no copy of the data or the .env is deleted" "$(deleted)" "nothing"
 show
 
@@ -346,7 +349,7 @@ assert "the ORIGINAL community is live in data/ (key, genesis, ledger, photos)" 
   "ORIGINAL-KEY|1|original ledger|members' photos"
 assert ".env survives" "$(grep -c '^SENTINEL_ENV=kept$' "$PROJ/.env" 2>/dev/null)" "1"
 assert "the node runs on it" "$(written_to "$DATA")" "yes"
-assert "nothing is left parked or set aside as stale" "$(ls "$HOME_L" | grep -cE 'backup|stale|set-aside')" "0"
+assert "nothing is left parked or set aside as stale" "$(home_names | grep -cE 'backup|stale|set-aside')" "0"
 assert "nothing was deleted, in either attempt" "$(deleted)" "nothing"
 show
 
@@ -374,7 +377,7 @@ assert "the ORIGINAL community is live, with what the node wrote while parked" \
   "$(cat "$DATA/community.key" 2>/dev/null)|$([ "$(writes "$DATA")" -ge "$parked_writes" ] && echo kept || echo lost)" "ORIGINAL-KEY|kept"
 assert "the new node starts only after the parked copy is back, and runs on it" \
   "$(before "^mv $R_PARKED -> $R_DATA rc=0" '^start ')|$(written_to "$DATA")" "yes|yes"
-assert "nothing is left parked or set aside as stale" "$(ls "$HOME_L" | grep -cE 'backup|stale|set-aside')" "0"
+assert "nothing is left parked or set aside as stale" "$(home_names | grep -cE 'backup|stale|set-aside')" "0"
 assert "nothing was deleted" "$(deleted)" "nothing"
 show
 
@@ -389,7 +392,7 @@ assert "the node is stopped before anything moves" "$(before '^stop beanpool-fak
 assert "the old node is gone" "$(kill -0 "$old_pid" 2>/dev/null && echo alive || echo gone)" "gone"
 assert "the ORIGINAL community and .env are live, and the node runs on them" \
   "$(cat "$DATA/community.key" 2>/dev/null)|$(grep -c '^SENTINEL_ENV=kept$' "$PROJ/.env" 2>/dev/null)|$(written_to "$DATA")" "ORIGINAL-KEY|1|yes"
-assert "nothing is left parked or set aside as stale" "$(ls "$HOME_L" | grep -cE 'backup|stale|set-aside')" "0"
+assert "nothing is left parked or set aside as stale" "$(home_names | grep -cE 'backup|stale|set-aside')" "0"
 assert "nothing was deleted" "$(deleted)" "nothing"
 show
 
@@ -398,12 +401,13 @@ live_server
 deploy SECOND_DEPLOY_AFTER_MOVE_OF="$DATA"
 assert "the first deploy succeeds" "$RC" "0"
 assert "the first holds the lock while data/ is parked" "$(grep -E "^mv $R_DATA " "$EVENTS" | grep -c 'lock=held$')" "1"
-assert "the second refuses" "$(grep -E '^second deploy rc=' "$EVENTS")|$(grep -c 'another deploy' "$SB/second-deploy.log" 2>/dev/null)" "second deploy rc=1|1"
+assert "the second refuses, saying another deploy is running" \
+  "$(grep -E '^second deploy rc=' "$EVENTS")|$(grep -c 'another deploy' "$SB/second-deploy.log" 2>/dev/null | sed 's/^[1-9][0-9]*$/yes/')" "second deploy rc=1|yes"
 between=$(sed -n '/^second deploy starts$/,/^second deploy rc=/p' "$EVENTS" | server_changes)
 assert "the second changes nothing: no move, no removal, no stop or start, no prune" "${between:-none}" "none"
 assert "the ORIGINAL community is live, and the node runs on it" "$(cat "$DATA/community.key" 2>/dev/null)|$(written_to "$DATA")" "ORIGINAL-KEY|yes"
-assert "nothing is left parked or set aside as stale" "$(ls "$HOME_L" | grep -cE 'backup|stale|set-aside')" "0"
-assert "neither deploy leaves its package behind" "$(ls "$HOME_L" | grep -c 'tar.gz')" "0"
+assert "nothing is left parked or set aside as stale" "$(home_names | grep -cE 'backup|stale|set-aside')" "0"
+assert "neither deploy leaves its package behind" "$(home_names | grep -c 'tar\.gz$')" "0"
 assert "nothing was deleted" "$(deleted)" "nothing"
 show
 
@@ -470,7 +474,7 @@ show
 
 section "a container with data/ mounted will not stop: refuse before anything moves"
 live_server
-hand=$(dk "run -d --name will-not-stop -v $DATA:/data ghcr.io/beanpool-org/beanpool-node" > /dev/null; ls "$DOCKER_STATE" | grep '^c' | tail -n1)
+hand=$(dk "run -d --name will-not-stop -v $DATA:/data ghcr.io/beanpool-org/beanpool-node")
 touch "$DOCKER_STATE/$hand/unstoppable"
 : > "$EVENTS"
 deploy

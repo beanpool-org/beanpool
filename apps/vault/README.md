@@ -29,7 +29,8 @@ sealed to their custodians, can be fetched again (`/v1/unlock/pending`). The vau
 custodians show they hold their share: each signs a check of its words (`/v1/unlock/confirm`), or two of them unlock
 with the new shares. Until then the old shares are the ones in force, so no lost answer or restart can leave a vault
 that nobody can open. Two current custodians can drop a reshare nobody finished (`/v1/unlock/cancel`); a genesis
-nobody finished is replaced by the next one.
+nobody finished is replaced by the next one. Custodians keep their old shares until the vault has switched (its
+`/v1/unlock/confirm` answer says `switched`), and destroy them then.
 
 ## Routes
 

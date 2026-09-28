@@ -6276,38 +6276,35 @@ export function getCommunityHealth(): CommunityHealth {
             if (seen.has(row.farmer_pubkey)) continue;
             seen.add(row.farmer_pubkey);
 
-            // Isolation check: do the puppets trade with ANYONE else?
+            // ⚡ Bolt: O(1) batch query to count isolated puppets instead of running 2N queries per invitee loop
             const puppetPubkeys = db.prepare(`
                 SELECT public_key FROM members WHERE invited_by = ?
-            `).all(row.farmer_pubkey) as any[];
-            
-            let isolatedPuppets = 0;
-            for (const p of puppetPubkeys) {
-                const marketPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT seller_pubkey as partner FROM marketplace_transactions
-                        WHERE buyer_pubkey = ? AND seller_pubkey != ? AND status = 'completed'
-                        UNION
-                        SELECT buyer_pubkey as partner FROM marketplace_transactions
-                        WHERE seller_pubkey = ? AND buyer_pubkey != ? AND status = 'completed'
-                    )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+            `).all(row.farmer_pubkey) as { public_key: string }[];
 
-                const directPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT to_pubkey as partner FROM transactions
-                        WHERE from_pubkey = ? AND to_pubkey != ?
+            let isolatedPuppets = 0;
+            if (puppetPubkeys.length > 0) {
+                const puppetKeysJson = JSON.stringify(puppetPubkeys.map(p => p.public_key));
+                const nonIsolatedCount = (db.prepare(`
+                    SELECT COUNT(DISTINCT puppet) as cnt FROM (
+                        SELECT buyer_pubkey as puppet FROM marketplace_transactions
+                        WHERE buyer_pubkey IN (SELECT value FROM json_each(?)) AND seller_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT seller_pubkey as puppet FROM marketplace_transactions
+                        WHERE seller_pubkey IN (SELECT value FROM json_each(?)) AND buyer_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT from_pubkey as puppet FROM transactions
+                        WHERE from_pubkey IN (SELECT value FROM json_each(?)) AND to_pubkey != ?
                           AND to_pubkey NOT LIKE 'escrow_%' AND to_pubkey NOT LIKE 'project_%'
                           AND to_pubkey != 'commons' AND to_pubkey != 'SYSTEM'
                         UNION
-                        SELECT from_pubkey as partner FROM transactions
-                        WHERE to_pubkey = ? AND from_pubkey != ?
+                        SELECT to_pubkey as puppet FROM transactions
+                        WHERE to_pubkey IN (SELECT value FROM json_each(?)) AND from_pubkey != ?
                           AND from_pubkey NOT LIKE 'escrow_%' AND from_pubkey NOT LIKE 'project_%'
                           AND from_pubkey != 'commons' AND from_pubkey != 'SYSTEM'
                     )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+                `).get(puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey) as any)?.cnt || 0;
 
-                if ((marketPartners?.cnt || 0) + (directPartners?.cnt || 0) === 0) isolatedPuppets++;
+                isolatedPuppets = puppetPubkeys.length - nonIsolatedCount;
             }
 
             flags.push({

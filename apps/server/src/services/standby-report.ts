@@ -164,6 +164,14 @@ const TABLE_WORDS: Record<string, string> = {
     [LEDGER_DIFFERS.commons]: 'the Commons',
 };
 
+/** The tables whose words (TABLE_WORDS) name one thing rather than many: "the communities directory", not "chat messages". */
+const ONE_THING = new Set(['conversation_participants', 'directory_cache', 'treasury_operators', LEDGER_DIFFERS.commons]);
+
+/** "it" or "them" for what differsInWords says of these tables: by its words, "chat messages" are them, however many tables. */
+export function pronounOf(tables: readonly string[]): 'it' | 'them' {
+    return tables.length === 1 && ONE_THING.has(tables[0]) ? 'it' : 'them';
+}
+
 /** "members' balances, listings and chat messages". */
 export function differsInWords(differs: string[]): string {
     const words = differs.map((d) => TABLE_WORDS[d] ?? d.replace(/_/g, ' '));

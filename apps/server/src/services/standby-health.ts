@@ -32,7 +32,7 @@ import { dispatchPushNotification } from '../state-engine.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { errorMessage } from '../error-message.js';
 import { withoutOldAddresses } from './address-retention.js';
-import { differsInWords, parseStandbyReport, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
+import { differsInWords, parseStandbyReport, pronounOf, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
 /** No copy for this long, and the standby needs its owners. */
@@ -338,17 +338,16 @@ function sentence(p: Problem, s: HealthState, withAddress = true): string {
     const who = label(p.standby, s, withAddress);
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
     if (p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${whyInWords(p.why)}.`;
-    const them = (tables: string[]) => (tables.length === 1 ? 'it' : 'them');
     if (p.kind === 'oversized') {
         return `${who} refuses ${p.refusedInARow > 0 ? 'its' : 'whole'} copies of this server: this server holds more rows of ${differsInWords(p.tables)} `
-            + `than one copy carries, and the ledger needs ${them(p.tables)} whole. `
+            + `than one copy carries, and the ledger needs ${pronounOf(p.tables)} whole. `
             + (p.refusedInARow > 0
                 ? `It still holds everything it copied up to ${timeInWords(p.lastCopyAt)}, and nothing after.`
                 : 'Changes still reach it one by one, but nothing can check its copy is exact.');
     }
     if (p.kind === 'left-out') {
-        return `${who}'s copies of this server leave out ${differsInWords(p.tables)}: this server holds more rows of ${them(p.tables)} than `
-            + `one copy carries. It keeps what it had of ${them(p.tables)}, and copies everything else.`;
+        return `${who}'s copies of this server leave out ${differsInWords(p.tables)}: this server holds more rows of ${pronounOf(p.tables)} than `
+            + `one copy carries. It keeps what it had of ${pronounOf(p.tables)}, and copies everything else.`;
     }
     return `${who}'s last whole copy of this server${p.at !== null ? `, at ${timeInWords(p.at)},` : ''} did not match it: `
         + `${differsInWords(p.differs)} differed. Last exact copy: ${timeInWords(p.lastExactAt)}.`;

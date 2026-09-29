@@ -14,7 +14,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import {
-    type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, timeInWords, whyInWords,
+    type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, pronounOf, timeInWords, whyInWords,
 } from './standby-report.js';
 
 const KEY = 'standby_copy_record';
@@ -358,13 +358,13 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
     if (out) {
         warning = true;
         lines.push(`Its copies of the main server leave out ${differsInWords(out.tables)}: the main server holds more rows of `
-            + `${out.tables.length === 1 ? 'it' : 'them'} than one copy carries. What this server has of ${out.tables.length === 1 ? 'it' : 'them'} `
+            + `${pronounOf(out.tables)} than one copy carries. What this server has of ${pronounOf(out.tables)} `
             + `is from before ${timeInWords(out.since)}; everything else was copied.`);
     }
     if (r.failedImportsInARow > 0) {
         warning = true;
         lines.push(`Its last ${r.failedImportsInARow === 1 ? 'copy was' : `${r.failedImportsInARow} copies were`} refused: ${r.lastWhy === 'oversized' && r.lastOversized
-            ? `the main server holds more rows of ${differsInWords(r.lastOversized.tables)} than one copy carries, and the ledger needs ${r.lastOversized.tables.length === 1 ? 'it' : 'them'} whole`
+            ? `the main server holds more rows of ${differsInWords(r.lastOversized.tables)} than one copy carries, and the ledger needs ${pronounOf(r.lastOversized.tables)} whole`
             : whyInWords(r.lastWhy)}.`);
         // Refused since: a refusal clears nothing, so what this server holds is the last copy that landed, whole (design §4.2 N4).
         lines.push(r.lastOkAt !== null

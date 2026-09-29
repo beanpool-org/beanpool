@@ -18,18 +18,37 @@
  * - The return lock never opens a prompt while one is open.
  * - Back after 15 seconds or more while a prompt is still open, the lock screen is up at once, before the answer: the app
  *   is never shown unlocked while the return lock waits. A pass takes it down with no second prompt.
+ * - The time away is the phone's since-boot clock's (utils/app-lock-clock.ts), not the wall clock's: whoever holds an
+ *   unlocked phone could set the wall clock back and come back to an open app (#1307's confirmation review, 2026-09-29).
+ * - A phone whose since-boot clock can't be read asks after every leave: the wall clock is App Lock's clock only in the web
+ *   build (#1309's deciding review, inline 4129453720, 2026-09-29).
  *
  * Screens can't be rendered here (see vitest.config.ts): the listener is driven the way AppState drives it, with the
- * phone's prompt mocked at expo-local-authentication and time faked.
+ * phone's prompt mocked at expo-local-authentication and time faked. The since-boot clock is a fake native module on
+ * globalThis.expo.modules, where the app reads it, counting with the faked timers.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { webcrypto } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
-const phoneState = vi.hoisted(() => ({ appLock: 'true' as string | null, appLockRead: null as null | (() => Promise<string | null>) }));
+const phoneState = vi.hoisted(() => ({
+    appLock: 'true' as string | null,
+    appLockRead: null as null | (() => Promise<string | null>),
+    /** Platform.OS. */
+    os: 'android' as string,
+    /** Whether the app has the phone's since-boot clock (modules/boot-clock). false: the web build, an old dev client. */
+    bootClock: true,
+    /** What the since-boot clock reads when the phone is set up. null: what the wall clock reads. */
+    bootClockStart: null as number | null,
+    /** The since-boot clock reads bootBase + performance.now(). */
+    bootBase: 0,
+    /** While set, the since-boot clock's elapsedMs answers this instead (throws, or answers something not a time). */
+    bootClockFault: null as null | (() => unknown),
+}));
 
-vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('react-native', () => ({ Platform: { get OS() { return phoneState.os; } } }));
 vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
@@ -67,12 +86,28 @@ const MANAGE_COMMUNITY = "Confirm it's you to manage Mullum";
 /** Every promise chain the listener and the prompt start has run. setImmediate is left real for this. */
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
+type ExpoGlobalForTests = { expo?: { modules: Record<string, { elapsedMs(): number }> } };
+
 /**
  * A phone with a PIN and App Lock on, BeanPool open on it with an account, and the return lock listening. Fresh modules
  * each time: the prompt marker is module state.
  */
 async function phoneWithAppLock() {
     vi.resetModules();
+    // The phone's since-boot clock (modules/boot-clock), where the app reads it. It counts with the faked timers
+    // (performance.now), and setting the wall clock (vi.setSystemTime) doesn't move it. Unless bootClockStart says otherwise
+    // it starts out reading what the wall clock reads, so every time reads the same on either until someone moves the wall
+    // clock. On a phone the two differ by decades: bootClockStart.
+    phoneState.bootBase = (phoneState.bootClockStart ?? Date.now()) - performance.now();
+    if (phoneState.bootClock) {
+        (globalThis as ExpoGlobalForTests).expo = {
+            modules: {
+                BeanPoolBootClock: {
+                    elapsedMs: () => (phoneState.bootClockFault ? phoneState.bootClockFault() : phoneState.bootBase + performance.now()) as number,
+                },
+            },
+        };
+    }
     const LA = await import('expo-local-authentication');
     const LocalAuth = await import('../LocalAuth');
     const ReturnLock = await import('../return-lock');
@@ -98,6 +133,14 @@ async function phoneWithAppLock() {
         },
         wait(ms: number) {
             vi.advanceTimersByTime(ms);
+        },
+        /** Someone moves the phone's date and time in its Settings (automatic time off): the wall clock only. */
+        setWallClock(byMs: number) {
+            vi.setSystemTime(Date.now() + byMs);
+        },
+        /** The phone restarts: its since-boot clock starts again from nothing. */
+        restartBootClock() {
+            phoneState.bootBase = -performance.now();
         },
         locked: () => locked,
         /** How many times the phone's prompt was shown. */
@@ -128,13 +171,19 @@ type Phone = Awaited<ReturnType<typeof phoneWithAppLock>>;
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
     vi.setSystemTime(START);
     phoneState.appLock = 'true';
     phoneState.appLockRead = null;
+    phoneState.os = 'android';
+    phoneState.bootClock = true;
+    phoneState.bootClockStart = null;
+    phoneState.bootClockFault = null;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
+    delete (globalThis as ExpoGlobalForTests).expo;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.restoreAllMocks();
 });
@@ -557,6 +606,519 @@ describe('leaving while a prompt is open', () => {
     });
 });
 
+describe("an 'active' with no leave seen while a prompt is open: the lock screen is up at once, before the answer", () => {
+    it.each([
+        [true, 'the app, with one prompt', false],
+        [false, 'the lock screen stays, with one prompt', true],
+    ] as const)("View Recovery Phrase's prompt, answered (passed: %s): %s", async (passes, _outcome, lockedAfter) => {
+        const phone = await phoneWithAppLock();
+        void phone.viewRecoveryPhrase();
+        await flush();
+        expect(phone.locked()).toBe(false);
+
+        phone.change('active');
+        await flush();
+        expect(phone.locked()).toBe(true);
+
+        phone.answer(passes);
+        await flush();
+        expect(phone.locked()).toBe(lockedAfter);
+        expect(phone.prompts()).toBe(1);
+    });
+});
+
+describe("the wall clock set back while the app is away: the phone's since-boot clock times the absence", () => {
+    // #1307's confirmation review (inline 4129238858): whoever holds an unlocked phone while BeanPool is in the background
+    // turns off automatic time in the phone's Settings and sets the clock back (most phones ask no PIN for that). The wall
+    // clock then read an hour away as seconds, or as less than nothing, and the app opened with no prompt.
+    it.each([3600, 3595, 7200])('away an hour, the wall clock set back %s s before the return: locked and asked once', async (backS) => {
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(3600 * SEC);
+        phone.setWallClock(-backS * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+        phone.answer(true);
+        await flush();
+        expect(phone.locked()).toBe(false);
+        expect(phone.prompts()).toBe(1);
+    });
+
+    it('iOS, inactive then background, away an hour, the wall clock set back an hour: locked and asked once', async () => {
+        const phone = await phoneWithAppLock();
+        phone.change('inactive');
+        phone.change('background');
+        phone.wait(3600 * SEC);
+        phone.setWallClock(-3600 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.prompts()).toBe(1);
+    });
+
+    it('the wall clock set forward two hours during a 5-second leave: nothing, as for any short leave', async () => {
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(2 * SEC);
+        phone.setWallClock(2 * 3600 * SEC);
+        phone.wait(3 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(false);
+        expect(phone.prompts()).toBe(0);
+    });
+
+    it('the wall clock set back a minute during a 5-second leave: locked and asked once, as after 15 seconds away', async () => {
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(2 * SEC);
+        phone.setWallClock(-60 * SEC);
+        phone.wait(3 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+    });
+
+    it('the phone restarts while the app is away (its since-boot clock reads less on the return than at the leave): locked and asked once', async () => {
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(2 * SEC);
+        phone.restartBootClock();
+        phone.wait(3 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+    });
+
+    it('a set-back while the app is in front (automatic time correcting it) does not count against the next leave', async () => {
+        const phone = await phoneWithAppLock();
+        await leaveAndReturn(phone, 60 * SEC);
+        phone.answer(true);
+        await flush();
+        expect(phone.locked()).toBe(false);
+
+        phone.setWallClock(-30 * SEC);
+        await leaveAndReturn(phone, 5 * SEC);
+
+        expect(phone.locked()).toBe(false);
+        expect(phone.prompts()).toBe(1);
+    });
+});
+
+describe('a prompt open across a wall clock change', () => {
+    it('the stretch is timed on the since-boot clock: open 20 seconds, whatever the wall clock did meanwhile', async () => {
+        const phone = await phoneWithAppLock();
+        const { LocalAuth } = phone;
+        const asked = LocalAuth.authenticateUser(VIEW_RECOVERY_PHRASE);
+        await flush();
+        phone.wait(10 * SEC);
+        phone.setWallClock(-3600 * SEC);
+        phone.wait(10 * SEC);
+        phone.answer(true);
+        expect(await asked).toBe(true);
+
+        const [stretch] = LocalAuth.localAuthPromptStretches();
+        expect(stretch.closedAt! - stretch.openedAt).toBe(20 * SEC);
+        expect(stretch.passed).toBe(true);
+    });
+
+    describe.each(SHAPES)('%s', (_shape, leave) => {
+        it('the PIN screen is left open an hour; someone sets the wall clock back an hour, cancels it and opens the app: locked', async () => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+            phone.change(leave);
+            phone.wait(3600 * SEC);
+            phone.setWallClock(-3600 * SEC);
+            phone.answer(false);
+            await flush();
+            phone.change('active');
+            await flush();
+
+            // Every wall reading since the leave says no time passed. The since-boot clock says an hour, and the prompt did
+            // not pass: the lock screen, and Unlock App asks when the member is ready.
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE]);
+        });
+
+        it('the same, the wall clock set back two hours: locked, and asked, as the times cannot be trusted', async () => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+            phone.change(leave);
+            phone.wait(3600 * SEC);
+            phone.setWallClock(-7200 * SEC);
+            phone.answer(false);
+            await flush();
+            phone.change('active');
+            await flush();
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+        });
+
+        it('the wall clock goes back while a prompt that passes is open: locked and asked once more, as the times cannot be trusted', async () => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+            phone.change(leave);
+            phone.wait(10 * SEC);
+            phone.setWallClock(-60 * SEC);
+            phone.wait(10 * SEC);
+            phone.answer(true);
+            await flush();
+            phone.change('active');
+            await flush();
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+        });
+    });
+});
+
+describe('the web build (no since-boot clock, and App Lock asks nothing there): the wall clock, as before', () => {
+    // Until #1309's deciding review these ran with Platform.OS 'android' and covered "a dev client built before the
+    // module" too. On a phone that is the hole the review found (inline 4129453720): a phone that can't read its
+    // since-boot clock now asks after every leave, below. The phone's prompt is mocked as on the other tests, so the
+    // rule's answer shows; the web build's own has nothing to ask.
+    beforeEach(() => {
+        phoneState.os = 'web';
+        phoneState.bootClock = false;
+        const stored = new Map<string, string>();
+        vi.stubGlobal('localStorage', {
+            getItem: (k: string) => (k === 'beanpool_app_lock_enabled' ? phoneState.appLock : stored.get(k) ?? null),
+            setItem: (k: string, v: string) => { stored.set(k, v); },
+            removeItem: (k: string) => { stored.delete(k); },
+        });
+    });
+
+    it('App Lock reads the wall clock there', async () => {
+        vi.resetModules();
+        const { appLockNow, clockReadFailures } = await import('../app-lock-clock');
+        expect(appLockNow()).toBe(START.getTime());
+        expect(clockReadFailures()).toBe(0);
+    });
+
+    it.each([
+        [60 * SEC, true, 1],
+        [5 * SEC, false, 0],
+    ])('away %s ms: locked %s, prompts %s', async (away, locked, prompts) => {
+        const phone = await phoneWithAppLock();
+
+        await leaveAndReturn(phone, away);
+
+        expect(phone.locked()).toBe(locked);
+        expect(phone.prompts()).toBe(prompts);
+    });
+
+    it('a 20-second prompt that passes: no second prompt, and the app is open', async () => {
+        const phone = await phoneWithAppLock();
+        void phone.viewRecoveryPhrase();
+        await flush();
+
+        await slowPrompt(phone, 'background', 'answer first', 20 * SEC, true);
+
+        expect(phone.prompts()).toBe(1);
+        expect(phone.locked()).toBe(false);
+    });
+
+    it('away an hour, the wall clock set back two hours (the return reads earlier than the leave): locked and asked once', async () => {
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(3600 * SEC);
+        phone.setWallClock(-7200 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+    });
+});
+
+/**
+ * The phone's since-boot clock read wrong, from phoneWithAppLock on: the module missing (bootClock false), or elapsedMs
+ * throwing or answering something that isn't a time.
+ */
+const UNREADABLE = [
+    ['the module missing (a phone app built before it)', () => { phoneState.bootClock = false; }],
+    ['elapsedMs throwing', () => { phoneState.bootClockFault = () => { throw new Error('native'); }; }],
+    ['elapsedMs answering NaN', () => { phoneState.bootClockFault = () => Number.NaN; }],
+    ['elapsedMs answering Infinity', () => { phoneState.bootClockFault = () => Number.POSITIVE_INFINITY; }],
+    ['elapsedMs answering a string', () => { phoneState.bootClockFault = () => '123456'; }],
+] as const;
+const FAULT = () => { throw new Error('native'); };
+/** Where the since-boot clock starts: as the harness has it, and as on a phone (the wall clock reads decades more). */
+const BOOT_STARTS = [
+    ['the since-boot clock reading what the wall clock reads', null],
+    ['the phone started three days ago', 3 * 24 * 3600 * SEC],
+] as const;
+
+describe("a phone whose since-boot clock can't be read: the time away can't be told, so App Lock asks", () => {
+    // #1309's deciding review (inline 4129453720): with no since-boot reading, App Lock went back to the wall clock with no
+    // sign, and away an hour with the clock set back 3595 s opened the app. The wall clock is App Lock's clock only in the
+    // web build now; a phone that can't read its since-boot clock at the leave, at the return, or at a prompt's open or
+    // close between them treats the time away as 15 seconds or more, as for any time that can't be trusted.
+    it.each(UNREADABLE)('%s, away an hour, the wall clock set back 3595 s: locked and asked once', async (_name, breakClock) => {
+        breakClock();
+        const phone = await phoneWithAppLock();
+        phone.change('background');
+        phone.wait(3600 * SEC);
+        phone.setWallClock(-3595 * SEC);
+        phone.change('active');
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+        phone.answer(true);
+        await flush();
+        expect(phone.locked()).toBe(false);
+        expect(phone.prompts()).toBe(1);
+    });
+
+    it.each(UNREADABLE)('%s, a 5-second leave: locked and asked once (a dev client built before the module asks after every leave)', async (_name, breakClock) => {
+        breakClock();
+        const phone = await phoneWithAppLock();
+
+        await leaveAndReturn(phone, 5 * SEC);
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+    });
+
+    it.each(UNREADABLE)('%s, a 20-second prompt that passes while the app is out of the front: asked once more', async (_name, breakClock) => {
+        breakClock();
+        const phone = await phoneWithAppLock();
+        void phone.viewRecoveryPhrase();
+        await flush();
+
+        await slowPrompt(phone, 'background', 'answer first', 20 * SEC, true);
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+    });
+
+    // #1309's deciding review (inline 4129818251), kept by decision: fail-closed. The phone's own prompt is itself a leave
+    // (Android 8-10's PIN screen backgrounds the app, iOS's passcode prompt makes it inactive), and with no since-boot
+    // reading every leave asks. So on a build without the module (or a dev client built before it) App Lock's own prompt
+    // brings the next one, passed or cancelled, however quick: a member with App Lock on can't get in, even to turn it off,
+    // until the app is rebuilt with the module. A build with it can't get here: elapsedRealtime and mach_continuous_time
+    // don't fail. Trusting the order of events alone to break the loop would reopen a window (see the review).
+    describe.each(UNREADABLE)('an unreadable since-boot clock fails closed: every prompt is a leave, so it asks again until the app is rebuilt with the module (%s)', (_name, breakClock) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            describe.each(ORDERS)('%s', (_order, order) => {
+                it.each([
+                    ['passes', true],
+                    ['cancels', false],
+                ] as const)('the launch lock asks, the member %s two 1-second prompts: a third prompt is open', async (_answers, passes) => {
+                    breakClock();
+                    const phone = await phoneWithAppLock();
+                    phone.unlockApp();
+                    await flush();
+                    expect(phone.prompts()).toBe(1);
+
+                    for (let answered = 1; answered <= 2; answered++) {
+                        await slowPrompt(phone, leave, order, 1 * SEC, passes);
+                        await flush();
+                        expect(phone.prompts()).toBe(answered + 1);
+                    }
+
+                    expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool', 'Unlock BeanPool']);
+                    expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+                    // Not pinned for passes: when the app is active before the answer, the pass that closes one prompt takes
+                    // the lock screen down after the next prompt has opened (a real pass, a second before). The next
+                    // prompt is open either way, and the loop is what this pins.
+                    if (!passes) expect(phone.locked()).toBe(true);
+                });
+            });
+        });
+    });
+
+    describe.each(SHAPES)('the same prompts with the since-boot clock working (%s): asked once, no loop', (_shape, leave) => {
+        it.each(ORDERS)('passed when %s: one prompt, and the app is open', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+
+            await slowPrompt(phone, leave, order, 1 * SEC, true);
+            await flush();
+
+            expect(phone.prompts()).toBe(1);
+            expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+            expect(phone.locked()).toBe(false);
+        });
+
+        it.each(ORDERS)('cancelled when %s: one prompt, and the lock screen stays', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+
+            await slowPrompt(phone, leave, order, 1 * SEC, false);
+            await flush();
+
+            expect(phone.prompts()).toBe(1);
+            expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+            expect(phone.locked()).toBe(true);
+        });
+    });
+
+    describe.each(BOOT_STARTS)('%s', (_start, bootClockStart) => {
+        beforeEach(() => {
+            phoneState.bootClockStart = bootClockStart;
+        });
+
+        /** Leaves, and comes back awayMs later with the wall clock moved by wallMs; the since-boot clock fails at `at` only. */
+        async function leaveAndReturnFailingAt(phone: Phone, at: 'leave' | 'return', awayMs: number, wallMs = 0) {
+            if (at === 'leave') phoneState.bootClockFault = FAULT;
+            phone.change('background');
+            phoneState.bootClockFault = null;
+            phone.wait(awayMs);
+            phone.setWallClock(wallMs);
+            if (at === 'return') phoneState.bootClockFault = FAULT;
+            // The return lock reads the time as the change arrives, before anything it waits on.
+            phone.change('active');
+            phoneState.bootClockFault = null;
+            await flush();
+        }
+
+        it.each(['leave', 'return'] as const)('only the reading at the %s fails, a 5-second leave: locked and asked once', async (at) => {
+            const phone = await phoneWithAppLock();
+
+            await leaveAndReturnFailingAt(phone, at, 5 * SEC);
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+        });
+
+        it.each(['leave', 'return'] as const)('only the reading at the %s fails, away an hour, the wall clock set back 3595 s: locked and asked once', async (at) => {
+            const phone = await phoneWithAppLock();
+
+            await leaveAndReturnFailingAt(phone, at, 3600 * SEC, -3595 * SEC);
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual(['Unlock BeanPool']);
+            phone.answer(true);
+            await flush();
+            expect(phone.prompts()).toBe(1);
+        });
+
+        it.each(SHAPES)("only the reading at a prompt's answer while the app is away fails (%s), 5 s away: locked and asked once more", async (_shape, leave) => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+            phone.change(leave);
+            phone.wait(5 * SEC);
+            phoneState.bootClockFault = FAULT;
+            phone.answer(true);
+            await flush();
+            phoneState.bootClockFault = null;
+            phone.change('active');
+            await flush();
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+        });
+
+        it("the reading at a prompt's answer before the leave fails: that prompt never covers a later hour away", async () => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+            phoneState.bootClockFault = FAULT;
+            phone.answer(true);
+            await flush();
+            phoneState.bootClockFault = null;
+            expect(phone.locked()).toBe(false);
+
+            await leaveAndReturn(phone, 3600 * SEC);
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool']);
+        });
+
+        it('a reading that failed while the app was in front does not count against the next leave: 5 s away, nothing', async () => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+            phoneState.bootClockFault = FAULT;
+            phone.answer(true);
+            await flush();
+            phoneState.bootClockFault = null;
+
+            await leaveAndReturn(phone, 5 * SEC);
+
+            expect(phone.locked()).toBe(false);
+            expect(phone.prompts()).toBe(1);
+        });
+
+        it('with the since-boot clock working, a 5-second leave: nothing, as before', async () => {
+            const phone = await phoneWithAppLock();
+
+            await leaveAndReturn(phone, 5 * SEC);
+
+            expect(phone.locked()).toBe(false);
+            expect(phone.prompts()).toBe(0);
+        });
+    });
+});
+
+describe("App Lock's clock is the phone's since-boot clock", () => {
+    const NATIVE = path.resolve(__dirname, '../..');
+    const read = (f: string) => fs.readFileSync(path.join(NATIVE, f), 'utf-8');
+    const MODULE = 'modules/boot-clock';
+    const KOTLIN = `${MODULE}/android/src/main/java/org/beanpool/bootclock/BootClockModule.kt`;
+    const SWIFT = `${MODULE}/ios/BootClockModule.swift`;
+
+    it('the return lock and the prompt marker read it, never the wall clock', () => {
+        const returnLock = read('utils/return-lock.ts');
+        const localAuth = read('utils/LocalAuth.ts');
+        expect(returnLock).not.toMatch(/Date\.now\(/);
+        expect(localAuth).not.toMatch(/Date\.now\(/);
+        expect(returnLock).toContain('leftAt = appLockNow();');
+        expect(returnLock).toContain('const activeAt = appLockNow();');
+        expect(localAuth).toContain('promptStretches.push({ openedAt: appLockNow(), closedAt: null, passed: false });');
+        expect(localAuth).toContain('current.closedAt = appLockNow();');
+    });
+
+    it('one native module under one name: Android reads elapsedRealtime, iOS mach_continuous_time', () => {
+        const config = JSON.parse(read(`${MODULE}/expo-module.config.json`));
+        expect(config.platforms).toEqual(['apple', 'android']);
+        expect(config.apple.modules).toEqual(['BootClockModule']);
+        expect(config.android.modules).toEqual(['org.beanpool.bootclock.BootClockModule']);
+        for (const source of [read(KOTLIN), read(SWIFT)]) {
+            expect(source).toContain('Name("BeanPoolBootClock")');
+            expect(source).toContain('Function("elapsedMs")');
+        }
+        expect(read(KOTLIN)).toContain('SystemClock.elapsedRealtime().toDouble()');
+        expect(read(SWIFT)).toContain('Double(mach_continuous_time())');
+        expect(read(`${MODULE}/index.ts`)).toContain("export const BOOT_CLOCK_MODULE = 'BeanPoolBootClock';");
+    });
+
+    it("a phone build packs the module's native code: the repo's .easignore, the one EAS reads, leaves it in", () => {
+        // eas-cli (vcs/clients/git.js) drops the files `git ls-files --exclude-from <git root>/.easignore --ignored --cached`
+        // lists from what it builds. A bare `android/` or `ios/` line there would drop these too, and the app would fall
+        // back to the wall clock without a word.
+        const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: NATIVE, encoding: 'utf-8' }).trim();
+        const listed = (...args: string[]) => execFileSync('git', ['ls-files', '--cached', ...args, '--', `apps/native/${MODULE}`], { cwd: root, encoding: 'utf-8' })
+            .split('\n')
+            .filter(Boolean);
+        expect(listed()).toEqual(expect.arrayContaining([
+            `apps/native/${MODULE}/android/build.gradle`,
+            `apps/native/${KOTLIN}`,
+            `apps/native/${MODULE}/ios/BeanPoolBootClock.podspec`,
+            `apps/native/${SWIFT}`,
+        ]));
+        expect(listed('--ignored', `--exclude-from=${path.join(root, '.easignore')}`)).toEqual([]);
+    });
+});
+
 describe('the return lock never opens a prompt while one is open', () => {
     it("the launch lock's prompt is open when an 'active' arrives with no leave seen: no second prompt", async () => {
         const phone = await phoneWithAppLock();
@@ -755,6 +1317,36 @@ describe('returnLockAction: the rule', () => {
         ['the launch prompt open, not passed', 'lock', [stretch(0, 30 * SEC, false)]],
     ] as const)('no leave seen, %s: %s', (_name, action, stretches) => {
         expect(returnLockActionOf(null, T + 10 * SEC, stretches)).toBe(action);
+    });
+
+    it.each([
+        ['the return reads earlier than the leave (the phone restarted)', 'ask', 60 * SEC, 5 * SEC, [], false],
+        ['the wall clock seen going back, 5 s away', 'ask', 0, 5 * SEC, [], true],
+        ['the wall clock seen going back, a prompt that passed covering the away', 'ask', 1, 20 * SEC, [stretch(0, 20 * SEC, true)], true],
+        ['the wall clock seen going back, a prompt that did not pass', 'ask', 1, 20 * SEC, [stretch(0, 20 * SEC, false)], true],
+        ['a prompt since the leave closed before it opened, 14 s away', 'ask', 0, 14 * SEC, [stretch(10 * SEC, 5 * SEC, true)], false],
+        ['a prompt that ran backwards before the leave does not count', 'none', 30 * SEC, 35 * SEC, [stretch(10 * SEC, 5 * SEC, true)], false],
+        ['the wall clock not seen going back: as before', 'none', 1, 20 * SEC, [stretch(0, 20 * SEC, true)], false],
+    ] as const)('times that ran backwards, %s: %s', (_name, action, left, active, stretches, wallClockSetBack) => {
+        expect(returnLockActionOf(T + left, T + active, stretches, wallClockSetBack)).toBe(action);
+    });
+
+    // App Lock's clock answers NaN for a reading it couldn't take (utils/app-lock-clock.ts). A time that isn't a number
+    // can't say how long the app was away: NaN >= 15 s is false, and the rule used to answer 'none' for it.
+    const passedCovering = [stretch(0, 20 * SEC, true)];
+    it.each([
+        ['the leave unread', 'ask', Number.NaN, T + 5 * SEC, []],
+        ['the return unread', 'ask', T, Number.NaN, []],
+        ['both unread', 'ask', Number.NaN, Number.NaN, []],
+        ['the return unread, a prompt that passed covering the away', 'ask', T + 1, Number.NaN, passedCovering],
+        ['the leave unread, a prompt that passed covering the away', 'ask', Number.NaN, T + 20 * SEC, passedCovering],
+        ['the leave infinitely far back', 'ask', Number.NEGATIVE_INFINITY, T + 5 * SEC, []],
+        ['the return infinitely far on', 'ask', T, Number.POSITIVE_INFINITY, passedCovering],
+        ['no leave seen, the return unread, a prompt that passed', 'ask', null, Number.NaN, passedCovering],
+        ["a prompt passed before the leave, its close unread: it doesn't cover the away", 'ask', T + 10 * SEC, T + 3600 * SEC, [{ openedAt: T, closedAt: Number.NaN, passed: true }]],
+        ["a prompt whose open was unread: it doesn't cover the away", 'ask', T + 1, T + 20 * SEC, [{ openedAt: Number.NaN, closedAt: T + 20 * SEC, passed: true }]],
+    ] as const)('a time that is not a number, %s: %s', (_name, action, left, active, stretches) => {
+        expect(returnLockActionOf(left, active, stretches)).toBe(action);
     });
 });
 

@@ -226,6 +226,7 @@ export default function SettingsSigninScreen() {
                                     onPress={approve}
                                     disabled={busy}
                                     accessibilityRole="button"
+                                    accessibilityLabel={busy ? "Signing computer in..." : "Sign in"}
                                     accessibilityHint="Asks for your phone's unlock, then signs the computer in"
                                     accessibilityState={{ busy, disabled: busy }}
                                 >

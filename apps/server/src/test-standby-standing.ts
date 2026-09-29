@@ -65,8 +65,8 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Standing-Main-Pw-7314!';
 const PW_STANDBY = 'Standing-Standby-Pw-2208!';
 const AHEAD_MS = 3600_000;
-/** The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 4 was this suite's (G2), 5 is in-flight money's (G3). */
-const FORMAT = '5';
+/** The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 4 was this suite's (G2), 5 in-flight money's (G3), 6 members' devices' (G4). */
+const FORMAT = '6';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 

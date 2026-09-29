@@ -30,9 +30,9 @@ export interface ColumnException {
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true } & Carried
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
@@ -65,6 +65,62 @@ export interface TombstoneClear {
     reason: string;
 }
 
+/**
+ * Which rows of a plain table travel, when not every row does: an SQL condition on the row, its own columns named bare,
+ * written here and never taken from a copy. A row it doesn't hold is this server's own. The export never sends one
+ * (engine sync.ts exportPlainTables), a whole copy neither sends nor deletes one (engine/plain-tables.ts), the whole-copy
+ * check neither counts nor hashes one on either server (engine audit.ts getReplicaConsistency, engine/replica-hashes.ts),
+ * and its delete writes no tombstone (db.ts deletePlainRows). A row starts travelling once the condition holds for it,
+ * at its next write or the next whole copy.
+ */
+export interface RowRule {
+    where: string;
+    reason: string;
+}
+
+/**
+ * The rows of a key with a member's row here (members.is_visitor 0, whatever its status): the phones and leave
+ * statements of this community's members. A key with no row, or a visitor's row, keeps its rows on the server it
+ * wrote them to, with a cap on what a key with no row stores (state-engine.ts STRANGER_PUSH_RULES,
+ * STRANGER_LEAVE_RULES). Anyone can make a key and register with it, so without this every stranger's rows would go
+ * into every copy (#1295 review 4126286269). A member's own are capped per key (state-engine.ts KEY_PUSH_RULES, review
+ * 4126900225). A visitor's row is made by a member's message or payment or by a linked community, never by the key
+ * itself, but a visitor is no member: after a take-over its phone is reached once the app registers again, as every
+ * phone was before G4.
+ */
+const MEMBERS_OWN: RowRule = {
+    where: 'public_key IN (SELECT m.public_key FROM members m WHERE m.is_visitor = 0)',
+    reason: "a member's own: anyone can make a key and register with it (review 4126286269)",
+};
+
+/**
+ * The price reports a member sent, signed (the reporter's key, members.is_visitor 0). A report may be anonymous, or signed
+ * by any key (routes/pricing-guide.ts), so without this anyone could fill every copy with them (#1295 review
+ * 4126894855). The rest stay on the server they were sent to, capped by address and for the node and pruned after a
+ * month (db/pricing-guide-db.ts PRICE_REPORT_RULES), and a server that takes over doesn't have them
+ * (services/takeover.ts WHAT_WILL_BE_MISSING): the admin's review queue, which nothing else reads. Never NULL: an
+ * anonymous report (no reporter) is simply not one that travels. A report signed by a key that wasn't a member's when
+ * it was sent is kept with no reporter (db/pricing-guide-db.ts submitPricingReport), so it stays too once the key joins
+ * (review 4128175868).
+ */
+const MEMBERS_REPORTS: RowRule = {
+    where: 'reporter_pubkey IS NOT NULL AND reporter_pubkey IN (SELECT m.public_key FROM members m WHERE m.is_visitor = 0)',
+    reason: "a member's own: a report may be anonymous, or signed by any key (review 4126894855)",
+};
+
+/**
+ * A plain table's age rule: its rows whose `column` (a stamp the main server wrote, the copy's) is more than `days` days
+ * old go, on each server, with no tombstone (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3 T2). The
+ * main server deletes them on its own schedule (the table's own prune) and before each whole copy it serves
+ * (routes/backup.ts; engine/plain-tables.ts pruneAgedOut), so a whole copy never names one; a standby deletes them
+ * after each copy it imports, by the copy's own time (engine/plain-tables.ts importPlainTables), since no tombstone tells
+ * it. Without a tombstone per row, a table a flood fills comes back as no flood of tombstones when it is pruned.
+ */
+export interface AgedOut {
+    column: string;
+    days: number;
+}
+
 /** Every payload carries the whole table, so a delta needs no watermark. */
 export const WHOLE_SET = 'whole set';
 
@@ -72,7 +128,7 @@ export const WHOLE_SET = 'whole set';
 const cols = (names: string): string[] => names.trim().split(/\s+/);
 
 /**
- * The SyncPayload key of the plain tables (`plain: true`, design G3 and §4.2): one generic path carries each, under its
+ * The SyncPayload key of the plain tables (`plain: true`, design G3, G4 and §4.2): one generic path carries each, under its
  * own name. The main server exports its rows `SELECT *` by the watermark, in the watermark's order (engine sync.ts
  * exportPlainTables; a whole copy: every row; never an `except` column); a standby writes each row as it is, the main
  * server's stamp included, checked against its own columns and rules, and a whole copy deletes the rows it doesn't name
@@ -82,10 +138,16 @@ const cols = (names: string): string[] => names.trim().split(/\s+/);
  */
 export const PLAIN_TABLES_PAYLOAD = 'plainTables';
 
-/** A plain table: its columns copied, verbatim, by the generic path (PLAIN_TABLES_PAYLOAD), all but the `except` ones. */
-const plain = (columns: string, except?: Record<string, ColumnException>): TableEntry => (except
-    ? { kind: 'replicated-except', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), except, plain: true }
-    : { kind: 'replicated', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), plain: true });
+/**
+ * A plain table: its columns copied, verbatim, by the generic path (PLAIN_TABLES_PAYLOAD), all but the `except` ones;
+ * every row, or the ones `rows` holds.
+ */
+const plain = (columns: string, opts: { except?: Record<string, ColumnException>; rows?: RowRule; agedOut?: AgedOut } = {}): TableEntry => {
+    const rows = { ...(opts.rows ? { rows: opts.rows } : {}), ...(opts.agedOut ? { agedOut: opts.agedOut } : {}) };
+    return opts.except
+        ? { kind: 'replicated-except', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), except: opts.except, plain: true, ...rows }
+        : { kind: 'replicated', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), plain: true, ...rows };
+};
 
 const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
 
@@ -299,12 +361,12 @@ export const TABLES: Record<string, TableEntry> = {
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
     // closes is deleted, with a tombstone.
-    suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', {
+    suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', { except: {
         break_glass_hash: {
             reason: "an owner's break-glass code, hashed: the take-over bundle carries the roles sealed, and this would travel "
                 + 'unsealed in every copy. An owner a promoted server gives the role back to makes a new code',
         },
-    }),
+    } }),
     enterprise_keeper_requests: plain('id enterprise_pubkey member_pubkey pledged_backing status created_at decided_at decided_by updated_at'),
     enterprise_keeper_changes: plain('id enterprise_pubkey kind member_pubkey request_id pledged_backing proposed_by status created_at applies_at resolved_at resolved_by reason updated_at'),
     enterprise_succession_proposals: plain('id enterprise_pubkey lead_pubkey candidate_pubkey proposer_pubkey status created_at executed_at deadline_at closed_reason updated_at'),
@@ -325,22 +387,39 @@ export const TABLES: Record<string, TableEntry> = {
     // its treasury again, never a member's enterprise of the same name.
     federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
 
+    // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
+    // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
+    // (state-engine.ts dispatchPushNotification). A re-key's moves and deletes of these rows are followed on the standby
+    // itself (engine/key-move.ts moveMemberKeyRows), as for G3's tables; every other delete writes a tombstone
+    // (db.ts deletePlainRows).
+    // Every phone a member registered, as the main server holds it, so a server that takes over reaches them at once. The
+    // rows are the main server's verbatim: a key registers and removes only its own (#1184), and `registered_at` is the
+    // phone's stamp a leave statement is judged by (#1258). Tokens go to a standby only: this payload is served to a
+    // standby's replication token, or the community's own admin password, and nothing else (routes/backup.ts), with the
+    // messages and recovery copies a standby already holds. Only members' (MEMBERS_OWN).
+    push_tokens: plain('public_key token platform created_at registered_at updated_at', { rows: MEMBERS_OWN }),
+    // A day's leave statements applied, so a registration the phone sent before one, delivered late to a server that took
+    // over, is refused there too (state-engine.ts registerPushToken). Its day-old rows go without tombstones, on each
+    // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).
+    push_token_leaves: plain('public_key token left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
+    chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
+    // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
+    thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
+    // Every event reminder the main server sent, so one is never sent twice (engine/event-reminders.ts).
+    event_reminders_sent: plain('post_id member_pubkey offset_min sent_at updated_at'),
+    // The activity list, ids included: a server that takes over numbers its next line after the last one it copied. Its
+    // lines a month old go without tombstones, on each server (db/activity-feed-db.ts pruneOldActivity; the age rule).
+    activity_feed: plain('id event_type actor_pubkey target_pubkey metadata created_at updated_at', { agedOut: { column: 'created_at', days: 30 } }),
+    // The pricing guide as the main server priced and edited it; a standby seeds none of its own (db.ts).
+    pricing_guide_items: plain('id category emoji name description price_beans unit is_pinned confidence_count trend seasonality_hint thumbnail_url updated_at'),
+    // Only members' reports (MEMBERS_REPORTS).
+    pricing_reports: plain('id item_id reporter_pubkey report_type comment status created_at updated_at', { rows: MEMBERS_REPORTS }),
+
     // ── Not copied today, and the design says they should be ──
-    push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
-    chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    thread_read_cursors: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    event_reminders_sent: { kind: 'local', gap: 'G4', reason: 'not in the payload: a reminder can be sent twice' },
-    activity_feed: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    pricing_guide_items: { kind: 'local', gap: 'G4', reason: "not in the payload: each server seeds its own at boot, and the admin's edits are lost" },
-    pricing_reports: { kind: 'local', gap: 'G4', reason: "not in the payload: members' price reports" },
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
-    push_token_leaves: {
-        kind: 'local',
-        reason: "a day's record of leave statements applied here, only for a registration delivered late; the fix for G4 carries it with push_tokens",
-    },
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },
@@ -350,23 +429,37 @@ export const TABLES: Record<string, TableEntry> = {
     owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
+    writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
-    invite_links: { kind: 'local', reason: 'nothing reads or writes it (the design: delete it, day zero)' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
 };
 
-/** A plain table as the generic path reads it: its name, its watermark, and the columns it never carries. */
+/**
+ * A plain table as the generic path reads it: its name, its watermark, the columns it never carries, when not every row
+ * travels the condition on the ones that do (its RowRule's `where`), and its age rule, if it has one.
+ */
 export interface PlainTable {
     table: string;
     watermark: string;
     except: string[];
+    where?: string;
+    agedOut?: AgedOut;
 }
 
 /** Every plain table (PLAIN_TABLES_PAYLOAD), in the manifest's order: what the export sends and the import writes. */
 export const PLAIN_TABLES: readonly PlainTable[] = Object.entries(TABLES).flatMap(([table, e]) =>
     ((e.kind === 'replicated' || e.kind === 'replicated-except') && e.plain
-        ? [{ table, watermark: e.watermark, except: e.kind === 'replicated-except' ? Object.keys(e.except) : [] }]
+        ? [{
+            table, watermark: e.watermark, except: e.kind === 'replicated-except' ? Object.keys(e.except) : [],
+            ...(e.rows ? { where: e.rows.where } : {}), ...(e.agedOut ? { agedOut: e.agedOut } : {}),
+        }]
         : []));
+
+/** The condition on the rows of `table` that travel (its RowRule), or null when every row does or it is no copied table. */
+export function travellingRows(table: string): string | null {
+    const e = TABLES[table];
+    return e && (e.kind === 'replicated' || e.kind === 'replicated-except') && e.rows ? e.rows.where : null;
+}
 
 /**
  * The two triggers that stamp a plain table's watermark on every write (db.ts stampPlainTables makes them), which a

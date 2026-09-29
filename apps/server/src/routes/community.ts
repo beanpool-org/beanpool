@@ -1550,11 +1550,21 @@ router.get('/api/ledger/export', async (ctx) => {
 
 // ===================== PUSH NOTIFICATION TOKENS =====================
 
+/** A push platform as the apps name it (React Native's Platform.OS: 'ios', 'android'): a short word, never a payload. */
+const PUSH_PLATFORM = /^[A-Za-z0-9_-]{1,16}$/;
+
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform, registeredAt } = (ctx as any).requestBody || {};
     if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
+        return;
+    }
+    // A token a leave statement can name (at most 512 characters, one line), as Expo's are (ExponentPushToken[…], about
+    // 41): anything else is no phone's, and would be stored and copied as it came (#1295 review 4126286269).
+    if (!isPushLeaveToken(token) || (platform !== undefined && platform !== null && (typeof platform !== 'string' || !PUSH_PLATFORM.test(platform)))) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a push token this server can store' };
         return;
     }
     // The phone's stamp for this registration (state-engine.ts registerPushToken); none from an app before it.
@@ -1569,16 +1579,23 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null);
+    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null, clientLimiterKey(ctx));
     if (registration === 'left') {
         // Sent before this key's leave statement for the token and delivered after it: the phone no longer wants it.
         ctx.status = 409;
         ctx.body = { error: 'This phone left this account after sending this registration', code: 'push_token_left' };
         return;
     }
+    if (registration === 'key_rate_limited' || registration === 'rate_limited' || registration === 'busy') {
+        // Over this key's day (state-engine.ts KEY_PUSH_RULES), or a key with no row here over its address's day or the
+        // node's (STRANGER_PUSH_RULES): the app tries again later, and a stranger's lands once its row is made.
+        ctx.status = 429;
+        ctx.body = pushRefusal(registration, 'phone');
+        return;
+    }
     const success = registration === 'registered';
-    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
-    // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
+    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, one the old main
+    // server didn't have) is told now (services/directory-mirror.ts). Never fails the registration.
     if (success) {
         try {
             tellOwedWatcher(activeKey);
@@ -1588,6 +1605,28 @@ router.post('/api/push-tokens', async (ctx) => {
     }
     ctx.body = { success };
 });
+
+/**
+ * A push registration or leave refused for a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_PUSH_RULES,
+ * STRANGER_LEAVE_RULES): the 429's body. Never PUSH_LEAVE_REFUSED: the phone keeps a refused leave and presents it later.
+ */
+function pushRefusal(refused: 'key_rate_limited' | 'rate_limited' | 'busy', what: 'phone' | 'leave'): { error: string; code: string } {
+    if (refused === 'key_rate_limited') {
+        return {
+            error: what === 'phone' ? 'This account has added too many new phones here today. Please try again tomorrow.'
+                : 'This account has left too many phones here today. This phone will tell the community again later.',
+            code: 'rate_limited',
+        };
+    }
+    if (what === 'leave') {
+        return refused === 'busy'
+            ? { error: 'This community is taking no more of these right now. This phone will tell it again later.', code: 'busy' }
+            : { error: 'Too many of these from this network today. This phone will tell the community again later.', code: 'rate_limited' };
+    }
+    return refused === 'busy'
+        ? { error: 'This community is not taking new phones from people who have not joined right now. Please try again later.', code: 'busy' }
+        : { error: 'Too many new phones from this network today. Please try again tomorrow, or once you have joined.', code: 'rate_limited' };
+}
 
 router.delete('/api/push-tokens', async (ctx) => {
     const { publicKey, token, leftAt } = (ctx as any).requestBody || {};
@@ -1610,7 +1649,13 @@ router.delete('/api/push-tokens', async (ctx) => {
         return;
     }
     if (leftAt !== undefined && leftAt !== null) {
-        applyPushLeave(activeKey, token, leftAt);
+        const left = applyPushLeave(activeKey, token, leftAt, clientLimiterKey(ctx));
+        if (typeof left !== 'number') {
+            // Over a day cap: the phone keeps its leave statement and presents it later (apps/native utils/push-leave.ts).
+            ctx.status = 429;
+            ctx.body = pushRefusal(left, 'leave');
+            return;
+        }
         ctx.body = { success: true };
         return;
     }
@@ -1653,7 +1698,14 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         ctx.body = proof.status === 421 ? { error: proof.error, code: proof.code } : { error: proof.error, code: PUSH_LEAVE_REFUSED };
         return;
     }
-    applyPushLeave(key, token, leftAt);
+    const left = applyPushLeave(key, token, leftAt, clientLimiterKey(ctx));
+    if (typeof left !== 'number') {
+        // Over a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_LEAVE_RULES): never PUSH_LEAVE_REFUSED, so the phone keeps
+        // the statement and presents it again later.
+        ctx.status = 429;
+        ctx.body = pushRefusal(left, 'leave');
+        return;
+    }
     ctx.body = { left: true };
 });
 

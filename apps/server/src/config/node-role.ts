@@ -68,14 +68,27 @@ export const STANDBY_WRITE_MESSAGE = 'This server is a standby copy of the commu
     + 'and this copy picks the change up with its next sync.';
 
 /**
- * A standby writes no row of the plain tables (engine/replication-manifest.ts PLAIN_TABLES, design G3): keepers' wages owed,
- * Decisions and their ballots, a role a Decision holds aside, keeper requests and changes, succession and convenor votes,
- * invites, re-key codes, recovery releases and links with other communities. Their rows are its main server's, verbatim,
+ * A standby writes no row of the plain tables (engine/replication-manifest.ts PLAIN_TABLES, design G3, G4): keepers' wages
+ * owed, Decisions and their ballots, a role a Decision holds aside, keeper requests and changes, succession and convenor
+ * votes, invites, re-key codes, recovery releases and links with other communities; members' phones and their leave
+ * statements, chat mutes, enterprise thread read marks, event reminders sent, the activity list and the pricing guide
+ * with its reports. Their rows are its main server's, verbatim,
  * and its import alone writes them (design §4.1), as with the ledger (assertLedgerWritable); one of its own would be
  * deleted by the next whole copy, or outlive a take-over. So every writer of them throws this first, before anything is
  * written, and the routes that write them answer the same 409 `standby` before their handler runs
  * (routes/standby-ledger-gate.ts). The timers that write them run on a main server only (state-engine.ts initStateEngine).
+ * A write a standby's read or a listing it takes would make on the side (an activity line, a keeper's first read mark)
+ * writes nothing there instead (standbyWritesNothing).
  */
 export function assertPlainTablesWritable(): void {
     if (getNodeRole() === 'backup') throw new StandbyLedgerError(STANDBY_WRITE_MESSAGE);
+}
+
+/**
+ * For a write a standby makes on the side of something it still does (a read that marks a thread read the first time, a
+ * listing's line in the activity list): true on a standby, where the plain tables are its main server's alone, and the
+ * caller writes nothing (assertPlainTablesWritable is for a write that is the request itself).
+ */
+export function standbyWritesNothing(): boolean {
+    return getNodeRole() === 'backup';
 }

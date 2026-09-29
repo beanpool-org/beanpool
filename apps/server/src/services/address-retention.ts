@@ -21,8 +21,8 @@
  *     `copyWithoutAddresses` (`writeDbSnapshot`, services/snapshot-scheduler.ts); a backup packed from a snapshot
  *     file (services/sealed-backup.ts), and one a fleet harvester receives (services/harvester.ts), goes through
  *     `forgetAddressesInStoredCopy`. A snapshot kept for weeks holds none, and a server restored from one brings none
- *     back. A copy also loses the sign-up and knock limiters' address hashes (`open_joins.ip_hash`,
- *     `join_requests.ip_hash`): their key, `openJoinSalt`, is in the same file, so a hash there gives back the address
+ *     back. A copy also loses the sign-up, knock and write limiters' address hashes (`open_joins.ip_hash`,
+ *     `join_requests.ip_hash`, `writes_by_address.ip_hash`): their key, `openJoinSalt`, is in the same file, so a hash there gives back the address
  *     to anyone who tries all of IPv4. And it loses every address in its log lines. Nothing is left in the file's free
  *     space or beside it: the copy is a VACUUM INTO (no free space comes along) made with secure_delete on (no page
  *     it builds keeps an old row in its gap), cleaned with its freed bytes zeroed and its journal in memory, and
@@ -118,10 +118,11 @@ export function forgetOldAddresses(now = Date.now()): number {
 }
 
 /**
- * The tables whose `ip_hash` is a limiter's keyed hash of an address (engine/open-join.ts, engine/knocks.ts): kept a
- * day in the live database, and never in a copy, which also holds the key.
+ * The tables whose `ip_hash` is a limiter's keyed hash of an address (engine/open-join.ts, engine/knocks.ts, and the
+ * writes a day cap by address, db/writes-by-address.ts): kept a day in the live database, and never in a copy, which
+ * also holds the key.
  */
-const ADDRESS_HASH_TABLES = ['open_joins', 'join_requests'] as const;
+const ADDRESS_HASH_TABLES = ['open_joins', 'join_requests', 'writes_by_address'] as const;
 
 const hasTable = (conn: Database.Database, table: string) =>
     !!conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);

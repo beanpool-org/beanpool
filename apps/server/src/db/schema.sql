@@ -290,17 +290,20 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_member ON event_rsvps(member_pubkey);
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_updated_at ON event_rsvps(updated_at);
 
--- One row per reminder this node has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
+-- One row per reminder the community has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
 -- the de-duplication: the scheduler claims a due reminder with INSERT OR IGNORE and sends only when the
 -- insert won, so a restart mid-sweep, a second tick or a slow Expo call can never double-send.
 --
--- Deliberately NOT replicated: it is this node's delivery log, not member data, and only the primary ever
--- sends (§2.2). The rows are deleted with the rest of an event by the 30-day scrub.
+-- Only the main server ever sends (§2.2). Copied to a standby verbatim (a plain table, engine/replication-manifest.ts),
+-- so a server that takes over sends no reminder a second time. The rows are deleted with the rest of an event by the
+-- 30-day scrub, each with a tombstone.
 CREATE TABLE IF NOT EXISTS event_reminders_sent (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     offset_min INTEGER NOT NULL,
     sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (post_id, member_pubkey, offset_min)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
@@ -500,14 +503,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
 CREATE INDEX IF NOT EXISTS idx_projects_unmigrated ON projects(id) WHERE migrated_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_projects_enterprise ON projects(enterprise_pubkey);
 
--- 10. Invite Links (Deferred Deep Linking Shortener)
-CREATE TABLE IF NOT EXISTS invite_links (
-    hash_id TEXT PRIMARY KEY,
-    payload TEXT NOT NULL,
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
 -- 11. Push Notification Tokens (Expo Push)
+-- Copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a server that takes over reaches every
+-- phone at once; a standby sends no push itself (state-engine.ts dispatchPushNotification).
 CREATE TABLE IF NOT EXISTS push_tokens (
     public_key TEXT NOT NULL REFERENCES members(public_key),
     token TEXT NOT NULL,
@@ -516,21 +514,44 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
     -- an app before leave statements. A leave statement removes the row only when this is not later than its own.
     registered_at INTEGER,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, token)
 );
 
 -- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
--- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused.
+-- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused. Copied
+-- to a standby with the tokens, so a server that takes over refuses the same late registration. A key applies at most
+-- so many a day (state-engine.ts KEY_PUSH_RULES), counted from `applied_at`.
 CREATE TABLE IF NOT EXISTS push_token_leaves (
     public_key TEXT NOT NULL,
     token TEXT NOT NULL,
     left_at INTEGER NOT NULL,
     applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, token)
 );
 -- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
 -- leaves: a search on this, never a scan of the table per leave.
 CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
+-- A new token of a key with no row here prunes such keys' tokens not registered again for a month (state-engine.ts
+-- STRANGER_PUSH_RULES): a search on this too.
+CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
+
+-- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
+-- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
+-- report without a member's key (db/pricing-guide-db.ts PRICE_REPORT_RULES). What one address, and every address
+-- together, may add of each `kind` in a day. `ip_hash` is the address as a keyed hash (engine/open-join.ts
+-- writeAddressHash), NULL for this server's own code. This server's own, never copied, and deleted once a day old
+-- (engine/open-join.ts forgetOldJoinAddresses).
+CREATE TABLE IF NOT EXISTS writes_by_address (
+    kind TEXT NOT NULL,
+    ip_hash TEXT,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_kind ON writes_by_address(kind, ip_hash);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
@@ -1418,11 +1439,17 @@ CREATE TABLE IF NOT EXISTS pricing_reports (
     report_type     TEXT NOT NULL CHECK (report_type IN ('too_high', 'too_low', 'other')),
     comment         TEXT,
     status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'dismissed')),
-    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_status ON pricing_reports(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
+-- A member's reports of the last day, counted at each one they send (db/pricing-guide-db.ts PRICE_REPORT_RULES), and the
+-- month-old reports without a member's key, pruned at each such report: searches, never a scan of the table.
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_reporter ON pricing_reports(reporter_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_created ON pricing_reports(created_at);
 
 -- ===================== LIVING ACTIVITY WATERFALL (#208) =====================
 -- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).
@@ -1432,7 +1459,9 @@ CREATE TABLE IF NOT EXISTS activity_feed (
     actor_pubkey  TEXT NOT NULL,
     target_pubkey TEXT,
     metadata      TEXT,
-    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
@@ -1713,24 +1742,30 @@ END;
 -- list and unread counts; every read and post re-checks group_members, never the mirror.
 
 -- Per-member, per-chat mute (decision 12): 8 hours, a week, or always (muted_until NULL). An @mention of the
--- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise.
+-- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise. Copied to a
+-- standby verbatim (a plain table, engine/replication-manifest.ts), so a muted chat stays muted after a take-over.
 CREATE TABLE IF NOT EXISTS chat_mutes (
     conversation_id TEXT NOT NULL,
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     muted_until     DATETIME,
     created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (conversation_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_chat_mutes_member ON chat_mutes(member_pubkey);
 
 -- A keeper's read cursor on their enterprise's thread, for the unread count in "Your groups". Deliberately NOT a
 -- conversation_participants row: the generic messaging routes read a participant row as the right to post, and an
--- enterprise thread is written only through its own route (engine/enterprise-thread.ts). Node-local, like mutes.
+-- enterprise thread is written only through its own route (engine/enterprise-thread.ts). Copied to a standby verbatim,
+-- like mutes (a plain table, engine/replication-manifest.ts).
 CREATE TABLE IF NOT EXISTS thread_read_cursors (
     conversation_id TEXT NOT NULL,
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     last_read_at    DATETIME NOT NULL,
     created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (conversation_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_thread_read_cursors_member ON thread_read_cursors(member_pubkey);

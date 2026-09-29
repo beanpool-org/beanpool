@@ -533,9 +533,15 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
         WHERE post_id IS NOT NULL AND status IN ('cancelled', 'completed', 'rejected')
           AND (NOT EXISTS (SELECT 1 FROM edge) OR created_at >= (SELECT created_at FROM edge))`)
         .all({ viewer }) as Array<{ post_id: string; status: string }>;
-    const cancelled = new Set(deals.filter(d => d.status === 'cancelled').map(d => d.post_id));
-    const completed = new Set(deals.filter(d => d.status === 'completed').map(d => d.post_id));
-    const rejected = new Set(deals.filter(d => d.status === 'rejected').map(d => d.post_id));
+    // ⚡ Bolt: single-pass status grouping to avoid three .filter().map() array scans and intermediate allocations
+    const cancelled = new Set<string>();
+    const completed = new Set<string>();
+    const rejected = new Set<string>();
+    for (const d of deals) {
+        if (d.status === 'cancelled') cancelled.add(d.post_id);
+        else if (d.status === 'completed') completed.add(d.post_id);
+        else if (d.status === 'rejected') rejected.add(d.post_id);
+    }
     const candidates = [...new Set([...reads, ...cancelled, ...completed, ...rejected])];
     if (candidates.length === 0) return [];
     const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(

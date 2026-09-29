@@ -66,7 +66,7 @@ import { sealSeedToSso, openSeedFromSso, openShareFromSso } from '@beanpool/core
 import {
     CHILD, SEAL_CLI, SENTENCE, KEY_FILE, GOOGLE_SUB, WORDS, SEED, OLD_SEED_HEX, OLD_LOOKUP_SALT, OLD_ENROLMENTS, CLEARED_KEY,
     FTS_PROBE_WORD, type Sealed, type History, type StandbyScript, type Id, fakeCopy, needlesOf, copiesFoundIn, exportRow, idFromSeed,
-    newId, tempDir, runChild, resultOf, thrown, child, check, section, finish, sealLines, bootParent,
+    newId, tempDir, runChild, resultOf, thrown, child, check, section, finish, sealLines, bootParent, sealDay, SEAL_SINCE_DAY,
 } from './recovery-seal-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -476,7 +476,7 @@ async function main(): Promise<void> {
 
         // The main server upgrades: the wrap stamps every copy it holds, and its VACUUM runs. SINCE: its standby's last pull
         // before that, after the deletions.
-        const SINCE = '2026-06-03T00:00:00.000Z';
+        const SINCE = SEAL_SINCE_DAY;
         const me = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SINCE }));
         const wrappedOnly = (rows: any[]) => rows.every(r => String(r.kdfParams).includes('node-wrap-xc20p-v1'));
         check(typeof me.cleared === 'string' && me.delta.length === current.length && me.full.length === current.length
@@ -663,7 +663,7 @@ async function main(): Promise<void> {
         fs.writeFileSync(historyFile, JSON.stringify(h));
         // Its main server, on the code before the seal: every member deposits, then re-deposits. Then it upgrades: the wrap
         // stamps every copy, and its next delta carries them all, wrapped.
-        const SINCE = '2026-06-03T00:00:00.000Z';
+        const SINCE = SEAL_SINCE_DAY;
         resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'main' }));
         const me = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SINCE }));
         check(me.delta.length === N && me.delta.every((r: any) => String(r.kdfParams).includes('node-wrap-xc20p-v1')),
@@ -675,8 +675,8 @@ async function main(): Promise<void> {
         const script: StandbyScript = {
             resyncFirst: true, reconcileMinutes: 0, pulls: 4, watch: [...h.gen1, ...h.gen2],
             steps: [
-                owners.map((o, i) => exportRow(o, i, h.gen1[i], 1, '2026-06-01T00:00:00.000Z')),
-                owners.map((o, i) => exportRow(o, i, h.gen2[i], 2, '2026-06-02T00:00:00.000Z')),
+                owners.map((o, i) => exportRow(o, i, h.gen1[i], 1, sealDay(1))),
+                owners.map((o, i) => exportRow(o, i, h.gen2[i], 2, sealDay(2))),
                 me.delta,
             ],
         };
@@ -782,10 +782,10 @@ async function main(): Promise<void> {
         const script: StandbyScript = {
             resyncFirst: true, reconcileMinutes: 0, pulls: 5, watch: [...gen2, ...gen3],
             steps: [
-                wrapped(gen2, 2, '2026-06-02T00:00:00.000Z'),      // its main server has sealed: the seed is all wrapped
-                clientForm(gen2, 2, '2026-06-05T00:00:00.000Z'),   // the rollback command unwraps and stamps every copy
-                clientForm(gen3, 3, '2026-06-06T00:00:00.000Z'),   // the older code stores the re-deposits as the app sealed them
-                wrapped(gen3, 3, '2026-06-07T00:00:00.000Z'),      // the upgrade again: the wrap stamps every copy
+                wrapped(gen2, 2, sealDay(2)),      // its main server has sealed: the seed is all wrapped
+                clientForm(gen2, 2, sealDay(5)),   // the rollback command unwraps and stamps every copy
+                clientForm(gen3, 3, sealDay(6)),   // the older code stores the re-deposits as the app sealed them
+                wrapped(gen3, 3, sealDay(7)),      // the upgrade again: the wrap stamps every copy
             ],
         };
         fs.writeFileSync(scriptFile, JSON.stringify(script));

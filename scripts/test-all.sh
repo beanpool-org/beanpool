@@ -295,6 +295,7 @@ run_federation_suites() {
       test-keeper-http
       test-open-join
       test-web-door
+      test-web-visits
       test-global-moderation
       test-community-me
       test-distance-search

@@ -425,6 +425,7 @@ export const TABLES: Record<string, TableEntry> = {
     system_metrics: { kind: 'local', reason: "this server's metrics" },
     signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
     onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
+    web_visit_days: { kind: 'local', reason: 'the page loads this server served, a day at a time: a standby counts its own' },
     pulse_thumbnail_backoff: { kind: 'local', reason: "this server's thumbnail fetch backoff" },
     owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },

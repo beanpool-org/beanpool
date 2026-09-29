@@ -1384,6 +1384,17 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
 CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;
 
+-- 20b. Web app visits a day (engine/web-visits.ts), shown to the operator on the manager's Home.
+-- One row per UTC day and these three columns only: never an address, a browser, a hash, a cookie or a member.
+-- `uniques` is counted in memory under a key that lives for the day and is never stored; only the count is here.
+-- Rows older than 400 days are deleted with no tombstone. Node-local: a standby counts its own
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS web_visit_days (
+    day     TEXT PRIMARY KEY,                          -- YYYY-MM-DD, UTC
+    visits  INTEGER NOT NULL DEFAULT 0 CHECK (visits >= 0),
+    uniques INTEGER NOT NULL DEFAULT 0 CHECK (uniques >= 0)
+);
+
 -- 21. Mirror Sync Audit Log (#134)
 -- Permanent audit trail: every importRemoteState() call writes one row recording
 -- the originating peer's identity and what changed. This makes it possible to

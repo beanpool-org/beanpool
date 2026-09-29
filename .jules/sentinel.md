@@ -210,3 +210,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 **Vulnerability:** `toggleMessageReaction` in `apps/server/src/engine/messaging.ts` allowed non-participants of a conversation to modify message reactions on private messages.
 **Learning:** Checking signature identity alone is insufficient if the user is not validated against the participants list of the target resource.
 **Prevention:** Verify that the authenticated initiator (`authorPubkey`) is a participant in `row.conversation_id` before processing mutations.
+
+## 2026-09-29 - Standardize error handling in commons routes
+**Vulnerability:** `ctx.throw(...)` was used in `apps/server/src/routes/commons.ts` for route error responses. Depending on Koa error handling configuration or middleware state, `ctx.throw(...)` can return text/plain or HTML responses or trigger unhandled error logic rather than returning structured JSON error bodies (`{ error: '...' }`), creating inconsistent response handling and potential error leakage.
+**Learning:** Standardizing route error responses on explicit HTTP status assignment (`ctx.status = 40x`) and structured JSON bodies (`ctx.body = { error: '...' }`) ensures predictable client contracts and avoids uncaught error propagation in Koa handlers.
+**Prevention:** Avoid `ctx.throw(...)` in Koa route handlers across `apps/server/`. Always set `ctx.status` and `ctx.body = { error: '...' }` explicitly.

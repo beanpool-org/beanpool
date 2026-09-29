@@ -244,4 +244,22 @@ describe('vault-custodian release', () => {
         expect(stale.code).toBe(1);
         expect(stale.out).toContain('it follows 1.0.0, but the newest release is 1.0.1');
     });
+
+    it('a release with a new image takes the image build\'s image.json, and only under the version the image was built as', async () => {
+        const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const feedDir = path.join(dir, 'image-feed');
+        publish(feedDir, makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2) }));
+        const feed = ['--feed-dir', feedDir, '--root-keys', rootKeysFile('i-root.json', custodians)];
+        const bundle = path.join(dir, 'api-image.mjs');
+        writeFileSync(bundle, 'console.log("api");\n');
+        const image = { ukiSha256: 'aa'.repeat(32), roothash: 'bb'.repeat(32), imageHash: '57eb176c60c16bb844292af03c2115d80255728ab0ee75fed10f81bcbab76b8d' };
+        const imageJson = path.join(dir, 'image.json');
+        writeFileSync(imageJson, JSON.stringify({ version: '1.1.0', ...image }));
+        const wrong = await cli(['release', 'propose', '--version', '1.2.0', '--image', imageJson, '--same-custodians', '--api-bundle', bundle, '--out', path.join(dir, 'p-wrong'), ...feed]);
+        expect(wrong.code).not.toBe(0);
+        expect(wrong.out).toContain('is image version 1.1.0');
+        const right = await cli(['release', 'propose', '--version', '1.1.0', '--image', imageJson, '--same-custodians', '--api-bundle', bundle, '--out', path.join(dir, 'p-right'), ...feed]);
+        expect(right.code).toBe(0);
+        expect(parseManifest(readFileSync(path.join(dir, 'p-right', MANIFEST_ASSET), 'utf8'))).toMatchObject({ version: '1.1.0', imageHash: image.imageHash, image: { ukiSha256: image.ukiSha256, roothash: image.roothash } });
+    });
 });

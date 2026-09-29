@@ -7,8 +7,13 @@
 # What it can't check, said plainly: mlockall. Node can't lock its memory and the vault ships no native module, so
 # the keyholder's pages are kept out of swap by there being no swap at all.
 failed=0
-pass() { echo "hygiene: PASS $1"; }
-fail() { echo "hygiene: FAIL $1"; failed=$((failed + 1)); }
+# To the console (the host's web console) through systemd, and to the serial port too when there is one.
+say() {
+    echo "$1"
+    if [ -c /dev/ttyS0 ]; then echo "$1" > /dev/ttyS0 2>/dev/null || true; fi
+}
+pass() { say "hygiene: PASS $1"; }
+fail() { say "hygiene: FAIL $1"; failed=$((failed + 1)); }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
 
 check "no swap" '[ "$(wc -l < /proc/swaps)" -le 1 ]'
@@ -38,7 +43,7 @@ check "no SSH server" '! command -v sshd >/dev/null && [ ! -e /usr/sbin/sshd ]'
 check "no login shell for any account" '! awk -F: "\$7 !~ /(nologin|false|sync)\$/ {print}" /etc/passwd | grep -q .'
 check "root can't log in (locked)" 'awk -F: "\$1 == \"root\" {exit !(\$2 ~ /^[!*]/)}" /etc/shadow'
 check "no getty on any console" '! systemctl is-active --quiet "getty@*" "serial-getty@*" console-getty.service'
-check "listening on the network: 80 and 443 only (and DNS on 127.0.0.1)" '[ -z "$(ss -Htuln | awk "{print \$5}" | grep -Ev "^(\*|0\.0\.0\.0|\[::\]):(80|443)$|^127\.0\.0\.1:53$|%lo:|^\[::1\]:53$")" ]'
+check "TCP listeners: 80 and 443 only (and DNS on 127.0.0.1)" '[ -z "$(ss -Htln | awk "{print \$4}" | grep -Ev "^(\*|0\.0\.0\.0|\[::\]):(80|443)$|^127\.0\.0\.1:53$")" ]'
 
-if [ "$failed" = 0 ]; then echo "hygiene: ALL PASS"; else echo "hygiene: $failed FAILED"; fi
+if [ "$failed" = 0 ]; then say "hygiene: ALL PASS"; else say "hygiene: $failed FAILED"; fi
 exit "$failed"

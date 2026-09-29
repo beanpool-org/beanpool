@@ -261,9 +261,12 @@ async function release(sub: string, trust: ReleaseTrust): Promise<void> {
             image = newest.image;
         } else {
             if (!arg('--image')) stop('missing --image (the image build\'s image.json) or --same-image');
-            const built = JSON.parse(readFileSync(arg('--image') as string, 'utf8')) as ReleaseImage & { imageHash?: string };
+            const built = JSON.parse(readFileSync(arg('--image') as string, 'utf8')) as ReleaseImage & { imageHash?: string; version?: string };
             image = { ukiSha256: built.ukiSha256, roothash: built.roothash };
             if (built.imageHash && built.imageHash !== imageHashOf(image)) stop(`${arg('--image')}: imageHash does not match its UKI and root hash.`);
+            // The image's version names its partitions and UKI (beanpool-vault_<version>), which the monthly restart's
+            // systemd-sysupdate matches against the release's: they must be the same.
+            if (built.version !== arg('--version')) stop(`${arg('--image')} is image version ${String(built.version)}: build it with --version ${arg('--version')}, or propose ${String(built.version)}.`);
         }
         const custodianKeys = flag('--same-custodians') ? [...(newest?.custodianKeys ?? trust.rootKeys)]
             : arg('--custodian-keys') ? keyList(arg('--custodian-keys') as string, '--custodian-keys') : stop('missing --custodian-keys or --same-custodians');

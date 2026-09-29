@@ -1,0 +1,59 @@
+name: Key vault image (built twice, compared)
+
+# The key vault's boot file must be reproducible (key vault design §3; host design §5.1 item 5): anyone can rebuild a
+# release's image and compare its hash. This builds apps/vault/image twice from scratch directories, with the same
+# (throwaway, public-only) custodian keys, and fails unless image.json and every artifact are byte-identical. It runs
+# when the image or the bundle script changes, and by hand. The package cache only saves downloads: apt checks every
+# package against the pinned snapshot's signed index either way.
+#
+# What test-all checks on every push instead: the bundles are the same bytes on two builds (bundle.test.ts), the
+# manifest, chain and imageHash vector (release.test.ts).
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/vault/image/**'
+      - 'apps/vault/scripts/bundle.mjs'
+      - '.github/workflows/vault-image.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-twice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @beanpool/core --filter @beanpool/signin build
+      - name: Throwaway custodian keys (public halves only)
+        run: node -e 'const c=require("crypto");console.log(JSON.stringify({genesisCustodians:[0,1,2].map(()=>c.randomBytes(32).toString("hex"))}))' > "${RUNNER_TEMP}/keys.json"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/image-cache
+          key: vault-image-${{ hashFiles('apps/vault/image/pins.env', 'apps/vault/image/mkosi/mkosi.conf') }}
+      - name: First build
+        run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
+      - name: Second build
+        run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/two" --cache "${RUNNER_TEMP}/image-cache"
+      - name: The same bytes
+        run: |
+          set -euo pipefail
+          cmp "${RUNNER_TEMP}/one/image.json" "${RUNNER_TEMP}/two/image.json"
+          cd "${RUNNER_TEMP}/one/mkosi.output"
+          for f in *; do
+            [ -f "$f" ] || continue
+            cmp "$f" "${RUNNER_TEMP}/two/mkosi.output/$f"
+            echo "same: $f"
+          done
+          cat "${RUNNER_TEMP}/one/image.json"

@@ -82,7 +82,13 @@ for f in vault-keyholder.mjs vault-api.mjs vault-launcher.mjs; do
 done
 node -e '
     const keys = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).genesisCustodians;
-    process.stdout.write(JSON.stringify({ stateDir: "/var/lib/beanpool-vault/keyholder", socketPath: "/run/beanpool-vault/keyholder/keyholder.sock", genesisCustodians: keys }, null, 2) + "\n");
+    process.stdout.write(JSON.stringify({
+        stateDir: "/var/lib/beanpool-vault/keyholder",
+        socketPath: "/run/beanpool-vault/keyholder/keyholder.sock",
+        socketMode: 0o660,
+        diskKeySocket: "/run/beanpool-vault/disk-key/disk.sock",
+        genesisCustodians: keys,
+    }, null, 2) + "\n");
 ' "${keys}" > "${extra}/etc/beanpool-vault/keyholder.json"
 mkdir -p "${work}/mkosi.sandbox/etc/apt/sources.list.d" "${work}/mkosi.sandbox/etc/apt/apt.conf.d"
 cat > "${work}/mkosi.sandbox/etc/apt/sources.list.d/mkosi.sources" <<EOF

@@ -2,17 +2,28 @@
 
 A small server that keeps each member's locked sign-in recovery copy, and gives one back only after it has checked
 the Google, Apple or Facebook sign-in itself. No community keeps a copy or can ask for one. The design is
-`scratch/global-node/DESIGN-key-vault-opus.md` (V2 is this package; V3 builds the image and releases).
+`scratch/global-node/DESIGN-key-vault-opus.md` (V2: the two programs; V3: the image, releases and the custodian
+tool), with `DESIGN-vault-host-tee-opus.md` §5.1 for the host checks.
 
-## Two programs
+**Where it stands (say it this way, and no other).** The unlock is built 2 of 3, but until the reshare to the other
+custodians one person, BeanPool's founder, holds all three shares, every release key and the hosting login. The host
+(1984 Hosting in Iceland, not bought yet) is an ordinary rented server: **the host can read the vault's memory, and
+nothing proves in hardware what it runs** (`platform: none`). Nothing here holds a real member's copy until the
+reshare is done.
+
+## Two programs, and the launcher
 
 - **`vault-keyholder`** (`src/keyholder/`) holds the shares while they arrive, the master secret `M` for as long as
-  it takes to use it, and the working keys. It never hands out a key. What it does is a fixed list: HMAC a copy's
-  indexes, wrap an envelope (from a deposit box it opens itself), read an envelope's metadata, release a copy sealed
-  to the restoring device's key, sign a ticket or the daily report, seal and open backups; and the ceremonies:
-  genesis, unlock, reshare, taking a backup's state into a fresh vault. It listens on a Unix socket (0600).
+  it takes to use it, and the working keys. It never hands out a key but one: `K_disk`, to root on the same machine,
+  for the kernel's dm-crypt (root can read its memory anyway). What it does is a fixed list: HMAC a copy's indexes,
+  wrap an envelope (from a deposit box it opens itself), read an envelope's metadata, release a copy sealed to the
+  restoring device's key, sign a ticket or the daily report, seal and open backups; and the ceremonies: genesis,
+  unlock, reshare, taking a backup's state into a fresh vault. It listens on a Unix socket, and has no network.
 - **`vault-api`** (`src/api/`) is plain `node:http`: the routes, the SQLite database (`node:sqlite`, no native
-  module), holds, Expo pushes, rate limits, backups and `/v1/report`. It holds no key and never sees a copy in the clear.
+  module), holds, Expo pushes, rate limits, backups, `/v1/report`, and the hourly release check. It holds no key and
+  never sees a copy in the clear.
+- **`vault-launcher`** (`src/launcher/`) is what systemd starts for the API. It runs the image's API, and hands over
+  to a newer release's API without a restart or an unlock (below). It changes only with the image.
 
 Any restart of the keyholder leaves the vault locked until two custodians unlock it. While locked, every route but
 `/v1/health` and `/v1/unlock/*` answers 503 `{locked: true}`.
@@ -21,28 +32,33 @@ Any restart of the keyholder leaves the vault locked until two custodians unlock
 
 `M` (32 bytes) is split 2 of 3 in SLIP-0039 (`src/keyholder/slip39.ts`, checked against the 45 official vectors), each
 share sealed to one custodian's pinned Ed25519 key. `M` opens `DK`, the working keys: `K_index` (the `sub_index` and
-`pk_index` HMACs), `K_wrap` (envelopes), `K_disk` (V3's data partition), `K_backup`, the Ed25519 ticket key and the
-X25519 deposit key. The apps pin the last two. A reshare changes `M`, `K_wrap` and `K_backup` and keeps the rest.
+`pk_index` HMACs), `K_wrap` (envelopes), `K_disk` (the data partition's LUKS2 key), `K_backup`, the Ed25519 ticket
+key and the X25519 deposit key. The apps pin the last two. A reshare changes `M`, `K_wrap` and `K_backup` and keeps
+the rest.
 
 A genesis or a reshare is two steps. The new state waits beside the old one (`state.next.json`), and the new shares,
-sealed to their custodians, can be fetched again (`/v1/unlock/pending`). The vault switches only when two of the new
-custodians show they hold their share: each signs a check of its words (`/v1/unlock/confirm`), or two of them unlock
-with the new shares. Until then the old shares are the ones in force, so no lost answer or restart can leave a vault
-that nobody can open. Two current custodians can drop a reshare nobody finished (`/v1/unlock/cancel`); a genesis
-nobody finished is replaced by the next one. Custodians keep their old shares until the vault has switched (its
-`/v1/unlock/confirm` answer says `switched`), and destroy them then.
+sealed to their custodians, can be fetched again (`/v1/unlock/pending`), also after the switch, until the keyholder
+restarts. The vault switches only when two of the new custodians show they hold their share: each signs a check of
+its words (`/v1/unlock/confirm`), or two of them unlock with the new shares. Until then the old shares are the ones in
+force, so no lost answer or restart can leave a vault that nobody can open. Two current custodians can drop a reshare
+nobody finished (`/v1/unlock/cancel`); a genesis nobody finished is replaced by the next one.
+
+**All three new custodians fetch and confirm their share**, the third one after the switch too (`vault-custodian
+fetch-share`): `/v1/report`'s `shares` says how many of the three have (`{generation, confirmed, of}`, known since the
+keyholder's last start). Custodians keep their old shares until the vault has switched (the confirm answer says
+`switched`), and destroy them then.
 
 ## Routes
 
 | route | signed by | does |
 |---|---|---|
-| `GET /v1/health` | nobody | `{state, release, since}` |
+| `GET /v1/health` | nobody | `{state, release, since}`: `release` is the image the vault booted |
 | `POST /v1/ticket` | the member key, or a throwaway key to restore | a ticket; the provider nonce is `base64url(SHA-256(ticket))` |
 | `POST /v1/copies` | the member key | a deposit: `{ticket, provider, idToken, box}` |
 | `POST /v1/copies/status`, `/delete`, `/v1/push-token` | the member key | connected sign-ins and open holds; disconnect; this device's push token |
 | `POST /v1/restore`, `/v1/restore/collect` | the throwaway key | every restore is held 24 hours (D2), then released sealed to that key |
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
-| `GET /v1/report` | nobody | signed daily totals, nothing per member |
+| `GET /v1/report` | nobody | signed daily totals, nothing per member (below) |
 | `POST /v1/unlock/*`, `/v1/reshare/*` | a custodian key | hello, genesis, share, restore-from-backup; pending, confirm, cancel (a genesis or reshare waiting); reshare |
 
 Requests are signed in BeanPool's request format 2 (`@beanpool/core` `request-signing.ts`) for the vault's own host
@@ -57,22 +73,127 @@ record, whenever the database next opens.
 Callsigns, emails, IP addresses, raw `sub`s, tokens, community lists, or a copy of what a release handed out. A copy's
 row is `{id, sub_index, pk_index, envelope, updated_day}`.
 
-## What V3's image must provide
+## Releases (design §3; host design §5.1 item 3)
 
-The keyholder refuses to start on Linux when a core file is possible, and anywhere with a debugger or heap-snapshot
-flag or without `--disable-sigusr1`. Plain Node can't `mlockall`, and the vault ships no native module, so memory is
-kept off disk by the image:
+A release is two files and their assets, published as a GitHub release whose tag starts `vault-v`:
 
-- the keyholder started as `node --disable-sigusr1 dist/keyholder/main.js` (Node 22.14 or later): otherwise SIGUSR1
-  opens an unauthenticated inspector inside it;
-- no swap partition or file, no hibernation, no crash kernel (kdump);
-- `LimitCORE=0` on the keyholder's unit; `kernel.yama.ptrace_scope = 3`;
-- the keyholder and the API under their own users, the socket and state directory readable by those two only;
-- the keyholder's state directory off the data partition (it holds the key to it).
+- `vault-release.json`, the manifest (`src/shared/release.ts`):
+  `{v: 1, version, previous, imageHash, image: {ukiSha256, roothash}, apiBundleHash, custodianKeys, hostPolicy, notes?}`.
+  `imageHash = SHA-256("beanpool-vault-image/1\n" ‖ ukiSha256 ‖ "\n" ‖ roothash ‖ "\n")` (hex): the boot file and
+  the dm-verity root hash of the system partition it names. `apiBundleHash` is the SHA-256 of `vault-api.mjs`.
+  `custodianKeys` are the three keys that sign the **next** release. `hostPolicy` is what custodians' tools check the
+  host against: `{platform: "none"}` on 1984. `previous` is the SHA-256 of the manifest before it (null for the first).
+- `vault-release.sigs.json`: Ed25519 signatures (RFC 8032, the custodians' ceremony keys) over
+  `"beanpool-vault-release/1\n" ‖ hex(SHA-256(vault-release.json))`. Two are needed.
+- Assets: `vault-api.mjs`; for a release with a new image also `vault.efi` (the UKI), `vault-root.raw` and
+  `vault-root-verity.raw` (the system partition and its verity tree).
 
-`/v1/report` says what the keyholder found.
+**Trust.** Every build pins the vault's genesis custodian keys (`scripts/bundle.mjs` bakes them in; a config file
+can't change them). Releases form one chain from them: the first needs two signatures from the genesis keys, each
+next one names the one before and needs two signatures from the keys that one named. So after a reshare, the old
+custodians sign a release naming the new keys, and from then on only the new ones can sign. Two different releases
+signed as the next after one (a fork, which takes two custodians' keys), or a signed release that is malformed, stop
+the chain there: the API takes nothing after it, and the custodian tool refuses to unlock until custodians sort it out.
+
+**Making one** (each step on the custodian's own computer, with the built `vault-custodian.mjs`):
+
+```
+vault-custodian release status                       # the chain as the vault will see it
+vault-custodian release propose --version 1.1.0 --same-image --same-custodians \
+    --api-bundle out/bundles/vault-api.mjs --out proposal/          # or --image out/image.json for a new image
+vault-custodian release sign --dir proposal/ --key my-key.json      # each of two custodians; shows every line first
+vault-custodian release verify --dir proposal/                      # "the vault would take it"
+gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-release.sigs.json proposal/vault-api.mjs
+```
+
+## Updates without anyone logging in (design §3)
+
+- **The API.** At start and every hour, the API reads the feed and walks the chain. The release whose API bundle is
+  its own file and whose image is the one it booted is the one it runs; a newer release for the same image is taken:
+  its bundle is downloaded and checked against `apiBundleHash`, the launcher checks the release again from its own
+  pinned keys, runs the bundle's `--self-test` (it must report the same pinned keys and its own hash), starts it beside
+  the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the old one to
+  finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release newer than the
+  one running, and an API that can't find itself in the feed takes nothing.
+- **A new image** (system, kernel, keyholder, Node): the API stages it (the UKI against `ukiSha256`, the partitions
+  against `roothash` with `veritysetup verify`) and `/v1/report` says `imageWaiting`. The monthly restart installs it
+  into the other system slot with systemd-sysupdate and boots it; systemd-boot falls back to the old one if it fails to
+  boot three times. Then two custodians unlock.
+- **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
+  under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
+  the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.
+
+## The image (`image/`; host design §5.1 items 5 and 6)
+
+`image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir>` builds it with mkosi in a pinned container:
+
+- Debian 13 from snapshot.debian.org at the time in `image/pins.env` (security updates from the same snapshot), the
+  official Node build (SHA-256 pinned), the esbuild bundles of the keyholder, launcher and API, Caddy.
+- One UKI (`EFI/Linux/beanpool-vault_<version>.efi`: kernel, initrd, and a command line naming the dm-verity
+  `roothash=` of the erofs system partition), booted by systemd-boot (no menu, no editor). `/var` is a separate state
+  partition, made at the first boot with the second system slot and the data partition (`usr/lib/repart.d`).
+- The data partition is LUKS2 under `K_disk`: after an unlock, a root helper takes the key from the keyholder's
+  root-only socket, opens the partition (formats it the first time), and mounts it; the API opens no database before.
+- No SSH server, no getty, no rescue or debug shell, root locked, no login shell for any account.
+- Firewall (`etc/nftables.conf`): in, 443 and 80 (certificates); out, HTTPS only to addresses the vault's own resolver
+  (dnsmasq, `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names: the providers' key endpoints,
+  Expo push, GitHub (the release feed), Let's Encrypt, the NTP pool. The backup store is added with its client.
+- Memory hygiene: the keyholder runs with `LimitCORE=0` and `--disable-sigusr1` (it refuses to start without them),
+  under its own user, with no network (`PrivateNetwork=yes`); no swap, `kernel.yama.ptrace_scope = 3`,
+  `core_pattern` to nothing, kexec disabled, no hibernation, `lockdown=confidentiality`, `init_on_free=1`.
+  `mlockall` is not used (Node has no call for it and the vault ships no native module): no swap is what keeps the
+  keys off disk. `image/.../check-hygiene` checks all of this at every boot and prints it on the console.
+
+**Checking a build.** Build twice (or on two machines) and compare: `image.json` (`{version, ukiSha256, roothash,
+imageHash}`) and the files must be the same. A release's `image` must be what your build printed. CI checks the parts
+it can run on every push: the bundles are the same bytes on two builds, the manifest, chain and imageHash vector. The
+full image build needs Docker and, the first time, about an hour (snapshot.debian.org is slow; `--cache` keeps the
+packages, and apt checks each against the snapshot's signed index). `image/boot-test.sh --image <dir>` boots a build
+under QEMU with UEFI and a network that reaches nothing outside, and passes when the hygiene check prints
+`hygiene: ALL PASS` on the serial port.
+
+## The custodian tool (`vault-custodian`; design §2.2, host design §5.1 item 4)
+
+Key files are sealed under a passphrase (`new-key`; asked on the terminal, or `VAULT_CUSTODIAN_PASSPHRASE`). Before
+genesis, an unlock, a reshare or a restore, the tool:
+
+1. reads the releases (the repo's GitHub Releases, or `--feed-dir`) and walks them from the genesis keys built into
+   it; no release, a fork or a malformed one: nothing is sent;
+2. says hello with a fresh 32-byte nonce and computes `bind` itself;
+3. checks the vault's `release` (the image it booted) against the newest release's `imageHash` (an older one only with
+   `--accept-release <version>`, when a new image is waiting for its restart);
+4. checks the host against the newest release's `hostPolicy`, never anything the vault says. On `none` it prints:
+   *"This vault's host can read its memory. There is no hardware proof of what it runs."* and sends your part only
+   when you type yes (or passed `--no-hardware-proof`). `tdx` and `sev-snp` need evidence and a checker for it
+   (`src/custodian/checker.ts`, V8); until then they are refused. An unknown platform is refused.
+
+These checks catch mistakes (an image nobody signed, an old one still running), not a hostile host, which can answer
+with any hash it likes. On `none` the guards against that are the reinstall-before-unlock rule and the split hosting
+login (design §2.2, §2.5).
+
+```
+vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --share share-1-1-xxxx.json
+vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare
+```
+
+## The monthly restart (D3)
+
+The first Sunday of each month at 09:00 UTC (`beanpool-vault-monthly-restart.timer`; `/v1/report` says when the next
+one is). It installs a staged image, if any, and restarts. The vault comes back locked: two custodians unlock it,
+within the 24-hour target. After a restart nobody planned, the rule stands: reinstall from the signed image first,
+then unlock.
+
+## Monitoring (design §3)
+
+- `/v1/health` is public: `{state: open | locked, release, since}` (`locked` also while a restore from backup or the
+  data partition is still being opened). Global checks it every minute.
+- `/v1/report` (while open) is signed with the ticket key and holds nothing per member: counts, copies, re-wrap
+  progress, backups, pushes, memory hygiene, how many new custodians confirmed their share, and `api` (the running
+  bundle's hash), `update` (the release it runs, the newest, a waiting image, anything refused and why, the last
+  handover), `nextRestart`.
 
 ## Tests
 
-`pnpm --filter @beanpool/vault test`: vitest over real HTTP and a real Unix socket, with a stub JWKS and a stub Expo, and an
-injected clock. No provider, host or object store is contacted.
+`pnpm --filter @beanpool/vault test`: vitest over real HTTP and real Unix sockets, with a stub JWKS, a stub Expo, a
+directory standing in for GitHub Releases, and an injected clock. No provider, host, feed or object store is
+contacted. `handover.test.ts` runs the bundled keyholder, launcher and API as processes.

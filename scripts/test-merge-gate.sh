@@ -172,6 +172,24 @@ pr 9 "$(git rev-parse HEAD)"
 expect 1 "test-all-pr: a PR that does not merge cleanly with main is refused" "does not merge cleanly with origin/main" -- bash "$PR_SCRIPT" 9
 [ "$(git worktree list | wc -l | tr -d ' ')" = "1" ] && ok "test-all-pr: ...and its scratch worktree is removed too" || bad "test-all-pr: a scratch worktree was left after a conflict"
 
+# A green run of a branch stacked on the PR contains the PR head and all of main, but it is not what landing the PR
+# alone produces: B's extra commit could mask something A breaks. Only a run of exactly A merged with main covers A.
+git checkout -q -b stack-a main
+echo "a" > stack-a.txt && git add stack-a.txt && git commit -q -m "stack A" && git push -q origin stack-a 2>/dev/null
+SA=$(git rev-parse HEAD)
+git checkout -q -b stack-b
+echo "b" > stack-b.txt && git add stack-b.txt && git commit -q -m "stack B, on A" && git push -q origin stack-b 2>/dev/null
+SB=$(git rev-parse HEAD)
+git checkout -q main
+echo "line four" >> notes.txt && git commit -q -am c4 && git push -q origin main 2>/dev/null
+git checkout -q -b stack-g "$SB" && git merge -q --no-edit main
+expect 0 "record: a green run of the stacked branch B merged with main" "Recorded $(git rev-parse --short HEAD) as green" -- bash scripts/test-all.sh --all
+expect 1 "merge check: a green run of a branch stacked on the PR does not cover the PR under it" "tested a different tree than this PR merged with main" -- bash "$MERGE_CHECK" --head "$SA"
+git checkout -q -b stack-a-landed main && git merge -q --no-edit "$SA"
+expect 0 "record: a green run of A merged with main" "Recorded $(git rev-parse --short HEAD) as green" -- bash scripts/test-all.sh --all
+expect 0 "merge check: ...which covers A" "is covered by green run $(git rev-parse --short HEAD)" -- bash "$MERGE_CHECK" --head "$SA"
+git checkout -q main
+
 expect 1 "merge check: an unknown head is not covered" "is not in this repository" -- bash "$MERGE_CHECK" --head 0123456789abcdef0123456789abcdef01234567
 
 echo ""

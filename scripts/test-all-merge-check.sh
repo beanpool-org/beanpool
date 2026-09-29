@@ -8,12 +8,16 @@
 # --all appends "<epoch> <commit> <tree> <wall-seconds>" to <git common dir>/test-all-green after a run that passed
 # every check on a clean, committed tree (scripts/test-all-lib.sh). A PR is covered by a green commit G when:
 #
-#   - G contains the PR head, and
-#   - every non-merge commit on origin/<base> is also in G.
+#   - G contains the PR head,
+#   - every non-merge commit on origin/<base> is also in G, and
+#   - G's tree is exactly the tree that merging the PR head into origin/<base> gives (`git merge-tree --write-tree`).
 #
 # Together those say G was the PR merged with main as main stands now: since G was tested, main has gained nothing G
-# lacks. A squash merge lands as one new non-merge commit, so every merge moves main past every green record and the
-# next PR needs a run on the new main — which is the point. scripts/test-all-pr.sh makes such a G and runs it.
+# lacks, and G holds nothing beyond the PR and main. The tree check is what refuses a superset: a green run of a branch
+# stacked on this PR contains the PR head and all of main, but it tested the stacked branch's changes too, which may
+# mask something this PR breaks on its own. A squash merge lands as one new non-merge commit, so every merge moves main
+# past every green record and the next PR needs a run on the new main — which is the point. scripts/test-all-pr.sh
+# makes such a G and runs it.
 #
 # It works on the repository of the current directory. It fetches origin/<base> first and fails closed if it cannot:
 # a stale origin/main would let a PR through that nothing tested against the main it lands on. Prints why when it fails.
@@ -67,6 +71,10 @@ HEAD_SHA=$(git rev-parse "$HEAD_SHA^{commit}")
 
 GATE_LOG="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 
+# The tree that landing the PR on current main produces. Empty when it does not merge cleanly (merge-tree exits 1 and
+# its first line is then a tree with conflict markers), so nothing can match it.
+LAND_TREE=$(git merge-tree --write-tree "$BASE_REF" "$HEAD_SHA" 2>/dev/null | head -n 1) || LAND_TREE=""
+
 age() {
   local mins=$(( ($(date +%s) - $1) / 60 ))
   if [ $mins -lt 120 ]; then echo "$mins min"; else echo "$((mins / 60)) h"; fi
@@ -83,20 +91,25 @@ if [ -f "$GATE_LOG" ]; then
     [ -n "$NEWEST" ] || NEWEST="$ts $commit"
     git merge-base --is-ancestor "$HEAD_SHA" "$commit" 2>/dev/null || continue
     [ -z "$(git rev-list --no-merges --max-count=1 "$BASE_REF" "^$commit")" ] || continue
+    [ -n "$LAND_TREE" ] && [ "$tree" = "$LAND_TREE" ] || continue
     echo "✅ test-all merge check: $LABEL is covered by green run $(git rev-parse --short "$commit") ($(age "$ts") ago${wall:+, ${wall}s})."
     exit 0
   done < <(tail -n 500 "$GATE_LOG" | awk '{ line[NR] = $0 } END { for (i = NR; i >= 1; i--) print line[i] }')
 fi
 
-if [ -z "$NEWEST" ]; then
+if [ -z "$LAND_TREE" ]; then
+  WHY="the PR head $(git rev-parse --short "$HEAD_SHA") does not merge cleanly with $BASE_REF, so no run can have tested it as it would land"
+elif [ -z "$NEWEST" ]; then
   WHY="no green \`test-all.sh --all\` run is recorded in this checkout ($GATE_LOG)"
 else
   read -r ts commit <<< "$NEWEST"
+  MISSING=$(git rev-list --no-merges --count "$BASE_REF" "^$commit")
   if ! git merge-base --is-ancestor "$HEAD_SHA" "$commit" 2>/dev/null; then
     WHY="the newest green run, $(git rev-parse --short "$commit") ($(age "$ts") ago), does not contain the PR head $(git rev-parse --short "$HEAD_SHA"), and no older one covers it"
-  else
-    MISSING=$(git rev-list --no-merges --count "$BASE_REF" "^$commit")
+  elif [ "$MISSING" != "0" ]; then
     WHY="the newest green run, $(git rev-parse --short "$commit") ($(age "$ts") ago), is missing $MISSING commit(s) that have landed on $BASE_REF since, and no older one covers it"
+  else
+    WHY="the newest green run, $(git rev-parse --short "$commit") ($(age "$ts") ago), tested a different tree than this PR merged with main ($(git rev-parse --short "$(git rev-parse "$commit^{tree}")") there, $(git rev-parse --short "$LAND_TREE") here: a branch stacked on the PR, say), and no older one covers it"
   fi
 fi
 echo "❌ test-all merge check: $LABEL is not covered: $WHY."

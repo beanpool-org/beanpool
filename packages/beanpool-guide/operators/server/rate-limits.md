@@ -38,7 +38,7 @@ These stop one account, or a stolen phone, spraying Beans or flooding your ledge
 - **Payments**: 100 a day, 1,000 for an enterprise. A send, buying an Offer, asking to buy one, approving help on your own Need, an enterprise's payments and sweeps to the Commons, a pledge of beans, and buying or commissioning from another community all count.
 - **New people paid**: 30 a day, 300 for an enterprise: people the account has never paid before. Paying someone it has paid before is not counted.
 - **Deals**: 100 a day asked for, accepted or approved, 1,000 approved for an enterprise.
-- **Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike. Pledges are a member's act, so an enterprise has no number of its own.
+- **Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike, and asking to become a keeper with a pledge. Pledges are a member's act, so an enterprise has no number of its own.
 
 What a keeper does for an enterprise also counts against what they do for all the enterprises they keep together, at the enterprise's numbers: 50,000 changes, 1,000 posts, 1,000 payments, 300 new people and 1,000 deals a day, on top of their own limits. Any member can start 3 enterprises a day, so without this one person could multiply their day by starting enterprises. An enterprise with several keepers still gets all of its own limits, as each keeper's share counts to their own. There is no smallest payment: a sweep of a fraction of a bean is a payment, and these limits bound how many there can be.
 

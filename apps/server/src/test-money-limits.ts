@@ -18,7 +18,8 @@
  *  3. Marketplace requests: asking, accepting and approving, 100 a day; the 101st is 429 money_requests_day and makes
  *     no trade row.
  *  4. Pledges: backing an enterprise, releasing it (every alias) and a crowdfund pledge, 20 a day; the 21st is 429
- *     money_pledges_day; another member is unaffected.
+ *     money_pledges_day, and so is applying to keep another enterprise with a pledge (each way it can be sent), with no
+ *     application stored; applying with none still goes; another member is unaffected.
  *  5. An enterprise: its payments (sweeps to the Commons) count against it, 1,000 a day, and never against the keeper
  *     who signs, nor the keeper's against it; 1,000 approvals of requests on its listings; 300 new people paid (helpers
  *     on its need), and paying one again is not new. An approval's id that isn't text is 400 at both its doors.
@@ -541,6 +542,20 @@ async function main(): Promise<void> {
         refused(await call('POST', fay, `/api/enterprise/${ent}/pledge`, { type: 'backing', amount: 1 }), 'money_pledges_day', /20 pledges/, before, 'a backing by its other door');
         refused(await call('DELETE', fay, `/api/enterprise/${ent}/backing`, { amount: 1 }), 'money_pledges_day', /20 pledges/, before, 'a release');
         refused(await crowdfund(fay, project), 'money_pledges_day', /20 pledges/, before, 'a crowdfund pledge');
+        // Applying to keep an enterprise with a pledge: it becomes her backing once the lead says yes.
+        const lea = member('Lea');
+        completedTrade(lea.pk, tradie.pk);
+        sync();
+        const loom = await enterprise(lea, 'Lea Loom');
+        const applications = () => count('SELECT COUNT(*) AS n FROM enterprise_keeper_requests WHERE member_pubkey = ?', fay.pk);
+        for (const field of ['pledgedBacking', 'amount', 'backing']) {
+            const beforeApplying = books();
+            refused(await call('POST', fay, `/api/enterprise/${loom}/keepers/request`, { [field]: 5 }), 'money_pledges_day', /20 pledges/, beforeApplying,
+                `applying to keep Lea Loom with a pledge (${field})`);
+        }
+        assert(applications() === 0, 'and no application is stored');
+        const noPledge = await call('POST', fay, `/api/treasury/${loom}/keepers/request`, { pledgedBacking: 0 });
+        assert(noPledge.status === 200 && applications() === 1, `applying with no pledge still goes: it pledges nothing (${show(noPledge)})`);
         const gilPledges = await crowdfund(gil, project);
         assert(gilPledges.status === 200, `another member still pledges (${show(gilPledges)})`);
     }

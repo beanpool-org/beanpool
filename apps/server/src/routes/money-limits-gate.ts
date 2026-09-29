@@ -28,6 +28,9 @@
  *   POST /api/(treasury|enterprise)/:id/pledge              L, and P when it is a crowdfund the member (pledges are a
  *                                                           pledge (pledgeDispatchKind)     member's act)
  *   POST /api/(treasury|enterprise)/:id/backing             L                               the member
+ *   POST /api/(treasury|enterprise)/:id/keepers/request     L when it carries a pledge      the applicant (the pledge is
+ *                                                                                           their backing once the lead
+ *                                                                                           says yes)
  *   POST .../release, .../pledge/release, .../backing/release, DELETE .../pledge, .../backing
  *                                                           L                               the member
  *   POST /api/crowdfund/projects/:id/pledge                 P (into its escrow), L          the member
@@ -160,6 +163,13 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
         },
     },
     { method: 'POST', path: at('backing'), plan: (actor) => pledge(actor) },
+    {
+        // Read as the handler and requestToJoinEnterprise read it (the same `??` chain, then Number): a zero pledge, which
+        // the apps send when there is none, is no pledge; anything else the handler would take as one counts (and is
+        // given back when it refuses it).
+        method: 'POST', path: at('keepers/request'),
+        plan: (actor, _m, b) => (Number(b.pledgedBacking ?? b.amount ?? b.backing ?? 0) === 0 ? null : pledge(actor)),
+    },
     { method: 'POST', path: at('(?:release|pledge/release|backing/release)'), plan: (actor) => pledge(actor) },
     { method: 'DELETE', path: at('(?:pledge|backing)'), plan: (actor) => pledge(actor) },
     {

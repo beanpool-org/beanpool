@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 78,
-  "hash": "69b42b0c26b544b1bc567d04d315ec8a311df05cbe598af70f7692f00adeca00",
+  "version": 79,
+  "hash": "ac380e0965da0f007e6bad394b9265342722f9b76a5a66ea3ac25300fdfb2571",
   "sections": [
     {
       "id": "setup",
@@ -2385,7 +2385,7 @@
             "**Payments**: 100 a day, 1,000 for an enterprise. A send, buying an Offer, asking to buy one, approving help on your own Need, an enterprise's payments and sweeps to the Commons, a pledge of beans, and buying or commissioning from another community all count.",
             "**New people paid**: 30 a day, 300 for an enterprise: people the account has never paid before. Paying someone it has paid before is not counted.",
             "**Deals**: 100 a day asked for, accepted or approved, 1,000 approved for an enterprise.",
-            "**Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike. Pledges are a member's act, so an enterprise has no number of its own."
+            "**Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike, and asking to become a keeper with a pledge. Pledges are a member's act, so an enterprise has no number of its own."
           ]
         },
         {

@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const mem = vi.hoisted(() => new Map<string, string>());
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -15,7 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, type JoinDeps } from '../join-another-community';
+import { joinAnotherCommunity, joinedNudge, type JoinDeps } from '../join-another-community';
 import type { BeanPoolIdentity } from '../identity';
 
 const GLOBAL = 'https://global.beanpool.org';
@@ -77,14 +79,26 @@ describe('joining another community with an invite', () => {
     });
 });
 
-describe('"protect this community too"', () => {
-    it('says what came along and what didn’t, and offers to protect the new community', () => {
+// Was '"protect this community too"', which asked the member to connect a sign-in at each community they joined. Key
+// vault design (custody K1, V4): the copy is kept by BeanPool's key vault for every community, and no community is
+// ever asked for one, so the nudge is removed.
+describe('after joining another community: no "protect this community too"', () => {
+    it('says what came along and what didn’t, and never asks to protect the new community', () => {
         const n = joinedNudge('Mullumbimby');
         expect(n.title).toBe('You’re in Mullumbimby'.replace('’', "'"));
         expect(n.body).toContain('Your key and your 12 words came with you');
         expect(n.body).toContain('Your posts, chats and trades stay in each community.');
-        expect(n.body).toContain('protect your account in Mullumbimby too');
-        expect([n.later, n.protect]).toEqual(['Later', 'Protect it']);
-        expect(PROTECT_REDIRECT).toBe('/(tabs)/settings?section=protection');
+        expect(n.body).toContain('A sign-in you linked to get back into your account works here too');
+        expect(n.body).not.toMatch(/protect your account in/i);
+        expect(Object.keys(n).sort()).toEqual(['body', 'next', 'title']);
+        expect(n.next).toBe('Next');
+    });
+
+    it('neither screen that joins another community offers a way to protect it there', () => {
+        for (const file of ['../../app/(tabs)/people.tsx', '../../app/find-community.tsx']) {
+            const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
+            expect(src, file).not.toMatch(/PROTECT_REDIRECT|nudge\.protect|section=protection/);
+            expect(src, file).toMatch(/nudge\.next/);
+        }
     });
 });

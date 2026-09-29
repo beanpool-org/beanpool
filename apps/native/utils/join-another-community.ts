@@ -107,22 +107,20 @@ export async function joinAnotherCommunity(
     return { url: targetUrl, name, alreadyMember };
 }
 
-/** Where the profile step lands a member who chose to protect the new community now. */
-export const PROTECT_REDIRECT = '/(tabs)/settings?section=protection';
-/** …and one who chose later. */
+/** Where the profile step lands a member once they're in the new community. */
 export const HOME_REDIRECT = '/(tabs)';
 
 /**
- * What a member is told once they're in a second community: what came with them, what didn't, and that sign-in
- * recovery is kept by each community, so this one needs protecting too (design §3.6's "protect this community
- * too"). Both answers go through the profile step (name and photo for this community) first.
+ * What a member is told once they're in a second community: what came with them and what didn't, then on to the
+ * profile step (name and photo for this community). No "protect this community too" (key vault design, custody K1):
+ * a linked sign-in's copy is kept by BeanPool's key vault, one for every community, so there is nothing to add here,
+ * and no community is ever asked to keep one.
  */
-export function joinedNudge(name: string): { title: string; body: string; later: string; protect: string } {
+export function joinedNudge(name: string): { title: string; body: string; next: string } {
     return {
         title: `You're in ${name}`,
         body: 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n'
-            + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
-        later: 'Later',
-        protect: 'Protect it',
+            + 'A sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.',
+        next: 'Next',
     };
 }

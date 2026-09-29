@@ -355,7 +355,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     }
 
     it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
-        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(/g;
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
         const doors: Record<string, number> = {
             // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
             'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
@@ -377,6 +377,8 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             'app/pair-device.tsx:encryptPairingPayload(': 1,
             // Protect with / Connect again / Try again (sign-in-link-behind-lock.test.ts).
             'components/SsoEnrolSheet.tsx:connectAndDeposit(': 1,
+            // "Yes, it's me" on a key vault hold: it lets the account through to another device now (below).
+            'components/RecoveryAlertBanner.tsx:approveVaultHold(': 1,
         };
         const found: Record<string, number> = {};
         for (const { rel, src } of screens()) {
@@ -409,6 +411,15 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             expect(refused).toBeGreaterThan(asked);
             expect(body.indexOf(removal)).toBeGreaterThan(refused);
         }
+    });
+
+    it("\"Yes, it's me\" asks the check before it lets a waiting restore through, and a check that doesn't pass does nothing", () => {
+        const s = code(fs.readFileSync(path.resolve(ROOT, 'components/RecoveryAlertBanner.tsx'), 'utf-8'));
+        expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
+        const body = slice(s, 'const handleApproveHold = useCallback((hold: VaultHold) => {', '}, [identity, fetchHolds]);');
+        const asked = body.indexOf("if (!(await authenticateUser(\"Confirm it's you to let your account through to your other device.\"))) return;");
+        expect(asked).toBeGreaterThan(-1);
+        expect(body.indexOf('await approveVaultHold(identity, hold.holdId);')).toBeGreaterThan(asked);
     });
 
     it("every check is Settings' own (LocalAuth.authenticateUser): no screen asks the phone's lock its own way", () => {

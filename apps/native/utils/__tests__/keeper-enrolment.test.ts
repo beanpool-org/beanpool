@@ -1,7 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * Linking a sign-in (utils/keeper-enrolment.ts): the copy sealed on the phone, and deposited at BeanPool's key vault
+ * (key vault design V4). Before V4 the deposit went to the member's community (`/api/recovery/shares/sso`); these are
+ * the same properties, held against what the vault receives: fake-vault.ts plays the vault with core's real deposit
+ * boxes, so `depositedSsoShare()` is the copy the vault opened from the box the phone sealed to it.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
-    default: { getItem: vi.fn(async () => 'https://test.beanpool.org') },
+    default: {
+        getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
+        setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
+        removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
+    },
 }));
 
 vi.mock('expo-file-system/legacy', () => ({
@@ -11,50 +22,56 @@ vi.mock('expo-file-system/legacy', () => ({
     deleteAsync: vi.fn(async () => {}),
 }));
 
-vi.mock('../crypto', () => ({
-    buildSignedHeaders: vi.fn(async () => ({ 'Content-Type': 'application/json' })),
-    encodeBase64: (b: Uint8Array) => Buffer.from(b).toString('base64'),
-    mnemonicToSeed: vi.fn(async () => new Uint8Array(32).map((_, i) => (i * 7 + 3) & 0xff)),
-    hexToBytes: (hex: string) => Uint8Array.from(Buffer.from(hex, 'hex')),
-}));
-
-vi.mock('../node-post', () => ({
-    anchorUrl: vi.fn(async () => 'https://test.beanpool.org'),
-    signedPost: vi.fn(),
-    signedDelete: vi.fn(),
-}));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
 
 // The words are read through the identity module (getMnemonic), which imports these at load.
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
-    getItemAsync: vi.fn(),
-    setItemAsync: vi.fn(),
-    deleteItemAsync: vi.fn(),
+    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import {
-    enrolKeepers, enrolSsoKeeper, disconnectSsoKeeper,
+    enrolKeepers, enrolSsoKeeper as enrolAtVault, disconnectSsoKeeper, vaultProtection,
 } from '../keeper-enrolment';
-import { signedPost, signedDelete, anchorUrl } from '../node-post';
 import { openShareFromSso, openSeedFromSso, isSingleBlobSso, toEd25519Pkcs8 } from '@beanpool/core';
+import { vaultTicket, VAULT_MESSAGES } from '../vault';
+import { installNetwork, fakeJwt, noVault, useVault, VAULT, type Network } from './fake-vault';
+
+let net: Network;
+const originalFetch = globalThis.fetch;
 
 /**
- * Route the `signedPost` mock.
+ * Link a sign-in as the sheet does once the provider is done: a deposit ticket from the vault for this key, and a token
+ * for `sub` carrying the ticket's hash. A key that can't sign gets no ticket; its deposit is tried with none.
  */
-function mockNode(opts: { deposit?: any } = {}) {
-    const { deposit = { ok: true, json: async () => ({ generation: 2 }) } } = opts;
-    (signedPost as any).mockImplementation(async (_url: string, _path: string) => {
-        return deposit;
+async function enrolSsoKeeper(input: { identity: any; provider: 'google' | 'apple' | 'facebook'; sub: string; idToken?: string; nonce?: string }) {
+    let grant = { ticket: 'no-ticket', nonce: 'no-nonce' };
+    try {
+        grant = await vaultTicket(input.identity, 'deposit', input.provider);
+    } catch {
+        // A key it can't read signs nothing: the deposit below refuses it before anything is sent.
+    }
+    return enrolAtVault({
+        identity: input.identity, provider: input.provider, sub: input.sub,
+        ticket: grant.ticket, idToken: fakeJwt({ sub: input.sub, nonce: grant.nonce }),
     });
 }
 
-/** The SSO share the client actually deposited. */
+/** Nothing to set up: the vault is installed for every test. Kept so each test still says where its deposit goes. */
+function mockNode() {}
+
+/** The copy the vault received: opened from the deposit box the phone sealed to its deposit key. */
 function depositedSsoShare(): any {
-    const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-    return call?.[2]?.shares?.find((sh: any) => sh.holderType === 'sso');
+    const copies = [...net.vault.copies.values()];
+    return copies[copies.length - 1]?.clientCopy;
 }
 
 /** The sealed member half as the client built it, decoded back to bytes. */
@@ -62,6 +79,9 @@ function depositedSsoCiphertextLength(): number {
     const sso = depositedSsoShare();
     return Buffer.from(sso.encryptedShare, 'base64').length;
 }
+
+/** The deposit requests the phone sent to the vault. */
+const deposits = () => net.sent.filter(s => s.origin === VAULT && s.path === '/v1/copies');
 
 const IDENTITY = {
     callsign: 'Alice',
@@ -71,16 +91,18 @@ const IDENTITY = {
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-const FRIEND_KEYS = [
-    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(1))).toString('hex'),
-    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(2))).toString('hex'),
-    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(3))).toString('hex'),
-];
+afterEach(() => {
+    globalThis.fetch = originalFetch;
+    noVault();
+});
 
 describe('keeper-enrolment.ts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        (anchorUrl as any).mockResolvedValue('https://test.beanpool.org');
+        mem.async.clear();
+        mem.secure.clear();
+        useVault();
+        net = installNetwork();
     });
 
     // ---------------------------------------------------------------------------
@@ -147,8 +169,9 @@ describe('keeper-enrolment.ts', () => {
 
                 expect(result.error).toBeUndefined();
                 expect(result.enrolled).toEqual(['sso']);
-                expect(result.generation).toBe(2);
-                expect(signedPost).toHaveBeenCalledTimes(1);
+                // A copy at the vault has no community generation (the node's used to).
+                expect(result.generation).toBeNull();
+                expect(deposits()).toHaveLength(1);
                 expect(await openedPublicKey('google', 'google-sub-restored')).toBe(WORDLESS.publicKey);
             });
 
@@ -197,7 +220,7 @@ describe('keeper-enrolment.ts', () => {
 
                 expect(result.enrolled).toEqual([]);
                 expect(result.error).toContain('could not read the private key');
-                expect(signedPost).not.toHaveBeenCalled();
+                expect(deposits()).toEqual([]);
             });
         });
 
@@ -298,26 +321,24 @@ describe('keeper-enrolment.ts', () => {
             });
 
             expect(result.enrolled).toEqual(['sso']);
-            expect(result.generation).toBe(2);
+            expect(result.generation).toBeNull();
             expect(result.available).toBe(1);
             expect(result.error).toBeUndefined();
-            expect(signedPost).toHaveBeenCalledWith(
-                'https://test.beanpool.org',
-                '/api/recovery/shares/sso',
-                expect.objectContaining({
-                    provider: 'google',
-                    idToken: 'mock-jwt-token',
-                    nonce: 'mock-nonce',
-                    shares: [
-                        expect.objectContaining({ holderType: 'sso', shareIndex: 1 }),
-                    ],
-                }),
-                IDENTITY,
-            );
+            // To the vault, signed by this member's key, with one single-blob copy in the box.
+            const [deposit] = deposits();
+            expect(deposit.url).toBe(`${VAULT}/v1/copies`);
+            expect(deposit.headers['X-Public-Key']).toBe(IDENTITY.publicKey);
+            expect(deposit.body).toMatchObject({ provider: 'google', ticket: expect.any(String), idToken: expect.any(String), box: { v: 1 } });
+            expect(Object.keys(depositedSsoShare()).sort()).toEqual(['encryptedShare', 'kdfParams', 'shareIv', 'shareTag']);
         });
 
         it('handles network throw gracefully without throwing', async () => {
-            (signedPost as any).mockRejectedValueOnce(new Error('Network connection timeout'));
+            // The vault takes the ticket, then doesn't answer the deposit.
+            const handle = net.vault.handle.bind(net.vault);
+            net.vault.handle = (req) => {
+                if (req.path === '/v1/copies') throw new TypeError('Network connection timeout');
+                return handle(req);
+            };
 
             const result = await enrolSsoKeeper({
                 identity: IDENTITY,
@@ -328,24 +349,17 @@ describe('keeper-enrolment.ts', () => {
             });
 
             expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('could not reach the node');
+            // Was "could not reach the node": the vault's words now, for a member to read.
+            expect(result).toMatchObject({ error: VAULT_MESSAGES.unreachable, failure: 'unreachable' });
         });
 
         it('maps multiple enrolled SSO providers so spare counter does not desync', async () => {
-            mockNode({
-                deposit: {
-                    ok: true,
-                    json: async () => ({ generation: 3, enrolledSso: ['google', 'apple'], threshold: 1 }),
-                },
-            });
+            // Was the node's deposit answer listing both. A deposit at the vault answers for its own sign-in; what
+            // protects the account is the vault's status, which Account Protection reads (vaultProtection).
+            await enrolSsoKeeper({ identity: IDENTITY, provider: 'google', sub: 'google-sub-12345' });
+            await enrolSsoKeeper({ identity: IDENTITY, provider: 'apple', sub: 'apple-sub-12345' });
 
-            const result = await enrolSsoKeeper({
-                identity: IDENTITY,
-                provider: 'apple',
-                sub: 'apple-sub-12345',
-                idToken: 'mock-jwt-token',
-                nonce: 'mock-nonce',
-            });
+            const result = await vaultProtection(IDENTITY);
 
             expect(result.enrolled).toEqual(['sso', 'sso']);
             expect(result.available).toBe(2);
@@ -381,9 +395,11 @@ describe('keeper-enrolment.ts', () => {
                 nonce: 'mock-nonce',
             });
 
-            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-            expect(call[2].shares.length).toBe(1);
-            expect(call[2].shares.some((sh: any) => sh.holderType === 'hub')).toBe(false);
+            // One copy at the vault, and nothing but the copy in it: no hub row, no holder fields, no second piece.
+            expect(deposits()).toHaveLength(1);
+            expect(net.vault.copies.size).toBe(1);
+            expect(Object.keys(depositedSsoShare()).sort()).toEqual(['encryptedShare', 'kdfParams', 'shareIv', 'shareTag']);
+            expect(net.sent.some(s => /hub/.test(s.path))).toBe(false);
         });
 
         it('deposited share can be decrypted back to the original seed', async () => {
@@ -462,20 +478,18 @@ describe('keeper-enrolment.ts', () => {
             expect(result.error).toContain('could not read the private key');
         });
 
-        it('a deposit proves the sign-in with the provider\'s idToken and the nonce, and nothing else', async () => {
-            mockNode();
+        it('a deposit proves the sign-in with the vault\'s ticket and the provider\'s idToken, and carries only the box', async () => {
+            await enrolSsoKeeper({ identity: IDENTITY, provider: 'google', sub: 'google-sub-12345' });
 
-            await enrolSsoKeeper({
-                identity: IDENTITY,
-                provider: 'google',
-                sub: 'google-sub-12345',
-                idToken: 'mock-jwt-token',
-                nonce: 'mock-nonce',
-            });
-
-            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-            expect(call[2]).toMatchObject({ provider: 'google', idToken: 'mock-jwt-token', nonce: 'mock-nonce' });
-            expect(Object.keys(call[2]).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
+            // Was `{provider, idToken, nonce, shares}` to the community. The vault takes its own ticket (whose hash
+            // is the token's nonce, so no nonce field), the token, and the copy sealed in a box to its deposit key.
+            const [deposit] = deposits();
+            expect(Object.keys(deposit.body).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
+            const ticketRequest = net.sent.find(s => s.path === '/v1/ticket')!;
+            expect(ticketRequest.body).toEqual({ purpose: 'deposit', provider: 'google' });
+            expect(JSON.parse(Buffer.from(deposit.body.idToken.split('.')[1], 'base64url').toString()).sub).toBe('google-sub-12345');
+            // The copy never travels in the clear.
+            expect(deposit.raw).not.toContain(depositedSsoShare().encryptedShare);
         });
     });
 
@@ -483,36 +497,33 @@ describe('keeper-enrolment.ts', () => {
     // Disconnect
     // ---------------------------------------------------------------------------
     describe('disconnectSsoKeeper', () => {
-        it('uses DELETE, which is the verb the route is registered under and the one signed', async () => {
-            (signedDelete as any).mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ enrolledSso: ['google'] }),
-            });
+        it('deletes the copy at the vault, signed by this key, and says what is still linked', async () => {
+            // Was a signed DELETE at the community. The vault's route is a signed POST that deletes this key's copy.
+            await enrolSsoKeeper({ identity: IDENTITY, provider: 'google', sub: 'google-sub-12345' });
+            await enrolSsoKeeper({ identity: IDENTITY, provider: 'apple', sub: 'apple-sub-12345' });
 
             const result = await disconnectSsoKeeper('apple', IDENTITY);
 
             expect(result.success).toBe(true);
             expect(result.enrolledSso).toEqual(['google']);
-            expect(signedDelete).toHaveBeenCalledWith(
-                'https://test.beanpool.org',
-                '/api/recovery/shares/sso/apple',
-                IDENTITY,
-            );
-            // A signed POST here 404s: koa-router has no POST at that path.
-            expect(signedPost).not.toHaveBeenCalled();
+            const del = net.sent.find(s => s.path === '/v1/copies/delete')!;
+            expect(del).toMatchObject({ origin: VAULT, method: 'POST', body: { provider: 'apple' } });
+            expect(del.headers['X-Public-Key']).toBe(IDENTITY.publicKey);
+            expect(net.vault.copiesOf(IDENTITY.publicKey).map(c => c.provider)).toEqual(['google']);
         });
 
-        it('surfaces the node refusing a disconnect that would strand the account', async () => {
-            (signedDelete as any).mockResolvedValueOnce({
-                ok: false,
-                status: 400,
-                text: async () => 'would leave this account unrecoverable',
-            });
+        it('surfaces the vault refusing a disconnect, in its own words', async () => {
+            net.vault.handle = () => ({ status: 400, body: { error: 'Say which sign-in to disconnect, or all.', code: 'bad_provider' } });
 
             const result = await disconnectSsoKeeper('google', IDENTITY);
 
             expect(result.success).toBe(false);
-            expect(result.error).toContain('unrecoverable');
+            expect(result.error).toBe('Say which sign-in to disconnect, or all.');
+        });
+
+        it('a paused vault disconnects nothing, and says so', async () => {
+            net.vault.locked = true;
+            expect(await disconnectSsoKeeper('google', IDENTITY)).toEqual({ success: false, error: VAULT_MESSAGES.paused });
         });
     });
 });

@@ -1,28 +1,33 @@
 /**
  * A sign-in restore from a copy that carries the 12 words saves them, only when they make the restored key.
  * A copy without words (every copy made before copies carried them) restores exactly as before: the key alone.
+ *
+ * Since V4 the copy comes back from BeanPool's key vault (utils/vault.ts `openRelease`), sealed to the restoring
+ * phone's throwaway key; fake-vault.ts plays the vault, with core's real releases.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
-    default: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() },
+    default: {
+        getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
+        setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
+        removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
+    },
 }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
-    getItemAsync: vi.fn(),
-    setItemAsync: vi.fn(),
-    deleteItemAsync: vi.fn(),
+    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 vi.mock('expo-crypto', () => ({
     getRandomBytes: vi.fn((len: number) => new Uint8Array(len).fill(9)),
 }));
 vi.mock('../sso-signin', () => ({
-    signInWithGoogle: vi.fn(),
-    signInWithApple: vi.fn(),
-    signInWithFacebook: vi.fn(),
+    signInWithProvider: vi.fn(),
 }));
-vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 // The real opener, wrapped so one test can make it misbehave and show the app checks the words itself.
 vi.mock('@beanpool/core', async (importOriginal) => {
     const real = await importOriginal<typeof import('@beanpool/core')>();
@@ -39,9 +44,9 @@ import * as SecureStore from 'expo-secure-store';
 import {
     KEEPER_ALG_SSO_WORDS, openSeedFromSso, packRecoveryWords, sealSeedToSso, type SealedShare,
 } from '@beanpool/core';
-import { signedPost } from '../node-post';
-import { signInWithGoogle } from '../sso-signin';
-import { recoverAccountWithSso } from '../sso-recovery';
+import { signInWithProvider } from '../sso-signin';
+import { checkSsoRestore, finishSsoRestore, startSsoRestore } from '../sso-recovery';
+import { fakeJwt, HOLD_MS, installNetwork, noVault, useVault, type Network } from './fake-vault';
 
 // Test phrases only (BIP-39 vectors), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -50,34 +55,24 @@ const SEED = sha256(sha256(utf8ToBytes(WORDS.join(' '))));
 const PUB = Buffer.from(ed25519.getPublicKey(SEED)).toString('hex');
 const SUB = '110169484474386276334';
 
-/** Google hands back a token whose `sub` is SUB; the node releases `sealed` as a single blob. */
+let net: Network;
+const originalFetch = globalThis.fetch;
+
+/** Google hands back a token whose `sub` is SUB; the vault keeps `sealed` for it, for PUB. */
 function mockSignInAndNode(sealed: SealedShare) {
-    const b64 = (s: string) => Buffer.from(s).toString('base64url');
-    const token = `${b64(JSON.stringify({ alg: 'RS256' }))}.${b64(JSON.stringify({ sub: SUB }))}.sig`;
-    (signInWithGoogle as any).mockResolvedValue({ idToken: token, nonce: 'n' });
-    (signedPost as any).mockImplementation(async (_url: string, path: string) => {
-        const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
-        if (path === '/api/recovery/collect') return ok({ collectionId: 'c1', threshold: 1 });
-        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n' });
-        if (path === '/api/recovery/collect/sso') return ok({ collected: 1, threshold: 1, enough: true });
-        if (path === '/api/recovery/collect/fragments') {
-            return ok({
-                collected: 1, threshold: 1, enough: true,
-                fragments: [{
-                    holderType: 'sso', shareIndex: 1,
-                    payload: sealed.encryptedShare, payloadIv: sealed.shareIv, payloadTag: sealed.shareTag,
-                    kdfParams: sealed.kdfParams,
-                }],
-            });
-        }
-        throw new Error(`Unexpected path: ${path}`);
-    });
+    vi.mocked(signInWithProvider).mockImplementation(async (provider, nonce) => ({ provider, idToken: fakeJwt({ sub: SUB, nonce }), nonce }));
+    net.vault.keep('google', SUB, PUB, sealed);
 }
 
+/** A sign-in restore, start to finish: the sign-in, the day's wait, the release, and the save. */
 async function restore() {
-    return recoverAccountWithSso({
-        callsign: 'Marty', anchorUrl: 'https://test.beanpool.org', provider: 'google',
-    });
+    await startSsoRestore('google');
+    vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
+    const collected = await checkSsoRestore();
+    vi.useRealTimers();
+    if (collected?.status !== 'released') throw new Error(`expected a release, got ${JSON.stringify(collected)}`);
+    const identity = await finishSsoRestore(collected.restored, 'https://test.beanpool.org', { nameOnNode: async () => 'Marty' });
+    return { identity };
 }
 
 /** What the identity module wrote to the phone. */
@@ -105,6 +100,15 @@ async function withWordsBox(sealed: SealedShare, words: string[]): Promise<Seale
 describe('a sign-in restore and the 12 words', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mem.async.clear();
+        mem.secure.clear();
+        useVault();
+        net = installNetwork();
+    });
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+        noVault();
+        vi.useRealTimers();
     });
 
     it('saves the words when the copy carries them, and they make the restored key', async () => {

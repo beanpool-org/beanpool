@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, ScrollView } from 'react-native';
 import { colors } from '../constants/colors';
-import { anchorUrl } from '../utils/node-post';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -72,16 +71,9 @@ export function SsoEnrolSheet({
         const abort = new AbortController();
         abortRef.current = abort;
         try {
-            const url = await anchorUrl();
-            if (!url) {
-                setErrorMessage('No node configured yet.');
-                setStep('error');
-                return;
-            }
-
+            // To BeanPool's key vault, whatever community this phone is on (utils/sso-sheet-connect.ts).
             const result = await connectAndDeposit({
                 provider,
-                url,
                 identity,
                 phoneLock: askPhoneLock ? () => authenticateUser('Confirm authentication to link a sign-in to your account.') : null,
                 // The provider is done: Cancel comes down, and the deposit goes ahead.
@@ -100,6 +92,8 @@ export function SsoEnrolSheet({
                 setEnrolResult(result);
                 setStep('success');
                 if (timerRef.current) clearTimeout(timerRef.current);
+                // A copy that replaced another account's stays up until Done: that line has to be read.
+                if (result.replaced) return;
                 timerRef.current = setTimeout(() => {
                     onEnrolled(result);
                     onClose();
@@ -195,8 +189,13 @@ export function SsoEnrolSheet({
                             </View>
                             <Text style={styles.title} accessibilityRole="header">You're covered</Text>
                             <Text style={styles.body}>
-                                Your {PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with {PROVIDER_NAME} to get back in.
+                                Your {PROVIDER_NAME} sign-in is now linked, in every community. If you lose this phone, sign in with {PROVIDER_NAME} to get back in: it takes a day, or less if another phone or computer of yours says it's you.
                             </Text>
+                            {enrolResult?.replaced && (
+                                <Text style={styles.body}>
+                                    This {PROVIDER_NAME} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.
+                                </Text>
+                            )}
                             <TouchableOpacity
                                 style={styles.primaryButton}
                                 onPress={handleDone}
@@ -209,7 +208,7 @@ export function SsoEnrolSheet({
 
                     {step === 'error' && (
                         <View style={styles.content} accessibilityLiveRegion="assertive">
-                            <Text style={styles.title} accessibilityRole="header">Something went wrong</Text>
+                            <Text style={styles.title} accessibilityRole="header">Not linked</Text>
                             <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}

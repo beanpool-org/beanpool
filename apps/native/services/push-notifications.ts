@@ -158,10 +158,11 @@ export function setupNotificationResponseHandler() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response: NotificationResponse) => {
         const data = response.notification.request.content.data;
         
-        if (data?.kind === 'recovery_started') {
-            // Recovery alert: navigate to Settings so the owner can see the
-            // RecoveryAlertBanner and tap [Stop it]. The collectionId is passed
-            // through so the banner can target the specific session.
+        if (data?.kind === 'recovery_started'
+            || data?.type === 'vault-hold' || data?.type === 'vault-released' || data?.type === 'vault-replaced') {
+            // Recovery alert, from a community or from BeanPool's key vault (apps/vault api/push.ts, `data.type`):
+            // navigate to Settings, where the RecoveryAlertBanner reads what is waiting and offers Stop (and, for the
+            // vault, "Yes, it's me"). The vault's notices carry nothing else: no hold id, no key.
             router.push('/(tabs)/settings');
         } else if (data?.screen === 'post' && data?.postId) {
             // Navigate directly to the post (escrow detail screen)

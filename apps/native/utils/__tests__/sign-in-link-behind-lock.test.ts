@@ -4,16 +4,17 @@
  * Account Protection's "Protect with" Google/Facebook/… (and Connect again) seals the account's private key AND its 12
  * words to whichever sign-in account is used. With no check, anyone holding the unlocked phone could link THEIR OWN
  * Google account, then restore the account on their own phone with it. The global door does the same for the phone's
- * account when it joins with it: the join carries a recovery copy sealed to the door's sign-in.
+ * account when it joins with it: its one sign-in also deposits a recovery copy at BeanPool's key vault (V4).
  *
- * - connectAndDeposit asks the lock it is handed before anything starts: no node, no provider, no read of the words.
+ * - connectAndDeposit asks the lock it is handed before anything starts: no vault, no provider, no read of the words.
  *   The sheet hands it Settings' check (LocalAuth.authenticateUser), so a phone with no screen lock is let through, as
  *   Settings lets it through, and one with a screen PIN but no fingerprint or face is asked for its PIN. A check that
  *   doesn't pass reads as a cancel: the sheet closes, nothing linked.
  * - The only account that skips it is a key the join wizard has just made (the member's own new account).
  * - The global door asks the same check before its sign-in when the key is the phone's own (not one the door made).
  *
- * Nothing here contacts a node or a provider: the `fetch` stub below plays the member's node.
+ * Nothing here contacts a node, a vault or a provider: fake-vault.ts plays BeanPool's key vault, where the ticket and
+ * the deposit go (V4; before it, the member's node), and refuses any other address.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -80,22 +81,23 @@ vi.mock('../identity', async (importOriginal) => {
 
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { authenticateUser } from '../LocalAuth';
 import { getMnemonic } from '../identity';
+import { installNetwork, noVault, useVault } from './fake-vault';
 
 // The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
 // (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
 (globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
 
-const NODE = 'https://test.example';
-const NONCE = '/api/recovery/sso-nonce';
-const DEPOSIT = '/api/recovery/shares/sso';
+/** The key vault's routes (fake-vault.ts): the ticket, then the deposit. */
+const DEPOSIT = '/v1/copies';
 
-// Test phrase only (a BIP-39 vector), never a real account's.
+// Test phrase only (a BIP-39 vector), never a real account's. A real key pair: the vault checks every signature.
 const MEMBER = {
-    publicKey: 'aa'.repeat(32),
+    publicKey: Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(7))).toString('hex'),
     privateKey: '07'.repeat(32),
     callsign: 'member',
     createdAt: '2026-09-25T00:00:00Z',
@@ -121,27 +123,16 @@ function phone(kind: Phone, lock: Lock = 'a fingerprint or face') {
     });
 }
 
-function answer(status: number, body: unknown = {}): Response {
-    return {
-        ok: status >= 200 && status < 300,
-        status,
-        headers: new Headers(),
-        json: async () => body,
-        text: async () => JSON.stringify(body),
-    } as unknown as Response;
-}
-
-/** The member's node, through a Facebook sign-in and a deposit. Every request is an event, and so is the provider. */
+/** The key vault, through a Facebook sign-in and a deposit. Every request is an event, and so is the provider. */
 function installNode(): void {
-    globalThis.fetch = vi.fn(async (input: any) => {
-        const url = String(input);
-        if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
-        const p = url.slice(NODE.length);
-        events.push(p);
-        if (p === NONCE) return answer(200, { nonce: 'n-1', expiresInSeconds: 600, providers: ['facebook'] });
-        if (p === DEPOSIT) return answer(200, { generation: 1, enrolledSso: ['facebook'], threshold: 1 });
-        return answer(404, { error: 'Not Found' });
+    useVault();
+    const net = installNetwork();
+    const vaultFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: any, init?: any) => {
+        events.push(new URL(String(input)).pathname);
+        return vaultFetch(input, init);
     }) as any;
+    void net;
     // Facebook's dialog, answering with an id_token bound to the nonce it was asked with.
     vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementation(async (authUrl: string) => {
         events.push('provider');
@@ -158,7 +149,6 @@ const REASON = 'Confirm authentication to link a sign-in to your account.';
 async function connect(phoneLock: (() => Promise<boolean>) | null, signal = new AbortController().signal) {
     const outcome = connectAndDeposit({
         provider: 'facebook',
-        url: NODE,
         identity: MEMBER,
         phoneLock,
         onSignedIn: () => {},
@@ -183,6 +173,7 @@ afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
+    noVault();
 });
 
 describe("connectAndDeposit: the phone's lock before a sign-in is linked", () => {
@@ -313,6 +304,11 @@ describe('components/SsoEnrolSheet.tsx: Protect with / Connect again / Try again
     it("Settings' sheet (the phone's own account) always asks", () => {
         const settingsSheet = slice(read('app/(tabs)/settings.tsx'), '<SsoEnrolSheet', '/>');
         expect(settingsSheet).not.toContain('askPhoneLock');
+    });
+
+    it("the move card's sheet (the phone's own account, moving its copy to the key vault) always asks", () => {
+        const cardSheet = slice(read('components/VaultMoveCard.tsx'), '<SsoEnrolSheet', '/>');
+        expect(cardSheet).not.toContain('askPhoneLock');
     });
 
     it("the join wizard's sheet skips it only for a key this join made", () => {

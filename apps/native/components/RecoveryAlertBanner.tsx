@@ -1,17 +1,16 @@
 /**
- * RecoveryAlertBanner — urgent alert when someone is trying to recover the owner's account.
+ * RecoveryAlertBanner — someone is getting back into this account.
  *
- * Polls `POST /api/recovery/collect/mine` on mount to check for active recovery sessions.
- * If any are open, renders a red danger banner with:
- *   1. Warning text explaining what's happening
- *   2. A [Stop it] button that cancels the session AND re-splits (generation bump)
+ * Two sources, each read in the background when the banner shows and whenever the app comes back, so nothing waits
+ * for them: a slow or unreachable one shows nothing.
  *
- * The re-split is the actual security action: cancelling just marks the session closed,
- * but a re-split changes the polynomial so ALL fragments from the old generation become
- * permanently useless. Even if the attacker already collected some, they can't use them.
- *
- * Design decision: we don't just cancel — we re-split. This is the "Stop it" button
- * from the design doc, not a "dismiss" button.
+ * - **BeanPool's key vault** (`/v1/copies/status`, utils/vault.ts): a sign-in restore of this account, waiting (D2:
+ *   every sign-in restore waits a day). Two answers, each confirmed first:
+ *     - **Stop**: it is never released. Whoever started it gets nothing, and has to use the 12 words.
+ *     - **Yes, it's me**: it goes through now, to the phone or computer that asked. Behind the phone's lock, since it
+ *       hands the account to another device.
+ * - **The member's community** (`/api/recovery/collect/mine`): a restore at a community that still keeps an old
+ *   sign-in copy, until the date those are removed (key vault design §5.1). Stop cancels it.
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -19,6 +18,12 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, App
 import { palette } from '../constants/colors';
 import { signedRequest } from '../utils/db';
 import { withJitter } from '../utils/jitter';
+import { useIdentity } from '../app/IdentityContext';
+import { authenticateUser } from '../utils/LocalAuth';
+import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
+import {
+    approveVaultHold, hasVault, holdEndsText, stopVaultHold, vaultStatus, type VaultHold,
+} from '../utils/vault';
 
 interface RecoverySession {
     collectionId: string;
@@ -32,9 +37,12 @@ export interface RecoveryAlertBannerProps {
 }
 
 export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps = {}): React.JSX.Element | null {
+    const { identity } = useIdentity();
     const [sessions, setSessions] = useState<RecoverySession[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [holds, setHolds] = useState<VaultHold[]>([]);
     const [stopping, setStopping] = useState(false);
+    /** The hold an answer is on its way for, so its buttons can't be tapped twice. */
+    const [busyHold, setBusyHold] = useState<string | null>(null);
 
     const fetchSessions = useCallback(async () => {
         try {
@@ -55,18 +63,31 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
             // Swallow — this is a best-effort check. If the endpoint doesn't exist
             // (older node), we just don't show the banner.
             console.warn('[RecoveryAlert] Failed to check active sessions:', (e as Error).message);
-        } finally {
-            setLoading(false);
         }
     }, []);
+
+    const fetchHolds = useCallback(async () => {
+        if (!identity || !hasVault()) return;
+        try {
+            setHolds((await vaultStatus(identity)).holds);
+        } catch (e) {
+            // Best effort, like the community's: a paused or unreachable vault shows nothing, and is asked again.
+            console.log('[RecoveryAlert] The key vault could not say:', (e as Error).message);
+        }
+    }, [identity]);
+
+    const refresh = useCallback(() => {
+        void fetchSessions();
+        void fetchHolds();
+    }, [fetchSessions, fetchHolds]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
 
         const startPolling = () => {
             if (!interval) {
-                fetchSessions();
-                interval = setInterval(fetchSessions, withJitter(30_000));
+                refresh();
+                interval = setInterval(refresh, withJitter(30_000));
             }
         };
 
@@ -95,7 +116,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
             stopPolling();
             sub.remove();
         };
-    }, [fetchSessions]);
+    }, [refresh]);
 
     const handleStopIt = useCallback(async () => {
         Alert.alert(
@@ -141,40 +162,148 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         );
     }, [sessions]);
 
-    if (loading || sessions.length === 0) return null;
+    const handleStopHold = useCallback((hold: VaultHold) => {
+        if (!identity) return;
+        const name = SSO_PROVIDER_NAMES[hold.provider];
+        Alert.alert(
+            'Stop it?',
+            `The restore with ${name} won't go through, and whoever started it gets nothing. If it was you after all, use your 12 words on that phone.`,
+            [
+                { text: 'Keep waiting', style: 'cancel' },
+                {
+                    text: 'Stop it',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setBusyHold(hold.holdId);
+                        try {
+                            await stopVaultHold(identity, hold.holdId);
+                            setHolds(h => h.filter(x => x.holdId !== hold.holdId));
+                            onStopSuccess?.();
+                            Alert.alert('Stopped', `The restore with ${name} won't go through. To be safe, check that your ${name} account's password is one only you know.`);
+                        } catch (e) {
+                            Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
+                            void fetchHolds();
+                        } finally {
+                            setBusyHold(null);
+                        }
+                    },
+                },
+            ],
+        );
+    }, [identity, fetchHolds, onStopSuccess]);
+
+    const handleApproveHold = useCallback((hold: VaultHold) => {
+        if (!identity) return;
+        const name = SSO_PROVIDER_NAMES[hold.provider];
+        Alert.alert(
+            'Was it you?',
+            `Only if you started getting back into BeanPool with ${name} on another phone or computer yourself. Your account goes there now.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: "Yes, it's me",
+                    onPress: async () => {
+                        // It hands the account to another device: the phone's lock first, as linking a sign-in asks.
+                        if (!(await authenticateUser("Confirm it's you to let your account through to your other device."))) return;
+                        setBusyHold(hold.holdId);
+                        try {
+                            await approveVaultHold(identity, hold.holdId);
+                            setHolds(h => h.filter(x => x.holdId !== hold.holdId));
+                            Alert.alert('Let through', 'Your other phone or computer gets your account the next time it checks, in about a minute.');
+                        } catch (e) {
+                            Alert.alert('Not let through', `${(e as Error).message} Try again.`);
+                            void fetchHolds();
+                        } finally {
+                            setBusyHold(null);
+                        }
+                    },
+                },
+            ],
+        );
+    }, [identity, fetchHolds]);
+
+    if (sessions.length === 0 && holds.length === 0) return null;
 
     return (
-        <View style={styles.container} accessibilityLiveRegion="assertive">
-            <View style={styles.header}>
-                <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
-                <Text style={styles.title} accessibilityRole="header">Someone is recovering your account</Text>
-            </View>
-            <Text style={styles.body}>
-                A device is trying to restore access to your account.
-                If this is not you, stop it immediately.
-            </Text>
-            <Text style={styles.detail}>
-                {sessions.length} active session{sessions.length > 1 ? 's' : ''}
-                {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
-            </Text>
-            <TouchableOpacity
-                style={styles.stopButton}
-                onPress={handleStopIt}
-                disabled={stopping}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                // Must be the VISIBLE text: this is the emergency control, and a speech-
-                // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
-                accessibilityLabel={stopping ? 'Stopping recovery' : 'Stop It Now'}
-                accessibilityHint="Cancels active recovery sessions"
-                accessibilityState={{ disabled: stopping, busy: stopping }}
-            >
-                {stopping ? (
-                    <ActivityIndicator size="small" color={palette.white} />
-                ) : (
-                    <Text style={styles.stopButtonText}>🛑 Stop It Now</Text>
-                )}
-            </TouchableOpacity>
+        <View>
+            {holds.map((hold) => {
+                const name = SSO_PROVIDER_NAMES[hold.provider];
+                const busy = busyHold === hold.holdId;
+                return (
+                    <View key={hold.holdId} style={styles.container} accessibilityLiveRegion="assertive">
+                        <View style={styles.header}>
+                            <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
+                            <Text style={styles.title} accessibilityRole="header">Someone is getting back into your account</Text>
+                        </View>
+                        <Text style={styles.body}>
+                            Someone used {name} to get back into your BeanPool account on another device. It goes through {holdEndsText(hold.releaseAt)} unless you stop it.
+                        </Text>
+                        <Text style={styles.detail}>
+                            Started {new Date(hold.openedAt).toLocaleString()}
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.stopButton}
+                            onPress={() => handleStopHold(hold)}
+                            disabled={busy}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            // The visible text, so a speech-control user saying "tap Stop" hits it (WCAG 2.5.3).
+                            accessibilityLabel={busy ? 'Working' : 'Stop'}
+                            accessibilityHint={`Stops the restore with ${name}`}
+                            accessibilityState={{ disabled: busy, busy }}
+                        >
+                            {busy ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.stopButtonText}>🛑 Stop</Text>}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.itsMeButton}
+                            onPress={() => handleApproveHold(hold)}
+                            disabled={busy}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel="Yes, it's me"
+                            accessibilityHint="Lets your account through to your other device now"
+                            accessibilityState={{ disabled: busy }}
+                        >
+                            <Text style={styles.itsMeButtonText}>Yes, it's me</Text>
+                        </TouchableOpacity>
+                    </View>
+                );
+            })}
+
+            {sessions.length > 0 && (
+                <View style={styles.container} accessibilityLiveRegion="assertive">
+                    <View style={styles.header}>
+                        <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
+                        <Text style={styles.title} accessibilityRole="header">Someone is recovering your account</Text>
+                    </View>
+                    <Text style={styles.body}>
+                        A device is trying to restore access to your account.
+                        If this is not you, stop it immediately.
+                    </Text>
+                    <Text style={styles.detail}>
+                        {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                        {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.stopButton}
+                        onPress={handleStopIt}
+                        disabled={stopping}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        // Must be the VISIBLE text: this is the emergency control, and a speech-
+                        // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
+                        accessibilityLabel={stopping ? 'Stopping recovery' : 'Stop It Now'}
+                        accessibilityHint="Cancels active recovery sessions"
+                        accessibilityState={{ disabled: stopping, busy: stopping }}
+                    >
+                        {stopping ? (
+                            <ActivityIndicator size="small" color={palette.white} />
+                        ) : (
+                            <Text style={styles.stopButtonText}>🛑 Stop It Now</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 }
@@ -227,5 +356,21 @@ const styles = StyleSheet.create({
         color: palette.white,
         fontSize: 15,
         fontWeight: '700',
+    },
+    itsMeButton: {
+        marginTop: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: palette.red300,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+    },
+    itsMeButtonText: {
+        color: palette.red800,
+        fontSize: 15,
+        fontWeight: '600',
     },
 });

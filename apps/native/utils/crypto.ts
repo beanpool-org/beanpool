@@ -239,6 +239,25 @@ export async function buildSignedHeaders(
 }
 
 /**
+ * Signed-request headers for BeanPool's key vault (utils/vault.ts): always format 2, bound to the vault's own host, so
+ * a request signed for the vault is refused by every community and one signed for a community is refused by the vault
+ * (apps/vault/src/api/auth.ts). Never the old format: the vault has no old apps. Signs with the member's key, or with
+ * the throwaway key a sign-in restore makes. Throws, having signed nothing, for a URL whose authority isn't plain.
+ */
+export async function buildVaultSignedHeaders(
+    method: string,
+    url: string,
+    bodyString: string,
+    privateKeyHex: string,
+    publicKeyHex: string,
+): Promise<Record<string, string>> {
+    assertPlainNodeAddress(url);
+    const sign = memberSigner(privateKeyHex);
+    const signed = await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce() });
+    return { 'Content-Type': 'application/json', ...signed };
+}
+
+/**
  * WebSocket connect auth (SRV-4). Produces signed query params for the `/ws`
  * handshake, mirroring the HTTP replay-proof scheme (method=`WS`, path,
  * timestamp, nonce, empty body). `wsUrl` is the full `ws(s)://…/ws` URL the socket

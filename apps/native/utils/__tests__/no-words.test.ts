@@ -22,7 +22,9 @@ vi.mock('../../components/SsoButton', () => {
     };
 });
 
-import { KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY } from '../../components/KeeperProtectionPanel';
+import {
+    KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SSO_GROUP_NOTE, SSO_WAIT_NOTE,
+} from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
 import {
@@ -122,7 +124,9 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         const text = textOf(panel(COVERED, false));
         expect(text).toContain('Facebook Connected');
         expect(text).not.toMatch(/12 words|written down/i);
-        expect(text).toContain('It only works while your hub is running.');
+        // Was "It only works while your hub is running.": the copy is at BeanPool's key vault now (V4), not with a hub.
+        expect(text).toContain(SSO_GROUP_NOTE);
+        expect(text).not.toMatch(/hub/i);
     });
 
     // Was "reads exactly as before", pinning "It does not hand your 12 words back". A sign-in connected from a
@@ -132,12 +136,15 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         const text = textOf(panel(WORDS_ONLY, true));
         expect(text).toContain('🔑 Your 12 words are your primary recovery');
         expect(text).toContain('Your 12 words are your primary key to your account. Write them down safely.');
-        expect(text).toContain(`restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`);
+        // Was "…restores your account on a new phone. [note] It only works while your hub is running — so keep the words
+        // written down.": the hub sentence went with the copy moving to the key vault (V4); the words part stays.
+        expect(text).toContain(`${SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} Keep the words written down as well.`);
+        expect(SSO_GROUP_NOTE).toBe('Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.');
         expect(SSO_WORDS_NOTE).toBe('A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.');
         expect(text).not.toMatch(/does not hand your 12 words back/);
         expect(text).not.toContain(NO_WORDS_WAY_BACK);
 
-        expect(textOf(panel(COVERED, true))).toContain('so keep the words written down');
+        expect(textOf(panel(COVERED, true))).toContain('Keep the words written down as well.');
     });
 
     it('a connected sign-in can be connected again on a phone with words, to include them; never on one without', () => {
@@ -156,11 +163,14 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
     });
 });
 
-// Recovery seal S3 (Marty, card sso-copy-lock, D-2 = a): under a connected sign-in, who can open the copy it keeps.
+// Under a connected sign-in, who can open the copy it keeps. Recovery seal S3 said a community's operators could; the
+// key vault (V4) moves every copy there, and D6 (Marty, 2026-09-28) is the honest words for it, in the one-custodian
+// period until the reshare (D1).
 describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
-    it('the sentences, word for word: the operators can, a stolen database cannot, the words alone keep everyone else out', () => {
+    it('the sentences, word for word: BeanPool can (one person for now), the host can read memory, a court, the sign-in; the words alone keep everyone else out', () => {
         expect(SIGN_IN_COPY_OPENERS).toBe(
-            "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.");
+            "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
+        expect(SIGN_IN_COPY_OPENERS).not.toMatch(/community's server/);
         expect(SIGN_IN_COPY_WORDS_ONLY).toBe('If you would rather nobody but you could get in, use only your 12 words.');
     });
 
@@ -201,7 +211,10 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
     it('covered with one sign-in: the footnote no longer says the server cannot open it alone', () => {
         const text = textOf(panel(COVERED, true));
         expect(text).not.toMatch(/Neither of them can open/);
-        expect(text).toContain("Your sign-in account can't restore your account alone — it takes your community's server too.");
+        // Was "…it takes your community's server too.": the vault keeps the copy for every community now (V4), and
+        // every restore waits a day unless a device of the member's says it's them (D2).
+        expect(text).toContain(`Protected by your sign-in account, in every community. It brings your account back on a new phone: ${SSO_WAIT_NOTE}`);
+        expect(text).not.toMatch(/community's server/);
     });
 });
 

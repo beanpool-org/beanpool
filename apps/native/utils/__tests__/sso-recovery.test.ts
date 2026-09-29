@@ -1,456 +1,181 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-    splitHubAndWhole,
-    sealShareToSso,
-    sealSeedToSso,
-    recordShareForHub,
-} from '@beanpool/core';
+/**
+ * "Recover with Social" (utils/sso-recovery.ts), since V4: BeanPool's key vault finds the copy from the sign-in, so
+ * the member types no name and no community address, and the phone asks no community anything until the account is
+ * back. Every restore waits (D2) until the vault releases it; the account is then saved onto the community the member
+ * chooses, global by default.
+ *
+ * Before V4 this suite held the community restore: a callsign and an address typed first, a collection opened at that
+ * community, and the old two-layer copies (a hub fragment combined with the sign-in's half). Those tests went with
+ * that path: the vault keeps only single-blob copies (core vault-wire.ts `isVaultClientCopy`), so no phone combines a
+ * hub fragment any more; a member whose only copy is an old one at a community gets back in with the 12 words, or moves
+ * it with the move card while they still have their phone. What they held that still applies is held here: the address
+ * the account is saved onto must be plain before anything is written, and the copy opens only with the sub the
+ * sign-in's token names.
+ *
+ * Nothing here contacts a node, a vault or a provider: fake-vault.ts plays the vault with core's real tickets and
+ * releases, and the providers' sheets are stubbed.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { sealSeedToSso } from '@beanpool/core';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
+        getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
+        setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
+        removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
     },
 }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
-    getItemAsync: vi.fn(),
-    setItemAsync: vi.fn(),
-    deleteItemAsync: vi.fn(),
+    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
-
-const mockRandomBytes = new Uint8Array(32).fill(7);
-vi.mock('expo-crypto', () => ({
-    getRandomBytes: vi.fn((len: number) => new Uint8Array(len).fill(9)),
-}));
-
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
 vi.mock('../sso-signin', () => ({
-    signInWithGoogle: vi.fn(),
-    signInWithApple: vi.fn(),
-    signInWithFacebook: vi.fn(),
+    signInWithProvider: vi.fn(),
 }));
 
-vi.mock('../node-post', () => ({
-    signedPost: vi.fn(),
-}));
-
-import { signedPost } from '../node-post';
-import { signInWithGoogle, signInWithApple } from '../sso-signin';
-import { recoverAccountWithSso } from '../sso-recovery';
-import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import { signInWithProvider } from '../sso-signin';
+import { checkSsoRestore, finishSsoRestore, startSsoRestore } from '../sso-recovery';
+import { loadIdentity } from '../identity';
+import { seedToKeypair } from '../crypto';
+import { fakeJwt, HOLD_MS, installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
+
+let net: Network;
+const originalFetch = globalThis.fetch;
+
+/** The provider's sheet: a token for `sub`, carrying the nonce it was given (the vault ticket's hash). */
+function signsInAs(sub: string, extra: Record<string, unknown> = {}) {
+    vi.mocked(signInWithProvider).mockImplementation(async (provider, nonce) => ({
+        provider, idToken: fakeJwt({ sub, nonce, ...extra }), nonce,
+    }));
+}
+
+/** The copy is released: after the day's wait (D2). */
+async function afterTheWait() {
+    vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
+    try {
+        const collected = await checkSsoRestore();
+        if (collected?.status !== 'released') throw new Error(`expected a release, got ${JSON.stringify(collected)}`);
+        return collected.restored;
+    } finally {
+        vi.useRealTimers();
+    }
+}
 
 describe('SSO Recovery Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mem.async.clear();
+        mem.secure.clear();
+        useVault();
+        net = installNetwork();
+    });
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+        noVault();
+        vi.useRealTimers();
     });
 
-    it('rejects an empty callsign', async () => {
-        await expect(recoverAccountWithSso({
-            callsign: '',
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
-        })).rejects.toThrow(/callsign/i);
+    it('asks for no name and no community address: the sign-in finds the copy, and only the vault is asked', async () => {
+        const seed = new Uint8Array(32).fill(42);
+        const keypair = await seedToKeypair(seed);
+        net.vault.keep('google', '110169484474386276334', keypair.publicKeyHex, await sealSeedToSso(seed, 'google', '110169484474386276334'));
+        signsInAs('110169484474386276334');
+
+        // startSsoRestore takes the provider and nothing else: there is no field for a name or an address.
+        expect(startSsoRestore.length).toBe(1);
+        await startSsoRestore('google');
+
+        expect(net.sent.map((s) => `${s.origin}${s.path}`)).toEqual([`${VAULT}/v1/ticket`, `${VAULT}/v1/restore`]);
+        const restore = net.sent[1].body;
+        expect(Object.keys(restore).sort()).toEqual(['idToken', 'provider', 'ticket']);
+        expect(JSON.stringify(net.sent)).not.toMatch(/callsign|anchor/);
     });
 
-    it('rejects an empty or invalid node address', async () => {
-        await expect(recoverAccountWithSso({
-            callsign: 'Monnunit',
-            anchorUrl: '',
-            provider: 'google',
-        })).rejects.toThrow(/node address/i);
-    });
+    it('refuses a community address that isn\'t plain host[:port] before anything is written (#1224 review 4113495290)', async () => {
+        const seed = new Uint8Array(32).fill(42);
+        const keypair = await seedToKeypair(seed);
+        net.vault.keep('google', 's-1', keypair.publicKeyHex, await sealSeedToSso(seed, 'google', 's-1'));
+        signsInAs('s-1');
+        await startSsoRestore('google');
+        const restored = await afterTheWait();
 
-    it('refuses an address that isn\'t plain host[:port] before any sign-in (#1224 review 4113495290)', async () => {
         for (const anchorUrl of ['https://test.beanpool.org\\@evil.test', 'https://127.0.0.1\\@evil.test', 'https://kim@test.beanpool.org', 'https://test.beanpool.org:123456']) {
-            await expect(recoverAccountWithSso({
-                callsign: 'Monnunit',
-                anchorUrl,
-                provider: 'google',
-            }), anchorUrl).rejects.toThrow(/node address/i);
+            await expect(finishSsoRestore(restored, anchorUrl, { nameOnNode: async () => 'x' }), anchorUrl).rejects.toThrow();
         }
-        expect(signInWithGoogle).not.toHaveBeenCalled();
         expect(AsyncStorage.setItem).not.toHaveBeenCalledWith('beanpool_anchor_url', expect.anything());
+        expect(await loadIdentity()).toBeNull();
     });
 
-    it('completes the full Google recovery round-trip', async () => {
-        // 1. Original account setup
+    it('completes the single-blob Google recovery round-trip, onto the community chosen, with the name it holds', async () => {
         const originalSeed = new Uint8Array(32).fill(42);
         const originalKeypair = await seedToKeypair(originalSeed);
-        const memberCallsign = 'Monnunit';
         const googleSub = '110169484474386276334';
+        net.vault.keep('google', googleSub, originalKeypair.publicKeyHex, await sealSeedToSso(originalSeed, 'google', googleSub));
+        signsInAs(googleSub);
 
-        const { hubShare, otherHalf } = await splitHubAndWhole(originalSeed);
-        const ssoSealed = await sealShareToSso(otherHalf, 'google', googleSub);
-        const hubRecorded = recordShareForHub(hubShare);
+        const held = await startSsoRestore('google');
+        expect(held).toMatchObject({ provider: 'google', sub: googleSub, holdId: expect.any(String) });
+        // Held, not released: every restore waits (D2).
+        expect(await checkSsoRestore()).toMatchObject({ status: 'held' });
 
-        // Construct fake Google ID token with sub
-        const b64 = (s: string) => Buffer.from(s).toString('base64url');
-        const tokenHeader = b64(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-        const tokenPayload = b64(JSON.stringify({
-            iss: 'https://accounts.google.com',
-            sub: googleSub,
-            email: 'monnunit@gmail.com',
-        }));
-        const fakeIdToken = `${tokenHeader}.${tokenPayload}.fake_signature`;
+        const restored = await afterTheWait();
+        const nameOnNode = vi.fn(async () => 'test-google-pilot');
+        const identity = await finishSsoRestore(restored, 'https://global.beanpool.org', { nameOnNode });
 
-        // 2. Mock Google Sign-In
-        (signInWithGoogle as any).mockResolvedValue({
-            idToken: fakeIdToken,
-            nonce: 'node-issued-nonce-123',
-            email: 'monnunit@gmail.com',
-        });
-
-        // 3. Mock Node signedPost responses
-        (signedPost as any).mockImplementation(async (_url: string, path: string) => {
-            if (path === '/api/recovery/collect') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collectionId: 'coll_test_123', generation: 1, threshold: 2 }),
-                };
-            }
-            if (path === '/api/recovery/collect/sso-nonce') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ nonce: 'node-issued-nonce-123', expiresInSeconds: 600 }),
-                };
-            }
-            if (path === '/api/recovery/collect/sso') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collected: 1, threshold: 2, enough: false }),
-                };
-            }
-            if (path === '/api/recovery/collect/hub') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collected: 2, threshold: 2, enough: true, hubReason: 'sso-approved' }),
-                };
-            }
-            if (path === '/api/recovery/collect/fragments') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({
-                        collected: 2,
-                        threshold: 2,
-                        enough: true,
-                        fragments: [
-                            {
-                                holderType: 'sso',
-                                shareIndex: 2,
-                                payload: ssoSealed.encryptedShare,
-                                payloadIv: ssoSealed.shareIv,
-                                payloadTag: ssoSealed.shareTag,
-                                kdfParams: ssoSealed.kdfParams,
-                            },
-                            {
-                                holderType: 'hub',
-                                shareIndex: 1,
-                                payload: hubRecorded.encryptedShare,
-                                payloadIv: hubRecorded.shareIv,
-                                payloadTag: hubRecorded.shareTag,
-                                kdfParams: hubRecorded.kdfParams,
-                            },
-                        ],
-                    }),
-                };
-            }
-            throw new Error(`Unexpected path: ${path}`);
-        });
-
-        const progressSteps: string[] = [];
-        const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
-            onProgress: (p) => progressSteps.push(p.step),
-        });
-
-        expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
-        expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
-        expect(result.identity.callsign).toEqual(memberCallsign);
-
-        expect(AsyncStorage.setItem).toHaveBeenCalledWith('beanpool_anchor_url', 'https://test.beanpool.org');
-        expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-            'sovereign-identity',
-            expect.stringContaining(originalKeypair.publicKeyHex),
-            { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
-        );
-
-        expect(progressSteps).toEqual([
-            'opening',
-            'nonce',
-            'signing-in',
-            'releasing-sso',
-            'fetching-fragments',
-            'releasing-hub',
-            'reconstructing',
-            'done',
-        ]);
+        expect(identity.publicKey).toEqual(originalKeypair.publicKeyHex);
+        expect(identity.privateKey).toEqual(originalKeypair.privateKeyHex);
+        expect(identity.callsign).toBe('test-google-pilot');
+        expect(nameOnNode).toHaveBeenCalledWith(originalKeypair.publicKeyHex);
+        expect(mem.async.get('beanpool_anchor_url')).toBe('https://global.beanpool.org');
+        expect((await loadIdentity())?.publicKey).toBe(originalKeypair.publicKeyHex);
     });
 
-    it('completes the single-blob Google recovery round-trip without hub release', async () => {
+    it('recovers with Apple: the restore carries Apple\'s token and the ticket, and the copy opens with the sub the token names', async () => {
         const originalSeed = new Uint8Array(32).fill(42);
         const originalKeypair = await seedToKeypair(originalSeed);
-        const memberCallsign = 'Monnunit-single';
-        const googleSub = '110169484474386276334';
-
-        const ssoSealed = await sealSeedToSso(originalSeed, 'google', googleSub);
-
-        const b64 = (s: string) => Buffer.from(s).toString('base64url');
-        const tokenHeader = b64(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-        const tokenPayload = b64(JSON.stringify({
-            iss: 'https://accounts.google.com',
-            sub: googleSub,
-            email: 'monnunit@gmail.com',
-        }));
-        const fakeIdToken = `${tokenHeader}.${tokenPayload}.fake_signature`;
-
-        (signInWithGoogle as any).mockResolvedValue({
-            idToken: fakeIdToken,
-            nonce: 'node-issued-nonce-single',
-            email: 'monnunit@gmail.com',
-        });
-
-        (signedPost as any).mockImplementation(async (_url: string, path: string) => {
-            if (path === '/api/recovery/collect') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collectionId: 'coll_test_single', generation: 1, threshold: 1 }),
-                };
-            }
-            if (path === '/api/recovery/collect/sso-nonce') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ nonce: 'node-issued-nonce-single', expiresInSeconds: 600 }),
-                };
-            }
-            if (path === '/api/recovery/collect/sso') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collected: 1, threshold: 1, enough: true }),
-                };
-            }
-            if (path === '/api/recovery/collect/hub') {
-                throw new Error('Hub should not be called for single-blob SSO');
-            }
-            if (path === '/api/recovery/collect/fragments') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({
-                        collected: 1,
-                        threshold: 1,
-                        enough: true,
-                        fragments: [
-                            {
-                                holderType: 'sso',
-                                shareIndex: 1,
-                                payload: ssoSealed.encryptedShare,
-                                payloadIv: ssoSealed.shareIv,
-                                payloadTag: ssoSealed.shareTag,
-                                kdfParams: ssoSealed.kdfParams,
-                            },
-                        ],
-                    }),
-                };
-            }
-            throw new Error(`Unexpected path: ${path}`);
-        });
-
-        const progressSteps: string[] = [];
-        const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
-            onProgress: (p) => progressSteps.push(p.step),
-        });
-
-        expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
-        expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
-        expect(result.identity.callsign).toEqual(memberCallsign);
-        expect(progressSteps).toEqual([
-            'opening',
-            'nonce',
-            'signing-in',
-            'releasing-sso',
-            'fetching-fragments',
-            'reconstructing',
-            'done',
-        ]);
-    });
-
-    it('recovers with Apple: the release carries Apple\'s token and the nonce, and the piece opens with the sub the token names', async () => {
-        const originalSeed = new Uint8Array(32).fill(42);
-        const originalKeypair = await seedToKeypair(originalSeed);
-        const memberCallsign = 'test-apple-pilot';
-
-        const { hubShare, otherHalf } = await splitHubAndWhole(originalSeed);
         const appleSub = '001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123';
-        const ssoSealed = await sealShareToSso(otherHalf, 'apple', appleSub);
-        const hubRecorded = recordShareForHub(hubShare);
+        net.vault.keep('apple', appleSub, originalKeypair.publicKeyHex, await sealSeedToSso(originalSeed, 'apple', appleSub));
+        signsInAs(appleSub, { iss: 'https://appleid.apple.com' });
 
-        const b64 = (s: string) => Buffer.from(s).toString('base64url');
-        const appleToken = `${b64(JSON.stringify({ alg: 'RS256', kid: 'apple-kid' }))}.${b64(JSON.stringify({
-            iss: 'https://appleid.apple.com', sub: appleSub, nonce: 'apple-eph-nonce-456',
-        }))}.fake_signature`;
-        (signInWithApple as any).mockResolvedValue({ idToken: appleToken, nonce: 'apple-eph-nonce-456' });
+        await startSsoRestore('apple');
+        const restore = net.sent.find((s) => s.path === '/v1/restore')!.body;
+        const ticket = net.sent.find((s) => s.path === '/v1/ticket')!;
+        expect(ticket.body).toEqual({ purpose: 'restore', provider: 'apple' });
+        expect(vi.mocked(signInWithProvider).mock.calls[0][0]).toBe('apple');
+        expect(restore).toMatchObject({ provider: 'apple', idToken: expect.any(String), ticket: expect.any(String) });
 
-        let released: any;
-        (signedPost as any).mockImplementation(async (_url: string, path: string, body: any) => {
-            if (path === '/api/recovery/collect') {
-                return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-apple-1' }) };
-            }
-            if (path === '/api/recovery/collect/sso-nonce') {
-                return { ok: true, status: 200, json: async () => ({ nonce: 'apple-eph-nonce-456' }) };
-            }
-            if (path === '/api/recovery/collect/sso') {
-                released = body;
-                return { ok: true, status: 200, json: async () => ({ status: 'sso_verified' }) };
-            }
-            if (path === '/api/recovery/collect/hub') {
-                return { ok: true, status: 200, json: async () => ({ status: 'hub_released' }) };
-            }
-            if (path === '/api/recovery/collect/fragments') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({
-                        collected: 2,
-                        threshold: 2,
-                        enough: true,
-                        fragments: [
-                            {
-                                holderType: 'sso',
-                                shareIndex: 2,
-                                payload: ssoSealed.encryptedShare,
-                                payloadIv: ssoSealed.shareIv,
-                                payloadTag: ssoSealed.shareTag,
-                                kdfParams: ssoSealed.kdfParams,
-                            },
-                            {
-                                holderType: 'hub',
-                                shareIndex: 1,
-                                payload: hubRecorded.encryptedShare,
-                                payloadIv: hubRecorded.shareIv,
-                                payloadTag: hubRecorded.shareTag,
-                                kdfParams: hubRecorded.kdfParams,
-                            },
-                        ],
-                    }),
-                };
-            }
-            throw new Error(`Unexpected path: ${path}`);
-        });
-
-        const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'apple',
-        });
-
-        expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
-        expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
-        expect(result.identity.callsign).toEqual(memberCallsign);
-        expect(result.provider).toBe('apple');
-        // Apple's sheet was handed the node's nonce, bound to this recovering device's ephemeral key.
-        expect(signInWithApple).toHaveBeenCalledWith('apple-eph-nonce-456');
-        expect(signInWithGoogle).not.toHaveBeenCalled();
-        // The release proves the sign-in with the provider's token and the nonce inside it, and nothing else.
-        expect(released).toEqual({
-            collectionId: 'coll-apple-1', provider: 'apple', idToken: appleToken, nonce: 'apple-eph-nonce-456',
-        });
+        const restored = await afterTheWait();
+        expect(restored).toMatchObject({ provider: 'apple', publicKey: originalKeypair.publicKeyHex, privateKey: originalKeypair.privateKeyHex });
     });
 
-    it('survives a malformed checksum (not 4 bytes) in kdfParams during legacy recovery', async () => {
-        const originalSeed = new Uint8Array(32).fill(77);
-        const originalKeypair = await seedToKeypair(originalSeed);
-        const memberCallsign = 'MalformedCheck';
-        const googleSub = '110169484474386276334';
+    it('the copy opens only with the sub the sign-in named: another account\'s copy for this key opens to nothing, and nothing is saved', async () => {
+        const seed = new Uint8Array(32).fill(42);
+        const keypair = await seedToKeypair(seed);
+        // The vault's row for this sign-in holds a copy sealed to some other subject.
+        net.vault.keep('google', 'the-signed-in-sub', keypair.publicKeyHex, await sealSeedToSso(seed, 'google', 'someone-else'));
+        signsInAs('the-signed-in-sub');
 
-        const { hubShare, otherHalf } = await splitHubAndWhole(originalSeed);
-        const ssoSealed = await sealShareToSso(otherHalf, 'google', googleSub);
-        const hubRecorded = recordShareForHub(hubShare);
+        await startSsoRestore('google');
+        vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
+        await expect(checkSsoRestore()).rejects.toMatchObject({ reason: 'wrong_account' });
+        expect(await loadIdentity()).toBeNull();
+    });
 
-        // Inject malformed checksum (8 bytes base64 encoded)
-        const parsedKdf = JSON.parse(ssoSealed.kdfParams);
-        parsedKdf.checksum = Buffer.from('12345678').toString('base64');
-        const ssoKdfWithMalformedChecksum = JSON.stringify(parsedKdf);
-
-        const b64 = (s: string) => Buffer.from(s).toString('base64url');
-        const tokenHeader = b64(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-        const tokenPayload = b64(JSON.stringify({
-            iss: 'https://accounts.google.com',
-            sub: googleSub,
-            email: 'malformed@gmail.com',
-        }));
-        const fakeIdToken = `${tokenHeader}.${tokenPayload}.fake_sig`;
-
-        (signInWithGoogle as any).mockResolvedValue({
-            idToken: fakeIdToken,
-            nonce: 'nonce-malformed',
-            email: 'malformed@gmail.com',
-        });
-
-        (signedPost as any).mockImplementation(async (_url: string, path: string) => {
-            if (path === '/api/recovery/collect') {
-                return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-malformed' }) };
-            }
-            if (path === '/api/recovery/collect/sso-nonce') {
-                return { ok: true, status: 200, json: async () => ({ nonce: 'nonce-malformed' }) };
-            }
-            if (path === '/api/recovery/collect/sso') {
-                return { ok: true, status: 200, json: async () => ({ enough: false, collected: 1 }) };
-            }
-            if (path === '/api/recovery/collect/hub') {
-                return { ok: true, status: 200, json: async () => ({ enough: true, collected: 2 }) };
-            }
-            if (path === '/api/recovery/collect/fragments') {
-                return {
-                    ok: true, status: 200,
-                    json: async () => ({
-                        fragments: [
-                            {
-                                holderType: 'sso',
-                                shareIndex: 2,
-                                payload: ssoSealed.encryptedShare,
-                                payloadIv: ssoSealed.shareIv,
-                                payloadTag: ssoSealed.shareTag,
-                                kdfParams: ssoKdfWithMalformedChecksum,
-                            },
-                            {
-                                holderType: 'hub',
-                                shareIndex: 1,
-                                payload: hubRecorded.encryptedShare,
-                                payloadIv: hubRecorded.shareIv,
-                                payloadTag: hubRecorded.shareTag,
-                                kdfParams: hubRecorded.kdfParams,
-                            },
-                        ],
-                    }),
-                };
-            }
-            throw new Error(`Unexpected path: ${path}`);
-        });
-
-        const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
-        });
-
-        expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
-        expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
+    it('no phone combines a hub fragment any more: the vault keeps only single-blob copies', () => {
+        for (const rel of ['../sso-recovery.ts', '../vault.ts']) {
+            const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
+            expect(src, rel).not.toMatch(/combineHubAndWhole|readHubShare|\/api\/recovery\/collect/);
+        }
     });
 });

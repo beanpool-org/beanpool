@@ -1,334 +1,75 @@
 /**
- * SSO Account Recovery Service (Apple, Google & Facebook).
+ * Getting an account back with a sign-in ("Recover with Social"), through BeanPool's key vault (utils/vault.ts; key
+ * vault design §1.3, V4). No name and no community address: the sign-in itself finds the copy, and no community is
+ * asked for anything until the account is back.
  *
- * Implements §6 Step 5b recovery round-trip:
- * 1. Generates a temporary ephemeral Ed25519 keypair for the recovering device.
- * 2. Opens a collection session for the callsign via POST /api/recovery/collect.
- * 3. Requests an SSO nonce bound to the ephemeral key via POST /api/recovery/collect/sso-nonce.
- * 4. Signs in with Apple/Google/Facebook to obtain the id_token.
- * 5. Releases the SSO fragment via POST /api/recovery/collect/sso, with the id_token and nonce.
- * 6. Releases the Hub fragment via POST /api/recovery/collect/hub (instant under SSO tier, D7 bypassed).
- * 7. Fetches the released fragments via POST /api/recovery/collect/fragments.
- * 8. Decrypts the SSO share (B) via openShareFromSso(sealed, provider, sub).
- * 9. Reads the Hub share (A) via readHubShare(hub).
- * 10. Reconstructs seed = combineHubAndWhole(A, B) and derives the Ed25519 keypair.
- * 11. Validates and saves the restored identity and node anchor URL.
+ * 1. {@link startSsoRestore}: a throwaway key, a restore ticket for it (checked against the vault's pinned keys before
+ *    any sheet opens), the provider's sheet with the ticket's nonce, then `/v1/restore`. Every restore is held (D2):
+ *    24 hours, or less once a phone or computer that has the account taps "Yes, it's me". That device is told at once
+ *    and can Stop it.
+ * 2. {@link checkSsoRestore}: asks the vault, while the member waits and whenever the app comes back. Released: the
+ *    copy opens with the throwaway key and the sign-in's subject, and counts only if its seed makes the key the
+ *    vault's release names. The 12 words come back when the copy carried them and they make that key.
+ * 3. {@link finishSsoRestore}: the member chooses the community to go to, global by default (as a 12-words restore
+ *    asks for one), and the account is saved through "Replace this phone's account?" when the phone holds another.
  *
- * A single-blob fragment (the only kind the app deposits now) skips 9 and 10: it holds the whole seed, and
- * the 12 words too when the sign-in was connected from a phone that had them. The words are saved only if
- * they make the restored key; a copy without them restores the key alone, as it always did.
+ * The waiting restore lives on this phone (SecureStore, this device only) until the account is saved, so a restart, a
+ * lost answer or a failed save comes back to the same hold.
  */
 
-import * as Crypto from 'expo-crypto';
-import {
-    openShareFromSso,
-    openSeedFromSso,
-    readHubShare,
-    combineHubAndWhole,
-    isSingleBlobSso,
-    recoveryWordsMatchPublicKey,
-} from '@beanpool/core';
-import { signedPost } from './node-post';
-import { seedToKeypair, decodeBase64 } from './crypto';
+import { signInWithProvider } from './sso-signin';
+import type { SsoProvider } from './sso-providers';
 import type { BeanPoolIdentity } from './identity';
-import { clearToRestore, saveRestoredAccount, type ConfirmReplace } from './restore-account';
-import { signInWithGoogle, signInWithApple, signInWithFacebook, SsoSignInError } from './sso-signin';
-import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
-import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
+import { restoreFromVault, type ConfirmReplace } from './restore-account';
+import {
+    clearPendingVaultRestore,
+    collectVaultRestore,
+    loadPendingVaultRestore,
+    startVaultRestore,
+    type PendingVaultRestore,
+    type RestoredFromVault,
+    type VaultCollect,
+} from './vault';
 
-export interface SsoRecoveryProgress {
-    step: 'opening' | 'nonce' | 'signing-in' | 'releasing-sso' | 'releasing-hub' | 'fetching-fragments' | 'reconstructing' | 'done';
-    message: string;
+export type { PendingVaultRestore, RestoredFromVault, VaultCollect } from './vault';
+
+/**
+ * Sign in with `provider` and ask the vault for this account's copy. Resolves with the hold: when it goes through.
+ * `onSignedIn` runs once the provider is done (the screen brings the app back to the front there). `signal`, aborted
+ * before the restore is sent, sends nothing.
+ */
+export async function startSsoRestore(
+    provider: SsoProvider,
+    options: { signal?: AbortSignal; onSignedIn?: () => void | Promise<void> } = {},
+): Promise<PendingVaultRestore> {
+    return startVaultRestore(provider, (p, nonce) => signInWithProvider(p, nonce), options);
 }
 
-export interface SsoRecoveryResult {
-    identity: BeanPoolIdentity;
-    provider: SsoProvider;
+/** The restore this phone is waiting on, or null. Nothing is asked of the vault. */
+export async function waitingSsoRestore(): Promise<PendingVaultRestore | null> {
+    return loadPendingVaultRestore();
 }
 
-function parseJwtSub(idToken: string): string {
-    const parts = idToken?.split('.');
-    if (!parts || parts.length < 2) {
-        throw new Error('Could not determine user identifier for this sign-in.');
-    }
-    try {
-        let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        while (base64.length % 4 !== 0) {
-            base64 += '=';
-        }
-        const bytes = decodeBase64(base64);
-        const decoded = new TextDecoder().decode(bytes);
-        const parsed = JSON.parse(decoded);
-        if (parsed.sub && typeof parsed.sub === 'string') {
-            return parsed.sub;
-        }
-    } catch {}
-    throw new Error('Sign-in token does not contain a valid subject claim (sub).');
+/** Ask the vault for the restore this phone is waiting on. Null when there is none waiting. */
+export async function checkSsoRestore(): Promise<VaultCollect | null> {
+    const pending = await loadPendingVaultRestore();
+    if (!pending?.holdId) return null;
+    return collectVaultRestore(pending);
 }
 
-export async function recoverAccountWithSso(options: {
-    callsign: string;
-    anchorUrl: string;
-    provider: SsoProvider;
-    onProgress?: (progress: SsoRecoveryProgress) => void;
-    /**
-     * Stops a restore whose sign-in has finished and not yet been released (welcome.tsx aborts it when the screen goes
-     * away). Not after the release: see below. The providers' own sheets have their own cancel.
-     */
-    signal?: AbortSignal;
-    /**
-     * Asked before this restore writes another account over the one the phone holds ("Replace this phone's
-     * account?", restore-account.ts). Called after the account has been rebuilt and before anything is written: the
-     * community's address, the key and the onboarding record all stay as they are unless it says yes. Without it, a
-     * phone holding another account refuses the restore. Never asked when the phone has no account, or this one.
-     */
-    confirmReplace?: ConfirmReplace;
-}): Promise<SsoRecoveryResult> {
-    const rawCallsign = options.callsign.trim();
-    if (!rawCallsign) {
-        throw new Error('Enter your callsign to recover your account.');
-    }
+/** Stop waiting on this phone: the member chose to start again, or to use their 12 words instead. */
+export async function abandonSsoRestore(): Promise<void> {
+    await clearPendingVaultRestore();
+}
 
-    const rawAnchor = options.anchorUrl.trim();
-    if (!rawAnchor) {
-        throw new Error('Enter your community node address.');
-    }
-
-    const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
-    if (!looksLikeNodeAddress(finalAnchorUrl)) {
-        throw new Error("That node address doesn't look right. Use something like node.yourcommunity.org");
-    }
-    if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
-        throw new Error('That node address is insecure (http on a public host). Use https:// instead.');
-    }
-
-    // 1. Generate throwaway ephemeral keypair to bind this recovery session
-    const ephSeed = Crypto.getRandomBytes(32);
-    const ephKey = await seedToKeypair(ephSeed);
-    const ephIdentity: BeanPoolIdentity = {
-        publicKey: ephKey.publicKeyHex,
-        privateKey: ephKey.privateKeyHex,
-        callsign: 'ephemeral-recovery',
-        createdAt: new Date().toISOString(),
-    };
-
-    // 2. Open recovery collection
-    options.onProgress?.({ step: 'opening', message: 'Connecting to node recovery session...' });
-    const openRes = await signedPost(finalAnchorUrl, '/api/recovery/collect', {
-        callsign: rawCallsign,
-    }, ephIdentity);
-
-    if (!openRes.ok) {
-        const err = await openRes.json().catch(() => ({}));
-        throw new Error(err.error || `Could not open recovery session (${openRes.status})`);
-    }
-    const openBody = await openRes.json();
-    const collectionId = openBody.collectionId;
-    if (!collectionId) {
-        throw new Error('Node did not return a valid recovery session ID.');
-    }
-
-    // 3. Request SSO Nonce bound to ephemeral key
-    options.onProgress?.({ step: 'nonce', message: 'Requesting secure sign-in challenge...' });
-    const nonceRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso-nonce', {
-        collectionId,
-    }, ephIdentity);
-    if (!nonceRes.ok) {
-        const err = await nonceRes.json().catch(() => ({}));
-        throw new Error(err.error || `Could not obtain sign-in challenge (${nonceRes.status})`);
-    }
-    const nonceBody = await nonceRes.json();
-    if (!nonceBody?.nonce) {
-        throw new Error('Node returned an empty sign-in nonce.');
-    }
-    const nonce = nonceBody.nonce as string;
-
-    // 4. Sign in with Provider (Apple / Google / Facebook)
-    options.onProgress?.({
-        step: 'signing-in',
-        message: `Signing in with ${SSO_PROVIDER_NAMES[options.provider]}...`,
-    });
-
-    let signInResult: { idToken: string; nonce: string; email?: string };
-    if (options.provider === 'google') {
-        signInResult = await signInWithGoogle(nonce);
-    } else if (options.provider === 'apple') {
-        signInResult = await signInWithApple(nonce);
-    } else {
-        signInResult = await signInWithFacebook(nonce);
-    }
-    const sub = parseJwtSub(signInResult.idToken);
-
-    // The last point a cancel can be honoured: nothing has been released yet, so nothing is. The release cannot be
-    // taken back: the node lets the piece go and tells the owner it did.
-    if (options.signal?.aborted) {
-        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    }
-
-    // 5. Submit SSO verification to Node: the provider's token and the nonce inside it.
-    options.onProgress?.({ step: 'releasing-sso', message: 'Verifying sign-in with node...' });
-    const ssoRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso', {
-        collectionId,
-        provider: options.provider,
-        idToken: signInResult.idToken,
-        nonce: signInResult.nonce,
-    }, ephIdentity);
-
-    if (!ssoRes.ok) {
-        const err = await ssoRes.json().catch(() => ({}));
-        throw new Error(err.error || `Sign-in verification failed (${ssoRes.status})`);
-    }
-
-    // 6. Retrieve Released Fragments
-    options.onProgress?.({ step: 'fetching-fragments', message: 'Downloading recovery fragments...' });
-    let fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
-        collectionId,
-    }, ephIdentity);
-
-    if (!fragsRes.ok) {
-        const err = await fragsRes.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
-    }
-
-    let fragsBody = await fragsRes.json();
-    let fragments: any[] = fragsBody.fragments || [];
-    const ssoFrag = fragments.find(f => f.holderType === 'sso');
-
-    if (!ssoFrag) {
-        throw new Error('Sign-in recovery piece was not returned by the node.');
-    }
-    if (!ssoFrag.kdfParams) {
-        throw new Error('Sign-in piece is missing derivation parameters (kdfParams).');
-    }
-
-    let restoredSeed: Uint8Array;
-    /** The 12 words, when the copy carried them (a sign-in connected from a phone that had them). */
-    let restoredWords: string[] | null = null;
-
-    if (isSingleBlobSso(ssoFrag.kdfParams)) {
-        // New-format single-blob SSO: entire seed is sealed in this one fragment, and the 12 words with
-        // it when the phone that connected the sign-in had them.
-        options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
-        const opened = await openSeedFromSso(
-            {
-                encryptedShare: ssoFrag.payload,
-                shareIv: ssoFrag.payloadIv,
-                shareTag: ssoFrag.payloadTag,
-                kdfParams: ssoFrag.kdfParams,
-            },
-            options.provider,
-            sub,
-        );
-        restoredSeed = opened.seed;
-        if (restoredSeed.length !== 32) {
-            throw new Error('Decrypted recovery seed has invalid length.');
-        }
-        restoredWords = opened.words;
-        // Why a copy gave no words, never the words themselves. 'absent' is every copy made before copies
-        // carried them, and every copy from a phone without them: the ordinary case, and not a problem.
-        if (opened.wordsStatus === 'unreadable' || opened.wordsStatus === 'mismatch') {
-            console.log(`[SSO-RECOVERY] ${options.provider}: the copy's 12 words ${opened.wordsStatus === 'mismatch'
-                ? 'make a different key' : 'did not open'}; restoring the key alone`);
-        }
-    } else {
-        // Old-format two-layer split (seed = A ⊕ B): request hub fragment (A), then combine with B.
-        options.onProgress?.({ step: 'releasing-hub', message: 'Collecting node fragment...' });
-        const hubRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/hub', {
-            collectionId,
-        }, ephIdentity);
-
-        if (!hubRes.ok) {
-            const err = await hubRes.json().catch(() => ({}));
-            throw new Error(err.error || `Hub release failed (${hubRes.status})`);
-        }
-
-        fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
-            collectionId,
-        }, ephIdentity);
-
-        if (!fragsRes.ok) {
-            const err = await fragsRes.json().catch(() => ({}));
-            throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
-        }
-
-        fragsBody = await fragsRes.json();
-        fragments = fragsBody.fragments || [];
-        const hubFrag = fragments.find(f => f.holderType === 'hub');
-        if (!hubFrag) {
-            throw new Error('Hub recovery piece was not returned by the node.');
-        }
-
-        options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
-        const otherHalf = await openShareFromSso(
-            {
-                encryptedShare: ssoFrag.payload,
-                shareIv: ssoFrag.payloadIv,
-                shareTag: ssoFrag.payloadTag,
-                kdfParams: ssoFrag.kdfParams,
-            },
-            options.provider,
-            sub,
-        );
-
-        const hubShare = readHubShare({
-            encryptedShare: hubFrag.payload,
-            shareIv: hubFrag.payloadIv,
-            shareTag: hubFrag.payloadTag,
-            kdfParams: hubFrag.kdfParams,
-        });
-
-        let checksum: Uint8Array | undefined;
-        try {
-            const parsed = JSON.parse(ssoFrag.kdfParams);
-            if (parsed.checksum && typeof parsed.checksum === 'string') {
-                const decoded = decodeBase64(parsed.checksum);
-                if (decoded.length === 4) {
-                    checksum = decoded;
-                }
-            }
-        } catch {}
-
-        try {
-            restoredSeed = combineHubAndWhole(hubShare, otherHalf, checksum);
-        } catch (e) {
-            throw new Error(
-                (e as Error).message || 'Failed to combine recovery fragments.',
-            );
-        }
-    }
-
-    const restoredKeypair = await seedToKeypair(restoredSeed);
-
-    // The words are kept only if they make the key being saved, compared by public key. openSeedFromSso
-    // already checked them against the seed; this checks them against the identity actually written.
-    let mnemonic: string[] | undefined;
-    if (restoredWords) {
-        if (recoveryWordsMatchPublicKey(restoredWords, restoredKeypair.publicKeyHex)) {
-            mnemonic = restoredWords;
-        } else {
-            console.log(`[SSO-RECOVERY] ${options.provider}: the copy's 12 words do not make the restored key; restoring the key alone`);
-        }
-    }
-
-    const restoredIdentity: BeanPoolIdentity = {
-        publicKey: restoredKeypair.publicKeyHex,
-        privateKey: restoredKeypair.privateKeyHex,
-        callsign: rawCallsign,
-        createdAt: new Date().toISOString(),
-        ...(mnemonic ? { mnemonic } : {}),
-    };
-
-    // 9. Never over another account without the member's yes: until then nothing on the phone changes.
-    const cleared = await clearToRestore(restoredIdentity, options.confirmReplace);
-
-    // 10. Save the anchor URL and the identity, and end any half-finished join wizard. Replacing another account, its
-    // app storage goes first (restore-account.ts `saveRestoredAccount`). Nothing after the gate reads the old anchor:
-    // every node call above went to `finalAnchorUrl`.
-    await saveRestoredAccount(cleared, finalAnchorUrl);
-
-    options.onProgress?.({ step: 'done', message: 'Account restored successfully!' });
-    return {
-        identity: cleared.identity,
-        provider: options.provider,
-    };
+/**
+ * Save the account the vault released onto `anchorUrl`, the community the member chose. Never over another account
+ * without the member's yes (`confirmReplace`); the name comes from that community (`nameOnNode`).
+ */
+export async function finishSsoRestore(
+    restored: RestoredFromVault,
+    anchorUrl: string,
+    options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
+): Promise<BeanPoolIdentity> {
+    return restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
 }

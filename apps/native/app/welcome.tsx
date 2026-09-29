@@ -43,8 +43,11 @@ import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso } from '../utils/sso-recovery';
-import { MemberAvatar } from '../components/MemberAvatar';
+import {
+    abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, waitingSsoRestore,
+    type PendingVaultRestore, type RestoredFromVault,
+} from '../utils/sso-recovery';
+import { holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -74,19 +77,6 @@ function inviteProblemMessage(reason?: string): string {
         default:
             return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
     }
-}
-
-/**
- * "March 2026" from whatever the node stored, or '' if it is unusable.
- *
- * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
- * date is more than a public lookup needs to hand out about somebody.
- */
-function joinedLabel(joinedAt: string | null | undefined): string {
-    if (!joinedAt) return '';
-    const d = new Date(joinedAt);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 export default function WelcomeScreen() {
@@ -130,53 +120,73 @@ export default function WelcomeScreen() {
         getSavedNodes().then(setSavedNodes).catch(() => {});
     }, [mode]);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
-    const [ssoCallsign, setSsoCallsign] = useState('');
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
-    /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
-    const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
-    const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
-    /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
-    const skipNextSsoLookupRef = useRef(false);
-
-    // Look up as they type, on the prefix. A member given `paul12` because `paul` was taken has no
-    // reason to remember the digits months later, and being told "no account" reads as "it is gone".
-    // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
-    useEffect(() => {
-        // Tapping a candidate writes the full callsign here, which matches itself on the server and
-        // would put the list straight back up under the member's finger.
-        if (skipNextSsoLookupRef.current) {
-            skipNextSsoLookupRef.current = false;
-            return;
-        }
-        const typed = ssoCallsign.trim();
-        const anchor = normalizeNodeUrl(recoveryAnchorUrl.trim());
-        if (typed.length < 2 || !looksLikeNodeAddress(anchor)) {
-            setSsoCandidates([]);
-            return;
-        }
-        let cancelled = false;
-        const t = setTimeout(async () => {
-            setSsoLookupBusy(true);
-            try {
-                const res = await fetch(`${anchor}/api/recovery/lookup/${encodeURIComponent(typed)}`);
-                if (!res.ok) throw new Error(String(res.status));
-                const all = await res.json();
-                if (!cancelled) {
-                    setSsoCandidates(Array.isArray(all) ? all.filter((c: any) => c.canRecoverBySso) : []);
-                }
-            } catch {
-                // Offline or an old node without the field: fall back to whatever they typed, which
-                // is exactly the behaviour before this existed.
-                if (!cancelled) setSsoCandidates([]);
-            } finally {
-                if (!cancelled) setSsoLookupBusy(false);
-            }
-        }, 400);
-        return () => { cancelled = true; clearTimeout(t); };
-    }, [ssoCallsign, recoveryAnchorUrl]);
-    /** Stops a sign-in restore whose sign-in has finished and not yet been released, when this screen goes away. */
+    /**
+     * A sign-in restore waiting at BeanPool's key vault (utils/sso-recovery.ts), or null. No name and no address: the
+     * sign-in finds the copy. Every restore waits (D2) until the vault releases it.
+     */
+    const [ssoWaiting, setSsoWaiting] = useState<PendingVaultRestore | null>(null);
+    /** The account the vault released, checked and not yet saved: the member chooses its community next. */
+    const [ssoReleased, setSsoReleased] = useState<RestoredFromVault | null>(null);
+    /** Where a released account goes: the global community unless the member chooses another (design §1.3). */
+    const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL);
+    const [ssoChecking, setSsoChecking] = useState(false);
+    /** Stops a sign-in restore whose sign-in has finished and not yet been sent, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
     useEffect(() => () => recoveryAbortRef.current?.abort(), []);
+
+    // A restore that is waiting at the vault is picked up where it was left, even after a restart: the phone keeps it
+    // until the account is saved. Read from the phone only; nothing waits on the vault here.
+    useEffect(() => {
+        let cancelled = false;
+        waitingSsoRestore().then((waiting) => {
+            if (cancelled || !waiting) return;
+            setSsoWaiting(waiting);
+            if (waiting.holdId) setMode(m => (m === 'home' ? 'ssoRecover' : m));
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+    /** Ask the vault whether the waiting restore has gone through. `quiet`: a background check, which shows no error. */
+    const checkSsoWaiting = useCallback(async (quiet: boolean) => {
+        setSsoChecking(true);
+        if (!quiet) setError(null);
+        try {
+            const result = await checkSsoRestore();
+            if (!result) {
+                setSsoWaiting(null);
+            } else if (result.status === 'held') {
+                setSsoWaiting(w => (w ? { ...w, until: result.until } : w));
+            } else if (result.status === 'stopped') {
+                setSsoWaiting(null);
+                setError(VAULT_MESSAGES.stopped);
+            } else {
+                setSsoReleased(result.restored);
+                setError(null);
+            }
+        } catch (e) {
+            if (e instanceof VaultError && e.message === VAULT_MESSAGES.gone) setSsoWaiting(null);
+            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError((e as Error).message);
+        } finally {
+            setSsoChecking(false);
+        }
+    }, []);
+
+    // While a restore waits on this screen: asked now, every minute, and whenever the app comes back.
+    useEffect(() => {
+        if (mode !== 'ssoRecover' || !ssoWaiting?.holdId || ssoReleased) return;
+        checkSsoWaiting(true);
+        const timer = setInterval(() => {
+            if (AppState.currentState === 'active') checkSsoWaiting(true);
+        }, 60_000);
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') checkSsoWaiting(true);
+        });
+        return () => {
+            clearInterval(timer);
+            sub.remove();
+        };
+    }, [mode, ssoWaiting?.holdId, ssoReleased, checkSsoWaiting]);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -1005,18 +1015,55 @@ export default function WelcomeScreen() {
         setOutgoingSeedCopied(false);
     }
 
+    /**
+     * "Recover with …": sign in, and the key vault finds the copy from the sign-in (utils/sso-recovery.ts). No name and
+     * no address. What comes back is a hold: the account returns when it ends, or sooner once a device that has it says
+     * "Yes, it's me".
+     */
     async function handleSsoRecover(provider: SsoProvider) {
-        const trimmedCallsign = ssoCallsign.trim();
-        if (!trimmedCallsign) {
-            setError('Please enter your callsign.');
+        setLoading(true);
+        setError(null);
+        setSsoProgressMessage(`Signing in with ${SSO_PROVIDER_NAMES[provider]}...`);
+        recoveryAbortRef.current?.abort();
+        const abort = new AbortController();
+        recoveryAbortRef.current = abort;
+        try {
+            const held = await startSsoRestore(provider, {
+                signal: abort.signal,
+                onSignedIn: async () => {
+                    setSsoProgressMessage("Asking BeanPool's key vault...");
+                    // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
+                    await returnToApp();
+                },
+            });
+            setSsoWaiting(held);
+        } catch (e: any) {
+            if (e?.reason === 'cancelled' || e?.message === 'Sign-in was cancelled.') {
+                setError(null);
+            } else {
+                setError(e?.message || `Recovery failed: ${String(e)}`);
+            }
+            // A restore whose answer was lost stays on the phone, and the next try comes back to the same hold.
+            setSsoWaiting(await waitingSsoRestore().catch(() => null));
+        } finally {
+            if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
+            setLoading(false);
+            setSsoProgressMessage(null);
+        }
+    }
+
+    /**
+     * The vault released the account: save it onto the community the member chose (global unless they typed another),
+     * through "Replace this phone's account?" when the phone holds a different one. The name comes from that community.
+     */
+    async function handleSsoFinish() {
+        if (!ssoReleased) return;
+        const raw = ssoCommunity.trim();
+        if (!raw) {
+            setError('Enter a community to open your account in. The global community works for everyone.');
             return;
         }
-        const rawAnchor = recoveryAnchorUrl.trim();
-        if (!rawAnchor) {
-            setError('Please enter your community node address.');
-            return;
-        }
-        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+        const finalAnchorUrl = normalizeNodeUrl(raw);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
             setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
@@ -1025,46 +1072,42 @@ export default function WelcomeScreen() {
             setError('That node address is insecure (http on a public host). Use https:// instead.');
             return;
         }
-
         setLoading(true);
         setError(null);
-        setSsoProgressMessage('Connecting to recovery session...');
-        recoveryAbortRef.current?.abort();
-        const abort = new AbortController();
-        recoveryAbortRef.current = abort;
         try {
-            const result = await recoverAccountWithSso({
-                callsign: trimmedCallsign,
-                anchorUrl: finalAnchorUrl,
-                provider,
-                onProgress: (p) => setSsoProgressMessage(p.message),
-                signal: abort.signal,
+            const identity = await finishSsoRestore(ssoReleased, finalAnchorUrl, {
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
+                nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
             });
-            // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
-            await returnToApp();
             await clearPendingOnboarding();
             setOutgoingIdentity(null);
-            setIdentity(result.identity);
+            setSsoReleased(null);
+            setSsoWaiting(null);
+            setIdentity(identity);
             setMode('home');
             router.replace('/');
         } catch (e: any) {
             // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
-            // its key unless even that failed): the app must not go on as it.
+            // its key unless even that failed): the app must not go on as it. The restore stays on the phone to try again.
             if (e instanceof ReplaceNotSaved) setIdentity(null);
-            if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
-                setError(null);
-            } else {
-                setError(e.message || `Recovery failed: ${String(e)}`);
+            if (e?.reason !== 'cancelled') {
+                setError(e?.message || `Recovery failed: ${String(e)}`);
                 leaveReplace('ssoRecover');
             }
         } finally {
-            if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
             setLoading(false);
-            setSsoProgressMessage(null);
         }
+    }
+
+    /** Stop waiting for this restore on this phone, to start again or to use the 12 words instead. */
+    async function handleSsoStartAgain(then: 'ssoRecover' | 'recover') {
+        await abandonSsoRestore();
+        setSsoWaiting(null);
+        setSsoReleased(null);
+        setError(null);
+        setMode(then);
     }
 
     // --- THE GLOBAL COMMUNITY'S DOOR (utils/global-join.ts; design §2.3) ---
@@ -2510,6 +2553,8 @@ export default function WelcomeScreen() {
     }
 
     if (mode === 'ssoRecover') {
+        // Three steps, one screen (utils/sso-recovery.ts): sign in; wait for the key vault; choose a community.
+        const waitingUntil = !ssoReleased && ssoWaiting?.holdId && ssoWaiting.until ? ssoWaiting.until : null;
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -2517,151 +2562,136 @@ export default function WelcomeScreen() {
                     behavior="padding"
                     style={{ flex: 1 }}
                 >
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 🌐 Recover with Social Sign-In
                             </Text>
-                            <Text style={styles.subtitle}>
-                                Enter your callsign and node address to restore your account with any linked sign-in.
-                            </Text>
 
-                            <TextInput
-                                accessibilityLabel="Callsign"
-                                style={styles.input}
-                                placeholder="Your Callsign (e.g. Monnunit)"
-                                placeholderTextColor={colors.text.muted}
-                                value={ssoCallsign}
-                                onChangeText={setSsoCallsign}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                editable={!loading}
-                            />
-
-                            {/* Recognise, do not recall. Tapping a face is a far easier thing to ask
-                                of someone who has lost their phone than reproducing a string they
-                                chose months ago — and the node only lists accounts that actually
-                                have a sign-in fragment, so none of these is a dead end. */}
-                            {!loading && ssoCandidates.length > 0 && (
-                                <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
-                                        {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
-                                    </Text>
-                                    {ssoCandidates.map((c: any) => (
-                                        <Pressable
-                                            key={c.publicKey}
-                                            onPress={() => {
-                                                skipNextSsoLookupRef.current = true;
-                                                setSsoCallsign(c.callsign);
-                                                setSsoCandidates([]);
-                                            }}
-                                            accessible
-                                            accessibilityRole="button"
-                                            accessibilityLabel={joinedLabel(c.joinedAt)
-                                                ? `Select the account ${c.callsign}, joined ${joinedLabel(c.joinedAt)}`
-                                                : `Select the account ${c.callsign}`}
-                                            accessibilityHint="Uses this account for recovery"
-                                            style={{
-                                                flexDirection: 'row', alignItems: 'center', gap: 10,
-                                                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
-                                                borderWidth: 1, borderColor: colors.border.default, marginBottom: 6,
-                                            }}
-                                        >
-                                            <MemberAvatar avatarUrl={c.avatarUrl} pubkey={c.publicKey} callsign={c.callsign || '?'} size={32} />
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: colors.text.heading, fontWeight: '600' }}>{c.callsign}</Text>
-                                                {/* Breaks the tie the avatar cannot: two namesakes who both
-                                                    kept the default identicon are otherwise identical rows. */}
-                                                {!!joinedLabel(c.joinedAt) && (
-                                                    <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-                                                        joined {joinedLabel(c.joinedAt)}
-                                                    </Text>
-                                                )}
-                                            </View>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                            {!loading && ssoLookupBusy && ssoCandidates.length === 0 && (
-                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                    Looking for your account…
-                                </Text>
-                            )}
-
-                            <SavedNodePicker
-                                nodes={savedNodes}
-                                onPick={(url) => { setRecoveryAnchorUrl(url); setError(null); }}
-                                disabled={loading}
-                                selectedUrl={normalizeNodeUrl(recoveryAnchorUrl.trim())}
-                                label="Your communities on this phone"
-                                actionLabel="Recover on"
-                                hint="Or type your community's name or address below."
-                            />
-
-                            <TextInput
-                                accessibilityLabel="Community name or node address"
-                                accessibilityHint="Enter your community name, like mullum, or its full address"
-                                style={styles.input}
-                                placeholder="Community name or address (e.g. mullum)"
-                                placeholderTextColor={colors.text.muted}
-                                value={recoveryAnchorUrl}
-                                onChangeText={setRecoveryAnchorUrl}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="url"
-                                editable={!loading}
-                            />
-                            {/* Shown, not assumed — see isBareCommunityName. A community on its
-                                own domain has a name that expands to the wrong address. */}
-                            {isBareCommunityName(recoveryAnchorUrl) && (
-                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                    Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
-                                    community is hosted elsewhere, enter its full address instead.
-                                </Text>
-                            )}
-
-                            {loading && (
-                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
-                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage || 'Verifying sign-in...'}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {error && <Text style={styles.error}>{error}</Text>}
-
-                            {!loading && (
+                            {ssoReleased ? (
                                 <>
-                                    {Platform.OS === 'ios' && (
-                                        <AppleButton
-                                            title="Recover with Apple"
-                                            onPress={() => handleSsoRecover('apple')}
-                                            style={{ marginBottom: 10, width: '100%' }}
-                                        />
+                                    <Text style={styles.subtitle}>
+                                        Your account is back. Which community do you want to open it in? You can add your other communities afterwards.
+                                    </Text>
+                                    <SavedNodePicker
+                                        nodes={savedNodes}
+                                        onPick={(url) => { setSsoCommunity(url); setError(null); }}
+                                        disabled={loading}
+                                        selectedUrl={normalizeNodeUrl(ssoCommunity.trim())}
+                                        label="Your communities on this phone"
+                                        actionLabel="Open in"
+                                        hint="Or type a community's name or address below."
+                                    />
+                                    <TextInput
+                                        accessibilityLabel="Community name or node address"
+                                        accessibilityHint="The global community is filled in. Enter your community's name, like mullum, or its full address"
+                                        style={styles.input}
+                                        placeholder="Community name or address (e.g. mullum)"
+                                        placeholderTextColor={colors.text.muted}
+                                        value={ssoCommunity}
+                                        onChangeText={setSsoCommunity}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        keyboardType="url"
+                                        editable={!loading}
+                                    />
+                                    {isBareCommunityName(ssoCommunity) && (
+                                        <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                            Will connect to {normalizeNodeUrl(ssoCommunity).replace('https://', '')} — if your
+                                            community is hosted elsewhere, enter its full address instead.
+                                        </Text>
                                     )}
-                                    <GoogleButton
-                                        title="Recover with Google"
-                                        onPress={() => handleSsoRecover('google')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <FacebookButton
-                                        title="Recover with Facebook"
-                                        onPress={() => handleSsoRecover('facebook')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
+                                    <Text style={styles.fieldHint}>
+                                        The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.
+                                    </Text>
+                                    {error && <Text style={styles.error}>{error}</Text>}
+                                    <Pressable style={styles.primaryBtn} onPress={handleSsoFinish} disabled={loading} accessibilityRole="button">
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                                    </Pressable>
+                                </>
+                            ) : waitingUntil ? (
+                                <>
+                                    <Text style={styles.subtitle} accessibilityLiveRegion="polite">
+                                        Your account comes back {holdEndsText(waitingUntil)}.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        For your safety, getting back in with a sign-in waits a day. If you still have a phone or computer with your BeanPool account on it, open BeanPool there and tap "Yes, it's me" to bring it back now. If it wasn't you, those devices can stop it.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        Keep BeanPool on this phone: it checks by itself. Your 12 words work any time, with no wait.
+                                    </Text>
+                                    {error && <Text style={styles.error}>{error}</Text>}
+                                    <Pressable
+                                        style={styles.primaryBtn}
+                                        onPress={() => checkSsoWaiting(false)}
+                                        disabled={ssoChecking}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ busy: ssoChecking, disabled: ssoChecking }}
+                                    >
+                                        {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Check now</Text>}
+                                    </Pressable>
+                                    <Pressable style={styles.recoverBtn} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
+                                        <Text style={styles.recoverBtnText}>🔑 Use my 12 words instead</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.backBtn} onPress={() => handleSsoStartAgain('ssoRecover')} accessibilityRole="button" accessibilityLabel="Start again with a sign-in">
+                                        <Text style={styles.backBtnText}>Start again</Text>
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        For your safety it takes a day, or less if another phone or computer of yours says it's you.
+                                    </Text>
+
+                                    {loading && (
+                                        <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                            <ActivityIndicator size="large" color={palette.blue600} />
+                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                                {ssoProgressMessage || 'Verifying sign-in...'}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {error && <Text style={styles.error}>{error}</Text>}
+
+                                    {!loading && (
+                                        <>
+                                            {Platform.OS === 'ios' && (
+                                                <AppleButton
+                                                    title="Recover with Apple"
+                                                    onPress={() => handleSsoRecover('apple')}
+                                                    style={{ marginBottom: 10, width: '100%' }}
+                                                />
+                                            )}
+                                            <GoogleButton
+                                                title="Recover with Google"
+                                                onPress={() => handleSsoRecover('google')}
+                                                style={{ marginBottom: 10, width: '100%' }}
+                                            />
+                                            <FacebookButton
+                                                title="Recover with Facebook"
+                                                onPress={() => handleSsoRecover('facebook')}
+                                                style={{ marginBottom: 10, width: '100%' }}
+                                            />
+                                        </>
+                                    )}
                                 </>
                             )}
 
-                            <Pressable
-                                style={styles.backBtn}
-                                onPress={() => { setMode('member'); setError(null); }}
-                                disabled={loading}
-                                accessibilityRole="button"
-                                accessibilityLabel="Back to Restore Options"
-                            >
-                                <Text style={styles.backBtnText}>← Back to Restore Options</Text>
-                            </Pressable>
+                            {!waitingUntil && (
+                                <Pressable
+                                    style={styles.backBtn}
+                                    onPress={() => { setMode('member'); setError(null); }}
+                                    disabled={loading}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Back to Restore Options"
+                                >
+                                    <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                                </Pressable>
+                            )}
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>

@@ -107,6 +107,8 @@ export interface UpdaterOptions {
     installResultFile?: string;
     verifyRoot?: VerifyRoot;
     clock?: () => number;
+    /** How a downloaded bundle is written into `releasesDir` (tests: a full disk). */
+    writeFile?: (file: string, bytes: Uint8Array, opts: { mode: number }) => void;
 }
 
 export interface ReleaseRef {
@@ -224,7 +226,7 @@ export class Updater {
         const bundlePath = path.join(dir, API_BUNDLE_ASSET);
         try {
             mkdirSync(dir, { recursive: true, mode: 0o700 });
-            writeFileSync(`${bundlePath}.part`, bytes, { mode: 0o600 });
+            (this.opts.writeFile ?? writeFileSync)(`${bundlePath}.part`, bytes, { mode: 0o600 });
             renameSync(`${bundlePath}.part`, bundlePath);
         } catch (e) {
             try {

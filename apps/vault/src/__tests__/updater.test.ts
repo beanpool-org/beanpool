@@ -374,6 +374,40 @@ describe('room on the state partition, and what the monthly restart installed, i
         expect(s.handover).toMatchObject({ ok: true, to: { version: '1.0.1' } });
     });
 
+    it('a handover bundle that can\'t be kept for room says so, leaves no partial file and hands nothing over; with room, it does (#1314 round 3 note)', async () => {
+        const { root, feedDir, bundleB, r1, asked, updater } = setUp();
+        const r2 = makeRelease({ version: '1.0.1', previous: r1, custodianKeys: root, signers: root.slice(1), apiBundleHash: sha256Hex(bundleB) });
+        publish(feedDir, r2, bundleB);
+        const releasesDir = path.join(feedDir, '..', `releases-${n}`);
+        // The file system fills up part way through the bundle.
+        const full = (file: string, bytes: Uint8Array) => {
+            writeFileSync(file, bytes.subarray(0, 10));
+            throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+        };
+        const s = await updater({ writeFile: full }).check();
+        expect(s.error).toBe('Release 1.0.1\'s API bundle could not be kept (no room on the state partition): ENOSPC: no space left on device, write');
+        expect(s.handover).toBeNull();
+        expect(asked).toEqual([]);
+        expect(readdirSync(path.join(releasesDir, sha256Hex(bundleB)))).toEqual([]);
+        // Room again: kept, and handed over.
+        const again = await updater().check();
+        expect(again).toMatchObject({ error: null, handover: { ok: true, to: { version: '1.0.1' } } });
+        expect(readdirSync(path.join(releasesDir, sha256Hex(bundleB)))).toEqual(['vault-api.mjs']);
+    });
+
+    it('a handover bundle whose partial file can\'t be removed: said, and the check still ends', async () => {
+        const { root, feedDir, bundleB, r1, asked, updater } = setUp();
+        const r2 = makeRelease({ version: '1.0.1', previous: r1, custodianKeys: root, signers: root.slice(1), apiBundleHash: sha256Hex(bundleB) });
+        publish(feedDir, r2, bundleB);
+        // A directory (holding something) where the partial file goes: the write fails, and so does its removal.
+        const part = path.join(feedDir, '..', `releases-${n}`, sha256Hex(bundleB), 'vault-api.mjs.part');
+        mkdirSync(path.join(part, 'x'), { recursive: true });
+        const s = await updater().check();
+        expect(s.error).toMatch(/^Release 1\.0\.1's API bundle could not be kept: EISDIR/);
+        expect(asked).toEqual([]);
+        expect(existsSync(part)).toBe(true);
+    });
+
     it('/v1/report says what root\'s install step did at the last restart (installed, or why not), from the file root leaves', async () => {
         const t = setUpInbox();
         const resultFile = path.join(t.feedDir, '..', `install-result-${n}.json`);

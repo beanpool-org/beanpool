@@ -386,6 +386,64 @@ async function main(): Promise<void> {
             `and under an old id of it, which lands in the DM it became (${show(viaOld)})`);
     }
 
+    // --- 4. Nor does the time an answer takes, on a node with a full messages table (#1333 review) ---
+    // POST /api/messages/send answered the hidden group's chat id at once (the group chat's own refusal, and the visitor
+    // gate's "a conversation, not a DM of yours"), while an id nobody has went on to look for an old id of a folded DM:
+    // a scan of every line with metadata, 35 ms against 2.4 at 100k lines. The old id is looked up in an index now.
+    {
+        const filler = createConversation('dm', [convenor.pk, pollster.pk], convenor.pk)!;
+        const insert = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp)
+            VALUES (?, ?, ?, 'ct', 'nc', 'text', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+        const LINES = 50_000;
+        db.transaction(() => {
+            for (let i = 0; i < LINES; i++) {
+                const meta = i % 50 === 0
+                    ? { originalConversationId: crypto.randomUUID() }
+                    : { replyTo: crypto.randomUUID(), reactions: [{ emoji: '👍', pubkey: convenor.pk }] };
+                insert.run(crypto.randomUUID(), filler.id, convenor.pk, JSON.stringify(meta));
+            }
+        })();
+        const lines = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE metadata IS NOT NULL').get() as any).c;
+        assert(lines >= LINES, `setup: ${lines} lines with metadata`);
+
+        const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+        const timed = async (id: Id, conversationId: string) => {
+            const body = { conversationId, authorPubkey: id.pk, ...lockedDm() };
+            const t0 = process.hrtime.bigint();
+            const r = await call('POST', '/api/messages/send', id, body);
+            return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r };
+        };
+        // Medians of alternating calls, and of each pair's difference, so a slow moment on the runner lands on both.
+        // The bound is far above the index's cost (well under a millisecond) and far below the scan's (about 15 ms here
+        // at 50k lines on a laptop, more on a CI runner).
+        const BOUND_MS = 3;
+        const SAMPLES = 21;
+        const cases: [string, Id, string, string][] = [
+            ['an outsider', outsider, 'the group chat id', hidden.id],
+            ['an outsider', outsider, 'the event chat id', event.id],
+            ['a member of another group', otherGroupie, 'the group chat id', hidden.id],
+            ['a member of another group', otherGroupie, 'the event chat id', event.id],
+            ["a visitor's row", vera, 'the group chat id', hidden.id],
+            ["a visitor's row", vera, 'the event chat id', event.id],
+            ["a visitor's row", vera, "someone else's old DM id", othersOldId],
+        ];
+        for (const [who, id, what, realId] of cases) {
+            await timed(id, realId); await timed(id, crypto.randomUUID());   // warm both paths
+            const real: number[] = [], none: number[] = [], diff: number[] = [];
+            let same = true;
+            for (let i = 0; i < SAMPLES; i++) {
+                const a = await timed(id, realId);
+                const b = await timed(id, crypto.randomUUID());
+                real.push(a.ms); none.push(b.ms); diff.push(b.ms - a.ms);
+                if (a.r.status !== b.r.status || a.r.text !== b.r.text) same = false;
+            }
+            const d = median(diff);
+            assert(same && Math.abs(d) < BOUND_MS,
+                `send, ${who}, ${what}: the same answer, in the same time as an id nobody has `
+                + `(median ${median(real).toFixed(2)} ms vs ${median(none).toFixed(2)} ms; pairs differ by ${d.toFixed(2)} ms, bound ${BOUND_MS} ms)`);
+        }
+    }
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

@@ -99,21 +99,22 @@ export function isVisitorsDirectConversation(conversationId: unknown, publicKey:
 
 /**
  * The conversation an old conversation id was folded into (chat consolidation): a line stored there names the old id in
- * its metadata, `originalConversationId` or `originalConversationIds`. Undefined when no line does.
+ * its metadata, `originalConversationId` or an item of `originalConversationIds`. Undefined when no line does. The
+ * earliest such line decides, as when this scanned the table in order.
+ *
+ * Looked up in message_old_conversation_ids (schema.sql), which the messages triggers keep from each line's metadata:
+ * one index probe, whether or not a line names the id. Scanning every line's metadata instead made an id nobody has
+ * cost ~35 ms at 100k lines, where a hidden group's chat id is answered at once, so the time told the two apart
+ * (#1333 review). A list's items match exactly now; the scan matched any part of the list's text.
  */
 function consolidatedConversationOf(conversationId: string): string | undefined {
-    // json_valid() guards json_extract via CASE so a single row with malformed
-    // metadata cannot abort the whole SELECT (which a caller's catch would
-    // then swallow, silently disabling consolidation resolution node-wide).
     const row = db.prepare(`
-        SELECT conversation_id FROM messages
-        WHERE metadata IS NOT NULL
-          AND CASE WHEN json_valid(metadata) THEN (
-                json_extract(metadata, '$.originalConversationId') = ?
-                OR json_extract(metadata, '$.originalConversationIds') LIKE ?
-              ) ELSE 0 END
+        SELECT m.conversation_id FROM message_old_conversation_ids o
+        JOIN messages m ON m.id = o.message_id
+        WHERE o.old_conversation_id = ?
+        ORDER BY m.rowid
         LIMIT 1
-    `).get(conversationId, `%${conversationId}%`) as { conversation_id?: string } | undefined;
+    `).get(conversationId) as { conversation_id?: string } | undefined;
     return row?.conversation_id || undefined;
 }
 

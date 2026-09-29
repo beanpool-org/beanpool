@@ -404,6 +404,39 @@ function bringMembersToSchemaRules(schemaSql: string): void {
     }
 }
 
+/** node_config: the lines already here have their old conversation ids indexed (indexOldConversationIds). */
+const MESSAGE_OLD_CONVERSATION_IDS = 'migration_message_old_conversation_ids_v1';
+
+/**
+ * Fills message_old_conversation_ids (schema.sql) from the lines already here, once: the first boot with the table
+ * (node_config `migration_message_old_conversation_ids_v1`, written in the same transaction). From then on its triggers
+ * keep it. On a standby too: the table is each server's own and never copied, and a `migration_*` marker is per-server,
+ * so a standby fills its own from the lines it holds. Reads the metadata exactly as the triggers do. A failure writes
+ * no marker, and the next boot tries again; until then an old id of a folded DM that only such a line names isn't
+ * followed, and a send to it is answered as one to an id nobody has.
+ */
+function indexOldConversationIds(): void {
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(MESSAGE_OLD_CONVERSATION_IDS)) return;
+        db.transaction(() => {
+            const n = db.prepare(`
+                INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+                SELECT json_extract(m.metadata, '$.originalConversationId'), m.id FROM messages m
+                 WHERE instr(m.metadata, 'originalConversationId') > 0
+                   AND CASE WHEN json_valid(m.metadata) THEN json_type(m.metadata, '$.originalConversationId') END = 'text'
+                UNION ALL
+                SELECT j.value, m.id
+                  FROM messages m, json_each(CASE WHEN json_valid(m.metadata) THEN m.metadata END, '$.originalConversationIds') j
+                 WHERE instr(m.metadata, 'originalConversationId') > 0 AND j.type = 'text' AND typeof(j.key) = 'integer'
+            `).run().changes;
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(MESSAGE_OLD_CONVERSATION_IDS);
+            if (n > 0) console.log(`[DB] Indexed ${n} old conversation id(s) named by chat lines`);
+        })();
+    } catch (e) {
+        console.error('[DB] ❌ Could not index the old conversation ids chat lines name:', e);
+    }
+}
+
 // Function to initialize schema
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
@@ -1047,6 +1080,7 @@ export function initSchema() {
     markExistingVisitors();
     backfillBoardStanding();
     bringMembersToSchemaRules(schemaSql);
+    indexOldConversationIds();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only

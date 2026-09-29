@@ -119,6 +119,7 @@ import { pathToFileURL } from 'node:url';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { closeOpenCopies } from '../engine/open-copies.js';
 
 export const RECOVERY_SEAL_KEY_FILE = 'recovery-seal.key';
 
@@ -1150,8 +1151,14 @@ function askWholeCopyAfterReseal(old: number): void {
         + 'This standby asks that server for one whole copy, which removes those it no longer holds.');
 }
 
-/** One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. */
-function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
+/**
+ * One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. A copy
+ * this server is serving in pages holds a read transaction on the WAL, which the checkpoint can't pass: its snapshot is
+ * closed first (engine/open-copies.ts), and the standby asks for a new copy. Exported for test-sync-copy-pages.ts.
+ */
+export function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
+    const closed = closeOpenCopies('the recovery seal clears state.db (one VACUUM)');
+    if (closed > 0) console.log(`🔐 Recovery seal: closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
     const before = fileBytes(dbFile());
     const t0 = performance.now();
     try {

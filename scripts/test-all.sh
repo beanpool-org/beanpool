@@ -390,6 +390,7 @@ run_federation_suites() {
       test-standby-devices
       test-standby-refusal-keeps-copy
       test-tombstone-retention
+      test-sync-copy-pages
       test-recovery-tombstones
       test-github-sign-in-removed
       test-unlock-cancel

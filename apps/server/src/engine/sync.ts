@@ -383,18 +383,32 @@ export interface SyncCallbacks {
 }
 
 export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): Promise<SyncPayload> {
-    const privateKey = cb.getPrivateKey();
-    if (privateKey) {
-        try {
-            const rawBody = JSON.stringify(payload);
-            const signatureBytes = await privateKey.sign(new TextEncoder().encode(rawBody));
-            payload.signature = Buffer.from(signatureBytes).toString('hex');
-            payload.publicKey = Buffer.from(cb.publicKeyToProtobuf(privateKey.publicKey)).toString('hex');
-        } catch (e: any) {
-            console.error(`[Sync] Failed to sign payload:`, e.message || e);
-        }
+    const signed = await signSyncBody(cb, JSON.stringify(payload));
+    if (signed) {
+        payload.signature = signed.signature;
+        payload.publicKey = signed.publicKey;
     }
     return payload;
+}
+
+/**
+ * This server's signature over a payload's JSON as it will be sent, and its public key, as signSyncPayload puts them on a
+ * payload: the importer checks them over the JSON of everything else it received (importRemoteState). A copy served in
+ * pages signs each page's text with it (engine/copy-pages.ts). Null when this server has no key yet, or signing failed.
+ */
+export async function signSyncBody(cb: SyncCallbacks, rawBody: string): Promise<{ signature: string; publicKey: string } | null> {
+    const privateKey = cb.getPrivateKey();
+    if (!privateKey) return null;
+    try {
+        const signatureBytes = await privateKey.sign(new TextEncoder().encode(rawBody));
+        return {
+            signature: Buffer.from(signatureBytes).toString('hex'),
+            publicKey: Buffer.from(cb.publicKeyToProtobuf(privateKey.publicKey)).toString('hex'),
+        };
+    } catch (e: any) {
+        console.error(`[Sync] Failed to sign payload:`, e.message || e);
+        return null;
+    }
 }
 
 /**
@@ -496,6 +510,37 @@ const EXPORT_READ_CONCURRENCY = 8;
 async function restoreInlinePhotos(payload: SyncPayload): Promise<SyncPayload> {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
+    const results = await restorePhotoRows(photos);
+    const omitted: string[] = [];
+    (payload as any).photos = results.flatMap((r) => {
+        if ('omitted' in r) { omitted.push(r.omitted); return []; }
+        return [r.row];
+    });
+    if (omitted.length > 0) {
+        // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
+        // the field ignores it, and the rows it receives are exactly the rows it received before.
+        payload.photosOmitted = omitted;
+        warnPhotosOmitted(omitted);
+    }
+    return payload;
+}
+
+/** Said on this server when an export leaves photo rows out (restoreInlinePhotos). */
+export function warnPhotosOmitted(omitted: readonly string[]): void {
+    console.warn(
+        `[Sync] ⚠️  ${omitted.length} photo row(s) are NOT in this export: this node cannot read the object `
+        + `each one names, so sending the row would blank a peer's or a replica's good copy. `
+        + `The payload names them so a force-resync keeps them: ${omitted.slice(0, 5).join(', ')}`
+        + `${omitted.length > 5 ? ', …' : ''}`,
+    );
+}
+
+/**
+ * Each photo row (`SELECT * FROM post_photos`) as restoreInlinePhotos sends it, by index: the row with its bytes put back,
+ * or, for a row whose object this server can't read, its `post_id|order_num`, which the export leaves out and names. A copy
+ * served in pages restores each slice of rows with it (engine/copy-pages.ts).
+ */
+export async function restorePhotoRows(photos: any[]): Promise<({ row: any } | { omitted: string })[]> {
     const store = getImageStore();
     // Filled by index, so the payload keeps exactly the order the engine exported — the reads finish in any order.
     const results: ({ row: any } | { omitted: string })[] = new Array(photos.length);
@@ -521,23 +566,7 @@ async function restoreInlinePhotos(payload: SyncPayload): Promise<SyncPayload> {
         }
     };
     await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
-    const omitted: string[] = [];
-    (payload as any).photos = results.flatMap((r) => {
-        if ('omitted' in r) { omitted.push(r.omitted); return []; }
-        return [r.row];
-    });
-    if (omitted.length > 0) {
-        // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
-        // the field ignores it, and the rows it receives are exactly the rows it received before.
-        payload.photosOmitted = omitted;
-        console.warn(
-            `[Sync] ⚠️  ${omitted.length} photo row(s) are NOT in this export: this node cannot read the object `
-            + `each one names, so sending the row would blank a peer's or a replica's good copy. `
-            + `The payload names them so a force-resync keeps them: ${omitted.slice(0, 5).join(', ')}`
-            + `${omitted.length > 5 ? ', …' : ''}`,
-        );
-    }
-    return payload;
+    return results;
 }
 
 export async function exportSyncState(
@@ -548,27 +577,40 @@ export async function exportSyncState(
 ): Promise<SyncPayload> {
     // The plain tables (in-flight money and governance) as the manifest names them (engine/replication-manifest.ts).
     const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance, PLAIN_TABLES));
+    Object.assign(payload, payloadRecords());
+    return signSyncPayload(cb, payload);
+}
+
+/** What a payload carries beside the tables (payloadRecords). */
+export type PayloadRecords = Pick<SyncPayload, 'nodeProfile' | 'openJoinSalt' | 'visitorsMarked' | 'sealEpoch' | 'communitySettings'>;
+
+/**
+ * What every payload carries beside the tables, from this server's node_config and settings, in the payload's order; a
+ * copy served in pages carries them in its opening page (engine/copy-pages.ts). Put on before the signature, so signed with
+ * the rest.
+ */
+export function payloadRecords(): PayloadRecords {
+    const out: PayloadRecords = {};
     // What kind of node this is, so a standby keeps it and a take-over or a hand promotion from there can't run
-    // the community as another kind (config/node-profile.ts). node_config itself is not replicated. Before the
-    // signature, so it is signed with the rest.
-    payload.nodeProfile = readProfileRecord();
+    // the community as another kind (config/node-profile.ts). node_config itself is not replicated.
+    out.nodeProfile = readProfileRecord();
     // The key the `openJoins` rows are hashed with, or they match nothing on a promoted standby (engine/open-join.ts).
-    // A node_config row, so here rather than in the table export. Signed with the rest.
-    payload.openJoinSalt = readOpenJoinSalt();
+    // A node_config row, so here rather than in the table export.
+    out.openJoinSalt = readOpenJoinSalt();
     // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
     // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
-    payload.visitorsMarked = visitorsMarked();
+    out.visitorsMarked = visitorsMarked();
     // The recovery seal's epoch (services/recovery-seal-key.ts): new each time this main server records clearing its
     // database after sealing, so a standby that cleared under another one clears again after a rollback past the seal,
     // whichever server was updated first. Only a main server names one. A node_config row.
     if (getNodeRole() === 'primary') {
         const sealEpoch = recoverySealEpoch();
-        if (sealEpoch) payload.sealEpoch = sealEpoch;
+        if (sealEpoch) out.sealEpoch = sealEpoch;
     }
     // The community's own settings (config/community-settings.ts): a standby keeps them, applied to nothing, for a
     // take-over or a hand promotion to install. In every payload, delta or whole: a settings change moves no row.
-    payload.communitySettings = readCommunitySettings();
-    return signSyncPayload(cb, payload);
+    out.communitySettings = readCommunitySettings();
+    return out;
 }
 
 function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: string): boolean {

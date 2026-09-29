@@ -717,6 +717,42 @@ export type PlainTableRows = Record<string, Record<string, unknown>[]>;
 /** A table or column name this code puts into SQL: a plain identifier, never anything else. */
 const SQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** A name as SQL quotes it. */
+const q = (n: string): string => `"${n.replace(/"/g, '""')}"`;
+
+/**
+ * How a plain table is read for a copy: its name and watermark, each a plain identifier; its key, from the table itself;
+ * its `where`; and each row as it is sent, never a column the spec leaves out. Null for a table this database doesn't have,
+ * a watermark it doesn't have, or a name that isn't a plain identifier: such a table is left out of a copy, never sent empty,
+ * and a standby keeps its own rows of it. exportPlainTables reads each with it, and so does a copy served in pages (apps/server
+ * engine/copy-pages.ts).
+ */
+export interface PlainTableRead {
+    table: string;
+    watermark: string;
+    /** The primary key's columns, in the key's order. */
+    key: string[];
+    where: string | null;
+    sent: (row: Record<string, unknown>) => Record<string, unknown>;
+}
+
+export function plainTableRead(db: Db, { table, watermark, except = [], where }: PlainTableSpec): PlainTableRead | null {
+    if (!SQL_NAME.test(table) || !SQL_NAME.test(watermark)) return null;
+    const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
+    if (!info.some((c) => c.name === watermark)) return null;
+    return {
+        table,
+        watermark,
+        key: info.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name),
+        where: where || null,
+        sent: except.length === 0 ? (r) => r : (r) => {
+            const kept = { ...r };
+            for (const c of except) delete kept[c];
+            return kept;
+        },
+    };
+}
+
 /**
  * The rows of each plain table, `SELECT *`: those whose watermark is at or after `since`, or every row for a whole copy
  * (no `since`); only the ones its `where` holds, when it has one. In the watermark's order, then the key's, so a standby
@@ -727,46 +763,33 @@ const SQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function exportPlainTables(db: Db, specs: readonly PlainTableSpec[], since?: string | null): PlainTableRows {
     const delta = typeof since === 'string' && since.length > 0;
     const out: PlainTableRows = {};
-    for (const { table, watermark, except = [], where } of specs) {
-        if (!SQL_NAME.test(table) || !SQL_NAME.test(watermark)) continue;
-        const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
-        if (!info.some((c) => c.name === watermark)) continue;
-        const key = info.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => `"${c.name}"`);
-        const order = [`"${watermark}"`, ...key].join(', ');
+    for (const spec of specs) {
+        const read = plainTableRead(db, spec);
+        if (!read) continue;
+        const { table, watermark, where } = read;
+        const order = [watermark, ...read.key].map(q).join(', ');
         const held = where ? ` AND (${where})` : '';
         const rows = (delta
-            ? db.prepare(`SELECT * FROM "${table}" WHERE "${watermark}" >= ?${held} ORDER BY ${order}`).all(since)
-            : db.prepare(`SELECT * FROM "${table}" WHERE 1${held} ORDER BY ${order}`).all()) as Record<string, unknown>[];
-        out[table] = except.length === 0 ? rows : rows.map((r) => {
-            const kept = { ...r };
-            for (const c of except) delete kept[c];
-            return kept;
-        });
+            ? db.prepare(`SELECT * FROM ${q(table)} WHERE ${q(watermark)} >= ?${held} ORDER BY ${order}`).all(since)
+            : db.prepare(`SELECT * FROM ${q(table)} WHERE 1${held} ORDER BY ${order}`).all()) as Record<string, unknown>[];
+        out[table] = rows.map(read.sent);
     }
     return out;
 }
 
-export function exportSyncState(
-    db: Db,
-    nodeId: string,
-    since?: string | null,
-    commonsBalance = 0,
-    plainTables: readonly PlainTableSpec[] = [],
-): SyncPayload {
-    const delta = typeof since === 'string' && since.length > 0;
-    const cursor = new Date().toISOString();
-    const sel = (table: string, watermark: string): any[] =>
-        delta
-            ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
-            : db.prepare(`SELECT * FROM ${table}`).all() as any[];
+// ── Each category's rows as the payload carries them ─────────────────────────────────────────────────────────────────
+// One function per category, from its table's row (`SELECT *`): exportSyncState shapes its rows with them, and so does a
+// copy served in pages, a slice of rows at a time (EXPORT_CATEGORIES).
 
-    // Each member's preferences (holiday, notification settings, reminder defaults) travel with their row, in one query:
-    // every writer moves the member's updated_at, so a delta that carries a change carries the member (design G2b).
+/**
+ * Each member's preferences (holiday, notification settings, reminder defaults), by key: of the members `keys` names, or
+ * of every member. Empty on a schema without the table.
+ */
+function preferencesOfMembers(db: Db, keys?: readonly string[]): Map<string, Record<string, string>> {
     const preferencesOf = new Map<string, Record<string, string>>();
     try {
-        const prefRows = (delta
-            ? db.prepare(`SELECT p.public_key, p.pref_key, p.pref_value FROM member_preferences p
-                          JOIN members m ON m.public_key = p.public_key WHERE m.updated_at >= ?`).all(since)
+        const prefRows = (keys
+            ? db.prepare('SELECT public_key, pref_key, pref_value FROM member_preferences WHERE public_key IN (SELECT value FROM json_each(?))').all(JSON.stringify(keys))
             : db.prepare('SELECT public_key, pref_key, pref_value FROM member_preferences').all()
         ) as { public_key: string; pref_key: string; pref_value: string }[];
         for (const r of prefRows) {
@@ -777,35 +800,34 @@ export function exportSyncState(
     } catch {
         // Table absent on older schema/fixtures
     }
+    return preferencesOf;
+}
 
-    // The whole row travels as `standing` (design G2a), so a promoted standby is every column of the main server's, and a
-    // column added later travels without anyone listing it; rowToMember leaves most of them out because the member
-    // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
-    // delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
-    // pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
-    const members = (delta
-        ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
-        : db.prepare("SELECT * FROM members").all() as any[]
-    ).map((row): Member => {
-        const { public_key: _key, updated_at: _stamp, ...standing } = row;
-        return {
-            ...rowToMember(row),
-            moderationMutedUntil: row.moderation_muted_until ?? null,
-            areaLat: row.area_lat ?? null,
-            areaLng: row.area_lng ?? null,
-            areaUpdatedAt: row.area_updated_at ?? null,
-            isVisitor: !!row.is_visitor,
-            deletedByOwnerAt: row.deleted_by_owner_at ?? null,
-            boardStandingChangedAt: row.board_standing_changed_at ?? null,
-            standing,
-            preferences: preferencesOf.get(row.public_key) ?? {},
-        };
-    });
+// The whole row travels as `standing` (design G2a), so a promoted standby is every column of the main server's, and a
+// column added later travels without anyone listing it; rowToMember leaves most of them out because the member
+// directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
+// delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
+// pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
+function memberOfRow(row: any, preferencesOf: ReadonlyMap<string, Record<string, string>>): Member {
+    const { public_key: _key, updated_at: _stamp, ...standing } = row;
+    return {
+        ...rowToMember(row),
+        moderationMutedUntil: row.moderation_muted_until ?? null,
+        areaLat: row.area_lat ?? null,
+        areaLng: row.area_lng ?? null,
+        areaUpdatedAt: row.area_updated_at ?? null,
+        isVisitor: !!row.is_visitor,
+        deletedByOwnerAt: row.deleted_by_owner_at ?? null,
+        boardStandingChangedAt: row.board_standing_changed_at ?? null,
+        standing,
+        preferences: preferencesOf.get(row.public_key) ?? {},
+    };
+}
 
-    // Who keeps each enterprise, the whole set every time (design G2c): an unbound keeper is a row the set no longer has.
-    let treasuryOperators: SyncTreasuryOperator[] = [];
+// Who keeps each enterprise, the whole set every time (design G2c): an unbound keeper is a row the set no longer has.
+export function exportTreasuryOperators(db: Db): SyncTreasuryOperator[] {
     try {
-        treasuryOperators = (db.prepare('SELECT * FROM treasury_operators').all() as any[]).map((r) => ({
+        return (db.prepare('SELECT * FROM treasury_operators').all() as any[]).map((r) => ({
             treasuryPubkey: r.treasury_pubkey,
             memberPubkey: r.member_pubkey,
             role: r.role,
@@ -816,27 +838,23 @@ export function exportSyncState(
         }));
     } catch {
         // Table absent on older schema/fixtures
+        return [];
     }
-    // Keepers' pledges, by the two writes a pledge has: made, and released.
-    let enterprisePledges: SyncEnterprisePledge[] = [];
-    try {
-        enterprisePledges = (delta
-            ? db.prepare('SELECT * FROM enterprise_pledges WHERE pledged_at >= ? OR released_at >= ?').all(since, since)
-            : db.prepare('SELECT * FROM enterprise_pledges').all()
-        ).map((r: any) => ({
-            id: r.id,
-            keeper: r.keeper,
-            enterprise: r.enterprise,
-            amount: r.amount,
-            pledgedAt: r.pledged_at ?? null,
-            releasedAt: r.released_at ?? null,
-        }));
-    } catch {
-        // Table absent on older schema/fixtures
-    }
+}
 
-    const postRows = sel('posts', 'updated_at');
-    const posts: MarketplacePost[] = postRows.map(row => ({
+function enterprisePledgeOfRow(r: any): SyncEnterprisePledge {
+    return {
+        id: r.id,
+        keeper: r.keeper,
+        enterprise: r.enterprise,
+        amount: r.amount,
+        pledgedAt: r.pledged_at ?? null,
+        releasedAt: r.released_at ?? null,
+    };
+}
+
+function postOfRow(row: any): MarketplacePost {
+    return {
         id: row.id,
         type: row.type,
         category: row.category,
@@ -890,13 +908,11 @@ export function exportSyncState(
         // Moderation (G3): a hidden post stays hidden, and a takedown still counts, on a standby and after a take-over.
         hiddenByReportsAt: row.hidden_by_reports_at ?? null,
         removedByModeratorAt: row.removed_by_moderator_at ?? null,
-    }));
+    };
+}
 
-    const photos = sel('post_photos', 'updated_at') as PostPhoto[];
-    const projects = sel('projects', 'updated_at') as Project[];
-
-    const ratingRows = sel('ratings', 'created_at');
-    const ratings: Rating[] = ratingRows.map(r => ({
+function ratingOfRow(r: any): Rating {
+    return {
         id: r.id,
         targetPubkey: r.target_pubkey,
         raterPubkey: r.rater_pubkey,
@@ -905,20 +921,20 @@ export function exportSyncState(
         role: r.role,
         transactionId: r.transaction_id,
         createdAt: r.created_at,
-    }));
+    };
+}
 
-    // Every account, in every payload, delta or whole: a standby's ledger is this one exactly (apps/server engine/sync.ts
-    // importRemoteState), so it needs the whole set each time, and each row as it is here, its stamp included.
-    const accountRows = db.prepare("SELECT * FROM accounts").all() as any[];
-    const accounts: SyncAccount[] = accountRows.map(row => ({
+function accountOfRow(row: any): SyncAccount {
+    return {
         publicKey: row.public_key,
         balance: row.balance,
         lastUpdatedAt: row.last_updated_at ?? null,
         lastDemurrageEpoch: row.last_demurrage_epoch,
-    }));
+    };
+}
 
-    const transactionRows = sel('transactions', 'timestamp');
-    const transactions: Transaction[] = transactionRows.map(row => ({
+function transactionOfRow(row: any): Transaction {
+    return {
         id: row.id,
         from: row.from_pubkey,
         to: row.to_pubkey,
@@ -932,15 +948,21 @@ export function exportSyncState(
         authSigner: row.auth_signer ?? null,
         authSignature: row.auth_signature ?? null,
         authPayload: row.auth_payload ?? null,
-    }));
+    };
+}
 
-    const ratingTxKeys = new Set(
-        (db.prepare("SELECT transaction_id, rater_pubkey FROM ratings").all() as any[])
+/** `transaction_id|rater_pubkey` of every rating, or of the ratings of the deals `ids` names. */
+function ratingKeysOfDeals(db: Db, ids?: readonly string[]): Set<string> {
+    return new Set(
+        (ids
+            ? db.prepare('SELECT transaction_id, rater_pubkey FROM ratings WHERE transaction_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(ids)) as any[]
+            : db.prepare('SELECT transaction_id, rater_pubkey FROM ratings').all() as any[])
             .map(r => `${r.transaction_id}|${r.rater_pubkey}`)
     );
+}
 
-    const marketplaceTxRows = sel('marketplace_transactions', 'updated_at');
-    const marketplaceTransactions: SyncMarketplaceTransaction[] = marketplaceTxRows.map(row => ({
+function marketplaceTransactionOfRow(row: any, ratingTxKeys: ReadonlySet<string>): SyncMarketplaceTransaction {
+    return {
         id: row.id,
         postId: row.post_id,
         buyerPubkey: row.buyer_pubkey,
@@ -961,10 +983,11 @@ export function exportSyncState(
         disputeResolvedBy: row.dispute_resolved_by ?? null,
         ratedByBuyer: ratingTxKeys.has(`${row.id}|${row.buyer_pubkey}`),
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
-    }));
+    };
+}
 
-    const friendRows = sel('friends', 'updated_at');
-    const friends: SyncFriend[] = friendRows.map(row => ({
+function friendOfRow(row: any): SyncFriend {
+    return {
         ownerPubkey: row.owner_pubkey,
         friendPubkey: row.friend_pubkey,
         addedAt: row.added_at,
@@ -974,34 +997,37 @@ export function exportSyncState(
         // deleted, so the honest value is the same everywhere: nobody is a guardian.
         isGuardian: false,
         updatedAt: row.updated_at || row.added_at,
-    }));
+    };
+}
 
-    // An event's chat is named with the event's title (apps/server engine/event-thread.ts), and a deleted account's event
-    // is renamed with its post (apps/server engine/post-scrub.ts): a delta carries the chat of each event it carries, so a
-    // standby's copy of the name goes too, not only at its next whole copy.
-    const conversationRows = delta
-        ? db.prepare(`SELECT * FROM conversations WHERE created_at >= ?
-                      OR (type = 'event_thread' AND id IN (SELECT id FROM posts WHERE type = 'event' AND updated_at >= ?))`).all(since, since) as any[]
-        : sel('conversations', 'created_at');
-    const conversations: SyncConversation[] = conversationRows.map(row => ({
+// An event's chat is named with the event's title (apps/server engine/event-thread.ts), and a deleted account's event
+// is renamed with its post (apps/server engine/post-scrub.ts): a delta carries the chat of each event it carries, so a
+// standby's copy of the name goes too, not only at its next whole copy.
+const CONVERSATIONS_SINCE = `created_at >= ?
+                      OR (type = 'event_thread' AND id IN (SELECT id FROM posts WHERE type = 'event' AND updated_at >= ?))`;
+
+function conversationOfRow(row: any): SyncConversation {
+    return {
         id: row.id,
         type: row.type,
         postId: row.post_id,
         name: row.name,
         createdBy: row.created_by,
         createdAt: row.created_at,
-    }));
+    };
+}
 
-    const participantRows = sel('conversation_participants', 'updated_at');
-    const conversationParticipants: SyncConversationParticipant[] = participantRows.map(row => ({
+function participantOfRow(row: any): SyncConversationParticipant {
+    return {
         conversationId: row.conversation_id,
         publicKey: row.public_key,
         lastReadAt: row.last_read_at,
         updatedAt: row.updated_at || row.last_read_at,
-    }));
+    };
+}
 
-    const messageRows = sel('messages', 'updated_at');
-    const messages: Message[] = messageRows.map(row => ({
+function messageOfRow(row: any): Message {
+    return {
         id: row.id,
         conversationId: row.conversation_id,
         authorPubkey: row.author_pubkey,
@@ -1013,10 +1039,11 @@ export function exportSyncState(
         timestamp: row.timestamp,
         editedAt: row.edited_at,
         updatedAt: row.updated_at || row.edited_at || row.timestamp,
-    }));
+    };
+}
 
-    const abuseRows = sel('abuse_reports', 'updated_at');
-    const abuseReports: SyncAbuseReport[] = abuseRows.map(row => ({
+function abuseReportOfRow(row: any): SyncAbuseReport {
+    return {
         id: row.id,
         reporterPubkey: row.reporter_pubkey,
         targetPubkey: row.target_pubkey,
@@ -1026,13 +1053,14 @@ export function exportSyncState(
         createdAt: row.created_at,
         status: row.status || 'pending',
         updatedAt: row.updated_at || row.created_at,
-    }));
+    };
+}
 
-    // Deleted rows are exported too, and must be: a backup that never hears about the deletion
-    // restores the channel. `url`/`handle` are already NULL by then (see deleteChannel), so the
-    // tombstone travels without the link travelling with it.
-    const channelRows = sel('creator_channels', 'updated_at');
-    const creatorChannels: SyncCreatorChannel[] = channelRows.map(row => ({
+// Deleted rows are exported too, and must be: a backup that never hears about the deletion
+// restores the channel. `url`/`handle` are already NULL by then (see deleteChannel), so the
+// tombstone travels without the link travelling with it.
+function creatorChannelOfRow(row: any): SyncCreatorChannel {
+    return {
         id: row.id,
         ownerPubkey: row.owner_pubkey,
         platform: row.platform,
@@ -1048,45 +1076,32 @@ export function exportSyncState(
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         deletedAt: row.deleted_at ?? null,
-    }));
+    };
+}
 
-    let pulseItems: SyncPulseItem[] = [];
-    try {
-        const pulseItemRows = sel('pulse_items', 'updated_at');
-        pulseItems = pulseItemRows.map(row => ({
-            id: row.id,
-            channelId: row.channel_id,
-            ownerPubkey: row.owner_pubkey,
-            platform: row.platform,
-            externalId: row.external_id ?? null,
-            url: row.url ?? null,
-            title: row.title ?? null,
-            thumbnailUrl: row.thumbnail_url ?? null,
-            publishedAt: row.published_at ?? null,
-            category: row.category,
-            source: row.source,
-            muted: row.muted === 1,
-            curated: row.curated === 1,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-            deletedAt: row.deleted_at ?? null,
-        }));
-    } catch {
-        // pulse_items table may not exist on older test fixtures
-    }
+function pulseItemOfRow(row: any): SyncPulseItem {
+    return {
+        id: row.id,
+        channelId: row.channel_id,
+        ownerPubkey: row.owner_pubkey,
+        platform: row.platform,
+        externalId: row.external_id ?? null,
+        url: row.url ?? null,
+        title: row.title ?? null,
+        thumbnailUrl: row.thumbnail_url ?? null,
+        publishedAt: row.published_at ?? null,
+        category: row.category,
+        source: row.source,
+        muted: row.muted === 1,
+        curated: row.curated === 1,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        deletedAt: row.deleted_at ?? null,
+    };
+}
 
-    // Guardian recovery is deleted. These three keys stay on the wire as empty arrays so an
-    // unpatched peer's `if (remote.recoveryRequests)` ingest still sees the shape it expects and
-    // iterates zero times. Querying the tables is pointless now and actively wrong on two counts:
-    // a fresh node has no such tables, so every sync cycle threw and swallowed an exception, and
-    // an existing node would have gone on replicating rows — PIN hashes included — for a feature
-    // that no longer has a single route.
-    const recoveryRequests: SyncRecoveryRequest[] = [];
-    const recoveryApprovals: SyncRecoveryApproval[] = [];
-    const recoveryPins: SyncRecoveryPin[] = [];
-
-    const recoveryShareRows = sel('recovery_shares', 'updated_at');
-    const recoveryShares: SyncRecoveryShare[] = recoveryShareRows.map((row: any) => ({
+function recoveryShareOfRow(row: any): SyncRecoveryShare {
+    return {
         ownerPubkey: row.owner_pubkey,
         holderType: row.holder_type,
         holderRef: row.holder_ref,
@@ -1101,12 +1116,11 @@ export function exportSyncState(
         generation: row.generation,
         createdAt: row.created_at,
         updatedAt: row.updated_at || row.created_at,
-    }));
+    };
+}
 
-    // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
-    // whose state has moved without re-sending the whole outbox.
-    const settlementRows = sel('settlements', 'updated_at');
-    const settlements: SyncSettlement[] = settlementRows.map(row => ({
+function settlementOfRow(row: any): SyncSettlement {
+    return {
         key: row.key,
         direction: row.direction,
         peerId: row.peer_id,
@@ -1123,18 +1137,340 @@ export function exportSyncState(
         failureReason: row.failure_reason ?? null,
         createdAt: row.created_at,
         updatedAt: row.updated_at || row.created_at,
-    }));
+    };
+}
+
+function pollVoteOfRow(r: any): SyncPollVote {
+    return {
+        postId: r.post_id,
+        voterPubkey: r.voter_pubkey,
+        optionId: r.option_id,
+        signature: r.signature || '',
+        createdAt: r.created_at,
+    };
+}
+
+function eventRsvpOfRow(r: any): SyncEventRsvp {
+    return {
+        postId: r.post_id,
+        memberPubkey: r.member_pubkey,
+        status: r.status,
+        signature: r.signature || '',
+        // Undefined rather than null on a schema without the column, so the import can tell "this node
+        // does not know about reminders" from "this person has no per-event choice".
+        reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
+        updatedAt: r.updated_at,
+    };
+}
+
+function groupOfRow(r: any): SyncGroup {
+    return {
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        description: r.description ?? null,
+        avatarUrl: r.avatar_url ?? null,
+        category: r.category || 'general',
+        createdBy: r.created_by,
+        leadPubkey: r.lead_pubkey ?? null,
+        joinPolicy: r.join_policy,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at || r.created_at,
+    };
+}
+
+function groupMemberOfRow(r: any): SyncGroupMember {
+    return {
+        groupId: r.group_id,
+        memberPubkey: r.member_pubkey,
+        role: r.role,
+        status: r.status,
+        joinedAt: r.joined_at ?? null,
+        invitedBy: r.invited_by ?? null,
+        updatedAt: r.updated_at || r.joined_at,
+        roleSince: r.role_since ?? null,
+    };
+}
+
+function openJoinOfRow(r: any): SyncOpenJoin {
+    return {
+        memberPubkey: r.member_pubkey,
+        provider: r.provider,
+        joinHash: r.join_hash,
+        joinedAt: r.joined_at,
+        updatedAt: r.updated_at || r.joined_at,
+    };
+}
+
+function placeWatchOfRow(r: any): SyncPlaceWatch {
+    return {
+        id: r.id,
+        pubkey: r.pubkey,
+        lat: r.lat,
+        lng: r.lng,
+        radiusKm: r.radius_km,
+        createdAt: r.created_at,
+        lastNotifiedAt: r.last_notified_at ?? null,
+        updatedAt: r.updated_at,
+    };
+}
+
+function directoryCommunityOfRow(r: any): SyncDirectoryCommunity {
+    return {
+        key: r.community_key,
+        listed: r.listed === 1,
+        name: r.name ?? null,
+        url: r.node_url ?? null,
+        lat: r.lat ?? null,
+        lng: r.lng ?? null,
+        radiusKm: r.radius_km ?? null,
+        memberCount: r.member_count ?? null,
+        contactEmail: r.contact_email ?? null,
+        contactPhone: r.contact_phone ?? null,
+        registryUpdatedAt: r.registry_updated_at ?? null,
+        firstSeenAt: r.first_seen_at,
+        updatedAt: r.updated_at,
+    };
+}
+
+// Requests to join (G6): on every node, empty on the global one. Never `ip_hash`, the knock limiter's for a day.
+function joinRequestOfRow(r: any): SyncJoinRequest {
+    return {
+        id: r.id,
+        pubkey: r.pubkey,
+        callsign: r.callsign,
+        message: r.message,
+        avatar: r.avatar ?? null,
+        fromNode: r.from_node ?? null,
+        status: r.status,
+        createdAt: r.created_at,
+        decidedBy: r.decided_by ?? null,
+        inviteCode: r.invite_code ?? null,
+        decidedAt: r.decided_at ?? null,
+        updatedAt: r.updated_at,
+    };
+}
+
+// Moderation notices kept for their member (apps/server engine/kept-notices.ts), and when they saw each one.
+function moderationNoticeOfRow(r: any): SyncModerationNotice {
+    return {
+        id: r.id,
+        recipient: r.recipient,
+        title: r.title,
+        body: r.body,
+        data: r.data,
+        createdAt: r.created_at,
+        seenAt: r.seen_at ?? null,
+        updatedAt: r.updated_at,
+    };
+}
+
+// Each member's block list (apps/server engine/member-blocks.ts): whom they blocked, and when.
+function memberBlockOfRow(r: any): SyncMemberBlock {
+    return {
+        ownerPubkey: r.owner_pubkey,
+        blockedPubkey: r.blocked_pubkey,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+    };
+}
+
+// The keys a re-key replaced, or is replacing (apps/server engine/member-wizards.ts). A key is lower case wherever
+// this server writes one.
+function invalidatedKeyOfRow(r: any): SyncInvalidatedKey {
+    return {
+        publicKey: r.public_key,
+        reason: r.reason,
+        invalidatedAt: r.invalidated_at,
+        rekeyedTo: r.rekeyed_to ?? null,
+    };
+}
+
+function tombstoneOfRow(t: any): { tableName: string; rowKey: string; deletedAt: string } {
+    return { tableName: t.table_name, rowKey: t.row_key, deletedAt: t.deleted_at };
+}
+
+/**
+ * A category of the payload as a copy served in pages reads it (apps/server engine/copy-pages.ts): its table, the rows a
+ * delta carries, and the code that shapes a slice of its rows (`SELECT *`) into what the payload carries, the code
+ * exportSyncState shapes them with.
+ */
+export interface ExportCategory {
+    /** The payload's key. */
+    key: keyof SyncPayload;
+    table: string;
+    /**
+     * The rows a delta carries: those whose `watermark` is at or after the cursor; those a condition of their own holds, with
+     * the cursor in each of its `sinceParams` places; or every row (`whole`), the accounts: a standby's ledger is this one
+     * exactly, so every payload carries the whole set.
+     */
+    delta: { watermark: string } | { where: string; sinceParams: number } | 'whole';
+    /** A slice of the table's rows, `SELECT *`, as the payload carries them. */
+    shape: (db: Db, rows: any[]) => unknown[];
+}
+
+const eachRow = (of: (row: any) => unknown) => (_db: Db, rows: any[]) => rows.map(of);
+const asTheyAre = (_db: Db, rows: any[]) => rows;
+
+/**
+ * Every category exportSyncState writes, in its order, but the ones a copy in pages carries otherwise: the keepers
+ * (`treasuryOperators`, the whole set, which the importer applies as a difference: exportTreasuryOperators, in one piece),
+ * the plain tables (plainTableRead; the payload has them after `enterprisePledges`, before `tombstones`), and the three
+ * guardian-recovery categories, always empty. `tombstones` last, as the payload has them.
+ */
+export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
+    {
+        key: 'members', table: 'members', delta: { watermark: 'updated_at' },
+        shape: (db, rows) => {
+            const prefs = preferencesOfMembers(db, rows.map((r) => r.public_key));
+            return rows.map((r) => memberOfRow(r, prefs));
+        },
+    },
+    { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: eachRow(postOfRow) },
+    // The photos' rows as the table holds them: the server puts each one's bytes back (apps/server engine/sync.ts).
+    { key: 'photos', table: 'post_photos', delta: { watermark: 'updated_at' }, shape: asTheyAre },
+    { key: 'projects', table: 'projects', delta: { watermark: 'updated_at' }, shape: asTheyAre },
+    { key: 'ratings', table: 'ratings', delta: { watermark: 'created_at' }, shape: eachRow(ratingOfRow) },
+    { key: 'accounts', table: 'accounts', delta: 'whole', shape: eachRow(accountOfRow) },
+    { key: 'transactions', table: 'transactions', delta: { watermark: 'timestamp' }, shape: eachRow(transactionOfRow) },
+    {
+        key: 'marketplaceTransactions', table: 'marketplace_transactions', delta: { watermark: 'updated_at' },
+        shape: (db, rows) => {
+            const rated = ratingKeysOfDeals(db, rows.map((r) => r.id));
+            return rows.map((r) => marketplaceTransactionOfRow(r, rated));
+        },
+    },
+    { key: 'friends', table: 'friends', delta: { watermark: 'updated_at' }, shape: eachRow(friendOfRow) },
+    { key: 'conversations', table: 'conversations', delta: { where: CONVERSATIONS_SINCE, sinceParams: 2 }, shape: eachRow(conversationOfRow) },
+    { key: 'conversationParticipants', table: 'conversation_participants', delta: { watermark: 'updated_at' }, shape: eachRow(participantOfRow) },
+    { key: 'messages', table: 'messages', delta: { watermark: 'updated_at' }, shape: eachRow(messageOfRow) },
+    { key: 'abuseReports', table: 'abuse_reports', delta: { watermark: 'updated_at' }, shape: eachRow(abuseReportOfRow) },
+    { key: 'creatorChannels', table: 'creator_channels', delta: { watermark: 'updated_at' }, shape: eachRow(creatorChannelOfRow) },
+    { key: 'pulseItems', table: 'pulse_items', delta: { watermark: 'updated_at' }, shape: eachRow(pulseItemOfRow) },
+    { key: 'recoveryShares', table: 'recovery_shares', delta: { watermark: 'updated_at' }, shape: eachRow(recoveryShareOfRow) },
+    { key: 'settlements', table: 'settlements', delta: { watermark: 'updated_at' }, shape: eachRow(settlementOfRow) },
+    { key: 'pollVotes', table: 'poll_votes', delta: { watermark: 'created_at' }, shape: eachRow(pollVoteOfRow) },
+    { key: 'eventRsvps', table: 'event_rsvps', delta: { watermark: 'updated_at' }, shape: eachRow(eventRsvpOfRow) },
+    { key: 'groups', table: 'groups', delta: { watermark: 'updated_at' }, shape: eachRow(groupOfRow) },
+    { key: 'groupMembers', table: 'group_members', delta: { watermark: 'updated_at' }, shape: eachRow(groupMemberOfRow) },
+    { key: 'openJoins', table: 'open_joins', delta: { watermark: 'updated_at' }, shape: eachRow(openJoinOfRow) },
+    { key: 'placeWatches', table: 'place_watches', delta: { watermark: 'updated_at' }, shape: eachRow(placeWatchOfRow) },
+    { key: 'directoryCache', table: 'directory_cache', delta: { watermark: 'updated_at' }, shape: eachRow(directoryCommunityOfRow) },
+    { key: 'joinRequests', table: 'join_requests', delta: { watermark: 'updated_at' }, shape: eachRow(joinRequestOfRow) },
+    { key: 'moderationNotices', table: 'moderation_notices', delta: { watermark: 'updated_at' }, shape: eachRow(moderationNoticeOfRow) },
+    { key: 'memberBlocks', table: 'member_blocks', delta: { watermark: 'updated_at' }, shape: eachRow(memberBlockOfRow) },
+    { key: 'invalidatedKeys', table: 'invalidated_keys', delta: { watermark: 'invalidated_at' }, shape: eachRow(invalidatedKeyOfRow) },
+    // Keepers' pledges, by the two writes a pledge has: made, and released.
+    { key: 'enterprisePledges', table: 'enterprise_pledges', delta: { where: 'pledged_at >= ? OR released_at >= ?', sinceParams: 2 }, shape: eachRow(enterprisePledgeOfRow) },
+    { key: 'tombstones', table: 'tombstones', delta: { watermark: 'deleted_at' }, shape: eachRow(tombstoneOfRow) },
+];
+
+export function exportSyncState(
+    db: Db,
+    nodeId: string,
+    since?: string | null,
+    commonsBalance = 0,
+    plainTables: readonly PlainTableSpec[] = [],
+): SyncPayload {
+    const delta = typeof since === 'string' && since.length > 0;
+    const cursor = new Date().toISOString();
+    const sel = (table: string, watermark: string): any[] =>
+        delta
+            ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
+            : db.prepare(`SELECT * FROM ${table}`).all() as any[];
+
+    // Each member's preferences (holiday, notification settings, reminder defaults) travel with their row, in one query:
+    // every writer moves the member's updated_at, so a delta that carries a change carries the member (design G2b).
+    const preferencesOf = new Map<string, Record<string, string>>();
+    try {
+        const prefRows = (delta
+            ? db.prepare(`SELECT p.public_key, p.pref_key, p.pref_value FROM member_preferences p
+                          JOIN members m ON m.public_key = p.public_key WHERE m.updated_at >= ?`).all(since)
+            : db.prepare('SELECT public_key, pref_key, pref_value FROM member_preferences').all()
+        ) as { public_key: string; pref_key: string; pref_value: string }[];
+        for (const r of prefRows) {
+            let prefs = preferencesOf.get(r.public_key);
+            if (!prefs) preferencesOf.set(r.public_key, prefs = {});
+            prefs[r.pref_key] = r.pref_value;
+        }
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
+    const members = (delta
+        ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
+        : db.prepare("SELECT * FROM members").all() as any[]
+    ).map((row) => memberOfRow(row, preferencesOf));
+
+    const treasuryOperators = exportTreasuryOperators(db);
+    let enterprisePledges: SyncEnterprisePledge[] = [];
+    try {
+        enterprisePledges = (delta
+            ? db.prepare('SELECT * FROM enterprise_pledges WHERE pledged_at >= ? OR released_at >= ?').all(since, since)
+            : db.prepare('SELECT * FROM enterprise_pledges').all()
+        ).map(enterprisePledgeOfRow);
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
+    const posts: MarketplacePost[] = sel('posts', 'updated_at').map(postOfRow);
+
+    const photos = sel('post_photos', 'updated_at') as PostPhoto[];
+    const projects = sel('projects', 'updated_at') as Project[];
+
+    const ratings: Rating[] = sel('ratings', 'created_at').map(ratingOfRow);
+
+    // Every account, in every payload, delta or whole: a standby's ledger is this one exactly (apps/server engine/sync.ts
+    // importRemoteState), so it needs the whole set each time, and each row as it is here, its stamp included.
+    const accounts: SyncAccount[] = (db.prepare("SELECT * FROM accounts").all() as any[]).map(accountOfRow);
+
+    const transactions: Transaction[] = sel('transactions', 'timestamp').map(transactionOfRow);
+
+    const ratingTxKeys = ratingKeysOfDeals(db);
+    const marketplaceTransactions: SyncMarketplaceTransaction[] = sel('marketplace_transactions', 'updated_at')
+        .map((row) => marketplaceTransactionOfRow(row, ratingTxKeys));
+
+    const friends: SyncFriend[] = sel('friends', 'updated_at').map(friendOfRow);
+
+    const conversationRows = delta
+        ? db.prepare(`SELECT * FROM conversations WHERE ${CONVERSATIONS_SINCE}`).all(since, since) as any[]
+        : sel('conversations', 'created_at');
+    const conversations: SyncConversation[] = conversationRows.map(conversationOfRow);
+
+    const conversationParticipants: SyncConversationParticipant[] = sel('conversation_participants', 'updated_at').map(participantOfRow);
+
+    const messages: Message[] = sel('messages', 'updated_at').map(messageOfRow);
+
+    const abuseReports: SyncAbuseReport[] = sel('abuse_reports', 'updated_at').map(abuseReportOfRow);
+
+    const creatorChannels: SyncCreatorChannel[] = sel('creator_channels', 'updated_at').map(creatorChannelOfRow);
+
+    let pulseItems: SyncPulseItem[] = [];
+    try {
+        pulseItems = sel('pulse_items', 'updated_at').map(pulseItemOfRow);
+    } catch {
+        // pulse_items table may not exist on older test fixtures
+    }
+
+    // Guardian recovery is deleted. These three keys stay on the wire as empty arrays so an
+    // unpatched peer's `if (remote.recoveryRequests)` ingest still sees the shape it expects and
+    // iterates zero times. Querying the tables is pointless now and actively wrong on two counts:
+    // a fresh node has no such tables, so every sync cycle threw and swallowed an exception, and
+    // an existing node would have gone on replicating rows — PIN hashes included — for a feature
+    // that no longer has a single route.
+    const recoveryRequests: SyncRecoveryRequest[] = [];
+    const recoveryApprovals: SyncRecoveryApproval[] = [];
+    const recoveryPins: SyncRecoveryPin[] = [];
+
+    const recoveryShares: SyncRecoveryShare[] = sel('recovery_shares', 'updated_at').map(recoveryShareOfRow);
+
+    // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
+    // whose state has moved without re-sending the whole outbox.
+    const settlements: SyncSettlement[] = sel('settlements', 'updated_at').map(settlementOfRow);
 
     let pollVotes: SyncPollVote[] = [];
     try {
-        const pollVoteRows = sel('poll_votes', 'created_at');
-        pollVotes = pollVoteRows.map((r: any) => ({
-            postId: r.post_id,
-            voterPubkey: r.voter_pubkey,
-            optionId: r.option_id,
-            signature: r.signature || '',
-            createdAt: r.created_at,
-        }));
+        pollVotes = sel('poll_votes', 'created_at').map(pollVoteOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
@@ -1143,16 +1479,7 @@ export function exportSyncState(
     // is a delete and travels as an `event_rsvps` tombstone.
     let eventRsvps: SyncEventRsvp[] = [];
     try {
-        eventRsvps = sel('event_rsvps', 'updated_at').map((r: any) => ({
-            postId: r.post_id,
-            memberPubkey: r.member_pubkey,
-            status: r.status,
-            signature: r.signature || '',
-            // Undefined rather than null on a schema without the column, so the import can tell "this node
-            // does not know about reminders" from "this person has no per-event choice".
-            reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
-            updatedAt: r.updated_at,
-        }));
+        eventRsvps = sel('event_rsvps', 'updated_at').map(eventRsvpOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
@@ -1160,29 +1487,8 @@ export function exportSyncState(
     let groups: SyncGroup[] = [];
     let groupMembers: SyncGroupMember[] = [];
     try {
-        groups = sel('groups', 'updated_at').map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            slug: r.slug,
-            description: r.description ?? null,
-            avatarUrl: r.avatar_url ?? null,
-            category: r.category || 'general',
-            createdBy: r.created_by,
-            leadPubkey: r.lead_pubkey ?? null,
-            joinPolicy: r.join_policy,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at || r.created_at,
-        }));
-        groupMembers = sel('group_members', 'updated_at').map((r: any) => ({
-            groupId: r.group_id,
-            memberPubkey: r.member_pubkey,
-            role: r.role,
-            status: r.status,
-            joinedAt: r.joined_at ?? null,
-            invitedBy: r.invited_by ?? null,
-            updatedAt: r.updated_at || r.joined_at,
-            roleSince: r.role_since ?? null,
-        }));
+        groups = sel('groups', 'updated_at').map(groupOfRow);
+        groupMembers = sel('group_members', 'updated_at').map(groupMemberOfRow);
     } catch {
         // Tables absent on older schema/fixtures
     }
@@ -1192,13 +1498,7 @@ export function exportSyncState(
         openJoins = (delta
             ? db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins WHERE updated_at >= ?').all(since)
             : db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins').all()
-        ).map((r: any) => ({
-            memberPubkey: r.member_pubkey,
-            provider: r.provider,
-            joinHash: r.join_hash,
-            joinedAt: r.joined_at,
-            updatedAt: r.updated_at || r.joined_at,
-        }));
+        ).map(openJoinOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
@@ -1207,101 +1507,41 @@ export function exportSyncState(
     // empty on a local one.
     let placeWatches: SyncPlaceWatch[] = [];
     try {
-        placeWatches = sel('place_watches', 'updated_at').map((r: any) => ({
-            id: r.id,
-            pubkey: r.pubkey,
-            lat: r.lat,
-            lng: r.lng,
-            radiusKm: r.radius_km,
-            createdAt: r.created_at,
-            lastNotifiedAt: r.last_notified_at ?? null,
-            updatedAt: r.updated_at,
-        }));
+        placeWatches = sel('place_watches', 'updated_at').map(placeWatchOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
     let directoryCache: SyncDirectoryCommunity[] = [];
     try {
-        directoryCache = sel('directory_cache', 'updated_at').map((r: any) => ({
-            key: r.community_key,
-            listed: r.listed === 1,
-            name: r.name ?? null,
-            url: r.node_url ?? null,
-            lat: r.lat ?? null,
-            lng: r.lng ?? null,
-            radiusKm: r.radius_km ?? null,
-            memberCount: r.member_count ?? null,
-            contactEmail: r.contact_email ?? null,
-            contactPhone: r.contact_phone ?? null,
-            registryUpdatedAt: r.registry_updated_at ?? null,
-            firstSeenAt: r.first_seen_at,
-            updatedAt: r.updated_at,
-        }));
+        directoryCache = sel('directory_cache', 'updated_at').map(directoryCommunityOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
 
-    // Requests to join (G6): on every node, empty on the global one. Never `ip_hash`, the knock limiter's for a day.
     let joinRequests: SyncJoinRequest[] = [];
     try {
-        joinRequests = sel('join_requests', 'updated_at').map((r: any) => ({
-            id: r.id,
-            pubkey: r.pubkey,
-            callsign: r.callsign,
-            message: r.message,
-            avatar: r.avatar ?? null,
-            fromNode: r.from_node ?? null,
-            status: r.status,
-            createdAt: r.created_at,
-            decidedBy: r.decided_by ?? null,
-            inviteCode: r.invite_code ?? null,
-            decidedAt: r.decided_at ?? null,
-            updatedAt: r.updated_at,
-        }));
+        joinRequests = sel('join_requests', 'updated_at').map(joinRequestOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
 
-    // Moderation notices kept for their member (apps/server engine/kept-notices.ts), and when they saw each one.
     let moderationNotices: SyncModerationNotice[] = [];
     try {
-        moderationNotices = sel('moderation_notices', 'updated_at').map((r: any) => ({
-            id: r.id,
-            recipient: r.recipient,
-            title: r.title,
-            body: r.body,
-            data: r.data,
-            createdAt: r.created_at,
-            seenAt: r.seen_at ?? null,
-            updatedAt: r.updated_at,
-        }));
+        moderationNotices = sel('moderation_notices', 'updated_at').map(moderationNoticeOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
 
-    // Each member's block list (apps/server engine/member-blocks.ts): whom they blocked, and when.
     let memberBlocks: SyncMemberBlock[] = [];
     try {
-        memberBlocks = sel('member_blocks', 'updated_at').map((r: any) => ({
-            ownerPubkey: r.owner_pubkey,
-            blockedPubkey: r.blocked_pubkey,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
-        }));
+        memberBlocks = sel('member_blocks', 'updated_at').map(memberBlockOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
 
-    // The keys a re-key replaced, or is replacing (apps/server engine/member-wizards.ts). A key is lower case wherever
-    // this server writes one.
     let invalidatedKeys: SyncInvalidatedKey[] = [];
     try {
-        invalidatedKeys = sel('invalidated_keys', 'invalidated_at').map((r: any) => ({
-            publicKey: r.public_key,
-            reason: r.reason,
-            invalidatedAt: r.invalidated_at,
-            rekeyedTo: r.rekeyed_to ?? null,
-        }));
+        invalidatedKeys = sel('invalidated_keys', 'invalidated_at').map(invalidatedKeyOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }
@@ -1309,7 +1549,7 @@ export function exportSyncState(
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
-    const tombstones = tombstoneRows.map(t => ({ tableName: t.table_name, rowKey: t.row_key, deletedAt: t.deleted_at }));
+    const tombstones = tombstoneRows.map(tombstoneOfRow);
 
     return {
         stateHash: getStateHash(db),

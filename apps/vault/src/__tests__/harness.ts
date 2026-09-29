@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -114,6 +114,8 @@ export interface VaultUnderTest {
     dir: string;
     stateDir: string;
     dataDir: string;
+    /** With requireDataMount: where a restore from backup waits (the image: the state partition). */
+    restoreDir: string;
     storeDir: string;
     socketPath: string;
     baseUrl: string;
@@ -129,6 +131,11 @@ export interface VaultUnderTest {
     restartKeyholder(): Promise<void>;
     /** A restart of the API alone (a crash, or a new release): on a new port, so `baseUrl` changes. */
     restartApi(): Promise<void>;
+    /**
+     * With requireDataMount: root mounts the data partition at `dataDir`, as the image's vault-data helper does after
+     * the unlock. Whatever the directory held is hidden (moved aside here) and it is empty: a blank volume.
+     */
+    mountData(): void;
     close(): Promise<void>;
     call(opts?: Partial<CallOptions>): CallOptions;
 }
@@ -149,6 +156,8 @@ export async function startVault(opts: {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
     const dataDir = path.join(dir, 'data');
+    const restoreDir = path.join(dir, 'restore');
+    let dataMounted = false;
     const storeDir = opts.storeDir ?? path.join(dir, 'store');
     const socketPath = path.join(dir, 'kh.sock');
     const clock = opts.clock ?? makeClock();
@@ -168,14 +177,14 @@ export async function startVault(opts: {
     const makeApi = async () => {
         const api = createVaultApi({
             dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy,
-            requireDataMount: opts.requireDataMount,
+            ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');
         return { api, baseUrl: `http://127.0.0.1:${port}` };
     };
     const first = await makeApi();
     const v: VaultUnderTest = {
-        dir, stateDir, dataDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
+        dir, stateDir, dataDir, restoreDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
         keyholder: () => kh,
         restartKeyholder: async () => {
             await server.close();
@@ -188,6 +197,11 @@ export async function startVault(opts: {
             const next = await makeApi();
             v.api = next.api;
             v.baseUrl = next.baseUrl;
+        },
+        mountData: () => {
+            if (existsSync(dataDir)) renameSync(dataDir, `${dataDir}.under-the-mount`);
+            mkdirSync(dataDir, { mode: 0o700 });
+            dataMounted = true;
         },
         close: async () => {
             await v.api.close();

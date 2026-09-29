@@ -79,9 +79,19 @@ export interface VaultApiOptions {
     about?: () => AboutThisApi;
     /**
      * `dataDir` is where the data partition is mounted once the vault is open (the image: LUKS2 under K_disk). Until
-     * it is, no database is opened (it would land on the partition underneath) and the vault answers as locked.
+     * it is, no database is opened (it would land on the partition underneath) and the vault answers as locked. Once
+     * it is, the API opens the database itself (finishing a restore from backup): it looks every `dataPollMs`.
      */
     requireDataMount?: boolean;
+    /**
+     * Where a restore from backup waits for the unlock (`restore-pending.bin`, sealed under K_backup). It must not be
+     * under `dataDir` when that is a mount point: the mount would hide it and the restore never finish. The image:
+     * `/var/lib/beanpool-vault/restore` on the state partition. Defaults to `dataDir` without `requireDataMount`.
+     */
+    restoreDir?: string;
+    /** Whether the data partition is mounted at `dataDir` (default: `dataDir` is on another device than its parent). */
+    dataMounted?: () => boolean;
+    dataPollMs?: number;
 }
 
 export interface AboutThisApi {
@@ -260,12 +270,18 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const background = new Set<Promise<unknown>>();
     let writeChain: Promise<unknown> = Promise.resolve();
 
-    const pendingPath = path.join(opts.dataDir, RESTORE_PENDING);
+    if (opts.requireDataMount) {
+        const under = opts.restoreDir ? path.relative(opts.dataDir, opts.restoreDir) : '';
+        if (!opts.restoreDir || !under.startsWith('..')) throw new Error('With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).');
+    }
+    const restoreDir = opts.restoreDir ?? opts.dataDir;
+    const pendingPath = path.join(restoreDir, RESTORE_PENDING);
     const dbPath = path.join(opts.dataDir, DB_FILE);
 
     /** The data directory is ready: always, unless it must be a mount point and isn't yet. */
     function dataReady(): boolean {
         if (!opts.requireDataMount) return true;
+        if (opts.dataMounted) return opts.dataMounted();
         try {
             return statSync(opts.dataDir).dev !== statSync(path.dirname(opts.dataDir)).dev;
         } catch {
@@ -331,7 +347,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 // A crash after the keyholder took the backup's state but before the file got its name.
                 if (!existsSync(pendingPath) && existsSync(`${pendingPath}.part`)) renameSync(`${pendingPath}.part`, pendingPath);
                 if (!existsSync(pendingPath)) {
-                    restoreFailure = 'the backup it was started from is missing from the data directory';
+                    restoreFailure = 'the backup it was started from is missing from the restore directory';
                     throw restoreWaiting();
                 }
                 if (clock() < restoreRetryAt) throw restoreWaiting();
@@ -359,6 +375,16 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         });
         return opening;
     }
+
+    /*
+     * The data partition is mounted by root after the unlock (the image's vault-data helper), with no request to wait
+     * for: once it is there, the database opens (a restore from backup finishes) without one. A locked keyholder or a
+     * restore still failing only means another try later.
+     */
+    const dataWatch = opts.requireDataMount ? setInterval(() => {
+        if (!db && !opening && dataReady()) ensureDb().catch(() => undefined);
+    }, opts.dataPollMs ?? 5000) : null;
+    dataWatch?.unref();
 
     /**
      * After the unlock of a vault restored from a backup: the backup's database is built beside the vault's file, every
@@ -898,7 +924,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch (e) {
             throw new HttpError(400, 'bad_backup', (e as Error).message);
         }
-        mkdirSync(opts.dataDir, { recursive: true, mode: 0o700 });
+        // Off the data partition's mount point (restoreDir): the unlock mounts the partition, which would hide it.
+        mkdirSync(restoreDir, { recursive: true, mode: 0o700 });
         writeFileSync(`${pendingPath}.part`, bytes, { mode: 0o600 });
         try {
             await call('adoptState', { custodian: ctx.key, sig: ctx.body.sig, backupName: name, state: header.state });
@@ -1107,6 +1134,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     async function closeRest(): Promise<void> {
+        if (dataWatch) clearInterval(dataWatch);
         await Promise.allSettled([...background]);
         await push.idle();
         kh.close();

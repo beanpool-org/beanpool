@@ -19,6 +19,7 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  *    "releasesDir": "/var/lib/beanpool-vault/releases", "feed": {"github": "beanpool-org/beanpool"}}
  *
  * - `requireDataMount`: `dataDir` is the data partition's mount point (the image); nothing opens until it is mounted.
+ *   `restoreDir` (then required, outside `dataDir`) keeps a restore from backup waiting for the unlock off it.
  * - `socketPath`: listen on a Unix socket behind that symlink (the image; Caddy connects through it), so a newer API
  *   can take over (updater.ts, launcher.ts). Without it, `port` and `host` (tests, a rehearsal).
  * - `backupDir` is a local directory standing in for the object store until its client and credentials exist (design
@@ -53,6 +54,7 @@ interface ApiConfig {
     imageIdentityFile?: string;
     rootKeys?: string[];
     requireDataMount?: boolean;
+    restoreDir?: string;
 }
 
 function argValue(name: string): string | undefined {
@@ -120,6 +122,7 @@ async function main(): Promise<void> {
         trustProxy: config.trustProxy,
         expoAccessToken: config.expoAccessToken,
         requireDataMount: config.requireDataMount,
+        restoreDir: config.restoreDir,
         about: () => ({ api: own ?? 'source', update: updater?.status ?? null, nextRestart: new Date(nextMonthlyRestart(Date.now())).toISOString() }),
     });
     const where = config.socketPath ? await api.listenUnix(config.socketPath) : `${config.host ?? '127.0.0.1'}:${await api.listen(config.port ?? 8443, config.host ?? '127.0.0.1')}`;

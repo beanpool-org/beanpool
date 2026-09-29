@@ -143,7 +143,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   `roothash=` of the erofs system partition), booted by systemd-boot (no menu, no editor). `/var` is a separate state
   partition, made at the first boot with the second system slot and the data partition (`usr/lib/repart.d`).
 - The data partition is LUKS2 under `K_disk`: after an unlock, a root helper takes the key from the keyholder's
-  root-only socket, opens the partition (formats it the first time), and mounts it; the API opens no database before.
+  root-only socket, opens the partition (formats it the first time), and mounts it in the machine's own mount
+  namespace (its unit has no setting that makes one), where the API sees it; the API opens no database before, and
+  opens it by itself once the partition is there. A restore from backup waits for the unlock on the state partition
+  (`/var/lib/beanpool-vault/restore`, the API's user's alone; it is sealed under `K_backup`), not in the mount point,
+  which the mount would hide; it is deleted once the restore lands.
 - No SSH server, no getty, no rescue or debug shell, root locked, no login shell for any account.
 - Firewall (`etc/nftables.conf`): in, 443 and 80 (certificates); out, HTTPS only to addresses the vault's own resolver
   (dnsmasq, `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names: the providers' key endpoints,

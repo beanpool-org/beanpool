@@ -1,6 +1,7 @@
 {
   "dataDir": "/var/lib/beanpool-vault/data",
   "requireDataMount": true,
+  "restoreDir": "/var/lib/beanpool-vault/restore",
   "keyholderSocket": "/run/beanpool-vault/keyholder/keyholder.sock",
   "hosts": ["vault.beanpool.org"],
   "socketPath": "/run/beanpool-vault/api/api.sock",

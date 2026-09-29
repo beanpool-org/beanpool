@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { restoreFromBackup } from '../custodian/lib.js';
 import { listenDiskKey, type KeyholderServer } from '../keyholder/server.js';
 import { MONTHLY_RESTART_ON_CALENDAR, nextMonthlyRestart } from '../shared/schedule.js';
-import { deposit, doGenesis, get, newMember, startVault, unlockWith, type VaultUnderTest } from './harness.js';
+import { deposit, doGenesis, get, newMember, startRestore, startVault, unlockWith, type VaultUnderTest } from './harness.js';
 
 /**
  * What the image relies on in the programs (V3): the data partition's key for root only while open, no database
@@ -78,6 +78,42 @@ describe('the data directory must be mounted (requireDataMount)', () => {
         const r = await deposit(v, g, newMember(), 'google', 'no-partition');
         expect(r).toMatchObject({ status: 503, body: { code: 'data_not_ready', locked: true } });
         expect(existsSync(path.join(v.dataDir, 'vault.db'))).toBe(false);
+    });
+});
+
+describe('a restore from backup on the image: the data partition is mounted over dataDir after the unlock', () => {
+    it('the backup waits off the mount point (root/owner-only); the restore then finishes, restorePending goes false, health says open, and the file goes', async () => {
+        const v = await startVault();
+        open.push(v);
+        const g = await doGenesis(v);
+        await deposit(v, g, newMember(), 'google', 'kept-across-the-restore');
+        const backup = await v.api.runBackup();
+
+        const fresh = await startVault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir, requireDataMount: true });
+        open.push(fresh);
+        expect((await restoreFromBackup(fresh.baseUrl, fresh.custodians[0], backup, fresh.call())).body.state).toBe('locked');
+        const pending = path.join(fresh.restoreDir, 'restore-pending.bin');
+        expect(existsSync(pending)).toBe(true);
+        expect(statSync(pending).mode & 0o777).toBe(0o600);
+        expect(statSync(fresh.restoreDir).mode & 0o777).toBe(0o700);
+        // Nothing in the mount point that the mount would hide.
+        expect(existsSync(fresh.dataDir) ? readdirSync(fresh.dataDir) : []).toEqual([]);
+
+        await unlockWith(fresh, g.shares, [0, 1]);
+        expect(fresh.keyholder().status()).toMatchObject({ state: 'open', restorePending: true });
+        expect((await get(fresh, '/v1/health')).body.state).toBe('locked');
+
+        // vault-data mounts the (blank) volume over dataDir: whatever the directory held is hidden.
+        fresh.mountData();
+        const deadline = Date.now() + 10_000;
+        while ((await get(fresh, '/v1/health')).body.state !== 'open' && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
+        expect((await get(fresh, '/v1/health')).body.state).toBe('open');
+        expect(fresh.keyholder().status().restorePending).toBe(false);
+        expect(existsSync(pending)).toBe(false);
+        expect(existsSync(path.join(fresh.dataDir, 'vault.db'))).toBe(true);
+        // The backup's copy is there: a restore by its sign-in is held (D2), not refused as unknown.
+        const r = await startRestore(fresh, 'google', 'kept-across-the-restore');
+        expect(r.reply).toMatchObject({ status: 200, body: { status: 'held' } });
     });
 });
 

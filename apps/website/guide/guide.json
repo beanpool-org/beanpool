@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 78,
-  "hash": "d33ea09d98049ca042b034df86da53b8d1facb8bc715b392d5cdc1339fa81426",
+  "version": 79,
+  "hash": "af283ac528d5e1a18fab7b754de40c00958689344a0e541b85ba7d6e8b76275c",
   "sections": [
     {
       "id": "about",
@@ -5046,7 +5046,7 @@
         {
           "type": "ul",
           "items": [
-            "If GitHub was the only account you linked and this phone has your 12 words, write them down now (**Settings** → **Check your 12 words**), and link Google, Facebook or (on an iPhone) Apple, as above. Until you do one of these, this phone is your only way into your account.",
+            "If GitHub was the only account you linked and your 12 words are on this phone but not written down, write them down now (**Settings**, then **View Recovery Phrase**), or link Google, Facebook or (on an iPhone) Apple, as above. Until you do one of these, this phone is your only way into your account.",
             "If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.",
             "If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account."
           ]

@@ -26,6 +26,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -793,6 +794,10 @@ export function initStateEngine(): void {
             try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
         }, 60 * 1000);
     }
+
+    // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
+    // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
+    startPruningUnusedInvites();
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;

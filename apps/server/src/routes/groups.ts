@@ -39,6 +39,7 @@ import {
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
 import { db } from '../db/db.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
@@ -177,6 +178,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             // A muted member (G3) starts nothing other members read: a group's name and description are listed.
             assertNotMuted(actor);
+            // 5 groups started a day per member, on every profile (W-main): no route deletes a group.
+            assertMayStartGroupToday(actor);
             const group = createGroup({
                 name: name.trim(),
                 slug: slug?.trim(),

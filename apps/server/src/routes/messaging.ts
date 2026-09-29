@@ -21,6 +21,7 @@ import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
+import { assertDmLineFits, assertMayReachNewPeople } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { assertMayMessage } from '../engine/probation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
@@ -158,6 +159,9 @@ router.post('/api/messages/conversation', async (ctx) => {
         for (const other of uniqueParticipants) if (other !== createdBy) assertMayMessage(createdBy, other);
         // A visitor's row opens no new conversation, and so makes no row for anyone (assertMayOpenConversation).
         assertMayOpenConversation(createdBy, uniqueParticipants);
+        // Every profile: a DM opened with someone who has no row here makes one for them, so at most 20 such people a
+        // day (W-main, engine/writer-bounds.ts), after probation's stricter 10 new people where it is on.
+        assertMayReachNewPeople(createdBy, uniqueParticipants);
         const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;
@@ -195,13 +199,14 @@ router.post('/api/messages/send', async (ctx) => {
         }
         clientId = id.toLowerCase();
     }
-    // A group chat line is a row in a room that pushes to every member, so it is throttled exactly as the group
-    // chat route throttles it — per signed member, in the chat bucket (PR #924 review, item 4) — and an
-    // invite-only group is 404 to an outsider here as there (item 5). Store apps up to 1.2.37 send group chat
-    // lines through this route.
+    // Every line through here is throttled per signed member, in the chat bucket: a DM line (W-main: it was limited
+    // only by the gateway's 120 a minute, and each is a row a standby copies) and a group chat line, which is a row in
+    // a room that pushes to every member, exactly as the group chat route throttles it (PR #924 review, item 4). An
+    // invite-only group is 404 to an outsider here as there (item 5). Store apps up to 1.2.37 send group chat lines
+    // through this route.
+    if (!chatRateLimit(ctx, ctx.state.actor)) return;
     const target = getConversation(conversationId);
     if (target?.type === GROUP_THREAD_TYPE) {
-        if (!chatRateLimit(ctx, ctx.state.actor)) return;
         if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
     }
     let msg;
@@ -214,6 +219,8 @@ router.post('/api/messages/send', async (ctx) => {
         if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
             for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);
         }
+        // A line's words at most 64 KB as stored (W-main); a photo goes as an attachment and is not counted.
+        assertDmLineFits(ciphertext, metadata);
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
@@ -299,6 +306,8 @@ router.post('/api/messages/edit', async (ctx) => {
     try {
         // An edit is new words in someone else's chat: a muted member (G3) can't make one.
         assertNotMuted(actor);
+        // The same 64 KB as a new line (W-main), or an edit could grow a short line past it.
+        assertDmLineFits(ciphertext);
         const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {

@@ -150,7 +150,7 @@ import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
-import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
+import { gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
@@ -305,6 +305,23 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
 ]);
+/**
+ * The peer protocol's own paths, which the gateway's throttle leaves alone: the public reads another community's
+ * server makes of this one (a harvester's counts, a take-over's health check), which may come in a burst from one
+ * address. Exact paths, reads only, matched as sent. Everything else under /api/federation/ and /api/community/ is
+ * charged like any other request: before W-main the gateway exempted both whole prefixes, so a member's own signed
+ * purchase, commission, registration or area there was not limited at all (design scratch/global-node/
+ * DESIGN-replica-flood-bounds-opus.md §2, §6.2). The peers' disabled verify and relay routes (federation-api.ts) are
+ * deliberately not listed: a peer route that writes is charged when it comes back.
+ */
+export const GATEWAY_EXEMPT_PEER_READS: ReadonlySet<string> = new Set<string>([
+    '/api/community/info',
+    '/api/community/health',
+]);
+export function isPeerProtocolRead(ctx: { method: string; path: string }): boolean {
+    return (ctx.method === 'GET' || ctx.method === 'HEAD') && GATEWAY_EXEMPT_PEER_READS.has(ctx.path);
+}
+
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
 // accidentally expose a sensitive neighbour — e.g. the DM-content reads
@@ -1092,9 +1109,10 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         // 4. Rate Limiting (gateway-rate-limit.ts): per real client address for unsigned requests, per member
         //    for signed ones (charged after verification, below requireSignature). Exempts the admin control
-        //    plane and federation/community paths (inter-node synchronisation bursts).
-        const isFederationPath = ctx.path.startsWith('/api/federation/') || ctx.path.startsWith('/api/community/');
-        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isFederationPath;
+        //    plane (its own limiter) and the peer protocol's own reads (GATEWAY_EXEMPT_PEER_READS), and nothing
+        //    else under /api/federation/ or /api/community/: a purchase, a commission, a registration or an area
+        //    is a member's own request and is charged like any other (W-main).
+        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isPeerProtocolRead(ctx);
         if (limited) {
             // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to the default
             const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
@@ -1437,10 +1455,12 @@ export async function startHttpsServer(port: number): Promise<number> {
     }
     app.use(requireSignature);
 
-    // The gateway limiter's member bucket: charged only once the signature above has been verified.
+    // The gateway limiter's member bucket: charged only once the signature above has been verified. Then the key's
+    // day budget for writes (W-main), whether or not the minute throttle is on.
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
         if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
+        if (!gatewayAdmitDayBudget(ctx)) return;
         await next();
     });
 

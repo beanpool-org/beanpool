@@ -38,6 +38,7 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { assertMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
 
@@ -525,6 +526,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         // A muted member (G3) starts nothing other members read, and an enterprise's name and purpose are its page.
         if (respondIfMuted(ctx, actor)) return;
+        // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main).
+        try { assertMayStartEnterprise(actor); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
@@ -735,6 +738,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            // The keeper's own 100 new posts a day count what they put up for the enterprise too (W-main).
+            assertMayPostToday(actor);
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
@@ -755,6 +760,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            assertMayPostToday(actor);
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
@@ -786,6 +792,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            assertMayPostToday(actor);
             const post = createEventFromBody(b, treasury, actor);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };

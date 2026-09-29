@@ -60,7 +60,8 @@ import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
-import { respondIfMuted, isNote } from './profile-feature-gate.js';
+import { respondIfMuted, respondProfileRefusal, isNote } from './profile-feature-gate.js';
+import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount } from '@beanpool/core';
@@ -973,6 +974,8 @@ router.post('/api/invite/generate', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
+    // 20 made a day and 50 unused at once, per member (W-main, engine/writer-bounds.ts).
+    try { assertMayMakeInvite(publicKey); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     const invite = generateInvite(publicKey, intendedFor);
     if (!invite) {
         ctx.status = 403;

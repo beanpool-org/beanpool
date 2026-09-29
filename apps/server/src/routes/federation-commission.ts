@@ -249,15 +249,16 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         //    them is stuck at 3am that distinction is the first thing worth knowing.
         const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xc-${crypto.randomUUID()}`;
 
-        // 10. FUND IT. The first ledger movement in the whole flow, hence last. Re-checks the allowance,
-        //     spends the enterprise's own balance before the pot, and refuses without moving anything if
-        //     either is short.
         // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
         // against the enterprise (never the keeper) from the settlement row settleCrossNodePurchase writes as it escrows
         // the Beans. Checked before the Commons tops the link up, with nothing awaited between here and that row. A retry
         // of a commission already started is no new payment.
         if (!settlementStartedBy(key, link.treasuryPubkey)
             && refuseOverMoneyLimits(ctx, link.treasuryPubkey, [{ kind: 'payment', recipient: seller }])) return;
+
+        // 10. FUND IT. The first ledger movement in the whole flow, hence last. Re-checks the allowance,
+        //     spends the enterprise's own balance before the pot, and refuses without moving anything if
+        //     either is short.
         const funding = fundCommission(peerId, amount);
         if (!funding.ok) {
             ctx.status = funding.reason === 'no_link' ? 404 : 409;

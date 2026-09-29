@@ -102,6 +102,9 @@ interface Hold {
 
 export const HOLD_MS = 24 * 60 * 60 * 1000;
 
+/** Hold ids unique across every vault a run starts, as the real vault's random ones are (the app remembers ids it showed). */
+let holdSeq = 0;
+
 type Reply = { status: number; body: unknown };
 const reply = (status: number, body: unknown): Reply => ({ status, body });
 
@@ -117,7 +120,6 @@ export class FakeVault {
     readonly copies = new Map<string, Copy>();
     readonly holds = new Map<string, Hold>();
     readonly spent = new Set<string>();
-    private seq = 0;
 
     /** A copy the vault keeps already: `clientCopy` sealed to `provider:sub`, for `pubkey`. */
     keep(provider: string, sub: string, pubkey: string, clientCopy: SealedShare): void {
@@ -212,7 +214,7 @@ export class FakeVault {
                 if (open && Date.now() < open.releaseAt) return reply(409, { error: 'already waiting', code: 'hold_open', until: open.releaseAt });
                 const now = Date.now();
                 const hold: Hold = {
-                    holdId: `hold-${++this.seq}`, copy: id, requester: signer, provider: s.provider, openedAt: now,
+                    holdId: `hold-${++holdSeq}`, copy: id, requester: signer, provider: s.provider, openedAt: now,
                     releaseAt: now + HOLD_MS, cancelled: false, released: false,
                 };
                 this.holds.set(hold.holdId, hold);

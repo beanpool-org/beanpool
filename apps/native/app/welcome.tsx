@@ -128,8 +128,11 @@ export default function WelcomeScreen() {
     const [ssoWaiting, setSsoWaiting] = useState<PendingVaultRestore | null>(null);
     /** The account the vault released, checked and not yet saved: the member chooses its community next. */
     const [ssoReleased, setSsoReleased] = useState<RestoredFromVault | null>(null);
-    /** Where a released account goes: the global community unless the member chooses another (design §1.3). */
-    const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL);
+    /**
+     * Where a released account goes: the global community unless the member chooses another (design §1.3). Shown as its
+     * bare host (normalizeNodeUrl adds the https://): with the scheme, a 320 dp field showed only "://global.beanpool.org".
+     */
+    const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL.replace(/^https:\/\//, ''));
     const [ssoChecking, setSsoChecking] = useState(false);
     /** Stops a sign-in restore whose sign-in has finished and not yet been sent, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
@@ -2630,7 +2633,7 @@ export default function WelcomeScreen() {
                                     >
                                         {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Check now</Text>}
                                     </Pressable>
-                                    <Pressable style={styles.recoverBtn} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
+                                    <Pressable style={[styles.recoverBtn, { marginTop: 12 }]} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
                                         <Text style={styles.recoverBtnText}>🔑 Use my 12 words instead</Text>
                                     </Pressable>
                                     <Pressable style={styles.backBtn} onPress={() => handleSsoStartAgain('ssoRecover')} accessibilityRole="button" accessibilityLabel="Start again with a sign-in">

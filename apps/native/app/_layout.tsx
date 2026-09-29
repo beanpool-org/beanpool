@@ -32,7 +32,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { getAppLockEnabled } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
-import { vaultHoldsAtOpen } from '../utils/vault';
+import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -607,9 +607,12 @@ function RootLayoutNav() {
         let current = true;
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
-                if (!current || holds.length === 0) return;
+                // Marked only here, as the alert goes up: an answer for a layout that has gone keeps its hold's alert.
+                if (!current || takeHoldsToShow(holds).length === 0) return;
+                // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer one
+                // was cut mid-word (measured on the emulator). The body says what happened.
                 Alert.alert(
-                    'Someone is getting back into your account',
+                    'Is this you?',
                     'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
                     + 'you can let it through now. If not, stop it.',
                     [

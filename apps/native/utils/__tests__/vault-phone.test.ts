@@ -74,10 +74,11 @@ import { hexToBytes } from '../crypto';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { disconnectSsoKeeper, vaultProtection } from '../keeper-enrolment';
 import { abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, waitingSsoRestore } from '../sso-recovery';
-import { finishMove, moveLater, vaultMoveOffer, MOVE_AGAIN_AFTER_MS } from '../vault-move';
+import { finishMove, moveLater, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
-    approveVaultHold, connectWanted, holdEndsText, keepVaultPushTokenCurrent, readVaultConfig, stopVaultHold,
+    approveVaultHold, connectWanted, holdEndsText, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
+    takeHoldsToShow,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
@@ -382,6 +383,22 @@ describe('the move card', () => {
         expect(await vaultMoveOffer(member, COMMUNITY)).toBeNull();
     });
 
+    it('a community that never answers holds nothing back: after its wait, the card still offers a paused link', async () => {
+        await memberOnCommunity();
+        await rememberConnectWanted(member.publicKey, 'google');
+        const network = globalThis.fetch;
+        globalThis.fetch = ((input: any, init?: any) => (String(input).startsWith(COMMUNITY)
+            ? new Promise<Response>(() => {})
+            : network(input, init))) as typeof fetch;
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        let settled = false;
+        const offer = vaultMoveOffer(member, COMMUNITY).finally(() => { settled = true; });
+        await vi.advanceTimersByTimeAsync(COMMUNITY_TIMEOUT_MS - 1_000);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(await offer).toEqual({ kind: 'retry', provider: 'google' });
+    });
+
     it('a vault that cannot say shows no card', async () => {
         await memberOnCommunity();
         net.community.copies.add('google');
@@ -599,15 +616,28 @@ describe('status, disconnect, push token, and the check at app open', () => {
         expect(to(VAULT).filter(s => s.path === '/v1/push-token').map(s => s.body)).toEqual([{ token: 'ExponentPushToken[second]' }]);
     });
 
-    it('at app open, a waiting restore is brought up once per run', async () => {
+    it('at app open, a waiting restore is brought up once per run: marked only when its alert is shown', async () => {
         await memberOnCommunity();
         await connect('google');
-        const other = await draftIdentity('');
-        expect(other.publicKey).not.toBe(member.publicKey);
         await startSsoRestore('google');
-        const first = await vaultHoldsAtOpen(member);
-        expect(first).toHaveLength(1);
+        // Two answers at once (the app opening and turning active): one alert.
+        const [a, b] = await Promise.all([vaultHoldsAtOpen(member), vaultHoldsAtOpen(member)]);
+        expect(a).toHaveLength(1);
+        expect(takeHoldsToShow(a)).toHaveLength(1);
+        expect(takeHoldsToShow(b)).toEqual([]);
         expect(await vaultHoldsAtOpen(member)).toEqual([]);
+    });
+
+    it('an answer nobody showed (the screen that asked has gone) keeps the hold\'s alert for the next check', async () => {
+        await memberOnCommunity();
+        await connect('google');
+        await startSsoRestore('google');
+        const unshown = await vaultHoldsAtOpen(member);
+        expect(unshown).toHaveLength(1);
+        // Not taken: the layout was remounted before it could show it.
+        const again = await vaultHoldsAtOpen(member);
+        expect(again.map(h => h.holdId)).toEqual(unshown.map(h => h.holdId));
+        expect(takeHoldsToShow(again)).toHaveLength(1);
     });
 
     it('when a hold ends, in words', () => {

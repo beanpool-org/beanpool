@@ -36,24 +36,46 @@ function canSignInHere(provider: SsoProvider): boolean {
     return provider !== 'apple' || Platform.OS === 'ios';
 }
 
-/** The sign-ins the community at `url` keeps a copy for, for this key. Empty when it can't say. */
+/**
+ * How long the community gets to answer the card's two questions. React Native's fetch never gives up by itself, and a
+ * community that never answers would otherwise hold the card (and a paused link's offer) back for good (seen on the
+ * emulator with no connection).
+ */
+export const COMMUNITY_TIMEOUT_MS = 15_000;
+
+/** `p`, or null once `ms` has passed. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([p, new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), ms); })])
+        .finally(() => { if (timer) clearTimeout(timer); });
+}
+
+/** The sign-ins the community at `url` keeps a copy for, for this key. Empty when it can't say in time. */
 export async function communityCopies(identity: BeanPoolIdentity, url: string): Promise<SsoProvider[]> {
     try {
-        const res = await signedPost(url, '/api/recovery/shares/status', {}, identity);
+        const controller = new AbortController();
+        const res = await within(signedPost(url, '/api/recovery/shares/status', {}, identity, controller.signal), COMMUNITY_TIMEOUT_MS);
+        if (!res) {
+            controller.abort();
+            return [];
+        }
         if (!res.ok) return [];
-        const body = await res.json().catch(() => null) as { enrolledSso?: unknown } | null;
+        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown } | null;
         return offeredProviders(body?.enrolledSso);
     } catch {
         return [];
     }
 }
 
-/** Remove the community's copy for `provider`: a signed DELETE, and nothing else. True when it is gone. */
+/**
+ * Remove the community's copy for `provider`: a signed DELETE, and nothing else. True when it is gone; false when the
+ * community refused it or didn't answer in time (it is then tried again, see {@link finishMove}).
+ */
 export async function removeCommunityCopy(identity: BeanPoolIdentity, url: string, provider: SsoProvider): Promise<boolean> {
     try {
-        const res = await signedDelete(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, identity);
+        const res = await within(signedDelete(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, identity), COMMUNITY_TIMEOUT_MS);
         // 404: the community has no copy for it (already gone).
-        return res.ok || res.status === 404;
+        return !!res && (res.ok || res.status === 404);
     } catch {
         return false;
     }

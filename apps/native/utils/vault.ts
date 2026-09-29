@@ -118,8 +118,8 @@ export const VAULT_MESSAGES = {
     notConfigured: "Sign-in recovery isn't set up in this version of the app. Your 12 words work any time.",
     /** Design §2.3: while the vault is locked. */
     paused: 'Getting back in with a sign-in is paused for a little while. Your 12 words work any time.',
-    pausedConnect: "BeanPool's key vault is paused for a little while, so your sign-in wasn't linked. BeanPool will offer "
-        + 'it again next time you open the app. Your 12 words work any time.',
+    pausedConnect: "BeanPool's key vault is paused for a little while, so your sign-in wasn't linked. Settings offers to "
+        + 'link it again once the vault is back. Your 12 words work any time.',
     unreachable: "BeanPool's key vault didn't answer. Check your connection and try again. Your 12 words work any time.",
     badTicket: "BeanPool's key vault sent an answer that didn't check out, so no sign-in was started. Check that your "
         + "phone's date and time are right, then try again.",
@@ -374,18 +374,29 @@ const holdsAlerted = new Set<string>();
  * with the restores of this account waiting that haven't been brought up yet in this run, and gives the vault this
  * phone's push token when it has changed. Short timeout, never throws, and nothing waits for it: a slow or unreachable
  * vault shows nothing. No vault in this build: nothing is asked.
+ *
+ * Marks nothing: the caller marks the holds it actually shows ({@link takeHoldsToShow}), at the moment it shows them.
+ * An answer that arrives after the screen asking for it has gone (a remount) must not use up the hold's one alert.
  */
 export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold[]> {
     if (!hasVault()) return [];
     try {
         const status = await vaultStatus(identity, 15_000);
         if (status.providers.length) void keepVaultPushTokenCurrent(identity);
-        const fresh = status.holds.filter(h => !holdsAlerted.has(h.holdId));
-        for (const h of fresh) holdsAlerted.add(h.holdId);
-        return fresh;
+        return status.holds.filter(h => !holdsAlerted.has(h.holdId));
     } catch {
         return [];
     }
+}
+
+/**
+ * The holds in `holds` not yet brought up in this run, marked as brought up now: call it only as the alert is shown.
+ * Synchronous, so two answers arriving together (the app opening and turning active at once) show one alert.
+ */
+export function takeHoldsToShow(holds: readonly VaultHold[]): VaultHold[] {
+    const fresh = holds.filter(h => !holdsAlerted.has(h.holdId));
+    for (const h of fresh) holdsAlerted.add(h.holdId);
+    return fresh;
 }
 
 // ─── Holds: Stop, and "Yes, it's me" ──────────────────────────────────────────────────────

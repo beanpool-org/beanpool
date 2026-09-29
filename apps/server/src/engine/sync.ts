@@ -76,9 +76,11 @@ export const REPLICA_FORMAT = 5;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
- * copies made before the record. The next copy it lands is then its first, a seed (ImportOptions.seed). Only this standby
- * writes the record, when a force-resync lands: a copy can neither set it nor take it away, and a refused one leaves it
- * as it was (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2, N).
+ * copies made before the record. With no cursor either, it holds no copy, and the next one is its first, a seed
+ * (ImportOptions.seed); with a cursor, its copies are held to its ledger like any other's until its re-seed lands
+ * (services/backup-puller.ts). Only this standby writes the record, when a force-resync lands: a copy can neither set it
+ * nor take it away, and a refused one leaves it as it was (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md
+ * §4.2, N).
  */
 export function replicaFormatOfCopy(): number {
     const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined;
@@ -909,8 +911,9 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
 export interface ImportOptions {
     /**
      * A seed, which the conservation guard lets in whatever it sums to. Only three: this standby's first copy (it holds
-     * none it landed: no `replica_format` record, replicaFormatOfCopy), the format re-seed (REPLICA_FORMAT, this
-     * standby's own constant) and an operator's force-resync. Every other copy is held to the ledger here.
+     * none: no `replica_format` record, replicaFormatOfCopy, and no cursor), the format re-seed (REPLICA_FORMAT, this
+     * standby's own constant) and an operator's force-resync. Every other copy is held to the ledger here, a delta onto a
+     * copy made before the format record included.
      */
     seed?: boolean;
     /**

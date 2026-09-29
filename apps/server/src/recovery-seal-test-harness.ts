@@ -32,6 +32,20 @@ export const CHILD = process.env.RECOVERY_SEAL_CHILD;
 export const SENTENCE = 'This server holds sign-in recovery copies it cannot open: data/recovery-seal.key is missing.';
 export const KEY_FILE = 'recovery-seal.key';
 
+/**
+ * The fixtures' days, dated from now: day 1 is 20 days ago (UTC midnight), so the deposits (days 1–10) and the standby's
+ * cursor (day 3) keep their order and gaps and stay inside the 29 days a standby's cursor may be old before its puller
+ * takes the retention force-resync instead of a delta (services/backup-puller.ts PAST_RETENTION_MS). A fixed calendar date
+ * turns into that force-resync 29 days after it. Picked once, by the parent, and read by its children (SEAL_DAY1, which
+ * runChild passes on), so a run across midnight dates alike.
+ */
+const SEAL_DAY1 = process.env.SEAL_DAY1 ??= new Date((Math.floor(Date.now() / 86_400_000) - 20) * 86_400_000).toISOString();
+export function sealDay(n: number): string {
+    return new Date(Date.parse(SEAL_DAY1) + (n - 1) * 86_400_000).toISOString();
+}
+/** Where the standby's last pull before the seal left its cursor: after the first two deposits (days 1 and 2). */
+export const SEAL_SINCE_DAY = sealDay(3);
+
 // ── fixtures (test-sso-recovery-roundtrip.ts) ─────────────────────────────────────────────────────
 export const GOOGLE_KID = 'test-recovery-seal-google-kid';
 export const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
@@ -86,7 +100,7 @@ export function fakeCopy(): Sealed {
  */
 export interface History {
     owners: string[]; gen1: Sealed[]; gen2: Sealed[]; deleted: number[]; real: { i: number; seedHex: string }[];
-    /** When each deposit was stamped, by the main server's clock (default: 2026-06-01 and 2026-06-02). */
+    /** When each deposit was stamped, by the main server's clock (default: sealDay(1) and sealDay(2)). */
     at?: [string, string];
 }
 
@@ -276,7 +290,7 @@ export async function child(mode: string): Promise<void> {
         const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
         const gen1 = owners.map(() => fakeCopy());
         const gen2 = owners.map(() => fakeCopy());
-        const T = '2026-06-01T00:00:00.000Z';
+        const T = sealDay(1);
         const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
         // A main server stored a deposit with a plain INSERT (putShareGeneration).
         const put = db.prepare(`INSERT INTO recovery_shares
@@ -340,8 +354,8 @@ export async function child(mode: string): Promise<void> {
             }))();
             db.pragma('wal_checkpoint(TRUNCATE)');
         };
-        stage(h.gen1, 1, h.at?.[0] ?? '2026-06-01T00:00:00.000Z');
-        stage(h.gen2, 2, h.at?.[1] ?? '2026-06-02T00:00:00.000Z');
+        stage(h.gen1, 1, h.at?.[0] ?? sealDay(1));
+        stage(h.gen2, 2, h.at?.[1] ?? sealDay(2));
         if (standby && process.env.SEAL_NO_REPLICA_FORMAT !== '1') {
             // A copy the current importer made (engine/sync.ts REPLICA_FORMAT), so the pulls these suites drive are the
             // seal's own: the path of any later update that doesn't raise the format. Without the record (the release that
@@ -861,7 +875,7 @@ export async function epochFixtures(suite: string) {
         fs.cpSync(dir, d, { recursive: true });
         return d;
     };
-    const T2 = '2026-06-02T00:00:00.000Z', T5 = '2026-06-05T00:00:00.000Z', T6 = '2026-06-06T00:00:00.000Z', T7 = '2026-06-07T00:00:00.000Z';
+    const T2 = sealDay(2), T5 = sealDay(5), T6 = sealDay(6), T7 = sealDay(7);
     // 26–28: the member who removes their copy while the rollback lasts, and what the standby says about it.
     const REMOVER = 3;
     const allBut = (skip: number[]) => eOwners.map((_, i) => i).filter(i => !skip.includes(i));

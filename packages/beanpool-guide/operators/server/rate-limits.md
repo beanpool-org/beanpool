@@ -21,7 +21,7 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 ## What one member can make in a day
 
-These stop one account filling your server, and its standby copies, with rows: a standby can't copy a table of more than 250,000 rows whole. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
+These stop one account filling your server, and its standby copies, with rows. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
 
 - **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server.
 - **Posts**: 100 new ones a day, their own and those they put up for an enterprise they keep.

@@ -139,31 +139,40 @@ export function eventHiddenFrom(row: EventRow, pubkey: string | undefined): bool
 }
 
 /**
- * A chat that drops out of this member's chat list: an event's, while the event is hidden from them (G3). The
+ * A chat that drops out of this member's chat list: an event's, while the event isn't there for them (eventUnknownTo:
+ * hidden by reports (G3), or a group's event they can no longer see, their seat in the participants mirror kept). The
  * conversations list and the unread counts behind it and every push's badge (getListedUnreadCounts) all go by this.
  */
 export function chatHiddenFrom(conv: { id: string; type: string }, pubkey: string | undefined): boolean {
     if (conv.type !== 'event_thread') return false;
-    try { return eventHiddenFrom(loadEventForThread(conv.id), pubkey); } catch { return false; }
+    try { return eventUnknownTo(loadEventForThread(conv.id), pubkey); } catch { return false; }
 }
 
 /**
- * Host or Going — checked on every read and every post, never trusted from the participants mirror. Never a visitor's
- * row (isVisitorKey), whatever RSVP it holds from before visitors were refused one: the chat carries the private note.
+ * Host, or Going to an event they can still see — checked on every read and every post, never trusted from the
+ * participants mirror. Never a visitor's row (isVisitorKey), whatever RSVP it holds from before visitors were refused
+ * one: the chat carries the private note.
+ *
+ * Going counts only while the event is in the member's sight (engine/post-sight.ts, getPosts' rule): a member removed
+ * from an invite-only group, or who left it or was banned, was still let into its event's chat and private note by the
+ * RSVP they made as a member, while the event itself had gone from their feed (the director, 2026-09-30, from #1333's
+ * review). Their RSVP stays recorded: it is the host's record of who said they would come, a removal can be undone
+ * (invited back, they are Going again without tapping it), and the rule is read at every use, so an RSVP a standby
+ * imports, or one kept from before, gives no more than one made now. It gives them nothing while they are outside:
+ * not the chat, the note, the chat's live lines, reminders, "Your events" or the event's change pushes.
  */
 export function canReadEventThread(row: EventRow, pubkey: string | undefined): boolean {
     if (!pubkey || isVisitorKey(db, pubkey)) return false;
     if (eventHiddenFrom(row, pubkey)) return false;
     if (isEventHost(db, row, pubkey)) return true;
-    return eventRsvpStatusOf(row.id, pubkey) === 'going';
+    return !postOutOfSight(row, pubkey) && eventRsvpStatusOf(row.id, pubkey) === 'going';
 }
 
 /**
  * The event isn't there for this caller, so its chat answers as for an id nobody has: hidden by reports (eventHiddenFrom),
- * or a group's event they can't see (engine/post-sight.ts: not its author, not an active member of the group) and have no
- * seat in its chat. "Only the host and people going…" told anyone holding an invite-only group's event id that the event
- * was real. It takes nothing from anyone: whoever may read the chat (the host, a keeper of the enterprise that posted it,
- * someone Going) still reads it, and is still refused whatever they were refused.
+ * or a group's event they can't see (engine/post-sight.ts: not its author, not an active member of the group) and don't
+ * host. "Only the host and people going…" told anyone holding an invite-only group's event id that the event was real.
+ * A member removed from the group while Going is one of these now (canReadEventThread): answered as an outsider is.
  */
 export function eventUnknownTo(row: EventRow, pubkey: string | undefined): boolean {
     return eventHiddenFrom(row, pubkey) || (postOutOfSight(row, pubkey) && !canReadEventThread(row, pubkey));
@@ -461,7 +470,10 @@ function broadcastEventThreadMessage(
     const parts = db.prepare(
         'SELECT public_key FROM conversation_participants WHERE conversation_id = ?'
     ).all(postId) as any[];
-    const recipients = Array.from(new Set(parts.map(p => p.public_key)));
+    // The mirror keeps the seat of someone Going who has since been removed from the group (canReadEventThread): only
+    // those who may read the chat now get its lines.
+    const row = loadEventForThread(postId);
+    const recipients = Array.from(new Set(parts.map(p => p.public_key as string))).filter(pk => canReadEventThread(row, pk));
     cb.broadcast({
         type: 'new_message',
         conversationId: postId,

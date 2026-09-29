@@ -211,6 +211,14 @@ router.post('/api/messages/send', async (ctx) => {
     if (target?.type === GROUP_THREAD_TYPE) {
         if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
     }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by reports)
+    // is an id nobody has. The engine goes by the participants mirror, which keeps the seat of someone Going who has
+    // since been removed from the group, and told them "Post to an event chat through the event" instead.
+    if (target?.type === 'event_thread' && eventChatUnknownTo(conversationId, authorPubkey)) {
+        ctx.status = SEND_NOT_FOUND.status;
+        ctx.body = { error: SEND_NOT_FOUND.error };
+        return;
+    }
     let msg;
     try {
         // G3, global profile: a muted member sends nothing (403). A new account reaches at most 10 new people a
@@ -365,8 +373,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it. The
-    // unread counts leave out the same chats, as the badge every push carries does (getListedUnreadCounts).
+    // An event hidden by reports (G3) is not there for anyone but its author, nor a group's event for someone no longer in
+    // the group, and its chat is named after it (chatHiddenFrom). The unread counts leave out the same chats, as the
+    // badge every push carries does (getListedUnreadCounts).
     const convs = getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);

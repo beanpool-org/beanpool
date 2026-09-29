@@ -12,7 +12,7 @@ import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { assertNodeMember } from './members.js';
-import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
+import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -194,11 +194,16 @@ export function eventPushBody(kind: 'updated' | 'cancelled', eventTitle: string)
         : `${name} has a new time or place.`;
 }
 
-/** Everyone marked Going. Interested is deliberately not notified (decision 10). */
+/**
+ * Everyone marked Going who can still see the event. Interested is deliberately not notified (decision 10). A member
+ * removed from the event's group, or who left it or was banned, keeps their RSVP, and is told nothing of the event
+ * (engine/event-thread.ts canReadEventThread).
+ */
 export function eventGoingPubkeys(postId: string): string[] {
-    return (db.prepare(
-        "SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'"
-    ).all(postId) as any[]).map(r => r.member_pubkey as string);
+    return (db.prepare(`
+        SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
+         WHERE r.post_id = ? AND r.status = 'going' AND ${postInSightSql('p', 'r.member_pubkey')}
+    `).all(postId) as any[]).map(r => r.member_pubkey as string);
 }
 
 /**

@@ -42,6 +42,21 @@ export function postOutOfSight(row: PostAudienceRow, caller: string | undefined)
     return false;
 }
 
+/**
+ * postOutOfSight's rule as SQL, negated: true where the post is in sight of `caller`. `post` is the posts row's alias and
+ * `caller` an SQL expression for the key (a column, such as an RSVP's member_pubkey). For the queries that hand out what
+ * an RSVP gives (reminders, "Your events", the event's change pushes), so a member removed from the group, or who left it
+ * or was banned, is left out of them as getPosts leaves the event out of their feed.
+ */
+export function postInSightSql(post: string, caller: string): string {
+    return `(COALESCE(${post}.audience_scope, 'public') NOT IN ('group', 'direct')
+        OR ${post}.author_pubkey = ${caller}
+        OR (${post}.audience_scope = 'group' AND EXISTS (
+            SELECT 1 FROM group_members sight_gm
+             WHERE sight_gm.group_id = ${post}.target_group_id AND sight_gm.member_pubkey = ${caller} AND sight_gm.status = 'active'))
+        OR (${post}.audience_scope = 'direct' AND (${post}.target_pubkey = ${caller} OR ${post}.assigned_to = ${caller})))`;
+}
+
 /** postOutOfSight, for a post as getPosts returns it (camelCase). */
 export function marketplacePostOutOfSight(
     post: { authorPublicKey: string; audienceScope?: string | null; targetGroupId?: string | null; targetPubkey?: string | null; assignedTo?: string | null },

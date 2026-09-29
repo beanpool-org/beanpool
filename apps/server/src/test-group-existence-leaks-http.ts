@@ -25,6 +25,14 @@
  *    the chat is for the host and people going; only the author closes a poll; the target of a direct post trades on
  *    it; a public post is still someone else's to take down; and a visitor still writes in its own direct conversation,
  *    under an old id of it too.
+ * 4. The time POST /api/messages/send takes, with 50k chat lines: the same for the hidden group's chat id, its event's
+ *    chat id and someone else's old DM id as for an id nobody has.
+ * 5. Out of the group while Going (the director, 2026-09-30, from #1333's review): a member removed by a convenor, and one
+ *    who left, each answered as an outsider is (and as for an id nobody has) by the event's chat, its private note, the
+ *    chat's write routes, the reminder and the RSVP; the event is gone from their "Your events", their chat list, the
+ *    chat's live lines, reminders and change pushes. Their RSVP stays recorded, and a member invited back is Going
+ *    again. An account the community closed is refused every request, a real id's as an unknown one's. A member still
+ *    in the group reads the chat and its note, and gets all of it.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-group-existence-leaks-http.ts
  */
@@ -39,8 +47,11 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, createPost, createGroup, joinGroup, inviteGroupMember, removeGroupMember, seedGenesisMember,
-    rsvpEvent, createConversation, sendMessage,
+    rsvpEvent, createConversation, sendMessage, adminPruneUser,
 } from './state-engine.js';
+import { postEventThreadMessage } from './engine/event-thread.js';
+import { dueEventReminders } from './engine/event-reminders.js';
+import { eventGoingPubkeys } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
@@ -384,6 +395,118 @@ async function main(): Promise<void> {
         const viaOld = await call('POST', '/api/messages/send', vera, { conversationId: oldDmId, authorPubkey: vera.pk, ...lockedDm() });
         assert(viaOld.status === 200 && viaOld.body?.message?.conversationId === veraDm.id,
             `and under an old id of it, which lands in the DM it became (${show(viaOld)})`);
+    }
+
+    // --- 5. Out of the group while Going: the RSVP stays, and gives nothing ---
+    {
+        const supper = createPost('event', 'community', 'Circle supper', 'at the hall', 0, 'fixed', convenor.pk, -28.55, 153.5, [], false, undefined, false,
+            { ...inGroup, eventStartAt: inHours(24), eventPlaceName: 'The hall', eventPrivateNote: 'Gate 1234' })!;
+        const stayer = makeMember('StayerGL');    // still in the group
+        const ousted = makeMember('OustedGL');    // a convenor removes them: the row stays 'removed', so it sticks
+        const leaver = makeMember('LeaverGL');    // leaves: the row goes
+        const closed = makeMember('ClosedGL');    // the community closes their account (a prune)
+        for (const who of [stayer, ousted, leaver, closed]) {
+            inviteGroupMember(hidden.id, convenor.pk, who.pk, 'member');
+            joinGroup(hidden.id, who.pk);
+            rsvpEvent(supper.id, who.pk, 'going');
+        }
+        const readsNote = (r: Res) => r.status === 200 && r.body?.privateNote === 'Gate 1234';
+        for (const who of [stayer, ousted, leaver, closed]) {
+            const r = await call('GET', `/api/marketplace/posts/${supper.id}/chat`, who);
+            const rem = await call('PUT', `/api/events/${supper.id}/reminder`, who, { offsets: [120] });
+            assert(readsNote(r) && rem.status === 200, `setup: ${who.name}, Going as a member, reads the chat and its note and sets a reminder (${show(r)} | ${show(rem)})`);
+        }
+        const said = await call('POST', `/api/marketplace/posts/${supper.id}/chat/message`, stayer, { text: 'Bring a plate' });
+        const lineId = said.body?.message?.id as string;
+        assert(!!lineId, `setup: a line in the chat (${show(said)})`);
+
+        removeGroupMember(hidden.id, convenor.pk, ousted.pk);
+        removeGroupMember(hidden.id, leaver.pk, leaver.pk);
+        adminPruneUser(closed.pk, 'owner:password');
+        const status = (pk: string) => (db.prepare('SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(hidden.id, pk) as any)?.status ?? null;
+        assert(status(ousted.pk) === 'removed' && status(leaver.pk) === null && status(stayer.pk) === 'active',
+            `setup: one removed (row kept), one left (row gone), one still in (${status(ousted.pk)}, ${status(leaver.pk)}, ${status(stayer.pk)})`);
+
+        // What an RSVP hands out beyond the routes (before the routes below, whose refused writes must change nothing).
+        const E = supper.id;
+        const mine = async (who: Id) => ((await call('GET', '/api/events/mine', who)).body?.events ?? []).map((e: any) => e.postId) as string[];
+        const chats = async (who: Id) => ((await call('GET', `/api/messages/conversations/${who.pk}`, who)).body?.conversations ?? []).map((c: any) => c.id) as string[];
+        for (const who of [ousted, leaver]) {
+            assert(!(await mine(who)).includes(E), `${who.name}: the event is gone from "Your events"`);
+            assert(!(await chats(who)).includes(E), `${who.name}: and its chat from their chat list`);
+        }
+        assert((await mine(stayer)).includes(E) && (await chats(stayer)).includes(E), 'a member still in the group has it in "Your events" and the chat in their list');
+        const going = eventGoingPubkeys(E);
+        assert(going.includes(stayer.pk) && !going.includes(ousted.pk) && !going.includes(leaver.pk),
+            `a change push for the event goes to the member still in, not to the two who are out (${going.length} Going)`);
+        const due = dueEventReminders(Date.parse(supper.eventStartAt!) - 120 * 60_000 + 30_000).filter(d => d.postId === E).map(d => d.memberPubkey);
+        assert(due.includes(stayer.pk) && !due.includes(ousted.pk) && !due.includes(leaver.pk),
+            `the 2-hour reminder is due for the member still in, not for the two who are out (${due.length} due)`);
+        let heard: string[] = [];
+        postEventThreadMessage({ broadcast: (_e: any, r?: string[]) => { heard = r ?? []; }, dispatchPushNotification: () => {} }, E, stayer.pk, 'See you all');
+        const seats = (db.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(E) as any[]).map(r => r.public_key);
+        assert(seats.includes(ousted.pk) && heard.includes(stayer.pk) && !heard.includes(ousted.pk) && !heard.includes(leaver.pk),
+            `a new line goes live to the member still in, not to the two who are out, whose seats in the mirror are kept (${heard.length} hear it)`);
+
+        const ghostE = crypto.randomUUID();
+        const EVENT_ROUTES: [string, string, unknown?][] = [
+            ['GET', '/api/marketplace/posts/{E}/chat'],
+            ['POST', '/api/marketplace/posts/{E}/chat/message', { text: 'still here?' }],
+            ['POST', '/api/marketplace/posts/{E}/chat/remove', { messageId: lineId }],
+            ['GET', '/api/messages/{E}'],
+            ['POST', '/api/messages/send', { conversationId: '{E}', authorPubkey: '{ME}', ...lockedDm() }],
+            ['POST', '/api/messages/mark-read', { conversationId: '{E}' }],
+            ['POST', '/api/messages/mute', { conversationId: '{E}', duration: '8h' }],
+            ['PUT', '/api/events/{E}/reminder', { offsets: [60] }],
+            ['POST', '/api/marketplace/posts/{E}/rsvp', { status: 'interested' }],
+            ['POST', '/api/marketplace/posts/{E}/rsvp', { status: null }],
+            ['GET', '/api/marketplace/posts?id={E}'],
+        ];
+        const at = (path: string, e: string, me: Id) => path.replace(/\{E\}/g, e).replace(/\{ME\}/g, me.pk);
+        const bodyAt = (b: unknown, e: string, me: Id) => b === undefined ? undefined : JSON.parse(at(JSON.stringify(b), e, me));
+        const as = (r: Res, e: string, me: Id) => `${r.status} ${r.text.split(e).join('<E>').split(me.pk).join('<ME>')}`;
+        for (const who of [ousted, leaver]) {
+            const differ: string[] = [];
+            for (const [method, path, body] of EVENT_ROUTES) {
+                const mine = await call(method, at(path, E, who), who, bodyAt(body, E, who));
+                const outsiders = await call(method, at(path, E, outsider), outsider, bodyAt(body, E, outsider));
+                const nobodys = await call(method, at(path, ghostE, who), who, bodyAt(body, ghostE, who));
+                if (as(mine, E, who) !== as(outsiders, E, outsider) || as(mine, E, who) !== as(nobodys, ghostE, who)) {
+                    differ.push(`${method} ${path}: ${show(mine)}  |  an outsider: ${show(outsiders)}  |  an id nobody has: ${show(nobodys)}`);
+                }
+            }
+            assert(differ.length === 0,
+                `${who.name}, out of the group while Going: every event chat route (${EVENT_ROUTES.length}) answers as it answers an outsider and an id nobody has`
+                + (differ.length ? `; ${differ.length} did not:\n    ${differ.join('\n    ')}` : ''));
+        }
+        {
+            const differ: string[] = [];
+            for (const [method, path, body] of EVENT_ROUTES) {
+                const mine = await call(method, at(path, E, closed), closed, bodyAt(body, E, closed));
+                const nobodys = await call(method, at(path, ghostE, closed), closed, bodyAt(body, ghostE, closed));
+                if (mine.status !== 403 || mine.body?.code !== 'account_closed' || mine.text !== nobodys.text) differ.push(`${method} ${path}: ${show(mine)} | ${show(nobodys)}`);
+            }
+            assert(differ.length === 0, `a closed account is refused every event chat route, a real id's as an unknown one's (account_closed)`
+                + (differ.length ? `:\n    ${differ.join('\n    ')}` : ''));
+        }
+
+        {
+            const outs = [ousted.pk, leaver.pk];
+            const lines = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ? AND author_pubkey IN (?, ?)').get(E, ...outs) as any).c;
+            const mutes = (db.prepare('SELECT COUNT(*) AS c FROM chat_mutes WHERE conversation_id = ? AND member_pubkey IN (?, ?)').get(E, ...outs) as any).c;
+            const offsets = (db.prepare('SELECT reminder_offsets AS o FROM event_rsvps WHERE post_id = ? AND member_pubkey IN (?, ?)').all(E, ...outs) as any[]).map(r => r.o);
+            assert(lines === 0 && mutes === 0 && offsets.every(o => o === '[120]'),
+                `nothing they were refused was written: no line, no mute, their reminders as they set them (${lines}, ${mutes}, ${offsets.join(' ')})`);
+        }
+        // The RSVP stays recorded, and a member invited back is Going again without tapping it.
+        const rsvp = (pk: string) => (db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(E, pk) as any)?.status;
+        assert(rsvp(ousted.pk) === 'going' && rsvp(leaver.pk) === 'going', `their RSVPs are still recorded (${rsvp(ousted.pk)}, ${rsvp(leaver.pk)})`);
+        const stays = await call('GET', `/api/marketplace/posts/${E}/chat`, stayer);
+        assert(readsNote(stays), `the member still in reads the chat and its note (${show(stays)})`);
+        inviteGroupMember(hidden.id, convenor.pk, ousted.pk, 'member');
+        joinGroup(hidden.id, ousted.pk);
+        const back = await call('GET', `/api/marketplace/posts/${E}/chat`, ousted);
+        assert(readsNote(back) && (await mine(ousted)).includes(E), `invited back, the removed member is Going again: the chat, its note, "Your events" (${show(back)})`);
     }
 
     // --- 4. Nor does the time an answer takes, on a node with a full messages table (#1333 review) ---

@@ -377,9 +377,17 @@ export const VARIANTS = [
 ];
 
 /**
- * Runs that go one at a time AFTER the pool, each with the machine to itself: a suite that measures time or rates
- * and failed only with other suites beside it. Keyed by run id (`test-x` or `test-x(tag)`), with the reason.
- * Keep it short; every entry is serial wall-clock added to every run.
+ * Runs that go one at a time AFTER the pool, with no other server suite beside them: suites whose checks time
+ * something, so a neighbour's burst of CPU can fail them. (Inside test-all the other checks, settings_phone above
+ * all, may still be running.) Keyed by run id (`test-x` or `test-x(tag)`), with the reason. Keep it short: every
+ * entry is serial wall-clock added to every run, 1m13s for these three on this Mac.
  */
 export const SERIAL = {
+    // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
+    // during one of the pair and not the other is a failure that says nothing about the code.
+    'test-distance-search-perf': 'relative timings, 2x slack',
+    // Times adding a source to a full map against adding one with room (5x slack), the #944 regression it guards.
+    'test-password-brake-fairness': 'relative timings, 5x slack',
+    // Waits a fixed 100-150 ms for each pong (or its absence) on a live socket; a loaded machine answers later.
+    'test-ws-pong-watchdog': 'fixed 100-150 ms waits for a reply',
 };

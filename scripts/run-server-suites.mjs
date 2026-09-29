@@ -13,7 +13,7 @@
 //
 // ORDER. Longest first, from the durations the last run recorded in <git common dir>/server-suite-durations.json (shared
 // by every worktree of the checkout, never tracked). A run with no recorded duration goes first, so a new suite is never
-// the one holding up the end. SERIAL runs in the manifest go last, one at a time, with the machine to themselves.
+// the one holding up the end. SERIAL runs in the manifest go last, one at a time, with no other suite beside them.
 //
 // NO RETRIES. A failure is red. The report lists every failing run with its log, then one roll-up line that
 // scripts/test-all-lib.sh reads (`❌ Server suites failed: test-x test-y(on) test-z(TIMEOUT)`).

@@ -30,6 +30,7 @@ import PatternBackground from '../components/PatternBackground';
 import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
+import { createReturnLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
@@ -126,7 +127,7 @@ function RootLayoutNav() {
     const router = useRouter();
     const [deepLinkUrl, setDeepLinkUrl] = useState<string | null>(null);
     const isComponentMounted = useRef(true);
-    const lastBackgroundTime = useRef<number | null>(null);
+    const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
 
     const [isLocked, setIsLocked] = useState(false);
@@ -170,28 +171,13 @@ function RootLayoutNav() {
         checkAppLock();
     }, [identity]);
 
-    // Check when returning to foreground
+    // Check when returning to foreground (15 seconds away). Time the phone's own lock prompt was open is not time away, so
+    // a slow prompt is never followed by a second one: utils/return-lock.ts.
     useEffect(() => {
-        const sub = AppState.addEventListener('change', async (next) => {
-            if (next === 'background' || next === 'inactive') {
-                lastBackgroundTime.current = Date.now();
-            } else if (next === 'active' && identity) {
-                const bgTime = lastBackgroundTime.current;
-                lastBackgroundTime.current = null; // reset
-
-                const enabled = await getAppLockEnabled();
-                if (enabled) {
-                    const gracePeriodMs = 15000; // 15 seconds grace period
-                    if (bgTime && (Date.now() - bgTime) < gracePeriodMs) {
-                        return;
-                    }
-                    setIsLocked(true);
-                    const success = await authenticateUser('Unlock BeanPool');
-                    if (success) {
-                        setIsLocked(false);
-                    }
-                }
-            }
+        if (!returnLock.current) returnLock.current = createReturnLock(setIsLocked);
+        const onChange = returnLock.current;
+        const sub = AppState.addEventListener('change', (next) => {
+            onChange(next, !!identity);
         });
         return () => sub.remove();
     }, [identity]);

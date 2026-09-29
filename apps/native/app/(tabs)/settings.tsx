@@ -35,6 +35,8 @@ import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
+import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
+import { copyWordsForAMinute } from '../../utils/words-clipboard';
 import { ADD_WORDS_COPY, viewWordsOpens } from '../../utils/add-words';
 import {
     NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_VIEW_LINE, VIEW_WORDS_MENU,
@@ -385,23 +387,13 @@ export default function SettingsScreen() {
         }
     };
 
+    // Cleared from the clipboard a minute later, if it still holds them (utils/words-clipboard.ts).
     const handleCopyWords = async () => {
         if (!mnemonicWords) return;
-        await Clipboard.setStringAsync(mnemonicWords);
+        await copyWordsForAMinute(mnemonicWords);
         hapticTick();
         setCopiedWords(true);
         setTimeout(() => setCopiedWords(false), 2000);
-
-        // Auto-wipe system clipboard after 30 seconds
-        const wordsSnapshot = mnemonicWords;
-        setTimeout(async () => {
-            try {
-                const current = await Clipboard.getStringAsync();
-                if (current === wordsSnapshot) {
-                    await Clipboard.setStringAsync('');
-                }
-            } catch {}
-        }, 30000);
     };
 
     // Resolves a human label for the node we are actually anchored to, preferring the
@@ -930,11 +922,11 @@ export default function SettingsScreen() {
         }
     };
 
-    // Copy Words is drawn only once the words are shown: it copies what the phone's lock let through.
+    // Copy Words is drawn only once the words are shown: it copies what the phone's lock let through, for a minute.
     const handleCopySeed = async () => {
         const words = seedWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -1981,6 +1973,7 @@ export default function SettingsScreen() {
                                 ) : (
                                     <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                            <NoScreenCapture>
                                             {mnemonicWords?.split(' ').map((word, idx) => (
                                                 <View
                                                     key={`${word}-${idx}`}
@@ -1992,6 +1985,7 @@ export default function SettingsScreen() {
                                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
                                                 </View>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
 
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -2014,6 +2008,8 @@ export default function SettingsScreen() {
                                                 <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
                                             </Pressable>
                                         </View>
+                                        <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
+                                        <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
                                     </View>
                                 )}
                             </View>
@@ -2590,6 +2586,7 @@ export default function SettingsScreen() {
                                           twenty-four stops and leaves the listener to pair
                                           the numbers with the words themselves.
                                         */}
+                                        <NoScreenCapture>
                                         {seedWords?.map((word, i) => (
                                             <View
                                                 key={i}
@@ -2601,6 +2598,7 @@ export default function SettingsScreen() {
                                                 <Text style={styles.seedWordText}>{word}</Text>
                                             </View>
                                         ))}
+                                        </NoScreenCapture>
                                     </View>
                                     <Pressable
                                         style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, marginTop: 16 }]}
@@ -2611,6 +2609,8 @@ export default function SettingsScreen() {
                                             {seedCopied ? '✅ Copied!' : '📋 Copy Words'}
                                         </Text>
                                     </Pressable>
+                                    <CopyClearsNote style={[styles.infoText, { marginTop: 10, marginBottom: 0 }]} />
+                                    <NoScreenLockNote style={[styles.infoText, { marginTop: 8, marginBottom: 0 }]} />
                                 </>
                             )}
                         </>

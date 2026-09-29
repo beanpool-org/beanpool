@@ -114,7 +114,8 @@ export async function phoneLockPrompt(
  * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
  * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
  * openedAt and closedAt are on App Lock's clock (utils/app-lock-clock.ts), as the return lock's own times are: the phone's
- * since-boot clock, which setting the phone's date and time can't move.
+ * since-boot clock, which setting the phone's date and time can't move. NaN where a phone couldn't read it: such a stretch
+ * covers none of the time away.
  */
 export type LocalAuthPromptStretch = { openedAt: number; closedAt: number | null; passed: boolean };
 

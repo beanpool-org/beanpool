@@ -5,8 +5,14 @@
  * phone's Settings (#1307's confirmation review, 2026-09-29). It reads the phone's since-boot clock now, which counts the
  * time the phone slept and which Settings can't move, and watches the wall clock for going backwards. The native module
  * is faked where the app reads it, on globalThis.expo.modules; the return lock's use of this is in return-lock.test.ts.
+ *
+ * A phone that can't read its since-boot clock gets no time at all (NaN), never the wall clock, and the reading is
+ * counted: the return lock asks (#1309's deciding review, inline 4129453720). Only the web build reads the wall clock.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const platform = vi.hoisted(() => ({ os: 'android' }));
+vi.mock('react-native', () => ({ Platform: { get OS() { return platform.os; } } }));
 
 type ExpoGlobalForTests = { expo?: { modules: Record<string, { elapsedMs(): number }> } };
 const expoGlobal = globalThis as ExpoGlobalForTests;
@@ -23,6 +29,7 @@ async function freshClock() {
 }
 
 beforeEach(() => {
+    platform.os = 'android';
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(START);
 });
@@ -63,10 +70,52 @@ describe('appLockNow', () => {
         expect(appLockNow()).toBe(5000 + 3600 * 1000);
     });
 
-    it('reads the wall clock where there is no since-boot clock', async () => {
+    it('reads the wall clock in the web build, where there is no since-boot clock and App Lock asks nothing', async () => {
+        platform.os = 'web';
+        const { appLockNow, clockReadFailures } = await freshClock();
+
+        expect(appLockNow()).toBe(START.getTime());
+        expect(clockReadFailures()).toBe(0);
+    });
+
+    it('the web build reads the wall clock even with a since-boot clock there', async () => {
+        platform.os = 'web';
+        withBootClock(() => 5000);
         const { appLockNow } = await freshClock();
 
         expect(appLockNow()).toBe(START.getTime());
+    });
+
+    it.each([
+        ['no Expo modules at all', () => { delete expoGlobal.expo; }],
+        ['no such module (a dev client built before it)', () => { expoGlobal.expo = { modules: {} }; }],
+        ['a reading that throws', () => withBootClock(() => { throw new Error('native'); })],
+        ['a reading that is NaN', () => withBootClock(() => Number.NaN)],
+        ['a reading that is Infinity', () => withBootClock(() => Number.POSITIVE_INFINITY)],
+        ['a reading that is a string', () => withBootClock(() => '5000' as unknown as number)],
+    ])('on a phone, %s: no time (NaN), never the wall clock, and the reading counted as failed', async (_name, setUp) => {
+        setUp();
+        const { appLockNow, clockReadFailures } = await freshClock();
+
+        expect(clockReadFailures()).toBe(0);
+        expect(appLockNow()).toBeNaN();
+        expect(clockReadFailures()).toBe(1);
+        expect(appLockNow()).toBeNaN();
+        expect(clockReadFailures()).toBe(2);
+    });
+
+    it.each(['ios', 'android'])('%s: a reading that fails once is counted once, and the next good reading reads the clock', async (os) => {
+        platform.os = os;
+        let fail = false;
+        withBootClock(() => { if (fail) throw new Error('native'); return 5000; });
+        const { appLockNow, clockReadFailures } = await freshClock();
+
+        expect(appLockNow()).toBe(5000);
+        fail = true;
+        expect(appLockNow()).toBeNaN();
+        fail = false;
+        expect(appLockNow()).toBe(5000);
+        expect(clockReadFailures()).toBe(1);
     });
 });
 

@@ -3,8 +3,9 @@
  * last started, counting the time it slept, and nothing in the phone's Settings can move it. Only the difference between
  * two readings means anything. App Lock times the member's absence with it: utils/app-lock-clock.ts.
  *
- * null where the app has no such clock: the web build, and a phone app built before this module was added (a dev
- * client). App Lock then reads the wall clock.
+ * null where the app has no such clock (the web build, a phone app built before this module was added), or the reading
+ * throws or isn't a time. The web build's App Lock then reads the wall clock; a phone's asks after every leave
+ * (utils/app-lock-clock.ts).
  *
  * Read off globalThis.expo.modules, the host object the Expo runtime puts every native module on (requireOptionalNativeModule
  * looks there first; LocalAuth.ts's expo-local-authentication import has made sure it is there before any reading). Not

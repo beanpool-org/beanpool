@@ -6,7 +6,7 @@ import {
     whenLocalAuthPromptsClose,
     type LocalAuthPromptStretch,
 } from './LocalAuth';
-import { appLockNow, wallClockSetBacks } from './app-lock-clock';
+import { appLockNow, clockReadFailures, wallClockSetBacks } from './app-lock-clock';
 
 /** App Lock asks again when the member comes back after this long away. */
 export const RETURN_LOCK_GRACE_MS = 15000;
@@ -39,10 +39,13 @@ export type ReturnLockAction = 'none' | 'lock' | 'ask';
  *   its lock, which is all the return lock would ask.
  * - It did not pass, and the app was away 15 seconds or more: 'lock', never 'ask'. A member can leave while the prompt
  *   is open (Android keeps its PIN screen over the app), and whoever cancels it later must not find the app open.
- * - Before all of these: times that ran backwards can't say how long the app was away, so they count as 15 seconds or
- *   more away with no prompt open: 'ask'. On the phone's since-boot clock that is a restart while away (it starts again
- *   from zero); wallClockSetBack says the wall clock was seen going backwards meanwhile (utils/app-lock-clock.ts); and
- *   where the app has only the wall clock, a return or a prompt's close that reads earlier than the moment before it.
+ * - Before all of these: times that ran backwards, or that aren't times, can't say how long the app was away, so they
+ *   count as 15 seconds or more away with no prompt open: 'ask'. On the phone's since-boot clock that is a restart while
+ *   away (it starts again from zero); clockUntrusted says the wall clock was seen going backwards, or the since-boot
+ *   clock could not be read, since the leave (utils/app-lock-clock.ts); in the web build, which has only the wall clock,
+ *   a return or a prompt's close that reads earlier than the moment before it; and a leave or a return that is not a
+ *   finite number (NaN: App Lock's clock could not be read then). A prompt stretch with a time that isn't a finite
+ *   number covers none of the time away.
  *
  * leftAt is when the app last left the front (null: no leave seen, the first return after a launch in the background,
  * which asks as before); activeAt is when it came back. Every time here is on App Lock's clock (appLockNow), as the
@@ -53,12 +56,15 @@ export function returnLockAction(
     leftAt: number | null,
     activeAt: number,
     stretches: readonly LocalAuthPromptStretch[],
-    wallClockSetBack = false,
+    clockUntrusted = false,
 ): ReturnLockAction {
+    // NaN >= RETURN_LOCK_GRACE_MS is false: a time that isn't one would otherwise read as no time away.
+    if (!Number.isFinite(activeAt) || (leftAt !== null && !Number.isFinite(leftAt))) return 'ask';
     const from = leftAt ?? activeAt;
     const ranBackwards = activeAt < from || stretches.some(s => s.openedAt >= from && s.closedAt !== null && s.closedAt < s.openedAt);
-    if (wallClockSetBack || ranBackwards) return 'ask';
-    const during = stretches.filter(s => s.openedAt <= activeAt && (s.closedAt === null || s.closedAt >= from));
+    if (clockUntrusted || ranBackwards) return 'ask';
+    const readable = (s: LocalAuthPromptStretch) => Number.isFinite(s.openedAt) && (s.closedAt === null || Number.isFinite(s.closedAt));
+    const during = stretches.filter(s => readable(s) && s.openedAt <= activeAt && (s.closedAt === null || s.closedAt >= from));
     const passed = during.every(s => s.closedAt !== null && s.passed);
     if (leftAt === null) {
         if (during.length === 0) return 'ask';
@@ -96,39 +102,44 @@ function promptsSettled(): Promise<void> {
  * button's. setLocked(true) puts the lock screen up; the listener takes it down only when its own prompt passes, or when
  * it put it up for a prompt that then passed.
  *
- * Times are read on App Lock's clock (utils/app-lock-clock.ts), which setting the phone's date and time can't move.
+ * Times are read on App Lock's clock (utils/app-lock-clock.ts), which setting the phone's date and time can't move. A
+ * phone that can't read it asks after every leave.
  */
 export function createReturnLock(setLocked: (locked: boolean) => void): (next: string, hasIdentity: boolean) => Promise<void> {
     let leftAt: number | null = null;
     let setBacksAtLeave = 0;
+    let failuresAtLeave = 0;
     let changes = 0;
     return async (next, hasIdentity) => {
         const change = ++changes;
         if (next === 'background' || next === 'inactive') {
             leftAt = appLockNow();
             setBacksAtLeave = wallClockSetBacks();
+            failuresAtLeave = clockReadFailures();
             return;
         }
         if (next !== 'active' || !hasIdentity) return;
         const activeAt = appLockNow();
         const from = leftAt;
         const setBacksFrom = setBacksAtLeave;
+        const failuresFrom = failuresAtLeave;
         leftAt = null;
-        // Whether the wall clock was seen going backwards since the app left. Asked again after the wait: the prompt's
-        // answer reads the clock too.
-        const wallClockSetBack = () => from !== null && wallClockSetBacks() !== setBacksFrom;
+        // Whether the wall clock was seen going backwards, or App Lock's clock could not be read (the return's own reading
+        // included), since the app left; a leave that could not be read is NaN, which the rule asks for. Asked again after
+        // the wait: the prompt's answer reads the clock too.
+        const clockUntrusted = () => from !== null && (wallClockSetBacks() !== setBacksFrom || clockReadFailures() !== failuresFrom);
         let raised = false;
         if (isLocalAuthPromptOpen()) {
             // The rule counts the open prompt as not passed: if that locks, up now, not after the wait, in case the answer
             // is slow or never comes.
-            const ifNotPassed = returnLockAction(from, activeAt, localAuthPromptStretches(), wallClockSetBack());
+            const ifNotPassed = returnLockAction(from, activeAt, localAuthPromptStretches(), clockUntrusted());
             if (ifNotPassed !== 'none' && (await getAppLockEnabled())) {
                 setLocked(true);
                 raised = true;
             }
             await promptsSettled();
         }
-        const action = returnLockAction(from, activeAt, localAuthPromptStretches(), wallClockSetBack());
+        const action = returnLockAction(from, activeAt, localAuthPromptStretches(), clockUntrusted());
         if (action === 'none') {
             // The prompt passed: whoever is holding the phone just gave its lock. Unless the app has left again since.
             if (raised && change === changes) setLocked(false);

@@ -306,6 +306,11 @@ export function setSyncCursor(peerId: string, cursor: string): void {
     `).run(peerId, cursor, now);
 }
 
+/** Forgets a pull cursor: a take-over's, whose server copies from nobody now (services/takeover.ts). */
+export function deleteSyncCursor(peerId: string): void {
+    db.prepare('DELETE FROM sync_cursors WHERE peer_id = ?').run(peerId);
+}
+
 export function recordSyncAttempt(peerId: string): void {
     const now = new Date().toISOString();
     db.prepare(`

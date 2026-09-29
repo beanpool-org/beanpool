@@ -343,6 +343,7 @@ run_federation_suites() {
       test-p2p-announce
       test-federation-settlement
       test-admin-actor-name
+      test-chat-mutes
       test-admin-queue
       test-admin-auth
       test-first-admin-password
@@ -389,6 +390,7 @@ run_federation_suites() {
       test-standby-in-flight
       test-standby-devices
       test-standby-refusal-keeps-copy
+      test-tombstone-retention
       test-sync-copy-pages
       test-recovery-tombstones
       test-github-sign-in-removed

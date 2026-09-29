@@ -17,7 +17,7 @@
 
 import { fileURLToPath } from 'node:url';
 import {
-    CHILD, type History, fakeCopy, tempDir, runChild, resultOf, child, check, section, finish, sealLines, bootParent, epochFixtures,
+    CHILD, type History, fakeCopy, tempDir, runChild, resultOf, child, check, section, finish, sealLines, bootParent, epochFixtures, sealDay, SEAL_SINCE_DAY,
 } from './recovery-seal-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
     // client's form after its main server seals again, and only a whole copy removes it. A standby asks for one once a
     // process, and may have spent that ask already. It still clears at the import that brings the wrapped copies (the rest of what the rollback sent would
     // otherwise stay in its files until a restart), and asks for one more whole copy, which removes that member's.
-    const T8 = '2026-06-08T00:00:00.000Z', T9 = '2026-06-09T00:00:00.000Z', T10 = '2026-06-10T00:00:00.000Z';
+    const T8 = sealDay(8), T9 = sealDay(9), T10 = sealDay(10);
 
     /**
      * 26 and 28: one process of this code throughout (the reviewer's S10 and S10n). The standby starts with its clear
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
         resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: jsonFile(`${label}-history`, h), SEAL_SIDE: 'standby' }));
         const sealed = eWrapped(eGen3, 2, T7, kept);
         const o1 = await runStandby(dir, `${label}-seal`, {
-            resyncFirst: false, since: '2026-06-03T00:00:00.000Z', reconcileMinutes: 0, pulls: 1, watch: [], steps: [sealed],
+            resyncFirst: false, since: SEAL_SINCE_DAY, reconcileMinutes: 0, pulls: 1, watch: [], steps: [sealed],
             ...(epoch ? { epochs: [epoch] } : {}),
         });
         const t1 = resultOf(o1);

@@ -46,19 +46,22 @@
 
 import { importRemoteState, getNodeRole, getReplicaConsistency, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
 import { logger } from '../logger.js';
-import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
+import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy, TOMBSTONE_RETENTION_MS } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
-import { REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, valueLeftOutName, OversizedCopyError, type ResyncClear, type ValueLeftOut } from '../engine/sync.js';
+import {
+    REPLICA_FORMAT, replicaFormatOfCopy, noteReplicaFormat, noteLedgerMismatch, valueLeftOutName, OversizedCopyError, deleteSyncCursor,
+    type ResyncClear, type ValueLeftOut,
+} from '../engine/sync.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
-import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
+import { compareTableHashes, readTableHashes, tableContentHashes } from '../engine/replica-hashes.js';
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
-    noteUncomparedCheck, noteWholeCopyCheck, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
+    notePastRetention, noteUncomparedCheck, noteWholeCopyCheck, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
 } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
 import { STATE_HASH_TABLES } from '@beanpool/engine';
@@ -152,7 +155,9 @@ let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 // N2 (design §4.2): after a copy that came and was refused, when the next of its kind may be asked for. A whole copy waits
 // for the next routine one (a reconcile interval); a force-resync, and a first copy, RESYNC_RETRY_MS. An operator's
-// force-resync is always taken. A copy that never came (the main server restarting) keeps the usual cadence.
+// force-resync is always taken. A force-resync or a first copy that never came (the main server restarting) keeps the usual
+// cadence; a whole copy taken over deltas that never came waits for the next routine one too, and the retention resync
+// RESYNC_RETRY_MS (pullOnce).
 let wholeRetryAt = 0;
 let resyncRetryAt = 0;
 // The last whole copy landed with tables left out (more rows than one copy carries, design §5): the next of any kind waits
@@ -210,9 +215,20 @@ type PullMode = 'delta' | 'full' | 'resync';
  * Why a force-resync. The format re-seed (REPLICA_FORMAT) and an operator's are seeds, decided by this standby alone; one
  * the loop takes after a whole copy that didn't match (checkWholeCopy), or after a delta that left the main server's
  * deletions out, isn't: a main server can make a copy fail that check, so its import is held to the ledger this standby
- * had before its clear (engine/sync.ts ImportOptions.clear).
+ * had before its clear (engine/sync.ts ImportOptions.clear). Nor is `retention`, the one for a cursor older than the main
+ * server keeps its deletes (nextMode).
  */
-type ResyncKind = 'format' | 'operator' | 'mismatch';
+type ResyncKind = 'format' | 'operator' | 'mismatch' | 'retention';
+
+/**
+ * A cursor older than this has missed deletes: the main server keeps them TOMBSTONE_RETENTION_MS (db/db.ts), and a day
+ * less leaves room for the two servers' clocks and their daily prunes (design §6.3 T6).
+ */
+const PAST_RETENTION_MS = TOMBSTONE_RETENTION_MS - 24 * 60 * 60_000;
+function pastRetention(cursor: string, now: number): boolean {
+    const at = Date.parse(cursor);
+    return Number.isFinite(at) && at < now - PAST_RETENTION_MS;
+}
 
 /** Pull once from the primary and import it. Never throws.
  *  - 'delta'  : incremental — X-Since-Cursor, only rows changed since. Falls back to a
@@ -381,19 +397,41 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (Number.isFinite(genMs)) lastGeneratedAtMs = genMs;
             lastImportedGeneratedAt = payload.generatedAt; // full conditional-pull cursor
         }
-        // Advance the delta watermark and persist it so a restart resumes deltas.
-        if (payload.cursor) {
+        const leftOut = result.tablesLeftOut ?? [];
+        // Advance the delta watermark and persist it so a restart resumes deltas. Not past a whole copy that left a table
+        // out and was taken over deltas (a routine one, the canary's, or a once-a-process one; not a force-resync of any
+        // kind, and not a first copy): it carried none of that table's rows, so a cursor it moved would skip the ones
+        // written since the last delta, for good (#1315 review 4132483095). The cursor stays at the last delta's, and the
+        // next delta carries that window again, every table of it: the importer takes a row it already holds as a no-op
+        // (the same stamp, the same transaction id). A force-resync moves it, whatever it left out: the retention one must
+        // (a cursor kept past the main server's deletes would ask for it again), and the others clear from nothing.
+        // Nor kept when it would be past retention (nextMode) before the next pull, unless this copy left the deletes out
+        // too: it carried every tombstone the main server holds, so the retention force-resync that cursor would ask for
+        // mends nothing, and moves the cursor past this table's rows just as this copy does (#1315 review 4133485540). The
+        // next pull starts a pull interval after this one and the take-over keys' fetch end, so two intervals of margin.
+        const nearRetention = !!lastImportedCursor && !leftOut.includes('tombstones')
+            && pastRetention(lastImportedCursor, Date.now() + 2 * getPullMs());
+        const keepCursor = !isDelta && !fresh && hadCursor && leftOut.length > 0 && !nearRetention;
+        if (payload.cursor && !keepCursor) {
             lastImportedCursor = payload.cursor;
             try { setSyncCursor(BACKUP_CURSOR_PEER, payload.cursor); } catch { /* best-effort */ }
         }
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
-        const leftOut = result.tablesLeftOut ?? [];
-        recordQuietly(() => noteCopyLanded(lastSuccessAt!, { whole: !isDelta, leftOut }));
+        // A table a whole copy leaves out, this standby lacks rows of (the record's lastLacking, which the canary doesn't
+        // read) unless the copy's own hash of it equals this standby's rows of it now: a force-resync moved the cursor past
+        // that table's rows written since the last delta, and its first copy, or the one for the deletes the main server
+        // pruned, landed onto rows that weren't current. One taken over deltas kept the cursor, so the next delta brings
+        // those rows; the table is read as lacking all the same until a whole copy carries it or hashes it equal, since
+        // drift the canary found in it would ask for whole copies that leave it out again (#1315 review 4131868827). A
+        // force-resync that lands owes nothing for the deletes the main server pruned any more.
+        const current = !isDelta && leftOut.length > 0 ? leftOutTablesCurrent(payload, leftOut) : [];
+        recordQuietly(() => noteCopyLanded(lastSuccessAt!, { whole: !isDelta, leftOut, current, resync: fresh }));
         if (leftOut.length > 0) {
             logger.warn('P2P', `[Backup] ⚠️ This copy landed without ${leftOut.join(', ')}: the main server holds more rows of `
-                + `${leftOut.length === 1 ? 'it' : 'them'} than one copy carries. This standby keeps its own rows of ${leftOut.length === 1 ? 'it' : 'them'}; the rest is copied.`);
+                + `${leftOut.length === 1 ? 'it' : 'them'} than one copy carries. This standby keeps its own rows of ${leftOut.length === 1 ? 'it' : 'them'}; the rest is copied.`
+                + (keepCursor ? ' The next delta starts where the last one ended, so it brings the rows written since.' : ''));
         }
         // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode), and the
         // record that this standby holds a copy it landed, so no later one is a seed of that kind. A force-resync, or a
@@ -409,11 +447,17 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // watermark-less mutation, e.g. a social-recovery pubkey rewrite).
             if (payload.stateHash) {
                 const localHash = getStateHash();
-                // A table the hash reads, left out of the copies (more rows than one copy carries): the hash differs until
-                // a whole copy carries that table again, and a whole copy leaves it out the same way. Read as drift, it
-                // would have the main server build and sign its whole database, flood included, every other pull. The
-                // copy is reported not exact by that table's name instead (the record's lastLeftOut), and the next routine
-                // whole copy compares every other table by its own hash (checkWholeCopy).
+                // A table the hash reads that this standby lacks rows of (a delta left it out: more rows than one copy
+                // carries): the hash differs until a whole copy carries that table again, and a whole copy leaves it out
+                // the same way. Read as drift, it would have the main server build and sign its whole database, flood
+                // included, every other pull. The copy is reported not exact by that table's name instead (the record's
+                // lastLeftOut), and the next routine whole copy compares every other table by its own hash
+                // (checkWholeCopy). So is one a whole copy left out whose rows here weren't the copy's (lastLacking): that
+                // copy moved the cursor past its rows written since the last delta, and a whole copy the canary asked for
+                // would leave it out and skip more of them again (#1315 review 4131868827). One a whole copy left out whose
+                // hash matched is read like any other: its rows came by delta, so the hash still says whether anything
+                // drifted (#1304 review 4128951076). Drift it finds waits for the next routine time all the same (nextMode's
+                // hold after a whole copy that left a table out).
                 const stale = staleTablesOfCopy(leftOut).filter((t) => STATE_HASH_TABLES.includes(t));
                 if (localHash !== payload.stateHash && stale.length > 0) {
                     logger.sync('P2P', `[Backup] Delta stateHash canary not read: ${stale.join(', ')} left out of this standby's copies, so the hash `
@@ -474,13 +518,30 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             wholeRetryAt = now + (getReconcileMs() || resyncRetryMs());
             if (fresh || !hadCursor) resyncRetryAt = now + resyncRetryMs();
         }
+        // So does one taken over deltas that never came (the main server answering 503 or 500, or the fetch timing out: a
+        // community too large to build its whole copy in time): asked for again on the next tick, it would be every tick's
+        // pull, as after a restart (the routine one is due at once), and no delta would land meanwhile (#1315 review
+        // 4132485902). Deltas carry on, and the next routine time asks again. A force-resync or a first copy that never came
+        // is asked for on the next tick (the main server may be restarting with the same update); the retention one waits
+        // RESYNC_RETRY_MS (below).
+        const wholeNeverCame = stage === 'fetch' && !isDelta && !fresh && hadCursor;
+        if (wholeNeverCame) wholeRetryAt = Date.now() + (getReconcileMs() || resyncRetryMs());
+        // The retention resync waits RESYNC_RETRY_MS after any failure, a copy that never came too (the main server
+        // answering 503 or 500, or the fetch timing out: a community too large to build its whole copy in time). Asked for
+        // on the next tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile;
+        // the record keeps it owed (nextMode).
+        if (why === 'retention') resyncRetryAt = Date.now() + resyncRetryMs();
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
             logger.security('P2P', `[Backup] ❌ ${isDelta ? 'Delta' : 'Snapshot'} REJECTED by import guard: ${msg}`);
         } else {
-            const next = stage === 'import' && !isDelta
+            const next = why === 'retention'
+                ? `no force-resync asked for before ${new Date(resyncRetryAt).toISOString()}; deltas meanwhile`
+                : stage === 'import' && !isDelta
                 ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}`
+                : wholeNeverCame
+                ? `no whole copy asked for before ${new Date(wholeRetryAt).toISOString()}; deltas meanwhile`
                 : 'will retry in interval';
             logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${fresh ? 'resync' : isDelta ? 'delta' : 'full'}) failed: ${msg} (${next})`);
         }
@@ -492,13 +553,33 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
 }
 
 /**
- * The tables this standby's copy of is stale, because copies left them out (more rows than one copy carries): the ones
- * its record keeps until a whole copy carries them again (services/standby-copy-record.ts noteCopyLanded), and this copy's.
+ * The tables this standby lacks rows of, because copies left them out (more rows than one copy carries): the ones its
+ * record keeps until a whole copy carries them again (services/standby-copy-record.ts lastLacking), and this delta's.
  */
-function staleTablesOfCopy(thisCopy: readonly string[]): string[] {
+function staleTablesOfCopy(thisDelta: readonly string[]): string[] {
     let recorded: readonly string[] = [];
-    try { recorded = readCopyRecord().lastLeftOut?.tables ?? []; } catch { /* the record unreadable: this copy's alone */ }
-    return [...new Set([...recorded, ...thisCopy])];
+    try { recorded = readCopyRecord().lastLacking?.tables ?? []; } catch { /* the record unreadable: this delta's alone */ }
+    return [...new Set([...recorded, ...thisDelta])];
+}
+
+/**
+ * Of the tables a whole copy left out, the ones this standby holds exactly as the main server did when it made the copy:
+ * the copy's own hash of each (SyncPayload `tableHashes`, as checkWholeCopy reads them) equals this standby's, hashed now.
+ * None when the copy sent no hashes (one written to while it was being made), or they can't be read here.
+ */
+function leftOutTablesCurrent(payload: SyncPayload, leftOut: readonly string[]): string[] {
+    try {
+        const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
+        if (!theirs) return [];
+        const hashed = leftOut.filter((t) => Object.hasOwn(theirs, t));
+        if (hashed.length === 0) return [];
+        const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
+        const mine = tableContentHashes({ only: hashed, photosLeftOut }).tables;
+        return hashed.filter((t) => mine[t] !== undefined && mine[t].rows === theirs[t].rows && mine[t].hash === theirs[t].hash);
+    } catch (e: any) {
+        logger.warn('P2P', `[Backup] The tables this whole copy left out could not be hashed here: ${e?.message || e}`);
+        return [];
+    }
 }
 
 /** The standby's record of its copies (services/standby-copy-record.ts) never fails a pull, nor masks how one went. */
@@ -715,12 +796,18 @@ let visitorMarksAsked = false;
 let replacedKeysAsked = false;
 let memberBlocksAsked = false;
 
+/** The record says this standby owes the force-resync for the deletes its main server pruned (nextMode). */
+function owesRetentionResync(): boolean {
+    try { return readCopyRecord().pastRetentionAt !== null; } catch { return false; }
+}
+
 /** No pull this tick: the last copy of the only kind this standby can take now was refused, and N2 waits (pullOnce). */
 type Wait = 'wait';
 
 function nextMode(): PullMode | ResyncKind | Wait {
     const now = Date.now();
-    // A force-resync, or a first copy, refused at its import in the last RESYNC_RETRY_MS (N2): none asked for until then.
+    // A force-resync, or a first copy, refused at its import in the last RESYNC_RETRY_MS (N2), or a retention resync that
+    // failed in it at any stage (pullOnce): none asked for until then.
     const resyncWaits = now < resyncRetryAt;
     // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
     // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first
@@ -754,10 +841,20 @@ function nextMode(): PullMode | ResyncKind | Wait {
             ledgerResyncAskedAt = null;
         }
     }
+    // A cursor older than the main server keeps its deletes (PAST_RETENTION_MS: design §6.3 T6): a delta from it would miss
+    // every delete the main server has pruned since, and no whole copy deletes a row (the importer upserts). One
+    // force-resync, not a seed, owed until one lands: the record keeps it, so neither a delta that lands meanwhile (after a
+    // refused one, N2) nor a restart forgets it. The delta moves the cursor, not what it missed.
+    if (lastImportedCursor && pastRetention(lastImportedCursor, now)) recordQuietly(() => notePastRetention(now));
+    if (!resyncWaits && owesRetentionResync()) {
+        logger.info('P2P', `[Backup] This standby's copy is older than the ${Math.round(TOMBSTONE_RETENTION_MS / 86_400_000)} days the main server `
+            + 'keeps its deletes: taking one force-resync, so nothing it deleted meanwhile stays here');
+        return 'retention';
+    }
     // No copy landed yet: a whole one, the seed, unless the last was refused (N2).
     if (!lastImportedCursor) return resyncWaits ? 'wait' : 'full';
-    // A whole copy refused at its import (N2): none of any kind before the next routine one; deltas meanwhile. The
-    // once-a-process ones below are not used up while it waits.
+    // A whole copy refused at its import (N2), or one taken over deltas that never came: none of any kind before the next
+    // routine one; deltas meanwhile. The once-a-process ones below are not used up while it waits.
     if (now < wholeRetryAt) return 'delta';
     // The last whole copy landed with tables left out: none of any kind before the next routine one, as after a refused
     // one. Drift the canary finds meanwhile waits for it; deltas carry on.
@@ -1050,7 +1147,7 @@ export function pullNow(): Promise<{ ok: boolean; error?: string }> {
     if (next === 'wait') {
         return Promise.resolve({ ok: false, error: `This standby's last copy was refused; the next is asked for at ${new Date(resyncRetryAt).toISOString()}.` });
     }
-    return next === 'format' || next === 'mismatch' || next === 'operator' ? pullOnce('resync', next) : pullOnce(next);
+    return next === 'format' || next === 'mismatch' || next === 'operator' || next === 'retention' ? pullOnce('resync', next) : pullOnce(next);
 }
 
 /**
@@ -1093,6 +1190,16 @@ export function initBackupPuller(): void {
     };
     // First pull shortly after boot so the replica converges quickly.
     pullTimer = setTimeout(loop, 5_000);
+}
+
+/**
+ * A take-over (services/takeover.ts `pull-config`): this server copies from nobody now, so the cursor of its last pull
+ * goes, here and in its database. No pull follows it: a server made a standby again later starts from a first copy, never
+ * a delta from before its time as the main server (design §6.3 T6).
+ */
+export function forgetPullCursor(): void {
+    deleteSyncCursor(BACKUP_CURSOR_PEER);
+    lastImportedCursor = null;
 }
 
 /** Stop the puller (used on promotion / shutdown). */

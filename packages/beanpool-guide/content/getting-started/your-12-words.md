@@ -29,7 +29,9 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 Open **Settings** with the sliders button at the top of the screen. Then either:
 
 - Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.
-- Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done. They also hide when you leave the screen, and the phone asks again next time.
+- Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done.
+
+Either way, the words also hide when you leave that screen, or leave the app for 15 seconds or more, and the phone asks again next time. A lock screen check that takes more than two minutes shows nothing: tap again.
 
 A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise the phone has no copy of them: they can't be rebuilt from a sign-in. **View Recovery Phrase** is still there, and says **No copy on this phone yet**. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
 

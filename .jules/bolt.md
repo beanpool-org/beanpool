@@ -19,6 +19,10 @@ lookups/counts → O(1)" fix). Before opening a PR:
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 
+### 2026-09-30 — "single-pass status grouping in offBoardPostsToResend" (#1320) — CLOSED, NO BENEFIT.
+`deals` is capped at the last 50 deals (`HEALED_DEALS`); the rewrite is behaviour-identical, so it saves microseconds. Fourth time
+(#745, #1018, #1034, #1320): name the loop and a list that grows with the community before filing.
+
 ### 2026-09-23 — "O(1) group lookups in MapPage composer audience notices" (#1034) — CLOSED, NO BENEFIT.
 Three one-shot `userGroups.find()` calls in one panel's render, over the member's own groups (a handful). No loop, no
 recursion, nothing a member sees changes. This is the third time (#745, #1018, #1034): name the loop or recursion and

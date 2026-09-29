@@ -517,3 +517,10 @@ intentional; do not open PRs or issues attempting to alter them:
   when the node is elsewhere (`resolveNodeApiUrl`). The cookie is already sent, so there's no 401 to fix. Writing the
   default out changes nothing. Vault: a missing `credentials` option is a defect only for a CROSS-origin call that needs
   cookies (`'include'`). Show the request going cross-origin, and the 401 it gets, before filing one.
+
+### 2026-09-30 — Bolt: single-pass status grouping in `offBoardPostsToResend` (#1320) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (no measurable gain), RECURRING (the #745, #1018, #1034 shape)
+- **Claim:** three `.filter().map()` passes over `deals` in `packages/beanpool-engine/src/posts.ts` should be one loop.
+- **Why not to re-file:** `deals` is capped at the member's last 50 deals (`HEALED_DEALS = 50`, ties included), and the rewrite is
+  behaviour-identical (20,000 random inputs: 0 mismatches), so the saving is microseconds on at most 50 rows. Bolt: only file a
+  loop rewrite for a list that grows with the community, and name the loop and the list size.

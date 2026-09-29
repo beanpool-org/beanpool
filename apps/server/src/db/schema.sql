@@ -118,6 +118,11 @@ CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(boar
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
+-- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
+-- pricing_reports travel to a standby (engine/replication-manifest.ts MEMBERS_OWN, MEMBERS_REPORTS) reads them on every
+-- page and hash slice of a copy, and without it walks every member's row, inline photo and all (at 6,000 members with
+-- 60 KB photos: 7.8 ms a count, 1.2 ms with it).
+CREATE INDEX IF NOT EXISTS idx_members_member_keys ON members(is_visitor, public_key);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (

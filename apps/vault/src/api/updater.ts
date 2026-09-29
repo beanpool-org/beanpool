@@ -12,7 +12,7 @@ import {
     type ReleaseFeed,
 } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, sha256Hex, type ReleaseChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
-import { stagedNames, veritysetupVerify, type VerifyRoot } from '../shared/staged-image.js';
+import { freeBytes, isNoRoom, mib, readInstallRecord, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
 
 export { stagedNames, uuidOfHex, veritysetupVerify, type VerifyRoot } from '../shared/staged-image.js';
 
@@ -102,6 +102,8 @@ export interface UpdaterOptions {
     launcher: LauncherLink | null;
     /** The inbox a new image is staged into for the monthly restart (root checks it again); without it, only reported. */
     stagedDir?: string;
+    /** What root's install step did at the last monthly restart (INSTALL_RESULT_FILE), read at every check. */
+    installResultFile?: string;
     verifyRoot?: VerifyRoot;
     clock?: () => number;
 }
@@ -128,6 +130,8 @@ export interface UpdateStatus {
     /** Releases not taken at the last check, and why. */
     refused: { release: string; reason: string }[];
     handover: { to: ReleaseRef; at: number; ok: boolean; reason?: string } | null;
+    /** What root's install step did at the last monthly restart (installed, or why not), as root left it. */
+    lastInstall: InstallRecord | null;
     note: string | null;
 }
 
@@ -137,7 +141,8 @@ function ref(r: TrustedRelease): ReleaseRef {
 
 export class Updater {
     readonly status: UpdateStatus = {
-        checkedAt: null, image: null, error: null, running: null, newest: null, imageWaiting: null, stopped: null, refused: [], handover: null, note: null,
+        checkedAt: null, image: null, error: null, running: null, newest: null, imageWaiting: null, stopped: null, refused: [], handover: null, lastInstall: null,
+        note: null,
     };
     private checking: Promise<UpdateStatus> | null = null;
     private readonly clock: () => number;
@@ -156,6 +161,7 @@ export class Updater {
         const s = this.status;
         s.checkedAt = this.clock();
         s.image = this.opts.runningImageHash();
+        s.lastInstall = this.opts.installResultFile ? readInstallRecord(this.opts.installResultFile) : null;
         if (!this.opts.rootKeys) {
             s.note = 'No pinned custodian keys (run from source): releases are not checked.';
             return s;
@@ -211,10 +217,16 @@ export class Updater {
             return s;
         }
         const dir = path.join(this.opts.releasesDir, target.manifest.apiBundleHash);
-        mkdirSync(dir, { recursive: true, mode: 0o700 });
         const bundlePath = path.join(dir, API_BUNDLE_ASSET);
-        writeFileSync(`${bundlePath}.part`, bytes, { mode: 0o600 });
-        renameSync(`${bundlePath}.part`, bundlePath);
+        try {
+            mkdirSync(dir, { recursive: true, mode: 0o700 });
+            writeFileSync(`${bundlePath}.part`, bytes, { mode: 0o600 });
+            renameSync(`${bundlePath}.part`, bundlePath);
+        } catch (e) {
+            rmSync(`${bundlePath}.part`, { force: true });
+            s.error = `Release ${target.manifest.version}'s API bundle could not be kept${isNoRoom(e) ? ' (no room on the state partition)' : ''}: ${(e as Error).message}`.slice(0, 300);
+            return s;
+        }
         const upTo = chain.releases.slice(0, chain.releases.indexOf(target) + 1);
         const request: SwitchRequest = {
             bundlePath,
@@ -267,7 +279,7 @@ export class Updater {
         }
         const listed = files.find(f => sha256Hex(f.manifestText) === release.hash) as FeedRelease;
         const drop = () => {
-            for (const n of Object.values(names)) {
+            for (const n of Object.values(names).flatMap(x => [x, `${x}.part`])) {
                 try {
                     rmSync(path.join(dir, n), { recursive: true, force: true });
                 } catch {
@@ -296,6 +308,15 @@ export class Updater {
             return { staged: true };
         } catch (e) {
             drop();
+            if (isNoRoom(e)) {
+                let free = '';
+                try {
+                    free = `, ${mib(freeBytes(dir, false))} free without it`;
+                } catch {
+                    // Said without it.
+                }
+                return { staged: false, error: `no room for the image on the state partition${free}: ${(e as Error).message}`.slice(0, 300) };
+            }
             return { staged: false, error: `the image could not be fetched: ${(e as Error).message}`.slice(0, 300) };
         }
     }

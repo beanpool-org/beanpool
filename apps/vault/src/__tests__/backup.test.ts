@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { openSeedFromSso, openVaultRelease, vaultUnb64 } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
-import type { BackupStore } from '../api/backup-store.js';
+import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { HOLD_MS, RESTORE_RETRY_MS } from '../api/server.js';
 import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.js';
 import { openState, readStateFile, type WorkingKeys } from '../keyholder/keys.js';
@@ -223,6 +224,45 @@ describe('backups', () => {
         await a.api.runBackup();
         expect(readdirSync(a.storeDir)).not.toContain(first);
         expect(readdirSync(a.storeDir)).toHaveLength(2);
+    });
+
+    it('local backups kept to a byte budget (they share the state partition with a waiting image): the oldest go, the newest always stays', async () => {
+        // The store alone, with backups of known sizes (same-second ones in their order).
+        const dir = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
+        try {
+            const store = new LocalDirectoryStore(dir, { maxBytes: 2500 });
+            const names = ['bv-20261001T100000Z.bin', 'bv-20261001T110000Z.bin', 'bv-20261001T110000Z-1.bin', 'bv-20261001T120000Z.bin'];
+            for (const name of names.slice(0, 3)) await store.put(name, crypto.randomBytes(1000));
+            // 3000 bytes > 2500: the oldest went, after the third.
+            expect(await store.list()).toEqual(names.slice(1, 3));
+            await store.put(names[3], crypto.randomBytes(1000));
+            expect(await store.list()).toEqual(names.slice(2, 4));
+            // One backup larger than the whole budget: it stays, alone.
+            await store.put('bv-20261001T130000Z.bin', crypto.randomBytes(3000));
+            expect(await store.list()).toEqual(['bv-20261001T130000Z.bin']);
+            expect(readdirSync(dir)).toEqual(['bv-20261001T130000Z.bin']);
+            // Without a budget nothing goes but by age (the API's 30 days).
+            const unbounded = new LocalDirectoryStore(path.join(dir, 'all'));
+            for (const name of names) await unbounded.put(name, crypto.randomBytes(1000));
+            expect(await unbounded.list()).toEqual(names);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+
+        // The API's hourly backups into such a store (a budget smaller than one backup here): after each, only it.
+        const bounded = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
+        try {
+            const a = await vault({ store: () => new LocalDirectoryStore(bounded, { maxBytes: 1 }) });
+            const g = await doGenesis(a);
+            await deposit(a, g, newMember(), 'google', 'within-the-budget');
+            for (let i = 0; i < 3; i++) {
+                const name = await a.api.runBackup();
+                expect(readdirSync(bounded)).toEqual([name]);
+                a.clock.advance(60 * 60 * 1000);
+            }
+        } finally {
+            rmSync(bounded, { recursive: true, force: true });
+        }
     });
 });
 

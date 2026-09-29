@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync, statfsSync, statSync } from 'node:fs';
 
 /**
  * A new image on its way to the monthly restart (key vault design §3). The API downloads a release's image files into
@@ -14,6 +15,51 @@ export const IMAGE_WORK = '/var/lib/beanpool-vault/install.work';
 
 /** The staged release's chain file (`{version, imageHash, stagedAt, chain}`) is no larger than this. */
 export const STAGED_RELEASE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * What root's install step did at the last monthly restart (install.ts), for the API's `/v1/report`: root writes it
+ * (0644, in root's directory), the API only reads it. On the state partition, so it outlasts the restart.
+ */
+export const INSTALL_RESULT_FILE = '/var/lib/beanpool-vault/install-result.json';
+
+export interface InstallRecord {
+    at: number;
+    installed: boolean;
+    version?: string;
+    reason?: string;
+}
+
+/** The install record in `file`, or null (none yet, or not one). */
+export function readInstallRecord(file: string): InstallRecord | null {
+    try {
+        if (statSync(file).size > 64 * 1024) return null;
+        const o = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+        if (typeof o.at !== 'number' || typeof o.installed !== 'boolean') return null;
+        return {
+            at: o.at, installed: o.installed,
+            ...(typeof o.version === 'string' ? { version: o.version.slice(0, 32) } : {}),
+            ...(typeof o.reason === 'string' ? { reason: o.reason.slice(0, 500) } : {}),
+        };
+    } catch {
+        return null;
+    }
+}
+
+/** The file system saying it is full (or a quota reached). */
+export function isNoRoom(e: unknown): boolean {
+    const code = (e as NodeJS.ErrnoException | undefined)?.code;
+    return code === 'ENOSPC' || code === 'EDQUOT';
+}
+
+/** Bytes free on the file system holding `dir`: for root (who may use the blocks ext4 keeps back) or for others. */
+export function freeBytes(dir: string, forRoot: boolean): number {
+    const s = statfsSync(dir);
+    return (forRoot ? s.bfree : s.bavail) * s.bsize;
+}
+
+export function mib(bytes: number): string {
+    return `${Math.floor(bytes / (1024 * 1024))} MiB`;
+}
 
 /**
  * Checks a system partition image against its verity tree and the root hash its release names: `veritysetup verify`

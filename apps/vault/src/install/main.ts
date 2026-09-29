@@ -2,14 +2,15 @@
 import { spawnSync } from 'node:child_process';
 import { identifyImage } from '../shared/image-identity.js';
 import { rootKeysFor } from '../shared/pinned.js';
-import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK } from '../shared/staged-image.js';
+import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK, INSTALL_RESULT_FILE } from '../shared/staged-image.js';
 import { installStaged } from './install.js';
 
 /**
  * `vault-install`: the monthly restart's install step, as root (install.ts; usr/lib/beanpool-vault/monthly-restart).
  * It checks what the API staged from the custodian keys this file was built with, and has systemd-sysupdate install it
  * into the other slot only if every check passes. Exit 0: a new image is installed and boots at the restart. Exit 1:
- * nothing was installed (nothing staged, or refused: the journal says why). Exit 2: not a built bundle.
+ * nothing was installed (nothing staged, or refused: the journal says why, and so does the API's /v1/report after the
+ * restart, from INSTALL_RESULT_FILE). Exit 2: not a built bundle.
  */
 
 const SYSUPDATE = '/usr/lib/systemd/systemd-sysupdate';
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
         process.exit(2);
     }
     const result = await installStaged({
-        inbox: IMAGE_INBOX, transferDir: IMAGE_TRANSFER, workDir: IMAGE_WORK, rootKeys,
+        inbox: IMAGE_INBOX, transferDir: IMAGE_TRANSFER, workDir: IMAGE_WORK, rootKeys, resultFile: INSTALL_RESULT_FILE,
         runningImage: () => {
             const r = identifyImage();
             return r.ok ? r.image.imageHash : null;

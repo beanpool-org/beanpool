@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { BACKUP_NAME_RE, compareBackupNames } from '../shared/backup-format.js';
 
@@ -20,16 +20,43 @@ function checkName(name: string): string {
     return name;
 }
 
-/** A directory as a backup store: for tests, and for a rehearsal with a disk as the "other provider". */
+/**
+ * A directory as a backup store: for tests, for a rehearsal with a disk as the "other provider", and on the image until
+ * the store's client exists (the state partition, `/var/lib/beanpool-vault/backups`). There it shares the partition
+ * with a new image waiting for the monthly restart, so `maxBytes` bounds it: after each backup the oldest go until the
+ * rest fit, and the newest always stays.
+ */
 export class LocalDirectoryStore implements BackupStore {
-    constructor(private readonly dir: string) {
+    private readonly maxBytes: number | null;
+
+    constructor(private readonly dir: string, opts: { maxBytes?: number } = {}) {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
+        this.maxBytes = opts.maxBytes ?? null;
     }
 
     async put(name: string, bytes: Uint8Array): Promise<void> {
         const file = path.join(this.dir, checkName(name));
-        writeFileSync(`${file}.part`, bytes, { mode: 0o600 });
-        renameSync(`${file}.part`, file);
+        try {
+            writeFileSync(`${file}.part`, bytes, { mode: 0o600 });
+            renameSync(`${file}.part`, file);
+        } catch (e) {
+            // A partial file (a full disk) takes no room from what comes next.
+            rmSync(`${file}.part`, { force: true });
+            throw e;
+        }
+        if (this.maxBytes !== null) this.keepWithin(this.maxBytes);
+    }
+
+    /** The oldest backups go until the rest take no more than `maxBytes`; the newest always stays. */
+    private keepWithin(maxBytes: number): void {
+        const backups = readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n)).sort(compareBackupNames)
+            .map(name => ({ name, size: statSync(path.join(this.dir, name)).size }));
+        let total = backups.reduce((sum, b) => sum + b.size, 0);
+        for (const b of backups.slice(0, -1)) {
+            if (total <= maxBytes) break;
+            rmSync(path.join(this.dir, b.name), { force: true });
+            total -= b.size;
+        }
     }
 
     async get(name: string): Promise<Buffer> {

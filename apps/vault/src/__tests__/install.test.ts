@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { custodianKey } from '../custodian/lib.js';
-import { installStaged, type InstallOptions } from '../install/install.js';
+import { INSTALL_SPARE_BYTES, installStaged, type InstallOptions } from '../install/install.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
 import { stagedNames } from '../shared/staged-image.js';
 import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit.js';
@@ -179,6 +179,30 @@ describe('the monthly restart installs only what root checks from the pinned key
         expect(await installStaged(t.opts())).toMatchObject({ installed: false, reason: expect.stringContaining('a link') });
         t.nothingInstalled();
         expect(readFileSync(target).equals(t.next.uki)).toBe(true);
+    });
+
+    it('no room on the state partition for root\'s copies: refused before copying, said plainly, and left for the report', async () => {
+        const t = setUp();
+        const names = t.stage(t.r2, t.next, [t.r1, t.r2]);
+        const need = [names.uki, names.root, names.verity].reduce((sum, name) => sum + readFileSync(path.join(t.inbox, name)).length, 0);
+        const resultFile = path.join(dir, `result-${n}.json`);
+        const asked: string[] = [];
+        // What is free where root copies to: its copies and 64 MiB to spare, less one byte.
+        const free = need + INSTALL_SPARE_BYTES - 1;
+        const r = await installStaged(t.opts({ resultFile, clock: () => 42, freeBytes: d => { asked.push(d); return free; } }));
+        const reason = `no room on the state partition for root's copies of release 1.1.0: they need 0 MiB and ${Math.floor(free / 1048576)} MiB are free`;
+        expect(r).toEqual({ installed: false, reason });
+        expect(asked).toEqual([path.join(dir, `install-${n}.work`)]);
+        t.nothingInstalled();
+        expect(JSON.parse(readFileSync(resultFile, 'utf8'))).toEqual({ at: 42, installed: false, reason });
+        expect(statSync(resultFile).mode & 0o777).toBe(0o644);
+        // With that byte free: installed, and that is left for the report instead.
+        t.stage(t.r2, t.next, [t.r1, t.r2]);
+        expect(await installStaged(t.opts({ resultFile, clock: () => 43, freeBytes: () => free + 1 }))).toEqual({ installed: true, version: '1.1.0' });
+        expect(JSON.parse(readFileSync(resultFile, 'utf8'))).toEqual({ at: 43, installed: true, version: '1.1.0' });
+        // A restart with nothing staged says that.
+        await installStaged(t.opts({ resultFile, clock: () => 44 }));
+        expect(JSON.parse(readFileSync(resultFile, 'utf8'))).toEqual({ at: 44, installed: false, reason: 'nothing is staged' });
     });
 
     it('systemd-sysupdate failing: reported, and the transfer source is emptied', async () => {

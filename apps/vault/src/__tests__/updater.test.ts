@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { stagedNames, Updater, uuidOfHex, type LauncherLink, type SwitchRequest } from '../api/updater.js';
 import { installStaged } from '../install/install.js';
 import { Launcher } from '../launcher/launcher.js';
-import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
+import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET, type ReleaseFeed } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
 import { doGenesis, get, startVault } from './harness.js';
 import { keys3, makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
@@ -228,25 +228,25 @@ describe('the image staged is the one the newest release names, from the release
     });
 });
 
-describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 round 2)', () => {
-    /** 1.0.0 runs; 1.0.1 is an API fix for its image (a handover); 1.1.0 is a new image (staged). */
-    function setUpInbox() {
-        const t = setUp();
-        const r2 = makeRelease({ version: '1.0.1', previous: t.r1, custodianKeys: t.root, signers: t.root.slice(1), apiBundleHash: sha256Hex(t.bundleB) });
-        publish(t.feedDir, r2, t.bundleB);
-        const uki = crypto.randomBytes(100);
-        const image = { ukiSha256: sha256Hex(uki), roothash: crypto.randomBytes(32).toString('hex') };
-        const r3 = makeRelease({ version: '1.1.0', previous: r2, custodianKeys: t.root, signers: t.root, image, apiBundleHash: sha256Hex(crypto.randomBytes(64)) });
-        const d = publish(t.feedDir, r3);
-        writeFileSync(path.join(d, UKI_ASSET), uki);
-        writeFileSync(path.join(d, ROOT_ASSET), Buffer.from('the system partition'));
-        writeFileSync(path.join(d, VERITY_ASSET), Buffer.from('its verity tree'));
-        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
-        mkdirSync(stagedDir, { mode: 0o700 });
-        const names = Object.values(stagedNames('1.1.0', image.roothash)).sort();
-        return { ...t, stagedDir, names, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
-    }
+/** 1.0.0 runs; 1.0.1 is an API fix for its image (a handover); 1.1.0 is a new image (staged). */
+function setUpInbox() {
+    const t = setUp();
+    const r2 = makeRelease({ version: '1.0.1', previous: t.r1, custodianKeys: t.root, signers: t.root.slice(1), apiBundleHash: sha256Hex(t.bundleB) });
+    publish(t.feedDir, r2, t.bundleB);
+    const uki = crypto.randomBytes(100);
+    const image = { ukiSha256: sha256Hex(uki), roothash: crypto.randomBytes(32).toString('hex') };
+    const r3 = makeRelease({ version: '1.1.0', previous: r2, custodianKeys: t.root, signers: t.root, image, apiBundleHash: sha256Hex(crypto.randomBytes(64)) });
+    const d = publish(t.feedDir, r3);
+    writeFileSync(path.join(d, UKI_ASSET), uki);
+    writeFileSync(path.join(d, ROOT_ASSET), Buffer.from('the system partition'));
+    writeFileSync(path.join(d, VERITY_ASSET), Buffer.from('its verity tree'));
+    const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+    mkdirSync(stagedDir, { mode: 0o700 });
+    const names = Object.values(stagedNames('1.1.0', image.roothash)).sort();
+    return { ...t, stagedDir, names, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
+}
 
+describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 round 2)', () => {
     it('a directory (one under a name it stages too, one it can\'t write), a link to a directory outside, and a directory holding a link out: all gone, what the links point at survives, the image is staged and the handover runs', async () => {
         const t = setUpInbox();
         const outside = path.join(t.feedDir, '..', `outside-${n}`);
@@ -317,6 +317,53 @@ describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 r
             expect(r.status).toBe(200);
             const update = (JSON.parse(r.body.report.text as string) as { update: { imageWaiting: { staged: boolean; error: string } } }).update;
             expect(update.imageWaiting).toMatchObject({ staged: false, error: expect.stringContaining('the inbox could not be cleared (stray: EACCES)') });
+        } finally {
+            await v.close();
+        }
+    });
+});
+
+describe('room on the state partition, and what the monthly restart installed, in the report (#1314 round 2)', () => {
+    it('a staging that fails for space says so, leaves no partial file, and the handover still runs', async () => {
+        const t = setUpInbox();
+        const feed = new LocalDirectoryFeed(t.feedDir);
+        const full: ReleaseFeed = {
+            list: () => feed.list(),
+            asset: (r, name, max) => feed.asset(r, name, max),
+            assetToFile: async (r, name, file, max) => {
+                if (name !== ROOT_ASSET) return feed.assetToFile(r, name, file, max);
+                // The file system fills up part way through the system partition.
+                writeFileSync(`${file}.part`, 'part of it');
+                throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+            },
+        };
+        const s = await t.updater({ feed: full, stagedDir: t.stagedDir, verifyRoot: async () => true }).check();
+        expect(s.imageWaiting).toMatchObject({
+            version: '1.1.0', staged: false, error: expect.stringMatching(/^no room for the image on the state partition, \d+ MiB free without it: ENOSPC/),
+        });
+        expect(readdirSync(t.stagedDir)).toEqual([]);
+        expect(s.handover).toMatchObject({ ok: true, to: { version: '1.0.1' } });
+    });
+
+    it('/v1/report says what root\'s install step did at the last restart (installed, or why not), from the file root leaves', async () => {
+        const t = setUpInbox();
+        const resultFile = path.join(t.feedDir, '..', `install-result-${n}.json`);
+        const u = t.updater({ stagedDir: t.stagedDir, verifyRoot: async () => true, installResultFile: resultFile });
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        try {
+            await doGenesis(v);
+            const lastInstall = async () => {
+                await u.check();
+                const r = await get(v, '/v1/report');
+                return (JSON.parse(r.body.report.text as string) as { update: { lastInstall: unknown } }).update.lastInstall;
+            };
+            expect(await lastInstall()).toBeNull();
+            writeFileSync(resultFile, JSON.stringify({ at: 1, installed: false, reason: 'no room on the state partition for root\'s copies of release 1.1.0: they need 1137 MiB and 900 MiB are free' }));
+            expect(await lastInstall()).toEqual({ at: 1, installed: false, reason: expect.stringContaining('no room on the state partition') });
+            writeFileSync(resultFile, JSON.stringify({ at: 2, installed: true, version: '1.1.0' }));
+            expect(await lastInstall()).toEqual({ at: 2, installed: true, version: '1.1.0' });
+            writeFileSync(resultFile, 'not json');
+            expect(await lastInstall()).toBeNull();
         } finally {
             await v.close();
         }

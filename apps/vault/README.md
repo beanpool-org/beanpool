@@ -155,6 +155,15 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
 - One UKI (`EFI/Linux/beanpool-vault_<version>.efi`: kernel, initrd, and a command line naming the dm-verity
   `roothash=` of the erofs system partition), booted by systemd-boot (no menu, no editor). `/var` is a separate state
   partition, made at the first boot with the second system slot and the data partition (`usr/lib/repart.d`).
+- The disk: the ESP (512 MiB), two system slots (1 GiB and a 64 MiB verity tree each), the state partition (6 GiB) and
+  the data partition (the rest, at least 1 GiB): 9.63 GiB and the partition table, so a 10 GiB disk or more (1984's
+  smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the monthly restart's worst moment, measured on
+  a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and is there twice while
+  root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most 200 MiB), the local
+  backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go first, the newest
+  always stays) and a few MiB of releases, certificates and state. About 3.7 GiB of the 5.6 GiB ext4 leaves the
+  vault's users: 1.9 GiB to spare. Root's install step checks the room for its copies before it makes them, and a
+  staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`, `lastInstall`).
 - The data partition is LUKS2 under `K_disk`: after an unlock, a root helper takes the key from the keyholder's
   root-only socket, opens the partition (formats it the first time), and mounts it in the machine's own mount
   namespace (its unit has no setting that makes one), where the API sees it; the API opens no database before, and
@@ -256,8 +265,10 @@ planned, the rule stands: reinstall from the signed image first, then unlock.
   data partition is still being opened). Global checks it every minute.
 - `/v1/report` (while open) is signed with the ticket key and holds nothing per member: counts, copies, re-wrap
   progress, backups, pushes, memory hygiene, how many new custodians confirmed their share, and `api` (the running
-  bundle's hash), `update` (the image this API knows it booted, the release it runs, the newest, a waiting image,
-  anything refused and why, the last handover), `nextRestart`.
+  bundle's hash), `update` (the image this API knows it booted, the release it runs, the newest, a waiting image and
+  whether it is staged or why not, anything refused and why, the last handover, and `lastInstall`: what root's install
+  step did at the last monthly restart, installed or why not, from the file it leaves in
+  `/var/lib/beanpool-vault/install-result.json`), `nextRestart`.
 
 ## Tests
 

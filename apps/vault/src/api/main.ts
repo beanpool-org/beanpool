@@ -23,9 +23,12 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  * - `socketPath`: listen on a Unix socket behind that symlink (the image; Caddy connects through it), so a newer API
  *   can take over (updater.ts, launcher.ts). Without it, `port` and `host` (tests, a rehearsal).
  * - `backupDir` is a local directory standing in for the object store until its client and credentials exist (design
- *   §4: a second provider in another country).
+ *   §4: a second provider in another country). `backupMaxBytes` bounds it: after each backup the oldest go until the
+ *   rest fit (the newest always stays). On the image it shares the state partition with a new image waiting.
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
  * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
+ * - `installResultFile`: what root's install step did at the last monthly restart (the image:
+ *   /var/lib/beanpool-vault/install-result.json), shown in /v1/report.
  * - `rootKeys`: for a run from source only (tests). A built bundle pins its keys and ignores these.
  * - `imageIdentityFile`: where root leaves which image booted (the image: `/run/beanpool-vault-image.json`, written by
  *   beanpool-vault-identity.service before the vault's programs start, as the keyholder reads it). The ESP it is
@@ -41,6 +44,7 @@ interface ApiConfig {
     keyholderSocket: string;
     hosts: string[];
     backupDir: string;
+    backupMaxBytes?: number;
     port?: number;
     host?: string;
     socketPath?: string;
@@ -48,6 +52,7 @@ interface ApiConfig {
     expoAccessToken?: string;
     releasesDir?: string;
     stagedDir?: string;
+    installResultFile?: string;
     feed?: { github?: string; directory?: string };
     updateCheckSeconds?: number;
     imageHash?: string;
@@ -111,14 +116,14 @@ async function main(): Promise<void> {
     };
     const updater = feed && config.releasesDir ? new Updater({
         feed, rootKeys: rootKeysFor(config.rootKeys), ownBundleHash: own, runningImageHash: image, releasesDir: config.releasesDir, launcher,
-        stagedDir: config.stagedDir,
+        stagedDir: config.stagedDir, installResultFile: config.installResultFile,
     }) : null;
 
     const api = createVaultApi({
         dataDir: config.dataDir,
         keyholderSocket: config.keyholderSocket,
         hosts: config.hosts,
-        store: new LocalDirectoryStore(config.backupDir),
+        store: new LocalDirectoryStore(config.backupDir, { maxBytes: config.backupMaxBytes }),
         trustProxy: config.trustProxy,
         expoAccessToken: config.expoAccessToken,
         requireDataMount: config.requireDataMount,

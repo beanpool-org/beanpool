@@ -3,7 +3,7 @@
 #
 #   apps/vault/image/boot-test.sh --image <build.sh's --out dir> [--limit <seconds>] [--verdict hygiene|vault-test]
 #
-# A copy of the disk image, grown to 8 GB so the first boot can add its partitions, boots under QEMU with UEFI in a
+# A copy of the disk image, grown to 12 GiB so the first boot can add its partitions, boots under QEMU with UEFI in a
 # container (x86-64 emulated on other machines: several minutes). The guest's network reaches nothing outside, so
 # nothing is contacted (Caddy can't fetch a certificate and the release check finds no feed; both only log it). It
 # passes when image/.../check-hygiene prints "hygiene: ALL PASS" on the serial port and the vault's /v1/health reports
@@ -34,7 +34,7 @@ work="${image}/boot-test"
 rm -rf "${work}"
 mkdir -p "${work}"
 cp "${raw}" "${work}/disk.raw"
-truncate -s 8G "${work}/disk.raw"
+truncate -s 12G "${work}/disk.raw"
 
 # The container holds QEMU and the firmware; run.sh is mounted, so changing it doesn't rebuild the container.
 tester="beanpool-vault-boot-test:$(docker version -f '{{.Server.Arch}}')-$(cat "${here}/boot-test/Dockerfile" "${here}/pins.env" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-16)"

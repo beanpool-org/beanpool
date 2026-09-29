@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
-import { STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type VerifyRoot } from '../shared/staged-image.js';
+import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
 
 /**
  * The monthly restart's install step (key vault design §3), run as root by usr/lib/beanpool-vault/monthly-restart. The
@@ -20,6 +20,8 @@ import { STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type VerifyRo
  * Only then are the files moved into the transfer source systemd-sysupdate reads (root's alone), and systemd-sysupdate
  * installs them into the other slot. Anything that fails is logged, nothing is installed, and the inbox is emptied
  * either way (the API stages again). The API's user can write neither the transfer source nor root's scratch space.
+ * Before its copies, it checks the state partition has room for them (with some to spare), and says so plainly if not.
+ * What it did goes into `resultFile` too, for the API's `/v1/report` after the restart.
  *
  * The inbox belongs to the API's user, who may be hostile: entries are opened without following links, only regular
  * files are read, sizes are capped, every check runs on root's copy (made first), and entries are unlinked, never
@@ -41,7 +43,15 @@ export interface InstallOptions {
     /** systemd-sysupdate, once the files are in `transferDir`: true when it installed them. */
     sysupdate: () => boolean;
     log?: (line: string) => void;
+    /** Where what it did is left for the API's report (INSTALL_RESULT_FILE on the image). */
+    resultFile?: string;
+    /** Bytes root may still write where `workDir` is (default: the file system's free blocks, reserved ones included). */
+    freeBytes?: (dir: string) => number;
+    clock?: () => number;
 }
+
+/** What root's copies leave free at least, for the journal and the vault's own files. */
+export const INSTALL_SPARE_BYTES = 64 * 1024 * 1024;
 
 export type InstallResult = { installed: true; version: string } | { installed: false; reason: string };
 
@@ -157,6 +167,16 @@ async function check(opts: InstallOptions, entries: string[]): Promise<{ release
     const strays = entries.filter(n => PARTITION_NAME.test(n) && n !== names.root && n !== names.verity);
     if (strays.length) refuse(`partitions staged under another version or root hash than release ${version}'s: ${strays.join(', ')}`);
     for (const n of [names.root, names.verity]) if (!entries.includes(n)) refuse(`${n} (release ${version}'s) is not staged`);
+    // Room for root's copies, beside the API's (the sizes the inbox shows; copyOwn caps what it copies).
+    const need = [names.uki, names.root, names.verity].reduce((sum, n) => {
+        try {
+            return sum + lstatSync(path.join(opts.inbox, n)).size;
+        } catch {
+            return sum;
+        }
+    }, 0);
+    const free = (opts.freeBytes ?? (d => freeBytes(d, true)))(opts.workDir);
+    if (need + INSTALL_SPARE_BYTES > free) refuse(`no room on the state partition for root's copies of release ${version}: they need ${mib(need)} and ${mib(free)} are free`);
     // 4. The boot file.
     const uki = copyOwn(path.join(opts.inbox, names.uki), path.join(opts.workDir, names.uki), UKI_MAX_BYTES);
     if (uki !== release.manifest.image.ukiSha256) refuse(`the boot file is not the one release ${version} names`);
@@ -170,6 +190,20 @@ async function check(opts: InstallOptions, entries: string[]): Promise<{ release
 
 export async function installStaged(opts: InstallOptions): Promise<InstallResult> {
     const log = opts.log ?? (line => console.log(`vault-install: ${line}`));
+    const result = await attempt(opts, log);
+    if (opts.resultFile) {
+        const record: InstallRecord = { at: (opts.clock ?? Date.now)(), ...result };
+        try {
+            writeFileSync(`${opts.resultFile}.part`, `${JSON.stringify(record)}\n`, { mode: 0o644 });
+            renameSync(`${opts.resultFile}.part`, opts.resultFile);
+        } catch (e) {
+            log(`what was done could not be left for the report: ${(e as Error).message}`);
+        }
+    }
+    return result;
+}
+
+async function attempt(opts: InstallOptions, log: (line: string) => void): Promise<InstallResult> {
     emptyOwn(opts.transferDir);
     emptyOwn(opts.workDir);
     let entries: string[];
@@ -186,7 +220,9 @@ export async function installStaged(opts: InstallOptions): Promise<InstallResult
             renameSync(path.join(opts.workDir, n), path.join(opts.transferDir, n));
         }
     } catch (e) {
-        const reason = e instanceof Refused ? e.message : `the staged files could not be checked: ${(e as Error).message}`;
+        const reason = e instanceof Refused ? e.message
+            : isNoRoom(e) ? `no room on the state partition for root's copies: ${(e as Error).message}`
+                : `the staged files could not be checked: ${(e as Error).message}`;
         log(`refused, nothing installed: ${reason}`);
         emptyOwn(opts.transferDir);
         return { installed: false, reason };

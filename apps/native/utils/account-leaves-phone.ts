@@ -18,11 +18,13 @@
  * - Communities. The list the community switcher shows (`beanpool_saved_nodes`) and each one's cached copy
  *   (community-cache.ts).
  *
- * Sign Out and the self-delete purge ({@link signOutOfThisPhone}, settings.tsx) and Replace (restore-account.ts
- * `saveRestoredAccount`) take both, through {@link releaseAccountFromPhone}. The node-mismatch delete
- * ({@link deleteAccountFromThisPhone}, node-mismatch.tsx) stops the push alerts only: there the communities stay, as
- * before, so the member can pick theirs to recover on (welcome.tsx). Restoring the same account, or onto an empty
- * phone, takes nothing (#1183's rule).
+ * Sign Out, the self-delete purge at the member's last community on the phone ({@link signOutOfThisPhone},
+ * settings.tsx) and Replace (restore-account.ts `saveRestoredAccount`) take both, through
+ * {@link releaseAccountFromPhone}. A self-delete at a community while another saved one keeps the key takes neither:
+ * only that community leaves the phone, and the key stays (delete-here.ts). The node-mismatch delete
+ * ({@link deleteAccountFromThisPhone}, node-mismatch.tsx), offered only when no saved community keeps the key, stops
+ * the push alerts only: there the communities stay, as before, so the member can pick theirs to recover on
+ * (welcome.tsx). Restoring the same account, or onto an empty phone, takes nothing (#1183's rule).
  *
  * Every caller runs this BEFORE the key, the push record, the community address or the guest markers are wiped: the
  * unregister and the statements need the key and the record, and the cached copies need the addresses. The statements
@@ -186,9 +188,9 @@ export async function forgetCommunities(communities: readonly string[], storage:
 }
 
 /**
- * An account leaves this phone (Sign Out, the self-delete purge, Replace): its push alerts stop, then its communities
- * and their cached copies go. `account` is the leaving account, whose key is still on the phone; with none, only the
- * communities go. The caller then wipes the key and the rest of the account's app storage.
+ * An account leaves this phone (Sign Out, the self-delete purge at its last community, Replace): its push alerts stop,
+ * then its communities and their cached copies go. `account` is the leaving account, whose key is still on the phone;
+ * with none, only the communities go. The caller then wipes the key and the rest of the account's app storage.
  */
 export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
     await stopPushAlerts(account, storage);
@@ -196,7 +198,8 @@ export async function releaseAccountFromPhone(account: LeavingAccount | null, st
 }
 
 /**
- * "Sign Out (Device Only)", and the phone's half of the self-delete purge once the node has answered (settings.tsx):
+ * "Sign Out (Device Only)", and the phone's half of the self-delete purge at the member's last community on the phone
+ * once the node has answered (settings.tsx, delete-here.ts `planDelete`):
  * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
  * app storage go (identity.ts `wipeIdentity`).
  */
@@ -208,8 +211,9 @@ export async function signOutOfThisPhone(account: LeavingAccount | null): Promis
 }
 
 /**
- * "Delete this account from this phone" (node-mismatch.tsx): its push alerts stop, then its key and app storage go.
- * The saved communities stay, so the member can pick theirs to recover on.
+ * "Delete this account from this phone" (node-mismatch.tsx), once no saved community keeps the key (delete-here.ts
+ * `otherCommunitiesKeeping`): its push alerts stop, then its key and app storage go. The saved communities stay, so
+ * the member can pick theirs to recover on.
  */
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);

@@ -16,6 +16,8 @@
  * - A prompt that did not pass after the app was away 15 seconds or more leaves the app locked, and asks nothing more:
  *   Unlock App asks. A member can leave while the prompt is open, and whoever cancels it later must not find the app open.
  * - The return lock never opens a prompt while one is open.
+ * - Back after 15 seconds or more while a prompt is still open, the lock screen is up at once, before the answer: the app
+ *   is never shown unlocked while the return lock waits. A pass takes it down with no second prompt.
  *
  * Screens can't be rendered here (see vitest.config.ts): the listener is driven the way AppState drives it, with the
  * phone's prompt mocked at expo-local-authentication and time faked.
@@ -181,10 +183,14 @@ const ORDERS = [
     ['the app is active again before the answer arrives', 'active first'],
 ] as const;
 
-/** The opener's prompt takes the app out of the front for `ms`, then is answered, in the given order. */
+/**
+ * The opener's prompt takes the app out of the front for `ms`, then is answered, in the given order. Active first: whether
+ * the lock screen was up between the app's return and the answer.
+ */
 async function slowPrompt(phone: Phone, leave: AppStateStatus, order: 'answer first' | 'active first', ms: number, passes: boolean) {
     phone.change(leave);
     phone.wait(ms);
+    let lockedBeforeAnswer: boolean | null = null;
     if (order === 'answer first') {
         phone.answer(passes);
         await flush();
@@ -192,9 +198,11 @@ async function slowPrompt(phone: Phone, leave: AppStateStatus, order: 'answer fi
     } else {
         phone.change('active');
         await flush();
+        lockedBeforeAnswer = phone.locked();
         phone.answer(passes);
     }
     await flush();
+    return { lockedBeforeAnswer };
 }
 
 describe.each(Object.keys(OPENERS) as Array<keyof typeof OPENERS>)('a 20-second prompt from %s', (opener) => {
@@ -204,8 +212,10 @@ describe.each(Object.keys(OPENERS) as Array<keyof typeof OPENERS>)('a 20-second 
             await OPENERS[opener](phone);
             expect(phone.prompts()).toBe(1);
 
-            await slowPrompt(phone, leave, order, 20 * SEC, true);
+            const { lockedBeforeAnswer } = await slowPrompt(phone, leave, order, 20 * SEC, true);
 
+            // Back 20 seconds later with the prompt still open: the app isn't shown until the answer.
+            if (order === 'active first') expect(lockedBeforeAnswer).toBe(true);
             expect(phone.prompts()).toBe(1);
             expect(phone.locked()).toBe(false);
             expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
@@ -215,8 +225,9 @@ describe.each(Object.keys(OPENERS) as Array<keyof typeof OPENERS>)('a 20-second 
             const phone = await phoneWithAppLock();
             await OPENERS[opener](phone);
 
-            await slowPrompt(phone, leave, order, 20 * SEC, false);
+            const { lockedBeforeAnswer } = await slowPrompt(phone, leave, order, 20 * SEC, false);
 
+            if (order === 'active first') expect(lockedBeforeAnswer).toBe(true);
             expect(phone.prompts()).toBe(1);
             // Unlock App asks when the member is ready. The Settings prompt was 20 seconds with the app out of sight:
             // whoever cancelled it gets the lock screen, not the app (see the Android leave below).
@@ -287,14 +298,102 @@ describe('every phone-lock prompt in the app opens through the marker', () => {
 });
 
 describe('a short prompt that is cancelled changes nothing, as before', () => {
-    it.each(SHAPES)('%s', async (_shape, leave) => {
+    describe.each(SHAPES)('%s', (_shape, leave) => {
+        it.each(ORDERS)('when %s', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            await OPENERS["Settings' View Recovery Phrase"](phone);
+
+            const { lockedBeforeAnswer } = await slowPrompt(phone, leave, order, 5 * SEC, false);
+
+            // Under 15 seconds: no lock screen while the answer is awaited either.
+            if (order === 'active first') expect(lockedBeforeAnswer).toBe(false);
+            expect(phone.prompts()).toBe(1);
+            expect(phone.locked()).toBe(LOCKED_BY_OPENER["Settings' View Recovery Phrase"]);
+        });
+    });
+});
+
+describe('back after 20 seconds while the prompt is still open: the lock screen until the answer, never the app', () => {
+    const UNLOCKED_OPENERS = [
+        "Settings' View Recovery Phrase",
+        'Manage community, sign in on a computer or take over with this phone (requireDeviceUnlock)',
+    ] as const;
+    describe.each(UNLOCKED_OPENERS)('%s', (opener) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            it('passed just before the wait runs out: the lock screen until then, then the app, with one prompt in all', async () => {
+                const phone = await phoneWithAppLock();
+                await OPENERS[opener](phone);
+                phone.change(leave);
+                phone.wait(20 * SEC);
+                phone.change('active');
+                await flush();
+                expect(phone.locked()).toBe(true);
+
+                phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS - 1);
+                await flush();
+                expect(phone.locked()).toBe(true);
+                phone.answer(true);
+                await flush();
+
+                expect(phone.locked()).toBe(false);
+                expect(phone.prompts()).toBe(1);
+            });
+
+            it('cancelled: the lock screen stays, and nothing more is asked', async () => {
+                const phone = await phoneWithAppLock();
+                await OPENERS[opener](phone);
+                phone.change(leave);
+                phone.wait(20 * SEC);
+                phone.change('active');
+                await flush();
+                expect(phone.locked()).toBe(true);
+
+                phone.wait(1 * SEC);
+                phone.answer(false);
+                await flush();
+                phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS);
+                await flush();
+
+                expect(phone.locked()).toBe(true);
+                expect(phone.prompts()).toBe(1);
+            });
+        });
+    });
+
+    it('App Lock off: no lock screen while the answer is awaited, and none after', async () => {
+        phoneState.appLock = 'false';
         const phone = await phoneWithAppLock();
-        await OPENERS["Settings' View Recovery Phrase"](phone);
+        void phone.viewRecoveryPhrase();
+        await flush();
+        phone.change('background');
+        phone.wait(20 * SEC);
+        phone.change('active');
+        await flush();
+        expect(phone.locked()).toBe(false);
 
-        await slowPrompt(phone, leave, 'answer first', 5 * SEC, false);
+        phone.answer(false);
+        await flush();
 
+        expect(phone.locked()).toBe(false);
         expect(phone.prompts()).toBe(1);
-        expect(phone.locked()).toBe(LOCKED_BY_OPENER["Settings' View Recovery Phrase"]);
+    });
+
+    it('the app leaves again before the answer: the lock screen stays up, and the pass does not take it down', async () => {
+        const phone = await phoneWithAppLock();
+        void phone.viewRecoveryPhrase();
+        await flush();
+        phone.change('background');
+        phone.wait(20 * SEC);
+        phone.change('active');
+        await flush();
+        expect(phone.locked()).toBe(true);
+
+        phone.change('background');
+        phone.answer(true);
+        await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.prompts()).toBe(1);
     });
 });
 
@@ -338,6 +437,19 @@ describe('a real leave, with no prompt open, locks exactly as before', () => {
         await leaveAndReturn(phone, 60 * SEC);
         phone.answer(false);
         await flush();
+
+        expect(phone.locked()).toBe(true);
+        expect(phone.prompts()).toBe(1);
+    });
+
+    it('the lock screen is up after a cancelled return prompt: a short leave and return does not take it down', async () => {
+        const phone = await phoneWithAppLock();
+        await leaveAndReturn(phone, 60 * SEC);
+        phone.answer(false);
+        await flush();
+        expect(phone.locked()).toBe(true);
+
+        await leaveAndReturn(phone, 5 * SEC);
 
         expect(phone.locked()).toBe(true);
         expect(phone.prompts()).toBe(1);
@@ -421,7 +533,7 @@ describe('leaving while a prompt is open', () => {
         expect(phone.locked()).toBe(locked);
     });
 
-    it('a prompt whose answer never comes cannot hold the lock off: locked after a short wait, and no prompt over it', async () => {
+    it('a prompt whose answer never comes cannot hold the lock off: locked at once, still locked after the wait, and no prompt over it', async () => {
         const phone = await phoneWithAppLock();
         void phone.viewRecoveryPhrase();
         await flush();
@@ -429,9 +541,12 @@ describe('leaving while a prompt is open', () => {
         phone.wait(3600 * SEC);
         phone.change('active');
         await flush();
-        expect(phone.locked()).toBe(false);
+        expect(phone.locked()).toBe(true);
 
-        phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS);
+        phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS - 1);
+        await flush();
+        expect(phone.locked()).toBe(true);
+        phone.wait(1);
         await flush();
 
         expect(phone.locked()).toBe(true);

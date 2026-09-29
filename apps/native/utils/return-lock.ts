@@ -12,8 +12,9 @@ export const RETURN_LOCK_GRACE_MS = 15000;
 
 /**
  * How long the return lock waits, when the app is back in front while a prompt is still open, for that prompt to close.
- * The prompt's answer and the app's return arrive within moments of each other on both platforms, in either order; this
- * only bounds a prompt whose answer never comes, so one can't hold the lock off for good.
+ * The prompt's answer and the app's return arrive within moments of each other on both platforms, in either order. After
+ * 15 seconds or more away the lock screen is already up while it waits, so this only bounds how late a passing answer can
+ * come and still open the app without a second prompt; one that never comes leaves the lock screen up.
  */
 export const PROMPT_SETTLE_MS = 10000;
 
@@ -79,9 +80,11 @@ function promptsSettled(): Promise<void> {
  * last left the front. Pass it every AppState change and whether there is an account on the phone.
  *
  * When the app is back in front while a prompt is still open (the AppState change can arrive before or after the
- * prompt's answer), it waits for the prompt to close before deciding. It never opens a prompt while one is open: the
- * launch lock's, its own or the Unlock App button's. setLocked(true) puts the lock screen up; the listener takes it down
- * only when its own prompt passes.
+ * prompt's answer), it waits for the prompt to close before deciding. After 15 seconds or more away (or no leave seen) it
+ * puts the lock screen up first, so the app is never shown unlocked while it waits, and takes it down after only if the
+ * rule then says 'none': the answer that closed the prompt passed. It never opens a prompt while one is open: the launch
+ * lock's, its own or the Unlock App button's. setLocked(true) puts the lock screen up; the listener takes it down only
+ * when its own prompt passes, or when it put it up for a prompt that then passed.
  */
 export function createReturnLock(setLocked: (locked: boolean) => void): (next: string, hasIdentity: boolean) => Promise<void> {
     let leftAt: number | null = null;
@@ -96,9 +99,22 @@ export function createReturnLock(setLocked: (locked: boolean) => void): (next: s
         const activeAt = Date.now();
         const from = leftAt;
         leftAt = null;
-        if (isLocalAuthPromptOpen()) await promptsSettled();
+        let raised = false;
+        if (isLocalAuthPromptOpen()) {
+            // Long enough away to lock: up now, not after the wait, in case the answer is slow or never comes.
+            if ((from === null || activeAt - from >= RETURN_LOCK_GRACE_MS) && (await getAppLockEnabled())) {
+                setLocked(true);
+                raised = true;
+            }
+            await promptsSettled();
+        }
         const action = returnLockAction(from, activeAt, localAuthPromptStretches());
-        if (action === 'none' || !(await getAppLockEnabled())) return;
+        if (action === 'none') {
+            // The prompt passed: whoever is holding the phone just gave its lock. Unless the app has left again since.
+            if (raised && change === changes) setLocked(false);
+            return;
+        }
+        if (!raised && !(await getAppLockEnabled())) return;
         setLocked(true);
         // The app left again while this was deciding: locked, and Unlock App asks. A prompt is open: it isn't asked twice.
         if (action !== 'ask' || change !== changes || isLocalAuthPromptOpen()) return;

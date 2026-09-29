@@ -58,9 +58,10 @@ import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
-    noteUncomparedCheck, noteWholeCopyCheck, pendingMismatchResync, standbyReport, whyOf,
+    noteUncomparedCheck, noteWholeCopyCheck, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
 } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
+import { STATE_HASH_TABLES } from '@beanpool/engine';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
 
 // Said once per value, not on every 60 s pull.
@@ -154,6 +155,9 @@ let pendingReconcile = false; // set when a delta's stateHash canary detects dri
 // force-resync is always taken. A copy that never came (the main server restarting) keeps the usual cadence.
 let wholeRetryAt = 0;
 let resyncRetryAt = 0;
+// The last whole copy landed with tables left out (more rows than one copy carries, design §5): the next of any kind waits
+// for the next routine one, read at the interval set now (nextMode).
+let lastWholeLeftOut = false;
 // The kind of the last pull tried: 'delta', 'full' or 'resync'.
 let lastPullMode: PullMode | null = null;
 // A whole copy found this standby's copy isn't its main server's (checkWholeCopy), at this time: the next pull is a
@@ -253,12 +257,16 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     const isDelta = mode === 'delta' && !!lastImportedCursor;
     lastPullMode = fresh ? 'resync' : isDelta ? 'delta' : 'full';
     // A seed, which the conservation guard lets in whatever it sums to (engine/sync.ts ImportOptions), decided here from
-    // this standby's own records before anything is fetched, and never from its ledger, which a copy can change: its
-    // first copy (it holds none it landed: no record of a format, replicaFormatOfCopy), the
-    // format re-seed, and an operator's force-resync. Any other copy is held to the ledger here: a force-resync's, to the
-    // ledger before its clear, in the same transaction (engine/sync.ts ImportOptions.clear).
-    const seed = (fresh && (why === 'format' || why === 'operator')) || replicaFormatOfCopy() === 0;
+    // this standby's own records before anything is fetched, and never from its ledger, which a copy can change: the
+    // format re-seed, an operator's force-resync, and a first copy (it holds none: no record of a format and no cursor).
+    // Any other copy is held to the ledger here: a force-resync's, to the ledger before its clear, in the same transaction
+    // (engine/sync.ts ImportOptions.clear).
+    // A cursor with no format record is a copy an older importer made (every standby that copied before the record): its
+    // deltas are held to its ledger like any other's while its re-seed waits, never taken as seeds. Held, not stopped: a
+    // re-seed refused for good (a ledger table past the row cap in whole copies only) would otherwise leave this standby
+    // taking seeds from every delta, with no guard, or none at all.
     const hadCursor = !!lastImportedCursor;
+    const seed = (fresh && (why === 'format' || why === 'operator')) || (replicaFormatOfCopy() === 0 && !hadCursor);
 
     inFlight = true;
     // Where a failure happened: no copy came ('fetch'), or it came and was not imported ('import'). Only the second counts
@@ -401,7 +409,16 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // watermark-less mutation, e.g. a social-recovery pubkey rewrite).
             if (payload.stateHash) {
                 const localHash = getStateHash();
-                if (localHash !== payload.stateHash) {
+                // A table the hash reads, left out of the copies (more rows than one copy carries): the hash differs until
+                // a whole copy carries that table again, and a whole copy leaves it out the same way. Read as drift, it
+                // would have the main server build and sign its whole database, flood included, every other pull. The
+                // copy is reported not exact by that table's name instead (the record's lastLeftOut), and the next routine
+                // whole copy compares every other table by its own hash (checkWholeCopy).
+                const stale = staleTablesOfCopy(leftOut).filter((t) => STATE_HASH_TABLES.includes(t));
+                if (localHash !== payload.stateHash && stale.length > 0) {
+                    logger.sync('P2P', `[Backup] Delta stateHash canary not read: ${stale.join(', ')} left out of this standby's copies, so the hash `
+                        + 'differs until a whole copy carries them. No whole copy asked for; the next routine one checks every table.');
+                } else if (localHash !== payload.stateHash) {
                     pendingReconcile = true;
                     logger.warn('P2P', `[Backup] ⚠️ Delta stateHash canary drift (local ${localHash} ≠ primary ${payload.stateHash}) — scheduling full reconcile`);
                 }
@@ -419,6 +436,11 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         } else {
             lastFullReconcileAt = Date.now();
             pendingReconcile = false;
+            // A whole copy landed: whatever held the last one back when it was refused is gone. One that landed with tables
+            // left out holds the next back instead, as a refused one does (N2, nextMode): the next leaves them out too, and
+            // each costs the main server its whole database built and signed, the flooded table included.
+            wholeRetryAt = 0;
+            lastWholeLeftOut = leftOut.length > 0;
             // Gate future reconciles on payload size — a giant full JSON stalls the
             // primary's event loop; past the threshold we rely on complete deltas.
             const bytes = rawBody.length;
@@ -467,6 +489,16 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         clearTimeout(timeout);
         inFlight = false;
     }
+}
+
+/**
+ * The tables this standby's copy of is stale, because copies left them out (more rows than one copy carries): the ones
+ * its record keeps until a whole copy carries them again (services/standby-copy-record.ts noteCopyLanded), and this copy's.
+ */
+function staleTablesOfCopy(thisCopy: readonly string[]): string[] {
+    let recorded: readonly string[] = [];
+    try { recorded = readCopyRecord().lastLeftOut?.tables ?? []; } catch { /* the record unreadable: this copy's alone */ }
+    return [...new Set([...recorded, ...thisCopy])];
 }
 
 /** The standby's record of its copies (services/standby-copy-record.ts) never fails a pull, nor masks how one went. */
@@ -708,6 +740,9 @@ function nextMode(): PullMode | ResyncKind | Wait {
     // A whole copy refused at its import (N2): none of any kind before the next routine one; deltas meanwhile. The
     // once-a-process ones below are not used up while it waits.
     if (now < wholeRetryAt) return 'delta';
+    // The last whole copy landed with tables left out: none of any kind before the next routine one, as after a refused
+    // one. Drift the canary finds meanwhile waits for it; deltas carry on.
+    if (lastWholeLeftOut && now - lastFullReconcileAt < (getReconcileMs() || resyncRetryMs())) return 'delta';
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats
     // bandwidth when the stateHash canary says the copy has actually diverged, and it
     // only fires on a real mismatch. The SIZE cutoff and the operator "off" setting

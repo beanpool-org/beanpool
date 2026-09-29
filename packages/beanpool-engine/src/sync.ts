@@ -627,6 +627,14 @@ export interface SyncPayload {
     publicKey?: string;
 }
 
+/**
+ * The tables getStateHash reads, by name. A standby whose copies leave one of them out (more rows than one copy carries,
+ * apps/server engine/sync.ts) can't read the hash as drift: it differs until a whole copy carries that table again.
+ */
+export const STATE_HASH_TABLES: readonly string[] = [
+    'members', 'posts', 'creator_channels', 'pulse_items', 'event_rsvps', 'groups', 'group_members',
+];
+
 export function getStateHash(db: Db): string {
     const pKeys = db.prepare("SELECT public_key FROM members ORDER BY public_key").all() as any[];
     const pIds = db.prepare("SELECT id FROM posts WHERE active=1 ORDER BY id").all() as any[];

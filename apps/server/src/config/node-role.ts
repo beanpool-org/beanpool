@@ -63,3 +63,19 @@ export class StandbyLedgerError extends Error {
 export function assertLedgerWritable(): void {
     if (getNodeRole() === 'backup') throw new StandbyLedgerError();
 }
+
+export const STANDBY_WRITE_MESSAGE = 'This server is a standby copy of the community, not its main server. This is changed on the main server, '
+    + 'and this copy picks the change up with its next sync.';
+
+/**
+ * A standby writes no row of the plain tables (engine/replication-manifest.ts PLAIN_TABLES, design G3): keepers' wages owed,
+ * Decisions and their ballots, a role a Decision holds aside, keeper requests and changes, succession and convenor votes,
+ * invites, re-key codes, recovery releases and links with other communities. Their rows are its main server's, verbatim,
+ * and its import alone writes them (design §4.1), as with the ledger (assertLedgerWritable); one of its own would be
+ * deleted by the next whole copy, or outlive a take-over. So every writer of them throws this first, before anything is
+ * written, and the routes that write them answer the same 409 `standby` before their handler runs
+ * (routes/standby-ledger-gate.ts). The timers that write them run on a main server only (state-engine.ts initStateEngine).
+ */
+export function assertPlainTablesWritable(): void {
+    if (getNodeRole() === 'backup') throw new StandbyLedgerError(STANDBY_WRITE_MESSAGE);
+}

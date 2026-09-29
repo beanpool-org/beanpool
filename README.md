@@ -223,9 +223,11 @@ beanpool/
 │   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p mesh (routes/, services/, config/, engine/)
 │   ├── pwa/           # PWA — map, marketplace (13 categories), messaging, ledger (Vite + React + Leaflet)
 │   ├── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
-│   └── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
+│   ├── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
+│   └── vault/         # Key vault — keeps sign-in recovery copies (vault-keyholder + vault-api); not in the node's image
 ├── packages/
 │   ├── beanpool-engine/# Shared node engine: DB-backed business logic (members, trust, escrow, posts, messaging, sync, audit)
+│   ├── beanpool-signin/# Sign-in checks (Google/Apple/Facebook id_tokens, GitHub device flow), shared by the node and the key vault
 │   └── beanpool-core/  # Shared protocol constants: Ledger, Merkle, Passport, Governance
 ├── scripts/           # Utility and verification scripts (incl. verify-auth-boundary.mjs)
 ├── branding/          # Bean icon assets (16x16 → 512x512)
@@ -276,6 +278,7 @@ docker compose up -d
 pnpm install
 pnpm manager                               # Launch Fleet Manager Dashboard (http://localhost:5173)
 cd packages/beanpool-core && pnpm build   # Build shared core first
+cd packages/beanpool-signin && pnpm build # Build the sign-in checks (the server imports them)
 cd apps/pwa && pnpm build                 # Build PWA → apps/server/public/
 cd apps/server && pnpm dev                # Start BeanPool Node with hot reload
 ```

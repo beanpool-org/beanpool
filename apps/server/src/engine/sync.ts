@@ -15,12 +15,15 @@ import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
+import { importPlainTables, deletePlainRow, plainRowStamp } from './plain-tables.js';
+import { PLAIN_TABLES, plainTableTriggers } from './replication-manifest.js';
 import { RowRules } from '../db/table-rules.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
 import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer, PAIR_TOMBSTONES_OF } from './member-blocks.js';
+import { DELETED_POST_TITLE, dropSearchLeftovers } from './post-scrub.js';
 import {
     mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
     type ReplicatedRekey,
@@ -63,8 +66,13 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     over a withdrawal), each member's preferences (holiday, notification settings), who keeps each enterprise and the
  *     keepers' pledges. A copy made by format 3 holds members rows under the main server's stamps without those columns,
  *     which no later copy moves past.
+ *  5. In-flight money and governance are the main server's (G3), on the generic path for plain tables
+ *     (engine/plain-tables.ts): keepers' wages owed, Decisions and their ballots, a role a Decision holds aside, keeper
+ *     requests and changes, succession and convenor votes, invites, re-key codes, recovery releases and links with other
+ *     communities. A copy made by format 4 or older holds none of them, or rows this standby wrote itself (an invite it
+ *     made, a link it created at boot), which no copy names.
  */
-export const REPLICA_FORMAT = 4;
+export const REPLICA_FORMAT = 5;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -234,6 +242,14 @@ export interface ImportResult {
     tombstonesApplied: number;
     conflictsSkipped: number;
     recoverySharesImported: number;
+    /** The plain tables' rows written or deleted (engine/plain-tables.ts, design G3). */
+    plainChanges: number;
+    /**
+     * `<table>:<key>.<column>` for each value of the copy's plain tables this database's rules refuse, left out of its row's
+     * write, and `<table>:<key>` for a row not written at all: this standby's row isn't the main server's there, and the
+     * whole-copy check counts the rows (services/backup-puller.ts checkWholeCopy).
+     */
+    plainTablesLeftOut: string[];
     /**
      * Each value of the copy's members rows this table's own rules refuse (a goal below 0 from a main server whose column
      * has no CHECK), left out of the write: this standby's row isn't the main server's there, and the whole-copy check says
@@ -426,7 +442,8 @@ export async function exportSyncState(
     since?: string | null,
     commonsBalance = 0
 ): Promise<SyncPayload> {
-    const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
+    // The plain tables (in-flight money and governance) as the manifest names them (engine/replication-manifest.ts).
+    const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance, PLAIN_TABLES));
     // What kind of node this is, so a standby keeps it and a take-over or a hand promotion from there can't run
     // the community as another kind (config/node-profile.ts). node_config itself is not replicated. Before the
     // signature, so it is signed with the rest.
@@ -562,9 +579,14 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
         // below: a later copy must not keep the older ones, so each row is judged by itself.
         case 'recovery_shares':
             return deleteTombstonedCopies(rowKey, deletedAt) > 0;
-        default:
+        default: {
+            // A plain table's row the main server deleted (engine/plain-tables.ts): a role a Decision held aside, a recovery
+            // release gone with its member.
+            const plain = deletePlainRow(tableName, rowKey);
+            if (plain !== null) return plain;
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
+        }
     }
 }
 
@@ -652,8 +674,10 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
                 .get(rowKey.slice(0, cut), rowKey.slice(cut + 1)) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
+        // A plain table's row, stamped by the main server (engine/plain-tables.ts): one it made again after the delete is
+        // stamped after the tombstone, and stays.
         default:
-            return null;
+            return plainRowStamp(tableName, rowKey) ?? null;
     }
 }
 
@@ -805,7 +829,8 @@ export interface ImportOptions {
     heldToSum?: number | null;
     /**
      * The copy is a whole one (the puller asked for the snapshot, not a delta), so the sets it carries whole are the main
-     * server's entire sets: the keepers' pledges it doesn't name are deleted here (mergeEnterprisePledges).
+     * server's entire sets: the keepers' pledges it doesn't name are deleted here (mergeEnterprisePledges), and so is a row
+     * of a plain table it doesn't name (engine/plain-tables.ts).
      */
     whole?: boolean;
 }
@@ -820,6 +845,8 @@ export interface ImportOptions {
  */
 const IMPORT_KEEPS_STAMPS = [
     'posts_touch_updated_at', 'post_photos_touch_updated_at', 'marketplace_transactions_touch_updated_at', 'projects_touch_updated_at',
+    // Each plain table's two (db.ts stampPlainTables): its rows are written with the main server's stamps.
+    ...PLAIN_TABLES.flatMap((t) => Object.values(plainTableTriggers(t))),
 ] as const;
 
 /**
@@ -1052,6 +1079,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             throw new Error(`[Sync] Import payload category '${String(cat)}' has ${arr.length} rows (> ${MAX_IMPORT_ROWS}); rejecting oversized payload to protect the event loop`);
         }
     }
+    for (const [table, arr] of Object.entries(remote.plainTables ?? {})) {
+        if (Array.isArray(arr) && arr.length > MAX_IMPORT_ROWS) {
+            throw new Error(`[Sync] Import payload table '${table.slice(0, 64)}' has ${arr.length} rows (> ${MAX_IMPORT_ROWS}); rejecting oversized payload to protect the event loop`);
+        }
+    }
     // A balance no ledger holds (MAX_LEDGER_BALANCE), before anything is written, the photo store included. An entry with
     // no number for a balance isn't one: the import leaves that account as it is, and the whole-copy check counts it.
     // A conservation violation, as the guard's refusals are, so the puller logs it at SECURITY, not as a pull to retry.
@@ -1063,10 +1095,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     }
 
     let newMembers = 0, newPosts = 0;
-    let updatedMembers = 0, updatedPosts = 0;
+    let updatedMembers = 0, updatedPosts = 0, wipedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
     let groupChanges = 0;
+    // The plain tables' rows written or deleted (design G3), and each value or row of theirs left out.
+    let plainChanges = 0;
+    const plainTablesLeftOut: string[] = [];
     // Preferences, keepers and pledges written (design G2b, G2c).
     let standingChanges = 0;
     // Each value of a members row this table's own rules refuse, left out of its write.
@@ -1280,7 +1315,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             }
 
             for (const rp of remote.posts ?? []) {
-                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at, title FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null; title: string } | undefined;
                 const pollOptionsJson = rp.pollOptions != null
                     ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
                     : null;
@@ -1401,8 +1436,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                         rp.id
                     );
                     if (res.changes > 0) updatedPosts++;
+                    // A post the main server wiped with its author's account (engine/post-scrub.ts): its old words leave
+                    // this server's search index for good too, once the copy has committed.
+                    if (res.changes > 0 && rp.title === DELETED_POST_TITLE && existing.title !== rp.title) wipedPosts++;
                 }
             }
+            if (wipedPosts > 0) afterTransactionCommit(dropSearchLeftovers);
 
             if (importedPhotoColumns) {
                 // INSERT OR REPLACE over a row that already named an object leaves that object with
@@ -2150,7 +2189,21 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
             // a watch on the same cell itself, and directory_cache and open_joins have no tombstones.
             const knockTombstones = tombstones.filter((ts) => ts.tableName === 'join_requests');
             applyTombstones(knockTombstones);
-            if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
+            if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests, Array.isArray(remote.plainTables?.invite_codes));
+
+            // In-flight money and governance (design G3): each plain table the copy carries, the main server's rows verbatim
+            // (engine/plain-tables.ts); a whole copy deletes the rows it doesn't name. After the re-key follow above, which
+            // moved this standby's rows to the new keys the main server's rows name, and before the tombstones below, which
+            // leave a row the main server made again after its delete. A main server older than this sends none, and this
+            // standby keeps the rows it has.
+            const plain = importPlainTables(remote.plainTables, opts.whole === true);
+            plainChanges += plain.changes;
+            conflictsSkipped += plain.skipped;
+            plainTablesLeftOut.push(...plain.leftOut);
+            if (plain.leftOut.length > 0) {
+                console.warn(`[Sync] ${plain.leftOut.length} value(s) or row(s) of the main server's plain tables this database refuses, left out: `
+                    + plain.leftOut.slice(0, 5).join(', '));
+            }
 
             applyTombstones(tombstones.filter((ts) => ts.tableName !== 'join_requests' && ts.tableName !== 'recovery_shares'
                 && !appliedBeforeRekey.has(ts)));
@@ -2169,10 +2222,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
     // so nothing downstream would ever have noticed.
     // groupChanges too: the groups list answers conditional requests from its own version counter, which
     // 'state_synced' bumps — an import that only changed groups would otherwise leave it serving 304s.
-    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0 || groupChanges > 0 || standingChanges > 0) {
+    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0 || groupChanges > 0 || standingChanges > 0
+        || plainChanges > 0) {
         cb.broadcast({
             type: 'state_synced',
-            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied, groupChanges, standingChanges,
+            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied, groupChanges, standingChanges, plainChanges,
             from: remote.nodeId,
         });
     }
@@ -2201,6 +2255,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
         tombstonesApplied,
         conflictsSkipped,
         recoverySharesImported,
+        plainChanges,
+        plainTablesLeftOut,
         valuesLeftOut,
     };
 }

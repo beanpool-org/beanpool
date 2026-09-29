@@ -115,6 +115,36 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
 }
 
 /**
+ * The posts `postIds` renamed `title` in the lines that name them as they were: a new listing's `title`, a deal's and a
+ * ruling's `postTitle` (Delete account, engine/post-scrub.ts). Returns the lines changed.
+ */
+export function retitlePostsInActivity(postIds: string[], title: string): number {
+    if (postIds.length === 0) return 0;
+    const changed = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.title', ?, '$.postTitle', ?)
+         WHERE json_valid(metadata) AND json_extract(metadata, '$.postId') IN (SELECT value FROM json_each(?))`)
+        .run(title, title, JSON.stringify(postIds)).changes;
+    if (changed > 0) bumpActivityVersion();
+    return changed;
+}
+
+/**
+ * The name `publicKey` had, as the lines keep it, replaced by `name`: their own join's `callsign`, and a ruling's
+ * `counterpartyCallsign` on the other party's line (Delete account, state-engine.ts purgeMemberSelf). Every other line
+ * names them by key, and reads the name from their row. Returns the lines changed.
+ */
+export function renameMemberInActivity(publicKey: string, name: string): number {
+    const joined = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.callsign', ?)
+         WHERE event_type = 'member_joined' AND actor_pubkey = ? AND json_valid(metadata)`).run(name, publicKey).changes;
+    const ruled = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.counterpartyCallsign', ?)
+         WHERE json_valid(metadata) AND json_extract(metadata, '$.counterpartyPubkey') = ?`).run(name, publicKey).changes;
+    if (joined + ruled > 0) bumpActivityVersion();
+    return joined + ruled;
+}
+
+/**
  * Prunes activity feed events older than specified retention days.
  * Kept lean (default 30 days) to prevent unbound table growth.
  */

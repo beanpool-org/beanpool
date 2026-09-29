@@ -312,16 +312,16 @@
         });
 
         document.getElementById('pubaddr-restart-btn')?.addEventListener('click', async () => {
-            showStatus('pubaddr-status', '⚡ Force-restarting sidecar container…', 'info');
+            showStatus('pubaddr-status', '⚡ Restarting the tunnel inside this server…', 'info');
             startLiveMonitor();
             try {
-                const res = await fetch(`${API}/admin/public-address/restart-sidecar`, {
+                const res = await fetch(`${API}/admin/public-address/restart-tunnel`, {
                     method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    showStatus('pubaddr-status', '⚡ Tunnel Sidecar restarted cleanly!', 'success');
+                    showStatus('pubaddr-status', '⚡ Tunnel restarted. It reconnects to Cloudflare in a few seconds.', 'success');
                     loadPublicAddress();
                 } else showStatus('pubaddr-status', d.error || 'Restart failed', 'error');
             } catch (e) { showStatus('pubaddr-status', 'Restart failed', 'error'); }
@@ -964,8 +964,11 @@
                         lat: document.getElementById('cfg-lat').value ? parseFloat(document.getElementById('cfg-lat').value) : null,
                         lng: document.getElementById('cfg-lng').value ? parseFloat(document.getElementById('cfg-lng').value) : null,
                         communityName: document.getElementById('community-name').value,
-                        contactEmail: document.getElementById('contact-email').value,
-                        contactPhone: document.getElementById('contact-phone').value,
+                        // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
+                        ...(contactsLoaded ? {
+                            contactEmail: document.getElementById('contact-email').value,
+                            contactPhone: document.getElementById('contact-phone').value,
+                        } : {}),
                     })
                 });
                 // Also save node config (radius + directory)
@@ -976,17 +979,46 @@
         });
 
         // ======================== COMMUNITY INFO ========================
+        // The contacts come from the admin route: the public community-info says each only when it is published. Until
+        // they load, or if they can't, the two boxes stay closed and Save leaves both out, so it never erases the node's.
+        let contactsLoaded = false;
+        function showContacts(loaded, failed) {
+            contactsLoaded = loaded;
+            document.getElementById('contact-email').disabled = !loaded;
+            document.getElementById('contact-phone').disabled = !loaded;
+            document.getElementById('contacts-not-loaded').style.display = failed ? 'block' : 'none';
+        }
+
         // Load community info after login
         async function loadCommunityInfo() {
+            showContacts(false, false);
             try {
                 const res = await fetch(`${API}/community-info`);
                 if (res.ok) {
                     const data = await res.json();
                     document.getElementById('community-name').value = data.communityName || '';
-                    document.getElementById('contact-email').value = data.contactEmail || '';
-                    document.getElementById('contact-phone').value = data.contactPhone || '';
                 }
             } catch (e) { console.warn('Failed to load community info:', e); }
+            try {
+                const res = await fetch(`${API}/admin/diagnostics`, {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ password: authToken }),
+                });
+                const data = res.ok ? await res.json() : null;
+                // Each is text, or null for none stored; anything else is not the node's contacts.
+                const text = (v) => (typeof v === 'string' ? v : v === null ? '' : undefined);
+                if (!data || text(data.contactEmail) === undefined || text(data.contactPhone) === undefined) {
+                    showContacts(false, true);
+                    return;
+                }
+                document.getElementById('contact-email').value = text(data.contactEmail);
+                document.getElementById('contact-phone').value = text(data.contactPhone);
+                showContacts(true, false);
+            } catch (e) {
+                console.warn('Failed to load the community contacts:', e);
+                showContacts(false, true);
+            }
         }
 
         // ======================== SEED INVITE ========================
@@ -1681,12 +1713,13 @@
             const km = parseInt(document.getElementById('radius-km').value) || 0;
             const publishLocation = document.getElementById('publish-location').checked;
             const publishMembers = document.getElementById('publish-members').checked;
-            const publishContacts = document.getElementById('publish-contacts').checked;
+            const publishContactEmail = document.getElementById('publish-contact-email').checked;
+            const publishContactPhone = document.getElementById('publish-contact-phone').checked;
             const publishHealth = document.getElementById('publish-health').checked;
             const val = parseInt(document.getElementById('directory-push-interval').value);
             const directoryPushIntervalHours = isNaN(val) ? 12 : val;
             
-            const update = { publishLocation, publishMembers, publishContacts, publishHealth, directoryPushIntervalHours };
+            const update = { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours };
             if (!isNaN(lat) && !isNaN(lng)) {
                 update.serviceRadius = { lat, lng, radiusKm: Math.max(0, km) };
             } else {
@@ -1746,7 +1779,9 @@
                 }
                 document.getElementById('publish-location').checked = config.publishLocation !== false;
                 document.getElementById('publish-members').checked = config.publishMembers !== false;
-                document.getElementById('publish-contacts').checked = config.publishContacts !== false;
+                // Off unless the owner turned each on.
+                document.getElementById('publish-contact-email').checked = config.publishContactEmail === true;
+                document.getElementById('publish-contact-phone').checked = config.publishContactPhone === true;
                 document.getElementById('publish-health').checked = config.publishHealth !== false;
                 if (config.directoryPushIntervalHours !== undefined) {
                     document.getElementById('directory-push-interval').value = config.directoryPushIntervalHours;
@@ -3276,9 +3311,10 @@
                     notice.textContent = text;
                     notice.style.display = text ? 'block' : 'none';
                 }
+                // An address is kept 7 days; after that the server sends null (services/address-retention.ts).
                 const lastPull = document.getElementById('rep-last-pull');
                 if (lastPull) lastPull.textContent = d.lastPullAt
-                    ? `${relativeTime(d.lastPullAt)}${d.lastPullIp ? ' · ' + d.lastPullIp : ''}${d.lastPullAuth ? ' · ' + d.lastPullAuth : ''}`
+                    ? `${relativeTime(d.lastPullAt)} · ${d.lastPullIp || 'address no longer kept'}${d.lastPullAuth ? ' · ' + d.lastPullAuth : ''}`
                     : 'never';
                 const totalPulls = document.getElementById('rep-total-pulls');
                 if (totalPulls) totalPulls.textContent = String(d.totalPulls || 0);
@@ -3312,7 +3348,7 @@
                                 const ok = ev.auth !== 'rejected';
                                 const color = ok ? '#22c55e' : '#f87171';
                                 const tag = ok ? ev.auth : ('rejected' + (ev.reason ? ' (' + ev.reason + ')' : ''));
-                                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0;"><span style="color:${color};">${tag}</span><span style="color:#64748b;">${ev.ip || '—'} · ${relativeTime(ev.at)}</span></div>`;
+                                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0;"><span style="color:${color};">${tag}</span><span style="color:#64748b;">${ev.ip || 'address no longer kept'} · ${relativeTime(ev.at)}</span></div>`;
                             }).join('');
                     }
                 }

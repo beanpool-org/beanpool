@@ -39,6 +39,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { getGroupLead, isVisitorKey } from '@beanpool/engine';
 import { postGroupSystemLine, callsignOf, GroupSystemType, loadGroupForThread } from './group-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
@@ -355,6 +356,7 @@ function toInfo(r: any, viewer?: string): GroupSuccessionProposalInfo {
 
 /** Settle proposals past their deadline (all groups, or one). The scheduler runs this every minute. */
 export function tickGroupSuccession(cb: MessagingCallbacks, asOfMs = Date.now(), groupId?: string): { passed: number; closed: number } {
+    assertPlainTablesWritable();
     const nowIso = new Date(asOfMs).toISOString();
     const due = (groupId
         ? db.prepare("SELECT * FROM group_convenor_proposals WHERE status = 'active' AND deadline_at <= ? AND group_id = ?").all(nowIso, groupId)
@@ -372,6 +374,8 @@ export function tickGroupSuccession(cb: MessagingCallbacks, asOfMs = Date.now(),
  * hook on each signed write, so it is one indexed lookup when there is nothing to do.
  */
 export function cancelGroupSuccessionIfConvenorActive(cb: MessagingCallbacks, convenorPubkey: string): number {
+    // A standby writes no vote of its own (config/node-role.ts assertPlainTablesWritable): the main server closes it.
+    if (getNodeRole() === 'backup') return 0;
     const open = db.prepare("SELECT * FROM group_convenor_proposals WHERE convenor_pubkey = ? AND status = 'active'").all(convenorPubkey) as any[];
     let n = 0;
     for (const p of open) if (closeProposal(cb, p, 'convenor_returned')) n++;
@@ -392,6 +396,7 @@ export function proposeGroupConvenor(
     proposerPubkey: string,
     candidatePubkey: string,
 ): { proposal: GroupSuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     loadGroupForThread(groupId);
     tickGroupSuccession(cb, Date.now(), groupId);
 
@@ -482,6 +487,7 @@ export function voteGroupConvenor(
     voterPubkey: string,
     choice: 'yes' | 'no',
 ): { proposal: GroupSuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
     if (!prop) throw new Error('Convenor proposal not found');
@@ -523,9 +529,13 @@ export function getGroupSuccession(cb: MessagingCallbacks, groupId: string, view
     voters: string[];
 } {
     loadGroupForThread(groupId);
-    tickGroupSuccession(cb, Date.now(), groupId);
-    const active = db.prepare("SELECT * FROM group_convenor_proposals WHERE group_id = ? AND status = 'active'").get(groupId) as any;
-    if (active) settle(cb, active, false, new Date().toISOString());
+    // A read that settles what is due first, on a main server. A standby's votes are its main server's, which settles them
+    // (config/node-role.ts assertPlainTablesWritable): it answers them as they are.
+    if (getNodeRole() !== 'backup') {
+        tickGroupSuccession(cb, Date.now(), groupId);
+        const active = db.prepare("SELECT * FROM group_convenor_proposals WHERE group_id = ? AND status = 'active'").get(groupId) as any;
+        if (active) settle(cb, active, false, new Date().toISOString());
+    }
     const silence = getConvenorSilence(groupId);
     const rows = db.prepare('SELECT * FROM group_convenor_proposals WHERE group_id = ? ORDER BY created_at DESC').all(groupId) as any[];
     const proposals = rows.map(r => toInfo(r, viewerPubkey));

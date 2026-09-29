@@ -24,7 +24,9 @@
  *
  * AND NEITHER RECORD MAY CARRY A SECRET, because the data dir is exactly what an owner copies, mounts and
  * hands to a stranger for help. A Node diagnostic report holds the whole environment unless it is told
- * not to; see the block above `scrubReportEnvironment` for that, and for the reports already on disk.
+ * not to; see the block above `scrubReportEnvironment` for that, and for the reports already on disk. Nor
+ * may it keep anyone's internet address, which a report does for every open socket: see the block above
+ * `stripAddressesFromReport`.
  *
  * NOTHING IN THIS FILE MAY THROW, and nothing in it may import the database. It is the last net under
  * everything else: if it depends on the thing that broke, it is not a net. That is why `sanitizeMessage`
@@ -37,7 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { errorMessage } from './error-message.js';
-import { sanitizeMessage } from './sanitize-message.js';
+import { redactAddresses, sanitizeMessage } from './sanitize-message.js';
 
 export interface UnhandledRejectionSummary {
     /** Unhandled rejections seen since this process started. Not persisted: a restart resets it. */
@@ -357,6 +359,88 @@ function stripEnvironmentFromReport(report: Record<string, unknown>, depth = 0):
 }
 
 /**
+ * A DIAGNOSTIC REPORT ALSO CARRIES INTERNET ADDRESSES.
+ *
+ * Its `libuv` section lists every open socket with a `localEndpoint` and a `remoteEndpoint`, each
+ * `{ host, ip4 | ip6, port }`. On a server in direct mode (port 443 open) the remote ends of the accepted
+ * sockets are the members connected at that moment; in tunnel mode they are cloudflared's. MEASURED (#1289's
+ * review): a report written with an accepted TCP connection open carries the peer's `ip4`, with
+ * `excludeNetwork` set or not. Reports are kept for good, and a community server keeps no one's address past
+ * 7 days (services/address-retention.ts). So the scrub takes the address out of each endpoint and keeps its
+ * port, which still says which listener or which outbound service a socket was.
+ *
+ * It also takes out `header.networkInterfaces`, this machine's own addresses, which nodes stop writing with
+ * `--report-exclude-network` (docker-compose.yml; that flag also stops Node looking up each member's address
+ * in DNS while it writes a report). And an exception's text can name an address ("connect ECONNREFUSED
+ * 203.0.113.5:443"), so the JavaScript stack section goes through the redaction every log line does.
+ */
+const ENDPOINTS = ['localEndpoint', 'remoteEndpoint'];
+const ENDPOINT_ADDRESS_FIELDS = ['host', 'ip4', 'ip6'];
+/** Deep enough for an error's own properties; bounded so a malformed file cannot spin here. */
+const MAX_STACK_DEPTH = 8;
+
+const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(o, key);
+
+/** Redact every address in the strings under `holder[key]`, in place. True if any changed. */
+function redactAddressesUnder(holder: Record<string, unknown>, key: string, depth = 0): boolean {
+    const value = holder[key];
+    if (typeof value === 'string') {
+        const redacted = redactAddresses(value);
+        if (redacted === value) return false;
+        holder[key] = redacted;
+        return true;
+    }
+    if (depth >= MAX_STACK_DEPTH || !value || typeof value !== 'object') return false;
+    let changed = false;
+    for (const inner of Object.keys(value)) {
+        if (redactAddressesUnder(value as Record<string, unknown>, inner, depth + 1)) changed = true;
+    }
+    return changed;
+}
+
+/**
+ * Take every internet address out of one parsed report, in place, worker sections included. Returns false
+ * when there was none, so a file already scrubbed is not rewritten (the same rule as the environment's).
+ */
+function stripAddressesFromReport(report: Record<string, unknown>, depth = 0): boolean {
+    let changed = false;
+
+    if (Array.isArray(report.libuv)) {
+        for (const handle of report.libuv) {
+            if (!handle || typeof handle !== 'object') continue;
+            for (const side of ENDPOINTS) {
+                const end = (handle as Record<string, unknown>)[side];
+                if (!end || typeof end !== 'object') continue;
+                for (const field of ENDPOINT_ADDRESS_FIELDS) {
+                    if (hasOwn(end, field)) {
+                        delete (end as Record<string, unknown>)[field];
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    const header = report.header;
+    if (header && typeof header === 'object' && hasOwn(header, 'networkInterfaces')) {
+        delete (header as Record<string, unknown>).networkInterfaces;
+        changed = true;
+    }
+
+    if (redactAddressesUnder(report, 'javascriptStack')) changed = true;
+
+    if (depth < MAX_WORKER_DEPTH && Array.isArray(report.workers)) {
+        for (const worker of report.workers) {
+            if (worker && typeof worker === 'object' && !Array.isArray(worker)) {
+                if (stripAddressesFromReport(worker as Record<string, unknown>, depth + 1)) changed = true;
+            }
+        }
+    }
+
+    return changed;
+}
+
+/**
  * Scrub one report file in place, and say whether it was changed. Atomic: the new content is written
  * beside the original and renamed over it, so a report is never half a file and an interrupted update
  * leaves the original intact. Anything that will not parse as a JSON object is left exactly as it is — it
@@ -371,7 +455,10 @@ function scrubReportFile(filePath: string): boolean {
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
     const report = parsed as Record<string, unknown>;
-    if (!stripEnvironmentFromReport(report)) {
+    // Both, always: `||` would skip the addresses of a report that still had its environment.
+    const withoutEnvironment = stripEnvironmentFromReport(report);
+    const withoutAddresses = stripAddressesFromReport(report);
+    if (!withoutEnvironment && !withoutAddresses) {
         // Already clean. Still worth closing the permissions: these went out world-readable, and this is
         // the boot that fixes the ones already there.
         restrictMode(filePath);
@@ -392,9 +479,9 @@ function scrubReportFile(filePath: string): boolean {
 }
 
 /**
- * Rewrite every diagnostic report already on disk that carries the environment, and return how many were
- * changed. Called at install, and again from the entry point once the root .env has been read and the data
- * dir is certain. Never throws, and on a node with no reports it costs one readdir.
+ * Rewrite every diagnostic report already on disk that carries the environment or an internet address, and
+ * return how many were changed. Called at install, and again from the entry point once the root .env has
+ * been read and the data dir is certain. Never throws, and on a node with no reports it costs one readdir.
  */
 export function scrubReportEnvironment(dataDir?: string): number {
     let scrubbed = 0;
@@ -415,7 +502,7 @@ export function scrubReportEnvironment(dataDir?: string): number {
         // Same rule as the rest of this file: it must never become a failure of its own.
     }
     if (scrubbed > 0) {
-        console.warn(`[diagnostic-reports] removed the environment from ${scrubbed} existing report file${scrubbed === 1 ? '' : 's'} — they held every variable of the process in plaintext, secrets included`);
+        console.warn(`[diagnostic-reports] removed the environment and internet addresses from ${scrubbed} existing report file${scrubbed === 1 ? '' : 's'} — a report holds every variable of the process in plaintext, secrets included, and the address at each end of every open connection`);
     }
     return scrubbed;
 }
@@ -442,6 +529,13 @@ export function installProcessHandlers(options?: { dataDir?: string }): void {
         if (process.report) process.report.excludeEnv = true;
     } catch {
         // Node before 22.13 has no such property. Nothing else to do: the scrub below still runs.
+    }
+    // No network interfaces, and no DNS lookup of each open connection's address while a report is written
+    // (the scrub takes the addresses out after; see `stripAddressesFromReport`). Untyped in @types/node.
+    try {
+        if (process.report) (process.report as { excludeNetwork?: boolean }).excludeNetwork = true;
+    } catch {
+        // Before Node 22 the property does nothing. The scrub still runs.
     }
 
     process.on('unhandledRejection', (reason) => {

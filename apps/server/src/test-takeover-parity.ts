@@ -46,6 +46,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -67,8 +68,12 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * and the last one deletes the line, which the suite then requires.
  *
  * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
- * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this suite
- * found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any of them is new.
+ * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this
+ * suite found) are closed, and so are G1b's listing, deal, photo and project columns and G3's tables (in-flight money and
+ * governance, on the plain-table path): a difference in any of them is new. G3 is not closed whole: its one setting, the
+ * Commons project proposals still waiting for a decision (node_config `commons_projects`, a `community` gap in
+ * engine/replication-manifest.ts NODE_CONFIG_KEYS), stays behind on a take-over, and the preview names it. This scenario
+ * makes no such proposal, so nothing here differs by it; one that did would need its line here.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
@@ -77,15 +82,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
-    // G3: in-flight money and governance.
-    { key: 'db:deferred_wage_claims (not copied)', gap: 'G3', why: "a keeper's unpaid wage vanishes" },
-    { key: 'db:decisions (not copied)', gap: 'G3', why: 'an open Decision and one in its grace period vanish' },
-    { key: 'db:decision_votes (not copied)', gap: 'G3', why: 'their votes' },
-    { key: 'db:invite_codes (not copied)', gap: 'G3', why: 'every invite already sent fails' },
-    { key: 'db:rekey_requests (not copied)', gap: 'G3', why: 'an unused re-key code is refused' },
-    { key: 'http:redeem the unused invite', gap: 'G3', why: '"Invalid invite code"' },
-    { key: 'http:the Decision sweep, eight days on', gap: 'G3', why: 'the removal never completes and the open Decision never closes' },
-    { key: "http:the enterprise's page", gap: 'G3', why: "a keeper's unpaid wage is not on it (before G2's fix, 404 \"Not a treasury\")" },
 
     // G4: members' devices and conveniences.
     { key: 'db:push_tokens (not copied)', gap: 'G4', why: 'no push reaches anyone' },
@@ -473,8 +469,8 @@ async function main(): Promise<void> {
         built('the community names itself and its place', await A('/api/local/update-identity', {
             callsign: 'parityville', communityName: 'Parityville', lat: -28.55, lng: 153.5, contactEmail: 'hello@parityville.example', contactPhone: '+61 2 5550 1234',
         }));
-        built('it keeps its contacts and members out of the directory', await A('/api/local/admin/node/config', {
-            publishContacts: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
+        built('it publishes its contact email but not its phone, and keeps its members out of the directory', await A('/api/local/admin/node/config', {
+            publishContactEmail: true, publishContactPhone: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
         }));
         built('and sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45 }));
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {
@@ -497,12 +493,13 @@ async function main(): Promise<void> {
             `M: the removal passed and waits out its grace period (${graced.body?.decision?.status}; sweep ${JSON.stringify(tick)})`);
         const convo = built('Ann starts a chat with Bo', await S_(ann, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
         const convoId = convo.conversation?.id ?? convo.id;
+        const jpeg = lockedDm(64); // a DM photo goes in encrypted, its caption and its bytes alike
         built('and sends a photo', await S_(ann, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: ann.pk, ciphertext: Buffer.from('a photo').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
-            type: 'image', attachment: { data: Buffer.from('encrypted jpeg bytes').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), mime: 'image/jpeg' },
+            conversationId: convoId, authorPubkey: ann.pk, ...lockedDm(),
+            type: 'image', attachment: { data: jpeg.ciphertext, nonce: jpeg.nonce, mime: 'image/jpeg' },
         }));
         built('Bo answers, with the empty metadata a hand-made request can send', await S_(bo, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: bo.pk, ciphertext: Buffer.from('thanks').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), metadata: '',
+            conversationId: convoId, authorPubkey: bo.pk, ...lockedDm(), metadata: '',
         }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;

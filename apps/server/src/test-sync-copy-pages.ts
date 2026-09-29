@@ -26,11 +26,17 @@
  *     verifies but names that copy.
  *  7. Expiry: a copy no page is asked of closes, and the WAL it held truncates after (it could not while the copy was open);
  *     a copy open too long closes whatever is asked of it.
- *  8. The recovery seal's VACUUM succeeds with a copy open: the copy closes first (404 after), and the WAL empties.
+ *  8. The recovery seal's VACUUM succeeds with a copy open: the copy closes first (404 after), and the WAL empties. So do
+ *     the operator's Clean storage and the image evacuation's reclaim (a truncating checkpoint, a VACUUM): each closes the
+ *     copy first, never waits out the busy timeout on it with the event loop held, and leaves the WAL empty.
  *  9. After M restarts, the copy it was serving is 404, and a new one opens.
  * 10. The size run, at the real bounds: a community of 40,000 members, 80,000 chat lines and 40,000 trades. Each page within
  *     its bounds, and M's event loop never blocked a second by any page; today's whole payload of the same community, for
  *     comparison.
+ * 11. Wide rows under the deployed heap: M restarted with `--max-old-space-size=512` (docker-compose.yml runs the main
+ *     server so), 6,000 more members each carrying a 70,000-character photo inline (the app's 512 px JPEG): a whole copy
+ *     of it all completes, M's resident memory stays bounded, and neither the open nor any page holds the event loop long.
+ *     With slices sized in rows (1,000 a page slice, 5,000 a hash slice) M ran out of heap here.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-copy-pages.ts
@@ -54,6 +60,15 @@ const PW = 'Copy-Pages-Main-Pw-5521!';
 /** M's page bounds, scaled down from 8 MB and 25,000 rows. */
 const PAGE_BYTES = 64 * 1024;
 const PAGE_ROWS = 200;
+/**
+ * Step 11's bounds, M at a 512 MB heap serving pages of 8 MB. Its event loop held by the open or any page at most as long
+ * as step 10 allows (measured 30 to 130 ms here, the design's 70 to 260 ms a page; a loaded machine has shown 500). Its heap
+ * in use and its resident memory's growth at most these: a page holds a page of rows, its JSON and its text (measured
+ * 150 to 195 MB of heap, 100 to 210 MB of growth); with slices sized in rows it held 390 MB of heap or ran out.
+ */
+const WIDE_LAG_MS = 1000;
+const WIDE_HEAP_BYTES = 320 * 1024 * 1024;
+const WIDE_RSS_GROWTH = 320 * 1024 * 1024;
 
 // ── The node process's commands ────────────────────────────────────────────────────────────
 
@@ -77,6 +92,15 @@ async function child(): Promise<void> {
     const { monitorEventLoopDelay } = await import('node:perf_hooks');
     const lag = monitorEventLoopDelay({ resolution: 5 });
     lag.enable();
+    // The most memory this process held since the last reset, sampled every 5 ms (a page's rows live for a few ms).
+    let peakRss = 0;
+    let peakHeap = 0;
+    const sample = () => {
+        const u = process.memoryUsage();
+        peakRss = Math.max(peakRss, u.rss);
+        peakHeap = Math.max(peakHeap, u.heapUsed);
+    };
+    setInterval(sample, 5).unref();
     await runNodeChild({
         ...serveCommands,
         'setup-primary': async (a: { replicationToken: string; genesis: string }) => {
@@ -174,6 +198,34 @@ async function child(): Promise<void> {
         'lag-reset': async () => { lag.reset(); return true; },
         /** The longest this process's event loop was blocked since the last reset, in ms, and its resident memory. */
         'lag-read': async () => ({ maxMs: lag.max / 1e6, rss: process.memoryUsage().rss }),
+        'peak-reset': async () => { peakRss = 0; peakHeap = 0; sample(); return true; },
+        /** The most resident memory and V8 heap in use since the last peak-reset, and the heap's limit. */
+        'peak-read': async () => {
+            sample();
+            const { getHeapStatistics } = await import('node:v8');
+            return { rss: peakRss, heap: peakHeap, heapLimit: getHeapStatistics().heap_size_limit };
+        },
+        /** The operator's Clean storage (routes/admin.ts POST /api/local/admin/storage/clean), timed. */
+        'clean-storage': async () => {
+            const { cleanStorageAndCompressLogs } = await import('./engine/storage-health.js');
+            const t0 = performance.now();
+            const r = await cleanStorageAndCompressLogs();
+            return { ms: performance.now() - t0, success: r.success };
+        },
+        /**
+         * The image evacuation's once-per-node reclaim (a truncating checkpoint, a VACUUM, another), as the evacuation runs
+         * it when it is done: its marker removed first so it runs again. Timed; whether it recorded itself done.
+         */
+        reclaim: async () => {
+            const { db } = await import('./db/db.js');
+            const { reclaimSpaceOnce } = await import('./services/image-evacuation.js');
+            db.prepare(`DELETE FROM node_config WHERE key = 'image_store_evacuation_vacuumed_v1'`).run();
+            const t0 = performance.now();
+            reclaimSpaceOnce();
+            const ms = performance.now() - t0;
+            const marked = !!db.prepare(`SELECT 1 FROM node_config WHERE key = 'image_store_evacuation_vacuumed_v1'`).get();
+            return { ms, marked };
+        },
         fetches: async () => fetches,
     });
 }
@@ -654,8 +706,31 @@ async function main(): Promise<void> {
         const vAfter = await get(v.page.copyId, 1);
         assert(vacuumed.ok === true, `the VACUUM and the checkpoint that empties the WAL both succeed (${JSON.stringify(vacuumed)})`);
         assert(vAfter.status === 404, `the copy was closed first: its next page is 404 (${vAfter.status} ${vAfter.text.slice(0, 80)})`);
+        const reopened0 = await open();
+        assert(reopened0.status === 200, `a new copy opens after it (${reopened0.status})`);
+        // The two other truncating checkpoints on M's own connection. With the copy's read open, each would wait out the
+        // busy timeout (5 s), synchronously, and leave the WAL as it was.
+        for (const [what, cmd] of [['Clean storage', 'clean-storage'], ['the image evacuation reclaim', 'reclaim']] as const) {
+            const c = cmd === 'clean-storage' ? reopened0 : await open();
+            require_(c.status === 200 && c.page.last === false, `a copy opens before ${what} (${c.status})`);
+            await main.send('flood', { kind: 'messages', n: 50, prefix: `ck-${cmd}`, conversationId, author: ann.pk });
+            const walHeld = await main.send('wal');
+            await main.send('lag-reset');
+            const r = await main.send(cmd);
+            const l = await main.send('lag-read');
+            const cAfter = await get(c.page.copyId, 1);
+            const walLeft = await main.send('wal');
+            assert(r.ms < 1500 && l.maxMs < 1500 && (cmd === 'reclaim' ? r.marked === true : r.success === true),
+                `${what} with a copy open doesn't wait on it: ${r.ms.toFixed(0)} ms, M's loop blocked up to ${l.maxMs.toFixed(0)} ms (${JSON.stringify(r)})`);
+            // The reclaim records itself done after its last checkpoint: that one write is all its WAL may hold.
+            const walAllowed = cmd === 'reclaim' ? 16 * 1024 : 0;
+            assert(cAfter.status === 404 && walHeld > 0 && walLeft <= walAllowed,
+                `it closed the copy first (its next page ${cAfter.status}), and the WAL of ${walHeld} bytes is empty after (${walLeft}${walAllowed ? `, at most ${walAllowed} for its own mark` : ''})`);
+            // A copy it left open is served to its end, so the next one can open.
+            if (cAfter.status === 200 && !cAfter.page.last) await drain(c.page.copyId, 2);
+        }
         const reopened = await open();
-        assert(reopened.status === 200, `a new copy opens after it (${reopened.status})`);
+        assert(reopened.status === 200, `a new copy opens after them (${reopened.status})`);
 
         // ── 9. A restart ──
         console.log('\n— 9. after M restarts, the copy it was serving is gone —');
@@ -704,6 +779,62 @@ async function main(): Promise<void> {
             `the copy is ${sized.pages.length} pages in ${(totalMs / 1000).toFixed(1)} s, each within 8 MB and 25,000 rows (${JSON.stringify({ members: sm.members?.length, messages: sm.messages?.length, transactions: sm.transactions?.length })})`);
         assert(sortKeys(flat(sized.pages[0].rowCounts)) === sortKeys(countsOf(sm)), 'it carries every row its opening page counts');
         assert(maxLag < 1000, `no page blocked M's event loop for a second: at most ${maxLag.toFixed(0)} ms (today's whole payload: ${oldLag.maxMs.toFixed(0)} ms at once)`);
+
+        // ── 11. Wide rows under the deployed heap ──
+        console.log('\n— 11. wide rows under the deployed heap: M at --max-old-space-size=512, 6,000 more members with a 70 KB photo inline —');
+        await main.kill();
+        main = await spawnNode(SCRIPT, dir, { ...env, SYNC_PAGE_BYTES: '', SYNC_PAGE_ROWS: '', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=512`.trim() });
+        nodes.push(main);
+        const heapLimit = (await main.send('peak-read')).heapLimit;
+        // V8's limit is the old space's 512 MB and the young space's beside it.
+        require_(heapLimit < 700 * 1024 * 1024, `M runs with the deployed heap limit (V8's heap_size_limit ${(heapLimit / 1e6).toFixed(0)} MB)`);
+        const tWide = Date.now();
+        // In batches, each its own transaction, so writing them never needs them all in memory at once. Keys starting `0w`
+        // come before nearly every other member's (hex) in the table hashes' order, so the first slices of members hashed
+        // are all wide, as on a community whose every member has a photo.
+        for (let i = 0; i < 6; i++) await main.send('flood', { kind: 'members', n: 1000, prefix: `0wide${i}`, bytes: 70_000 });
+        const wideDb = fs.statSync(path.join(dir, 'state.db')).size + (fs.existsSync(path.join(dir, 'state.db-wal')) ? fs.statSync(path.join(dir, 'state.db-wal')).size : 0);
+        const rssWide = (await main.send('lag-read')).rss;
+        console.log(`  (written in ${((Date.now() - tWide) / 1000).toFixed(1)} s; state.db and its WAL ${(wideDb / 1e6).toFixed(0)} MB; M's RSS ${(rssWide / 1e6).toFixed(0)} MB)`);
+        const widePages: { n: number; rows: number; mb: number; ms: number; lag: number }[] = [];
+        await main.send('peak-reset');
+        await main.send('lag-reset');
+        const tWideCopy = Date.now();
+        let wide: { pages: any[] } | null = null;
+        let wideError = '';
+        try {
+            wide = await copy({
+                onPage: async (g) => {
+                    const l = await main.send('lag-read');
+                    const rows = rowsOf(g.page);
+                    widePages.push({ n: g.page.n, rows: rows.length, mb: rows.reduce((a, r) => a + r.bytes, 0) / 1e6, ms: g.ms, lag: l.maxMs });
+                    await main.send('lag-reset');
+                },
+            });
+        } catch (e: any) {
+            const code = await Promise.race([main.exited, sleep(2000).then(() => 'still running')]);
+            wideError = `${e?.message || e}; M ${code === 'still running' ? 'is still running' : `exited (${code})`}${/heap out of memory/.test(main.output()) ? ', out of heap' : ''}`;
+        }
+        const wideMs = Date.now() - tWideCopy;
+        // A dead M answers no command: the suite stops here rather than wait on it.
+        require_(wide !== null, `M serves the whole copy under a 512 MB heap: ${wide ? `${wide.pages.length} pages in ${(wideMs / 1000).toFixed(1)} s` : wideError}`);
+        if (wide) {
+            const peak = await main.send('peak-read');
+            const worst = widePages.reduce((a, p) => (p.lag > a.lag ? p : a), widePages[0]);
+            const opening = widePages[0];
+            const ws = merged(wide.pages);
+            const wideMembers = (ws.members ?? []).filter((r: any) => /^0wide\d-/.test(r.publicKey ?? r.public_key ?? '')).length;
+            console.log(`  pages ${widePages.length}; the open (page 0): ${opening.rows} rows, ${opening.mb.toFixed(2)} MB, loop blocked up to ${opening.lag.toFixed(0)} ms;`
+                + ` worst page ${worst.n}: ${worst.rows} rows, ${worst.mb.toFixed(2)} MB, loop blocked up to ${worst.lag.toFixed(0)} ms;`
+                + ` peak RSS ${(peak.rss / 1e6).toFixed(0)} MB (before ${(rssWide / 1e6).toFixed(0)} MB), peak heap ${(peak.heap / 1e6).toFixed(0)} MB of ${(peak.heapLimit / 1e6).toFixed(0)} MB`);
+            assert(sortKeys(flat(wide.pages[0].rowCounts)) === sortKeys(countsOf(ws)) && wideMembers === 6000,
+                `it carries every row its opening page counts, the 6,000 wide members among them (${wideMembers})`);
+            assert(widePages.every((p) => p.rows <= 25_000 && (p.mb * 1e6 <= 8 * 1024 * 1024 || p.rows === 1)), 'each page within 8 MB and 25,000 rows');
+            assert(opening.lag < WIDE_LAG_MS && worst.lag < WIDE_LAG_MS,
+                `neither the open nor any page held M's event loop ${WIDE_LAG_MS} ms (the open ${opening.lag.toFixed(0)} ms, worst page ${worst.lag.toFixed(0)} ms)`);
+            assert(peak.heap < WIDE_HEAP_BYTES && peak.rss - rssWide < WIDE_RSS_GROWTH,
+                `M's memory stays bounded: peak heap ${(peak.heap / 1e6).toFixed(0)} MB (< ${(WIDE_HEAP_BYTES / 1e6).toFixed(0)}), RSS grew ${((peak.rss - rssWide) / 1e6).toFixed(0)} MB (< ${(WIDE_RSS_GROWTH / 1e6).toFixed(0)})`);
+        }
 
         assert(unsigned.length === 0, `every page of every copy verifies, naming its copy and its number (${JSON.stringify(unsigned.slice(0, 5))})`);
         const blocked = (await main.send('fetches')).blocked;

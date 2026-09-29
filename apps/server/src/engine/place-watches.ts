@@ -63,7 +63,7 @@
  * Verified listings (the registrar vouching for an address) would let a notice name the community; not built here.
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { EARTH_RADIUS_KM, haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
 import { roundToArea } from './member-area.js';
 import { firstSightings, type DirectoryRow, type FirstSighting } from './directory-cache.js';
@@ -218,6 +218,7 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
                 upsert.run(w.id, w.pubkey, lat, lng, w.radiusKm, w.createdAt, w.lastNotifiedAt ?? null, w.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Place watches] A copied watch could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

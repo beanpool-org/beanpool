@@ -171,10 +171,10 @@ export function clearReplicatedRows(clear: ResyncClear, spare: ReadonlySet<strin
     // server's clock. The clear is no group's delete: with the listings spared (left out of the copy), it would cancel
     // every one aimed at a group, and the copy would bring none back. Set aside for the clear, as the database held it.
     const putTriggerBack = setTouchTriggersAside(['posts_cleanup_on_group_delete']);
-    for (const t of tables) {
-        try { db.prepare(`DELETE FROM ${t}`).run(); }
-        catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
-    }
+    // Nothing here is caught. A delete that fails (a disk full or failing, a trigger's RAISE) may already have rolled the
+    // whole transaction back, and every delete after it would then commit on its own: the standby left with less, and the
+    // copy refused. Thrown, it fails the copy, and the transaction puts every table back, the trigger included.
+    for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
     putTriggerBack();
     if (spare.has('post_photos')) return;
     // `post_photos` apart, so the named rows can be spared by primary key. A row key that is not `post_id|order_num` names
@@ -952,14 +952,22 @@ const MEMBERS_KEEP_STAMPS = ['members_touch_updated_at', 'members_touch_board_st
 
 /** Drops the named touch triggers; the function it returns creates again the ones this database had. In a transaction. */
 function setTouchTriggersAside(names: readonly string[]): () => void {
-    const held: string[] = [];
+    const held: { name: string; sql: string }[] = [];
+    const exists = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`);
     for (const name of names) {
-        const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(name) as { sql: string } | undefined)?.sql;
+        const sql = (exists.get(name) as { sql: string } | undefined)?.sql;
         if (!sql) continue;
-        held.push(sql);
+        held.push({ name, sql });
         db.exec(`DROP TRIGGER ${name}`);
     }
-    return () => { for (const sql of held) db.exec(sql); };
+    // Only inside the transaction that set them aside, and only one still gone: a rollback puts a trigger back by itself
+    // (its drop was part of the transaction), and one put back after that would run on its own, outside any copy.
+    return () => {
+        if (held.length > 0 && !(db as any).inTransaction) {
+            throw new Error('[Sync] The transaction that set these triggers aside is gone: they are back as the database held them');
+        }
+        for (const t of held) if (!exists.get(t.name)) db.exec(t.sql);
+    };
 }
 
 /** A value SQLite stores as the main server held it: text, a finite number, or null. Anything else is left out. */

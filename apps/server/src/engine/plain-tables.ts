@@ -17,7 +17,7 @@
  * out; each is reported, and the whole-copy check counts the rows (engine audit.ts getReplicaConsistency).
  */
 import type Database from 'better-sqlite3';
-import { db } from '../db/db.js';
+import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { RowRules } from '../db/table-rules.js';
 import { PLAIN_TABLES, type PlainTable } from './replication-manifest.js';
 
@@ -204,6 +204,7 @@ function importTable(spec: PlainTable, shape: Shape, rows: unknown[], whole: boo
                 try {
                     write(n.key, n.row);
                 } catch (e) {
+                    rethrowUnlessRowRefused(e);
                     if (!isConstraintError(e)) throw e;
                     refused.push(n);
                 }

@@ -42,7 +42,7 @@
  * A standby that copied from its main server before it had this table never stored the rows made meanwhile, and no delta
  * brings them again: it takes one whole copy (memberBlocksWantWholeCopy), as for the replaced keys (engine/key-move.ts).
  */
-import { db } from '../db/db.js';
+import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './member-key.js';
 import type { SyncMemberBlock } from '@beanpool/engine';
 
@@ -303,6 +303,7 @@ export function mergeReplicatedBlocks(rows: unknown): BlockMerge {
                 upsert.run(b.ownerPubkey, b.blockedPubkey, b.createdAt, b.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Blocks] A copied block could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

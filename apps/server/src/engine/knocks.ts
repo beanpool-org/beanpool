@@ -116,7 +116,7 @@
  * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
@@ -600,6 +600,7 @@ export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): Kno
                     merge.invitesMade += makeInvite.run(r.inviteCode, r.decidedBy, r.decidedAt ?? r.updatedAt, r.pubkey).changes;
                 }
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Knocks] A copied request to join could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

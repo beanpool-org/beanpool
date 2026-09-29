@@ -25,7 +25,7 @@
  * over starts tidying at its first hourly run.
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import type { SyncModerationNotice } from '@beanpool/engine';
 
 export const KEPT_NOTICES = { perMember: 50, maxAgeDays: 60 } as const;
@@ -235,6 +235,7 @@ export function mergeReplicatedNotices(rows: unknown): NoticeMerge {
                 upsert.run(n.id, n.recipient, n.title, n.body, n.data, n.createdAt, n.seenAt ?? null, n.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Notices] A copied notice could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

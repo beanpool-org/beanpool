@@ -40,6 +40,13 @@ const KILL_GRACE_MS = 10_000;
 const FAILED_LOG_LINES = 300; // a failing run's whole log up to this; past it, its ✗ lines and the last 200
 const SUMMARY_TOP = 15;
 
+/**
+ * Never handed to a suite: a shell that sourced a node's .env would otherwise run the suites as that node, with its
+ * admin password and a live Cloudflare token (services/tls.ts reads CF_* at import). The same set as test-all-lib.sh's
+ * scrub_test_env; CI has none of them.
+ */
+const SECRET_ENV = /^(CF_.*|CLOUDFLARE_.*|ADMIN_PASSWORD|BACKUP_ADMIN_PASSWORD|ADMIN_SECRET|BACKUP_REPLICATION_TOKEN|TIKTOK_CLIENT_SECRET|INSTAGRAM_APP_SECRET|INSTAGRAM_CLIENT_SECRET)$/;
+
 const cores = os.availableParallelism ? os.availableParallelism() : os.cpus().length;
 const JOBS = Math.max(1, Number(process.env.TEST_ALL_JOBS) || (process.env.CI ? 3 : cores - 4));
 
@@ -157,6 +164,7 @@ function runOne(run, workDir) {
         fs.mkdirSync(dataDir, { recursive: true });
         fs.mkdirSync(tmpDir, { recursive: true });
         const env = { ...process.env, ...DEFAULT_ENV };
+        for (const k of Object.keys(env)) if (SECRET_ENV.test(k)) delete env[k];
         for (const [k, v] of Object.entries(run.env)) {
             if (v === null) delete env[k]; else env[k] = v;
         }

@@ -31,6 +31,9 @@ for arg in "$@"; do
   fi
 done
 
+# No check sees a real admin password or Cloudflare credential from this shell (test-all-lib.sh says why).
+scrub_test_env
+
 # Stop before anything else if the install is older than a package.json. A missing dependency surfaces as "Cannot
 # find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
 node scripts/check-deps-installed.mjs || exit 1

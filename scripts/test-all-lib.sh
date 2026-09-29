@@ -147,6 +147,23 @@ failing_tests_summary() {
   '
 }
 
+# ── No real secrets in a test run ─────────────────────────────────────────────────────────────────────────────────
+#
+# A shell that has sourced a node's .env hands every check the node's admin password and its Cloudflare credentials,
+# and the server reads CF_API_TOKEN / CF_ZONE_ID / CF_RECORD_NAME at import (services/tls.ts): a suite would then run
+# as that node, able to reach Cloudflare with a live token. CI has none of them set, so a local run should not either.
+# The names are the secrets_guard inventory plus every CF_* and CLOUDFLARE_*. scripts/run-server-suites.mjs drops the
+# same set for the suites when it is run on its own.
+scrub_test_env() {
+  local v
+  for v in $(compgen -e); do
+    case "$v" in
+      CF_*|CLOUDFLARE_*|ADMIN_PASSWORD|BACKUP_ADMIN_PASSWORD|ADMIN_SECRET|BACKUP_REPLICATION_TOKEN|TIKTOK_CLIENT_SECRET|INSTAGRAM_APP_SECRET|INSTAGRAM_CLIENT_SECRET)
+        unset "$v" ;;
+    esac
+  done
+}
+
 # ── The merge gate's green record ─────────────────────────────────────────────────────────────────────────────────
 #
 # Merges into main rest on a local `test-all.sh --all` (Marty, 2026-09-30), so a green run leaves a record the gate can

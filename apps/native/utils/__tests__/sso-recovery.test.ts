@@ -15,6 +15,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(),
     setItemAsync: vi.fn(),
     deleteItemAsync: vi.fn(),
@@ -182,6 +183,7 @@ describe('SSO Recovery Service', () => {
         expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
             'sovereign-identity',
             expect.stringContaining(originalKeypair.publicKeyHex),
+            { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
         );
 
         expect(progressSteps).toEqual([

@@ -8,7 +8,8 @@
  * give the same answer for every upgrade path:
  *
  *   /ws signed by a member → 101, and a broadcast reaches the socket
- *   /ws unsigned (default) → 101, and gets a public change as a bare doorbell but not a member event
+ *   /ws unsigned (default) → 101, and gets a public Commons change as a bare doorbell, but not a member event nor, on a
+ *     local community (listings members-only, 2026-09-28), a listing's
  *   /ws (ENFORCE_WS_AUTH=true) unsigned → 401, validly signed → 101
  *   /ws (ENFORCE_WS_AUTH=false) unsigned → 101, and gets a community-wide event in full (the open feed)
  *   /ws/logs      without admin auth → 401; with a valid ticket → 101
@@ -130,10 +131,13 @@ async function main() {
                 anon.events.length = 0;
                 broadcast({ type: 'test_ping', marker: 'member-only' });
                 broadcast({ type: 'new_post', post: { id: 'p1', title: 'Spare lemons' } });
+                broadcast({ type: 'project_created', project: { id: 'pr1', title: 'Community garden' } });
                 await sleep(200);
                 assert(!anon.events.some(e => e.type === 'test_ping'), `${p.name}: unsigned /ws does not get a member event`);
-                assert(anon.events.some(e => e.type === 'new_post' && Object.keys(e).length === 1),
-                    `${p.name}: unsigned /ws gets a public change as a bare doorbell`);
+                assert(!anon.events.some(e => e.type === 'new_post'),
+                    `${p.name}: unsigned /ws gets no listing doorbell on a local community (its listings are members-only)`);
+                assert(anon.events.some(e => e.type === 'project_created' && Object.keys(e).length === 1),
+                    `${p.name}: unsigned /ws gets a public Commons change as a bare doorbell`);
                 anon.ws.close();
             }
         }

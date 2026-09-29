@@ -6,7 +6,8 @@
  * - Options list with live progress bars, vote counts, and percentages.
  * - Tap-to-vote: one member, one vote; re-voting overwrites choice.
  * - Total turnout count & close date.
- * - Public open ballot: collapsible list of who voted for what.
+ * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
+ *   (`pollOpenVote`), members also get a collapsible list of who voted for what. The card says which.
  * - Author "Close Poll" action for early closure.
  */
 
@@ -45,6 +46,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     // the full width of a page column, where a single answer column already fits: they are left exactly as they were.
     const isGrid = viewMode === 'grid';
 
+    // Only a poll its creator made an open vote names its voters; a node before the choice sends no flag, and its polls
+    // showed voters to members, so a list that comes with the poll is shown there as before.
+    const openVote = livePost.pollOpenVote === true || (livePost.pollOpenVote === undefined && Array.isArray(livePost.pollVotes) && livePost.pollVotes.length > 0);
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
     const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt ? new Date(livePost.pollClosesAt).getTime() <= Date.now() : false);
     const authorName = livePost.authorCallsign || (livePost.authorPublicKey ? livePost.authorPublicKey.slice(0, 6) : 'Anonymous');
@@ -282,12 +286,16 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                 })}
             </div>
 
-            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
-            {!visitor && (
+            {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
+            {!visitor && (openVote ? (
             <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
-                <span aria-hidden="true">👁️ </span>Your vote is visible to members
+                <span aria-hidden="true">👁️ </span>Open vote: members can see who chose what
             </p>
-            )}
+            ) : (
+            <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-anonymous-note">
+                <span aria-hidden="true">🔒 </span>Anonymous: everyone sees only the totals
+            </p>
+            ))}
 
             {/* Error Message */}
             {error && (
@@ -302,7 +310,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span aria-hidden="true">📊 </span>{totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
                 </span>
 
-                {!visitor && votesList.length > 0 && (
+                {!visitor && openVote && votesList.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setShowVoters(v => !v)}
@@ -316,10 +324,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </div>
 
             {/* Collapsible Open Ballot Public Voter List */}
-            {!visitor && showVoters && votesList.length > 0 && (
+            {!visitor && openVote && showVoters && votesList.length > 0 && (
                 <div id="poll-voters-list" className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
                     <p className="text-[10px] uppercase tracking-wider font-extrabold text-nature-400 mb-1">
-                        Public Village Ballot
+                        Open vote
                     </p>
                     {votesList.map((vote, idx) => {
                         const opt = optionsById.get(vote.optionId);
@@ -344,7 +352,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Village Notice */}
             {!visitor && (
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-500 text-center">
-                <span aria-hidden="true">ℹ️ </span>Public signed village voting · Re-voting overwrites choice
+                <span aria-hidden="true">ℹ️ </span>{openVote ? 'Open vote' : 'Anonymous vote'} · Re-voting overwrites choice
             </p>
             )}
         </div>

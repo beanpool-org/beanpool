@@ -112,9 +112,10 @@ export function visitorWriteRefused(method: string, path: string, body: unknown,
 
 /**
  * What a visitor's row (isLiveVisitor) may read past the read gate: only what is its own and was sent to it, its messages
- * and its Beans (#1182). Each is held to the signer here, as the route holds it under read auth: its own conversation
- * list, a direct conversation it is in, its own balance and its own transactions. Every other gated read it is refused,
- * as a non-member is. Compared as the path spells it, as above.
+ * and its Beans (#1182), and its own listings. Each is held to the signer here, as the route holds it under read auth:
+ * its own conversation list, a direct conversation it is in, its own balance and its own transactions, and the board
+ * asked for its own listings only (`author` = the signer). Every other gated read it is refused, as a non-member is.
+ * Compared as the path spells it, as above.
  */
 export function visitorsOwnRead(path: string, query: Record<string, unknown>, signer: string): boolean {
     const routed = routedPath(path);
@@ -128,5 +129,10 @@ export function visitorsOwnRead(path: string, query: Record<string, unknown>, si
     const balance = /^\/api\/ledger\/balance\/([^/]+)$/.exec(routed);
     if (balance) return balance[1] === signer;
     if (routed === '/api/ledger/transactions') return query.publicKey === signer;
+    // Its own listings, from before visitors were refused one: it may still take one down (VISITOR_WRITES isOwnListing),
+    // so it may find them. Where a local community's listings are its members' (https-server.ts
+    // PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT), this is all of the board a visitor reads: `author` names the signer, and the
+    // route reads for nobody but that author.
+    if (routed === '/api/marketplace/posts') return query.author === signer;
     return false;
 }

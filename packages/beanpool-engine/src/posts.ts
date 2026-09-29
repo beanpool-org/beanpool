@@ -13,6 +13,7 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey } from './members.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
+import { postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -81,6 +82,12 @@ export interface MarketplacePost {
     createdBy?: string;
     pollOptions?: PollOption[];
     pollClosesAt?: string;
+    /**
+     * A poll's ballot (Marty, 2026-09-28): false, anonymous (the default), where everyone sees only the counts; true, an
+     * open vote, where members also see who chose what (`pollVotes`). Chosen when the poll is made, fixed once anyone
+     * has voted. Polls only.
+     */
+    pollOpenVote?: boolean;
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
@@ -158,9 +165,10 @@ export interface PostFilter {
      */
     includeHidden?: boolean;
     /**
-     * Who voted for what in each poll (`pollVotes`), for a reader who reads as a member of this node (readsAsMember)
-     * only: the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's
-     * `votes` and `percentage`) and no voters, so a read nobody vouched for can never leak them.
+     * Who voted for what in each open-vote poll (`pollVotes`, `pollOpenVote`), for a reader who reads as a member of this
+     * node (readsAsMember) only: an open vote is open to members. An anonymous poll never carries its voters, with this
+     * or without. Without it a poll carries its counts (`totalVotes`, each option's `votes` and `percentage`) and no
+     * voters, so a read nobody vouched for can never leak them.
      */
     includeVoters?: boolean;
     /**
@@ -323,7 +331,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         completedAt: row.completed_at,
         lat: row.lat,
         lng: row.lng,
-        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`),
+        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at)),
         originNode: row.origin_node,
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
@@ -336,6 +344,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        ...(row.type === 'poll' ? { pollOpenVote: row.poll_open_vote === 1 } : {}),
         audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
         targetGroupId: row.target_group_id || undefined,
         targetGroupName: row.target_group_name || undefined,
@@ -1090,7 +1099,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                     return { ...opt, votes: count, percentage };
                 });
             }
-            if (filter?.includeVoters) {
+            // Only an open vote names its voters, and only to a member (includeVoters). An anonymous poll names nobody,
+            // to anyone: its author, a moderator and the voters themselves included.
+            if (filter?.includeVoters && post.pollOpenVote === true) {
                 post.pollVotes = votes.map((v: any) => ({
                     voterPubkey: v.voter_pubkey,
                     voterCallsign: v.voter_callsign || 'Anonymous',
@@ -1122,6 +1133,23 @@ export function withoutPollVoters(post: MarketplacePost): MarketplacePost {
 }
 
 /**
+ * The post without who took it (`acceptedBy`, `acceptedByCallsign`) or the deal it is in (`pendingTransactionId`), for a
+ * reader or a socket that is neither its author nor the member who took it. Balances and trades are private (Marty,
+ * 2026-09-28): a trade shows only its two people. Everyone else still sees that it is spoken for or done (its status and
+ * dates), as a visitor does (guestPost). Any post nobody has taken comes back as it was.
+ */
+export function withoutTradeParty(post: MarketplacePost): MarketplacePost {
+    if (!('acceptedBy' in post) && !('acceptedByCallsign' in post) && !('pendingTransactionId' in post)) return post;
+    const { acceptedBy: _by, acceptedByCallsign: _byName, pendingTransactionId: _deal, ...rest } = post;
+    return rest;
+}
+
+/** Whether `reader` is one of a post's trade's two people: its author, or the member who took it. */
+export function isTradeParty(post: Pick<MarketplacePost, 'authorPublicKey' | 'acceptedBy'>, reader: string | null | undefined): boolean {
+    return !!reader && (reader === post.authorPublicKey || (!!post.acceptedBy && reader === post.acceptedBy));
+}
+
+/**
  * The author every post names to a visitor (guestPost): one constant, never a per-post token, which would link one
  * person's listings together. Not empty, so an app that writes it into a NOT NULL column (the phone's local posts
  * table) still can. The phone knows it (apps/native utils/posts-view.ts HIDDEN_AUTHOR) and opens no profile for it.
@@ -1143,7 +1171,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
-    pollOptions: 'keep', pollClosesAt: 'keep', totalVotes: 'keep',
+    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
@@ -1190,10 +1218,11 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
  * to the viewer the post was read for, so the viewer-only fields come off first: an event's note, RSVP list
  * and the reader's own RSVP, and — for every type — `reachPeers`, which `getPosts` gives to the author alone.
  * These posts are read for the author (or the voter, for a poll vote), and the apps now keep what the feed
- * sends them (@beanpool/core `livePostChange`).
+ * sends them (@beanpool/core `livePostChange`). So the reader's own poll vote (`userVotedOptionId`) comes off too: sent
+ * with a vote's `post_updated`, it told every socket what the voter just chose, on an anonymous poll as on any.
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
-    const { reachPeers: _peers, ...shared } = post;
+    const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
     const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
     return rest;

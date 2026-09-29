@@ -167,4 +167,23 @@ describe('DecideSection voting answers', () => {
         expect(box.textContent).toContain(`An admin suspended Dave on ${new Date('2026-09-19T10:00:00.000Z').toLocaleDateString()}. Keep the suspension?`);
         expect(box.textContent).toContain("If this vote doesn't pass, the suspension lifts by itself.");
     });
+
+    // Balances are private (2026-09-28): the node sends a removal vote's record of the member's balance and debt only to
+    // those who can vote in it. Anyone else is told so, never shown a made-up −0.
+    it('a removal vote: a voter reads the debt the node sent; anyone else reads that it is for voters only', () => {
+        const voter = decisionCard('r1', '1m1v', null);
+        voter.effect = 'remove_member';
+        voter.params = { memberName: 'Eve', debt: 12, balance: -12, commonsPool: 300 };
+        const { unmount } = renderDecide(true, [voter]);
+        expect(screen.getByTestId('removal-debt-write-off-line').textContent).toContain("Eve's balance is −12 beans");
+        unmount();
+
+        const other = decisionCard('r2', '1m1v', null);
+        other.effect = 'remove_member';
+        other.params = { memberName: 'Eve', commonsPool: 300 };
+        renderDecide(true, [other]);
+        const line = screen.getByTestId('removal-debt-write-off-line').textContent ?? '';
+        expect(line).toContain("only the members who can vote in this see Eve's balance");
+        expect(line).not.toContain('−0');
+    });
 });

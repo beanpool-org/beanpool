@@ -99,20 +99,24 @@ async function main() {
     assert(asGuest.status === 403, `non-member guest, signed, is refused with 403 (got ${asGuest.status})`);
     assert(!hasTrade(asGuest.body), 'the guest response carries no trade');
 
-    console.log('\n── any member of the community reads it ──');
+    console.log('\n── any member of the community reads it, and a trade only its two people ──');
     const asAlice = await get(FEED, alice);
     assert(asAlice.status === 200, `alice (in the trade), signed, gets 200 (got ${asAlice.status})`);
     assert(hasTrade(asAlice.body), 'alice sees the alice→bob trade');
+    const asBob = await get(FEED, bob);
+    assert(asBob.status === 200 && hasTrade(asBob.body), 'bob, the other side of it, sees it too');
     const asCarol = await get(FEED, carol);
     assert(asCarol.status === 200, `carol (NOT in the trade), signed, gets 200 (got ${asCarol.status})`);
-    assert(hasTrade(asCarol.body), 'carol sees the same alice→bob trade — it is a community feed');
+    // Trades are private to their two people (Marty, 2026-09-28). This said "carol sees the same trade — it is a community
+    // feed" while members saw each other's trades.
+    assert(!hasTrade(asCarol.body) && !JSON.stringify(asCarol.body).includes('Sourdough'), 'carol does not see the alice→bob trade');
 
     console.log('\n── a guest can still browse the public community ──');
     const enterprise = createTreasury('Guest Visible Bakery', 'data:image/png;base64,iVBORw0KGgo=', 0, { leadKeeperPubkey: alice.pubKeyHex }).publicKey;
     const guestReads: string[] = [
         '/api/community/info',
         '/api/node/info',
-        '/api/marketplace/posts',
+        // Not /api/marketplace/posts: a local community's listings are its members' since 2026-09-28 (test-privacy-defaults).
         '/api/enterprises',
         '/api/enterprises/map',
         `/api/enterprise/${enterprise}`,

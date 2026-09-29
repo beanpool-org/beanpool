@@ -53,6 +53,7 @@ vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => {
         if (key !== 'beanpool_app_lock_enabled') return null;
         return phoneState.appLockRead ? phoneState.appLockRead() : phoneState.appLock;
@@ -903,6 +904,70 @@ describe("a phone whose since-boot clock can't be read: the time away can't be t
 
         expect(phone.locked()).toBe(true);
         expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+    });
+
+    // #1309's deciding review (inline 4129818251), kept by decision: fail-closed. The phone's own prompt is itself a leave
+    // (Android 8-10's PIN screen backgrounds the app, iOS's passcode prompt makes it inactive), and with no since-boot
+    // reading every leave asks. So on a build without the module (or a dev client built before it) App Lock's own prompt
+    // brings the next one, passed or cancelled, however quick: a member with App Lock on can't get in, even to turn it off,
+    // until the app is rebuilt with the module. A build with it can't get here: elapsedRealtime and mach_continuous_time
+    // don't fail. Trusting the order of events alone to break the loop would reopen a window (see the review).
+    describe.each(UNREADABLE)('an unreadable since-boot clock fails closed: every prompt is a leave, so it asks again until the app is rebuilt with the module (%s)', (_name, breakClock) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            describe.each(ORDERS)('%s', (_order, order) => {
+                it.each([
+                    ['passes', true],
+                    ['cancels', false],
+                ] as const)('the launch lock asks, the member %s two 1-second prompts: a third prompt is open', async (_answers, passes) => {
+                    breakClock();
+                    const phone = await phoneWithAppLock();
+                    phone.unlockApp();
+                    await flush();
+                    expect(phone.prompts()).toBe(1);
+
+                    for (let answered = 1; answered <= 2; answered++) {
+                        await slowPrompt(phone, leave, order, 1 * SEC, passes);
+                        await flush();
+                        expect(phone.prompts()).toBe(answered + 1);
+                    }
+
+                    expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool', 'Unlock BeanPool']);
+                    expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+                    // Not pinned for passes: when the app is active before the answer, the pass that closes one prompt takes
+                    // the lock screen down after the next prompt has opened (a real pass, a second before). The next
+                    // prompt is open either way, and the loop is what this pins.
+                    if (!passes) expect(phone.locked()).toBe(true);
+                });
+            });
+        });
+    });
+
+    describe.each(SHAPES)('the same prompts with the since-boot clock working (%s): asked once, no loop', (_shape, leave) => {
+        it.each(ORDERS)('passed when %s: one prompt, and the app is open', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+
+            await slowPrompt(phone, leave, order, 1 * SEC, true);
+            await flush();
+
+            expect(phone.prompts()).toBe(1);
+            expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+            expect(phone.locked()).toBe(false);
+        });
+
+        it.each(ORDERS)('cancelled when %s: one prompt, and the lock screen stays', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+
+            await slowPrompt(phone, leave, order, 1 * SEC, false);
+            await flush();
+
+            expect(phone.prompts()).toBe(1);
+            expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+            expect(phone.locked()).toBe(true);
+        });
     });
 
     describe.each(BOOT_STARTS)('%s', (_start, bootClockStart) => {

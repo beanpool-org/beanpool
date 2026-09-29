@@ -81,8 +81,10 @@ async function main() {
         '1d. and it is exactly what the apps apply without fetching (livePostChange accepts it)');
     assert(se.getPosts({ id: offer.id, viewerPubkey: author })[0]?.reachPeers?.[0] === PEER,
         '1e. the author still reads their own list back — the edit form needs it');
-    assert(JSON.stringify(last(stranger, 'new_post')) === JSON.stringify({ type: 'new_post' }),
-        '1f. a stranger\'s socket still gets only the bare doorbell');
+    // A local community's listings are its members' (2026-09-28): a socket with no member's key gets no listing doorbell
+    // here. It got a bare one while the board was public on every node (test-visitor-doorbells has the global node's).
+    assert(last(stranger, 'new_post') === undefined,
+        '1f. a stranger\'s socket gets nothing for it: it may not read the listings on a local node');
 
     // ── 2. An edit ────────────────────────────────────────────────────────────────────────────────────
     clear();
@@ -104,7 +106,9 @@ async function main() {
     assert(voted?.post?.id === poll.id && !('reachPeers' in voted.post),
         `3b. the author voting on their own poll does not broadcast their named communities (got ${JSON.stringify(voted?.post?.reachPeers)})`);
     assert(livePostChange(voted) === null,
-        '3c. a poll update stays a doorbell for the apps — it carries the voter\'s own choice, which is not every reader\'s');
+        '3c. a poll update stays a doorbell for the apps: each reader\'s own vote is read, not pushed');
+    assert(voted !== undefined && !('userVotedOptionId' in voted.post),
+        `3c'. and it no longer carries the voter's own choice to every socket (got ${JSON.stringify(voted?.post?.userVotedOptionId)})`);
     clear();
     se.closePoll(poll.id, author);
     const closed = last(ben, 'post_updated');
@@ -118,8 +122,8 @@ async function main() {
     assert(removed?.id === offer.id && removed.audienceScope === 'public',
         `4a. post_removed names the listing and says it was public (got ${JSON.stringify(removed)})`);
     assert(livePostChange(removed)?.kind === 'remove', '4b. and the apps apply it without fetching');
-    assert(JSON.stringify(last(stranger, 'post_removed')) === JSON.stringify({ type: 'post_removed' }),
-        '4c. the stranger\'s doorbell stays bare — the new field does not ride on it');
+    assert(last(stranger, 'post_removed') === undefined,
+        '4c. the stranger\'s socket gets nothing for it on a local node, so the new field cannot ride on it');
 
     clear();
     const second = se.createPost('need', 'food', 'Need eggs', 'A dozen', 5, 'fixed', author)!;

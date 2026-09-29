@@ -9,6 +9,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(),
     setItemAsync: vi.fn(),
     deleteItemAsync: vi.fn(),

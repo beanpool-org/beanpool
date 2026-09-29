@@ -396,25 +396,35 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (Number.isFinite(genMs)) lastGeneratedAtMs = genMs;
             lastImportedGeneratedAt = payload.generatedAt; // full conditional-pull cursor
         }
-        // Advance the delta watermark and persist it so a restart resumes deltas.
-        if (payload.cursor) {
+        const leftOut = result.tablesLeftOut ?? [];
+        // Advance the delta watermark and persist it so a restart resumes deltas. Not past a whole copy that left a table
+        // out and was taken over deltas (a routine one, the canary's, or a once-a-process one; not a force-resync of any
+        // kind, and not a first copy): it carried none of that table's rows, so a cursor it moved would skip the ones
+        // written since the last delta, for good (#1315 review 4132483095). The cursor stays at the last delta's, and the
+        // next delta carries that window again, every table of it: the importer takes a row it already holds as a no-op
+        // (the same stamp, the same transaction id). A force-resync moves it, whatever it left out: the retention one must
+        // (a cursor kept past the main server's deletes would ask for it again), and the others clear from nothing.
+        const keepCursor = !isDelta && !fresh && hadCursor && leftOut.length > 0;
+        if (payload.cursor && !keepCursor) {
             lastImportedCursor = payload.cursor;
             try { setSyncCursor(BACKUP_CURSOR_PEER, payload.cursor); } catch { /* best-effort */ }
         }
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
-        const leftOut = result.tablesLeftOut ?? [];
         // A table a whole copy leaves out, this standby lacks rows of (the record's lastLacking, which the canary doesn't
-        // read) unless the copy's own hash of it equals this standby's rows of it now: the copy moved the cursor past that
-        // table's rows written since the last delta (#1315 review 4131868827), and its first copy, or the one for the
-        // deletes the main server pruned, landed onto rows that weren't current. A force-resync that lands owes nothing for
-        // those deletes any more.
+        // read) unless the copy's own hash of it equals this standby's rows of it now: a force-resync moved the cursor past
+        // that table's rows written since the last delta, and its first copy, or the one for the deletes the main server
+        // pruned, landed onto rows that weren't current. One taken over deltas kept the cursor, so the next delta brings
+        // those rows; the table is read as lacking all the same until a whole copy carries it or hashes it equal, since
+        // drift the canary found in it would ask for whole copies that leave it out again (#1315 review 4131868827). A
+        // force-resync that lands owes nothing for the deletes the main server pruned any more.
         const current = !isDelta && leftOut.length > 0 ? leftOutTablesCurrent(payload, leftOut) : [];
         recordQuietly(() => noteCopyLanded(lastSuccessAt!, { whole: !isDelta, leftOut, current, resync: fresh }));
         if (leftOut.length > 0) {
             logger.warn('P2P', `[Backup] ⚠️ This copy landed without ${leftOut.join(', ')}: the main server holds more rows of `
-                + `${leftOut.length === 1 ? 'it' : 'them'} than one copy carries. This standby keeps its own rows of ${leftOut.length === 1 ? 'it' : 'them'}; the rest is copied.`);
+                + `${leftOut.length === 1 ? 'it' : 'them'} than one copy carries. This standby keeps its own rows of ${leftOut.length === 1 ? 'it' : 'them'}; the rest is copied.`
+                + (keepCursor ? ' The next delta starts where the last one ended, so it brings the rows written since.' : ''));
         }
         // The copy is now one this importer made, from nothing: what the format re-seed waits for (nextMode), and the
         // record that this standby holds a copy it landed, so no later one is a seed of that kind. A force-resync, or a

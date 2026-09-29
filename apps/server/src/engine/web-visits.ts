@@ -1,28 +1,28 @@
 /**
- * Web app visits: how many times a day the web app was opened on this server, and by about how many people. Counted here,
- * where the page is served, because a browser beacon (Cloudflare's) stays blocked: no cookie, no script, nothing the
- * visitor's browser keeps or sends for it.
+ * Web app visits: how many times a day the web app was opened on this server, and by about how many people. Counted
+ * here, where the page is served, because a browser beacon (Cloudflare's) stays blocked: no cookie, no script, nothing
+ * the visitor's browser keeps or sends for it.
  *
  * What is stored is `web_visit_days` (schema.sql 20b): one row per UTC day, `(day, visits, uniques)`, and nothing else:
- * no address, no browser, no hash, no member. Rows older than 400 days are deleted with no tombstone. The table stays on
- * this server (engine/replication-manifest.ts: local): a standby counts the page loads it serves itself.
+ * no address, no browser, no hash, no member. Rows older than 400 days are deleted with no tombstone. The table stays
+ * on this server (engine/replication-manifest.ts: local): a standby counts the page loads it serves itself.
  *
  * A visit is one GET of the web app's page where it is served (countWebAppPageLoad: routes/settings.ts for `/app`,
- * https-server.ts's SPA fallback for `/app/…`; `/` redirects to `/app`, so a browser that opens `/` is one visit, not two)
- * that a person's browser asked for to show (isWebAppPageLoad). Its files (scripts, styles, pictures), API calls, the Settings and
- * manager pages, a sign-in's return to the app, HEAD requests, prefetches, and requests from crawlers, link previews,
- * uptime checks and scripts are not.
+ * https-server.ts's SPA fallback for `/app/…`; `/` redirects to `/app`, so a browser that opens `/` is one visit, not
+ * two) that a person's browser asked for to show (isWebAppPageLoad). Its files (scripts, styles, pictures), API calls,
+ * the Settings and manager pages, a sign-in's return to the app, HEAD requests, prefetches, and requests from crawlers,
+ * link previews, uptime checks and scripts are not.
  *
  * `uniques` is how many different visitors that day, told apart without identifying anyone: each visit's address (by
- * client-ip.ts `limiterKeyForIp`, so an IPv6 subscriber is its /64) and browser (User-Agent) are hashed with HMAC-SHA-256
- * under 32 random bytes made for the current UTC day, and the first 16 characters kept in a set in this process's memory.
- * The key and the set are never in the database, a file or a log, and both are dropped when the day ends (a timer at UTC
- * midnight, and the day's first visit after it if the timer ran late). Only the count reaches the database. Without the
- * key, a tag cannot be matched to an address by trying every IPv4 address; after the day nobody has the key. Same shape as
- * log-address.ts, with its own domain and its own key.
+ * client-ip.ts `limiterKeyForIp`, so an IPv6 subscriber is its /64) and browser (User-Agent) are hashed with
+ * HMAC-SHA-256 under 32 random bytes made for the current UTC day, and the first 16 characters kept in a set in this
+ * process's memory. The key and the set are never in the database, a file or a log, and both are dropped when the day
+ * ends (a timer at UTC midnight, and the day's first visit after it if the timer ran late). Only the count reaches the
+ * database. Without the key, a tag cannot be matched to an address by trying every IPv4 address; after the day nobody
+ * has the key. Same shape as log-address.ts, with its own domain and its own key.
  *
- * So `uniques` is an estimate, and the manual says so: people behind one address with the same browser count once, and a
- * restart starts a new key and set, so someone who comes back after it counts again. The set holds at most
+ * So `uniques` is an estimate, and the manual says so: people behind one address with the same browser count once, and
+ * a restart starts a new key and set, so someone who comes back after it counts again. The set holds at most
  * MAX_VISITORS_PER_DAY tags: past that (a flood of made-up addresses, not a community), `uniques` stops rising and
  * `visits` goes on.
  */
@@ -147,11 +147,14 @@ export function getWebVisits(days: number, now = Date.now()): VisitDay[] {
 /**
  * User-Agents that are not a person opening the app: crawlers, link previews, uptime checks, headless browsers and
  * scripts. A word ending in `bot` counts only with a `/` or `-` after it (Googlebot/2.1, Slackbot-LinkExpanding), so a
- * phone's model (CUBOT J3, CUBOT_X19, CUBOT)) is still a person; the previews that write `…Bot (` or `…bot 1.0` are named.
+ * phone's model (CUBOT J3, CUBOT_X19, CUBOT)) is still a person; the previews that write `…Bot (` or `…bot 1.0` are
+ * named.
  */
 const NOT_A_PERSON = new RegExp([
-    '\\bbot\\b', '[a-z]bot[/-]', 'telegrambot', 'twitterbot', 'slackbot', 'discordbot', 'crawl', 'spider', 'slurp', '\\+https?:',
-    'facebookexternalhit', 'facebookcatalog', 'meta-externalagent', 'whatsapp/', 'skypeuripreview', 'embedly', 'preview',
+    '\\bbot\\b', '[a-z]bot[/-]', 'telegrambot', 'twitterbot', 'slackbot', 'discordbot',
+    'crawl', 'spider', 'slurp', '\\+https?:',
+    'facebookexternalhit', 'facebookcatalog', 'meta-externalagent', 'whatsapp/', 'skypeuripreview', 'embedly',
+    'preview',
     'uptime', 'monitor', 'pingdom', 'statuscake', 'site24x7', 'cloudflare',
     'headless', 'lighthouse', 'pagespeed', 'phantomjs', 'selenium', 'puppeteer', 'playwright',
     'curl/', 'wget/', 'python', 'go-http', 'java/', 'okhttp', 'axios', 'node-fetch', 'undici', 'libwww', 'httpie',
@@ -168,12 +171,12 @@ function header(headers: Headers, name: string): string {
 /**
  * Whether a GET for the web app's page at `path` is a person's browser opening it: a document it will show
  * (Sec-Fetch-Dest `document`; a browser too old to send that asks for text/html), not a prefetch or prerender, from a
- * User-Agent that is not a crawler, a preview, a check or a script. A sign-in's return to the app (`/app/auth/…`) is the
- * same visit going on, not a new one.
+ * User-Agent that is not a crawler, a preview, a check or a script. A sign-in's return to the app (`/app/auth/…`) is
+ * the same visit going on, not a new one.
  */
 export function isWebAppPageLoad(path: string, headers: Headers): boolean {
     if (path.startsWith('/app/auth/')) return false;
-    const purpose = `${header(headers, 'sec-purpose')} ${header(headers, 'purpose')} ${header(headers, 'x-moz')}`.toLowerCase();
+    const purpose = ['sec-purpose', 'purpose', 'x-moz'].map((name) => header(headers, name)).join(' ').toLowerCase();
     if (purpose.includes('prefetch') || purpose.includes('prerender')) return false;
     const dest = header(headers, 'sec-fetch-dest').toLowerCase();
     if (dest ? dest !== 'document' : !header(headers, 'accept').toLowerCase().includes('text/html')) return false;

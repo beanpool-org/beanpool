@@ -124,7 +124,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   launcher's, not a release chosen: the release it fell back from may be taken again after a back-off (an hour,
   doubling each time it fails again, never past the next monthly restart), and nothing else at or below the newest
   release it switched to. All of that is the launcher process's memory, so it stays up while its API is down (only
-  systemd's stop ends it); `launcher-program.test.ts` runs the built program to check it.
+  systemd's stop ends it); `launcher-program.test.ts` runs the built program to check it. A release's bundle sits
+  where the API's user writes, so the launcher keeps the SHA-256 it checked and hashes the file again before every
+  start (the switch, a restart, a step back): a file that changed is not run, the image's own API starts instead, and
+  that release is backed off from. (The launcher runs as the API's user: a hostile API could still race the moment
+  between that hash and Node reading the file. That gains it nothing it lacks: it can already refuse a handover.)
 - **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one
   booted, the API downloads that image from the release that brought it (the first to name it: an API-only release
   after it carries no image files, and the image's files are named for the version it was built as) into its inbox

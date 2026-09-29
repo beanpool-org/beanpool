@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { SwitchRequest } from '../api/updater.js';
-import { compareVersions, resolveChain, sha256Hex } from '../shared/release.js';
+import { compareVersions, resolveChain, sha256Hex, type ReleaseManifest } from '../shared/release.js';
 import { nextMonthlyRestart } from '../shared/schedule.js';
 
 /**
@@ -21,6 +21,10 @@ import { nextMonthlyRestart } from '../shared/schedule.js';
  *
  * The keyholder is another service: it stays unlocked throughout. Any failure before step 3 leaves the old API
  * serving, and it tries again at its next hourly check. An API that dies is started again (after a pause that grows).
+ * A release's bundle sits in `releasesDir`, which the API's user writes (the launcher runs as that user too), so the
+ * launcher keeps the SHA-256 it checked and hashes the file again before every start: the switch, a restart, a step
+ * back. A file that is no longer those bytes is not run: the image's own API is started instead (its bundle is on the
+ * dm-verity system partition), and the release it was is backed off from as below.
  * One that keeps dying (three times in ten minutes) after a switch gives way to the API that was in service before
  * that switch, and if that one keeps dying too (or there was none), to the image's own bundle. That step back is the
  * launcher's own, not a release chosen: the release it fell back from may be switched to again after a back-off (an
@@ -58,12 +62,18 @@ const RETRY_BACKOFF_MAX_MS = 35 * 24 * 60 * 60 * 1000;
 
 type ChildMessage = { type: 'ready' } | { type: 'switch'; id: number; request: SwitchRequest };
 
+/** An API bundle, and the SHA-256 it was checked as (its release's `apiBundleHash`, or the image's own file). */
+interface Bundle {
+    path: string;
+    sha256: string;
+}
+
 interface Running {
     child: ChildProcess;
-    bundle: string;
+    bundle: Bundle;
     startedAt: number;
     /** For an API switched to: the release it is, and the bundle in service before the switch (the fallback). */
-    switched: { version: string; before: string } | null;
+    switched: { version: string; before: Bundle } | null;
 }
 
 export interface SelfTestReport {
@@ -97,6 +107,7 @@ export class Launcher {
     private retry: { version: string; notBefore: number; backoffMs: number } | null = null;
     private readonly log: (line: string) => void;
     private readonly now: () => number;
+    private imageSha256: string | null = null;
 
     constructor(private readonly opts: LauncherOptions) {
         this.log = opts.log ?? (line => console.log(`vault-launcher: ${line}`));
@@ -109,12 +120,28 @@ export class Launcher {
     }
 
     get currentBundle(): string | null {
-        return this.current?.bundle ?? null;
+        return this.current?.bundle.path ?? null;
+    }
+
+    /** The image's own API bundle: on the dm-verity system partition, so its bytes can't change under the launcher. */
+    private imageBundle(): Bundle {
+        this.imageSha256 ??= sha256Hex(readFileSync(this.opts.imageBundle));
+        return { path: this.opts.imageBundle, sha256: this.imageSha256 };
+    }
+
+    /** Why `bundle`'s file is not the bytes it was checked as, or null when it is. */
+    private changed(bundle: Bundle): string | null {
+        if (bundle.path === this.opts.imageBundle) return null;
+        try {
+            return sha256Hex(readFileSync(bundle.path)) === bundle.sha256 ? null : 'its bytes changed after it was checked';
+        } catch (e) {
+            return `it can't be read (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})`;
+        }
     }
 
     /** Starts the image's API and resolves once it listens. */
     async start(): Promise<void> {
-        await this.run(this.opts.imageBundle);
+        await this.run(this.imageBundle());
     }
 
     private spawnApi(bundle: string): ChildProcess {
@@ -148,10 +175,20 @@ export class Launcher {
         });
     }
 
-    /** Starts `bundle` as the API in service; restarts it (or falls back) when it dies. */
-    private async run(bundle: string, switched: Running['switched'] = null): Promise<void> {
-        const child = this.spawnApi(bundle);
-        this.log(`started the API (${bundle}) as pid ${child.pid}`);
+    /**
+     * Starts `bundle` as the API in service, once its file is checked again; restarts it (or falls back) when it dies. A
+     * file that is not the bytes checked gives way to the image's own API, and its release is backed off from.
+     */
+    private async run(bundle: Bundle, switched: Running['switched'] = null): Promise<void> {
+        const why = this.changed(bundle);
+        if (why) {
+            const until = switched ? ` (release ${switched.version} may be taken again from ${new Date(this.backOff(switched.version, this.now())).toISOString()})` : '';
+            this.log(`not starting ${bundle.path}: ${why}; the image's own API instead${until}`);
+            bundle = this.imageBundle();
+            switched = null;
+        }
+        const child = this.spawnApi(bundle.path);
+        this.log(`started the API (${bundle.path}) as pid ${child.pid}`);
         this.current = { child, bundle, startedAt: this.now(), switched };
         this.watch(this.current);
         await this.waitReady(child);
@@ -164,13 +201,13 @@ export class Launcher {
             this.log(`the API (pid ${r.child.pid}) exited (${code ?? signal}); starting it again in ${this.restartDelayMs} ms`);
             const now = this.now();
             this.recentFailures = [...this.recentFailures.filter(t => t > now - 10 * 60_000), now];
-            let next: { bundle: string; switched: Running['switched'] } = { bundle: r.bundle, switched: r.switched };
-            if (this.recentFailures.length >= 3 && r.bundle !== this.opts.imageBundle) {
+            let next: { bundle: Bundle; switched: Running['switched'] } = { bundle: r.bundle, switched: r.switched };
+            if (this.recentFailures.length >= 3 && r.bundle.path !== this.opts.imageBundle) {
                 // The API in service before the switch to this one; a fallback that fails too (it has none) gives way to
                 // the image's own.
-                next = { bundle: r.switched?.before ?? this.opts.imageBundle, switched: null };
+                next = { bundle: r.switched?.before ?? this.imageBundle(), switched: null };
                 this.recentFailures = [];
-                const backTo = next.bundle === this.opts.imageBundle ? 'the image\'s own API' : `the API in service before it (${next.bundle})`;
+                const backTo = next.bundle.path === this.opts.imageBundle ? 'the image\'s own API' : `the API in service before it (${next.bundle.path})`;
                 if (r.switched) {
                     const until = this.backOff(r.switched.version, now);
                     this.log(`release ${r.switched.version} keeps failing: back to ${backTo}; it may be taken again from ${new Date(until).toISOString()}`);
@@ -201,10 +238,10 @@ export class Launcher {
     }
 
     /**
-     * Step 1: the release from the launcher's own keys, newer than the API in service (`inService`, the file it runs
-     * from), and the bundle file it names.
+     * Step 1: the release from the launcher's own keys, newer than the API in service (`inService`: the SHA-256 its file
+     * was checked as when it started), and the bundle file it names.
      */
-    verify(req: SwitchRequest, inService = this.current?.bundle ?? this.opts.imageBundle): { ok: true } | { ok: false; reason: string } {
+    verify(req: SwitchRequest, inService?: string): { ok: true } | { ok: false; reason: string } {
         if (!req || typeof req.bundlePath !== 'string' || !req.release || !Array.isArray(req.chain)) return { ok: false, reason: 'not a switch request' };
         const chain = resolveChain(req.chain, this.opts.rootKeys);
         const hash = sha256Hex(String(req.release.manifestText));
@@ -212,7 +249,7 @@ export class Launcher {
         if (!release) return { ok: false, reason: 'that release is not in the chain from the pinned keys' };
         let own: string;
         try {
-            own = sha256Hex(readFileSync(inService));
+            own = inService ?? this.current?.bundle.sha256 ?? this.imageBundle().sha256;
         } catch {
             return { ok: false, reason: 'the API in service can\'t be read' };
         }
@@ -279,8 +316,13 @@ export class Launcher {
             if (!checked.ok) return reply(false, checked.reason);
             const tested = await this.selfTest(req.bundlePath);
             if (!tested.ok) return reply(false, tested.reason);
+            const { version, apiBundleHash } = resolveChain(req.chain, this.opts.rootKeys).releases.find(r => r.hash === sha256Hex(String(req.release.manifestText)))?.manifest as ReleaseManifest;
+            const bundle: Bundle = { path: req.bundlePath, sha256: apiBundleHash };
+            // Its file once more, as at every start: the API's user can write it.
+            const why = this.changed(bundle);
+            if (why) return reply(false, `the bundle is not the one its release names: ${why}`);
             const old = this.current;
-            const next = this.spawnApi(req.bundlePath);
+            const next = this.spawnApi(bundle.path);
             this.log(`switching: started ${req.bundlePath} as pid ${next.pid} beside pid ${old.child.pid}`);
             try {
                 await this.waitReady(next);
@@ -289,8 +331,7 @@ export class Launcher {
                 this.log(`the new API did not take over: ${(e as Error).message}`);
                 return reply(false, `the new API did not start: ${(e as Error).message}`);
             }
-            const version = resolveChain(req.chain, this.opts.rootKeys).releases.find(r => r.hash === sha256Hex(String(req.release.manifestText)))?.manifest.version as string;
-            this.current = { child: next, bundle: req.bundlePath, startedAt: this.now(), switched: { version, before: old.bundle } };
+            this.current = { child: next, bundle, startedAt: this.now(), switched: { version, before: old.bundle } };
             this.floor = version;
             if (this.retry?.version !== version) this.retry = null;
             this.recentFailures = [];

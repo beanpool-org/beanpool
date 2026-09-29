@@ -397,19 +397,20 @@ describe('the launcher checks a switch itself', () => {
         writeFileSync(a, bundleA);
         writeFileSync(b, bundleB);
         const launcher = new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: a, apiArgs: [], rootKeys: root.map(k => k.publicKey), log: () => undefined });
+        // (The API in service is named by the hash its file was checked as when it started.)
         // 1.1.0's API in service asks for 1.0.0's (the chain as it is, or cut short before 1.1.0): refused.
-        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1, r2] }, b)).toEqual({ ok: false, reason: 'never backwards: 1.0.0 is not newer than 1.1.0' });
-        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1] }, b)).toEqual({ ok: false, reason: 'the API in service is not a release in that chain' });
+        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1, r2] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'never backwards: 1.0.0 is not newer than 1.1.0' });
+        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'the API in service is not a release in that chain' });
         // The same release again: refused.
-        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, b)).toEqual({ ok: false, reason: 'never backwards: 1.1.0 is not newer than 1.1.0' });
+        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'never backwards: 1.1.0 is not newer than 1.1.0' });
         // Forwards, from 1.0.0's: taken.
-        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, a)).toEqual({ ok: true });
+        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, sha256Hex(bundleA))).toEqual({ ok: true });
         // A newer release for another image waits for the restart: not taken by the launcher.
         const bundleC = crypto.randomBytes(64);
         const r3 = makeRelease({ version: '1.2.0', previous: r2, custodianKeys: root, signers: root, image: randomImage(), apiBundleHash: sha256Hex(bundleC) });
         const c = path.join(dir, `other-image-${n}.mjs`);
         writeFileSync(c, bundleC);
-        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, b)).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
+        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
     });
 
     it('refuses a bundle whose self-test fails or was built with other keys', async () => {

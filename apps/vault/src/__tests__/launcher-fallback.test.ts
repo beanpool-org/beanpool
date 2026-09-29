@@ -107,7 +107,14 @@ function setUp(start: number) {
         && logs.some(l => l === `the API (pid ${launcher.currentPid}) is listening` || l.startsWith(`pid ${launcher.currentPid} is serving`)));
     const crash = (version: string, on: boolean) => (on ? writeFileSync(path.join(work, `crash-${version}`), '') : rmSync(path.join(work, `crash-${version}`), { force: true }));
     const fallbacks = (version: string) => logs.filter(l => l.startsWith(`release ${version} keeps failing`));
-    return { launcher, bundles, clock, logs, ask, inService, crash, fallbacks };
+    /** Code no release signs, written over `version`'s bundle file: it says it listens, and leaves a mark that it ran. */
+    const overwrite = (version: string) => writeFileSync(bundles[version], `import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(path.join(work, 'unsigned-ran'))}, String(process.pid));
+process.send({ type: 'ready' });
+setInterval(() => undefined, 1 << 30);
+`);
+    const unsignedRan = () => existsSync(path.join(work, 'unsigned-ran'));
+    return { launcher, bundles, clock, logs, ask, inService, crash, fallbacks, overwrite, unsignedRan };
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -172,5 +179,42 @@ describe('the launcher steps back from a release that keeps failing, and takes i
         expect(t.fallbacks('1.0.1')[0]).toBe(`release 1.0.1 keeps failing: back to the image's own API; it may be taken again from ${iso(restart)}`);
         await t.inService('1.0.0');
         expect(await t.ask('1.0.0', '1.0.1')).toMatchObject({ ok: false, reason: `release 1.0.1 kept failing after the switch: it may be taken again from ${iso(restart)}` });
+    }, 60_000);
+});
+
+describe('the launcher checks a release\'s file again before every start (#1314 round 3, 4138896441)', () => {
+    it('the file of the API in service overwritten, and its process killed: the image\'s own API starts, not the file', async () => {
+        const t = setUp(Date.UTC(2026, 9, 5, 12));
+        await t.launcher.start();
+        expect(await t.ask('1.0.0', '1.0.1')).toEqual({ ok: true });
+        await t.inService('1.0.1');
+        const pid = t.launcher.currentPid as number;
+        t.overwrite('1.0.1');
+        process.kill(pid, 'SIGKILL');
+        await until('the image\'s API', () => t.logs.some(l => l.startsWith(`not starting ${t.bundles['1.0.1']}`)));
+        await t.inService('1.0.0');
+        expect(t.logs.find(l => l.startsWith('not starting'))).toBe(
+            `not starting ${t.bundles['1.0.1']}: its bytes changed after it was checked; the image's own API instead (release 1.0.1 may be taken again from ${iso(t.clock.now + HOUR)})`);
+        await new Promise(r => setTimeout(r, 300));
+        expect(t.unsignedRan()).toBe(false);
+        expect(t.logs.filter(l => l.startsWith(`started the API (${t.bundles['1.0.1']})`))).toEqual([]);
+    }, 60_000);
+
+    it('the fallback\'s file overwritten before the release after it keeps failing: the image\'s own API, not the file', async () => {
+        const t = setUp(Date.UTC(2026, 9, 5, 12));
+        await t.launcher.start();
+        expect(await t.ask('1.0.0', '1.0.1')).toEqual({ ok: true });
+        await t.inService('1.0.1');
+        expect(await t.ask('1.0.1', '1.0.2')).toEqual({ ok: true });
+        await t.inService('1.0.2');
+        // 1.0.1 is where the launcher would step back to; its file is rewritten, then 1.0.2 keeps exiting.
+        t.overwrite('1.0.1');
+        t.crash('1.0.2', true);
+        await until('the fallback', () => t.fallbacks('1.0.2').length === 1);
+        await until('the image\'s API', () => t.logs.some(l => l.startsWith(`not starting ${t.bundles['1.0.1']}`)));
+        await t.inService('1.0.0');
+        expect(t.logs.find(l => l.startsWith('not starting'))).toBe(`not starting ${t.bundles['1.0.1']}: its bytes changed after it was checked; the image's own API instead`);
+        await new Promise(r => setTimeout(r, 300));
+        expect(t.unsignedRan()).toBe(false);
     }, 60_000);
 });

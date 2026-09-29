@@ -120,7 +120,9 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   newer than the one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this
   too, whatever the API asks: it takes only a release newer than the one whose bundle is in service (and than any it
   switched to), for the same image.
-- **A new image** (system, kernel, keyholder, Node): the API downloads it into its inbox
+- **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one
+  booted, the API downloads that image from the release that brought it (the first to name it: an API-only release
+  after it carries no image files, and the image's files are named for the version it was built as) into its inbox
   (`/var/lib/beanpool-vault/staged`), with the chain of releases up to it, and `/v1/report` says `imageWaiting`. That
   decides nothing: the API is what this guards against. At the monthly restart root's install step
   (`vault-install.mjs`, built with the genesis keys like the launcher, on the verified system partition;

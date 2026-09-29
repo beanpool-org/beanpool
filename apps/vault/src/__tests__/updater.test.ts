@@ -4,10 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { stagedNames, Updater, uuidOfHex, type LauncherLink, type SwitchRequest } from '../api/updater.js';
+import { installStaged } from '../install/install.js';
 import { Launcher } from '../launcher/launcher.js';
 import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
-import { keys3, makeRelease, publish, randomImage } from './release-kit.js';
+import { keys3, makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 
 /**
  * The release check in the API (updater.ts) and the launcher's own check of a switch (launcher.ts), in process: what
@@ -119,6 +120,110 @@ describe('a new image is staged for the monthly restart', () => {
         const t = await tampered.updater({ stagedDir: tampered.stagedDir, verifyRoot: async () => false }).check();
         expect(t.imageWaiting).toMatchObject({ staged: false, error: expect.stringContaining('root hash') });
         expect(readdirSync(tampered.stagedDir)).toEqual([]);
+    });
+});
+
+describe('the image staged is the one the newest release names, from the release that brought it (#1314 round 2)', () => {
+    /** An image's three files, with a stand-in root hash both verifyRoot below and install.test.ts check. */
+    function imageFiles() {
+        const uki = crypto.randomBytes(300);
+        const root = crypto.randomBytes(500);
+        const verity = crypto.randomBytes(50);
+        return { uki, root, verity, image: { ukiSha256: sha256Hex(uki), roothash: sha256Hex(Buffer.concat([root, verity])) } };
+    }
+    const verifyRoot = async (rootFile: string, verityFile: string, roothash: string) => sha256Hex(Buffer.concat([readFileSync(rootFile), readFileSync(verityFile)])) === roothash;
+
+    function setUpImages() {
+        const t = setUp();
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        /** A release with a new image: its files published with it (`vault-release propose --image`). */
+        const imageRelease = (version: string, previous: MadeRelease, files: ReturnType<typeof imageFiles>, bundle = crypto.randomBytes(64)) => {
+            const r = makeRelease({ version, previous, custodianKeys: t.root, signers: t.root.slice(0, 2), image: files.image, apiBundleHash: sha256Hex(bundle) });
+            const d = publish(t.feedDir, r, bundle);
+            writeFileSync(path.join(d, UKI_ASSET), files.uki);
+            writeFileSync(path.join(d, ROOT_ASSET), files.root);
+            writeFileSync(path.join(d, VERITY_ASSET), files.verity);
+            return r;
+        };
+        /** An API-only release (`--same-image`): the manifest, the signatures and its bundle; no image files. */
+        const apiRelease = (version: string, previous: MadeRelease, bundle = crypto.randomBytes(64)) => {
+            const r = makeRelease({ version, previous, custodianKeys: t.root, signers: t.root.slice(1), apiBundleHash: sha256Hex(bundle) });
+            publish(t.feedDir, r, bundle);
+            return r;
+        };
+        /** Root's install step at the monthly restart, on this inbox (install.ts), with a stand-in systemd-sysupdate. */
+        const install = async () => {
+            const transferDir = path.join(t.feedDir, '..', `install-${n}`);
+            const installed: string[][] = [];
+            const result = await installStaged({
+                inbox: stagedDir, transferDir, workDir: `${transferDir}.work`, rootKeys: t.root.map(k => k.publicKey),
+                runningImage: () => t.r1.manifest.imageHash, verifyRoot, log: () => undefined,
+                sysupdate: () => { installed.push(readdirSync(transferDir).sort()); return true; },
+            });
+            return { result, installed };
+        };
+        return { ...t, stagedDir, imageRelease, apiRelease, install, check: () => t.updater({ stagedDir, verifyRoot }).check() };
+    }
+
+    it('an image release, then an API-only release: the image stays staged, and root\'s step installs it', async () => {
+        const t = setUpImages();
+        const b = imageFiles();
+        const r2 = t.imageRelease('1.1.0', t.r1, b);
+        expect((await t.check()).imageWaiting).toMatchObject({ version: '1.1.0', imageHash: r2.manifest.imageHash, staged: true });
+        const names = stagedNames('1.1.0', b.image.roothash);
+        const before = readdirSync(t.stagedDir).sort();
+        expect(before).toEqual(Object.values(names).sort());
+
+        // An API fix for the new image (1.1.1, no image files) before the restart: the image staged is left as it is.
+        t.apiRelease('1.1.1', r2);
+        const s = await t.check();
+        expect(s.newest).toMatchObject({ version: '1.1.1' });
+        expect(s.imageWaiting).toEqual({ version: '1.1.0', hash: r2.hash, imageHash: r2.manifest.imageHash, staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(before);
+        expect(readFileSync(path.join(t.stagedDir, names.uki)).equals(b.uki)).toBe(true);
+
+        const { result, installed } = await t.install();
+        expect(result).toEqual({ installed: true, version: '1.1.0' });
+        expect(installed).toEqual([[names.uki, names.root, names.verity].sort()]);
+    });
+
+    it('both in the feed before the first check: the image is staged from the release that brought it, under its version', async () => {
+        const t = setUpImages();
+        const b = imageFiles();
+        const r2 = t.imageRelease('1.1.0', t.r1, b);
+        t.apiRelease('1.1.2', t.apiRelease('1.1.1', r2));
+        expect((await t.check()).imageWaiting).toMatchObject({ version: '1.1.0', imageHash: r2.manifest.imageHash, staged: true });
+        expect((await t.install()).result).toEqual({ installed: true, version: '1.1.0' });
+    });
+
+    it('image, API-only, then a newer image: the newer image is staged, and the older one goes', async () => {
+        const t = setUpImages();
+        const b = imageFiles();
+        const c = imageFiles();
+        const r2 = t.imageRelease('1.1.0', t.r1, b);
+        await t.check();
+        const r3 = t.apiRelease('1.1.1', r2);
+        expect((await t.check()).imageWaiting).toMatchObject({ version: '1.1.0', staged: true });
+        const r4 = t.imageRelease('1.2.0', r3, c);
+        expect((await t.check()).imageWaiting).toEqual({ version: '1.2.0', hash: r4.hash, imageHash: r4.manifest.imageHash, staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(Object.values(stagedNames('1.2.0', c.image.roothash)).sort());
+        // And an API fix for that one after it changes nothing staged.
+        t.apiRelease('1.2.1', r4);
+        expect((await t.check()).imageWaiting).toMatchObject({ version: '1.2.0', staged: true });
+        expect((await t.install()).result).toEqual({ installed: true, version: '1.2.0' });
+    });
+
+    it('an API-only release for the running image, with a newer image and its API fix after it: the handover and the staging both happen', async () => {
+        const t = setUpImages();
+        // 1.0.1: an API fix for the image this machine runs (1.0.0's), then 1.1.0 (a new image), then 1.1.1 (its API fix).
+        const r2 = t.apiRelease('1.0.1', t.r1, t.bundleB);
+        const r3 = t.imageRelease('1.1.0', r2, imageFiles());
+        t.apiRelease('1.1.1', r3);
+        const s = await t.check();
+        expect(s).toMatchObject({ running: { version: '1.0.0' }, newest: { version: '1.1.1' }, imageWaiting: { version: '1.1.0', staged: true }, handover: { ok: true, to: { version: '1.0.1' } } });
+        expect(t.asked).toHaveLength(1);
+        expect(readFileSync(t.asked[0].bundlePath).equals(t.bundleB)).toBe(true);
+        expect((await t.install()).result).toEqual({ installed: true, version: '1.1.0' });
     });
 });
 

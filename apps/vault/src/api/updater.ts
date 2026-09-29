@@ -25,10 +25,12 @@ export { stagedNames, uuidOfHex, veritysetupVerify, type VerifyRoot } from '../s
  * - **a newer release for the same image**: its bundle is downloaded, checked against the hash its manifest names, kept
  *   in `releasesDir`, and handed to the launcher, which checks it again, runs its self-test, starts it beside this one
  *   and moves the traffic to it. This process then drains and exits. The keyholder is untouched: no unlock;
- * - **a release with a new image** (system or keyholder): its files are downloaded and checked into `stagedDir`, an
- *   inbox this process owns, with the chain of releases up to it. At the monthly restart root checks them again from
- *   the keys it was built with and installs only what passes (install/install.ts): nothing here decides what boots.
- *   Until then the report says so. Its API bundle doesn't run on the old image.
+ * - **a release with a new image** (system or keyholder): when the newest release names another image than the one
+ *   booted, the release that brought that image (the first in the chain to name it: API-only releases after it carry
+ *   no image files) has its files downloaded and checked into `stagedDir`, an inbox this process owns, with the chain
+ *   of releases up to it. At the monthly restart root checks them again from the keys it was built with and installs
+ *   only what passes (install/install.ts): nothing here decides what boots. Until then the report says so. Its API
+ *   bundle doesn't run on the old image.
  *
  * Never backwards: only a release newer than the one running is taken, and an API that can't find itself in the feed
  * (a withheld release, a source run) takes nothing.
@@ -75,7 +77,10 @@ export interface UpdateStatus {
     error: string | null;
     running: ReleaseRef | null;
     newest: ReleaseRef | null;
-    /** A newer image, installed at the next monthly restart; `staged` once its files are checked and in place. */
+    /**
+     * The newest release's image, when it isn't the one booted, as the release that brought it (its version is the
+     * image's): installed at the next monthly restart; `staged` once its files are checked and in place.
+     */
     imageWaiting: (ReleaseRef & { imageHash: string; staged: boolean; error?: string }) | null;
     stopped: ReleaseChain['stopped'];
     /** Releases not taken at the last check, and why. */
@@ -130,10 +135,12 @@ export class Updater {
         const newestFirst = [...chain.releases].reverse();
         const running = newestFirst.find(r => r.manifest.apiBundleHash === own && r.manifest.imageHash === image) ?? null;
         s.running = running ? ref(running) : null;
-        const newest = chain.newest;
-        s.imageWaiting = newest && image && newest.manifest.imageHash !== image
-            ? { ...ref(newest), imageHash: newest.manifest.imageHash, ...(await this.stage(newest, files, chain)) }
-            : null;
+        // The newest release's image, from the release that brought it: that one carries its files, and its version is
+        // the one the image was built as (its UKI's and partitions' names), which root's step and systemd-sysupdate go by.
+        // An API-only release after it names the same image and carries none of them.
+        const newestImage = chain.newest && image && chain.newest.manifest.imageHash !== image ? chain.newest.manifest.imageHash : null;
+        const brought = newestImage ? chain.releases.find(r => r.manifest.imageHash === newestImage) ?? null : null;
+        s.imageWaiting = brought ? { ...ref(brought), imageHash: brought.manifest.imageHash, ...(await this.stage(brought, files, chain)) } : null;
         if (!running) {
             s.note = own === null ? 'Run from source: no handover.' : !image
                 ? 'The booted image is unknown: no handover.'

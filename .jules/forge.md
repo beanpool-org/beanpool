@@ -134,3 +134,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `exportLedgerAudit` in `apps/server/src/engine/audit.ts` executed `JSON.parse(projectsRow.value)` without a try/catch block. Malformed JSON stored in `node_config` under `commons_projects` threw unhandled exceptions, crashing admin ledger export requests.
 **Learning:** Reading JSON blobs from database tables without enclosing `JSON.parse` in a try/catch block allows corrupted database strings to crash admin audit endpoints.
 **Pattern:** Always wrap `JSON.parse` operations on DB config rows in try/catch blocks with safe fallback values.
+
+## 2026-09-29 - [Raw Koa ctx.throw exceptions in commons routes]
+**Issue:** `apps/server/src/routes/commons.ts` used `ctx.throw(400/404, msg)` for error responses instead of setting explicit JSON error bodies (`ctx.status = status; ctx.body = { error: msg }`).
+**Learning:** Calling `ctx.throw` in Koa route handlers throws text `HttpError` exceptions that bypass the API's standard `{ error: '...' }` JSON response contract.
+**Pattern:** Ensure Koa route handlers assign `ctx.status` and `ctx.body = { error: ... }` explicitly instead of throwing Koa text exceptions.

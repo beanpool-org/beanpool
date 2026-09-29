@@ -51,6 +51,11 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 3
 done
 check "the API answers /v1/health: $health" 'printf "%s" "$health" | grep -q "\"state\":\"\(locked\|open\)\""'
+# The image the keyholder says it booted (image-identity.ts): what custodians' tools check against the release.
+entry=$(tail -c +5 /sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\000')
+say "hygiene: booted $(tr ' ' '\n' < /proc/cmdline | grep '^roothash=') entry=${entry:-none} ESP: $(ls /efi/EFI/Linux 2>&1 | tr '\n' ' ')"
+say "hygiene: $(journalctl -b -u beanpool-vault-keyholder.service -o cat 2>/dev/null | grep 'vault-keyholder: release' | tail -n 1)"
+check "the keyholder knows which image it booted" 'printf "%s" "$health" | grep -q "\"release\":\"[0-9a-f]\{64\}\""'
 
 check "no SSH server" '! command -v sshd >/dev/null && [ ! -e /usr/sbin/sshd ]'
 check "no login shell for any account" '! awk -F: "\$7 !~ /(nologin|false|sync)\$/ {print}" /etc/passwd | grep -q .'

@@ -6,8 +6,8 @@
 # A copy of the disk image, grown to 8 GB so the first boot can add its partitions, boots under QEMU with UEFI in a
 # container (x86-64 emulated on other machines: several minutes). The guest's network reaches nothing outside, so
 # nothing is contacted (Caddy can't fetch a certificate and the release check finds no feed; both only log it). It
-# passes when image/.../check-hygiene prints "hygiene: ALL PASS" on the serial port. The serial log is left in
-# <dir>/boot-test/serial.log.
+# passes when image/.../check-hygiene prints "hygiene: ALL PASS" on the serial port and the vault's /v1/health reports
+# the build's imageHash (image.json) as its release. The serial log is left in <dir>/boot-test/serial.log.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,4 +36,5 @@ if ! docker image inspect "${tester}" >/dev/null 2>&1; then
 fi
 kvm=()
 if [ -c /dev/kvm ]; then kvm=(--device /dev/kvm); fi
-docker run --rm "${kvm[@]}" -v "${work}:/w" "${tester}" sh /run.sh "${limit}"
+expected="$(sed -n 's/.*"imageHash": "\([0-9a-f]*\)".*/\1/p' "${image}/image.json")"
+docker run --rm "${kvm[@]}" -v "${work}:/w" "${tester}" sh /run.sh "${limit}" "${expected}"

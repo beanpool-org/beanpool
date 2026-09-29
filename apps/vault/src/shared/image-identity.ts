@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { imageHashOf } from './release.js';
 
@@ -9,8 +9,9 @@ import { imageHashOf } from './release.js';
  * the API compares it with the releases in the feed.
  *
  * On the image, systemd-boot starts the UKI and records its file name in the EFI variable `LoaderEntrySelected`; the
- * UKI sits in the ESP's `EFI/Linux/`. The command line carries `roothash=`. Read on a machine that booted another way
- * (a developer's, a test), this finds nothing and says so: the release is then `unreleased`.
+ * UKI sits in the ESP's `EFI/Linux/` (with a `+left-done` boot-counting suffix until the boot is blessed). The command
+ * line carries `roothash=`. Read on a machine that booted another way (a developer's, a test), this finds nothing and
+ * says why: the release is then `unreleased`.
  *
  * What it proves: on platform `none`, nothing a hostile host couldn't fake (the host can change the ESP after boot, or
  * boot something else that answers the same). It catches mistakes: an image nobody signed, or an old one still running.
@@ -47,7 +48,12 @@ export function roothashFromCmdline(cmdline: string): string | null {
     return null;
 }
 
-export function runningImage(paths: ImageIdentityPaths = {}): ImageIdentity | null {
+/** An entry's file name without systemd-boot's boot-counting suffix (`name+3-0.efi` → `name.efi`). */
+export function withoutTries(entry: string): string {
+    return entry.replace(/\+\d+(-\d+)?(?=\.efi$)/i, '');
+}
+
+export function identifyImage(paths: ImageIdentityPaths = {}): { ok: true; image: ImageIdentity } | { ok: false; reason: string } {
     const read = (p: string) => {
         try {
             return readFileSync(p);
@@ -57,15 +63,26 @@ export function runningImage(paths: ImageIdentityPaths = {}): ImageIdentity | nu
     };
     const cmdline = read(paths.cmdline ?? '/proc/cmdline');
     const roothash = cmdline ? roothashFromCmdline(cmdline.toString('utf8')) : null;
-    if (!roothash) return null;
-    const entryVar = read(path.join(paths.efivars ?? '/sys/firmware/efi/efivars', `LoaderEntrySelected-${LOADER_GUID}`));
+    if (!roothash) return { ok: false, reason: 'no roothash= on the kernel command line' };
+    const efivars = paths.efivars ?? '/sys/firmware/efi/efivars';
+    const entryVar = read(path.join(efivars, `LoaderEntrySelected-${LOADER_GUID}`));
     const entry = entryVar ? readEfiString(entryVar) : null;
-    if (!entry || !/^[A-Za-z0-9_.+-]{1,200}\.efi$/.test(entry)) return null;
+    if (!entry) return { ok: false, reason: `no LoaderEntrySelected in ${efivars}` };
+    const base = withoutTries(entry).toLowerCase();
     for (const esp of paths.esp ? [paths.esp] : ['/efi', '/boot']) {
-        const ukiPath = path.join(esp, 'EFI', 'Linux', entry);
-        if (!existsSync(ukiPath)) continue;
+        const dir = path.join(esp, 'EFI', 'Linux');
+        if (!existsSync(dir)) continue;
+        // The file that booted, or the same one renamed since (its boot blessed, or a case the firmware changed).
+        const file = readdirSync(dir).find(f => f === entry) ?? readdirSync(dir).find(f => withoutTries(f).toLowerCase() === base);
+        if (!file) continue;
+        const ukiPath = path.join(dir, file);
         const ukiSha256 = crypto.createHash('sha256').update(readFileSync(ukiPath)).digest('hex');
-        return { ukiSha256, roothash, imageHash: imageHashOf({ ukiSha256, roothash }), ukiPath };
+        return { ok: true, image: { ukiSha256, roothash, imageHash: imageHashOf({ ukiSha256, roothash }), ukiPath } };
     }
-    return null;
+    return { ok: false, reason: `the booted entry ${entry} is not in EFI/Linux on the ESP` };
+}
+
+export function runningImage(paths: ImageIdentityPaths = {}): ImageIdentity | null {
+    const r = identifyImage(paths);
+    return r.ok ? r.image : null;
 }

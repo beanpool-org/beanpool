@@ -4,6 +4,8 @@
 # after the time given). Exits 0 only on "hygiene: ALL PASS".
 set -u
 limit="${1:-1200}"
+# The build's imageHash: the booted vault must report exactly it as its release.
+expected="${2:-}"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd /w/vars.fd
 : > /w/serial.log
 # KVM where the machine has it (an x86-64 Linux host, CI); emulation otherwise (much slower).
@@ -28,4 +30,12 @@ done
 kill "$qemu" 2>/dev/null
 wait "$qemu" 2>/dev/null
 grep "hygiene:" /w/serial.log || echo "no hygiene verdict after ${waited}s"
-grep -q "hygiene: ALL PASS" /w/serial.log
+grep -q "hygiene: ALL PASS" /w/serial.log || exit 1
+if [ -n "$expected" ]; then
+    if grep -q "\"release\":\"$expected\"" /w/serial.log; then
+        echo "boot-test: the vault reports release $expected, the image built"
+    else
+        echo "boot-test: the vault does not report release $expected"
+        exit 1
+    fi
+fi

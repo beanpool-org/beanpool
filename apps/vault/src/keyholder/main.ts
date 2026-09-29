@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { runningImage } from '../shared/image-identity.js';
+import { identifyImage } from '../shared/image-identity.js';
 import { checkMemoryHygiene, hygieneRefusal } from './hygiene.js';
 import { Keyholder } from './keyholder.js';
 import { listenDiskKey, listenKeyholder } from './server.js';
@@ -41,7 +41,9 @@ async function main(): Promise<void> {
     const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
         stateDir: string; socketPath: string; genesisCustodians: string[]; releaseHash?: string; socketMode?: number; diskKeySocket?: string;
     };
-    const releaseHash = config.releaseHash ?? runningImage()?.imageHash;
+    const identity = config.releaseHash ? null : identifyImage();
+    const releaseHash = config.releaseHash ?? (identity?.ok ? identity.image.imageHash : undefined);
+    console.log(`vault-keyholder: release ${releaseHash ?? `unreleased (${identity && !identity.ok ? identity.reason : 'unknown'})`}`);
     const kh = new Keyholder({ stateDir: config.stateDir, genesisCustodians: config.genesisCustodians, releaseHash, hygiene });
     const server = await listenKeyholder(kh, config.socketPath, config.socketMode ?? 0o600);
     const disk = config.diskKeySocket ? await listenDiskKey(kh, config.diskKeySocket) : null;

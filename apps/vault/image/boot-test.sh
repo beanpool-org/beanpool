@@ -37,4 +37,4 @@ fi
 kvm=()
 if [ -c /dev/kvm ]; then kvm=(--device /dev/kvm); fi
 expected="$(sed -n 's/.*"imageHash": "\([0-9a-f]*\)".*/\1/p' "${image}/image.json")"
-docker run --rm "${kvm[@]}" -v "${work}:/w" "${tester}" sh /run.sh "${limit}" "${expected}"
+docker run --rm ${kvm[@]+"${kvm[@]}"} -v "${work}:/w" "${tester}" sh /run.sh "${limit}" "${expected}"

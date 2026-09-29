@@ -5,7 +5,7 @@
 [Unit]
 Description=BeanPool key vault: open the data partition once the vault is unlocked
 After=beanpool-vault-keyholder.service local-fs.target
-Requires=beanpool-vault-keyholder.service
+Wants=beanpool-vault-keyholder.service
 
 [Service]
 Type=oneshot

@@ -138,19 +138,42 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
 - Firewall (`etc/nftables.conf`): in, 443 and 80 (certificates); out, HTTPS only to addresses the vault's own resolver
   (dnsmasq, `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names: the providers' key endpoints,
   Expo push, GitHub (the release feed), Let's Encrypt, the NTP pool. The backup store is added with its client.
+- The kernel command line (fixed in the UKI) also carries `systemd.import_credentials=no`: nothing the host hands in
+  through firmware (SMBIOS, fw_cfg) becomes a unit or a setting.
 - Memory hygiene: the keyholder runs with `LimitCORE=0` and `--disable-sigusr1` (it refuses to start without them),
   under its own user, with no network (`PrivateNetwork=yes`); no swap, `kernel.yama.ptrace_scope = 3`,
   `core_pattern` to nothing, kexec disabled, no hibernation, `lockdown=confidentiality`, `init_on_free=1`.
   `mlockall` is not used (Node has no call for it and the vault ships no native module): no swap is what keeps the
   keys off disk. `image/.../check-hygiene` checks all of this at every boot and prints it on the console.
 
-**Checking a build.** Build twice (or on two machines) and compare: `image.json` (`{version, ukiSha256, roothash,
-imageHash}`) and the files must be the same. A release's `image` must be what your build printed. CI checks the parts
-it can run on every push: the bundles are the same bytes on two builds, the manifest, chain and imageHash vector. The
-full image build needs Docker and, the first time, about an hour (snapshot.debian.org is slow; `--cache` keeps the
-packages, and apt checks each against the snapshot's signed index). `image/boot-test.sh --image <dir>` boots a build
-under QEMU with UEFI and a network that reaches nothing outside, and passes when the hygiene check prints
-`hygiene: ALL PASS` on the serial port.
+**Checking a build.** Build it yourself with the release's custodian keys and version, and compare: `image.json`
+(`{version, ukiSha256, roothash, imageHash}`) must be the release's `image` and `imageHash`, and every file the same
+bytes. `root-files.txt`, `uki-sections.txt`, `initrd-files.txt`, `esp-files.txt` and `partitions.txt` list every file
+of the system tree, the UKI and its initrd, the ESP and the install image's partitions with their hashes, to find
+where two builds differ.
+
+- **Across machines** (checked 2026-09-29): an arm64 Mac (Docker Desktop, the image's x86-64 package scripts through
+  Rosetta) and GitHub's x86-64 runner built every file byte for byte the same with the same keys: `vault.efi`, the
+  system partition and its verity tree, the install image, the bundles. Two things had to be made so: Rosetta leaves
+  an empty `/.cache/rosetta` in the trees it runs in (removed from the system tree and the initrd), and
+  systemd-repart fills the ESP's FAT in the build machine's directory order (`rebuild-esp.py` makes it again in a
+  fixed order). zstd gives the same output at any thread count (checked at 1, 4 and 12).
+- **CI** (`.github/workflows/vault-image.yml`, on every change to `image/`, the bundle script or the workflow): two
+  builds on the runner must be byte-identical (`image.json`, `vault.efi`, `vault-root.raw`, `vault-root-verity.raw`,
+  the install image, the bundles); then `image/boot-test.sh` boots the first under QEMU (KVM, UEFI, a network that
+  reaches nothing outside) and passes only when the hygiene check prints `hygiene: ALL PASS` on the serial port and
+  the vault's `/v1/health` reports the build's `imageHash` as its release. Before that, `image/data-test.mjs` runs the
+  data partition helper as root on loop devices: a blank partition is formatted and mounted once the vault opens,
+  opened (not formatted) again after a restart, and left alone under another key or when it holds a file system. It
+  prints the throwaway public keys it used, so anyone can build the same image and compare.
+- **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
+
+The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow
+(`--cache` keeps the packages; apt checks each against the snapshot's signed index either way).
+
+**Before buying the host** (host design §6 adds these): the image boots with UEFI only (systemd-boot and a UKI), so
+1984 must boot our own disk image in UEFI mode (OVMF), not legacy BIOS; and it takes its address by DHCP and router
+advertisements (`etc/systemd/network/80-wan.network`), to change if 1984 assigns static addresses.
 
 ## The custodian tool (`vault-custodian`; design §2.2, host design §5.1 item 4)
 

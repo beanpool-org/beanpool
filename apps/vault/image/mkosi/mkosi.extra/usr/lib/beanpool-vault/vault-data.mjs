@@ -15,11 +15,16 @@ import { chmodSync, chownSync, existsSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
-const DEVICE = '/dev/disk/by-partlabel/vault-data';
-const NAME = 'vault-data';
+// The environment overrides these only for image/data-test.mjs (a loop device, a stand-in keyholder); the image's unit
+// sets none of them.
+const env = process.env;
+const DEVICE = env.VAULT_DATA_DEVICE ?? '/dev/disk/by-partlabel/vault-data';
+const NAME = env.VAULT_DATA_NAME ?? 'vault-data';
 const MAPPED = `/dev/mapper/${NAME}`;
-const MOUNT = '/var/lib/beanpool-vault/data';
-const KEY_SOCKET = '/run/beanpool-vault/disk-key/disk.sock';
+const MOUNT = env.VAULT_DATA_MOUNT ?? '/var/lib/beanpool-vault/data';
+const KEY_SOCKET = env.VAULT_DATA_KEY_SOCKET ?? '/run/beanpool-vault/disk-key/disk.sock';
+const OWNER = env.VAULT_DATA_OWNER ?? 'vault-api:vault-api-socket';
+const POLL_MS = Number(env.VAULT_DATA_POLL_MS ?? 5000);
 // Exit status that systemd is told not to restart on (the unit's RestartPreventExitStatus).
 const REFUSED = 3;
 
@@ -66,7 +71,7 @@ async function main() {
         key = await readKey();
         if (key.length === 32) break;
         if (waited % 60 === 0) log('waiting for two custodians to unlock the vault');
-        await sleep(5000);
+        await sleep(POLL_MS);
     }
     try {
         if (!existsSync(MAPPED)) {
@@ -87,8 +92,9 @@ async function main() {
             }
         }
         must('mount', ['-o', 'nodev,nosuid,noexec', MAPPED, MOUNT]);
-        const api = must('id', ['-u', 'vault-api']);
-        const group = must('getent', ['group', 'vault-api-socket']).split(':')[2];
+        const [user, groupName] = OWNER.split(':');
+        const api = must('id', ['-u', user]);
+        const group = must('getent', ['group', groupName]).split(':')[2];
         chownSync(MOUNT, Number(api), Number(group));
         chmodSync(MOUNT, 0o700);
         log('the data partition is open');

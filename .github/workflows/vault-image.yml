@@ -72,6 +72,10 @@ jobs:
             echo "same: $f ($(sha256sum "$f" | cut -c1-16))"
           done
           cat image.json
+      - name: The data partition helper on loop devices (formats, reopens, refuses another key or a foreign file system)
+        run: |
+          sudo apt-get install -y -qq cryptsetup-bin e2fsprogs >/dev/null
+          sudo "$(command -v node)" apps/vault/image/data-test.mjs
       - name: Boot it and check its memory hygiene from inside (QEMU, UEFI, no network out)
         run: apps/vault/image/boot-test.sh --image "${RUNNER_TEMP}/one" --limit 900
       - name: The boot's serial log

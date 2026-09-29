@@ -1,16 +1,23 @@
 #!/bin/bash
 # test-all.sh — BeanPool automated check runner with concurrency capping & scope auto-detection.
+#
+# `bash scripts/test-all.sh --all` is the gate before anything merges to main (Marty, 2026-09-30): it runs every
+# check with no diff-scoping, and a run that passes every check on a clean, committed tree appends a record to
+# <git common dir>/test-all-green that scripts/test-all-merge-check.sh reads. scripts/test-all-pr.sh runs it on a PR
+# merged with current main.
 
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# failing_tests_summary, which names the failing tests in the report below. Kept in its own file so
-# scripts/test-failing-tests-summary.sh can run it against captured output without running this script.
+cd "$SCRIPT_DIR/.." || exit 1
+# failing_tests_summary, which names the failing tests in the report below, and the green record. Kept in its own
+# file so scripts/test-failing-tests-summary.sh can run the first against captured output without running this script.
 # shellcheck source=test-all-lib.sh
 . "$SCRIPT_DIR/test-all-lib.sh"
 
 FAST=0
 FORCE_ALL=0
+ALL_REQUESTED=0   # --all itself; FORCE_ALL is also set when there is no base to diff against
 BYPASS=0
 
 for arg in "$@"; do
@@ -18,10 +25,18 @@ for arg in "$@"; do
     FAST=1
   elif [ "$arg" = "--all" ]; then
     FORCE_ALL=1
+    ALL_REQUESTED=1
   elif [ "$arg" = "--bypass-review" ]; then
     BYPASS=1
   fi
 done
+
+# Stop before anything else if the install is older than a package.json. A missing dependency surfaces as "Cannot
+# find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
+node scripts/check-deps-installed.mjs || exit 1
+
+# The commit under test, and whether the tree is exactly that commit, for the green record at the end.
+[ $ALL_REQUESTED -eq 1 ] && green_run_start
 
 # Scope auto-detection via git diff (unless FORCE_ALL=1)
 HAS_CORE_CHANGES=1
@@ -44,8 +59,9 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
     if [ -n "$CHANGED_FILES" ]; then
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-core/" || HAS_CORE_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^packages/beanpool-engine/" || HAS_ENGINE_CHANGES=0
-      # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them.
-      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/" || HAS_SERVER_CHANGES=0
+      # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them. So is a
+      # change to the list of server suites or the runner that runs them.
+      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/|^scripts/(run-)?server-suites\.mjs$" || HAS_SERVER_CHANGES=0
       echo "$CHANGED_FILES" | grep -q "^apps/native/" || HAS_NATIVE_CHANGES=0
     fi
   fi
@@ -81,12 +97,14 @@ run_check() {
   # The collection loop below reaps in launch order, so timing there would credit a check that
   # finished early with all the time it then sat waiting to be reaped — which is precisely the
   # number you must not get wrong when the question is what is overlapping with what.
+  # $name.rc, written last, is how another check waits for this one (the server suites wait for build).
   (
     CHECK_START=$(date +%s)
     "$@" > "$LOGDIR/$name.log" 2>&1
     CHECK_RC=$?
     CHECK_END=$(date +%s)
     echo "$((CHECK_START - RUN_START)) $((CHECK_END - CHECK_START))" > "$LOGDIR/$name.dur"
+    echo "$CHECK_RC" > "$LOGDIR/$name.rc"
     exit $CHECK_RC
   ) &
   PIDS+=($!)
@@ -119,6 +137,7 @@ skip_check() {
 #
 # Measured on this PR (#1073), the run is 14m41s and its critical path is:
 #     build 2m40s (+0s)  ->  federation 12m01s (+2m40s)  ->  end
+# (federation is the server_suites check now, run several at a time; it still starts after build.)
 # federation waits on build and then IS the rest of the run, so `build` is deliberately NOT
 # capped: every second build spends sharing the runner is a second on the whole job.
 #
@@ -142,11 +161,44 @@ if [ -n "${CI:-}" ]; then
 fi
 echo ""
 
+# Server suites. Every apps/server/src/test-*.ts run listed in scripts/server-suites.mjs. These are script-style checks,
+# not vitest, so `turbo run test` does not see them; scripts/run-server-suites.mjs runs them several at a time, each in
+# its own process with its own data dir and temp dir and a 300 s limit, longest first, then a short serial tail. The
+# invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap, one member never reading
+# another's messages) are exactly the kind that must not depend on someone remembering to run them.
+#
+# Triggered by SERVER, CORE or ENGINE changes. The suites exercise @beanpool/core's ledger and fee behaviour and the
+# engine the server imports, so a change there could otherwise break settlement conservation with nothing running them.
+#
+# They start once `build` has FINISHED, not beside it: `tsx` resolves @beanpool/core to its dist, and `turbo run build`
+# rewrites that dist, so running both at once gives non-deterministic module resolution. The check is launched right
+# after build and waits for build's .rc, so it starts the moment build is done rather than queueing for a free slot
+# behind the checks launched after it. A failed build is reported by its own check; the suites still run.
+run_server_suites() {
+  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  [ "$(cat "$LOGDIR/build.rc")" = "0" ] || echo "⚠️  build failed; these suites ran against whatever dist it left."
+  SERVER_SUITES_SUMMARY="$LOGDIR/server_suites.summary" node scripts/run-server-suites.mjs
+}
+
 # Core Monorepo Checks. The *_ARGS expansions are deliberately unquoted: empty off-CI, they must
-# disappear rather than become an empty argument that turbo would reject.
+# disappear rather than become an empty argument that turbo would reject. Launch order is start order under the
+# slot cap: the long ones (build, then the server suites behind it, test, settings_phone) go first.
 run_check "build"         pnpm turbo run build
-run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
+if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ] || [ $HAS_ENGINE_CHANGES -eq 1 ]; then
+  run_check "server_suites" run_server_suites
+else
+  skip_check "server_suites"
+fi
 run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
+
+# Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every
+# screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
+# folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
+# a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
+# The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
+
+run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 
 # Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run
 # `tsc` as their build — but apps/native has NO build script (an Expo app is built by EAS, not by
@@ -157,10 +209,9 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # reload. This is a separate task from 'build' precisely so it does not imply an artifact.
 run_check "typecheck"     pnpm turbo run typecheck $TURBO_AUX_ARGS
 
-# Every apps/server/src/test-*.ts must be reachable from a run below. The suites are script-style,
-# so `turbo run test` cannot see them and only the hand-maintained lists in this file run them —
-# which is how 21 suites came to exist that CI had never once executed. Cheap, and it is the only
-# check here that fails for something NOT being tested.
+# Every apps/server/src/test-*.ts must be listed in scripts/server-suites.mjs. The suites are script-style,
+# so `turbo run test` cannot see them and only that list runs them — which is how 21 suites came to exist
+# that CI had never once executed. Cheap, and it is the only check here that fails for something NOT being tested.
 run_check "suite_registration" bash scripts/check-suite-registration.sh
 
 # deploy.sh wipes each node's project directory on every run and moves data/ and .env aside first.
@@ -195,506 +246,6 @@ run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 # imported multiformats, nothing here noticed, and no image built for main across seven merges.
 run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 
-# Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every
-# screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
-# folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
-# a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
-# The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
-
-# Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
-# so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
-# invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
-# kind that must not depend on someone remembering.
-#
-# Each needs its OWN data dir: they share the module-level sqlite singleton, so a reused dir would let one
-# suite's rows leak into the next. ENABLE_PEER_CONNECTORS=true because connector reads short-circuit
-# without it, which would make the checks pass vacuously rather than fail.
-#
-# Triggered by SERVER **or** CORE changes. The suites exercise @beanpool/core's ledger and fee behaviour,
-# so a core-only change could otherwise break settlement conservation with nothing running these (review
-# finding) — and `turbo run test` still does not see them.
-#
-# Runs AFTER build rather than alongside it. `tsx` resolves @beanpool/core to its dist, and `turbo run build`
-# rewrites that dist — running both concurrently gives non-deterministic module resolution. This is the same
-# stale/half-written core-dist hazard that has bitten us before, in CI form.
-if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ]; then
-  FEDERATION_QUEUED=1
-else
-  FEDERATION_QUEUED=0
-  skip_check "federation"
-fi
-
-# Per-suite wall clock. A suite that never exits — one that leaves the engine's timers open and
-# returns normally instead of calling process.exit — otherwise blocks every suite queued behind it,
-# and the whole job with them. Runs on this repo have been cancelled at 14, 17, 22 and 360 minutes
-# for exactly that reason, and a hang is indistinguishable from a slow day until someone gives up.
-#
-# The timeout does not fix a hang; it converts one into a named failure with the suite's name
-# attached, which is the difference between "CI is flaky" and "test-x hangs". 300s is roughly 100x
-# the whole suite's healthy runtime, so it cannot fire on a merely slow machine.
-#
-# `timeout` is GNU coreutils; macOS has it as `gtimeout` via brew, or not at all. Absent, suites run
-# unguarded exactly as before — a local convenience should never change what CI verifies.
-if command -v timeout >/dev/null 2>&1; then
-  SUITE_TIMEOUT="timeout --kill-after=10s 300s"
-elif command -v gtimeout >/dev/null 2>&1; then
-  SUITE_TIMEOUT="gtimeout --kill-after=10s 300s"
-else
-  SUITE_TIMEOUT=""
-  echo "⚠️  no timeout(1) — suites run unguarded; a hanging suite will block this run"
-fi
-export SUITE_TIMEOUT
-
-run_federation_suites() {
-  bash -c '
-    cd apps/server
-    # NO `set -e`, and every suite runs even after one fails (review finding). Aborting on the first failure
-    # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
-    # cycle only revealed the next problem. Statuses are collected and all failures reported together.
-    FAILED=""
-    # ONE SUITE PER LINE. Add a new suite as its own line beside a related one rather than at the
-    # bottom: two PRs that each append after the same last line conflict, while insertions at
-    # different points merge cleanly. Order does not matter, since every suite gets a fresh data dir.
-    # scripts/check-suite-registration.sh reads this array, so keep one name per line.
-    SUITES=(
-      test-schema-upgrade
-      test-creator-channels
-      test-pulse-resolver
-      test-ssrf-fetch-timeout
-      test-pulse-submit
-      test-pulse-oauth
-      test-oauth-ingest-bounds
-      test-pulse-curated
-      test-pulse-admin-channels
-      test-pulse-report-takedown
-      test-pulse-thumbnail
-      test-pulse-thumbnail-recovery
-      test-pulse-cache-eviction
-      test-callsign-predicates
-      test-message-tombstone
-      test-recovery-shares
-      test-sso
-      test-sso-unavailable
-      test-daily-pulse
-      test-pairing-relay
-      test-pairing-routes
-      test-pricing-guide
-      test-pricing-aggregator-lifecycle
-      test-activity-feed
-      test-member-purge
-      test-removed-member-delete
-      test-keeper-deposit
-      test-keeper-routes
-      test-keeper-release
-      test-recovery-collect
-      test-sso-recovery-roundtrip
-      test-recovery-seal
-      test-recovery-seal-rollback
-      test-recovery-seal-removed
-      test-keeper-http
-      test-open-join
-      test-web-door
-      test-global-moderation
-      test-community-me
-      test-distance-search
-      test-distance-query-parsing
-      test-guest-view
-      test-distance-search-perf
-      test-global-directory
-      test-knock
-      test-commons-conservation
-      test-ledger-rollback
-      test-treasury-keepership
-      test-treasury-eggs
-      test-enterprise-credit-rules
-      test-derived-enterprise-floor
-      test-demurrage-window
-      test-crowdfund-delete-refund
-      test-admin-password-query
-      test-cors-policy
-      test-gateway-config
-      test-gateway-real-client
-      test-limiter-ipv6-and-password-brake
-      test-password-brake-no-lockout
-      test-password-brake-fairness
-      test-csrf-protection
-      test-totp-admin-2fa
-      test-2fa-covers-admin-routes
-      test-2fa-reenrol-needs-code
-      test-totp-helpers
-      test-moderation-admin
-      test-report-dedup-and-sync
-      test-ledger-export
-      test-ledger-audit-startup
-      test-mirror-sync-audit-log
-      test-federation-bridge
-      test-connector-credit-cap
-      test-connector-handshake-errors
-      test-connector-public-url
-      test-federation-link
-      test-listing-reach
-      test-listing-pull
-      test-settlement-state
-      test-settlement-exchange
-      test-settlement-orchestration
-      test-federation-purchase-route
-      test-federation-commission
-      test-p2p-announce
-      test-federation-settlement
-      test-admin-actor-name
-      test-chat-mutes
-      test-admin-queue
-      test-admin-auth
-      test-first-admin-password
-      test-config-write-races
-      test-admin-key-auth
-      test-app-admin-handoff
-      test-settings-qr-signin
-      test-challenge-token-leak
-      test-moderator-routes
-      test-backend-monitors
-      test-backup-hardening
-      test-request-binding-ledger
-      test-backup-identity-bundle
-      test-sealed-backups
-      test-takeover-envelope
-      test-owner-words-check
-      test-backup-topology
-      test-standby-token-only
-      test-standby-envelopes
-      test-takeover-by-code
-      test-takeover-crash-resume
-      test-takeover-by-phone
-      test-takeover-keeps-app-addresses
-      test-takeover-split-brain
-      test-sync-reads-carry-epoch
-      test-takeover-keeps-listing-times
-      test-profile-takeover
-      test-open-join-failover
-      test-standby-visitor-marks
-      test-standby-owner-deleted
-      test-delete-scrubs-posts
-      test-standby-board-standing
-      test-place-watch-failover
-      test-standby-rekey
-      test-takeover-parity
-      test-replication-manifest
-      test-standby-ledger-copy
-      test-standby-ledger-gate
-      test-standby-community-settings
-      test-standby-listings-verbatim
-      test-standby-standing
-      test-standby-health
-      test-address-retention
-      test-standby-in-flight
-      test-standby-devices
-      test-standby-refusal-keeps-copy
-      test-tombstone-retention
-      test-sync-copy-pages
-      test-recovery-tombstones
-      test-github-sign-in-removed
-      test-unlock-cancel
-      test-cash-also-needed
-      test-posts-ignore-archetypes
-      test-crowdfund-ledger-sync
-      test-detached-pwa
-      test-dos-caps
-      test-writer-bounds
-      test-economic-hardening
-      test-federation-api
-      test-federation-receipt
-      test-genesis
-      test-hardening
-      test-logger-sanitization
-      test-manager-build
-      test-onboarding-funnel
-      test-funnel-cohort
-      test-request-auth
-      test-api-path-auth
-      test-request-binding
-      test-loopback-audience
-      test-address-offers
-      test-staff-seen-prune
-      test-never-forget-registrar-name
-      test-former-address
-      test-registrar-names-record
-      test-registrar-name-watch
-      test-read-auth-default
-      test-privacy-defaults
-      test-activity-feed-members-only
-      test-members-contact-visibility
-      test-contact-trade-partners
-      test-sync-signature
-      test-trust-value-curve
-      test-trust-tiers-one-source
-      test-vouch-covenant
-      test-wash-sybil-defense
-      test-apple-probe
-      test-apple-return
-      test-recovery-backup-durability
-      test-public-address
-      test-tunnel-connector
-      test-no-docker-socket
-      test-node-config-public
-      test-registrar-contract
-      test-invite-trampoline
-      test-ticket-redeem-fault
-      test-offline-ticket-check
-      test-request-body
-      test-admin-thresholds
-      test-manager-backups
-      test-push-preferences
-      test-push-token-own-rows
-      test-push-leave-statement
-      test-settings
-      test-srv20-ledger-reset
-      test-harvester
-      test-membership-probe
-      test-friends-routes
-      test-message-attachment
-      test-social-ratings
-      test-app-store-versions
-      test-node-profile
-      test-profile-feature-gate
-      test-global-no-beans
-      test-open-door-hardening
-      test-funnel-event
-      test-handshake
-      test-post-pause-resume
-      test-cancel-post-request
-      test-non-members-cant-act
-      test-marketplace-auth
-      test-sync-author-off-board
-      test-sync-board-standing-upgrade
-      test-escrow-fail-closed
-      test-escrow-floor
-      test-escrow-write-off
-      test-version-resolution
-      test-avatar-endpoint
-      test-avatar-keys
-      test-etag-short-circuit
-      test-api-headers-and-feed-etag
-      test-directory-publisher
-      test-website-directory-map
-      test-members-holiday
-      test-admin-seed-invite
-      test-admin-genesis-pubkey
-      test-admin-empty-sentinel
-      test-node-roles
-      test-suspended-owner-bootstrap
-      test-federation-link-binding
-      test-ws-pong-watchdog
-      test-ws-http-port
-      test-ws-auth-default
-      test-visitor-doorbells
-      test-ws-feed-parties
-      test-live-post-payloads
-      test-moderation-notifications
-      test-moderation-notices-kept
-      test-member-blocks
-      test-member-blocks-standby
-      test-polls
-      test-poll-voters-members-only
-      test-suspended-and-visitor-reads
-      test-visitors-cant-act
-      test-doors-key-case
-      test-events
-      test-enterprise-event-http
-      test-event-chat
-      test-event-notify
-      test-event-reminders
-      test-event-reminders-http
-      test-posts-fts-same-ms
-      test-event-scrub
-      test-migration-projects-enterprises
-      test-commons-reject-project
-      test-commons-projects-update-delete
-      test-decisions-engine
-      test-decisions-client-api
-      test-decisions-voting-answers
-      test-decisions-tick-route-gone
-      test-decisions-funding-queue
-      test-decisions-grant-cap
-      test-decisions-off
-      test-rip-out-legacy-voting
-      test-escrow-disputes
-      test-process-handlers
-      test-shutdown-recovery
-      test-storage-health
-      test-image-store
-      test-image-store-s3
-      test-image-store-s3-http
-      test-image-evacuation
-      test-photo-metadata
-      test-snapshot-completeness
-      test-groups-isolation
-      test-groups-routes
-      test-groups-invite-only-hidden
-      test-group-existence-leaks
-      test-groups-patch-http
-      test-groups-sync-and-removal
-      test-groups-chat
-      test-chat-parity
-      test-dm-never-plaintext
-      test-keeper-read-cursor
-      test-groups-chat-sync
-      test-groups-succession
-      test-groups-succession-electorate
-      test-groups-lead-convenor
-      test-member-wizards
-      test-enterprise-pause
-      test-enterprise-season-lifecycle
-      test-enterprise-keepers-slice6
-      test-enterprise-keeper-answers
-      test-succession-broadcast-after-commit
-      test-enterprise-location
-      test-enterprise-thread
-      test-enterprise-closed-states
-      test-slice6-review-findings
-      test-security-followups-0919
-    )
-    for t in "${SUITES[@]}"; do
-      echo "━━━ $t ━━━"
-      TMP_DIR=$(mktemp -d)
-      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
-      RC=$?
-      # 124 is timeout(1) reporting the wall clock expired. Named separately so a hang reads as a
-      # hang in the summary rather than as an ordinary failure.
-      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t"; fi
-      rm -rf "$TMP_DIR"
-    done
-
-    # The two settlement ROUTES again with settlement ENABLED. FEDERATION_SETTLEMENT_ENABLED is a module const
-    # read at import, so a single process only ever sees one value — the loop above covers the shipped state
-    # (off, the kill switch refusing everything) and this covers the full matrix behind it. Running either one
-    # once would leave half the route untested, and it is the half that moves value: the purchase route can
-    # debit a member, and the commission route can draw on the Commons pot.
-    #
-    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is one single-quoted bash -c string, so one
-    # in a comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
-    SETTLEMENT_ON_SUITES=(
-      test-federation-purchase-route
-      test-federation-commission
-    )
-    for t in "${SETTLEMENT_ON_SUITES[@]}"; do
-      echo "━━━ $t (settlement ON) ━━━"
-      TMP_DIR=$(mktemp -d)
-      ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-        $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
-      RC=$?
-      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(on,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
-      rm -rf "$TMP_DIR"
-    done
-
-    # The keeper HTTP reachability suite again with read enforcement switched OFF by the operator opt-out.
-    # Read auth is ON by default, so the loop above already runs the pass that matters (the public-read
-    # allowlist under enforcement); this covers a node whose operator set ENFORCE_READ_AUTH=false. Same
-    # const-at-import problem as above: the flag is read once per process, and imports hoist.
-    echo "━━━ test-keeper-http (read auth opted out) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth-off)"; fi
-    rm -rf "$TMP_DIR"
-
-    # Messaging IDOR (A2-2/A2-3/A2-15) — asserts one member cannot read another members conversations.
-    # Needs ENFORCE_READ_AUTH for the same const-at-import reason, and refuses to run without it rather
-    # than passing vacuously, which is why it sat unregistered.
-    echo "━━━ test-messaging-idor (read auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-idor.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
-    rm -rf "$TMP_DIR"
-
-    # Member-read IDOR (A2-16 family) - asserts one member cannot read another members invites
-    # or notification preferences. Read auth is ON by default, so the loop above runs those 403
-    # assertions; this SECOND run covers the operator opt-out (ENFORCE_READ_AUTH=false), where they
-    # are skipped and the push-token and preference round-trips must still work.
-    echo "━━━ test-push-preferences (read auth opted out) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth-off)"; fi
-    rm -rf "$TMP_DIR"
-
-    # Distance search (G4) again with read enforcement opted out. The loop above runs it as a node ships; here
-    # nothing stands in front of the People list, so its own refusal of a distance to an unsigned caller or a
-    # key that is not a member is what holds.
-    echo "━━━ test-distance-search (read auth opted out) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-distance-search.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-distance-search(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-distance-search(readauth-off)"; fi
-    rm -rf "$TMP_DIR"
-
-    # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,
-    # preserves metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row.
-    echo "━━━ test-messaging-consolidation ━━━"
-    TMP_DIR=$(mktemp -d)
-    BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-consolidation.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-consolidation(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-consolidation"; fi
-    rm -rf "$TMP_DIR"
-
-    # WebSocket upgrades on the plain HTTP port, which is the Cloudflare tunnel origin, again with ws
-    # auth ON (strict). ENFORCE_WS_AUTH is read once at import, and the pass above only proves the default
-    # (strangers get public doorbells); this one proves an unsigned /ws is refused on 8080 exactly as on 8443.
-    echo "━━━ test-ws-http-port (ws auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-http-port.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(wsauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(wsauth)"; fi
-    rm -rf "$TMP_DIR"
-
-    # The same upgrade paths with the operator escape hatch ENFORCE_WS_AUTH=false: an unsigned /ws on the
-    # tunnel port gets the old open feed, exactly as on 8443. Same const-at-import reason.
-    echo "━━━ test-ws-http-port (ws auth OFF, open feed) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_WS_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-http-port.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(open,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(open)"; fi
-    rm -rf "$TMP_DIR"
-
-    # The /ws feed with the operator escape hatch ENFORCE_WS_AUTH=false: the old open feed, where an
-    # unsigned socket gets every community-wide event but still never a scoped one. The loop above
-    # covers the default (strangers get public doorbells only); same const-at-import reason.
-    echo "━━━ test-ws-auth-default (ws auth OFF, open feed) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_WS_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-auth-default.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-auth-default(open,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-auth-default(open)"; fi
-    rm -rf "$TMP_DIR"
-
-    # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.
-    # Both flags are mandatory — the suite itself exits nonzero without them rather than passing
-    # vacuously, which is why it can only ever have been run by hand. Same const-at-import reason as
-    # the two blocks above.
-    echo "━━━ test-recovery-ws (read + ws auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-recovery-ws.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-recovery-ws(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-recovery-ws"; fi
-    rm -rf "$TMP_DIR"
-
-    if [ -n "$FAILED" ]; then
-      echo ""
-      echo "❌ Federation suites failed:$FAILED"
-      exit 1
-    fi
-  '
-}
-
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens
@@ -719,31 +270,14 @@ run_check "secrets_guard" bash -c '
   node scripts/check-compose-log-caps.mjs || exit 1
 '
 
-# The federation suites need @beanpool/core's dist to be settled, so they start only once `build` has
-# finished. Waiting on that one PID keeps lint/test/secrets_guard running in parallel meanwhile.
-BUILD_STATUS=""
-if [ $FEDERATION_QUEUED -eq 1 ]; then
-  wait "${PIDS[0]}"
-  # CACHED, because the collection loop below waits on every PID again and waiting twice on one child is
-  # not portable — POSIX leaves it undefined once the child has been reaped. bash 3.2 happens to return the
-  # real status, so this is a latent portability trap rather than an observed failure, and a TEST GATE that
-  # can silently invert its own verdict is the last place to rely on shell-version behaviour.
-  BUILD_STATUS=$?
-  run_check "federation" run_federation_suites
-fi
-
 # Wait for parallel checks and collect results
 PASS=0
 FAIL=0
 FAILED_NAMES=()
 
 for i in "${!PIDS[@]}"; do
-  if [ $i -eq 0 ] && [ -n "$BUILD_STATUS" ]; then
-    EXIT_CODE=$BUILD_STATUS      # already reaped above; reuse its real status
-  else
-    wait "${PIDS[$i]}"
-    EXIT_CODE=$?
-  fi
+  wait "${PIDS[$i]}"
+  EXIT_CODE=$?
   if [ $EXIT_CODE -eq 0 ]; then
     PASS=$((PASS + 1))
   else
@@ -783,10 +317,17 @@ for sn in "${SKIPPED_NAMES[@]}"; do
   printf "║  %-16s ⚪ SKIPPED\n" "$sn"
 done
 
+WALL=$(($(date +%s) - RUN_START))
 echo "╠══════════════════════════════════════════╣"
 printf "║  Total: %d passed, %d failed, %d skipped\n" "$PASS" "$FAIL" "${#SKIPPED_NAMES[@]}"
-printf "║  Wall clock: %s (max %d parallel jobs)\n" "$(fmt_secs $(($(date +%s) - RUN_START)))" "$MAX_CONCURRENT_JOBS"
+printf "║  Wall clock: %s (max %d parallel jobs)\n" "$(fmt_secs $WALL)" "$MAX_CONCURRENT_JOBS"
 echo "╚══════════════════════════════════════════╝"
+
+# The server suites' own timing: their wall clock, the pool and the slowest runs (scripts/run-server-suites.mjs).
+if [ -f "$LOGDIR/server_suites.summary" ]; then
+  echo ""
+  cat "$LOGDIR/server_suites.summary"
+fi
 
 # Failure details. A plain tail of each log is not enough for the turbo checks: `turbo run test`
 # writes every package into one log, so when one package fails and others finish after it, its
@@ -822,6 +363,13 @@ if [ $FAIL -gt 0 ]; then
   for fn in "${FAILED_NAMES[@]}"; do
     echo ""
     echo "━━━ $fn ━━━"
+    # The server suites print one section per failing run after this marker (its log, or its ✗ lines and last 200
+    # lines), ending with the roll-up. A plain tail would show only the last run and the per-run time table.
+    if [ "$fn" = "server_suites" ] && grep -q '^──── Failing server suites' "$LOGDIR/$fn.log"; then
+      failing_tests_summary < "$LOGDIR/$fn.log"
+      sed -n '/^──── Failing server suites/,$p' "$LOGDIR/$fn.log" | tail -n 400
+      continue
+    fi
     shown=0
     unread=0
     tasks=$(turbo_failed_tasks "$LOGDIR/$fn.log")
@@ -843,8 +391,7 @@ if [ $FAIL -gt 0 ]; then
         shown=1
       done
     fi
-    # Same for a check turbo did not run — the federation suites above all land here, and their whole
-    # log is the one to read the names out of.
+    # Same for a check turbo did not run: its whole log is the one to read the names out of.
     if [ $shown -eq 0 ] || [ $unread -eq 1 ]; then
       failing_tests_summary < "$LOGDIR/$fn.log"
       tail -40 "$LOGDIR/$fn.log"
@@ -865,6 +412,12 @@ fi
 
 # Cleanup
 [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+# The merge gate's record (scripts/test-all-lib.sh): only an --all run, not --fast, in which every check ran and passed.
+if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ ${#SKIPPED_NAMES[@]} -eq 0 ]; then
+  echo ""
+  record_green_run "$WALL"
+fi
 
 # Exit with failure if anything failed
 [ $FAIL -eq 0 ]

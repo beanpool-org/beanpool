@@ -38,7 +38,7 @@ FAILING_TESTS_LOOKAHEAD=${FAILING_TESTS_LOOKAHEAD:-20}
 #
 # THE THREE LEVELS OF ❌, and why the count would otherwise lie. A script-style suite that fails one
 # assertion prints THREE ❌-ish lines, not one: the `✗` for the check, its own `❌ Test failed: Error: N
-# check(s) failed` catch-all, and run_federation_suites' closing `❌ <group> suites failed: <names>`.
+# check(s) failed` catch-all, and run-server-suites.mjs's closing `❌ <group> suites failed: <names>`.
 # Counting all three reported one broken assertion as "Failing tests (3)" and scaled with the number of
 # failing suites — the opposite of naming precisely what failed (review of PR #1069).
 # So only `✗` and `FAIL` are failing TESTS. The two ❌ summaries are kept as FALLBACKS, because each is
@@ -107,11 +107,11 @@ failing_tests_summary() {
       }
     }
     # Which suite a script-style line came from. Skipped when the line already names it, so the
-    # closing roll-up ("❌ Federation suites failed: test-x") does not repeat itself.
+    # closing roll-up ("❌ Server suites failed: test-x") does not repeat itself.
     function tag(t) { return (suite == "" || index(t, suite) > 0) ? t : suite ": " t }
     # The bare suite id behind either name for it. NO APOSTROPHES IN THIS AWK BLOCK: it is one
-    # single-quoted string, and one apostrophe closes it and breaks the file (same trap as
-    # run_federation_suites). A descriptive header suffix ` (settlement ON)` and a terser roll-up tag
+    # single-quoted string, and one apostrophe closes it and breaks the file (same trap as any
+    # bash -c block in test-all.sh). A descriptive header suffix ` (settlement ON)` and a terser roll-up tag
     # `(on)` / `(TIMEOUT)` are both a trailing parenthetical, so one cut matches the two to each other.
     function suite_id(s) { sub(/[[:space:]]*\(.*\)$/, "", s); return trim(s) }
     # Records that this suite accounted for itself, under both names it may be listed by.
@@ -145,4 +145,49 @@ failing_tests_summary() {
       if (n > cap) printf "  … and %d more\n", n - cap
     }
   '
+}
+
+# ── The merge gate's green record ─────────────────────────────────────────────────────────────────────────────────
+#
+# Merges into main rest on a local `test-all.sh --all` (Marty, 2026-09-30), so a green run leaves a record the gate can
+# read: one line, "<epoch> <commit> <tree> <wall-seconds>", appended to <git common dir>/test-all-green. The common dir
+# is shared by every worktree of a checkout, so a run in a scratch worktree counts for a merge issued from any other.
+# scripts/test-all-merge-check.sh reads it.
+#
+# Only a run that tested exactly a commit counts: the tree must match HEAD when the run starts (nothing modified,
+# staged, or untracked outside .gitignore) and still match that same HEAD when it ends.
+#
+# green_run_start           call first: notes the commit under test, and anything that makes the tree not that commit.
+# record_green_run <wall>   call after a run in which every check passed. Returns 1, saying why, when it records nothing.
+green_run_start() {
+  GREEN_START_HEAD=$(git rev-parse --verify -q HEAD 2>/dev/null)
+  GREEN_START_DIRTY=$(git status --porcelain 2>/dev/null | head -5)
+}
+
+record_green_run() {
+  local wall="$1" head now_dirty gate_log
+  if [ -z "$GREEN_START_HEAD" ]; then
+    echo "⚠️  Not recorded for the merge gate: this is not a git checkout with a commit."
+    return 1
+  fi
+  if [ -n "$GREEN_START_DIRTY" ]; then
+    echo "⚠️  Not recorded for the merge gate: the tree was not a commit when the run started. First of it:"
+    echo "$GREEN_START_DIRTY" | sed 's/^/     /'
+    echo "   Commit (or remove) those, then run test-all.sh --all again."
+    return 1
+  fi
+  head=$(git rev-parse --verify -q HEAD)
+  if [ "$head" != "$GREEN_START_HEAD" ]; then
+    echo "⚠️  Not recorded for the merge gate: HEAD moved during the run ($GREEN_START_HEAD, then $head)."
+    return 1
+  fi
+  now_dirty=$(git status --porcelain | head -5)
+  if [ -n "$now_dirty" ]; then
+    echo "⚠️  Not recorded for the merge gate: the tree changed during the run. First of it:"
+    echo "$now_dirty" | sed 's/^/     /'
+    return 1
+  fi
+  gate_log="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
+  echo "$(date +%s) $head $(git rev-parse "$head^{tree}") $wall" >> "$gate_log"
+  echo "🔓 Recorded $(git rev-parse --short "$head") as green for the merge gate ($gate_log)."
 }

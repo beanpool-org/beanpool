@@ -422,6 +422,7 @@ run_federation_suites() {
       test-registrar-name-watch
       test-read-auth-default
       test-privacy-defaults
+      test-photo-keys-resync
       test-activity-feed-members-only
       test-members-contact-visibility
       test-contact-trade-partners

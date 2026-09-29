@@ -23,18 +23,35 @@
  * - Decided at boot, like the rest of what a node runs as: keyed where reads are enforced (ENFORCE_READ_AUTH) and the
  *   visitors' view (`guestListingsOnly`) is off. Elsewhere the listings are a public read, and so are their photos, as
  *   before. An operator who changes either restarts the node, so the URLs it emits and the URLs it serves agree.
+ * - A phone keeps the photo URLs it was handed in its own copy of the listings, and syncs by cursor: it is sent again
+ *   only a listing that changed. Keying (or no longer keying) the photos, or a new secret (a restore from a backup
+ *   older than it), changes every listing's URLs and no listing's `updated_at`, so the URLs such a phone holds would
+ *   answer 404 for good. So the boot that changes the URLs' shape records when (`node_config.photoKeysSince`, beside
+ *   `photoKeysShape`, what they were), and a sync whose cursor is older is answered with every listing, as a first
+ *   sync is (routes/marketplace.ts, `photoUrlsChangedAfter`). A standby's first boot as the main server counts as a
+ *   change (photoUrlShape). A restart that changes nothing keeps both.
  */
 import crypto from 'node:crypto';
 import { configurePhotoKeys, photoVersionOf } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { getNodeRole } from '../config/node-role.js';
 
 export const PHOTO_KEY_SECRET_ROW = 'photoKeySecret';
+/**
+ * What the photo URLs this server emits look like: `open`, or `keyed:` and a fingerprint of the secret, and `@standby`
+ * on a standby (photoUrlShape).
+ */
+export const PHOTO_KEYS_SHAPE_ROW = 'photoKeysShape';
+/** When that last changed (ISO 8601): a sync from before it holds URLs that no longer open. */
+export const PHOTO_KEYS_SINCE_ROW = 'photoKeysSince';
 
 /** The key's length: 22 base64url characters, 132 bits. */
 const KEY_CHARS = 22;
 
 let secret: Buffer | null = null;
+/** photoKeysSince in ms, as this boot found or wrote it; null before installPhotoKeysAtBoot. */
+let urlsChangedAtMs: number | null = null;
 
 function photoKeySecret(): Buffer {
     let row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(PHOTO_KEY_SECRET_ROW) as { value: string } | undefined;
@@ -62,12 +79,65 @@ export function installPhotoKeysAtBoot(enforceReadAuth: boolean = process.env.EN
     if (!enforceReadAuth || getProfileSwitches().guestListingsOnly) {
         secret = null;
         configurePhotoKeys(null);
+        noteUrlShape(null);
         return false;
     }
     const s = photoKeySecret();
     secret = s;
     configurePhotoKeys((postId, orderNum, version) => keyFor(s, postId, orderNum, version));
+    noteUrlShape(s);
     return true;
+}
+
+/**
+ * The shape of every listing-photo URL this server emits with `s` (null: unkeyed). Keyed, a fingerprint of the secret
+ * (an HMAC of a fixed text, so it says nothing of the secret): a new secret is a new shape. A standby's is marked as
+ * such: no phone syncs from it, and the phones that sync from it once it takes over hold the URLs of the main server
+ * it replaced, keyed with that server's secret, not its own. So its first boot as the main server (a take-over, or a
+ * promotion by hand) is a new shape too, for a phone that predates the identity epoch (apps/native
+ * services/pillar-sync.ts) as much as for one that has it.
+ */
+function photoUrlShape(s: Buffer | null): string {
+    const shape = s ? `keyed:${crypto.createHmac('sha256', s).update('photo-url-shape', 'utf-8').digest('base64url').slice(0, 16)}` : 'open';
+    return getNodeRole() === 'backup' ? `${shape}@standby` : shape;
+}
+
+/**
+ * At boot: when the photo URLs' shape is not the one recorded (keys switched on or off, a new secret, or no record, as on
+ * a node from before this record, whose phones may hold URLs of either shape), record it, and as photoKeysSince now, or
+ * the start of time where the node holds no listing photo yet (a new node): no phone can hold a URL that stopped
+ * opening, so no sync is answered whole for it. Otherwise keep both. Either way this boot answers by photoKeysSince
+ * (photoUrlsChangedAfter).
+ */
+function noteUrlShape(s: Buffer | null): void {
+    const read = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    const shape = photoUrlShape(s);
+    let since = read(PHOTO_KEYS_SINCE_ROW);
+    if (read(PHOTO_KEYS_SHAPE_ROW) !== shape || !since || !Number.isFinite(Date.parse(since))) {
+        const anyPhoto = db.prepare('SELECT 1 FROM post_photos LIMIT 1').get() !== undefined;
+        since = new Date(anyPhoto ? Date.now() : 0).toISOString();
+        const put = db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)');
+        db.transaction(() => {
+            put.run(PHOTO_KEYS_SHAPE_ROW, shape);
+            put.run(PHOTO_KEYS_SINCE_ROW, since);
+        })();
+    }
+    urlsChangedAtMs = Date.parse(since);
+}
+
+/**
+ * Whether a sync whose cursor is `updatedAfter` (an ISO 8601 time) was made before this server's listing-photo URLs
+ * last changed shape (photoKeysSince): then every listing it holds may carry a URL that no longer opens, and it is
+ * answered with every listing, as a first sync is. False without a cursor, or with one that isn't a time.
+ *
+ * The phone's cursor is its clock at its last sync less five minutes (apps/native services/pillar-sync.ts), so a phone
+ * that syncs in the five minutes after the change gets every listing again; that is what heals a phone whose clock is
+ * up to five minutes fast, and it happens only after a boot that changed the URLs.
+ */
+export function photoUrlsChangedAfter(updatedAfter: string | undefined): boolean {
+    if (urlsChangedAtMs === null || !updatedAfter) return false;
+    const cursor = Date.parse(updatedAfter);
+    return Number.isFinite(cursor) && cursor < urlsChangedAtMs;
 }
 
 /** Whether this node serves a listing's photo only to a URL with its key (installPhotoKeysAtBoot). */

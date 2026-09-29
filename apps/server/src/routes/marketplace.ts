@@ -20,7 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeysRequired } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeysRequired, photoUrlsChangedAfter } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -226,6 +226,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // A delta from before this node's listing-photo URLs last changed (keys switched on or off, a new secret:
+    // engine/photo-keys.ts) is answered with every listing, as a first sync is: the phone keeps the URLs it was handed,
+    // and a listing that didn't change since would never be sent again with the URL that now opens its photo.
+    const wholeForPhotoUrls = photoUrlsChangedAfter(updatedAfter);
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
@@ -267,7 +271,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was. The visitors'
     // view is a view of its own: a key that becomes a member (same key, same URL) must not have its visitor's copy
     // confirmed, and a member is never answered 304 for one.
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
+    // A delta answered whole (wholeForPhotoUrls) is a body of its own, so its ETag is too: a copy of the delta held for
+    // the same URL is never confirmed with a 304 in its place.
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${wholeForPhotoUrls ? ':whole' : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -324,8 +330,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
+    // Whole: no cursor, and read as a sync read (removed and hidden listings kept, as removals), as a first sync is.
     const posts = getPosts({
-        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
+        id, type, types, excludeEvents, category, query: q, limit, offset,
+        updatedAfter: wholeForPhotoUrls ? undefined : updatedAfter, sync: sync || wholeForPhotoUrls,
+        authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
         includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
     });
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or

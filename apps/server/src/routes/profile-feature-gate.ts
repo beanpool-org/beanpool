@@ -22,6 +22,7 @@ import {
 } from '../config/node-profile.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { ProbationLimitError } from '../engine/probation.js';
+import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 
 interface GatedRoutes {
@@ -123,8 +124,8 @@ export async function profileFeatureGate(ctx: Context, next: Next): Promise<void
 
 /**
  * For a route's catch: answers a Beans-off or feature-off refusal, a probation limit (429, with `Retry-After`), a
- * moderation mute (403) or a standby's refusal of a Bean move (409 `standby`, config/node-role.ts) with its own status
- * and code. True when it did.
+ * moderation mute (403), a standby's refusal of a Bean move (409 `standby`, config/node-role.ts) or a writer limit
+ * (429 or 413, engine/writer-bounds.ts) with its own status and code. True when it did.
  */
 export function respondProfileRefusal(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, e: unknown): boolean {
     if (e instanceof StandbyLedgerError) {
@@ -149,6 +150,13 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown; set?
     if (e instanceof MutedError) {
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code, mutedUntil: e.until };
+        return true;
+    }
+    // A writer limit (W-main, engine/writer-bounds.ts): 429, or 413 for a DM line too long, with when it lets up.
+    if (e instanceof WriterLimitError) {
+        ctx.status = e.status;
+        ctx.body = e.resetsAt ? { error: e.message, code: e.code, resetsAt: e.resetsAt } : { error: e.message, code: e.code };
+        if (e.resetsAt) ctx.set?.('Retry-After', String(Math.max(1, Math.ceil((Date.parse(e.resetsAt) - Date.now()) / 1000))));
         return true;
     }
     return false;

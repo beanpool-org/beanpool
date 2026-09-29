@@ -38,6 +38,7 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { assertMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
 
@@ -550,6 +551,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
         const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
         const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
+        // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main). After the checks
+        // on what was sent, so a bad name or photo is still told as such, and right before anything is written.
+        try { assertMayStartEnterprise(actor); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
 
         try {
             const res = createTreasury(
@@ -735,7 +739,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
+            // The keeper's own 100 new posts a day count what they put up for the enterprise too (W-main), checked by the
+            // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertMayPostToday(actor) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -755,7 +761,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertMayPostToday(actor) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -786,7 +792,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createEventFromBody(b, treasury, actor);
+            const post = createEventFromBody(b, treasury, actor, () => assertMayPostToday(actor));
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {

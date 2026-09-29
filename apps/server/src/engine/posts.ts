@@ -321,6 +321,12 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /**
+         * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
+         * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
+         * with no Offer) and before anything is stored, so a limit never answers for a post that may not be made at all.
+         */
+        beforeWrite?: () => void;
     },
 ): MarketplacePost | null {
     const now = Date.now();
@@ -459,6 +465,7 @@ export function createPost(
     }
 
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
+    options?.beforeWrite?.();
 
     const finalId = id || crypto.randomUUID();
     const createdAt = new Date(now).toISOString();

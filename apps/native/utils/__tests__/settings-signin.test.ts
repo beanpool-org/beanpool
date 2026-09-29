@@ -33,6 +33,10 @@ import {
 } from '../settings-signin';
 import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 const SEED = new Uint8Array(32).fill(9);
 const identity = { publicKey: Buffer.from(ed25519.getPublicKey(SEED)).toString('hex'), privateKey: Buffer.from(SEED).toString('hex'), callsign: 'me', createdAt: '' };
 const signedBy = (sigB64: string, bytes: Uint8Array) =>

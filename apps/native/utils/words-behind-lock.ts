@@ -16,8 +16,10 @@ import { getMnemonic, type BeanPoolIdentity } from './identity';
  *
  * The check is LocalAuth.authenticateUser, as Settings has always asked it: the phone's own prompt for whatever
  * screen lock it has, a fingerprint or face or else its PIN, pattern or passcode. A failed or cancelled prompt, or one
- * that throws, reads nothing. A phone with no screen lock at all has nothing to ask with and is let through; that is
- * authenticateUser's own rule, so a member is never locked out of their words by their phone.
+ * that throws, reads nothing; nor does a pass that reached the app too late to be one given for this request (a pass the
+ * phone held while the app was away: LocalAuth.doorPassCounts), App Lock on or off. A phone with no screen lock at all
+ * has nothing to ask with and is let through; that is authenticateUser's own rule, so a member is never locked out of
+ * their words by their phone.
  *
  * Returns the words, or null: a check that did not pass, or an account with no words on this phone.
  */

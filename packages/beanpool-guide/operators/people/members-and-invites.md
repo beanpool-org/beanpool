@@ -7,7 +7,7 @@ related: roles, reports-and-takedowns, decisions-and-emergencies, disputes, firs
 
 ## How people join
 
-Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. The name an invite is made out to is only a label: the person picks their own name when they join.
+Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join.
 
 Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.
 

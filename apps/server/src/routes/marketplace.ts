@@ -18,6 +18,7 @@ import {
     nodeRoleOf,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
+import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { photoKeyMatches, photoKeysRequired } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
@@ -376,10 +377,14 @@ router.post('/api/marketplace/posts', async (ctx) => {
         assertNotMuted(actor);
         // A poll keeps no photos, and more than a post can hold is the engine's 400, not a limit.
         assertMayPost(authorPublicKey, type !== 'poll' && Array.isArray(photos) ? Math.min(photos.length, 5) : 0);
+        // Every profile: 100 new posts a day (W-main, engine/writer-bounds.ts), after probation's stricter 3. The engine
+        // runs it once every refusal of the post itself has passed (an unfinished profile, a group the author is not in),
+        // so a limit never answers for a post that may not be made at all.
+        const underDailyPosts = () => assertMayPostToday(authorPublicKey);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
@@ -392,7 +397,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo }
+            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts }
         );
         if (!post) {
             ctx.status = 400;

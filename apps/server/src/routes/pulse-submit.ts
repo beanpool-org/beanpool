@@ -35,7 +35,8 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
-import { respondIfMuted } from './profile-feature-gate.js';
+import { respondIfMuted, respondProfileRefusal } from './profile-feature-gate.js';
+import { WriterLimitError, assertMaySubmitToPulse, pulseSyncAllowance } from '../engine/writer-bounds.js';
 import {
     ssrfSafeFetch,
     extractYouTubeVideoId,
@@ -152,6 +153,24 @@ function extractTagText(html: string, tagName: string): string | null {
  * Detect platform and extract identity from URL without making network calls.
  * Performs strict hostname / IP address SSRF validation.
  */
+/** Query parameters that only say where a link was shared from or who shared it, never which page it is. */
+const SHARE_TRACKING_PARAM = /^(utm_[a-z0-9_]*|fbclid|gclid|dclid|gbraid|wbraid|msclkid|mc_cid|mc_eid|igshid|igsh|si|feature|ref|ref_src|ref_url|share_id|is_from_webapp|sender_device|_r|_t)$/i;
+
+/**
+ * The one spelling of a link the Pulse dedups on (W-main: one member's varied spellings of a link were each a new row a
+ * standby copies): no fragment, no share-tracking parameters, the rest of the query sorted. The host is already lower
+ * case (URL does that). A platform with its own canonical form (YouTube, Instagram) replaces this below.
+ */
+export function normalisePulseUrl(parsed: URL): string {
+    const url = new URL(parsed.toString());
+    url.hash = '';
+    const kept = [...url.searchParams].filter(([name]) => !SHARE_TRACKING_PARAM.test(name))
+        .sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0));
+    url.search = '';
+    for (const [name, value] of kept) url.searchParams.append(name, value);
+    return url.toString();
+}
+
 export function identifyPlatformAndExternalId(rawUrl: string): {
     platform: ChannelPlatform;
     externalId: string | null;
@@ -188,7 +207,7 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
     const host = hostClean.toLowerCase().replace(/^www\./, '');
     let platform: ChannelPlatform = 'website';
     let externalId: string | null = null;
-    let canonicalUrl = parsed.toString();
+    let canonicalUrl = normalisePulseUrl(parsed);
     let accountHandle: string | null = null;
 
     if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com') {
@@ -791,7 +810,9 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                         isDeduplicated = true;
                     }
                 } else {
-                    // Fresh insert
+                    // Fresh insert: 50 new links by hand a day per member (W-main, engine/writer-bounds.ts). Checked here,
+                    // in the transaction, so a link already there or brought back is never refused.
+                    assertMaySubmitToPulse(actor);
                     finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                     stmtInsertItem.run(
                         finalItemId,
@@ -833,6 +854,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 ctx.body = { error: 'ssrf_blocked', message: err.message };
                 return;
             }
+            if (err instanceof WriterLimitError && respondProfileRefusal(ctx, err)) return;
             ctx.status = 500;
             ctx.body = { error: 'internal_error', message: err?.message || 'Failed to submit post.' };
         }
@@ -1098,9 +1120,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const results: PulseFeedCard[] = [];
         const itemsToCache: Array<{ id: string; url: string }> = [];
         let deduplicatedCount = 0;
+        // New items past the member's day (W-main: 300 new synced items a day, engine/writer-bounds.ts) wait for a later
+        // sync, which finds the ones already here and adds the rest. Counted, never a refusal of the whole sync.
+        let leftForLater = 0;
 
         try {
             db.transaction(() => {
+                let allowance = pulseSyncAllowance(actor);
                 for (const rawItem of items) {
                     const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
                     if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
@@ -1177,6 +1203,8 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                             deduplicatedCount++;
                         }
                     } else {
+                        if (allowance <= 0) { leftForLater++; continue; }
+                        allowance--;
                         finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                         stmtInsertOauthItem.run(
                             finalItemId,
@@ -1220,6 +1248,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 count: results.length,
                 skippedCount,
                 deduplicatedCount,
+                leftForLater,
                 items: results,
             };
         } catch (err: any) {

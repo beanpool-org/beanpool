@@ -39,6 +39,10 @@ import {
     buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 const SEED = new Uint8Array(32).fill(7);
 const identity = { publicKey: Buffer.from(ed25519.getPublicKey(SEED)).toString('hex'), privateKey: Buffer.from(SEED).toString('hex'), callsign: 'me', createdAt: '' };
 const NODE = 'https://mullum.beanpool.org/';

@@ -459,7 +459,9 @@ async function main(): Promise<void> {
 
     // ── 8b. Group chat sends through the ordinary send route are rate-limited ───────────────
     // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is: per signed member in the chat
-    // bucket, never the per-IP auth limiter that also guards recovery (0919 follow-up). A DM is not throttled.
+    // bucket, never the per-IP auth limiter that also guards recovery (0919 follow-up). A DM line goes through the same
+    // chat bucket since W-main (every DM line is a row a standby copies, and the gateway's 120 a minute was its only
+    // limit), and never through the auth limiter either.
     console.log('\n--- 8b. Rate limit on the ordinary send route ---');
     let authLimiterCalls = 0;
     const limited = createMessagingRoutes({
@@ -475,9 +477,14 @@ async function main(): Promise<void> {
     assert(authLimiterCalls === 0, 'and the per-IP auth limiter never sees it');
     assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before8b, 'and nothing is written');
     const dmPair = createConversation('dm', [bob, erin], bob)!;
+    const dmThrottled = await dispatch(limited, 'POST', '/api/messages/send',
+        ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ...lockedDm() }));
+    assert(dmThrottled.status === 429 && dmThrottled.body?.code === 'chat_rate' && authLimiterCalls === 0,
+        'a DM line from a member who has used his minute is refused by the chat limiter too (W-main), never the auth limiter');
+    resetChatRateLimit();
     const dmSent = await dispatch(limited, 'POST', '/api/messages/send',
         ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ...lockedDm() }));
-    assert(dmSent.body?.success === true && authLimiterCalls === 0, 'a DM is not put through either limiter');
+    assert(dmSent.body?.success === true && authLimiterCalls === 0, 'once the minute is over the DM goes, and the auth limiter never saw either');
     resetChatRateLimit();
 
     // ── 9. The old chat group is gone ───────────────────────────────────────────────────────

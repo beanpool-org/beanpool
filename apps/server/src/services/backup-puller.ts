@@ -217,7 +217,7 @@ let ledgerResyncRestored = false;
 let lastLedgerResyncAt = 0;
 // At most one force-resync for a copy that doesn't match in this long: one a resync doesn't cure must not clear this
 // standby over and over.
-const LEDGER_RESYNC_EVERY_MS = 6 * 60 * 60_000;
+export const LEDGER_RESYNC_EVERY_MS = 6 * 60 * 60_000;
 
 /**
  * A2-9: only allow an HTTPS primary URL (loopback http permitted for dev). The
@@ -1351,15 +1351,14 @@ export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boole
 }
 
 /**
- * What this process takes from its database of the copies before it, once, before its first pull: the cursor, when the
- * last whole copy landed and how many pages it took (the routine one's cadence, standby-copy-record.ts lastWholeCopy), and,
- * at the first start on a whole copy swapped in (db/swap-at-boot.ts; services/stager.ts wrote SWAPPED_COPY_KEY into it),
- * that copy's time, the recovery seal's clean-up after a whole copy (services/recovery-seal-key.ts), and the database it
- * replaced, deleted once the next copy lands. Never throws.
+ * The cursor, and when the last whole copy landed and how many pages it took (the routine one's cadence,
+ * standby-copy-record.ts lastWholeCopy), from this database, once a process: what a status read shows, and what the next
+ * pull decides by. Reads only.
  */
-function restoreFromDatabase(): void {
-    if (restored) return;
-    restored = true;
+let cadenceRestored = false;
+function restoreCadence(): void {
+    if (cadenceRestored || getNodeRole() !== 'backup') return;
+    cadenceRestored = true;
     try {
         const saved = getSyncCursor(BACKUP_CURSOR_PEER);
         if (saved && !lastImportedCursor) lastImportedCursor = saved;
@@ -1371,6 +1370,19 @@ function restoreFromDatabase(): void {
             lastWholePages = whole.pages;
         }
     } catch { /* the record unreadable: a whole copy is due, as at a first start */ }
+}
+
+/**
+ * What this process takes from its database of the copies before it, once, before its first pull: the cursor, when the
+ * last whole copy landed and how many pages it took (the routine one's cadence, standby-copy-record.ts lastWholeCopy), and,
+ * at the first start on a whole copy swapped in (db/swap-at-boot.ts; services/stager.ts wrote SWAPPED_COPY_KEY into it),
+ * that copy's time, the recovery seal's clean-up after a whole copy (services/recovery-seal-key.ts), and the database it
+ * replaced, deleted once the next copy lands. Never throws.
+ */
+function restoreFromDatabase(): void {
+    restoreCadence();
+    if (restored) return;
+    restored = true;
     let swapped: { generatedAt?: unknown; sealEpoch?: unknown; pages?: unknown } | null = null;
     try {
         const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(SWAPPED_COPY_KEY) as { value: string } | undefined;
@@ -1470,6 +1482,7 @@ export function getBackupStatus(): {
     lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number; lastPullMode: PullMode | null;
     wholeRetryAt: number | null; resyncRetryAt: number | null; lastWholePages: number; swapReady: boolean;
 } {
+    restoreCadence();
     const now = Date.now();
     return {
         // How many pages the last whole copy took, and a whole copy made ready to swap in at the restart under way.

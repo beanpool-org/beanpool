@@ -210,7 +210,8 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** A listing of M's whose photo M's own image store doesn't have: its copies leave the photo's row out and name it. */
         'photo-main-cannot-read': async (a: { author: string }) => {
@@ -235,7 +236,8 @@ async function child(): Promise<void> {
                 { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
             ];
             payload.generatedAt = at;
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /**
          * A whole copy M signs with its table hashes, as its route sends one (routes/backup.ts), but with Gwen's listing not
@@ -256,14 +258,19 @@ async function child(): Promise<void> {
             payload.tableHashes = hashes;
             payload.posts = payload.posts.map((x: any) => (x.id === 'plums-lost-photo' ? { ...x, description: a.value } : x));
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** M's own whole copy as its route sends one it was written to while making (routes/backup.ts): signed, no table hashes. */
         'copy-without-hashes': async () => {
-            const { exportSyncState } = await import('./state-engine.js');
+            const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
-            return exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
+            delete payload.signature;
+            delete payload.publicKey;
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** The main server's watch (services/standby-health.ts), or null on a server without one. */
         health: async () => {

@@ -259,7 +259,8 @@ async function child(): Promise<void> {
             });
             payload.communitySettings = rec;
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** The ledger conservation audit (promotionSanityCheck), run now. */
         'ledger-audit': async () => {

@@ -149,7 +149,8 @@ async function child(): Promise<void> {
                 id: `forged-${crypto.randomUUID()}`, postId: null, buyerPubkey: 'x', sellerPubkey: 'y', credits: 1, status: 'pending', createdAt: later,
             }];
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** Import a payload as the puller does, straight into this standby. */
         import: async (a: { payload: any }) => {
@@ -266,6 +267,10 @@ function rowsDiff(m: Rows, s: Rows): string[] {
             const o = ss.get(id);
             if (!o) { out.push(`${table} ${id.slice(0, 20)} missing`); continue; }
             for (const c of Object.keys(r)) {
+                // A cached listing M holds with no search words yet: each server's boot fills them in, and S has started
+                // again since its first copy, to swap that copy in (P2), so it holds them first (engine/replica-hashes.ts
+                // COLUMNS_NOT_HASHED says the same).
+                if (table === 'posts' && c === 'search_keywords' && r[c] === '') continue;
                 if (JSON.stringify(r[c]) !== JSON.stringify(o[c])) {
                     out.push(`${table} ${id.slice(0, 20)}.${c}: main ${JSON.stringify(r[c])?.slice(0, 40)}, standby ${JSON.stringify(o[c])?.slice(0, 40)}`);
                 }
@@ -358,7 +363,7 @@ async function main(): Promise<void> {
         const ownOrigins = [...new Set(s.posts.filter((p) => p.id !== cachedRow.id).map((p) => p.origin_node))];
         assert(ownOrigins.length === 1 && ownOrigins[0] === null, `a listing of M's own names no origin on S (${JSON.stringify(ownOrigins)})`);
         assert(s.posts.find((p) => p.id === cachedRow.id)?.origin_node === NEIGHBOUR_URL, 'the cached one names its community');
-        assert(s.format === '6', `the copy records the importer's format, 6 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 the standing copy's (G2); 5 in-flight money and governance's (G3); 6 members' devices' (G4)
+        assert(s.format === '7', `the copy records the importer's format, 7 (${s.format})`); // 2 was this suite's (#1272); 3 is #1268's; 4 the standing copy's (G2); 5 in-flight money and governance's (G3); 6 members' devices' (G4); 7 a whole copy built from nothing in a staging database (P2)
 
         // ── 3. Changes after the first copy, then a delta ──
         console.log('\n— 3. after the first copy: the changes a delta must carry —');
@@ -433,7 +438,7 @@ async function main(): Promise<void> {
         const o5: Rows = await old.send('rows');
         assert(reseed.ok === true && reseed.mode === 'resync', `its next pull is one re-seed, and it lands (${JSON.stringify({ ok: reseed.ok, mode: reseed.mode, error: reseed.error })})`);
         assert(rowsDiff(m5, o5).length === 0, `it ends equal to M, every row and stamp (differences ${first(rowsDiff(m5, o5))})`);
-        assert(o5.format === '6', `and records format 6, the importer's (${o5.format})`);
+        assert(o5.format === '7', `and records format 7, the importer's (${o5.format})`);
         const after = await old.send('pull', {});
         assert(after.ok === true && after.mode === 'delta', `the pull after it is a delta, not a second re-seed (${JSON.stringify({ ok: after.ok, mode: after.mode, error: after.error })})`);
         // A main server whose older database holds a photo and a project unstamped: the copy stamps each from M's own rows,

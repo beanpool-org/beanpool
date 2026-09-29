@@ -2,9 +2,10 @@
  * The swap of a standby's whole copy, at boot, before the database opens (design scratch/global-node/DESIGN-paged-copies-
  * fable.md §4.2 and §4.3; services/stager.ts builds the copy in `data/staging`).
  *
- * Imported first (index.ts, right after the report scrub; the take-over harness likewise), because db/db.ts opens
- * `state.db` as it is imported: this imports nothing that does, only Node, better-sqlite3 and services/stager.ts's
- * constants (that module imports nothing of the server's at its top level).
+ * Run before the database opens: db/db.ts calls it right before it opens `state.db`, whichever module imported it
+ * first, and index.ts imports this module first of all (right after the report scrub), as the take-over harness does. It
+ * imports nothing that opens the database, only Node, better-sqlite3 and services/stager.ts's constants (that module
+ * imports nothing of the server's at its top level). Once a process: the first call does it.
  *
  * - `staging/READY` and `staging/state.db`, and the staging database passes `PRAGMA quick_check`: `state.db` (with its
  *   `-wal` and `-shm`) becomes `state.previous.db`, the staging database becomes `state.db`, and the staging directory

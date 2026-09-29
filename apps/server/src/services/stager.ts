@@ -19,8 +19,9 @@
  *  1. every page arrived once, in order: each category's and plain table's rows, counted as they came, are what the
  *     copy's last page says it sent (`rowsSent`), which are what its opening page counted in its snapshot (`rowCounts`),
  *     but for the listing photos the main server could not read (`photosOmitted`), which it counted and did not send;
- *  2. the staging's tables hash as the copy's own table hashes say (engine/replica-hashes.ts), but for the values this
- *     database's rules refuse, which are reported, not refused (the whole-copy check's rule);
+ *  2. the staging's tables against the copy's own table hashes (engine/replica-hashes.ts): the whole-copy check's verdict,
+ *     recorded with the copy (a table this importer writes otherwise than the main server holds it is reported, and asks
+ *     for the held force-resync at most every six hours; the values this database's rules refuse are reported alone);
  *  3. the conservation guard: the staging's ledger total against the live one's, within the tolerance, unless the puller
  *     took this copy as a seed; and a copy that is no seed must carry a ledger;
  *  4. then what this standby keeps of its own is carried over from the live database, read-only, in one read: every table
@@ -294,8 +295,9 @@ async function stagerChild(): Promise<void> {
     const { copyPartOf, noteMainLedger, noteReplicaFormat, LEDGER_CONSERVATION_TOLERANCE } = await import('../engine/sync.js');
     const { tableContentHashes, readTableHashes } = await import('../engine/replica-hashes.js');
     const { emptyCopiedTables } = await import('../engine/copied-tables.js');
-    const { keepMainServerRecords } = await import('./backup-puller.js');
-    const { noteCopyLanded, noteWholeCopyCheck, noteWholeCopyTaken } = await import('./standby-copy-record.js');
+    const { keepMainServerRecords, LEDGER_RESYNC_EVERY_MS } = await import('./backup-puller.js');
+    const { noteCopyLanded, noteWholeCopyCheck, noteUncomparedCheck, noteWholeCopyTaken, readCopyRecord } = await import('./standby-copy-record.js');
+    const { LEDGER_DIFFERS } = await import('./standby-report.js');
     const Database = (await import('better-sqlite3')).default;
 
     await ensureGenesis();
@@ -397,17 +399,24 @@ async function stagerChild(): Promise<void> {
         const rows = Object.entries(received).reduce((n, [k, v]) => n + (k === 'plainTables' ? 0 : v as number), 0)
             + Object.values(received.plainTables ?? {}).reduce((n, v) => n + v, 0);
 
-        // 2. The copy's table hashes, made in its snapshot, against the staging's: but the values this database's rules
-        //    refuse, reported as the whole-copy check reports them (services/backup-puller.ts checkWholeCopy), never refused.
+        // 2. The copy's table hashes, made in its snapshot, against the staging's: the whole-copy check's verdict
+        //    (services/backup-puller.ts checkWholeCopy), recorded with the copy. Every page came once, signed, and the counts
+        //    add up, so a table that differs is one this importer writes otherwise than the main server holds it: reported,
+        //    and the held force-resync asked for at most every six hours, as for any whole copy that doesn't match; never a
+        //    reason to keep the older copy, which the same importer wrote. The values this database's rules refuse are
+        //    reported on their own and ask for none. A copy with no hashes gives no verdict.
         const theirs = readTableHashes(closing.tableHashes);
-        const differs = new Set<string>([...plainLeftOut, ...(membersLeftOut.size > 0 ? ['members'] : [])]);
+        const valuesDiffer = new Set<string>([...plainLeftOut, ...(membersLeftOut.size > 0 ? ['members'] : [])]);
+        const mendable: string[] = [];
         if (theirs) {
             const mine = tableContentHashes({ photosLeftOut: new Set(photosOmitted), membersLeftOut }).tables;
-            const wrong = Object.entries(theirs)
-                .filter(([t, h]) => mine[t] !== undefined && (mine[t].rows !== h.rows || mine[t].hash !== h.hash) && !plainLeftOut.has(t))
-                .map(([t, h]) => `${t} (${mine[t].rows} rows here, ${h.rows} there)`);
-            if (wrong.length > 0) throw refused(`The copy is not the main server's: ${wrong.slice(0, 6).join(', ')} differ from its own hashes`);
+            for (const [t, h] of Object.entries(theirs)) {
+                if (mine[t] === undefined || plainLeftOut.has(t) || (mine[t].rows === h.rows && mine[t].hash === h.hash)) continue;
+                mendable.push(t === 'accounts' ? LEDGER_DIFFERS.ledger : t);
+                console.warn(`[Stager] ${t} differs from the copy's own hash of it (${mine[t].rows} rows here, ${h.rows} there): not exact.`);
+            }
         }
+        const differs = new Set<string>([...valuesDiffer, ...mendable]);
 
         // 3. The conservation guard, against this standby's live ledger, and what it keeps of its own, read in one read.
         const live = new Database(a.live, { readonly: true, fileMustExist: true });
@@ -498,12 +507,18 @@ async function stagerChild(): Promise<void> {
                 if (typeof opening!.cursor === 'string') setSyncCursor('backup:primary', opening!.cursor);
                 const now = Date.now();
                 const exact = differs.size === 0 && !!theirs;
+                const generatedAt = typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null;
                 noteCopyLanded(now, { whole: true, leftOut: [], resync: a.resync });
                 if (theirs) {
+                    // The held force-resync, as the whole-copy check asks for it: at most one in six hours, restarts
+                    // included (the record's last ask); the puller takes it at its first pull (nextMode).
+                    const resyncAsked = mendable.length > 0 && now - (readCopyRecord().lastMismatchResyncAt ?? 0) >= LEDGER_RESYNC_EVERY_MS;
                     noteWholeCopyCheck({
                         at: now, exact, differs: [...differs].sort(), ledgerDiffering: 0, hashed: true, photosLeftOut: photosOmitted.length,
-                        resyncAsked: false, snapshotGeneratedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null,
+                        resyncAsked, snapshotGeneratedAt: generatedAt,
                     });
+                } else {
+                    noteUncomparedCheck({ at: now, notCompared: ['content'], photosLeftOut: photosOmitted.length, snapshotGeneratedAt: generatedAt });
                 }
                 noteWholeCopyTaken({ at: now, pages, generatedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null });
                 set.run(SWAPPED_COPY_KEY, JSON.stringify({

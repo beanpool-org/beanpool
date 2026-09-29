@@ -1186,8 +1186,11 @@ router.post('/api/local/admin/sync-copy', async (ctx) => {
     }
     try {
         // As before a whole copy (sync-snapshot): the plain tables' rows past their age rule go first, so the copy names
-        // none the standby's own age rule would take after it lands. Before the snapshot opens.
-        pruneAgedOutRows();
+        // none the standby's own age rule would take after it lands. Before the snapshot opens. Not before a delta, as the
+        // old delta route never did: a row that has just aged out here goes to the standby with its age, and the standby's
+        // own age rule takes it there (engine/plain-tables.ts importPlainTables); pruned here first, with no tombstone, it
+        // would never leave the standby.
+        if (!since) pruneAgedOutRows();
         const nodeId = getP2PNode()?.peerId?.toString() ?? 'unknown';
         const answer = await openCopy({ nodeId, since: since || null, commonsBalance: getCommonsBalanceExact, sign: signSyncBody });
         answerCopy(ctx, answer);

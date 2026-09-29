@@ -11,6 +11,7 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
+import { swapStagedCopyAtBoot } from './swap-at-boot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,11 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_PATH = path.join(DATA_DIR, 'state.db');
 const STATE_JSON_PATH = path.join(DATA_DIR, 'state.json');
 const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`);
+
+// A standby's whole copy made ready in data/staging is swapped in first (db/swap-at-boot.ts), by rename, before this
+// process opens the database, whichever module imported this one first: a rename under an open connection would leave
+// this process writing to the file it replaced.
+swapStagedCopyAtBoot(DATA_DIR);
 
 // Initialize Database connection
 export const db: Database.Database = new Database(DB_PATH);

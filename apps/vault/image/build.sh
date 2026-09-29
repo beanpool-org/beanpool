@@ -14,8 +14,9 @@
 #   vault-root.raw                 the system partition alone, and its verity tree: with vault.efi, a new image's
 #   vault-root-verity.raw          release assets (installed into the other slot at a monthly restart)
 #   image.json                     {version, ukiSha256, roothash, imageHash}: what a release names
-#   root-files.txt, uki-sections.txt  every file of the system tree, and every section of the UKI, with its hash:
-#                                  to compare two builds file by file
+#   root-files.txt, uki-sections.txt, initrd-files.txt
+#                                  every file of the system tree, every section of the UKI and every file of its
+#                                  initrd, with its hash: to compare two builds file by file
 #   bundles/                       the programs, as built into the image
 #
 # Two runs from the same commit, pins.env and keys give the same bytes: compare image.json (and the files) of two
@@ -137,6 +138,7 @@ mv "${o}/beanpool-vault.root-files.txt" "${out}/root-files.txt"
 docker run --rm -v "${out}:/output" "${builder}" \
     python3 -c 'import hashlib,pefile,sys; pe=pefile.PE(sys.argv[1]); [print(s.Name.rstrip(b"\0").decode(), hashlib.sha256(s.get_data()).hexdigest()) for s in pe.sections]' \
     /output/vault.efi > "${out}/uki-sections.txt"
+docker run --rm -v "${out}:/output" -v "${here}:/image:ro" "${builder}" python3 /image/list-initrd.py /output/vault.efi > "${out}/initrd-files.txt"
 roothash="$(docker run --rm -v "${out}:/output" "${builder}" \
     python3 -c 'import pefile,re,sys; pe=pefile.PE(sys.argv[1]); c=[s.get_data().rstrip(b"\0").decode() for s in pe.sections if s.Name.rstrip(b"\0")==b".cmdline"][0]; print(re.search(r"\broothash=([0-9a-f]+)", c).group(1))' \
     /output/vault.efi)"

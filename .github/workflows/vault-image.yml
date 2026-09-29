@@ -58,6 +58,7 @@ jobs:
             ${{ runner.temp }}/one/image.json
             ${{ runner.temp }}/one/root-files.txt
             ${{ runner.temp }}/one/uki-sections.txt
+            ${{ runner.temp }}/one/initrd-files.txt
           if-no-files-found: ignore
           retention-days: 14
       - name: The same bytes

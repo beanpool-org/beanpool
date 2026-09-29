@@ -1,9 +1,14 @@
 #!/bin/sh
-# Lists the system tree as it goes into the image, so two builds (on two machines) can be compared file by file:
-# every file's SHA-256, every symlink's target, and every entry's mode and owner. build.sh leaves it in
-# <out>/root-files.txt. It changes nothing in the image.
+# The system tree, just before it becomes the system partition: an emulator's leftover goes, and the tree is listed so
+# two builds (on two machines) can be compared file by file: every file's SHA-256, every symlink's target, and every
+# entry's mode and owner. build.sh leaves the list in <out>/root-files.txt.
 set -eu
 cd "$BUILDROOT"
+# An x86-64 build on another architecture runs the packages' scripts through the host's emulator, and Docker
+# Desktop's Rosetta leaves an empty cache directory behind: not part of the image, and it would make a build on an
+# arm64 Mac differ from one on an x86-64 machine.
+rm -rf ./.cache/rosetta
+rmdir ./.cache 2>/dev/null || true
 out="$OUTPUTDIR/beanpool-vault.root-files.txt"
 {
     find . -xdev -type f ! -path './var/*' ! -path './boot/*' ! -path './efi/*' -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum

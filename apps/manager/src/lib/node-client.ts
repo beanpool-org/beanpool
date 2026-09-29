@@ -178,6 +178,7 @@ export interface NodeReport {
     reporterPubkey?: string;
     reporter_pubkey?: string;
     reason?: string;
+    description?: string;
     severity?: string;
     status?: string;
     outcome?: 'open' | 'dismissed' | 'actioned' | string;

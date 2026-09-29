@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 91,
-  "hash": "c9da20e1f22893ac2712ced74118bea93af7f12410d4cacbc3aab52069288582",
+  "version": 88,
+  "hash": "6cfef4a0c59618c663ca01133fd79e7d2e1f7d261a011dec4197a04716e8a9ea",
   "sections": [
     {
       "id": "about",
@@ -750,9 +750,7 @@
             "**Nobody can flood a community.** One account can make up to 5,000 changes a day: posts, messages, edits and the like. Within that, up to 100 new posts, 5 new groups, 3 new enterprises, 20 invites and 50 links on the Pulse a day. Nobody using BeanPool normally comes near these. If you do reach one, the app says which, and when you can carry on.",
             "**Messages.** Up to 30 a minute in any chat, direct messages too. A very long message is refused: send it in parts. Photos don't count.",
             "**New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.",
-            "**Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days.",
-            "**Payments.** Up to 100 payments a day, and up to 30 people you have never paid before. Up to 100 deals asked for, accepted or approved, and 20 pledges made or changed. Receiving is never limited.",
-            "**Enterprises and projects** have their own limits, ten times a member's. What a keeper does for one never counts against the keeper's own. A keeper can do one enterprise's worth a day for all the enterprises they keep together."
+            "**Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days."
           ]
         },
         {
@@ -2267,10 +2265,6 @@
         {
           "type": "p",
           "text": "When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans \"credits\" in a few places; they mean the same thing."
-        },
-        {
-          "type": "p",
-          "text": "You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you pay for counts as one of your 100 payments a day too (see \"Sending a gift\"). Releasing beans, cancelling and being paid are never limited."
         },
         {
           "type": "h2",
@@ -3893,10 +3887,6 @@
           ]
         },
         {
-          "type": "p",
-          "text": "An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits."
-        },
-        {
           "type": "h2",
           "text": "Finding them"
         },
@@ -3933,7 +3923,7 @@
         {
           "type": "ul",
           "items": [
-            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too.",
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**.",
             "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
             "**Become a keeper:** see \"Keepers\"."
           ]
@@ -4319,8 +4309,7 @@
           "type": "ul",
           "items": [
             "Gifts do not build trust. Only completed trades do.",
-            "You can send gifts while on holiday.",
-            "You can make up to 100 payments in any 24 hours. Gifts, buying, asking to buy an Offer, approving help on your Need, pledges of beans to a project and buying from another community all count. A keeper's backing of an enterprise moves no beans, so it is not a payment: it counts only as one of your 20 pledge changes a day. Up to 30 of them can go to people you have never paid before; paying people you have paid before still works. Receiving is never limited. If you reach a limit, the app says which, and when you can pay again."
+            "You can send gifts while on holiday."
           ]
         }
       ]
@@ -4430,7 +4419,7 @@
         },
         {
           "type": "p",
-          "text": "It does not limit how much you can buy, sell, give or receive with anyone. You can trade with one person as much as you both like, within the daily limit on how many payments you make (see \"Sending a gift\")."
+          "text": "It does not limit how much you can buy, sell, give or receive with anyone. You can trade with one person as much as you both like."
         },
         {
           "type": "h2",

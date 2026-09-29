@@ -119,8 +119,8 @@ export function PeopleSafetySection({
             await removeReportedPulseItem(activeNode.url, reportId, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setActionedReportIds((prev) => new Set(prev).add(String(reportId)));
             refreshReports();
-        } catch (e: any) {
-            setPulseRemoveError(e?.message || 'Failed to remove the item');
+        } catch (e: unknown) {
+            setPulseRemoveError(e instanceof Error ? e.message : 'Failed to remove the item');
         } finally {
             setRemovingReportId(null);
         }
@@ -129,7 +129,7 @@ export function PeopleSafetySection({
     const rawReports: NodeReport[] = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
 
-    const getOutcome = (r: any): 'open' | 'dismissed' | 'actioned' => {
+    const getOutcome = (r: NodeReport): 'open' | 'dismissed' | 'actioned' => {
         const id = String(r.id);
         if (dismissedReportIds.has(id)) return 'dismissed';
         if (actionedReportIds.has(id)) return 'actioned';
@@ -440,7 +440,7 @@ export function PeopleSafetySection({
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {reportsToDisplay.map((report: any, idx: number) => {
+                                {reportsToDisplay.map((report: NodeReport, idx: number) => {
                                     const postTitle = report.postTitle || report.title;
                                     const authorCallsign = report.postAuthorCallsign;
                                     const isRemoved = Boolean(report.postRemoved);
@@ -471,9 +471,7 @@ export function PeopleSafetySection({
                                                                 ? report.targetPubkey
                                                                 : (typeof report.target_pubkey === 'string'
                                                                     ? report.target_pubkey
-                                                                    : (report.targetPubkey && typeof report.targetPubkey.publicKey === 'string'
-                                                                        ? report.targetPubkey.publicKey
-                                                                        : ''));
+                                                                    : '');
                                                             return `Target: ${target ? `${target.slice(0, 16)}...` : 'Unknown'}`;
                                                         })()}
                                                     </span>
@@ -499,7 +497,7 @@ export function PeopleSafetySection({
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>
-                                                {report.pulseItem && typeof report.pulseItem === 'object' && (
+                                                {Boolean(report.pulseItem) && report.pulseItem && (
                                                     <div className="text-xs text-nature-300 flex flex-wrap items-center gap-2" data-testid="pulse-report-item">
                                                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-200 border border-nature-700">
                                                             Pulse · {String(report.pulseItem.platform || 'unknown')}

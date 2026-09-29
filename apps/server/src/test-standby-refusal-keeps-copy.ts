@@ -927,7 +927,6 @@ async function main(): Promise<void> {
         await restart();
         await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
         await standby.send('set-reconcile-ms', { ms: HOLD_MS });
-        const t15 = Date.now();
         const whole15 = await standby.send('pull', {});
         const r15b = await standby.send('record');
         require_(whole15.ok === true && whole15.mode === 'full' && JSON.stringify(r15b.lastLeftOut?.tables) === JSON.stringify(['posts']) && r15b.lastLacking === null,

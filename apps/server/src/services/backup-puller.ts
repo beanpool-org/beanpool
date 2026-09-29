@@ -405,7 +405,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // next delta carries that window again, every table of it: the importer takes a row it already holds as a no-op
         // (the same stamp, the same transaction id). A force-resync moves it, whatever it left out: the retention one must
         // (a cursor kept past the main server's deletes would ask for it again), and the others clear from nothing.
-        const keepCursor = !isDelta && !fresh && hadCursor && leftOut.length > 0;
+        // Nor kept when it would be past retention (nextMode) before the next pull, unless this copy left the deletes out
+        // too: it carried every tombstone the main server holds, so the retention force-resync that cursor would ask for
+        // mends nothing, and moves the cursor past this table's rows just as this copy does (#1315 review 4133485540). The
+        // next pull starts a pull interval after this one and the take-over keys' fetch end, so two intervals of margin.
+        const nearRetention = !!lastImportedCursor && !leftOut.includes('tombstones')
+            && pastRetention(lastImportedCursor, Date.now() + 2 * getPullMs());
+        const keepCursor = !isDelta && !fresh && hadCursor && leftOut.length > 0 && !nearRetention;
         if (payload.cursor && !keepCursor) {
             lastImportedCursor = payload.cursor;
             try { setSyncCursor(BACKUP_CURSOR_PEER, payload.cursor); } catch { /* best-effort */ }

@@ -19,6 +19,11 @@ import { buildSettingsHandoffUrl } from '../node-admin';
 import { vi } from 'vitest';
 vi.mock('expo-local-authentication', () => ({ SecurityLevel: { NONE: 0 } }));
 vi.mock('../crypto', () => ({}));
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
+}));
 
 const appJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../app.json'), 'utf8'));
 const filters: any[] = appJson.expo.android.intentFilters;

@@ -69,20 +69,35 @@ export async function authenticateUser(reason: string): Promise<boolean> {
     const lock = await getScreenLock();
     if (lock === 'none') return true;
     if (lock === 'unknown' && !((await hasLocalAuthHardware()) && (await isLocalAuthEnrolled()))) return true;
-    promptOpened();
-    let passed = false;
     try {
-        const res = await LocalAuthentication.authenticateAsync({
+        const res = await phoneLockPrompt({
             promptMessage: reason,
             fallbackLabel: 'Use Passcode',
             disableDeviceFallback: false,
         });
 
-        passed = res.success === true;
         return res.success;
     } catch (e) {
         console.warn('Local authentication error:', e);
         return false;
+    }
+}
+
+/**
+ * The phone's own lock prompt, the one way the app opens it: authenticateAsync, with the prompt marker below around it so
+ * the return lock knows the time it was open is not time away. authenticateUser and node-admin's requireDeviceUnlock
+ * (Manage community, sign in on a computer, take over with this phone) both ask through here, each with its own rule for
+ * a phone with no lock. Answers and throws what authenticateAsync does; the marker closes either way.
+ */
+export async function phoneLockPrompt(
+    options: LocalAuthentication.LocalAuthenticationOptions,
+): Promise<LocalAuthentication.LocalAuthenticationResult> {
+    promptOpened();
+    let passed = false;
+    try {
+        const res = await LocalAuthentication.authenticateAsync(options);
+        passed = res.success === true;
+        return res;
     } finally {
         promptClosed(passed);
     }

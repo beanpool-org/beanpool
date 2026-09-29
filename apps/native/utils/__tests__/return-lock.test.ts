@@ -1,13 +1,14 @@
 /**
  * App Lock asks once: the return lock (utils/return-lock.ts, app/_layout.tsx's AppState listener) and the prompt marker
- * it reads (LocalAuth.authenticateUser).
+ * it reads (LocalAuth.phoneLockPrompt, which authenticateUser and node-admin's requireDeviceUnlock both open through).
  *
  * Found by #1290's deciding review, 2026-09-29. The phone's own lock prompt takes the app out of the front while it is
  * open: Android 8-10's PIN screen backgrounds it, iOS's passcode prompt makes it inactive. The return lock read that as
  * the member leaving, so a prompt that took 15 seconds or more (five wrong PINs on Android bring a 30-second wait) was
  * followed, the moment it closed, by a second prompt. Any prompt did it: App Lock's own, the launch lock's, Unlock App's,
- * and every "behind the phone lock" door (View Recovery Phrase, pairing a computer, linking a sign-in, taking the account
- * off the phone).
+ * every "behind the phone lock" door (View Recovery Phrase, pairing a computer, linking a sign-in, taking the account
+ * off the phone), and the fail-closed gate in front of Manage community, sign in on a computer and take over with this
+ * phone (requireDeviceUnlock).
  *
  * - Time a prompt was open is not time away. A prompt that passed brings nothing more, whichever order the app's return
  *   and the prompt's answer arrive in.
@@ -58,6 +59,7 @@ const START = new Date('2026-09-29T09:00:00Z');
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
 const ACCOUNT = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'Kim', createdAt: '', mnemonic: WORDS };
 const VIEW_RECOVERY_PHRASE = 'Confirm your security to view your recovery phrase.';
+const MANAGE_COMMUNITY = "Confirm it's you to manage Mullum";
 
 /** Every promise chain the listener and the prompt start has run. setImmediate is left real for this. */
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -72,6 +74,7 @@ async function phoneWithAppLock() {
     const LocalAuth = await import('../LocalAuth');
     const ReturnLock = await import('../return-lock');
     const { readWordsBehindLock } = await import('../words-behind-lock');
+    const { requireDeviceUnlock } = await import('../node-admin');
 
     const open: Array<(answer: Answer) => void> = [];
     vi.mocked(LA.getEnrolledLevelAsync).mockResolvedValue(LA.SecurityLevel.SECRET);
@@ -111,6 +114,10 @@ async function phoneWithAppLock() {
         /** Settings' View Recovery Phrase. */
         viewRecoveryPhrase() {
             return readWordsBehindLock(ACCOUNT, VIEW_RECOVERY_PHRASE);
+        },
+        /** Manage / Moderate community, Settings sign-in on a computer, Take over with this phone: the same gate. */
+        manageCommunity() {
+            return requireDeviceUnlock('Mullum');
         },
     };
 }
@@ -152,12 +159,18 @@ const OPENERS = {
         await flush();
         expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE]);
     },
+    'Manage community, sign in on a computer or take over with this phone (requireDeviceUnlock)': async (phone: Phone) => {
+        void phone.manageCommunity();
+        await flush();
+        expect(phone.reasons()).toEqual([MANAGE_COMMUNITY]);
+    },
 };
 /** Whether the lock screen is up once the opener's own prompt has closed, as it was before the prompt. */
 const LOCKED_BY_OPENER: Record<keyof typeof OPENERS, boolean> = {
     "App Lock's own prompt, after a real leave of a minute": true,
     'the Unlock App button (and the launch lock, which asks the same way)': true,
     "Settings' View Recovery Phrase": false,
+    'Manage community, sign in on a computer or take over with this phone (requireDeviceUnlock)': false,
 };
 const SHAPES = [
     ["Android 8-10: the PIN screen backgrounds the app", 'background'],
@@ -209,6 +222,67 @@ describe.each(Object.keys(OPENERS) as Array<keyof typeof OPENERS>)('a 20-second 
             // whoever cancelled it gets the lock screen, not the app (see the Android leave below).
             expect(phone.locked()).toBe(true);
         });
+    });
+});
+
+describe('requireDeviceUnlock answers as before through the marker', () => {
+    it.each([
+        [true, 'ok'],
+        [false, 'failed'],
+    ] as const)('a 20-second prompt, passed %s: %s, and the marker has closed', async (passes, result) => {
+        const phone = await phoneWithAppLock();
+        const unlocked = phone.manageCommunity();
+        await flush();
+        expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+
+        phone.wait(20 * SEC);
+        phone.answer(passes);
+
+        expect(await unlocked).toBe(result);
+        expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+        expect(phone.LocalAuth.localAuthPromptStretches()).toEqual([
+            { openedAt: START.getTime(), closedAt: START.getTime() + 20 * SEC, passed: passes },
+        ]);
+    });
+
+    it('a throwing prompt: failed (it fails closed), and the marker has closed', async () => {
+        const phone = await phoneWithAppLock();
+        const LA = await import('expo-local-authentication');
+        vi.mocked(LA.authenticateAsync).mockRejectedValueOnce(new Error('prompt failed'));
+
+        expect(await phone.manageCommunity()).toBe('failed');
+        expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(false);
+        expect(phone.LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: START.getTime(), passed: false }]);
+    });
+});
+
+describe('every phone-lock prompt in the app opens through the marker', () => {
+    const NATIVE = path.resolve(__dirname, '../..');
+    function sources(dir: string): string[] {
+        return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) return e.name === '__tests__' || e.name === 'node_modules' ? [] : sources(p);
+            return /\.(ts|tsx|js|jsx)$/.test(e.name) ? [p] : [];
+        });
+    }
+
+    it('authenticateAsync is called in one place only: LocalAuth.phoneLockPrompt', () => {
+        const callers = ['app', 'components', 'constants', 'services', 'utils', 'plugins']
+            .flatMap(d => sources(path.join(NATIVE, d)))
+            .filter(f => /authenticateAsync\s*\(/.test(fs.readFileSync(f, 'utf-8')))
+            .map(f => path.relative(NATIVE, f));
+        expect(callers).toEqual([path.join('utils', 'LocalAuth.ts')]);
+        const localAuth = fs.readFileSync(path.join(NATIVE, 'utils', 'LocalAuth.ts'), 'utf-8');
+        expect(localAuth.match(/authenticateAsync\s*\(/g)).toHaveLength(1);
+        expect(localAuth).toMatch(/export async function phoneLockPrompt\([\s\S]*?promptOpened\(\);[\s\S]*?LocalAuthentication\.authenticateAsync\(options\)[\s\S]*?finally \{\s*promptClosed\(passed\);/);
+    });
+
+    it("node-admin's requireDeviceUnlock asks through it, and Manage, sign in on a computer and take over use that gate", () => {
+        const read = (f: string) => fs.readFileSync(path.join(NATIVE, 'utils', f), 'utf-8');
+        expect(read('node-admin.ts')).toMatch(/export async function requireDeviceUnlock[\s\S]*?await phoneLockPrompt\(\{/);
+        expect(read('node-admin.ts')).toContain('await requireDeviceUnlock(opts.communityName)');
+        expect(read('settings-signin.ts')).toContain('await requireDeviceUnlock(opts.communityName)');
+        expect(read('takeover-unlock.ts')).toContain('await requireDeviceUnlock(opts.communityName)');
     });
 });
 

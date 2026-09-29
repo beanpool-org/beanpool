@@ -23,7 +23,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "${image}" ] || { echo "usage: $0 --image <dir> [--limit <seconds>]" >&2; exit 2; }
 image="$(cd "${image}" && pwd)"
-raw="$(ls "${image}"/mkosi.output/beanpool-vault_*.raw | grep -v -e '\.root-' -e '\.esp\.' | head -n1)"
+raw="$(ls "${image}"/beanpool-vault_*.raw | head -n1)"
 work="${image}/boot-test"
 rm -rf "${work}"
 mkdir -p "${work}"
@@ -34,4 +34,6 @@ tester="beanpool-vault-boot-test:$(docker version -f '{{.Server.Arch}}')-$(cat "
 if ! docker image inspect "${tester}" >/dev/null 2>&1; then
     docker build -q -t "${tester}" --build-arg "BUILDER_BASE=${BUILDER_BASE}" --build-arg "DEBIAN_SNAPSHOT=${DEBIAN_SNAPSHOT}" "${here}/boot-test" >/dev/null
 fi
-docker run --rm -v "${work}:/w" "${tester}" sh /run.sh "${limit}"
+kvm=()
+if [ -c /dev/kvm ]; then kvm=(--device /dev/kvm); fi
+docker run --rm "${kvm[@]}" -v "${work}:/w" "${tester}" sh /run.sh "${limit}"

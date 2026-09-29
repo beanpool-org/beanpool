@@ -6,7 +6,12 @@ set -u
 limit="${1:-1200}"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd /w/vars.fd
 : > /w/serial.log
-qemu-system-x86_64 -machine q35 -m 1024 -smp 2 \
+# KVM where the machine has it (an x86-64 Linux host, CI); emulation otherwise (much slower).
+accel="-accel tcg"
+if [ -c /dev/kvm ]; then accel="-accel kvm -cpu host"; fi
+echo "boot-test: $accel"
+# shellcheck disable=SC2086
+qemu-system-x86_64 $accel -machine q35 -m 1024 -smp 2 \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,file=/w/vars.fd \
     -drive file=/w/disk.raw,format=raw,if=virtio \

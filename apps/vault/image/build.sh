@@ -9,12 +9,12 @@
 # Needs Docker (with binfmt emulation of x86-64 when the machine isn't x86-64), Node 22.14 or later and a workspace
 # where `pnpm install` has run and @beanpool/core and @beanpool/signin are built. It writes into <dir>:
 #
-#   beanpool-vault_<version>.efi                   the boot file (UKI), also inside the disk image
-#   beanpool-vault_<version>.raw                   the disk image to install (ESP, system partition, its verity tree)
-#   beanpool-vault_<version>.root-x86-64*.raw      the system partition alone, and its verity tree (a new image's
-#   beanpool-vault_<version>.root-x86-64-verity*   release assets, installed into the other slot at a monthly restart)
-#   image.json                                     {version, ukiSha256, roothash, imageHash}: what a release names
-#   bundles/                                       the programs, as built into the image
+#   beanpool-vault_<version>.raw   the disk image to install (ESP, system partition, its verity tree)
+#   vault.efi                      the boot file (UKI), as in the disk image's ESP
+#   vault-root.raw                 the system partition alone, and its verity tree: with vault.efi, a new image's
+#   vault-root-verity.raw          release assets (installed into the other slot at a monthly restart)
+#   image.json                     {version, ukiSha256, roothash, imageHash}: what a release names
+#   bundles/                       the programs, as built into the image
 #
 # Two runs from the same commit, pins.env and keys give the same bytes: compare image.json (and the files) of two
 # runs, on any machine.
@@ -122,12 +122,17 @@ docker run --rm --privileged \
     mkosi -C /work --image-version="${version}" --seed="${IMAGE_SEED}" --source-date-epoch="${SOURCE_DATE_EPOCH}" \
         --output-directory=/output --package-cache-dir=/pkgcache --force build
 
-# 5. What a release names: the UKI's hash and the root hash on its command line, and imageHash from both.
-uki="$(ls "${out}/mkosi.output"/beanpool-vault_"${version}"*.efi | head -n1)"
-roothash="$(docker run --rm -v "${out}/mkosi.output:/output" "${builder}" \
+# 5. The release's files, and what it names: the UKI's hash and the root hash on its command line, and imageHash.
+o="${out}/mkosi.output"
+rm -f "${out}/vault.efi" "${out}/vault-root.raw" "${out}/vault-root-verity.raw" "${out}"/beanpool-vault_*.raw
+mv "${o}/beanpool-vault.efi" "${out}/vault.efi"
+mv "${o}/beanpool-vault.root-x86-64.raw" "${out}/vault-root.raw"
+mv "${o}/beanpool-vault.root-x86-64-verity.raw" "${out}/vault-root-verity.raw"
+mv "${o}/beanpool-vault.raw" "${out}/beanpool-vault_${version}.raw"
+roothash="$(docker run --rm -v "${out}:/output" "${builder}" \
     python3 -c 'import pefile,re,sys; pe=pefile.PE(sys.argv[1]); c=[s.get_data().rstrip(b"\0").decode() for s in pe.sections if s.Name.rstrip(b"\0")==b".cmdline"][0]; print(re.search(r"\broothash=([0-9a-f]+)", c).group(1))' \
-    "/output/$(basename "${uki}")")"
-uki_sha="$(sha256 "${uki}")"
+    /output/vault.efi)"
+uki_sha="$(sha256 "${out}/vault.efi")"
 image_hash="$(printf 'beanpool-vault-image/1\n%s\n%s\n' "${uki_sha}" "${roothash}" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)"
 printf '{\n  "version": "%s",\n  "ukiSha256": "%s",\n  "roothash": "%s",\n  "imageHash": "%s"\n}\n' "${version}" "${uki_sha}" "${roothash}" "${image_hash}" > "${out}/image.json"
 cat "${out}/image.json"

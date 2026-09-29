@@ -49,11 +49,14 @@ jobs:
       - name: The same bytes
         run: |
           set -euo pipefail
-          cmp "${RUNNER_TEMP}/one/image.json" "${RUNNER_TEMP}/two/image.json"
-          cd "${RUNNER_TEMP}/one/mkosi.output"
-          for f in *; do
-            [ -f "$f" ] || continue
-            cmp "$f" "${RUNNER_TEMP}/two/mkosi.output/$f"
-            echo "same: $f"
+          cd "${RUNNER_TEMP}/one"
+          for f in image.json vault.efi vault-root.raw vault-root-verity.raw beanpool-vault_0.0.1.raw bundles/*.mjs; do
+            cmp "$f" "${RUNNER_TEMP}/two/$f"
+            echo "same: $f ($(sha256sum "$f" | cut -c1-16))"
           done
-          cat "${RUNNER_TEMP}/one/image.json"
+          cat image.json
+      - name: Boot it and check its memory hygiene from inside (QEMU, UEFI, no network out)
+        run: apps/vault/image/boot-test.sh --image "${RUNNER_TEMP}/one" --limit 900
+      - name: The boot's serial log
+        if: always()
+        run: cat "${RUNNER_TEMP}/one/boot-test/serial.log" 2>/dev/null | tail -n 300 || true

@@ -90,7 +90,7 @@ const retention = await import('./services/address-retention.js').catch(() => nu
     forgetOldAddresses(now?: number): number; startForgettingOldAddresses(everyMs?: number): Promise<number> | void;
 };
 const { listSnapshots } = await import('./services/snapshot-scheduler.js');
-const { openJoinAddressHash, knockAddressHash } = await import('./engine/open-join.js');
+const { openJoinAddressHash, knockAddressHash, writeAddressHash } = await import('./engine/open-join.js');
 const logTag = await import('./log-address.js').catch(() => null) as null | { logAddressTag(key: string, now?: number): string };
 
 let run = 0, passed = 0;
@@ -110,9 +110,10 @@ const ADDRESS_ROWS = ['replication_access', 'standby_health', 'takeover_envelope
 const addressRowsText = () => ADDRESS_ROWS.map(configRow).join('\n');
 /** A file's bytes as text, free pages and freed cells included: what `strings` on it would find. */
 const bytesOf = (file: string) => fs.readFileSync(file).toString('latin1');
-/** The two limiters' address hashes, as the rows of `conn` hold them. */
+/** The limiters' address hashes (sign-ups, knocks, the writes a day cap by address), as the rows of `conn` hold them. */
 const addressHashes = (conn: Database.Database) => (conn.prepare(
-    "SELECT ip_hash FROM open_joins WHERE ip_hash IS NOT NULL UNION ALL SELECT ip_hash FROM join_requests WHERE ip_hash IS NOT NULL",
+    "SELECT ip_hash FROM open_joins WHERE ip_hash IS NOT NULL UNION ALL SELECT ip_hash FROM join_requests WHERE ip_hash IS NOT NULL"
+    + " UNION ALL SELECT ip_hash FROM writes_by_address WHERE ip_hash IS NOT NULL",
 ).all() as { ip_hash: string }[]).map((r) => r.ip_hash);
 const resetBrakes = () => { resetAdminAuthTarpit(); resetPasswordBrake(); };
 
@@ -341,18 +342,23 @@ async function main() {
         say('\n— 6. a snapshot —');
         await get('/api/local/admin/sync-snapshot', from('203.0.113.70', { 'X-Replication-Token': TOKEN }));
         assert(configRow('replication_access').includes('203.0.113.70'), '6. the live database has a fresh address');
-        // A sign-up and a knock from the last day: the limiters' keyed hashes of their addresses. The key, openJoinSalt,
-        // is in node_config, so from a copy anyone can try every IPv4 address against them.
+        // A sign-up, a knock and a write a day cap by address (db/writes-by-address.ts) from the last day: the limiters'
+        // keyed hashes of their addresses. The key, openJoinSalt, is in node_config, so from a copy anyone can try every
+        // IPv4 address against them.
         const signupHash = openJoinAddressHash('203.0.113.57');
         const knockHash = knockAddressHash('203.0.113.58');
+        const writeHash = writeAddressHash('203.0.113.59');
         const fkWas = db.pragma('foreign_keys', { simple: true });
         db.pragma('foreign_keys = OFF');
         db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, ip_hash) VALUES (?, ?, ?, ?)')
             .run('address-retention-member', 'google', 'address-retention-join-hash', signupHash);
         db.prepare("INSERT INTO join_requests (id, pubkey, callsign, message, status, ip_hash) VALUES (?, ?, ?, ?, 'pending', ?)")
             .run('address-retention-knock', 'address-retention-knocker', 'Knocker', 'hello', knockHash);
+        db.prepare("INSERT INTO writes_by_address (kind, ip_hash, made_at) VALUES ('address-retention-write', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")
+            .run(writeHash);
         db.pragma(`foreign_keys = ${fkWas ? 'ON' : 'OFF'}`);
-        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash), '6. (the live database has a sign-up\'s and a knock\'s address hash)');
+        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash) && addressHashes(db).includes(writeHash),
+            '6. (the live database has a sign-up\'s, a knock\'s and a write\'s address hash)');
         // Take-over keys' holders enough that the row spills onto overflow pages. Cleaning it in the copy frees those
         // pages whole: without secure_delete their bytes, addresses and all, stay in the copy's free list, where SQL
         // never looks and `strings` does. (A row inside one page can leave its old cell behind too, depending on the
@@ -374,10 +380,11 @@ async function main() {
         assert(addressesIn(copyLogs).length === 0, "6. …nor in its log lines");
         assert(copyJoins === 2 && copyHashes.length === 0, `6. …nor a limiter's address hash: the sign-up and the knock are kept, their hashes are not (${copyHashes.length} left)`);
         const copyBytes = bytesOf(snapFile);
-        assert(addressesIn(copyBytes).length === 0 && !copyBytes.includes(signupHash) && !copyBytes.includes(knockHash),
-            `6. the copy's FILE holds no address and no hash, free space included (${[...addressesIn(copyBytes), ...[signupHash, knockHash].filter((h) => copyBytes.includes(h))].join(', ') || 'none'})`);
+        assert(addressesIn(copyBytes).length === 0 && !copyBytes.includes(signupHash) && !copyBytes.includes(knockHash) && !copyBytes.includes(writeHash),
+            `6. the copy's FILE holds no address and no hash, free space included (${[...addressesIn(copyBytes), ...[signupHash, knockHash, writeHash].filter((h) => copyBytes.includes(h))].join(', ') || 'none'})`);
         assert(configRow('replication_access').includes('203.0.113.70'), '6. the live database still has its fresh one');
-        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash), '6. …and its hashes, which the sign-up and knock limits count for a day');
+        assert(addressHashes(db).includes(signupHash) && addressHashes(db).includes(knockHash) && addressHashes(db).includes(writeHash),
+            '6. …and its hashes, which the sign-up, knock and write limits count for a day');
         assert(fs.readdirSync(snapDir).join(',') === 'copy.db', `6. nothing left beside the copy (${fs.readdirSync(snapDir).join(', ')})`);
 
         // A snapshot from before this version: a plain copy, with the live addresses in it.
@@ -402,7 +409,7 @@ async function main() {
         assert(backupRows.includes('"auth":"token"') && addressesIn(backupRows).length === 0 && backupHashes.length === 0,
             `6. downloaded as a backup, its database holds none (${addressesIn(backupRows).join(', ') || 'none'}; ${backupHashes.length} hash(es))`);
         const backupBytes = bytesOf(path.join(unpacked, 'state.db'));
-        assert(addressesIn(backupBytes).length === 0 && !backupBytes.includes(signupHash) && !backupBytes.includes(knockHash),
+        assert(addressesIn(backupBytes).length === 0 && !backupBytes.includes(signupHash) && !backupBytes.includes(knockHash) && !backupBytes.includes(writeHash),
             `6. …and the backup's database FILE holds none either (${addressesIn(backupBytes).join(', ') || 'none'})`);
 
         // ── 6b. Copies already on disk ──
@@ -461,7 +468,7 @@ async function main() {
         const swept = await retention?.startForgettingOldAddresses();
         for (const f of kept) {
             const bytes = bytesOf(f);
-            const left = [...addressesIn(bytes), ...[signupHash, knockHash].filter((h) => bytes.includes(h))];
+            const left = [...addressesIn(bytes), ...[signupHash, knockHash, writeHash].filter((h) => bytes.includes(h))];
             const conn = new Database(f, { readonly: true });
             const entries = (conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
             const lines = (conn.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;
@@ -514,7 +521,7 @@ async function main() {
         const opened = await openEnvelope(new Uint8Array(lockedBytes), { type: 'code', code: recovery.code }, { kind: 'backup' });
         for (const [how, file] of [['readable', unpackDb(readableBytes, 'readable')], ['locked', unpackDb(opened.payload, 'locked')]] as const) {
             const bytes = bytesOf(file);
-            const left = [...addressesIn(bytes), ...[signupHash, knockHash].filter((h) => bytes.includes(h))];
+            const left = [...addressesIn(bytes), ...[signupHash, knockHash, writeHash].filter((h) => bytes.includes(h))];
             const conn = new Database(file, { readonly: true });
             const entries = (conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value;
             const lines = (conn.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;

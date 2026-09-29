@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -75,10 +75,29 @@ export interface VaultApiOptions {
     expoAccessToken?: string;
     /** Take the client address from the last X-Forwarded-For entry (Caddy on the same machine, V3). */
     trustProxy?: boolean;
+    /** What this process is, for `/v1/report`: its API bundle, the release checks, the next restart. */
+    about?: () => AboutThisApi;
+}
+
+export interface AboutThisApi {
+    /** SHA-256 of the running API bundle, or `source`. */
+    api: string;
+    /** The updater's last check (updater.ts), or null when this API doesn't check releases. */
+    update: unknown;
+    /** The next planned restart (ISO time), or null. */
+    nextRestart: string | null;
 }
 
 export interface VaultApi {
     listen(port?: number, host?: string): Promise<number>;
+    /**
+     * Listens on a Unix socket of its own beside `linkPath` (`api-<pid>.sock`), then points `linkPath`, a symlink Caddy
+     * connects through, at it in one rename. From that moment new connections come here; an API still listening on
+     * its own socket keeps the connections it has. Returns the socket's own path.
+     */
+    listenUnix(linkPath: string, mode?: number): Promise<string>;
+    /** Takes no new connection, finishes those it has (up to `timeoutMs`), then closes as {@link close} does. */
+    drain(timeoutMs?: number): Promise<void>;
     close(): Promise<void>;
     /** One backup now; the hourly job calls this. Returns its name. */
     runBackup(): Promise<string>;
@@ -195,6 +214,7 @@ class Counters {
 
 export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const clock = opts.clock ?? (() => Date.now());
+    const about = opts.about ?? ((): AboutThisApi => ({ api: 'source', update: null, nextRestart: null }));
     const startedAt = clock();
     const kh = new KeyholderClient(opts.keyholderSocket);
     const store = opts.store;
@@ -765,6 +785,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
+            api: about().api, update: about().update, nextRestart: about().nextRestart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
         });
     }
@@ -1064,21 +1085,51 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         handle(req, res).catch(() => send(res, json(500, { error: 'The key vault could not do that.', code: 'internal' })));
     });
 
+    async function closeRest(): Promise<void> {
+        await Promise.allSettled([...background]);
+        await push.idle();
+        kh.close();
+        db?.close();
+        db = null;
+    }
+
     return {
         listen: (port = 0, host = '127.0.0.1') => new Promise<number>((resolve, reject) => {
             server.once('error', reject);
             server.listen(port, host, () => resolve((server.address() as AddressInfo).port));
         }),
+        listenUnix: async (linkPath, mode = 0o660) => {
+            const own = path.join(path.dirname(linkPath), `api-${process.pid}.sock`);
+            rmSync(own, { force: true });
+            await new Promise<void>((resolve, reject) => {
+                server.once('error', reject);
+                server.listen(own, () => resolve());
+            });
+            chmodSync(own, mode);
+            const next = `${linkPath}.${process.pid}`;
+            rmSync(next, { force: true });
+            symlinkSync(path.basename(own), next);
+            renameSync(next, linkPath);
+            return own;
+        },
+        drain: async (timeoutMs = 30_000) => {
+            await new Promise<void>(resolve => {
+                const timer = setTimeout(() => server.closeAllConnections(), timeoutMs);
+                server.close(() => {
+                    clearTimeout(timer);
+                    resolve();
+                });
+                server.closeIdleConnections();
+            });
+            await closeRest();
+        },
         close: async () => {
             await Promise.allSettled([...background]);
-            await push.idle();
             await new Promise<void>(resolve => {
                 server.closeAllConnections();
                 server.close(() => resolve());
             });
-            kh.close();
-            db?.close();
-            db = null;
+            await closeRest();
         },
         runBackup,
         maintenance,

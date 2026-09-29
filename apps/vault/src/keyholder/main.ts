@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { runningImage } from '../shared/image-identity.js';
 import { checkMemoryHygiene, hygieneRefusal } from './hygiene.js';
 import { Keyholder } from './keyholder.js';
 import { listenKeyholder } from './server.js';
 
 /**
- * `vault-keyholder --config <file>`. The config (V3 bakes it into the image, beside the pinned custodian keys):
+ * `vault-keyholder --config <file>`. The config (on the image's read-only system partition, beside the pinned keys):
  *
- *   {"stateDir": "...", "socketPath": "...", "genesisCustodians": ["<hex>", "<hex>", "<hex>"], "releaseHash": "..."}
+ *   {"stateDir": "...", "socketPath": "...", "genesisCustodians": ["<hex>", "<hex>", "<hex>"]}
+ *
+ * The hello's `releaseHash` is the image this machine booted (image-identity.ts: the UKI and its dm-verity root hash),
+ * which the custodian's tool checks against the newest two-signed release. `releaseHash` in the config overrides it
+ * (tests and rehearsals, which boot no image); without either it is `unreleased`.
  *
  * It starts locked (or fresh, before a genesis) and stays so until two custodians unlock it. On SIGTERM or SIGINT it
  * wipes what it holds and exits; an uncaught error does the same, with no core file (hygiene.ts).
@@ -33,7 +38,8 @@ async function main(): Promise<void> {
     const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
         stateDir: string; socketPath: string; genesisCustodians: string[]; releaseHash?: string;
     };
-    const kh = new Keyholder({ stateDir: config.stateDir, genesisCustodians: config.genesisCustodians, releaseHash: config.releaseHash, hygiene });
+    const releaseHash = config.releaseHash ?? runningImage()?.imageHash;
+    const kh = new Keyholder({ stateDir: config.stateDir, genesisCustodians: config.genesisCustodians, releaseHash, hygiene });
     const server = await listenKeyholder(kh, config.socketPath);
     const stop = (code: number) => {
         kh.lock();

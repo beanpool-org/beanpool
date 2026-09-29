@@ -167,6 +167,24 @@ export function writeTombstone(tableName: string, rowKey: string): void {
 }
 
 /**
+ * How long every server keeps a tombstone (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3 T6). A delta
+ * carries a delete only as its tombstone, so a standby whose cursor is older than this has missed deletes its main server
+ * no longer holds: it takes a force-resync instead of a delta (services/backup-puller.ts).
+ */
+export const TOMBSTONE_RETENTION_DAYS = 30;
+export const TOMBSTONE_RETENTION_MS = TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Drops the tombstones older than TOMBSTONE_RETENTION_MS, whatever this server's role (connector-manager.ts, daily). No
+ * floor from the pull cursors: only this server's own puller writes one (`backup:primary`), so a promoted server's last
+ * pull kept every tombstone written after its take-over, for good, and a standby an older version's refused force-resync
+ * left with cursor `''` kept every one. Returns how many went.
+ */
+export function pruneTombstones(now = Date.now()): number {
+    return db.prepare('DELETE FROM tombstones WHERE deleted_at < ?').run(new Date(now - TOMBSTONE_RETENTION_MS).toISOString()).changes;
+}
+
+/**
  * Deletes the rows of a plain table (engine/replication-manifest.ts PLAIN_TABLES) that `where` matches, each with a
  * tombstone keyed by its primary key's values joined with `|` (engine/plain-tables.ts plainRowKey), so a standby deletes
  * them too: a delta carries a delete only as its tombstone. A row the table's RowRule doesn't hold (a phone of a key that

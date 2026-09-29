@@ -29,8 +29,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PatternBackground from '../components/PatternBackground';
 import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
-import { createReturnLock } from '../utils/return-lock';
+import { getAppLockEnabled } from '../utils/LocalAuth';
+import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
@@ -149,7 +149,7 @@ function RootLayoutNav() {
     }, []);
 
     const triggerUnlock = async () => {
-        const success = await authenticateUser('Unlock BeanPool');
+        const success = await unlockWithPhoneLock('Unlock BeanPool');
         if (success) {
             setIsLocked(false);
         }
@@ -161,7 +161,7 @@ function RootLayoutNav() {
             const enabled = await getAppLockEnabled();
             if (enabled && identity) {
                 setIsLocked(true);
-                const success = await authenticateUser('Unlock BeanPool');
+                const success = await unlockWithPhoneLock('Unlock BeanPool');
                 if (success) {
                     setIsLocked(false);
                 }

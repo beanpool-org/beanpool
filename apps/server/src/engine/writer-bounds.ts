@@ -134,10 +134,12 @@ export function assertMayStartEnterprise(member: string, now = Date.now()): void
  * The invites `member` made in the day: codes by when they were made, and offline tickets by when they were used. A
  * ticket is made on the phone, with a time its maker signs, and has no row here until someone joins with it, so its
  * join is when this server first sees it. A ticket's row is keyed on its hash (16 hex); every code begins `INV-`.
+ * Never the codes an owner or admin made in Settings (`issued_by`, routes/community.ts): those hang off the first member
+ * in the invite tree, and a card run of 100 would otherwise stop that person inviting anyone from their own phone.
  */
 function inviteTimes(member: string, now: number): string[] {
     return [
-        ...column(db.prepare(`SELECT created_at AS t FROM invite_codes WHERE created_by = ? AND code LIKE 'INV-%' AND created_at > ?`)
+        ...column(db.prepare(`SELECT created_at AS t FROM invite_codes WHERE created_by = ? AND code LIKE 'INV-%' AND issued_by IS NULL AND created_at > ?`)
             .all(member, since(now))),
         ...column(db.prepare(`SELECT used_at AS t FROM invite_codes WHERE created_by = ? AND code NOT LIKE 'INV-%' AND used_at > ?`)
             .all(member, since(now))),
@@ -147,10 +149,10 @@ function inviteTimes(member: string, now: number): string[] {
 const invitesPerDayWords = (limit: number) => (when: string) =>
     `You can make ${limit} invites in any 24 hours. You can make more ${when}.`;
 
-/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working. */
+/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working (Settings' own aside). */
 export function assertMayMakeInvite(member: string, now = Date.now()): void {
     const unused = (db.prepare(`SELECT COUNT(*) AS n FROM invite_codes
-                                 WHERE created_by = ? AND code LIKE 'INV-%' AND used_by IS NULL AND created_at > ?`)
+                                 WHERE created_by = ? AND code LIKE 'INV-%' AND issued_by IS NULL AND used_by IS NULL AND created_at > ?`)
         .get(member, iso(now - INVITE_LIFE_DAYS * DAY_MS)) as { n: number }).n;
     if (unused >= WRITER_LIMITS.invitesUnused) {
         throw new WriterLimitError('invites_unused',

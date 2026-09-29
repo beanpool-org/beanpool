@@ -19,7 +19,8 @@
  *  6. Posts: 100 a day (the 101st 429 posts_per_day), a keeper's posts for an enterprise counted with their own.
  *  7. Groups: 5 a day (the 6th 429 groups_per_day).
  *  8. Invites: 20 a day (the 21st 429 invites_per_day); 50 unused (the 51st 429 invites_unused), and a used one makes
- *     room; an offline ticket counts when someone joins with it, and past 20 that join is refused with nothing written.
+ *     room; the codes an owner makes in Settings under the first member never count against that member's own; an
+ *     offline ticket counts when someone joins with it, and past 20 that join is refused with nothing written.
  *  9. The unused-invite prune: an unused code (or ticket row) past 30 days goes, with no tombstone; a used one and a
  *     younger one stay; a standby prunes nothing.
  * 10. The Pulse: 50 links by hand a day (the 51st 429 pulse_per_day); a link already there, spelled with share tracking
@@ -405,6 +406,13 @@ async function main(): Promise<void> {
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code = 'INV-Q000-OLD1'").run(owner.pk, ago(DAY));
         const afterUse = await invite(quin);
         assert(afterUse.status === 200, `once one is used, Quin can make another (${show(afterUse)})`);
+
+        const vic = member('Vic');
+        for (let i = 0; i < WRITER_LIMITS.invitesUnused + 10; i++) {
+            db.prepare('INSERT INTO invite_codes (code, created_by, created_at, issued_by) VALUES (?, ?, ?, ?)').run(`INV-V${String(i).padStart(3, '0')}-CARD`, vic.pk, ago(HOUR), 'owner:password');
+        }
+        const vicOwn = await invite(vic);
+        assert(vicOwn.status === 200, `60 invites an owner made in Settings under Vic (the first member) don't count against Vic's own (${show(vicOwn)})`);
 
         const rex = member('Rex');
         for (let i = 0; i < WRITER_LIMITS.invitesPerDay - 1; i++) await invite(rex);

@@ -69,6 +69,8 @@ export async function authenticateUser(reason: string): Promise<boolean> {
     const lock = await getScreenLock();
     if (lock === 'none') return true;
     if (lock === 'unknown' && !((await hasLocalAuthHardware()) && (await isLocalAuthEnrolled()))) return true;
+    promptOpened();
+    let passed = false;
     try {
         const res = await LocalAuthentication.authenticateAsync({
             promptMessage: reason,
@@ -76,11 +78,64 @@ export async function authenticateUser(reason: string): Promise<boolean> {
             disableDeviceFallback: false,
         });
 
+        passed = res.success === true;
         return res.success;
     } catch (e) {
         console.warn('Local authentication error:', e);
         return false;
+    } finally {
+        promptClosed(passed);
     }
+}
+
+/**
+ * A stretch of time the phone's own lock prompt was open: from the first authenticateUser prompt opening to the last one
+ * closing, with passed true when one of them passed. Overlapping calls make one stretch (Android answers a second call
+ * while one is open with app_cancel at once).
+ *
+ * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
+ * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
+ */
+export type LocalAuthPromptStretch = { openedAt: number; closedAt: number | null; passed: boolean };
+
+/** Kept to the last few: the return lock only looks at the ones since the app last left the front. */
+const PROMPT_STRETCHES_KEPT = 16;
+let openPrompts = 0;
+const promptStretches: LocalAuthPromptStretch[] = [];
+let promptCloseWaiters: Array<() => void> = [];
+
+function promptOpened(): void {
+    if (openPrompts++ === 0) {
+        promptStretches.push({ openedAt: Date.now(), closedAt: null, passed: false });
+        if (promptStretches.length > PROMPT_STRETCHES_KEPT) promptStretches.shift();
+    }
+}
+
+function promptClosed(passed: boolean): void {
+    const current = promptStretches[promptStretches.length - 1];
+    if (passed && current) current.passed = true;
+    if (--openPrompts > 0) return;
+    openPrompts = 0;
+    if (current) current.closedAt = Date.now();
+    const waiters = promptCloseWaiters;
+    promptCloseWaiters = [];
+    waiters.forEach(resolve => resolve());
+}
+
+/** Whether one of authenticateUser's prompts is open now. */
+export function isLocalAuthPromptOpen(): boolean {
+    return openPrompts > 0;
+}
+
+/** The prompt stretches, oldest first; the last one has closedAt null while a prompt is open. Copies. */
+export function localAuthPromptStretches(): LocalAuthPromptStretch[] {
+    return promptStretches.map(s => ({ ...s }));
+}
+
+/** Resolves when no prompt is open: at once if none is. */
+export function whenLocalAuthPromptsClose(): Promise<void> {
+    if (openPrompts === 0) return Promise.resolve();
+    return new Promise(resolve => promptCloseWaiters.push(resolve));
 }
 
 /**

@@ -98,14 +98,38 @@ export function isVisitorsDirectConversation(conversationId: unknown, publicKey:
 }
 
 /**
- * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an id that names no
- * conversation, which sendMessage follows to the one it became (chat consolidation) and refuses a visitor anywhere but a
- * direct conversation it is in.
+ * The conversation an old conversation id was folded into (chat consolidation): a line stored there names the old id in
+ * its metadata, `originalConversationId` or `originalConversationIds`. Undefined when no line does.
+ */
+function consolidatedConversationOf(conversationId: string): string | undefined {
+    // json_valid() guards json_extract via CASE so a single row with malformed
+    // metadata cannot abort the whole SELECT (which a caller's catch would
+    // then swallow, silently disabling consolidation resolution node-wide).
+    const row = db.prepare(`
+        SELECT conversation_id FROM messages
+        WHERE metadata IS NOT NULL
+          AND CASE WHEN json_valid(metadata) THEN (
+                json_extract(metadata, '$.originalConversationId') = ?
+                OR json_extract(metadata, '$.originalConversationIds') LIKE ?
+              ) ELSE 0 END
+        LIMIT 1
+    `).get(conversationId, `%${conversationId}%`) as { conversation_id?: string } | undefined;
+    return row?.conversation_id || undefined;
+}
+
+/**
+ * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an old id of one, which
+ * sendMessage follows to the one it became (chat consolidation). Anything else, an id nobody has included, is refused at
+ * the gate in the same words: letting every id that names no conversation through told a visitor, by the engine's
+ * different answer, which ids do name one (a hidden group's chat is its group's id).
  */
 export function visitorMaySendTo(conversationId: unknown, publicKey: string | undefined): boolean {
     if (isVisitorsDirectConversation(conversationId, publicKey)) return true;
-    return typeof conversationId === 'string' && !!conversationId && !!publicKey && isLiveVisitor(db, publicKey)
-        && !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId);
+    if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    if (db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId)) return false;
+    let folded: string | undefined;
+    try { folded = consolidatedConversationOf(conversationId); } catch { return false; }
+    return !!folded && isVisitorsDirectConversation(folded, publicKey);
 }
 
 /**
@@ -298,20 +322,9 @@ export function sendMessage(
     // If not found directly, check if conversationId was consolidated into an active DM
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
         try {
-            // json_valid() guards json_extract via CASE so a single row with malformed
-            // metadata cannot abort the whole SELECT (which the surrounding catch would
-            // then swallow, silently disabling consolidation resolution node-wide).
-            const consolidatedMsg = db.prepare(`
-                SELECT conversation_id FROM messages
-                WHERE metadata IS NOT NULL
-                  AND CASE WHEN json_valid(metadata) THEN (
-                        json_extract(metadata, '$.originalConversationId') = ?
-                        OR json_extract(metadata, '$.originalConversationIds') LIKE ?
-                      ) ELSE 0 END
-                LIMIT 1
-            `).get(conversationId, `%${conversationId}%`) as any;
-            if (consolidatedMsg?.conversation_id) {
-                effectiveConvId = consolidatedMsg.conversation_id;
+            const consolidatedId = consolidatedConversationOf(conversationId);
+            if (consolidatedId) {
+                effectiveConvId = consolidatedId;
                 participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
 
                 // Preserve the ORIGINAL conversation id the sender encrypted against.

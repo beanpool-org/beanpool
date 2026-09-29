@@ -24,6 +24,7 @@ import {
 } from '@beanpool/engine';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -158,6 +159,22 @@ export function canReadEventThread(row: EventRow, pubkey: string | undefined): b
 }
 
 /**
+ * The event isn't there for this caller, so its chat answers as for an id nobody has: hidden by reports (eventHiddenFrom),
+ * or a group's event they can't see (engine/post-sight.ts: not its author, not an active member of the group) and have no
+ * seat in its chat. "Only the host and people going…" told anyone holding an invite-only group's event id that the event
+ * was real. It takes nothing from anyone: whoever may read the chat (the host, a keeper of the enterprise that posted it,
+ * someone Going) still reads it, and is still refused whatever they were refused.
+ */
+export function eventUnknownTo(row: EventRow, pubkey: string | undefined): boolean {
+    return eventHiddenFrom(row, pubkey) || (postOutOfSight(row, pubkey) && !canReadEventThread(row, pubkey));
+}
+
+/** eventUnknownTo for an event chat's conversation id; false when it names no event (the caller's own refusal stands). */
+export function eventChatUnknownTo(conversationId: string, pubkey: string | undefined): boolean {
+    try { return eventUnknownTo(loadEventForThread(conversationId), pubkey); } catch { return false; }
+}
+
+/**
  * The chat row, created with the post: id equal to the post id and `type = 'event_thread'`, mirroring
  * ensureEnterpriseThread. Lazily created for an event posted before this slice shipped.
  */
@@ -289,7 +306,7 @@ export function getEventThread(
     offset = 0,
 ): EventThreadView {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
     if (!canReadEventThread(row, viewerPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
 
@@ -320,7 +337,7 @@ export function postEventThreadMessage(
     clientId?: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, authorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, authorPubkey)) throw new Error(EVENT_NOT_FOUND);
     // Its author still reads it, but a line now would reach the people Going, whom the event is hidden from.
     if (row.hidden_by_reports_at) throw new Error(EVENT_CHAT_HIDDEN);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
@@ -389,7 +406,7 @@ export function removeEventThreadMessage(
     actorPubkey: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (!isEventHost(db, row, actorPubkey)) {
         throw new Error('Only the host can remove messages from this event chat');
     }

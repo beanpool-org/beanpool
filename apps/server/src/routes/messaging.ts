@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
@@ -415,6 +415,11 @@ router.post('/api/messages/mark-read', async (ctx) => {
         }
         ctx.body = { success: true };
         return;
+    } else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        // A group's event the caller can't see (or one hidden by reports): an id nobody has, not "not a participant".
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
     } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
@@ -453,6 +458,11 @@ router.post('/api/messages/mute', async (ctx) => {
         return;
     }
     if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
+    if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
+    }
     if (conv.type !== GROUP_THREAD_TYPE && !canOpenChat(conv, actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not in this conversation' };
@@ -479,6 +489,13 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // pending request, an open invitation and an outsider are all refused; node admins get no exception.
     if (conv.type === GROUP_THREAD_TYPE) {
         if (refuseGroupChat(ctx, conversationId, ctx.state.actor as string | undefined, CONVERSATION_NOT_FOUND)) return;
+    }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by
+    // reports) is an id nobody has, before the participant check below could say "not a participant".
+    else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, ctx.state.actor as string | undefined)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Under read-auth the signer is a verified member (ctx.state.actor); require

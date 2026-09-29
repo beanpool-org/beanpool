@@ -12,6 +12,7 @@ import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -968,10 +969,12 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
-    // would hand back the whole event.
-    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)) {
+    // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
+    // its cancellation or its end can say it exists.
+    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)
+        || postOutOfSight(row, memberPublicKey)) {
         throw new Error('Event not found');
     }
     if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
@@ -1051,7 +1054,8 @@ export function rsvpEvent(
 
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
-    if (!post || post.type !== 'poll') {
+    // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
+    if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, authorPublicKey)) {
         throw new Error('Poll not found');
     }
     if (post.authorPublicKey !== authorPublicKey) {
@@ -1095,8 +1099,10 @@ export function votePoll(
 
     const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     // A poll hidden by reports (G3) is not there for anyone but its author, here as when read by id: a vote would
-    // hand back the whole poll.
-    if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)) {
+    // hand back the whole poll. Nor is a group's or a direct poll for anyone who can't see it (engine/post-sight.ts),
+    // before its being closed can say it exists. An observer sees a group's poll, and is refused the vote below.
+    if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)
+        || marketplacePostOutOfSight(post, voterPublicKey)) {
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {

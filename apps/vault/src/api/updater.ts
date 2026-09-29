@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
     API_BUNDLE_ASSET,
@@ -35,6 +35,48 @@ export { stagedNames, uuidOfHex, veritysetupVerify, type VerifyRoot } from '../s
  * Never backwards: only a release newer than the one running is taken, and an API that can't find itself in the feed
  * (a withheld release, a source run) takes nothing.
  */
+
+/**
+ * Everything in the API's inbox but `keep` (the staged image's names, as regular files) goes: the API owns it, and a
+ * hostile API before it may have left anything there, which root's step leaves alone (a directory) or refuses. A file
+ * or a link is unlinked (never what a link points at). A directory goes with all it holds, once its own directories are
+ * writable again (found by lstat, so never through a link; Node's rm doesn't follow a link inside either). Nothing
+ * outside the inbox is touched. Returns what couldn't be removed, and why.
+ */
+function clearInbox(dir: string, keep: readonly string[]): string[] {
+    const left: string[] = [];
+    for (const name of readdirSync(dir)) {
+        const p = path.join(dir, name);
+        try {
+            const st = lstatSync(p);
+            if (st.isFile() && keep.includes(name)) continue;
+            if (st.isDirectory()) {
+                try {
+                    writable(p);
+                } catch {
+                    // rm says what stays.
+                }
+            }
+            rmSync(p, { recursive: true, force: true });
+        } catch (e) {
+            left.push(`${name}: ${errorCode(e)}`);
+        }
+    }
+    return left;
+}
+
+/** A directory this process's user owns, and each one under it, made writable (lstat: a link is never followed). */
+function writable(dir: string): void {
+    chmodSync(dir, 0o700);
+    for (const name of readdirSync(dir)) {
+        const p = path.join(dir, name);
+        if (lstatSync(p).isDirectory()) writable(p);
+    }
+}
+
+function errorCode(e: unknown): string {
+    return (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+}
 
 export interface SwitchRequest {
     bundlePath: string;
@@ -140,7 +182,9 @@ export class Updater {
         // An API-only release after it names the same image and carries none of them.
         const newestImage = chain.newest && image && chain.newest.manifest.imageHash !== image ? chain.newest.manifest.imageHash : null;
         const brought = newestImage ? chain.releases.find(r => r.manifest.imageHash === newestImage) ?? null : null;
-        s.imageWaiting = brought ? { ...ref(brought), imageHash: brought.manifest.imageHash, ...(await this.stage(brought, files, chain)) } : null;
+        s.imageWaiting = brought ? { ...ref(brought), imageHash: brought.manifest.imageHash, ...(await this.stage(brought, files, chain).catch(e => ({
+            staged: false, error: `the image could not be staged: ${(e as Error).message}`.slice(0, 300),
+        }))) } : null;
         if (!running) {
             s.note = own === null ? 'Run from source: no handover.' : !image
                 ? 'The booted image is unknown: no handover.'
@@ -191,24 +235,46 @@ export class Updater {
      * to it (`stagedNames().release`). Anything that doesn't check is removed. Once staged it isn't fetched again; an
      * older staged image goes. These checks only spare a download that would fail: root makes them all again at the
      * restart, from its own pinned keys (install/install.ts), since this process is the one they guard against.
+     *
+     * First, at every check, the inbox is cleared of everything else (clearInbox). What can't be removed is said in
+     * `error`, and staging goes on beside it.
      */
     private async stage(release: TrustedRelease, files: FeedRelease[], chain: ReleaseChain): Promise<{ staged: boolean; error?: string }> {
         const dir = this.opts.stagedDir;
         if (!dir) return { staged: false };
+        let left: string[];
+        try {
+            mkdirSync(dir, { recursive: true, mode: 0o700 });
+            left = clearInbox(dir, Object.values(stagedNames(release.manifest.version, release.manifest.image.roothash)));
+        } catch (e) {
+            left = [`the inbox itself: ${errorCode(e)}`];
+        }
+        const uncleared = left.length ? `the inbox could not be cleared (${left.join('; ')})` : null;
+        const result = await this.fetchImage(dir, release, files, chain);
+        const error = [uncleared, result.error].filter(Boolean).join('; ');
+        return { staged: result.staged, ...(error ? { error: error.slice(0, 300) } : {}) };
+    }
+
+    private async fetchImage(dir: string, release: TrustedRelease, files: FeedRelease[], chain: ReleaseChain): Promise<{ staged: boolean; error?: string }> {
         const { version, image, imageHash } = release.manifest;
         const names = stagedNames(version, image.roothash);
         const marker = path.join(dir, names.release);
         try {
-            if (existsSync(marker) && (JSON.parse(readFileSync(marker, 'utf8')) as { imageHash?: string }).imageHash === imageHash) return { staged: true };
+            const all = [names.uki, names.root, names.verity].every(n => lstatSync(path.join(dir, n)).isFile());
+            if (all && (JSON.parse(readFileSync(marker, 'utf8')) as { imageHash?: string }).imageHash === imageHash) return { staged: true };
         } catch {
-            // Read again below.
+            // Not (all) there: fetched below.
         }
         const listed = files.find(f => sha256Hex(f.manifestText) === release.hash) as FeedRelease;
-        mkdirSync(dir, { recursive: true, mode: 0o700 });
-        for (const old of readdirSync(dir)) {
-            if (old.startsWith('beanpool-vault_') && !Object.values(names).includes(old)) rmSync(path.join(dir, old), { force: true });
-        }
-        const drop = () => Object.values(names).forEach(n => rmSync(path.join(dir, n), { force: true }));
+        const drop = () => {
+            for (const n of Object.values(names)) {
+                try {
+                    rmSync(path.join(dir, n), { recursive: true, force: true });
+                } catch {
+                    // The next check's clearInbox says what stays.
+                }
+            }
+        };
         try {
             const uki = await this.opts.feed.assetToFile(listed, UKI_ASSET, path.join(dir, names.uki), UKI_MAX_BYTES);
             if (uki !== image.ukiSha256) {

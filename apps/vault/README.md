@@ -131,7 +131,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files into
   `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs), where
   systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to the old
-  one if it fails to boot three times. Anything else is refused, logged and deleted. Then two custodians unlock. Not
+  one if it fails to boot three times. Anything else is refused, logged and deleted: root unlinks the inbox's files
+  (it never walks into a directory the API's user made there), and at its next check the API clears everything in
+  its inbox but the image it stages (a directory with all it holds; a link, never what it points at). What it can't
+  remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians
+  unlock. Not
   yet run end to end: a real signed next image installed by systemd-sysupdate and booted. The test image checks the
   refusals on the image; `install.test.ts` checks the checks and the move.
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only

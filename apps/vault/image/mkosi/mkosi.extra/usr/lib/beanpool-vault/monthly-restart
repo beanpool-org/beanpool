@@ -4,8 +4,8 @@
 # two custodian signatures, newer than the running release, the file names, the UKI's SHA-256 and veritysetup verify
 # against the release's root hash. Only a new image that passes all of them reaches systemd-sysupdate, which writes it
 # into the other slot (usr/lib/sysupdate.d); systemd-boot boots it next, and the slot in use is kept to fall back to.
-# Anything else is refused, logged and deleted. Then the machine restarts, and the vault waits locked for two
-# custodians.
+# Anything else is refused and logged; root unlinks the inbox's files, and the API clears anything else in it (a
+# directory, a link) at its next check. Then the machine restarts, and the vault waits locked for two custodians.
 set -u
 /opt/node/bin/node /usr/lib/beanpool-vault/vault-install.mjs || echo "monthly restart: no new image installed; restarting the current one"
 echo "monthly restart: restarting now"

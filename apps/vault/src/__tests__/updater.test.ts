@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { installStaged } from '../install/install.js';
 import { Launcher } from '../launcher/launcher.js';
 import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
+import { doGenesis, get, startVault } from './harness.js';
 import { keys3, makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 
 /**
@@ -224,6 +225,101 @@ describe('the image staged is the one the newest release names, from the release
         expect(t.asked).toHaveLength(1);
         expect(readFileSync(t.asked[0].bundlePath).equals(t.bundleB)).toBe(true);
         expect((await t.install()).result).toEqual({ installed: true, version: '1.1.0' });
+    });
+});
+
+describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 round 2)', () => {
+    /** 1.0.0 runs; 1.0.1 is an API fix for its image (a handover); 1.1.0 is a new image (staged). */
+    function setUpInbox() {
+        const t = setUp();
+        const r2 = makeRelease({ version: '1.0.1', previous: t.r1, custodianKeys: t.root, signers: t.root.slice(1), apiBundleHash: sha256Hex(t.bundleB) });
+        publish(t.feedDir, r2, t.bundleB);
+        const uki = crypto.randomBytes(100);
+        const image = { ukiSha256: sha256Hex(uki), roothash: crypto.randomBytes(32).toString('hex') };
+        const r3 = makeRelease({ version: '1.1.0', previous: r2, custodianKeys: t.root, signers: t.root, image, apiBundleHash: sha256Hex(crypto.randomBytes(64)) });
+        const d = publish(t.feedDir, r3);
+        writeFileSync(path.join(d, UKI_ASSET), uki);
+        writeFileSync(path.join(d, ROOT_ASSET), Buffer.from('the system partition'));
+        writeFileSync(path.join(d, VERITY_ASSET), Buffer.from('its verity tree'));
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        mkdirSync(stagedDir, { mode: 0o700 });
+        const names = Object.values(stagedNames('1.1.0', image.roothash)).sort();
+        return { ...t, stagedDir, names, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
+    }
+
+    it('a directory (one under a name it stages too, one it can\'t write), a link to a directory outside, and a directory holding a link out: all gone, what the links point at survives, the image is staged and the handover runs', async () => {
+        const t = setUpInbox();
+        const outside = path.join(t.feedDir, '..', `outside-${n}`);
+        mkdirSync(outside);
+        writeFileSync(path.join(outside, 'precious'), 'not the inbox\'s');
+        // As a compromised API might leave them (the reviewer's `mkdir`, and more).
+        mkdirSync(path.join(t.stagedDir, 'beanpool-vault_x', 'locked'), { recursive: true });
+        writeFileSync(path.join(t.stagedDir, 'beanpool-vault_x', 'locked', 'f'), 'x');
+        chmodSync(path.join(t.stagedDir, 'beanpool-vault_x', 'locked'), 0o500);
+        chmodSync(path.join(t.stagedDir, 'beanpool-vault_x'), 0o500);
+        mkdirSync(path.join(t.stagedDir, 'beanpool-vault_1.1.0.efi'));
+        writeFileSync(path.join(t.stagedDir, 'beanpool-vault_1.1.0.efi', 'f'), 'x');
+        symlinkSync(outside, path.join(t.stagedDir, 'beanpool-vault_9.9.9.efi'));
+        mkdirSync(path.join(t.stagedDir, 'junk'));
+        symlinkSync(outside, path.join(t.stagedDir, 'junk', 'out'));
+        writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
+
+        const s = await t.u.check();
+        expect(s.imageWaiting).toEqual({ version: '1.1.0', hash: expect.any(String), imageHash: expect.any(String), staged: true });
+        expect(s.handover).toMatchObject({ ok: true, to: { version: '1.0.1' } });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
+        expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the inbox\'s');
+    });
+
+    it('an image already staged: what is put beside it (or in place of one of its files) goes at the next check', async () => {
+        const t = setUpInbox();
+        expect((await t.u.check()).imageWaiting).toMatchObject({ staged: true });
+        mkdirSync(path.join(t.stagedDir, 'beanpool-vault_9.9.9.efi'));
+        const uki = t.names.find(x => x.endsWith('.efi')) as string;
+        rmSync(path.join(t.stagedDir, uki));
+        mkdirSync(path.join(t.stagedDir, uki));
+        expect((await t.u.check()).imageWaiting).toMatchObject({ staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
+        expect(statSync(path.join(t.stagedDir, uki)).isFile()).toBe(true);
+    });
+
+    // Root reads and writes past file modes: a file it can't remove can't be made there.
+    it.skipIf(process.getuid?.() === 0)('an entry it can\'t remove: said in imageWaiting.error, and the handover still runs; once it can, the next check stages', async () => {
+        const t = setUpInbox();
+        writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
+        chmodSync(t.stagedDir, 0o500);
+        try {
+            const s = await t.u.check();
+            expect(s.imageWaiting).toMatchObject({ version: '1.1.0', staged: false, error: expect.stringMatching(/^the inbox could not be cleared \(stray: EACCES\)/) });
+            expect(s.handover).toMatchObject({ ok: true, to: { version: '1.0.1' } });
+        } finally {
+            chmodSync(t.stagedDir, 0o700);
+        }
+        const again = await t.u.check();
+        expect(again.imageWaiting).toEqual({ version: '1.1.0', hash: expect.any(String), imageHash: expect.any(String), staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
+    });
+
+    it.skipIf(process.getuid?.() === 0)('/v1/report shows it', async () => {
+        const t = setUpInbox();
+        const u = t.u;
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        try {
+            await doGenesis(v);
+            writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
+            chmodSync(t.stagedDir, 0o500);
+            try {
+                await u.check();
+            } finally {
+                chmodSync(t.stagedDir, 0o700);
+            }
+            const r = await get(v, '/v1/report');
+            expect(r.status).toBe(200);
+            const update = (JSON.parse(r.body.report.text as string) as { update: { imageWaiting: { staged: boolean; error: string } } }).update;
+            expect(update.imageWaiting).toMatchObject({ staged: false, error: expect.stringContaining('the inbox could not be cleared (stray: EACCES)') });
+        } finally {
+            await v.close();
+        }
     });
 });
 

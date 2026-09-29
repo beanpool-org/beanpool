@@ -18,7 +18,7 @@ import {
     type SsoProvider,
 } from '@beanpool/signin';
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
-import { createVaultApi, type VaultApi } from '../api/server.js';
+import { createVaultApi, type VaultApi, type VaultApiOptions } from '../api/server.js';
 import { LocalDirectoryFeed } from '../shared/release-feed.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { MemoryHygiene } from '../keyholder/hygiene.js';
@@ -152,6 +152,8 @@ export async function startVault(opts: {
     hygiene?: MemoryHygiene;
     /** The API waits for its data directory to be a mount point (the image's data partition). */
     requireDataMount?: boolean;
+    /** What the API says of itself in `/v1/report` (its bundle, the release checks, the next restart). */
+    about?: VaultApiOptions['about'];
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -176,7 +178,7 @@ export async function startVault(opts: {
     const store = opts.store ? opts.store(inner) : inner;
     const makeApi = async () => {
         const api = createVaultApi({
-            dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy,
+            dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy, about: opts.about,
             ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');

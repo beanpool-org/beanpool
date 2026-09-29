@@ -7,13 +7,13 @@ import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
-    WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, webDeleteFailedLine,
+    WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, purgeHere, webDeleteFailedLine,
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, purgeAccountApi, getSignInRecovery,
+    updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
 import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
@@ -1139,11 +1139,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     setIsPurging(true);
                                                     setPurgeError(null);
                                                     try {
-                                                        // Until the node answers that it deleted the account, nothing in this browser changes.
-                                                        try {
-                                                            await purgeAccountApi();
-                                                        } catch (e) {
-                                                            setPurgeError(webDeleteFailedLine((e instanceof Error && e.message) || 'Failed to purge account from node. Active escrow deals may need to be resolved first.'));
+                                                        // Until the node the panel named answers { ok: true }, nothing in this browser changes:
+                                                        // purgeHere sends nothing when the web app now talks to another node, and gives up
+                                                        // after 20 seconds.
+                                                        const purged = await purgeHere(plan);
+                                                        if (!purged.ok) {
+                                                            setPurgeError(webDeleteFailedLine(purged.reason));
                                                             return;
                                                         }
                                                         if (plan.kind === 'this-one') {

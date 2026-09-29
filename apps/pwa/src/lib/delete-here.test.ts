@@ -7,8 +7,12 @@
  * a stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The purge goes through api.ts `request`, which signs with the browser's key: none here (no IndexedDB in the tests).
+vi.mock('./identity', async () => ({ ...(await vi.importActual('./identity')), loadIdentity: vi.fn(async () => null) }));
 import {
-    leaveThisCommunity, membershipAt, otherCommunityOfThisBrowser, planWebDelete, webDeleteFailedLine, webKeepsKeyLine,
+    PURGE_TIMEOUT_MS, WEB_COMMUNITY_CHANGED, WEB_PURGE_NOT_CONFIRMED, WEB_PURGE_NO_ANSWER, leaveThisCommunity,
+    membershipAt, otherCommunityOfThisBrowser, planWebDelete, purgeHere, webDeleteFailedLine, webKeepsKeyLine,
     webLastCommunityLine,
 } from './delete-here';
 
@@ -134,5 +138,76 @@ describe('what the web app says', () => {
     it('a delete the node refused says the key is still here', () => {
         expect(webDeleteFailedLine('You have a deal under way.')).toBe(
             'You have a deal under way. Nothing was removed from this browser: your key is still here.');
+    });
+});
+
+/** The purge route's answer, through api.ts as the page sends it; every other request fails the test. */
+type PurgeAnswer = 'ok' | 'already' | 'refused' | 'not-json' | 'odd' | 'not-ok' | 'silent';
+
+function purgeAnswers(answer: PurgeAnswer) {
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method !== 'POST' || !url.endsWith('/api/member/purge')) throw new Error(`No request expected: ${url}`);
+        sent.push(url);
+        if (answer === 'silent') {
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
+        }
+        if (answer === 'refused') return new Response(JSON.stringify({ error: 'You have a deal under way.' }), { status: 400 });
+        if (answer === 'not-json') return new Response('<html>Sign in to the Wi-Fi</html>', { status: 200 });
+        if (answer === 'odd') return new Response('{}', { status: 200 });
+        if (answer === 'not-ok') return new Response(JSON.stringify({ ok: false, message: 'Account purged' }), { status: 200 });
+        return new Response(JSON.stringify({ ok: true, message: answer === 'already' ? 'Account is already pruned' : 'Account successfully purged from node.' }), { status: 200 });
+    }));
+    return sent;
+}
+
+describe('the delete itself (PR #1303)', () => {
+    it('{ ok: true } is a delete, and so is a retry\'s "Account is already pruned"', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        for (const answer of ['ok', 'already'] as const) {
+            const sent = purgeAnswers(answer);
+            expect(await purgeHere({ kind: 'last', here: CASTLEMAINE })).toEqual({ ok: true });
+            expect(sent).toEqual([`${CASTLEMAINE}/api/member/purge`]);
+        }
+    });
+
+    // 4128110186: a captive portal or proxy answers 200 with its own page.
+    for (const answer of ['not-json', 'odd', 'not-ok'] as const) {
+        it(`a 2xx that isn't { ok: true } (${answer}) is not a delete, and says so`, async () => {
+            localStorage.setItem('bp_node_url', CASTLEMAINE);
+            purgeAnswers(answer);
+            expect(await purgeHere({ kind: 'last', here: CASTLEMAINE })).toEqual({ ok: false, reason: WEB_PURGE_NOT_CONFIRMED });
+        });
+    }
+
+    it('a refusal is not a delete, in the node\'s words', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        purgeAnswers('refused');
+        expect(await purgeHere({ kind: 'last', here: CASTLEMAINE })).toEqual({ ok: false, reason: 'You have a deal under way.' });
+    });
+
+    // 4128119830: a node that accepts the connection and never answers.
+    it('a node that never answers: the web app stops waiting, and says try again', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        purgeAnswers('silent');
+        expect(await purgeHere({ kind: 'last', here: CASTLEMAINE }, 50)).toEqual({ ok: false, reason: WEB_PURGE_NO_ANSWER });
+        expect(webDeleteFailedLine(WEB_PURGE_NO_ANSWER)).toBe(
+            "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes " +
+            'the delete in this browser. Nothing was removed from this browser: your key is still here.');
+        expect(PURGE_TIMEOUT_MS).toBe(20_000);
+    });
+
+    // 4128122372: another tab changed Sovereign Node Connection after the panel was opened.
+    it('the web app now talks to another node than the panel named: nothing is sent', async () => {
+        const sent = purgeAnswers('ok');
+        localStorage.setItem('bp_node_url', 'https://byron.beanpool.org');
+        expect(await purgeHere({ kind: 'last', here: CASTLEMAINE })).toEqual({ ok: false, reason: WEB_COMMUNITY_CHANGED });
+        localStorage.removeItem('bp_node_url');
+        expect(await purgeHere({ kind: 'this-one', here: CASTLEMAINE, keeps: { url: window.location.origin, membership: 'member' } }))
+            .toEqual({ ok: false, reason: WEB_COMMUNITY_CHANGED });
+        expect(sent).toEqual([]);
     });
 });

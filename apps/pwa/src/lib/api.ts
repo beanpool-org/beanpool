@@ -119,7 +119,7 @@ export async function buildOfflineInviteCode(
 }
 
 // Base request helper with auth
-export async function request<T>(method: string, path: string, body?: any): Promise<T> {
+export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal): Promise<T> {
     const opts: RequestInit = {
         method,
         cache: 'no-cache',
@@ -127,6 +127,7 @@ export async function request<T>(method: string, path: string, body?: any): Prom
             'Content-Type': 'application/json',
         } as Record<string, string>,
     };
+    if (signal) opts.signal = signal;
 
     const bodyString = body ? JSON.stringify(body) : '';
     if (body) {
@@ -2397,10 +2398,14 @@ export async function getActivityFeedApi(limit: number = 50, offset: number = 0)
 
 // ===================== ACCOUNT DELETION & PURGE (#99) =====================
 
-export async function purgeAccountApi(): Promise<{ ok: boolean; message: string }> {
+/**
+ * Settings' Delete account: the node the web app talks to deletes the account. Callers go through lib/delete-here.ts
+ * `purgeHere`, which gives up after a timeout (`signal`) and counts only `{ ok: true }` as a delete.
+ */
+export async function purgeAccountApi(signal?: AbortSignal): Promise<{ ok: boolean; message: string }> {
     return request<{ ok: boolean; message: string }>('POST', '/api/member/purge', {
         action: 'purge_account',
-    });
+    }, signal);
 }
 
 

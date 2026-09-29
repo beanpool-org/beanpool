@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 73,
-  "hash": "3579d1cfb8fa4c837d32f5718538f31fa54ff3f09b65dc926a51a88dc1d4546d",
+  "version": 74,
+  "hash": "3479b32fbded17d6be0e5e69bc5fa9854adce1dc473701fb96bdc38f3759fba8",
   "sections": [
     {
       "id": "about",
@@ -4939,7 +4939,7 @@
             "A community the app can't reach counts as one you are still in, so a bad connection never takes your key.",
             "**If this is the last community on this phone where you are a member,** your key and 12 words go from the phone too, as when you sign out. Write your 12 words down first: they get you back into any community this phone does not list.",
             "To take BeanPool off the phone altogether, use **Sign Out (Device Only)**.",
-            "If the community refuses the delete, or does not answer, nothing on the phone changes. The app says so."
+            "If the community refuses the delete, or does not answer within 20 seconds, nothing on the phone changes. The app says so, and you can try again."
           ]
         },
         {
@@ -4952,7 +4952,7 @@
         },
         {
           "type": "p",
-          "text": "The app shows **This community doesn't recognise you** when the community the phone is set to does not have you as a member, most often because the address is wrong. If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. **Delete this account from this phone** is offered only when none does."
+          "text": "The app shows **This community doesn't recognise you** when the community the phone is set to does not have you as a member, most often because the address is wrong. If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. Tapping **Delete this account from this phone** first asks your other communities. It deletes only when none of them still has you."
         },
         {
           "type": "h3",

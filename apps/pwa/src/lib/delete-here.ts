@@ -14,7 +14,7 @@
  *   page's own node ({@link leaveThisCommunity}). The key stays.
  * - Otherwise this is the last community this copy serves: the delete wipes it, as before.
  */
-import { getNodeApiUrl, setNodeApiUrl } from './api';
+import { getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
 
 /** How long the page's own node has to answer, as the phone waits for each community. */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -107,6 +107,53 @@ export async function planWebDelete(publicKey: string, timeoutMs: number = MEMBE
     if (!other) return { kind: 'last', here };
     const membership = await membershipAt(other, publicKey, timeoutMs);
     return membership === 'stranger' ? { kind: 'last', here } : { kind: 'this-one', here, keeps: { url: other, membership } };
+}
+
+/** How long the node has to answer Delete account before the web app stops waiting, as the phone (node-post.ts). */
+export const PURGE_TIMEOUT_MS = 20_000;
+
+/** The node didn't answer within {@link PURGE_TIMEOUT_MS}: nothing in this browser changed. */
+export const WEB_PURGE_NO_ANSWER =
+    "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the " +
+    'delete in this browser.';
+
+/** A 2xx that isn't the purge route's `{ ok: true }` (a captive portal, a proxy's page). */
+export const WEB_PURGE_NOT_CONFIRMED = "The community's answer didn't confirm the delete. Try again.";
+
+/** The web app was pointed at another node since the panel was opened (another tab's Sovereign Node Connection). */
+export const WEB_COMMUNITY_CHANGED = 'This web app now talks to a different community. Open Delete account again.';
+
+/**
+ * The delete at {@link WebDeletePlan} `here`, as the panel named it. `{ ok: true }` only when the node answered
+ * `{ ok: true }` (routes/community.ts: every delete, and a retry's "Account is already pruned"); otherwise nothing in
+ * this browser may change, and `reason` says why (PR #1303):
+ * - the web app now talks to another node than `plan.here` (api.ts reads `bp_node_url` when it sends, and another tab
+ *   can change it): nothing is sent (4128122372), as the phone checks (native delete-here.ts `deleteAccountHere`);
+ * - any other answer, a 2xx included, or a body that isn't JSON, is no delete (4128110186);
+ * - no answer within `timeoutMs` (4128119830).
+ */
+export async function purgeHere(
+    plan: WebDeletePlan, timeoutMs: number = PURGE_TIMEOUT_MS,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+    // An address that isn't http(s) is compared as written.
+    const now = thisCommunity();
+    if ((originOf(now) ?? now) !== (originOf(plan.here) ?? plan.here)) return { ok: false, reason: WEB_COMMUNITY_CHANGED };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const answer: unknown = await purgeAccountApi(controller.signal);
+        const confirmed = !!answer && typeof answer === 'object' && (answer as { ok?: unknown }).ok === true;
+        return confirmed ? { ok: true } : { ok: false, reason: WEB_PURGE_NOT_CONFIRMED };
+    } catch (e) {
+        if (controller.signal.aborted) return { ok: false, reason: WEB_PURGE_NO_ANSWER };
+        // api.ts `request` reads a 2xx with res.json(): a page that isn't JSON throws a SyntaxError.
+        if (e instanceof SyntaxError) return { ok: false, reason: WEB_PURGE_NOT_CONFIRMED };
+        const reason = (e instanceof Error && e.message)
+            || 'Failed to purge account from node. Active escrow deals may need to be resolved first.';
+        return { ok: false, reason };
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**

@@ -149,6 +149,59 @@ describe('Settings: Permanently Delete Account', () => {
         expect(screen.queryByText(/Reloading app/)).toBeNull();
     });
 
+    // PR #1303 4128110186: only the node's { ok: true } is a delete.
+    it('a 2xx that isn\'t { ok: true }: nothing in this browser changes, and the screen says the delete wasn\'t confirmed', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        pageNode('stranger');
+        vi.mocked(api.purgeAccountApi).mockResolvedValue({} as any);
+        await openDelete();
+
+        await screen.findByText(/Your key and 12 words leave this browser/);
+        await act(async () => { fireEvent.click(purgeButton()); });
+
+        expect(await screen.findByText("The community's answer didn't confirm the delete. Try again. Nothing was removed from this browser: your key is still here."))
+            .toHaveAttribute('id', 'purge-error-alert');
+        expect(identityLib.wipeIdentity).not.toHaveBeenCalled();
+        expect(localStorage.getItem('bp_node_url')).toBe(CASTLEMAINE);
+        expect(screen.queryByText(/Reloading app/)).toBeNull();
+    });
+
+    // PR #1303 4128119830: a node that never answers.
+    it('the node never answers: after 20 seconds the web app stops waiting, changes nothing, and says try again', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        pageNode('stranger');
+        vi.mocked(api.purgeAccountApi).mockImplementation((signal?: AbortSignal) => new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }));
+        await openDelete();
+
+        await screen.findByText(/Your key and 12 words leave this browser/);
+        await act(async () => { fireEvent.click(purgeButton()); });
+        expect(screen.getByRole('button', { name: 'Purging...' })).toBeDisabled();
+        await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+
+        expect(await screen.findByText(/^The community didn't answer\. You can try again/)).toHaveAttribute('id', 'purge-error-alert');
+        expect(identityLib.wipeIdentity).not.toHaveBeenCalled();
+        expect(purgeButton()).toHaveTextContent('Purge Account');
+        expect(screen.queryByText(/Reloading app/)).toBeNull();
+    });
+
+    // PR #1303 4128122372: another tab changed Sovereign Node Connection while the panel was open.
+    it('the web app was pointed at another node after the panel opened: nothing is sent, and nothing changes', async () => {
+        localStorage.setItem('bp_node_url', CASTLEMAINE);
+        pageNode('stranger');
+        await openDelete();
+
+        await screen.findByText(/Your key and 12 words leave this browser/);
+        localStorage.setItem('bp_node_url', 'https://byron.beanpool.org');
+        await act(async () => { fireEvent.click(purgeButton()); });
+
+        expect(await screen.findByText('This web app now talks to a different community. Open Delete account again. Nothing was removed from this browser: your key is still here.'))
+            .toHaveAttribute('id', 'purge-error-alert');
+        expect(api.purgeAccountApi).not.toHaveBeenCalled();
+        expect(identityLib.wipeIdentity).not.toHaveBeenCalled();
+    });
+
     it('the button waits for the answer', async () => {
         localStorage.setItem('bp_node_url', CASTLEMAINE);
         vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));

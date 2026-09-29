@@ -54,6 +54,7 @@ import {
     otherCommunitiesKeeping, planDelete, stillKeptLine, type DeletePlan,
 } from '../delete-here';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
+import { PURGE_NOT_CONFIRMED, PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } from '../node-post';
 import { boundSignatureValid } from './server-signature-check';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
@@ -68,7 +69,7 @@ const ESCROW_REFUSAL = 'You have an escrow deal under way. Finish or cancel it f
 /** A community's answer to the membership probe. */
 type Probe = 'member' | 'stranger' | 'down' | 'refused' | 'silent' | 'not-json' | 'odd';
 /** Its answer to the purge. */
-type Purge = 'ok' | 'refused' | 'down';
+type Purge = 'ok' | 'already' | 'refused' | 'down' | 'silent' | 'not-json' | 'odd' | 'not-ok';
 
 interface Sent { url: string; method: string; headers: Record<string, string>; body: string }
 
@@ -99,6 +100,17 @@ function nodes(probe: Record<string, Probe>, purge: Purge = 'ok'): Sent[] {
         if (method === 'POST' && u.pathname === '/api/member/purge') {
             if (purge === 'down') throw new TypeError('Network request failed');
             if (purge === 'refused') return new Response(JSON.stringify({ error: ESCROW_REFUSAL }), { status: 400 });
+            if (purge === 'silent') {
+                return new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+                });
+            }
+            // A captive portal or proxy on a plain http:// address answers 200 with its own page.
+            if (purge === 'not-json') return new Response('<html>Sign in to the Wi-Fi</html>', { status: 200 });
+            if (purge === 'odd') return new Response('{}', { status: 200 });
+            if (purge === 'not-ok') return new Response(JSON.stringify({ ok: false, message: 'Account purged' }), { status: 200 });
+            // The route answers a retry after a lost reply this way (state-engine.ts purgeMemberSelf).
+            if (purge === 'already') return new Response(JSON.stringify({ ok: true, message: 'Account is already pruned' }), { status: 200 });
             return new Response(JSON.stringify({ ok: true, message: 'Account purged' }), { status: 200 });
         }
         if (method === 'DELETE' && u.pathname === '/api/push-tokens') {
@@ -358,6 +370,56 @@ describe('the node does not delete: nothing on the phone changes, and the screen
             await untouched();
         });
     }
+
+    // #1303 4128110186: only the purge route's `{ ok: true }` is a delete. A 2xx page from a captive portal is not.
+    for (const purge of ['not-json', 'odd', 'not-ok'] as const) {
+        it(`a 2xx that isn't { ok: true } (${purge}) is not a delete, at another community or the last`, async () => {
+            for (const other of ['member', 'stranger'] as const) {
+                await kimsPhone();
+                const sent = nodes({ [BELLINGEN]: other }, purge);
+                const plan = await planDelete(kim.publicKey);
+                expect(plan.kind).toBe(other === 'member' ? 'this-one' : 'last');
+
+                const outcome = await deleteAccountHere(kim, plan);
+
+                expect(outcome).toEqual({ kind: 'not-deleted', reason: PURGE_NOT_CONFIRMED });
+                expect(purges(sent)).toHaveLength(1);
+                expect(sent.filter((s) => s.method === 'DELETE')).toEqual([]);
+                await untouched();
+            }
+        });
+    }
+
+    it('"Account is already pruned" (a retry after a lost reply) is a delete', async () => {
+        await kimsPhone();
+        nodes({ [BELLINGEN]: 'member' }, 'already');
+        const plan = await planDelete(kim.publicKey);
+
+        expect(await deleteAccountHere(kim, plan)).toEqual({ kind: 'left' });
+        expect(mem.async.get(ANCHOR)).toBe(BELLINGEN);
+    });
+
+    // #1303 4128119830: a node that accepts the connection and never answers ends as not-deleted, with a message.
+    it('a community that never answers: the phone stops waiting, nothing changes, and it says try again', async () => {
+        for (const other of ['member', 'stranger'] as const) {
+            await kimsPhone();
+            const sent = nodes({ [BELLINGEN]: other }, 'silent');
+            const plan = await planDelete(kim.publicKey);
+
+            const outcome = await deleteAccountHere(kim, plan, 50);
+
+            expect(outcome).toEqual({ kind: 'not-deleted', reason: PURGE_NO_ANSWER });
+            expect(purges(sent)).toHaveLength(1);
+            await untouched();
+        }
+        expect(deleteFailedLine(PURGE_NO_ANSWER, true)).toBe(
+            "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again " +
+            "finishes the delete on this phone.\n\nThis phone's key and 12 words were not touched.");
+    });
+
+    it('the purge waits 20 seconds by default', () => {
+        expect(PURGE_TIMEOUT_MS).toBe(20_000);
+    });
 
     it('the message says the key was not touched', () => {
         expect(deleteFailedLine(ESCROW_REFUSAL, true)).toBe(`${ESCROW_REFUSAL}\n\nThis phone's key and 12 words were not touched.`);

@@ -25,7 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from './account-leaves-phone';
 import { communityName } from './community-name';
 import type { BeanPoolIdentity } from './identity';
-import { anchorUrl, purgeAccountOnNode } from './node-post';
+import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { communityAddress, dropFromRecord } from './push-registrations';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
@@ -317,19 +317,23 @@ const reasonOf = (e: unknown) => (e instanceof Error && e.message ? e.message : 
 
 /**
  * Settings' Permanently Delete Account, once the member confirmed `plan` ({@link planDelete}): the node deletes the
- * account here (node-post.ts `purgeAccountOnNode`), and only once it has answered that it did, the phone does what the
+ * account here (node-post.ts `purgeAccountOnNode`), and only once it has answered `{ ok: true }` within
+ * `purgeTimeoutMs`, the phone does what the
  * plan says. Other communities keep the key: {@link leaveThisCommunity}, then the next one's copy is opened. The last
  * one: account-leaves-phone.ts `signOutOfThisPhone`. Never throws.
  *
  * The phone must still be set to the community the plan was made for: purgeAccountOnNode deletes at the one it is set
  * to.
  */
-export async function deleteAccountHere(identity: BeanPoolIdentity, plan: DeletePlan): Promise<DeleteOutcome> {
+export async function deleteAccountHere(
+    identity: BeanPoolIdentity, plan: DeletePlan, purgeTimeoutMs: number = PURGE_TIMEOUT_MS,
+): Promise<DeleteOutcome> {
     try {
         if (communityAddress(await anchorUrl()) !== communityAddress(plan.here)) {
             return { kind: 'not-deleted', reason: 'This phone changed community. Open Delete account again.' };
         }
-        await purgeAccountOnNode(identity);
+        // Only the node's `{ ok: true }` counts, and a node that doesn't answer within the timeout is a not-deleted.
+        await purgeAccountOnNode(identity, purgeTimeoutMs);
     } catch (e) {
         return { kind: 'not-deleted', reason: reasonOf(e) };
     }

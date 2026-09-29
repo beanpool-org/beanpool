@@ -89,3 +89,25 @@ describe('node-mismatch: its delete takes the key only when no saved community k
         expect(slice(s, '{!showWipe ? (', ') : (')).toContain('!keptBy?.length && (');
     });
 });
+
+describe('the members\' guide says what the screens do (PR #1303)', () => {
+    const guide = () => fs.readFileSync(
+        path.resolve(__dirname, '../../../../packages/beanpool-guide/content/settings/leaving-or-deleting.md'), 'utf-8');
+
+    // 4128120538: the button is on the screen before any community is asked; tapping it asks them.
+    it('node-mismatch: the delete button shows before the check, so the guide says tapping it asks first', () => {
+        const s = source('node-mismatch.tsx');
+        expect(slice(s, '{!showWipe ? (', ') : (')).toContain('!keptBy?.length && (');
+        expect(guide()).toContain(
+            'Tapping **Delete this account from this phone** first asks your other communities. It deletes only when none of them still has you.');
+        expect(guide()).not.toContain('is offered only when none does');
+    });
+
+    // 4128119830: "does not answer" is true only because the purge gives up after PURGE_TIMEOUT_MS.
+    it('a community that does not answer: the guide names the purge\'s own timeout', () => {
+        const nodePost = fs.readFileSync(path.resolve(__dirname, '../node-post.ts'), 'utf-8');
+        expect(nodePost).toMatch(/export const PURGE_TIMEOUT_MS = 20_000;/);
+        expect(guide()).toContain(
+            '- If the community refuses the delete, or does not answer within 20 seconds, nothing on the phone changes. The app says so, and you can try again.');
+    });
+});

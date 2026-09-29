@@ -525,11 +525,12 @@ async function main(): Promise<void> {
             require_(land5b.ok === true && land5b.mode === 'resync' && s5e.record.pastRetentionAt === null,
                 `S: M sending whole copies again, the force-resync lands, and nothing is owed (${JSON.stringify({ pull: land5b, owed: s5e.record.pastRetentionAt })})`);
 
-            // 5c. S switched off just under 29 days after its last delta, M holding more listings than one copy carries: the
-            // restart's routine whole copy leaves listings out, and carries every tombstone M holds. It doesn't keep a cursor
-            // that passes 29 days before the next pull, which would ask for a force-resync of deletes it already applied, and
-            // have M build and sign its whole database again (#1315 review 4133485540).
-            console.log('\n— 5c. a restart just under 29 days on, whose whole copy leaves listings out: no retention force-resync after it —');
+            // 5c. S switched off just under 29 days after its last delta, M holding more listings than the old cap let one copy
+            // carry: the restart's routine whole copy lands in pages with every one of them (before paged copies it left
+            // listings out), and carries every tombstone M holds. It doesn't keep a cursor that passes 29 days before the next
+            // pull, which would ask for a force-resync of deletes it already applied, and have M build and sign its whole
+            // database again (#1315 review 4133485540).
+            console.log('\n— 5c. a restart just under 29 days on, whose whole copy holds more listings than the old cap: no retention force-resync after it —');
             await main.send('flood-posts', { n: FLOOD, author: gwen.pk });
             const near5c = Date.now() - 29 * DAY_MS + NEAR_MS;
             const nearCursor = new Date(near5c).toISOString();

@@ -145,3 +145,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `useSectionSubTab`, `isSettingsSection`, and edge cases in `defaultSubTab` & `subTabLabel` in `apps/manager/src/lib/sections.ts` lacked unit test coverage.
 **Learning:** `useSectionSubTab` hook requires `<string>` generic type argument in `renderHook` when testing subtab transitions across different sections to satisfy TypeScript type safety.
 **Action:** Check remaining utility files and components in `apps/manager/` for edge-case unit test coverage.
+
+## 2026-09-19 - [manager tests] SectionErrorBoundary stack trace toggle unit tests
+**Gap:** Stack trace details toggle (`Show Details` / `Hide Details` buttons and `<pre>` block rendering) in `apps/manager/src/components/common/SectionErrorBoundary.tsx` lacked unit test coverage.
+**Learning:** Testing `SectionErrorBoundary` stack trace toggle required rendering a component that throws an `Error` instance, asserting that the error message is displayed while the stack trace is hidden initially, clicking "Show Details" to verify that the button label changes to "Hide Details" and `<pre>` stack details appear, and clicking again to confirm that the stack details hide.
+**Action:** Identify remaining untested UI component edge cases or interactive state paths across `apps/manager/src/components/`.

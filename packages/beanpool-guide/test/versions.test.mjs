@@ -23,6 +23,9 @@ const WEBSITE = 'apps/website/guide';
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
 const build = (cwd, ...args) => node(cwd, `${PKG}/scripts/build.mjs`, ...args);
+/** The check as a GitHub Actions run of `event` (pull_request, push, workflow_dispatch) runs it. */
+const ciCheck = (cwd, event) => spawnSync(process.execPath, [`${PKG}/scripts/build.mjs`, '--check'],
+    { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: event } });
 const publishCommand = (cwd, ...args) => node(cwd, `${PKG}/scripts/publish.mjs`, ...args);
 const read = (cwd, rel) => fs.readFileSync(path.join(cwd, rel), 'utf8');
 const write = (cwd, rel, text) => fs.writeFileSync(path.join(cwd, rel), text);
@@ -376,7 +379,7 @@ test("in CI's checkout of a pull request — its merge commit, two commits deep,
             git(dir, 'remote', 'add', 'origin', `file://${path.join(repo.root, 'origin.git')}`);
             git(dir, 'fetch', '-q', '--no-tags', `--depth=${depth}`, 'origin', `+${ref}:refs/remotes/pull/merge`);
             git(dir, 'checkout', '-q', '--detach', 'refs/remotes/pull/merge');
-            return build(dir, '--check');
+            return ciCheck(dir, 'pull_request');
         };
 
         const pagesOnly = mergeRef('pages', c => editPage(c, 'content/ledger/gifts.md', 'New words.'));
@@ -395,6 +398,50 @@ test("in CI's checkout of a pull request — its merge commit, two commits deep,
         const shallow = ciCheckout(pagesOnly, 1);
         assert.equal(shallow.status, 1, said(shallow));
         assert.match(shallow.stderr, /fetch-depth: 2/);
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('a branch whose tip merged origin/main, checked out with no origin/main outside a pull request (a workflow_dispatch run): versions not compared, never blamed for main\'s publish', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        // Branch x changes no guide file.
+        git(cwd, 'checkout', '-q', '-b', 'x', 'origin/main');
+        write(cwd, 'NOTE-x.txt', 'x\n');
+        git(cwd, 'add', 'NOTE-x.txt');
+        git(cwd, 'commit', '-q', '-m', 'x');
+        git(cwd, 'push', '-q', 'origin', 'x');
+        // Main gets a guide PR, then its publish.
+        git(cwd, 'checkout', '-q', 'main');
+        editPage(cwd, 'content/ledger/gifts.md', 'Main changed this page.');
+        git(cwd, 'commit', '-q', '-am', 'a guide PR');
+        assert.equal(build(cwd, '--publish').status, 0);
+        git(cwd, 'add', '-A');
+        git(cwd, 'commit', '-q', '-m', 'publish');
+        git(cwd, 'push', '-q', 'origin', 'main');
+        // x syncs with main: its tip is a merge whose first parent is x before the sync, not main.
+        git(cwd, 'checkout', '-q', 'x');
+        git(cwd, 'fetch', '-q', 'origin');
+        git(cwd, 'merge', '--no-ff', '-q', '-m', 'Merge origin/main into x', 'origin/main');
+        git(cwd, 'push', '-q', 'origin', 'x');
+        // What actions/checkout does for a workflow_dispatch run on x: refs/heads/x, two commits deep, no origin/main.
+        const dir = fs.mkdtempSync(path.join(repo.root, 'ci-'));
+        git(dir, 'init', '-q');
+        git(dir, 'remote', 'add', 'origin', `file://${path.join(repo.root, 'origin.git')}`);
+        git(dir, 'fetch', '-q', '--no-tags', '--depth=2', 'origin', '+refs/heads/x:refs/remotes/origin/x');
+        git(dir, 'checkout', '-q', '-B', 'x', 'refs/remotes/origin/x');
+        for (const event of ['workflow_dispatch', 'push']) {
+            const r = ciCheck(dir, event);
+            assert.equal(r.status, 0, `${event}: ${said(r)}`);
+            assert.match(r.stdout, /Versions not compared: no origin\/main/);
+        }
+        // With origin/main, it is compared, and passes: x publishes nothing.
+        git(dir, 'fetch', '-q', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main');
+        const compared = ciCheck(dir, 'workflow_dispatch');
+        assert.equal(compared.status, 0, said(compared));
+        assert.match(compared.stdout, /checked against .*where this branch left origin\/main/);
     } finally {
         repo.cleanup();
     }

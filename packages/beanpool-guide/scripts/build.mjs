@@ -133,8 +133,12 @@ function git(...args) {
  *   GUIDE_BASE=<commit>                    that commit
  *   a branch off origin/main               where it left origin/main (a PR branch, a lane's worktree)
  *   uncommitted guide edits on its tip     the commit under them
- *   otherwise                              the commit before HEAD: on main, main before the last merge; in CI, a pull
- *                                          request is checked out as a merge commit whose first parent is main's tip
+ *   otherwise                              the commit before HEAD (its first parent): on main, main before the last
+ *                                          merge; in CI's pull_request run, the PR's merge commit, whose first parent
+ *                                          is main's tip
+ * A merge commit with no origin/main, outside a pull_request run, is not compared: its first parent need not be main.
+ * On a branch whose tip merged origin/main (a sync), it is the branch before the sync, and main's own publish would be
+ * blamed on the branch — a workflow_dispatch run on a branch checks out only that branch.
  * Returns { ref, why }. ref is null when there is nothing to compare with; `broken` marks the cases the check must
  * not pass over: a shallow clone missing the commit before HEAD (CI fetches it: fetch-depth 2 in ci.yml), or a bad
  * GUIDE_BASE.
@@ -147,10 +151,15 @@ export function findBase() {
     }
     const head = git('rev-parse', 'HEAD');
     if (!head) return { ref: null, why: 'this is not a git checkout' };
-    const forked = git('merge-base', 'HEAD', 'origin/main');
+    const hasOriginMain = git('rev-parse', '--verify', '--quiet', 'origin/main^{commit}') !== null;
+    const forked = hasOriginMain ? git('merge-base', 'HEAD', 'origin/main') : null;
     if (forked && forked !== head) return { ref: forked, why: 'where this branch left origin/main' };
     const guidePaths = [...COLLECTIONS.map(c => rel(c.dir)), ...PUBLISHED_PATHS];
     if (git('status', '--porcelain', '--', ...guidePaths)) return { ref: head, why: 'the commit under these uncommitted edits' };
+    const isMerge = git('rev-parse', '--verify', '--quiet', 'HEAD^2') !== null;
+    if (isMerge && !hasOriginMain && process.env.GITHUB_EVENT_NAME !== 'pull_request') {
+        return { ref: null, why: "no origin/main (HEAD is a merge, and outside a pull request's merge commit its first parent need not be main; fetch origin/main, or set GUIDE_BASE, to compare)" };
+    }
     const parent = git('rev-parse', '--verify', '--quiet', 'HEAD^1');
     if (parent) return { ref: parent, why: 'the commit before this one' };
     if (git('rev-parse', '--is-shallow-repository') === 'true') {

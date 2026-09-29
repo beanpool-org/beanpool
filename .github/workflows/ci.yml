@@ -36,7 +36,8 @@ jobs:
     steps:
       # Two commits deep: the guide check (packages/beanpool-guide/scripts/build.mjs, findBase) compares
       # the published guide with the commit before HEAD — main before this push, or, for a pull request's
-      # merge commit, main's tip — and fails when a shallow clone lacks it.
+      # merge commit, main's tip — and fails when a shallow clone lacks it. A workflow_dispatch run on a
+      # branch has no origin/main: when its tip is a merge, the check says the versions were not compared.
       - name: Checkout Code
         uses: actions/checkout@v4
         with:

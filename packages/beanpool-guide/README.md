@@ -65,7 +65,10 @@ pnpm --filter @beanpool/guide generate
 # Write nothing; fail on a page that does not build, a generated file that is not exactly what the published
 # copies produce, or (compared with the commit this change starts from) changed text under an old version, the
 # same text under a new version, a skipped version, a published copy that is not the pages' text, or a change
-# that edits pages AND publishes them. Run by `pnpm test`, so CI enforces it.
+# that edits pages AND publishes them. Run by `pnpm test`, so CI enforces it. The commit it compares with: where
+# the branch left origin/main; on main, main before the last merge; in CI's pull_request run, the PR's merge commit's
+# first parent (main's tip). A merge commit with no origin/main outside a pull_request run (a workflow_dispatch run on
+# a synced branch) is not compared: its first parent need not be main. GUIDE_BASE=<commit> sets it by hand.
 node scripts/build.mjs --check
 
 # Does anything wait to be published? (exit 1 if so)

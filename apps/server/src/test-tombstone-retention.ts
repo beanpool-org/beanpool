@@ -25,7 +25,9 @@
  *  5. The same, with M unable to send a whole copy (it answers 503, as a community too large to build one in time does):
  *     the failed force-resync is asked for again only after the retry wait (an hour, scaled down), deltas landing in
  *     between (a listing M made meanwhile reaches S), and it stays owed until one lands exact. (Before: a copy that never
- *     came was asked for again on every pull, and no delta ever landed.)
+ *     came was asked for again on every pull, and no delta ever landed.) With routine whole copies on (5b), the routine
+ *     whole copy due at once after the restart, which M can't send either, waits for the next routine time too: the pulls
+ *     after it are deltas, and land. (Before: a routine whole copy on every pull, and no delta.)
  *  6. S takes over with the recovery code. The promoted server forgets its pull cursor, and prunes a tombstone written
  *     35 days ago, after a take-over 40 days ago, and keeps a 29-day-old one. (Before: its last pull's cursor floored the
  *     prune, so no tombstone written after the take-over was ever pruned.)
@@ -96,6 +98,12 @@ async function child(): Promise<void> {
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             // Routine whole copies off, as Settings' cadence sets it: the pull after a restart is a delta.
             updateBackupCadence({ reconcileMinutes: 0 });
+            return true;
+        },
+        /** Settings' cadence of routine whole copies, in minutes (0: off); kept in the local config, across a restart. */
+        'set-cadence': async (a: { minutes: number }) => {
+            const { updateBackupCadence } = await import('./config/local-config.js');
+            updateBackupCadence({ reconcileMinutes: a.minutes });
             return true;
         },
         /** The main server's address this standby pulls from (read on each pull). */
@@ -459,6 +467,37 @@ async function main(): Promise<void> {
             assert(land5.ok === true && land5.mode === 'resync' && !(await standby.send('has-message', { id: lines[2] }))
                 && same(s5c, m5, 'messages', 'posts', 'members', 'accounts') && s5c.record.lastWhole?.exact === true && s5c.record.pastRetentionAt === null,
                 `M sending whole copies again, the force-resync lands, exact: the third line is gone from S, and nothing is owed (${JSON.stringify({ pull: land5, verdict: s5c.record.lastWhole?.differs, owed: s5c.record.pastRetentionAt })}; ${counts(s5c, 'messages', 'posts')}; M ${counts(m5, 'messages', 'posts')})`);
+
+            // 5b. Routine whole copies on (every 10 minutes, the default cadence's kind): after a restart the routine one is
+            // due at once, and M can't send it either.
+            console.log('\n— 5b. the same with routine whole copies on: the routine whole copy that never comes waits for the next routine time —');
+            await standby.send('set-cadence', { minutes: 10 });
+            await restart(awayCursor(31));
+            failWhole = true;
+            const plums = await offer(bo, 'Plums');
+            const before5b = { ...asked };
+            const t5b = Date.now();
+            const pulls5b: string[] = [];
+            for (let i = 0; i < 6; i++) {
+                const p = await standby.send('pull');
+                pulls5b.push(`${p.mode}:${p.ok ? 'ok' : 'failed'}`);
+            }
+            const took5b = Date.now() - t5b;
+            const s5d: Snap = await standby.send('snapshot', { tables: TABLES });
+            const hasPlums = (await standby.send('sql', { sql: 'UPDATE posts SET title = title WHERE id = ?', args: [plums.id] })) === 1;
+            require_(took5b < RETRY_MS, `S: the six pulls take less than the retry wait (${took5b} ms)`);
+            assert(pulls5b[0] === 'resync:failed' && pulls5b[1] === 'full:failed' && pulls5b.slice(2).every((x) => x === 'delta:ok')
+                && asked.whole - before5b.whole === 2 && asked.delta - before5b.delta === 4,
+                `the force-resync, then the routine whole copy, get no copy; the next four pulls are deltas, and land; M was asked for two whole copies, not six (${pulls5b.join(', ')}; whole ${asked.whole - before5b.whole}, deltas ${asked.delta - before5b.delta}; before: five failed routine whole copies, no delta)`);
+            assert(hasPlums && !!s5d.savedCursor && Date.parse(s5d.savedCursor) > Date.now() - DAY_MS && s5d.record.pastRetentionAt !== null,
+                `Bo's plums, listed on M after S came back, are on S, the cursor is today's, and the force-resync is still owed (${JSON.stringify({ plums: hasPlums, cursor: s5d.savedCursor, owed: s5d.record.pastRetentionAt })}; before: no plums, and the cursor 31 days old)`);
+            failWhole = false;
+            await sleep(RETRY_MS + 300);
+            const land5b = await standby.send('pull');
+            const s5e: Snap = await standby.send('snapshot', { tables: TABLES });
+            require_(land5b.ok === true && land5b.mode === 'resync' && s5e.record.pastRetentionAt === null,
+                `S: M sending whole copies again, the force-resync lands, and nothing is owed (${JSON.stringify({ pull: land5b, owed: s5e.record.pastRetentionAt })})`);
+            await standby.send('set-cadence', { minutes: 0 });
             await standby.send('point-at', { url: main.base });
         } finally {
             proxy.close();

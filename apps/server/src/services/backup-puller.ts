@@ -155,8 +155,9 @@ let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 // N2 (design §4.2): after a copy that came and was refused, when the next of its kind may be asked for. A whole copy waits
 // for the next routine one (a reconcile interval); a force-resync, and a first copy, RESYNC_RETRY_MS. An operator's
-// force-resync is always taken. A copy that never came (the main server restarting) keeps the usual cadence. The retention
-// resync waits RESYNC_RETRY_MS after a copy that never came too (pullOnce).
+// force-resync is always taken. A force-resync or a first copy that never came (the main server restarting) keeps the usual
+// cadence; a whole copy taken over deltas that never came waits for the next routine one too, and the retention resync
+// RESYNC_RETRY_MS (pullOnce).
 let wholeRetryAt = 0;
 let resyncRetryAt = 0;
 // The last whole copy landed with tables left out (more rows than one copy carries, design §5): the next of any kind waits
@@ -511,6 +512,14 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             wholeRetryAt = now + (getReconcileMs() || resyncRetryMs());
             if (fresh || !hadCursor) resyncRetryAt = now + resyncRetryMs();
         }
+        // So does one taken over deltas that never came (the main server answering 503 or 500, or the fetch timing out: a
+        // community too large to build its whole copy in time): asked for again on the next tick, it would be every tick's
+        // pull, as after a restart (the routine one is due at once), and no delta would land meanwhile (#1315 review
+        // 4132485902). Deltas carry on, and the next routine time asks again. A force-resync or a first copy that never came
+        // is asked for on the next tick (the main server may be restarting with the same update); the retention one waits
+        // RESYNC_RETRY_MS (below).
+        const wholeNeverCame = stage === 'fetch' && !isDelta && !fresh && hadCursor;
+        if (wholeNeverCame) wholeRetryAt = Date.now() + (getReconcileMs() || resyncRetryMs());
         // The retention resync waits RESYNC_RETRY_MS after any failure, a copy that never came too (the main server
         // answering 503 or 500, or the fetch timing out: a community too large to build its whole copy in time). Asked for
         // on the next tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile;
@@ -525,6 +534,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 ? `no force-resync asked for before ${new Date(resyncRetryAt).toISOString()}; deltas meanwhile`
                 : stage === 'import' && !isDelta
                 ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}`
+                : wholeNeverCame
+                ? `no whole copy asked for before ${new Date(wholeRetryAt).toISOString()}; deltas meanwhile`
                 : 'will retry in interval';
             logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${fresh ? 'resync' : isDelta ? 'delta' : 'full'}) failed: ${msg} (${next})`);
         }
@@ -836,8 +847,8 @@ function nextMode(): PullMode | ResyncKind | Wait {
     }
     // No copy landed yet: a whole one, the seed, unless the last was refused (N2).
     if (!lastImportedCursor) return resyncWaits ? 'wait' : 'full';
-    // A whole copy refused at its import (N2): none of any kind before the next routine one; deltas meanwhile. The
-    // once-a-process ones below are not used up while it waits.
+    // A whole copy refused at its import (N2), or one taken over deltas that never came: none of any kind before the next
+    // routine one; deltas meanwhile. The once-a-process ones below are not used up while it waits.
     if (now < wholeRetryAt) return 'delta';
     // The last whole copy landed with tables left out: none of any kind before the next routine one, as after a refused
     // one. Drift the canary finds meanwhile waits for it; deltas carry on.

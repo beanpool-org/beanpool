@@ -12,6 +12,12 @@
  *   2. it still carries every field each of its readers uses, with the saved values
  *   3. the admin route the manager reads the public address from still returns it (token and contact included),
  *      and refuses a caller without the admin password
+ *   4. the contact email and phone switches are the owner's alone: a Settings save turns each on and off, and a save
+ *      from a page that still sends the old single contacts switch turns neither on
+ *   5. the community's contact email and phone are in no unsigned public read unless the owner turned that one on
+ *      (/api/local/community-info needs no key and no password, and the directory lists every community's address);
+ *      the admin route the manager and static/settings.js read them from returns both, and refuses a caller without
+ *      the admin password
  *
  * Contacts no registrar: REGISTRAR_URL points at a closed local port, so the admin status route answers from the
  * saved address, as it does whenever the registrar is unreachable.
@@ -46,6 +52,15 @@ async function getRaw(path: string, headers: Record<string, string> = {}): Promi
     return { status: res.status, text: await res.text() };
 }
 
+async function postAdmin(path: string, body: unknown): Promise<{ status: number; text: string }> {
+    const res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PASSWORD },
+        body: JSON.stringify(body),
+    });
+    return { status: res.status, text: await res.text() };
+}
+
 function signedHeaders(path: string): Record<string, string> {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
@@ -67,6 +82,7 @@ async function main() {
     const { withKeptTunnelToken } = await import('./services/public-address-agent.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
+    const { db } = await import('./db/db.js');
 
     await initTls();
     initAdminPassword();
@@ -79,7 +95,7 @@ async function main() {
     const serviceRadius = { lat: -28.55, lng: 153.5, radiusKm: 25 };
     const lastDirectoryPush = '2026-09-20T10:00:00.000Z';
     updateNodeConfig({
-        serviceRadius, publishLocation: true, publishMembers: false, publishContacts: true, publishHealth: false,
+        serviceRadius, publishLocation: true, publishMembers: false, publishContactEmail: true, publishContactPhone: false, publishHealth: false,
         directoryPushIntervalHours: 6, lastDirectoryPush,
     });
 
@@ -119,7 +135,9 @@ async function main() {
     assert(body.serviceRadius?.radiusKm === serviceRadius.radiusKm, 'serviceRadius.radiusKm (web map, web marketplace, phone map, manager, settings.js)');
     assert(body.publishLocation === true, 'publishLocation (manager, settings.js)');
     assert(body.publishMembers === false, 'publishMembers (manager, settings.js)');
-    assert(body.publishContacts === true, 'publishContacts (manager, settings.js)');
+    assert(body.publishContactEmail === true, 'publishContactEmail (manager, settings.js)');
+    assert(body.publishContactPhone === false, 'publishContactPhone (manager, settings.js)');
+    assert(!('publishContacts' in body), 'no old single contacts switch');
     assert(body.publishHealth === false, 'publishHealth (manager, settings.js)');
     assert(body.directoryPushIntervalHours === 6, 'directoryPushIntervalHours (manager, settings.js)');
     assert(body.lastDirectoryPush === lastDirectoryPush, 'lastDirectoryPush (manager, settings.js)');
@@ -139,6 +157,76 @@ async function main() {
     assert(pa.status === 'live', 'admin status: status');
     assert(pa.contact === CONTACT, 'admin status: contact');
     assert(pa.tunnelToken === TUNNEL_TOKEN, 'admin status: tunnelToken (the operator screen shows it)');
+
+    console.log('\n── 4. the contact switches are the owner\'s choice ──');
+    const CONFIG = '/api/local/admin/node/config';
+    const switches = async () => {
+        const b = JSON.parse((await getRaw('/api/node/config')).text);
+        return { email: b.publishContactEmail, phone: b.publishContactPhone };
+    };
+    const off = await postAdmin(CONFIG, { publishContactEmail: false });
+    assert(off.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: false }),
+        `the owner turns the email off: both read off (${off.status} ${JSON.stringify(await switches())})`);
+    const oldPage = await postAdmin(CONFIG, { publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true });
+    assert(oldPage.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: false }),
+        `a page that still sends the old single switch as true turns neither on (${oldPage.status} ${JSON.stringify(await switches())})`);
+    const stored = JSON.parse((db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string }).value);
+    assert(!('publishContacts' in stored), `the old switch is not stored (${Object.keys(stored).join(', ')})`);
+    const phoneOn = await postAdmin(CONFIG, { publishContactPhone: true });
+    assert(phoneOn.status === 200 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: true }),
+        `the owner turns the phone on: only the phone reads on (${phoneOn.status} ${JSON.stringify(await switches())})`);
+    const notBool = await postAdmin(CONFIG, { publishContactEmail: 'yes' });
+    assert(notBool.status === 400 && JSON.stringify(await switches()) === JSON.stringify({ email: false, phone: true }),
+        `a switch that isn't true or false is refused, and nothing changes (${notBool.status} ${JSON.stringify(await switches())})`);
+
+    console.log('\n── 5. the contacts are public only where the owner turned each on; the admin screens read both ──');
+    const EMAIL = 'owner-contacts-nodeconfig@example.invalid';
+    const PHONE = '+61 400 555 017';
+    const identity = await postAdmin('/api/local/update-identity', { communityName: 'Test Vale', contactEmail: EMAIL, contactPhone: PHONE });
+    if (identity.status !== 200) throw new Error(`setup: update-identity answered ${identity.status} ${identity.text}`);
+    // Every unsigned read that says who this community is, as anyone walking the directory's addresses would ask.
+    const PUBLIC = ['/api/local/community-info', '/api/community/info', '/api/directory/info', '/api/node/config', '/api/local/dashboard'];
+    for (const [email, phone] of [[false, false], [true, false], [false, true], [true, true]] as const) {
+        const set = await postAdmin(CONFIG, { publishContactEmail: email, publishContactPhone: phone });
+        if (set.status !== 200) throw new Error(`setup: the switches answered ${set.status} ${set.text}`);
+        const label = `email ${email ? 'on' : 'off'}, phone ${phone ? 'on' : 'off'}`;
+        const reads = Object.fromEntries(await Promise.all(PUBLIC.map(async (p) => [p, await getRaw(p)] as const)));
+        for (const [p, r] of Object.entries(reads)) {
+            assert(r.status === 200, `${label}: unsigned GET ${p} is 200 (got ${r.status})`);
+            if (!email) assert(!r.text.includes(EMAIL), `${label}: ${p} does not hold the email`);
+            if (!phone) assert(!r.text.includes(PHONE), `${label}: ${p} does not hold the phone`);
+        }
+        const info = JSON.parse(reads['/api/local/community-info'].text);
+        assert(info.communityName === 'Test Vale', `${label}: community-info still names the community (${info.communityName})`);
+        assert(info.contactEmail === (email ? EMAIL : null) && info.contactPhone === (phone ? PHONE : null),
+            `${label}: community-info says only the contact turned on (${JSON.stringify({ email: info.contactEmail, phone: info.contactPhone })})`);
+        const dir = JSON.parse(reads['/api/directory/info'].text);
+        assert(dir.contactEmail === (email ? EMAIL : null) && dir.contactPhone === (phone ? PHONE : null),
+            `${label}: the directory preview says the same (${JSON.stringify({ email: dir.contactEmail, phone: dir.contactPhone })})`);
+    }
+    const noStore = await fetch(`${BASE}/api/local/community-info`);
+    assert(/no-store/.test(noStore.headers.get('cache-control') ?? ''),
+        `community-info is not kept by a cache, so a contact turned off stops showing at once (${noStore.headers.get('cache-control')})`);
+    await noStore.text();
+
+    const DIAG = '/api/local/admin/diagnostics';
+    const quiet = await postAdmin(CONFIG, { publishContactEmail: false, publishContactPhone: false });
+    if (quiet.status !== 200) throw new Error(`setup: the switches answered ${quiet.status} ${quiet.text}`);
+    const noAuth = await getRaw(DIAG);
+    assert(noAuth.status === 401, `without the admin password ${DIAG} is refused (got ${noAuth.status})`);
+    assert(!noAuth.text.includes(EMAIL) && !noAuth.text.includes(PHONE), 'the refusal holds neither contact');
+    const adminGet = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    assert(adminGet.contactEmail === EMAIL && adminGet.contactPhone === PHONE,
+        `with the admin password, GET ${DIAG} (the manager) returns both, with both switches off (${JSON.stringify({ email: adminGet.contactEmail, phone: adminGet.contactPhone })})`);
+    const adminPost = await postAdmin(DIAG, { password: ADMIN_PASSWORD });
+    const posted = JSON.parse(adminPost.text);
+    assert(adminPost.status === 200 && posted.contactEmail === EMAIL && posted.contactPhone === PHONE,
+        `and POST ${DIAG} (static/settings.js) too (${adminPost.status} ${JSON.stringify({ email: posted.contactEmail, phone: posted.contactPhone })})`);
+    const cleared = await postAdmin('/api/local/update-identity', { contactEmail: '', contactPhone: '' });
+    if (cleared.status !== 200) throw new Error(`setup: update-identity answered ${cleared.status} ${cleared.text}`);
+    const none = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    assert(none.contactEmail === null && none.contactPhone === null,
+        `a node with no contacts says null for each, so a screen can tell "none" from "not loaded" (${JSON.stringify({ email: none.contactEmail, phone: none.contactPhone })})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

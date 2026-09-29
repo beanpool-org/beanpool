@@ -376,6 +376,9 @@ const DIAGNOSTICS = {
     userCount: MEMBERS.length,
     communityName: COMMUNITY_NAME,
     callsign: CALLSIGN,
+    // The contacts as stored: the Node Identity screen reads them here, not from the public community-info.
+    contactEmail: `admin@${NODE_HOSTNAME}`,
+    contactPhone: '+61 3 5472 1234',
     shutdownStatus: SHUTDOWN_STATUS,
     diskHealth: DISK_HEALTH,
 };
@@ -1008,14 +1011,16 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
 
     // ---- identity / node config ----
     if (pathname === '/api/local/community-info') {
-        return ok({ communityName: COMMUNITY_NAME, contactEmail: `admin@${NODE_HOSTNAME}`, contactPhone: '+61 3 5472 1234', callsign: CALLSIGN });
+        // Public: neither contact is published (both switches off below), so neither is said.
+        return ok({ communityName: COMMUNITY_NAME, contactEmail: null, contactPhone: null, callsign: CALLSIGN });
     }
     if (pathname === '/api/node/config' || pathname === '/api/local/admin/node/config') {
         return ok({
             serviceRadius: { radiusKm: 15, lat: -37.0625, lng: 144.2086 },
             publishLocation: true,
             publishMembers: true,
-            publishContacts: true,
+            publishContactEmail: false,
+            publishContactPhone: false,
             publishHealth: true,
             directoryPushIntervalHours: 12,
             lastDirectoryPush: '2026-09-19T00:00:00.000Z',

@@ -126,8 +126,15 @@ export function spawnNode(
                     const id = ++seq;
                     waiting.set(id, (m) => {
                         waiting.delete(id);
-                        if (m.error) rej(new Error(`${cmd}: ${m.error}`));
-                        else res(m.result);
+                        // A command after which the node restarts to swap a whole copy in answers once the new start is
+                        // up, so whatever the suite does next (an HTTP call, too) reaches it.
+                        const settle = r.restarting && !r.killed
+                            ? r.exited.then(() => current).then(() => undefined, () => undefined)
+                            : Promise.resolve();
+                        void settle.then(() => {
+                            if (m.error) rej(new Error(`${cmd}: ${m.error}`));
+                            else res(m.result);
+                        });
                     });
                     r.proc.stdin!.write(JSON.stringify({ id, cmd, args }) + '\n');
                 });

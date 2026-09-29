@@ -120,6 +120,11 @@ async function child(): Promise<void> {
             const members = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
             return { resync, envelope, held: listHeldEnvelopes().map((h) => h.envelopeId), members };
         },
+        /** How many members this server holds: after a whole copy it swapped in at a restart (P2), the new start's. */
+        members: async () => {
+            const { db } = await import('./db/db.js');
+            return (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
+        },
         checkpoint: async () => {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');
@@ -208,7 +213,9 @@ async function main(): Promise<void> {
         assert(standby.ready.role === 'backup' && standbyOwnPeerId !== mainPeerId, 'the standby is up with its own PeerId');
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: mainPeerId });
         const pull1 = await standby.send('pull');
-        assert(pull1.resync.ok && pull1.members >= 3, `the standby copied the database (${JSON.stringify(pull1.resync)}, ${pull1.members} members)`);
+        // The copy is swapped in at a restart (P2): counted by the new start.
+        const members1 = pull1.resync.restarting ? await standby.send('members') : pull1.members;
+        assert(pull1.resync.ok && members1 >= 3, `the standby copied the database (${JSON.stringify(pull1.resync)}, ${members1} members)`);
         assert(pull1.envelope === 'stored' && pull1.held.length === 1 && pull1.held[0] === setup.envelopeId, 'and holds the main server\'s take-over envelope');
         {
             const onMain = (await main.send('recovery-rows')).rows.filter((r: any) => r.owner_pubkey === deposited.pk);
@@ -385,7 +392,8 @@ async function main(): Promise<void> {
         await third.send('setup-standby', { primaryUrl: standby.base, replicationToken: token2.body.token, primaryPeerId: mainPeerId });
         const pull3 = await third.send('pull');
         assert(pull3.resync.ok === true, `it accepts the promoted server's signed sync payload (${JSON.stringify(pull3.resync)})`);
-        assert(pull3.members >= 3, `and has the community's members (${pull3.members})`);
+        const members3 = pull3.resync.restarting ? await third.send('members') : pull3.members;
+        assert(members3 >= 3, `and has the community's members (${members3})`);
         assert(pull3.envelope === 'stored' && pull3.held.length === 1, 'and its take-over envelope, signed by the same key');
         await third.kill();
 

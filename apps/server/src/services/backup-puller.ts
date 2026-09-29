@@ -1370,6 +1370,13 @@ function restoreCadence(): void {
             lastWholePages = whole.pages;
         }
     } catch { /* the record unreadable: a whole copy is due, as at a first start */ }
+    // A copy swapped in at this start: the stager's whole-copy check of it, as a check after an import leaves it for the
+    // status (checkWholeCopy).
+    try {
+        const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(SWAPPED_COPY_KEY) as { value: string } | undefined;
+        const consistency = row ? JSON.parse(row.value)?.consistency : null;
+        if (consistency && typeof consistency === 'object' && !lastConsistency) lastConsistency = consistency as ReplicaConsistency;
+    } catch { /* none to show */ }
 }
 
 /**
@@ -1383,7 +1390,7 @@ function restoreFromDatabase(): void {
     restoreCadence();
     if (restored) return;
     restored = true;
-    let swapped: { generatedAt?: unknown; sealEpoch?: unknown; pages?: unknown } | null = null;
+    let swapped: { generatedAt?: unknown; sealEpoch?: unknown; pages?: unknown; consistency?: unknown } | null = null;
     try {
         const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(SWAPPED_COPY_KEY) as { value: string } | undefined;
         if (row) swapped = JSON.parse(row.value);

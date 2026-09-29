@@ -171,7 +171,8 @@ export class StagedCopy {
         const dir = prepareStagingDir();
         const script = fileURLToPath(import.meta.url);
         const proc = spawn(process.execPath, [...process.execArgv, script, '--stage-copy'], {
-            env: { ...process.env, BEANPOOL_DATA_DIR: dir },
+            // A standby, whatever told this process so (its .env, its local config, or a role set while it runs).
+            env: { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ROLE: 'backup' },
             stdio: ['pipe', 'pipe', 'pipe'],
         });
         let readyResolve!: () => void;
@@ -291,8 +292,9 @@ async function stagerChild(): Promise<void> {
     const { initStateEngine, importCopyPart, setSyncCursor, getNodeRole } = await import('../state-engine.js');
     const { loadConnectors } = await import('../connector-manager.js');
     const { db } = await import('../db/db.js');
-    const { TABLES, nodeConfigKeyEntry, isInternalTable } = await import('../engine/replication-manifest.js');
-    const { copyPartOf, noteMainLedger, noteReplicaFormat, LEDGER_CONSERVATION_TOLERANCE } = await import('../engine/sync.js');
+    const { TABLES, nodeConfigKeyEntry, isInternalTable, travellingRows } = await import('../engine/replication-manifest.js');
+    const { copyPartOf, noteMainLedger, noteReplicaFormat, valueLeftOutName, LEDGER_CONSERVATION_TOLERANCE } = await import('../engine/sync.js');
+    const { isWellFormedKey } = await import('@beanpool/engine');
     const { tableContentHashes, readTableHashes } = await import('../engine/replica-hashes.js');
     const { emptyCopiedTables } = await import('../engine/copied-tables.js');
     const { noteMainServerEpoch } = await import('./recovery-seal-key.js');
@@ -322,7 +324,10 @@ async function stagerChild(): Promise<void> {
     const accounts: { publicKey: string; balance: number }[] = [];
     // The values this database's rules refused, as the copy named them, for the hash check (engine/replica-hashes.ts).
     const membersLeftOut = new Map<string, Record<string, unknown>>();
+    const valuesLeftOutNames: string[] = [];
     const plainLeftOut = new Set<string>();
+    const plainLeftOutEntries: string[] = [];
+    let unreadableAccounts = 0;
 
     const count = (page: Record<string, any>) => {
         for (const key of Object.keys(part!.rowCounts)) {
@@ -351,7 +356,10 @@ async function stagerChild(): Promise<void> {
         count(page);
         for (const acc of Array.isArray(page.accounts) ? page.accounts : []) {
             if (typeof acc?.publicKey === 'string') accounts.push({ publicKey: acc.publicKey, balance: acc.balance });
+            if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey) || typeof acc.balance !== 'number') unreadableAccounts++;
         }
+        for (const v of result.valuesLeftOut) valuesLeftOutNames.push(valueLeftOutName(v));
+        plainLeftOutEntries.push(...result.plainTablesLeftOut);
         if (result.valuesLeftOut.length > 0) {
             const standingOf = new Map((Array.isArray(page.members) ? page.members : []).map((m: any) => [m?.publicKey, m?.standing]));
             for (const v of result.valuesLeftOut) {
@@ -418,6 +426,41 @@ async function stagerChild(): Promise<void> {
             }
         }
         const differs = new Set<string>([...valuesDiffer, ...mendable]);
+
+        /**
+         * The whole-copy check's report of this copy (engine audit.ts ReplicaConsistency), as the status shows it after the
+         * swap (services/backup-puller.ts): each copied table's rows here against the rows the copy counted in its snapshot
+         * (the photos it left out apart), the ledger (every account the copy's own, by construction; its entries with no key
+         * this server can store counted), and the values this database's rules refused.
+         */
+        const consistencyOf = (now: number) => {
+            const tables: { name: string; primary: number; backup: number; match: boolean }[] = [];
+            for (const [t, e] of Object.entries(TABLES)) {
+                if ((e.kind !== 'replicated' && e.kind !== 'replicated-except') || e.inRowOf || !has(db, t)) continue;
+                const snap = e.payload === 'plainTables' ? counted.plainTables?.[t] : counted[e.payload];
+                if (typeof snap !== 'number') continue;
+                const primary = t === 'post_photos' ? snap - photosOmitted.length : snap;
+                const where = travellingRows(t);
+                const backup = (db.prepare(`SELECT COUNT(*) AS n FROM ${q(t)}${where ? ` WHERE (${where})` : ''}`).get() as { n: number }).n;
+                tables.push({ name: t, primary, backup, match: primary === backup });
+            }
+            const copyTotal = accounts.reduce((n, x) => n + (typeof x.balance === 'number' && Number.isFinite(x.balance) ? x.balance : 0), 0);
+            const hereTotal = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            return {
+                checkedAt: new Date(now).toISOString(),
+                snapshotGeneratedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null,
+                tables,
+                sumBalances: { primary: copyTotal, backup: hereTotal, match: Math.abs(copyTotal - hereTotal) < 0.005 },
+                commons: null,
+                ledger: accounts.length > 0
+                    ? { compared: accounts.length - unreadableAccounts, differing: 0, unreadable: unreadableAccounts, examples: [], match: unreadableAccounts === 0 }
+                    : null,
+                valuesLeftOut: valuesLeftOutNames.length > 0 ? { count: valuesLeftOutNames.length, examples: valuesLeftOutNames.slice(0, 5) } : null,
+                plainTablesLeftOut: plainLeftOutEntries.length > 0
+                    ? { count: plainLeftOutEntries.length, tables: [...plainLeftOut].sort(), examples: plainLeftOutEntries.slice(0, 5) } : null,
+                ok: differs.size === 0 && !!theirs && tables.every((t) => t.match),
+            };
+        };
 
         // 3. The conservation guard, against this standby's live ledger, and what it keeps of its own, read in one read.
         const live = new Database(a.live, { readonly: true, fileMustExist: true });
@@ -527,7 +570,7 @@ async function stagerChild(): Promise<void> {
                 noteWholeCopyTaken({ at: now, pages, generatedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null });
                 set.run(SWAPPED_COPY_KEY, JSON.stringify({
                     copyId, generatedAt: opening!.generatedAt ?? null, cursor: opening!.cursor ?? null, sealEpoch: opening!.sealEpoch ?? null,
-                    pages, rows, at: now,
+                    pages, rows, at: now, consistency: consistencyOf(now),
                 }));
             })();
             live.exec('COMMIT');

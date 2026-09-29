@@ -335,8 +335,8 @@ member with no other sign-in loses them all, with the tombstone), every released
 its own open-door records, and takes the rest from its main server
 (`apps/server/src/engine/github-sign-in-removal.ts`). The key vault drops the copies of any
 provider it no longer keeps when its database opens. A member keeps their 12 words, and links
-Google, Apple or Facebook. Still open: a released copy of a GitHub copy the member had disconnected
-before this cannot be told from any other and stays (wrapped with the server's key), and backups
+Google, Apple or Facebook. Still open: a released copy of a GitHub copy the server no longer holds (the member disconnected
+GitHub before this, or connected it again, which replaces the copy) cannot be told from any other and stays (wrapped with the server's key), and backups
 and snapshots made before the upgrade hold the GitHub rows as they were.
 
 **A mandatory PIN in front of `A` — rejected.** It would have locked out more members through

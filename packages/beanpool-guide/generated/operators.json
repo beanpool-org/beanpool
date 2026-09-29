@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 66,
-  "hash": "04e7ec1e687bfb9f1e892fe2c7d0245215a77c06b17879a240c2897abca66d4c",
+  "version": 68,
+  "hash": "314d50df1999bef4369a6e6bb9e21a473de60575841cda34733cbacca1291cb4",
   "sections": [
     {
       "id": "setup",
@@ -1785,7 +1785,7 @@
         },
         {
           "type": "p",
-          "text": "GitHub is no longer a sign-in. At its first start after the update that removed it, a main server deletes every member's GitHub recovery copy, the copies of those that a sign-in handed out, and every record of a GitHub join to the global community. A handed-out copy of a GitHub copy the member had already disconnected can't be told from any other, and stays, locked like every copy. A member who had another sign-in keeps it; a member who had only GitHub keeps their 12 words, and can link Google, Apple or Facebook. Its standby deletes the copies when it next copies from the main server, and its own join records at its own start. The log says how many, once: docker compose logs beanpool-node | grep \"GitHub is no longer a sign-in\""
+          "text": "GitHub is no longer a sign-in. At its first start after the update that removed it, a main server deletes every member's GitHub recovery copy, the copies of those that a sign-in handed out, and every record of a GitHub join to the global community. A handed-out copy of a GitHub copy the server no longer holds (the member disconnected GitHub, or connected it again, which replaces the copy) can't be told from any other, and stays, locked like every copy. A member who had another sign-in keeps it; a member who had only GitHub keeps their 12 words, and can link Google, Apple or Facebook. Its standby deletes the copies when it next copies from the main server, and its own join records at its own start. The log says how many, once: docker compose logs beanpool-node | grep \"GitHub is no longer a sign-in\""
         },
         {
           "type": "p",
@@ -1930,7 +1930,7 @@
             "installs the community's admin password and two-factor sign-in, and the record of the recovery code;",
             "brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);",
             "brings back the web address, with its tunnel token;",
-            "installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contacts or member count out of the directory still does), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;",
+            "installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contact email, phone or member count out of the directory still does, whatever the standby chose for its own), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;",
             "becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;",
             "stops copying from the old main server, and restarts;",
             "checks once that the ledger adds up, before members trade on it;",
@@ -2241,7 +2241,11 @@
         },
         {
           "type": "p",
-          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name, the area it serves, how many members it has, and the contact email and phone if you filled them in. That is how new people find you. Each part can be switched off here, and so can the whole thing. Your members' names and posts are never sent."
+          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it."
+        },
+        {
+          "type": "p",
+          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
         },
         {
           "type": "h2",
@@ -2511,7 +2515,7 @@
         {
           "type": "ul",
           "items": [
-            "The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.",
+            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.",
             "Members' Pulse channels are fetched from the sites they link to.",

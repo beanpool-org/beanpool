@@ -40,75 +40,124 @@ let totalNodes = 0;
 const bounds = [];
 const markersLayer = L.layerGroup().addTo(nodesMap);
 
+// ======================== DIRECTORY ROWS ========================
+// Every field of a directory row is what some community published, and anyone who runs a node can publish one. This is
+// also the site the registrar's admin page is on, so markup in a row would be script here. A popup is built from DOM
+// nodes, each value put in as text; a link is made only from an email or a phone number that passes the check for its
+// kind, and only as mailto: or tel:. A number that isn't one is left out, so Leaflet never throws on a row.
+
+const EMAIL = /^[A-Za-z0-9._+-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const PHONE = /^\+?[0-9 ().-]{3,32}$/;
+
+function mailtoHref(email) {
+    return email.length <= 254 && EMAIL.test(email) ? `mailto:${email}` : null;
+}
+
+function telHref(phone) {
+    if (!PHONE.test(phone)) return null;
+    const digits = phone.replace(/\D/g, '');
+    return digits.length >= 3 ? `tel:${phone.startsWith('+') ? '+' : ''}${digits}` : null;
+}
+
+function text(v) {
+    return typeof v === 'string' ? v.trim() : '';
+}
+
+function number(v) {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && /^\s*[-+]?(\d+(\.\d*)?|\.\d+)\s*$/.test(v) ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : null;
+}
+
+/** A directory row as the map shows it; anything that isn't what it should be is null or empty. */
+function readRow(node) {
+    const r = node && typeof node === 'object' ? node : {};
+    const sr = r.service_radius && typeof r.service_radius === 'object' ? r.service_radius : {};
+    const lat = number(sr.lat) ?? number(r.lat);
+    const lng = number(sr.lng) ?? number(r.lng);
+    // 0,0 is in the Gulf of Guinea: a default nobody changed, not a community.
+    const onEarth = lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
+    const radiusKm = number(sr.radiusKm);
+    const members = number(r.member_count);
+    return {
+        name: text(r.community_name) || text(r.callsign) || 'BeanPool community',
+        lat: onEarth ? lat : null,
+        lng: onEarth ? lng : null,
+        radiusKm: radiusKm !== null && radiusKm > 0 && radiusKm <= 20037 ? radiusKm : null,
+        memberCount: members !== null && Number.isSafeInteger(members) && members >= 0 ? members : null,
+        email: text(r.contact_email),
+        phone: text(r.contact_phone),
+    };
+}
+
+function element(tag, style, content) {
+    const el = document.createElement(tag);
+    if (style) el.setAttribute('style', style);
+    if (content !== undefined) el.textContent = content;
+    return el;
+}
+
+/** A contact: a link when the value passes its check, else the value as plain text. */
+function contact(value, href) {
+    if (!href) return document.createTextNode(value);
+    const a = element('a', 'color:#10b981; text-decoration:none;', value);
+    a.setAttribute('href', href);
+    return a;
+}
+
+function directoryPopup(row) {
+    const box = element('div', 'font-family:Inter,sans-serif;');
+    box.appendChild(element('strong', null, row.name));
+    box.appendChild(element('br'));
+    const facts = [];
+    if (row.memberCount !== null) facts.push(`${row.memberCount} members`);
+    if (row.radiusKm !== null) facts.push(`${row.radiusKm}km radius`);
+    box.appendChild(element('span', 'color:#94a3b8;font-size:0.85em;', facts.join(' · ')));
+    if (row.email || row.phone) {
+        box.appendChild(element('br'));
+        const line = element('span', 'font-size:0.85em; color:#cbd5e1; display:inline-block; margin-top:4px;');
+        if (row.email) line.appendChild(contact(row.email, mailtoHref(row.email)));
+        if (row.email && row.phone) line.appendChild(document.createTextNode(' · '));
+        if (row.phone) line.appendChild(contact(row.phone, telHref(row.phone)));
+        box.appendChild(line);
+    }
+    return box;
+}
+
 async function pollNodes() {
 
     try {
         const { data: nodes, error } = await supabaseClient
             .from('directory_nodes')
             .select('*');
-            
+
         if (error) throw error;
-        
+
         totalNodes = 0;
         totalMembers = 0;
         markersLayer.clearLayers();
 
-        nodes.forEach((node) => {
+        (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+            const row = readRow(node);
             totalNodes++;
-            totalMembers += node.member_count || 0;
-            
-            // Map db fields to expected format
-            const radiusKm = node.service_radius?.radiusKm || 0;
-            const lat = node.service_radius?.lat || node.lat;
-            const lng = node.service_radius?.lng || node.lng;
-            const name = node.community_name || node.callsign;
-            const url = node.node_url || '#';
+            totalMembers += row.memberCount || 0;
+            if (row.lat === null || row.lng === null) return;
 
-            let contactHtml = '';
-            if (node.contact_email || node.contact_phone) {
-                const parts = [];
-                if (node.contact_email) parts.push(`<a href="mailto:${node.contact_email}" style="color:#10b981; text-decoration:none;">${node.contact_email}</a>`);
-                if (node.contact_phone) parts.push(`<a href="tel:${node.contact_phone}" style="color:#10b981; text-decoration:none;">${node.contact_phone}</a>`);
-                contactHtml = `<br><span style="font-size:0.85em; color:#cbd5e1; display:inline-block; margin-top:4px;">${parts.join(' &middot; ')}</span>`;
+            L.marker([row.lat, row.lng], { icon: nodeIcon })
+                .bindPopup(directoryPopup(row))
+                .addTo(markersLayer);
+
+            if (row.radiusKm !== null) {
+                L.circle([row.lat, row.lng], {
+                    radius: row.radiusKm * 1000,
+                    color: '#f59e0b',
+                    fillColor: '#f59e0b',
+                    fillOpacity: 0.06,
+                    weight: 1.5,
+                    dashArray: '6 4',
+                    interactive: false,
+                }).addTo(markersLayer);
             }
-
-            // Add marker
-            if (lat && lng) {
-                if (radiusKm > 0) {
-                    L.marker([lat, lng], { icon: nodeIcon })
-                        .bindPopup(`
-                            <div style="font-family:Inter,sans-serif;">
-                                <strong>${name}</strong><br>
-                                <span style="color:#94a3b8;font-size:0.85em;">${node.member_count} members &middot; ${radiusKm}km radius</span>
-                                ${contactHtml}
-                            </div>
-                        `)
-                        .addTo(markersLayer);
-
-                    // Radius circle
-                    L.circle([lat, lng], {
-                        radius: radiusKm * 1000,
-                        color: '#f59e0b',
-                        fillColor: '#f59e0b',
-                        fillOpacity: 0.06,
-                        weight: 1.5,
-                        dashArray: '6 4',
-                        interactive: false,
-                    }).addTo(markersLayer);
-                } else {
-                    L.marker([lat, lng], { icon: nodeIcon })
-                        .bindPopup(`
-                            <div style="font-family:Inter,sans-serif;">
-                                <strong>${name}</strong><br>
-                                <span style="color:#94a3b8;font-size:0.85em;">${node.member_count} members</span>
-                                ${contactHtml}
-                            </div>
-                        `)
-                        .addTo(markersLayer);
-                }
-                bounds.push([lat, lng]);
-            }
-
+            bounds.push([row.lat, row.lng]);
         });
     } catch (err) {
         console.error('Failed to load directory nodes from Supabase:', err);

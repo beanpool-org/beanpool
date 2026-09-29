@@ -47,6 +47,7 @@ To remove it, tap **Disconnect**.
 
 BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locked to it was not locked to anything only you have. When your community's server is updated, it deletes every copy linked to GitHub. Your account itself is not touched, and your 12 words still work.
 
+- If GitHub was the only account you linked and this phone has your 12 words, write them down now (**Settings** → **Check your 12 words**), and link Google, Facebook or (on an iPhone) Apple, as above. Until you do one of these, this phone is your only way into your account.
 - If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.
 - If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account.
 

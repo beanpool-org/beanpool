@@ -132,7 +132,7 @@ Once it has:
 
 ### GitHub copies
 
-GitHub is no longer a sign-in. At its first start after the update that removed it, a main server deletes every member's GitHub recovery copy, the copies of those that a sign-in handed out, and every record of a GitHub join to the global community. A handed-out copy of a GitHub copy the member had already disconnected can't be told from any other, and stays, locked like every copy. A member who had another sign-in keeps it; a member who had only GitHub keeps their 12 words, and can link Google, Apple or Facebook. Its standby deletes the copies when it next copies from the main server, and its own join records at its own start. The log says how many, once: docker compose logs beanpool-node | grep "GitHub is no longer a sign-in"
+GitHub is no longer a sign-in. At its first start after the update that removed it, a main server deletes every member's GitHub recovery copy, the copies of those that a sign-in handed out, and every record of a GitHub join to the global community. A handed-out copy of a GitHub copy the server no longer holds (the member disconnected GitHub, or connected it again, which replaces the copy) can't be told from any other, and stays, locked like every copy. A member who had another sign-in keeps it; a member who had only GitHub keeps their 12 words, and can link Google, Apple or Facebook. Its standby deletes the copies when it next copies from the main server, and its own join records at its own start. The log says how many, once: docker compose logs beanpool-node | grep "GitHub is no longer a sign-in"
 
 Backups, snapshots and copies of the data folder made before that start still hold them. Delete the ones you no longer need, as above.
 
@@ -218,7 +218,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 - installs the community's admin password and two-factor sign-in, and the record of the recovery code;
 - brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);
 - brings back the web address, with its tunnel token;
-- installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contacts or member count out of the directory still does), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;
+- installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contact email, phone or member count out of the directory still does, whatever the standby chose for its own), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;
 - becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
 - stops copying from the old main server, and restarts;
 - checks once that the ledger adds up, before members trade on it;

@@ -30,13 +30,25 @@ describe('NodeIdentityPanel Component', () => {
         vi.clearAllMocks();
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/community-info')) {
+                // The public route: no contact the owner hasn't turned on (the phone is on in /api/node/config below).
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
                         communityName: 'Hydrated Community',
-                        contactEmail: 'contact@hydrated.org',
+                        contactEmail: null,
                         contactPhone: '+61 400 000 000',
                         callsign: 'hydrated-callsign',
+                    }),
+                });
+            }
+            if (url.includes('/api/local/admin/diagnostics')) {
+                // The admin route: both contacts, whatever the switches say.
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        ...mockDiag,
+                        contactEmail: 'contact@hydrated.org',
+                        contactPhone: '+61 400 000 000',
                     }),
                 });
             }
@@ -46,7 +58,8 @@ describe('NodeIdentityPanel Component', () => {
                     json: () => Promise.resolve({
                         publishLocation: true,
                         publishMembers: true,
-                        publishContacts: false,
+                        publishContactEmail: false,
+                        publishContactPhone: true,
                         publishHealth: true,
                         directoryPushIntervalHours: 6,
                         lastDirectoryPush: 1700000000000,
@@ -140,7 +153,8 @@ describe('NodeIdentityPanel Component', () => {
         // Checkboxes
         expect(document.getElementById('publish-location')).toBeInTheDocument();
         expect(document.getElementById('publish-members')).toBeInTheDocument();
-        expect(document.getElementById('publish-contacts')).toBeInTheDocument();
+        expect(document.getElementById('publish-contact-email')).toBeInTheDocument();
+        expect(document.getElementById('publish-contact-phone')).toBeInTheDocument();
         expect(document.getElementById('publish-health')).toBeInTheDocument();
 
         // Community contacts
@@ -152,7 +166,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(screen.getByRole('button', { name: /save identity/i })).toBeInTheDocument();
     });
 
-    it('hydrates initial values correctly from /api/local/community-info and /api/node/config', async () => {
+    it('hydrates initial values correctly from /api/local/community-info, the admin diagnostics and /api/node/config', async () => {
         await act(async () => {
             render(
                 <NodeIdentityPanel
@@ -177,8 +191,59 @@ describe('NodeIdentityPanel Component', () => {
         const scheduleSelect = document.getElementById('directory-push-interval') as HTMLSelectElement;
         expect(scheduleSelect.value).toBe('6');
 
-        const publishContactsCheckbox = document.getElementById('publish-contacts') as HTMLInputElement;
-        expect(publishContactsCheckbox.checked).toBe(false);
+        const publishEmailCheckbox = document.getElementById('publish-contact-email') as HTMLInputElement;
+        const publishPhoneCheckbox = document.getElementById('publish-contact-phone') as HTMLInputElement;
+        expect(publishEmailCheckbox.checked).toBe(false);
+        expect(publishPhoneCheckbox.checked).toBe(true);
+    });
+
+    it('shows both contact switches off unless the node says the owner turned each on, and saves the one turned on', async () => {
+        // A node that doesn't name the switches, holding only the old single one as true: that was no owner's choice.
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/community-info')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ communityName: 'Quiet Valley', contactEmail: 'hi@quiet.example', contactPhone: '+61 400 111 222' }),
+                });
+            }
+            if (url.includes('/api/node/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true, directoryPushIntervalHours: 12, serviceRadius: null }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+        }));
+
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    onRefreshDiag={vi.fn()}
+                />
+            );
+        });
+        await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+
+        const email = document.getElementById('publish-contact-email') as HTMLInputElement;
+        const phone = document.getElementById('publish-contact-phone') as HTMLInputElement;
+        expect(email.checked).toBe(false);
+        expect(phone.checked).toBe(false);
+
+        await act(async () => {
+            fireEvent.click(email);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+        });
+
+        const configCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0].includes('/api/local/admin/node/config'));
+        expect(configCall).toBeDefined();
+        const body = JSON.parse(configCall[1].body);
+        expect(body.publishContactEmail).toBe(true);
+        expect(body.publishContactPhone).toBe(false);
+        expect('publishContacts' in body).toBe(false);
     });
 
     it('syncs service radius slider and km input', async () => {
@@ -502,7 +567,8 @@ describe('NodeIdentityPanel Component', () => {
                     password: mockProfile.adminPassword,
                     publishLocation: true,
                     publishMembers: true,
-                    publishContacts: false,
+                    publishContactEmail: false,
+                    publishContactPhone: true,
                     publishHealth: true,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },
@@ -530,6 +596,10 @@ describe('NodeIdentityPanel Component', () => {
                         callsign: 'unlocated',
                     }),
                 });
+            }
+            if (url.includes('/api/local/admin/diagnostics')) {
+                // A node with no contacts stored says so, so the empty boxes are what it has.
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ contactEmail: null, contactPhone: null }) });
             }
             if (url.includes('/api/node/config')) {
                 return Promise.resolve({
@@ -791,10 +861,16 @@ describe('NodeIdentityPanel Component', () => {
                         ok: true,
                         json: () => Promise.resolve({
                             communityName: 'Northern Rivers Eco',
-                            contactEmail: 'info@eco.org',
-                            contactPhone: '+61 400 999 888',
+                            contactEmail: null,
+                            contactPhone: null,
                             callsign: 'nrivers',
                         }),
+                    });
+                }
+                if (url.includes('/api/local/admin/diagnostics')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ contactEmail: 'info@eco.org', contactPhone: '+61 400 999 888' }),
                     });
                 }
                 if (url.includes('/api/node/config')) {
@@ -919,6 +995,12 @@ describe('NodeIdentityPanel Component', () => {
                         }),
                     });
                 }
+                if (url.includes('/api/local/admin/diagnostics')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ contactEmail: true, contactPhone: { nested: 'phone-obj' } }),
+                    });
+                }
                 return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
             }));
 
@@ -940,6 +1022,113 @@ describe('NodeIdentityPanel Component', () => {
             expect(nameInput).toBeInTheDocument();
             expect(emailInput).toBeInTheDocument();
             expect(phoneInput).toBeInTheDocument();
+            // Values that aren't text or null are not the node's contacts: the boxes stay closed.
+            await waitFor(() => expect(screen.getByText(/couldn.t load the contact email and phone/i)).toBeInTheDocument());
+            expect(emailInput).toBeDisabled();
+            expect(phoneInput).toBeDisabled();
+        });
+    });
+
+    describe('the contacts come from the admin route, and a Save never erases them (#1287)', () => {
+        const PUBLIC_EMAIL = 'published@public.example';
+        const OWNER_EMAIL = 'owner@private.example';
+        const OWNER_PHONE = '+61 400 222 333';
+
+        /** A node whose public route and admin route answer as given; every write succeeds. */
+        function mockNode(admin: () => Promise<unknown>) {
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ communityName: 'Quiet Valley', callsign: 'quiet', contactEmail: PUBLIC_EMAIL, contactPhone: null }),
+                    });
+                }
+                if (url.includes('/api/local/admin/diagnostics')) return admin();
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishContactEmail: true, publishContactPhone: false, serviceRadius: null }) });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+            return fetchMock;
+        }
+
+        const identityBody = (fetchMock: ReturnType<typeof vi.fn>) => {
+            const call = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/update-identity'));
+            expect(call).toBeDefined();
+            return JSON.parse(call![1].body);
+        };
+
+        const saveNow = async () => {
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+        };
+
+        it('reads both contacts from the admin route with the admin headers, never from the public community-info', async () => {
+            const fetchMock = mockNode(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ contactEmail: OWNER_EMAIL, contactPhone: OWNER_PHONE }) }));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+
+            const emailInput = document.getElementById('contact-email') as HTMLInputElement;
+            const phoneInput = document.getElementById('contact-phone') as HTMLInputElement;
+            await waitFor(() => {
+                expect(emailInput.value).toBe(OWNER_EMAIL);
+                expect(phoneInput.value).toBe(OWNER_PHONE);
+            });
+            expect(emailInput).not.toBeDisabled();
+            expect(phoneInput).not.toBeDisabled();
+            const adminCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/admin/diagnostics'));
+            expect(adminCall![1].headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+
+            await saveNow();
+            const body = identityBody(fetchMock);
+            expect(body.contactEmail).toBe(OWNER_EMAIL);
+            expect(body.contactPhone).toBe(OWNER_PHONE);
+        });
+
+        it.each([
+            ['the admin route refuses', () => Promise.resolve({ ok: false, status: 401, statusText: 'Unauthorized', json: () => Promise.resolve({ error: 'Unauthorized' }) })],
+            ['the admin route cannot be reached', () => Promise.reject(new TypeError('offline'))],
+            ['the node is from before and its admin route names no contacts', () => Promise.resolve({ ok: true, json: () => Promise.resolve({ ...mockDiag }) })],
+        ])('a Save after %s sends no contact fields, so the stored contacts stay', async (_why, admin) => {
+            const fetchMock = mockNode(admin);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText(/couldn.t load the contact email and phone/i)).toBeInTheDocument());
+
+            const emailInput = document.getElementById('contact-email') as HTMLInputElement;
+            const phoneInput = document.getElementById('contact-phone') as HTMLInputElement;
+            // Not the public route's copy either: that holds only what is published.
+            expect(emailInput.value).toBe('');
+            expect(emailInput).toBeDisabled();
+            expect(phoneInput).toBeDisabled();
+
+            await saveNow();
+            const body = identityBody(fetchMock);
+            expect('contactEmail' in body).toBe(false);
+            expect('contactPhone' in body).toBe(false);
+            // The rest of the identity still saves.
+            expect(body.communityName).toBe('Quiet Valley');
+            expect(body.callsign).toBe('quiet');
+        });
+
+        it('a Save before the contacts have loaded sends no contact fields', async () => {
+            const fetchMock = mockNode(() => new Promise(() => {}));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+            expect(document.getElementById('contact-email')).toBeDisabled();
+            expect(screen.queryByText(/couldn.t load the contact email and phone/i)).not.toBeInTheDocument();
+
+            await saveNow();
+            const body = identityBody(fetchMock);
+            expect('contactEmail' in body).toBe(false);
+            expect('contactPhone' in body).toBe(false);
         });
     });
     describe('requests to join (G6)', () => {

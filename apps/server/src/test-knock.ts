@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     assert(rowsFor(bob.pk)[0]?.status === 'pending', 'Bob\'s knock is untouched');
     const countOff = await admin('GET', '/api/local/admin/knocks');
     assert(countOff.status === 200 && countOff.body?.acceptKnocks === false && countOff.body?.open === openNow, 'the operator still sees the count, beside the switch');
-    const oldSettings = await admin('POST', '/api/local/admin/node/config', { publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true });
+    const oldSettings = await admin('POST', '/api/local/admin/node/config', { publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false, publishHealth: true });
     assert(oldSettings.status === 200 && oldSettings.body?.acceptKnocks === false && (await call(null, 'GET', '/api/node/config')).body?.acceptKnocks === false,
         'a Settings save that doesn\'t send acceptKnocks (a page from before G6) leaves it off');
     const overrideRow = db.prepare("SELECT value FROM node_config WHERE key = 'nodeProfile.knocks'").get() as any;

@@ -22,8 +22,8 @@
  *   (state-engine.ts deleteReplicatedRows), so a standby deletes them too. Told apart by what it holds: its copy, opened
  *   with this server's key, is the very copy a GitHub row here holds. Not by the share row it names: a server that took
  *   over numbers its rows itself, so that id may be another row's there. A released copy whose GitHub row no server
- *   holds any more (disconnected before this) cannot be told from a Google one and stays, locked with the server's key
- *   like every released copy.
+ *   holds any more (disconnected before this, or connected again: a new copy replaces the old one) cannot be told from a
+ *   Google one and stays, locked with the server's key like every released copy.
  * - Every GitHub open-door record (`open_joins`, provider `github`). The member stays a member: `invited_by` still says
  *   how they joined (db.ts NO_RECORD_OF_JOINING). No deletion of this table reaches a standby, so every server removes
  *   its own, standby included, and engine/open-join.ts writeOpenJoinRecord refuses one arriving from a main server or a

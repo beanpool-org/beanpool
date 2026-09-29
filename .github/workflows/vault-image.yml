@@ -36,8 +36,10 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @beanpool/core --filter @beanpool/signin build
-      - name: Throwaway custodian keys (public halves only)
-        run: node -e 'const c=require("crypto");console.log(JSON.stringify({genesisCustodians:[0,1,2].map(()=>c.randomBytes(32).toString("hex"))}))' > "${RUNNER_TEMP}/keys.json"
+      - name: Throwaway custodian keys (public halves only; printed, so anyone can build the same image elsewhere)
+        run: |
+          node -e 'const c=require("crypto");console.log(JSON.stringify({genesisCustodians:[0,1,2].map(()=>c.randomBytes(32).toString("hex"))}))' > "${RUNNER_TEMP}/keys.json"
+          cat "${RUNNER_TEMP}/keys.json"
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/image-cache

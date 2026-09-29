@@ -238,6 +238,11 @@ run_check "deploy_health" bash scripts/test-deploy-health.sh
 # instant, and it is the only check here that tests this script rather than the product.
 run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 
+# The merge gate rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
+# on check-deps-installed.mjs telling a stale install from broken code. This runs all four against a throwaway
+# repository with a stub `gh` (no GitHub, no network). A few seconds.
+run_check "merge_gate" bash scripts/test-merge-gate.sh
+
 # Undeclared imports & dependency boundary guard. Ensures every bare module import in each package the
 # Dockerfile builds — core, engine, PWA, manager and the server (its src/test-*.ts included, because the
 # server's tsc compiles them) — is declared in that package's own package.json. Our .npmrc sets

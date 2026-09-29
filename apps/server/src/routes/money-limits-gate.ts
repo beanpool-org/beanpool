@@ -43,6 +43,13 @@
  *   - Decisions (/api/commons/decisions): the Commons pays by a community's vote, not an account's act;
  *   - the admin surface (/api/local/admin/*): an operator's act, under its own limiter;
  *   - receiving, anywhere.
+ *
+ * AN ID IS TEXT OR IT IS REFUSED. A plan reads a key or an id from the body (`to`, `postId`, `transactionId`: each route's
+ * `ids`). The apps send each as text. Any other value that is sent (a list, an object, a number, true, null, or '') is
+ * answered 400 before anything is counted: the handlers accept some of them (SQLite binds `[id]` as `id`, and
+ * `String(...)` turns a list into its one element), where the plan would read no listing or request and count no payment.
+ * The other body fields a plan reads are read by the handler through the same code (pledgeDispatchKind: `type`, `memo`),
+ * so the two can't disagree.
  */
 import type { Context, Next } from 'koa';
 import { canOperateTreasury } from '../state-engine.js';
@@ -56,6 +63,8 @@ type Plan = { account: string; acts: MoneyAct[] } | null;
 interface MoneyRoute {
     method: 'POST' | 'DELETE';
     path: RegExp;
+    /** The body fields the plan reads an id from: each, when sent, must be text that isn't empty (see the header). */
+    ids?: readonly string[];
     /** The account and its acts, or null when this request counts nothing (the handler refuses it). */
     plan: (actor: string, match: RegExpMatchArray, body: Record<string, unknown>) => Plan;
 }
@@ -109,21 +118,21 @@ const at = (tail: string) => new RegExp(`^${ENTERPRISE}/${tail}/?$`);
 const pledge = (actor: string): Plan => ({ account: actor, acts: [{ kind: 'pledge' }] });
 
 export const MONEY_ROUTES: readonly MoneyRoute[] = [
-    { method: 'POST', path: /^\/api\/ledger\/transfer\/?$/, plan: (actor, _m, b) => ({ account: actor, acts: [{ kind: 'payment', recipient: str(b.to) }] }) },
+    { method: 'POST', path: /^\/api\/ledger\/transfer\/?$/, ids: ['to'], plan: (actor, _m, b) => ({ account: actor, acts: [{ kind: 'payment', recipient: str(b.to) }] }) },
     {
-        method: 'POST', path: /^\/api\/marketplace\/posts\/accept\/?$/,
+        method: 'POST', path: /^\/api\/marketplace\/posts\/accept\/?$/, ids: ['postId'],
         plan: (actor, _m, b) => ({ account: actor, acts: [{ kind: 'payment', recipient: listing(b.postId)?.author ?? null }, { kind: 'request' }] }),
     },
     {
-        method: 'POST', path: /^\/api\/marketplace\/posts\/request\/?$/,
+        method: 'POST', path: /^\/api\/marketplace\/posts\/request\/?$/, ids: ['postId'],
         plan: (actor, _m, b) => {
             const post = listing(b.postId);
             return { account: actor, acts: post?.type === 'offer' ? [{ kind: 'payment', recipient: post.author }, { kind: 'request' }] : [{ kind: 'request' }] };
         },
     },
-    { method: 'POST', path: /^\/api\/marketplace\/transactions\/approve\/?$/, plan: (actor, _m, b) => ({ account: actor, acts: approval(actor, b.transactionId) }) },
+    { method: 'POST', path: /^\/api\/marketplace\/transactions\/approve\/?$/, ids: ['transactionId'], plan: (actor, _m, b) => ({ account: actor, acts: approval(actor, b.transactionId) }) },
     {
-        method: 'POST', path: at('approve'),
+        method: 'POST', path: at('approve'), ids: ['transactionId'],
         plan: (actor, m, b) => {
             const ent = enterpriseActingFor(actor, m[0]);
             return ent ? { account: ent, acts: approval(ent, b.transactionId) } : null;
@@ -155,15 +164,29 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
     },
 ];
 
+/** The money route a request is, with its path's match, or null. */
+function moneyRouteFor(method: string, path: string): { route: MoneyRoute; match: RegExpMatchArray } | null {
+    for (const route of MONEY_ROUTES) {
+        if (route.method !== method) continue;
+        const match = path.match(route.path);
+        if (match) return { route, match };
+    }
+    return null;
+}
+
+/** The first of `route`'s id fields sent as anything but text that isn't empty, or null when every one is fine. */
+export function malformedMoneyId(route: Pick<MoneyRoute, 'ids'>, body: Record<string, unknown>): string | null {
+    for (const field of route.ids ?? []) {
+        if (body[field] !== undefined && str(body[field]) === null) return field;
+    }
+    return null;
+}
+
 /** What this request counts, and against whom: null when it counts nothing. */
 export function moneyPlanFor(method: string, path: string, actor: string | null | undefined, body: Record<string, unknown>): Plan {
     if (!actor) return null;
-    for (const route of MONEY_ROUTES) {
-        if (route.method !== method) continue;
-        const m = path.match(route.path);
-        if (m) return route.plan(actor, m, body);
-    }
-    return null;
+    const found = moneyRouteFor(method, path);
+    return found ? found.route.plan(actor, found.match, body) : null;
 }
 
 /** Answer a money limit's refusal: 429, its code, its words and when it lets up. True when `e` was one. */
@@ -193,7 +216,19 @@ export function refuseOverMoneyLimits(ctx: { status: number; body: unknown; set?
 export async function moneyLimitsGate(ctx: Context, next: Next): Promise<void> {
     // A standby makes no money move of its own and has refused these already (standbyLedgerGate): it counts nothing.
     if (getNodeRole() === 'backup') return next();
-    const plan = moneyPlanFor(ctx.method.toUpperCase(), ctx.path, ctx.state?.actor as string | undefined, ((ctx as any).requestBody ?? {}) as Record<string, unknown>);
+    const actor = ctx.state?.actor as string | undefined;
+    const found = actor ? moneyRouteFor(ctx.method.toUpperCase(), ctx.path) : null;
+    if (!actor || !found) return next();
+    const raw = (ctx as any).requestBody;
+    const body = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    // Before the plan: an id that isn't text is refused here, so nothing it could slip past is ever counted or run.
+    const bad = malformedMoneyId(found.route, body);
+    if (bad) {
+        ctx.status = 400;
+        ctx.body = { error: `${bad} must be an id, sent as text.` };
+        return;
+    }
+    const plan = found.route.plan(actor, found.match, body);
     if (!plan) return next();
     let hold: MoneyActHold;
     try {

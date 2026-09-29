@@ -8,17 +8,20 @@
  *     crowdfund pledge all count; the 101st is 429 money_payments_day in plain words, with Retry-After, and moves
  *     nothing (no balance, account row, transaction or trade: the node still sums to what it did); an act that pays
  *     nothing (approving a request on their own offer) still goes; another key is unaffected; receiving (a send, and a
- *     sale's escrow released) still works past every limit.
+ *     sale's escrow released) still works past every limit. At the limit, an id sent as anything but text (a list
+ *     holding the real one, an object, a number, true, null or '') is 400 on every route whose count reads one (a send's
+ *     `to`, a buy's or an ask's `postId`, an approval's `transactionId`), and nothing moves or is counted; the other
+ *     money routes read no id from the body.
  *  2. New people paid: 30 a day; paying one of them again, someone paid three days ago and someone bought from before
  *     is not new; the 31st new person is 429 money_new_recipients_day, and a key with no row gets no row; buying from a
- *     new seller counts too.
+ *     new seller counts too; so does an id that isn't text (400), buying or asking.
  *  3. Marketplace requests: asking, accepting and approving, 100 a day; the 101st is 429 money_requests_day and makes
  *     no trade row.
  *  4. Pledges: backing an enterprise, releasing it (every alias) and a crowdfund pledge, 20 a day; the 21st is 429
  *     money_pledges_day; another member is unaffected.
  *  5. An enterprise: its payments (sweeps to the Commons) count against it, 1,000 a day, and never against the keeper
  *     who signs, nor the keeper's against it; 1,000 approvals of requests on its listings; 300 new people paid (helpers
- *     on its need), and paying one again is not new.
+ *     on its need), and paying one again is not new. An approval's id that isn't text is 400 at both its doors.
  *  6. Posts (W-main): a keeper's own stop at 100; what they put up for an enterprise counts against the enterprise, up
  *     to 1,000, then 429 enterprise_posts_per_day; their own still stop at 100.
  *  7. The day budget (W-main): writes whose path names an enterprise the signer keeps spend the enterprise's 50,000,
@@ -179,6 +182,23 @@ const books = (): Books => ({
     members: count('SELECT COUNT(*) AS n FROM members'),
 });
 const sameBooks = (a: Books, b: Books) => JSON.stringify(a) === JSON.stringify(b);
+
+/** Every way to send an id that isn't text: a list holding the real one, an object, a number, true, null and ''. */
+const notText = (real: string): unknown[] => [[real], { id: real }, 7, true, null, ''];
+const actsOf = (pk: string) => count('SELECT COUNT(*) AS n FROM money_acts WHERE account = ?', pk);
+/**
+ * At a limit, `field` sent as anything but text is 400 before the gate counts anything or the handler runs, and nothing
+ * moves (the review of 362efe26: `[id]` took payments and new people past every limit, as SQLite binds it as `id`).
+ */
+async function idNotText(what: string, field: string, real: string, account: string, send: (id: unknown) => Promise<Res>): Promise<void> {
+    const before = books();
+    const acts = actsOf(account);
+    const answers: string[] = [];
+    for (const v of notText(real)) answers.push(`${JSON.stringify(v).slice(0, 12)} ${(await send(v)).status}`);
+    assert(answers.every((a) => a.endsWith(' 400')), `${what}: ${field} sent as a list, an object, a number, true, null or '' is 400 (${answers.join(', ')})`);
+    const after = books();
+    assert(sameBooks(before, after) && actsOf(account) === acts, `${what}: and nothing moved or was counted (${JSON.stringify(before)} → ${JSON.stringify(after)}, acts ${acts} → ${actsOf(account)})`);
+}
 
 /** A refusal by one of the money limits: 429 with its code, plain words (Beans, never Ʀ), when it lets up, and nothing moved. */
 function refused(r: Res, code: string, words: RegExp, before: Books, what: string): void {
@@ -375,6 +395,12 @@ async function main(): Promise<void> {
         refused(await request(ann, sellaOffer), 'money_payments_day', /100 payments/, before, 'asking to buy an offer past it');
         refused(await crowdfund(ann, project), 'money_payments_day', /100 payments/, before, 'a crowdfund pledge past it');
         assert(bal(ann.pk) === annBefore && bal(ben.pk) === benBefore, `neither balance moved (Ann ${annBefore}, Ben ${benBefore})`);
+        await idNotText('a send past it', 'to', ben.pk, ann.pk, (to) => call('POST', ann, '/api/ledger/transfer', { to, amount: 1 }));
+        await idNotText('a one-step buy past it', 'postId', sellaOffer, ann.pk, (postId) => call('POST', ann, '/api/marketplace/posts/accept', { postId, buyerPublicKey: ann.pk }));
+        await idNotText('asking to buy past it', 'postId', sellaOffer, ann.pk, (postId) => call('POST', ann, '/api/marketplace/posts/request', { postId, buyerPublicKey: ann.pk }));
+        const halAgain = plantRequest(annNeed, ann.pk, hal.pk);
+        await idNotText('approving help on her own need past it', 'transactionId', halAgain, ann.pk,
+            (transactionId) => call('POST', ann, '/api/marketplace/transactions/approve', { transactionId, authorPublicKey: ann.pk }));
 
         const boAsks = plantRequest(annOffer, bo.pk, ann.pk);
         const approveOwnOffer = await approve(ann, boAsks);
@@ -419,6 +445,8 @@ async function main(): Promise<void> {
         refused(await send(dan, stranger.pk), 'money_new_recipients_day', /30 people/, before, 'a key with no row');
         assert(count('SELECT COUNT(*) AS n FROM members WHERE public_key = ?', stranger.pk) === 0, 'and no row is made for them');
         refused(await accept(dan, newSellerOffer), 'money_new_recipients_day', /30 people/, before, 'buying from a new seller');
+        await idNotText('buying from a new seller', 'postId', newSellerOffer, dan.pk, (postId) => call('POST', dan, '/api/marketplace/posts/accept', { postId, buyerPublicKey: dan.pk }));
+        await idNotText('asking to buy from a new seller', 'postId', newSellerOffer, dan.pk, (postId) => call('POST', dan, '/api/marketplace/posts/request', { postId, buyerPublicKey: dan.pk }));
     }
 
     // ── 3. Marketplace requests ───────────────────────────────────────────────────────────────────────────────
@@ -503,6 +531,16 @@ async function main(): Promise<void> {
         assert(approvals.every(s => s === 200), `Gus approves 1,000 requests on Gus Grocer's offer, though it has made all its payments (${distinct(approvals)})`);
         const beforeApproval = books();
         refused(await call('POST', gus, `/api/treasury/${y}/approve`, { transactionId: asks[M.enterpriseMarketRequestsPerDay] }), 'money_requests_day', /Gus Grocer can approve 1,000 deals/, beforeApproval, 'the 1,001st approval');
+        // At its 1,000 payments and its 1,000 approvals, a helper on its need: the approval's id must be text, at both doors.
+        const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', credits: 1, repeatable: true })).body?.post?.id as string;
+        assert(!!yNeed, 'setup: Gus Grocer needs help');
+        const yHelper = member('Shelf Helper', 0);
+        sync();
+        const yOffer = plantRequest(yNeed, y, yHelper.pk);
+        for (const door of ['treasury', 'enterprise']) {
+            await idNotText(`Gus Grocer paying a helper by /api/${door}/:id/approve`, 'transactionId', yOffer, y,
+                (transactionId) => call('POST', gus, `/api/${door}/${y}/approve`, { transactionId }));
+        }
 
         // 300 new people: helpers on another enterprise's need, paid from its escrow when approved.
         const zed = member('Zed');

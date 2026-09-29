@@ -39,6 +39,19 @@ else
     fail "keyholder is not running"
 fi
 
+# The vault itself, up: its firewall, resolver, TLS, and the API answering through the socket Caddy uses (locked until
+# two custodians unlock it).
+check "firewall loaded" 'nft list table inet vault >/dev/null 2>&1'
+check "resolver running" 'systemctl is-active --quiet beanpool-vault-dns.service'
+check "Caddy running" 'systemctl is-active --quiet caddy.service'
+check "API running (through its launcher)" 'systemctl is-active --quiet beanpool-vault-api.service'
+health=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    health=$(/opt/node/bin/node -e 'require("http").get({ socketPath: "/run/beanpool-vault/api/api.sock", path: "/v1/health" }, r => { let b = ""; r.on("data", d => b += d); r.on("end", () => console.log(b)); }).on("error", () => process.exit(1))' 2>/dev/null) && break
+    sleep 3
+done
+check "the API answers /v1/health: $health" 'printf "%s" "$health" | grep -q "\"state\":\"\(locked\|open\)\""'
+
 check "no SSH server" '! command -v sshd >/dev/null && [ ! -e /usr/sbin/sshd ]'
 check "no login shell for any account" '! awk -F: "\$7 !~ /(nologin|false|sync)\$/ {print}" /etc/passwd | grep -q .'
 check "root can't log in (locked)" 'awk -F: "\$1 == \"root\" {exit !(\$2 ~ /^[!*]/)}" /etc/shadow'

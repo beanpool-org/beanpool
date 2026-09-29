@@ -54,6 +54,12 @@
  *     own payments spent, she completes the job the shop funded (Hugo is paid), turns a request down, removes Rex,
  *     pauses, resumes and starts winding it up, at both path prefixes and with a trailing slash; those 6 writes spend
  *     her own day (the next is 429 day_budget) and not her enterprise work.
+ * 15. A crowdfund project's id is the server's (the review of 68ff4e4f: Mallory made a "project" whose id was Victor's
+ *     key, and her pledge reached his balance and made him `funded`). A project sent with Victor's key, an enterprise's
+ *     treasury, the Commons, a deal's id (its escrow holds Beans) or a fresh id of the caller's own is refused, and so is
+ *     a pledge to each; nothing moves and no status changes. A projects row made before, under a person's key, takes no
+ *     pledge at either door and can't be edited or deleted (which renamed or pruned that person). A project sent with no
+ *     id is made with a new one, as its own enterprise, and pledges fund it into its own account.
  *
  * Local only: the servers it starts on localhost. The peer a purchase asks is a made-up key at a closed local port.
  *
@@ -74,7 +80,7 @@ import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, getMember, createTreasury, adminAssignTreasuryOperator } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, createCrowdfundProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { resetGatewayRateLimit, gatewayAdmitDayBudget } from './gateway-rate-limit.js';
 import { updateGatewayConfig } from './config/local-config.js';
@@ -1062,6 +1068,82 @@ async function main(): Promise<void> {
         const leaLoft = await line(lea, loft);
         assert(leaLoft.status === 201, `and not on her enterprise work: she still writes for Leah Loft (${show(leaLoft)})`);
         resetGatewayRateLimit();
+    }
+
+    // ── 15. A crowdfund project's id is the server's ──────────────────────────────────────────────────────────
+    console.log('\n--- 15. a crowdfund project\'s id is made by the server: never a person, an enterprise, the Commons or an escrow ---');
+    {
+        const mal = member('Mallory');
+        const vic = member('Victor', 10);
+        const vera = member('Vera');
+        const sal = member('Sal', 0);
+        const wendy = member('Wendy', 0);
+        for (const who of [mal, vic, vera]) { completedTrade(who.pk, tradie.pk); plantPost(who.pk, 'offer'); }
+        sync();
+        const vats = await enterprise(vera, 'Vera Vats');
+        setBalance(vats, 50);
+        // A deal whose buyer's Beans are held in trust: its escrow account, escrow_<the deal's id>, holds 4.
+        const bought = await accept(vic, plantPost(sal.pk, 'offer', 4, false));
+        const deal = bought.body?.transaction?.id as string;
+        assert(bal(`escrow_${deal}`) === 4, `setup: Victor buys from Sal, and 4 Beans wait in the deal's escrow (${show(bought)})`);
+
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
+        const rowOf = (pk: string) => JSON.stringify(db.prepare('SELECT callsign, bio, is_treasury, status, goal_amount FROM members WHERE public_key = ?').get(pk) ?? null);
+        const state = () => JSON.stringify({
+            books: books(), projects: count('SELECT COUNT(*) AS n FROM projects'), keepers: count('SELECT COUNT(*) AS n FROM treasury_operators'),
+            vic: rowOf(vic.pk), wendy: rowOf(wendy.pk), vats: rowOf(vats), commons: rowOf('COMMONS_POOL'), escrow: bal(`escrow_${deal}`),
+        });
+        const start = (id: unknown, goalAmount = 1) => call('POST', mal, '/api/crowdfund/projects', { id, title: `Mallory fund ${++seq}`, description: 'For me', goalAmount });
+
+        const before = state();
+        const ids: [string, string][] = [
+            ['Victor\'s key', vic.pk], ['Vera Vats\' treasury', vats], ['the Commons', 'COMMONS_POOL'],
+            ['the deal\'s id, whose escrow holds 4', deal], ['a fresh id of the caller\'s choosing', crypto.randomUUID()],
+        ];
+        for (const [what, id] of ids) {
+            const made = await start(id);
+            assert(made.status === 400 && /made by the server/.test(made.body?.error ?? ''), `a project with ${what} as its id is refused, in words (${show(made)})`);
+            const pledged = await crowdfund(mal, id);
+            assert(pledged.status === 400, `and Mallory's pledge of 1 to it is refused (${show(pledged)})`);
+        }
+        const after = state();
+        assert(after === before, `nothing moved and no status changed: no balance, escrow, project, keeper or member row (${before} → ${after})`);
+        assert(statusOf(vic.pk) === 'active' && statusOf(vats) === 'active', `Victor and Vera Vats are still active (${statusOf(vic.pk)}, ${statusOf(vats)})`);
+        // The same below the route, for any caller: createCrowdfundProject takes only an id nothing else has.
+        const refusals = [vic.pk, vats, 'COMMONS_POOL', deal, `escrow_${deal}`].map((id) => {
+            try { createCrowdfundProject(id, mal.pk, 'Mallory fund', 'For me', [], 1, null); return 'made'; } catch (e: any) { return String(e?.message); }
+        });
+        assert(refusals.every((m) => /an id nothing else has/.test(m)) && state() === before,
+            `and createCrowdfundProject refuses each of them, and the deal's escrow's own name, writing nothing (${refusals.join(' | ')})`);
+
+        // A projects row under a person's key, as the route wrote one before it made ids itself: nothing reaches it.
+        const plantBadProject = (pk: string) => db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, 'Mallory fund', 'For me', '[]', 1, NULL, 'ACTIVE', ?, ?, ?, ?)`).run(pk, mal.pk, new Date().toISOString(), pk, new Date().toISOString(), new Date().toISOString());
+        plantBadProject(vic.pk);
+        plantBadProject(wendy.pk);
+        const planted = state();
+        const oldPledge = await crowdfund(mal, vic.pk);
+        const oldDoor = await call('POST', mal, `/api/treasury/${vic.pk}/pledge`, { amount: 1, memo: 'For you' });
+        const oldEdit = await call('POST', mal, '/api/crowdfund/projects/update', { id: vic.pk, title: 'Renamed', description: 'Mine now', goalAmount: 1 });
+        const oldDelete = await call('POST', mal, '/api/crowdfund/projects/delete', { id: wendy.pk });
+        assert(oldPledge.status === 400 && oldDoor.status >= 400 && oldEdit.status === 400 && oldDelete.status === 400,
+            `a projects row made before, under Victor's or Wendy's key: pledging at either door, editing it and deleting it are all refused (${show(oldPledge)}, ${show(oldDoor)}, ${show(oldEdit)}, ${show(oldDelete)})`);
+        assert(state() === planted && statusOf(vic.pk) === 'active' && statusOf(wendy.pk) === 'active',
+            `and Victor is not paid, renamed or funded, and Wendy is not pruned (${planted} → ${state()})`);
+        db.prepare('DELETE FROM projects WHERE id IN (?, ?)').run(vic.pk, wendy.pk);
+
+        // A project as the apps would start one: no id sent. The server makes it, and it is funded into its own account.
+        const made = await start(undefined, 3);
+        const pid = made.body?.project?.id as string;
+        assert(made.status === 200 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(pid ?? '')
+            && (db.prepare('SELECT is_treasury, lifecycle FROM members WHERE public_key = ?').get(pid) as any)?.lifecycle === 'bounded',
+            `a project with no id is made, and the server gives it a new one, its own enterprise (${show(made)})`);
+        const vicBefore = bal(vic.pk);
+        const first = await crowdfund(vic, pid, 1);
+        const second = await crowdfund(mal, pid, 2);
+        assert(first.status === 200 && second.status === 200 && bal(pid) === 3 && statusOf(pid) === 'funded' && bal(vic.pk) === r4(vicBefore - 1),
+            `pledges of 1 and 2 fund it: its own account holds 3 and it is funded (${show(first)}, ${show(second)}, ${bal(pid)}, ${statusOf(pid)})`);
+        assert(statusOf(vic.pk) === 'active' && statusOf(mal.pk) === 'active', `and its backers are still active (${statusOf(vic.pk)}, ${statusOf(mal.pk)})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

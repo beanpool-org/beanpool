@@ -1,8 +1,11 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LocalDirectoryStore } from '../api/backup-store.js';
+import { createVaultApi } from '../api/server.js';
 import { restoreFromBackup } from '../custodian/lib.js';
 import { listenDiskKey, type KeyholderServer } from '../keyholder/server.js';
 import { MONTHLY_RESTART_ON_CALENDAR, nextMonthlyRestart } from '../shared/schedule.js';
@@ -114,6 +117,29 @@ describe('a restore from backup on the image: the data partition is mounted over
         // The backup's copy is there: a restore by its sign-in is held (D2), not refused as unknown.
         const r = await startRestore(fresh, 'google', 'kept-across-the-restore');
         expect(r.reply).toMatchObject({ status: 200, body: { status: 'held' } });
+    });
+});
+
+describe('with requireDataMount, a restore from backup must wait outside the mount point', () => {
+    it('no restoreDir, the mount point itself, or anything under it: the API refuses to start; beside it: it starts', async () => {
+        const base = mkdtempSync(path.join(os.tmpdir(), 'bvr-'));
+        const dataDir = path.join(base, 'data');
+        const api = (restoreDir: string | undefined) => createVaultApi({
+            dataDir, keyholderSocket: path.join(base, 'kh.sock'), hosts: ['127.0.0.1'], store: new LocalDirectoryStore(path.join(base, 'store')),
+            requireDataMount: true, dataMounted: () => false, ...(restoreDir === undefined ? {} : { restoreDir }),
+        });
+        try {
+            const refused = 'With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).';
+            // A name that only starts with two dots is still under the mount point.
+            for (const under of [undefined, dataDir, path.join(dataDir, 'restore'), path.join(dataDir, '..pending'), path.join(dataDir, 'a', '..', 'b')]) {
+                expect(() => api(under), String(under)).toThrow(refused);
+            }
+            for (const beside of [path.join(base, 'restore'), path.join(base, 'data-restore'), path.join(dataDir, '..', 'restore')]) {
+                await api(beside).close();
+            }
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
     });
 });
 

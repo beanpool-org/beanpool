@@ -271,8 +271,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let writeChain: Promise<unknown> = Promise.resolve();
 
     if (opts.requireDataMount) {
-        const under = opts.restoreDir ? path.relative(opts.dataDir, opts.restoreDir) : '';
-        if (!opts.restoreDir || !under.startsWith('..')) throw new Error('With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).');
+        // Outside: the way from dataDir to it starts by going up (`..pending` is a name under it).
+        const way = opts.restoreDir ? path.relative(opts.dataDir, opts.restoreDir) : '';
+        const outside = way === '..' || way.startsWith(`..${path.sep}`) || path.isAbsolute(way);
+        if (!opts.restoreDir || !outside) throw new Error('With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).');
     }
     const restoreDir = opts.restoreDir ?? opts.dataDir;
     const pendingPath = path.join(restoreDir, RESTORE_PENDING);

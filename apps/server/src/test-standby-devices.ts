@@ -35,6 +35,9 @@
  *     tombstone on S too) and adds 20 a day; 20 leaves a day. Keys with no row here: 20 leaves an address, 2,000 the node.
  *     An activity line a month old goes on S by the age rule after a delta, and on M by its prune, with no tombstone; a
  *     whole copy never names one M hasn't pruned yet, and stays exact.
+ * 3e. A key's price reports from before it joins (review 4128175868): a key with no row here sends 160 signed reports,
+ *     taken as a stranger's (by address and for the node), then joins. His first report as a member is taken, and the
+ *     160 stay on M, kept with no key: the next whole copy lands, exact.
  *  4. On S, every writer of these tables refuses (the routes with 409 `standby`, the engine's functions before they
  *     write), the side writes of a read or a listing write nothing, and its G4 tables are exactly as before.
  *  5. A whole copy with a plain row and values S's table refuses (a stricter, older standby's CHECKs on invites): the
@@ -43,8 +46,9 @@
  *     timers, and a chat message and an enterprise thread post over HTTPS. The only call of the push service in the
  *     server's source is the dispatcher's, and the copy with the tokens is served to the replication token alone.
  *  7. A standby as a format 5 importer left it, holding a pricing item of its own: it re-seeds itself once.
- *  8. M dies; S takes over with the recovery code. On the promoted server: every member's phone is M's, verbatim; the
- *     take-over's notice reaches them; a push of each category reaches exactly as many phones as M's did (a visitor's is
+ *  8. M dies; S takes over with the recovery code. Its preview lists what will be missing as the manager's fallback and
+ *     its e2e fixture do, line for line (review 4128175968). On the promoted server: every member's phone is M's,
+ *     verbatim; the take-over's notice reaches them; a push of each category reaches exactly as many phones as M's did (a visitor's is
  *     reached once its app registers again there, the narrow rule); the copied leave refuses the late registration Kip's
  *     phone sent before it, and a leave presented there removes exactly the (key, token) stamped at or before it; Cy's
  *     row for the shared phone outlives Dee's delete; a muted chat stays muted and an unmuted one pushes; the keepers'
@@ -283,6 +287,16 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             return db.prepare(`UPDATE activity_feed SET created_at = ?, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`)
                 .run(new Date(Date.now() - a.days * DAY).toISOString(), a.id).changes;
+        },
+        /** The day caps by address over (db/writes-by-address.ts), as a day passing would leave them. */
+        'new-address-day': async () => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(`UPDATE writes_by_address SET made_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')`).run().changes;
+        },
+        /** The gateway's minute (120 a key, gateway-rate-limit.ts) over, as a minute passing would leave it. */
+        'forget-gateway-minute': async () => {
+            (await import('./gateway-rate-limit.js')).resetGatewayRateLimit();
+            return true;
         },
         /** The auth limiter's minute (15 an address, auth-rate-limit.ts) over, as a minute passing would leave it. */
         'forget-auth-attempts': async () => {
@@ -926,6 +940,36 @@ async function main(): Promise<void> {
             && !mLine.tombstones.some((t: any) => t.table_name === 'activity_feed') && tablesDiff(mLine.tables, s.tables).length === 0
             && rLine.lastWhole?.exact === true && rLine.lastMismatchResyncAt === null,
             `a line M holds past the month, its prune not yet run, is pruned before M makes a whole copy: the copy is exact, with no tombstone (${JSON.stringify(rLine.lastWhole)})`);
+        // ── 3e. A key's price reports from before it joins (review 4128175868) ──
+        console.log('\n— 3e. a key with no row here sends 160 signed price reports, then joins: they stay on M, and the next whole copy lands —');
+        await main.send('new-address-day');
+        const xavier = newId('Xavier');
+        const xavierReport = (address: string) => api(m, 'POST', '/api/pricing-guide/report', {
+            as: xavier, body: { itemId: edited.id, reportType: 'too_high', comment: 'x'.repeat(500) }, headers: from(address) });
+        const beforeJoin: Answer[] = [];
+        for (let i = 0; i < STANDBY_ROW_CAP + 10; i++) {
+            if (i % 10 === 0) await forgetAuth();
+            if (i === 100) await main.send('forget-gateway-minute');
+            beforeJoin.push(await xavierReport(`192.0.2.${1 + Math.floor(i / 20)}`));
+        }
+        const mBefore = await main.send('rows');
+        const notTaken = beforeJoin.filter((r) => r.status !== 200);
+        require_(notTaken.length === 0 && mBefore.outside.pricing_reports >= beforeJoin.length,
+            `M: Xavier, a key with no row here, sends ${beforeJoin.length} signed reports from eight addresses (each a day's 20; one pause for the gateway's minute), all taken and outside the rule (${mBefore.outside.pricing_reports}; ${notTaken.length} not taken${notTaken.length ? `, first ${brief(notTaken[0])} at ${beforeJoin.indexOf(notTaken[0])}` : ''})`);
+        await forgetAuth();
+        built('Xavier joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: xavier.pk, callsign: 'Xavier' } }));
+        const xavierAsMember = await S_(xavier, '/api/pricing-guide/report', { itemId: edited.id, reportType: 'too_low', comment: 'Now a member' });
+        const mXavier = await main.send('rows');
+        const xavierHolds = (t: Tables) => t.pricing_reports.filter((r: any) => r.reporter_pubkey === xavier.pk).length;
+        assert(xavierAsMember.status === 200 && xavierHolds(mXavier.tables) === 1 && mXavier.outside.pricing_reports === mBefore.outside.pricing_reports,
+            `his first report as a member is taken, his first of the day as one; the ${beforeJoin.length} he sent before stay outside the rule, kept with no key (${brief(xavierAsMember)}; outside ${mXavier.outside.pricing_reports})`);
+        const wXavier = await standby.send('pull', { whole: true });
+        const rXavier = await standby.send('record');
+        s = await standby.send('rows');
+        assert(wXavier.ok === true && wXavier.whole === true && tablesDiff(mXavier.tables, s.tables).length === 0 && s.outside.pricing_reports === 0
+            && xavierHolds(s.tables) === 1 && rXavier.lastWhole?.exact === true && rXavier.reconcileDisabledForSize === false,
+            `the next whole copy lands, exact, with his one report as a member and none from before, S's routine whole copies still on (${wXavier.ok ? wXavier.mode : wXavier.error}; ${JSON.stringify(rXavier.lastWhole)})`);
+
         // A line of today's, so M's last line is again one S copies (the backdated ones above were the newest ids, gone on
         // both): step 8 checks the promoted server numbers its next line after it.
         await offer(cy, 'Seed potatoes', 2);
@@ -973,9 +1017,9 @@ async function main(): Promise<void> {
         const record5 = await standby.send('record');
         const c5 = record5.consistency;
         assert(whole5.ok === true && whole5.whole === true && JSON.stringify(c5?.plainTablesLeftOut?.tables) === '["invite_codes"]' && c5.ok === false
-            && c5.plainTablesLeftOut.count === 7 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
+            && c5.plainTablesLeftOut.count === 8 && c5.plainTablesLeftOut.examples.includes(`invite_codes:${joinedWith.Bo}`)
             && c5.tables.some((t: any) => t.name === 'invite_codes' && !t.match),
-            `the whole copy lands; the row (Bo's invite, so a count short) and the values (six takers: four members', the newcomer's, 3c, and Lu's, 3d) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
+            `the whole copy lands; the row (Bo's invite, so a count short) and the values (seven takers: four members', the newcomer's, 3c, Lu's, 3d, and Xavier's, 3e) left out are reported (${whole5.ok ? whole5.mode : whole5.error}; ${JSON.stringify(c5?.plainTablesLeftOut ?? null)})`);
         assert(before5.lastMismatchResyncAt === null && record5.lastWhole?.exact === false && record5.lastWhole.differs?.includes('invite_codes')
             && record5.lastWhole.resyncAsked === false && record5.lastMismatchResyncAt === null,
             `its record: not exact, invite_codes differing, and no force-resync asked (${JSON.stringify(record5.lastWhole)})`);
@@ -1059,6 +1103,20 @@ async function main(): Promise<void> {
         assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide/.test(line)) && missing.some((line) => /photos sent in chats/.test(line))
             && missing.some((line) => /price reports sent without signing in, or by someone who hadn't joined/.test(line)),
             `the preview no longer says phones or members' conveniences will be missing, and still names chat photos, and the price reports that stay on M (${JSON.stringify(missing).slice(0, 260)})`);
+        // The manager's own copies of the list (its fallback, and the fixture its phone-width run answers with) say the
+        // same, line for line (review 4128175968): each is the array literal after `<name> … = [` in its file.
+        const listIn = (file: string, name: string): string[] => {
+            const text = fs.readFileSync(path.join(HERE, file), 'utf-8');
+            const at = text.indexOf(name);
+            const body = at < 0 ? '' : text.slice(text.indexOf('= [', at) + 3, text.indexOf('];', at));
+            return [...body.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g)].map((q) => q[1] ?? q[2]);
+        };
+        const serverList = listIn('services/takeover.ts', 'export const WHAT_WILL_BE_MISSING');
+        const lists = { fallback: listIn('../../manager/src/components/modules/TakeoverPanel.tsx', 'const MISSING_FALLBACK'),
+            fixture: listIn('../../manager/e2e/fixtures.mjs', 'const TAKEOVER_MISSING') };
+        assert(serverList.length >= 4 && JSON.stringify(missing.slice(0, serverList.length)) === JSON.stringify(serverList)
+            && Object.values(lists).every((l) => JSON.stringify(l) === JSON.stringify(serverList)),
+            `the manager's fallback and its e2e fixture list what will be missing as the server does (${Object.entries(lists).map(([k, l]) => `${k} ${l.length} of ${serverList.length}`).join(', ')})`);
         refused.push(...(await standby.send('fetches')).blocked);
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);

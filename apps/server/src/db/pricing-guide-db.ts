@@ -214,7 +214,8 @@ export function pinPricingGuideItem(id: string, isPinned: boolean): boolean {
 /**
  * What price reports may add in a day (#1295 review 4126894855; design scratch/global-node/DESIGN-replica-flood-bounds-
  * opus.md §6.1). A member's go into every standby's copy (engine/replication-manifest.ts MEMBERS_REPORTS); the rest (no
- * key, or the key of someone who isn't a member here) can be sent by anyone, with no key at all, and stay on this server.
+ * key, or the key of someone who isn't a member here when they send it) can be sent by anyone, with no key at all, and
+ * stay on this server, kept with no key (submitPricingReport).
  */
 export const PRICE_REPORT_RULES = {
     /** A member's reports in any 24 hours, counted from the table. A careful member reports a handful. */
@@ -245,6 +246,12 @@ const MEMBERS_REPORT = travellingRows('pricing_reports') ?? '1';
  * the request's address as writes_by_address keys it (engine/open-join.ts writeAddressHash), worked out only for a
  * report without a member's key, the only one it counts; null (this server's own code) counts toward the node's day
  * only. A report without a member's key first prunes the month-old ones, with no tombstone.
+ *
+ * A signer who isn't a member when they send it (no row here, or a visitor's) is not stored: the report is kept as an
+ * anonymous one, and stays one if the key joins later (#1295 review 4128175868). Its key would make it a member's, and
+ * MEMBERS_REPORTS and the prune read membership as it is now, so a key that joined would bring every report it sent
+ * before, capped only by address and for the node (up to a month of the node's day), into every copy for good. Nothing
+ * reads a price reporter's key but the member's day count here and a re-key (engine/key-move.ts), both a member's.
  */
 export function submitPricingReport(
     itemId: string,
@@ -275,7 +282,7 @@ export function submitPricingReport(
         db.prepare(`
             INSERT INTO pricing_reports (id, item_id, reporter_pubkey, report_type, comment, status, created_at)
             VALUES (?, ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        `).run(id, itemId, reporter, reportType, comment || null);
+        `).run(id, itemId, isMember ? reporter : null, reportType, comment || null);
         return { id };
     })();
 }

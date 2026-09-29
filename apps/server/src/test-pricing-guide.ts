@@ -204,6 +204,30 @@ async function main() {
         && count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`) === reportTombstones,
         "the reset deletes every report, and writes no tombstone for one with no member's key");
 
+    // A key's reports from before it joins stay here once it joins (review 4128175868): kept with no key, so neither the
+    // rule nor its member's day counts them, and the month's prune still takes them.
+    const joiner = 'pubkey-joiner';
+    const report_ = (reporter?: string, address?: string) => submitPricingReport('fp-001', 'too_low', 'Before and after', reporter, address ? () => address : null);
+    const sentBefore = [report_(joiner, 'addr-j'), report_(joiner, 'addr-j'), report_('pubkey-visitor', 'addr-j')].map((r) => ('id' in r ? r.id : r.refused));
+    db.prepare(`INSERT INTO members (public_key, callsign, status) VALUES (?, 'Jo', 'active')`).run(joiner);
+    db.prepare(`UPDATE members SET is_visitor = 0 WHERE public_key = 'pubkey-visitor'`).run();
+    const keptAnonymously = count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE id IN (SELECT value FROM json_each(?)) AND reporter_pubkey IS NULL AND NOT (${rule})`,
+        JSON.stringify(sentBefore));
+    assert(keptAnonymously === 3,
+        `a key's reports sent before it joined (with no row, or a visitor's) are kept with no key, and stay here once it joins (${keptAnonymously} of ${JSON.stringify(sentBefore)})`);
+    const joinerDay: string[] = [];
+    for (let i = 0; i < memberPerDay; i++) joinerDay.push(refusedAs(report_(joiner, 'addr-j')));
+    assert(joinerDay.every((r) => r === 'taken') && refusedAs(report_(joiner, 'addr-j')) === 'member_rate_limited'
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`) === memberPerDay,
+        `its day as a member counts only what it sent as one: ${memberPerDay} more, then member_rate_limited; only those travel (${[...new Set(joinerDay)].join(', ')})`);
+    db.prepare(`UPDATE pricing_reports SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).run(`-${otherKeptDays + 1} days`);
+    const tombstonesJoined = count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`);
+    assert(refusedAs(report_(undefined, 'addr-k')) === 'taken'
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE id IN (SELECT value FROM json_each(?))`, JSON.stringify(sentBefore)) === 0
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`) === memberPerDay
+        && count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`) === tombstonesJoined,
+        "a month on, the prune takes the reports it sent before it joined, with no tombstone, and keeps its reports as a member");
+
     console.log(`\n🎉 Community Beans Pricing Guide Test Summary: ${passed}/${run} assertions passed.\n`);
     if (passed !== run) {
         process.exit(1);

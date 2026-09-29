@@ -99,7 +99,9 @@ const MEMBERS_OWN: RowRule = {
  * 4126894855). The rest stay on the server they were sent to, capped by address and for the node and pruned after a
  * month (db/pricing-guide-db.ts PRICE_REPORT_RULES), and a server that takes over doesn't have them
  * (services/takeover.ts WHAT_WILL_BE_MISSING): the admin's review queue, which nothing else reads. Never NULL: an
- * anonymous report (no reporter) is simply not one that travels.
+ * anonymous report (no reporter) is simply not one that travels. A report signed by a key that wasn't a member's when
+ * it was sent is kept with no reporter (db/pricing-guide-db.ts submitPricingReport), so it stays too once the key joins
+ * (review 4128175868).
  */
 const MEMBERS_REPORTS: RowRule = {
     where: 'reporter_pubkey IS NOT NULL AND reporter_pubkey IN (SELECT m.public_key FROM members m WHERE m.is_visitor = 0)',

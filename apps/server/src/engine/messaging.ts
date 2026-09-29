@@ -202,11 +202,18 @@ export function createConversation(
     type: 'dm',
     participants: string[],
     createdBy: string,
-    name?: string
+    name?: string,
+    /**
+     * A caller's own limit on what this writes (the DM route's new-people-a-day, W-main): run once every refusal above has
+     * passed and before anything is written, a visitor's row for someone new included, so a limit never answers for a
+     * caller who may not open the conversation at all.
+     */
+    beforeWrite?: () => void
 ): Conversation | null {
     if (type !== 'dm') throw new MessagingError(CHAT_GROUP_REMOVED_ERROR, 410);
     if (participants.length !== 2) throw new MessagingError('DM conversations must have exactly 2 distinct participants');
     assertMemberActive(createdBy);
+    beforeWrite?.();
     if (cb.registerVisitor) {
         for (const p of participants) {
             if (!getMember(db, p)) cb.registerVisitor(p);
@@ -251,8 +258,17 @@ export function sendMessage(
     attachment?: { data: string; nonce: string; mime?: string },
     metadata?: string,
     clientId?: string,
-    /** The node's own words into a DM (the admin page's message), not a member's: stored as written. */
-    opts: { nodeAuthored?: boolean } = {}
+    opts: {
+        /** The node's own words into a DM (the admin page's message), not a member's: stored as written. */
+        nodeAuthored?: boolean;
+        /**
+         * A caller's own limit on the line as it would be stored (the send route's 64 KB, W-main): run once every refusal
+         * below has passed (who may write here, the idempotent retry, encrypted or not at all) and just before the line is
+         * written, so a limit never answers for a caller who may not write in this conversation. Not run for a group
+         * chat line, which its own rule book bounds (2000 characters, and only a reply id kept from its metadata).
+         */
+        beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void;
+    } = {}
 ): Message | null {
     assertMemberActive(authorPubkey);
     // A visitor's row (isLiveVisitor) writes only in a direct conversation it is already in (checked again below, once
@@ -356,6 +372,7 @@ export function sendMessage(
         refuseUnencryptedDm(ciphertext, nonce);
         if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
     }
+    opts.beforeStore?.({ ciphertext, metadata });
 
     const msg: Message = {
         id: clientId || crypto.randomUUID(),
@@ -522,7 +539,13 @@ export function editMessage(
     messageId: string,
     authorPubkey: string,
     ciphertext: string,
-    nonce: string
+    nonce: string,
+    /**
+     * A caller's own limit on the new words (the edit route's 64 KB, W-main): run once every refusal below has passed
+     * (a thread or event chat's line, someone else's, a removed one, past the 15 minutes) and just before the row is
+     * changed, so a limit never answers for a caller who may not edit this message at all.
+     */
+    beforeStore?: () => void
 ): Message {
     assertMemberActive(authorPubkey);
     refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
@@ -576,6 +599,7 @@ export function editMessage(
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
         throw new MessagingError('Messages can only be edited within 15 minutes of sending');
     }
+    beforeStore?.();
 
     const editedAt = new Date().toISOString();
     db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);

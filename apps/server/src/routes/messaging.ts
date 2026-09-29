@@ -160,9 +160,11 @@ router.post('/api/messages/conversation', async (ctx) => {
         // A visitor's row opens no new conversation, and so makes no row for anyone (assertMayOpenConversation).
         assertMayOpenConversation(createdBy, uniqueParticipants);
         // Every profile: a DM opened with someone who has no row here makes one for them, so at most 20 such people a
-        // day (W-main, engine/writer-bounds.ts), after probation's stricter 10 new people where it is on.
-        assertMayReachNewPeople(createdBy, uniqueParticipants);
-        const conv = createConversation('dm', uniqueParticipants, createdBy, name);
+        // day (W-main, engine/writer-bounds.ts), after probation's stricter 10 new people where it is on. Checked by the
+        // engine once the opener is known to be an active member, and before it writes anything: a limit never answers
+        // for someone who may not open the conversation at all.
+        const conv = createConversation('dm', uniqueParticipants, createdBy, name,
+            () => assertMayReachNewPeople(createdBy, uniqueParticipants));
         if (!conv) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
@@ -219,9 +221,12 @@ router.post('/api/messages/send', async (ctx) => {
         if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
             for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);
         }
-        // A line's words at most 64 KB as stored (W-main); a photo goes as an attachment and is not counted.
-        assertDmLineFits(ciphertext, metadata);
-        msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
+        // A line's words at most 64 KB as stored (W-main); a photo goes as an attachment and is not counted. Checked by
+        // the engine after every refusal of who may write in this conversation and just before the line is stored, so
+        // a limit never answers for someone who may not write here (an enterprise or event chat's 403, an outsider's
+        // 404). A group chat line keeps its own 2000 characters.
+        msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId,
+            (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'send the message');
@@ -306,9 +311,10 @@ router.post('/api/messages/edit', async (ctx) => {
     try {
         // An edit is new words in someone else's chat: a muted member (G3) can't make one.
         assertNotMuted(actor);
-        // The same 64 KB as a new line (W-main), or an edit could grow a short line past it.
-        assertDmLineFits(ciphertext);
-        const msg = editMessage(messageId, actor, ciphertext, nonce);
+        // The same 64 KB as a new line (W-main), or an edit could grow a short line past it. Checked by the engine once
+        // this caller may edit this message at all (never a thread's or an event chat's line, only their own, within the
+        // 15 minutes), so the limit never answers in place of those refusals.
+        const msg = editMessage(messageId, actor, ciphertext, nonce, () => assertDmLineFits(ciphertext));
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;

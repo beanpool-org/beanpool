@@ -39,10 +39,16 @@ const INVITER_GONE = 'The member who made this invite is no longer in this commu
 /**
  * Creates standard online invite code for an active member.
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
+/**
+ * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, W-main), run once the inviter is
+ * known to be a member who may bring someone in and before anything is written, so a limit never answers for someone
+ * who may not invite at all.
+ */
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void): InviteCode | null {
     assertPlainTablesWritable();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
+    beforeWrite?.();
 
     recordActivity(inviterPubkey);
 

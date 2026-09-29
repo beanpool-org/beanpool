@@ -302,6 +302,14 @@ async function main(): Promise<void> {
         assert(photo.status === 200, `a photo of 300 KB goes as an attachment, not counted in the line (${show(photo)})`);
         const edit = await call('POST', fay, '/api/messages/edit', { messageId: exact.body?.message?.id, ...lineOf(LIMIT + 4), authorPubkey: fay.pk });
         assert(edit.status === 413 && edit.body?.code === 'message_too_long', `an edit past it is 413 message_too_long (${show(edit)})`);
+        // The limit never answers for someone who may not write there at all: their own refusal comes first.
+        const outsider = member('Hana');
+        const notIn = await line(outsider, conv, lineOf(LIMIT + 4));
+        assert(notIn.status === 400 && notIn.body?.code !== 'message_too_long',
+            `a line past it from someone not in the conversation gets the not-a-participant refusal, not 413 (${show(notIn)})`);
+        const notTheirs = await call('POST', gus, '/api/messages/edit', { messageId: exact.body?.message?.id, ...lineOf(LIMIT + 4), authorPubkey: gus.pk });
+        assert(notTheirs.status !== 413 && /only the author/i.test(notTheirs.body?.error ?? ''),
+            `an edit past it of someone else's line gets "only the author", not 413 (${show(notTheirs)})`);
         resetChatRateLimit();
     }
 

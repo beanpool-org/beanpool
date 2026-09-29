@@ -4496,6 +4496,8 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
+        beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
     credits = beansOffPrice(credits);
@@ -5648,20 +5650,20 @@ function getMessagingCb() {
     };
 }
 
-export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite);
 }
 
-export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
-    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId);
+export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
+    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId, { beforeStore });
 }
 
 export function toggleMessageReaction(messageId: string, authorPubkey: string, emoji: string): any {
     return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string): Message {
-    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
+export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void): Message {
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore);
 }
 
 export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {

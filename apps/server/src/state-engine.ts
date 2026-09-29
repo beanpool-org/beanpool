@@ -13,6 +13,7 @@ import {
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -83,6 +84,7 @@ import {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -118,6 +120,7 @@ export {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -154,6 +157,7 @@ import {
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
+    exportLedgerFor as exportLedgerForEngine,
     persistDecayEvents as persistDecayEventsEngine,
     persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
@@ -219,6 +223,8 @@ import {
     type FriendEntry,
     getPosts as getPostsEngine,
     withoutPollVoters,
+    withoutTradeParty,
+    isTradeParty,
     getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
@@ -587,6 +593,9 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
+    // A listing's photos behind a key in every photo URL, where the listings are members' (a local community with reads
+    // enforced, engine/photo-keys.ts): an <img> cannot sign. Decided here, once, as the faces are.
+    installPhotoKeysAtBoot(READ_AUTH_ON);
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -1117,15 +1126,22 @@ const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post
 // As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
 const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
 
+// The listings' own doorbells. A local community's listings are its members' (Marty, 2026-09-28; https-server.ts
+// PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT): a socket with no member's key reads them only where the visitors' view is on.
+const LISTING_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed']);
+
 /**
- * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
- * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
- * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
- * still is.
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node.
+ * On a node whose `guestListingsOnly` switch is on, only the listings' (GUEST_LISTINGS_WS_EVENTS). On every other node,
+ * every public doorbell but the listings': the Commons' reads are public there and the listings are members-only.
+ * With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell still is.
  */
 function keylessSocketMayUse(type: string): boolean {
-    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
-    return !getProfileSwitches().guestListingsOnly;
+    if (!READ_AUTH_ON) return true;
+    const guestView = getProfileSwitches().guestListingsOnly;
+    if (LISTING_WS_EVENTS.has(type)) return guestView;
+    if (GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
+    return !guestView;
 }
 
 export type ListingDoorbell = 'post_removed' | 'post_updated';
@@ -1141,7 +1157,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
- * post for no listing). Every node, whatever it lets such a socket read: it may read the listings everywhere.
+ * post for no listing). A socket with no member's key hears it only where it may read the listings: on a node with the
+ * visitors' view (keylessSocketMayUse). A visitor's and a suspended member's socket, which hold a key, hear it everywhere.
  *
  * One per change, never one per post, and those asked for in the same turn go as one (each type once). Sent after the
  * work in hand, so it may be asked for inside a transaction: one that then unwinds costs a read of what is there. The
@@ -1156,8 +1173,11 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
         listingDoorbellsDue = null;
         for (const t of due) {
             const out = JSON.stringify({ type: t });
+            // A socket with no member's key hears it only where it may read the listings (keylessSocketMayUse).
+            const keyless = keylessSocketMayUse(t);
             for (const ws of wsClients) {
                 if (ws._memberFeed || ws._openFeed) continue;
+                if (!ws._memberPubkey && !keyless) continue;
                 try { ws.send(out); } catch { wsClients.delete(ws); }
             }
         }
@@ -1254,6 +1274,11 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     return row.audience_scope === null || row.audience_scope === 'public';
 }
 
+/** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
+function isTreasuryKey(pk: string): boolean {
+    return !!(db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1').get(pk));
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1323,6 +1348,15 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
         && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
     let withoutVoters: string | null = null;
+    // Who took a listing, and its deal, go to that trade's two people only (withoutTradeParty): its author or the member
+    // who took it, and an enterprise's keepers for its side. Every other socket's copy leaves them off.
+    const tradePost = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && (!!event.post.acceptedBy || !!event.post.pendingTransactionId)
+        ? event.post as MarketplacePost : null;
+    const tradeSide = (pk: string | null | undefined): boolean => !!tradePost && (isTradeParty(tradePost, pk)
+        || (!!pk && [tradePost.authorPublicKey, tradePost.acceptedBy].some(side => !!side && isTreasuryKey(side) && canOperateTreasury(pk, side))));
+    let withoutParty: string | null = null;
+    let withoutPartyNorVoters: string | null = null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
@@ -1357,6 +1391,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
+        }
+        if (tradePost && (out === msg || out === withoutVoters) && !tradeSide(ws._memberPubkey)) {
+            out = out === msg
+                ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
+                : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
         }
         try {
             ws.send(out);
@@ -4438,6 +4477,7 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -4488,6 +4528,18 @@ function beansOffPrice(credits: unknown): number {
     if (getProfileSwitches().beans) return credits as number;
     if (Number(credits) > 0) throw new BeansOffError(BEANS_OFF_PRICE_MESSAGE);
     return 0;
+}
+
+/**
+ * Who hears that a deferred wage was paid: the keeper it paid, and the enterprise's keepers who may act for it
+ * (canOperateTreasury), the readers of its claims on its page (routes/treasury.ts `deferredClaims`). It names a person
+ * and what they were paid, so it never goes to the whole feed (balances and trades are private, 2026-09-28).
+ */
+function deferredWageRecipients(enterprisePubkey: string, keeperPubkey: string): string[] {
+    const out = new Set<string>([keeperPubkey]);
+    const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as { member_pubkey: string }[];
+    for (const k of keepers) if (canOperateTreasury(k.member_pubkey, enterprisePubkey)) out.add(k.member_pubkey);
+    return [...out];
 }
 
 /**
@@ -4574,9 +4626,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
                         amount: claim.amount,
-                    });
+                    }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
-                // deferred_wage_paid goes to the member feed only.
+                // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
+                // listing leave the board, if it did.
                 if (listingDone) ringListingDoorbell('post_removed');
             }
         }
@@ -5382,7 +5435,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const isStalled = daysInEscrow >= 7;
 
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
-        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at));
 
     // Chat context between buyer and seller
     const convRow = db.prepare(`
@@ -7406,6 +7459,11 @@ export function getDirectoryInfo(): any {
 // ===================== AUDIT EXPORT =====================
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
     return exportLedgerAuditEngine();
+}
+
+/** One member's own ledger export (engine/audit.ts exportLedgerFor): the Community Pool, their balance, their trades. */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    return exportLedgerForEngine(publicKey);
 }
 
 // ===================== COMMUNITY COMMONS =====================

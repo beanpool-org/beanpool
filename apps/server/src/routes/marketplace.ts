@@ -19,6 +19,7 @@ import {
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { photoKeyMatches, photoKeysRequired } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -36,7 +37,7 @@ import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
-import { guestPost } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, type MarketplacePost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -82,10 +83,13 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
     const photo = db.prepare(
-        `SELECT photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = ?`
-    ).get(id, Number(orderNum)) as PostPhotoRow | undefined;
+        `SELECT photo_data, storage_key, sha256, bytes, mime, updated_at FROM post_photos WHERE post_id = ? AND order_num = ?`
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null }) | undefined;
 
-    if (!photo) {
+    // Where the listings are members' (a local community with reads enforced), a photo goes only to a URL carrying the
+    // key the node hands out with its listing (engine/photo-keys.ts): an <img> cannot sign. Anything else is answered as
+    // no photo, so neither says whether there is one.
+    if (!photo || (photoKeysRequired() && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;
@@ -224,8 +228,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
-    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same public
-    // endpoint, so the peer origin is the only signal available.
+    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same
+    // endpoint, so the peer origin is the only signal available. It reaches this handler only on a
+    // node with the visitors' view on: elsewhere the listings are members-only and the signature gate
+    // refuses a peer's unsigned read first (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT).
     //
     // Origin is a HINT, not a credential, and that is the right strength here: reach is a discovery
     // filter, not an access control (docs/federation-economics.md Rule 9). Nothing is protected by
@@ -237,9 +243,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     const viewerPubkey = ctx.state.actor as string | undefined;
-    // Who voted for what in a poll goes to a member of this node only; everyone else gets the counts. This route is a
-    // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
-    // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
+    // Who voted for what in an open-vote poll goes to a member of this node only; everyone else gets the counts. On a
+    // node with the visitors' view this route is a public read, so an unsigned reader, a signed non-member and a pruned
+    // account reach it; elsewhere only a member does, a suspended one included, who reads the counts only. Membership is
+    // in the ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
     // confirmed with a 304.
     const includeVoters = viewerTier(ctx) === 'member';
     // The listings, not the people (G9a, the global profile's `guestListingsOnly`): anyone who isn't a member gets each
@@ -320,7 +327,13 @@ router.get('/api/marketplace/posts', async (ctx) => {
         id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
         includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
     });
-    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost) : posts);
+    // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
+    // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
+    const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
+        || (!!reader && isTreasury(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
+        || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
+    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost)
+        : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p));
 
     ctx.status = 200;
     ctx.type = 'application/json';
@@ -329,7 +342,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -379,7 +392,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo }
+            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo }
         );
         if (!post) {
             ctx.status = 400;

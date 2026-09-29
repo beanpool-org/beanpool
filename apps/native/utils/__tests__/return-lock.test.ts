@@ -34,6 +34,7 @@ vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => {
         if (key !== 'beanpool_app_lock_enabled') return null;
         return phoneState.appLockRead ? phoneState.appLockRead() : phoneState.appLock;

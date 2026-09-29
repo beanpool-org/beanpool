@@ -735,14 +735,15 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <button
                             onClick={async () => {
                                 try {
-                                    // Signed: the export is a member-only read on the node.
+                                    // Signed: the node answers with this member's own balance and transactions only (balances and
+                                    // trades are private, 2026-09-28), never the whole community's.
                                     const data = await request<{ balancesCsv: string; transactionsCsv: string }>('GET', '/api/ledger/export');
                                     
                                     const balBlob = new Blob([data.balancesCsv], { type: 'text/csv' });
                                     const balUrl = window.URL.createObjectURL(balBlob);
                                     const balA = document.createElement('a');
                                     balA.href = balUrl;
-                                    balA.download = 'beanpool_balances.csv';
+                                    balA.download = 'beanpool_my_balance.csv';
                                     balA.click();
                                     window.URL.revokeObjectURL(balUrl);
                                     
@@ -751,18 +752,18 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         const txUrl = window.URL.createObjectURL(txBlob);
                                         const txA = document.createElement('a');
                                         txA.href = txUrl;
-                                        txA.download = 'beanpool_transactions.csv';
+                                        txA.download = 'beanpool_my_transactions.csv';
                                         txA.click();
                                         window.URL.revokeObjectURL(txUrl);
                                     }, 500);
                                 } catch (e) {
                                     console.error('Export failed', e);
-                                    alert('Export failed');
+                                    alert(`Export failed${e instanceof Error && e.message ? `: ${e.message}` : ''}`);
                                 }
                             }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 transition-colors border border-nature-200 dark:border-nature-750 shadow-sm cursor-pointer"
                         >
-                            ⬇️ Node Audit
+                            ⬇️ Export mine
                         </button>
                     </div>
 

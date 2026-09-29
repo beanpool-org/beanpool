@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test-all": "bash scripts/test-all.sh",
+    "guide:publish": "node packages/beanpool-guide/scripts/publish.mjs",
     "clean": "turbo run clean"
   },
   "devDependencies": {

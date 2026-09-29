@@ -135,7 +135,7 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
     return page;
 }
 
-/** Hash of the guide text only (not the version), so a content change without a version bump is caught. */
+/** Hash of the guide text only (not the version), so publishing can tell whether the text changed. */
 export function contentHash(content) {
     return crypto.createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
@@ -144,10 +144,15 @@ export function contentHash(content) {
  * Read content/manifest.json and every page it lists. Each section is a folder, content/<section id>/, holding
  * exactly the pages the manifest lists for it, one file per page named <slug>.md. The operator manual
  * (operators/) is read the same way with `aboutSection: null`: it has no section of concept guides.
+ *
+ * The pages carry no version: a collection gets one when the director publishes it after merge (scripts/build.mjs),
+ * so `version` is null unless the caller passes the one it is publishing under.
  */
-export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImages = false } = {}) {
+export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImages = false, version = null } = {}) {
     const manifest = JSON.parse(fs.readFileSync(path.join(contentDir, 'manifest.json'), 'utf8'));
-    if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error('manifest.json: "version" must be a whole number, 1 or more');
+    if ('version' in manifest) {
+        throw new Error('manifest.json: remove "version". A version is set when the director publishes the text after merge, never by hand (packages/beanpool-guide/README.md)');
+    }
     if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
     const folders = fs.readdirSync(contentDir, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== 'images').map(d => d.name).sort();
     const listedFolders = manifest.sections.map(s => s.id).sort();
@@ -199,7 +204,7 @@ export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImage
             }
         }
     }
-    return { schema: GUIDE_SCHEMA, version: manifest.version, hash: contentHash({ sections, guides }), sections, guides };
+    return { schema: GUIDE_SCHEMA, version, hash: contentHash({ sections, guides }), sections, guides };
 }
 
 /** The exact bytes of guide.json — the same file in the app bundle and on the website. */

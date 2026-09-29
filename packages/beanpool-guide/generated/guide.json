@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 82,
-  "hash": "f310ca99699cbd75888cfeddb3af6d2f3b8782b814d645afa20e7b9fb24bf217",
+  "version": 84,
+  "hash": "8541423c9b5608e6cde1441461be6c651ba63fd9e933bac08574f073dc01ad29",
   "sections": [
     {
       "id": "about",
@@ -738,6 +738,23 @@
         },
         {
           "type": "h2",
+          "text": "Daily limits"
+        },
+        {
+          "type": "p",
+          "text": "These live on your community's server. You get them when your community's server is updated."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nobody can flood a community.** One account can make up to 5,000 changes a day: posts, messages, edits and the like. Within that, up to 100 new posts, 5 new groups, 3 new enterprises, 20 invites and 50 links on the Pulse a day. Nobody using BeanPool normally comes near these. If you do reach one, the app says which, and when you can carry on.",
+            "**Messages.** Up to 30 a minute in any chat, direct messages too. A very long message is refused: send it in parts. Photos don't count.",
+            "**New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.",
+            "**Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Version 1.2.38"
         },
         {
@@ -973,7 +990,8 @@
             "If you like, write who the invite is for, just for your own records.",
             "Tap **Generate Ticket**. Without a connection, the button says **Generate Offline Ticket**, and that works too.",
             "Show them the QR code, or tap **Share Invite** to send the link and the code.",
-            "Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again."
+            "Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.",
+            "You can make 20 invites a day, and have 50 that nobody has used yet. An invite nobody uses is deleted after its 30 days, and leaves **Pending**."
           ]
         },
         {

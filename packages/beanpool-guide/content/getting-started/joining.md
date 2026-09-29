@@ -75,6 +75,7 @@ Any member can invite people. Your trust badge does not matter.
 - Tap **Generate Ticket**. Without a connection, the button says **Generate Offline Ticket**, and that works too.
 - Show them the QR code, or tap **Share Invite** to send the link and the code.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
+- You can make 20 invites a day, and have 50 that nobody has used yet. An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
 
 A community's admins can turn invites off for the whole community.
 

@@ -14,6 +14,15 @@ These changes live on your community's server. You get them when your community'
 - **Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.
 - **Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see.
 
+## Daily limits
+
+These live on your community's server. You get them when your community's server is updated.
+
+- **Nobody can flood a community.** One account can make up to 5,000 changes a day: posts, messages, edits and the like. Within that, up to 100 new posts, 5 new groups, 3 new enterprises, 20 invites and 50 links on the Pulse a day. Nobody using BeanPool normally comes near these. If you do reach one, the app says which, and when you can carry on.
+- **Messages.** Up to 30 a minute in any chat, direct messages too. A very long message is refused: send it in parts. Photos don't count.
+- **New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.
+- **Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days.
+
 ## Version 1.2.38
 
 Some of these changes live on your community's server. You get them when your community's server is updated.

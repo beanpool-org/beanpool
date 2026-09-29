@@ -10,7 +10,7 @@ import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
 import { bundleVault } from '../../scripts/bundle.mjs';
 import { confirmShare, custodianKey, genesis } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
-import { API_BUNDLE_ASSET, SIGNATURES_ASSET } from '../shared/release-feed.js';
+import { API_BUNDLE_ASSET, LocalDirectoryFeed, SIGNATURES_ASSET } from '../shared/release-feed.js';
 import { addSignature, formatSignatures, sha256Hex, signRelease, type ReleaseSignatures } from '../shared/release.js';
 import { makeRelease, publish, randomImage } from './release-kit.js';
 import { unixFetch } from './unix-fetch.js';
@@ -128,7 +128,7 @@ describe('a release hands over the API', () => {
         const base = 'http://vault.test';
         const getJson = async (p: string) => (await fetch(`${base}${p}`)).json() as Promise<{ report: { text: string }; state: string; release: string }>;
         const report = async () => JSON.parse((await getJson('/v1/report')).report.text as string) as { update: { checkedAt: number; refused: unknown[]; running?: { version: string } }; api: string };
-        const opts = { fetch, acceptNoHardwareProof: true };
+        const opts = { fetch, acceptNoHardwareProof: true, trust: { feed: new LocalDirectoryFeed(feedDir), rootKeys } };
 
         // Genesis and the two confirmations: open.
         const g = await genesis(base, custodians[0], opts);

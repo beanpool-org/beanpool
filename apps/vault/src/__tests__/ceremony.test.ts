@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { vaultB64 } from '@beanpool/core';
-import { confirmShare, fetchHello, fetchPendingShare, genesis, NO_HARDWARE_PROOF, presentShare, signedPost, type CustodianKey } from '../custodian/lib.js';
+import { checkedHello, confirmShare, fetchPendingShare, genesis, NO_HARDWARE_PROOF, presentShare, signedPost, type CustodianKey } from '../custodian/lib.js';
 import { PENDING_FILE } from '../keyholder/keys.js';
 import { combineMnemonics, decodeShare, splitMasterSecret } from '../keyholder/slip39.js';
 import { buildShareSubmission, openCustodianShare, sealCustodianShare, unlockBind, type CustodianShare } from '../shared/ceremony.js';
@@ -55,12 +55,12 @@ describe('the hello', () => {
 
     it('answers {bootId, helloPub, releaseHash, platform: none, evidence: null}, and the tool refuses to send until the warning is accepted', async () => {
         v = await startVault();
-        const h = await fetchHello(v.baseUrl, v.custodians[0], '/v1/unlock/hello', v.call());
+        const h = await checkedHello(v.baseUrl, v.custodians[0], '/v1/unlock/hello', v.call());
         expect(Object.keys(h.hello).sort()).toEqual(['bootId', 'evidence', 'helloPub', 'platform', 'releaseHash']);
-        expect(h.hello).toMatchObject({ platform: 'none', evidence: null });
+        expect(h.hello).toMatchObject({ platform: 'none', evidence: null, releaseHash: v.release.manifest.imageHash });
         expect(h.bind).toHaveLength(64);
         expect(h.warning).toBe(NO_HARDWARE_PROOF);
-        await expect(genesis(v.baseUrl, v.custodians[0], { now: v.clock.now })).rejects.toThrow(/no hardware proof/);
+        await expect(genesis(v.baseUrl, v.custodians[0], { ...v.call(), acceptNoHardwareProof: false })).rejects.toThrow(/no hardware proof/);
         expect((await get(v, '/v1/health')).body.state).toBe('locked');
     });
 

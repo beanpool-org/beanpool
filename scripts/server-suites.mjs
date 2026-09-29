@@ -380,7 +380,9 @@ export const VARIANTS = [
  * Runs that go one at a time AFTER the pool, with no other server suite beside them: suites whose checks time
  * something, so a neighbour's burst of CPU can fail them. (Inside test-all the other checks, settings_phone above
  * all, may still be running.) Keyed by run id (`test-x` or `test-x(tag)`), with the reason. Keep it short: every
- * entry is serial wall-clock added to every run, 1m13s for these three on this Mac.
+ * entry is serial wall-clock added to every run. A suite belongs here when a check of it compares a wall-clock time
+ * with a bound a busy machine can cross; generous bounds (test-schema-upgrade's 5 s for a rebuild measured in tens of
+ * ms) stay in the pool.
  */
 export const SERIAL = {
     // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
@@ -390,4 +392,10 @@ export const SERIAL = {
     'test-password-brake-fairness': 'relative timings, 5x slack',
     // Waits a fixed 100-150 ms for each pong (or its absence) on a live socket; a loaded machine answers later.
     'test-ws-pong-watchdog': 'fixed 100-150 ms waits for a reply',
+    // Asserts no page of a copy blocks M's event loop for 1 s (1.5 s for the reclaim routes), measured with
+    // monitorEventLoopDelay, and that a copy closes within 1-4 s of a 2 s timer. Failed in the pool on a slow CI
+    // runner (CI run 36634378823: worst 1475 ms), passing alone.
+    'test-sync-copy-pages': 'event-loop hold under 1 s; failed in the CI pool',
+    // Asserts the orphan sweep never holds the event loop 250 ms (a 2 ms interval that must keep ticking).
+    'test-storage-health': 'event-loop hold under 250 ms',
 };

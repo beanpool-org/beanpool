@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loadIdentity, BeanPoolIdentity } from '../utils/identity';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { keepKeyOnThisPhone, loadIdentity, BeanPoolIdentity } from '../utils/identity';
 
 interface IdentityContextState {
     identity: BeanPoolIdentity | null;
@@ -27,6 +28,11 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
             })
             .finally(() => {
                 setIsLoading(false);
+                // After the first read, never before it, and nothing waits on it: an iPhone's key item is made
+                // this-device-only once (identity.ts). It never throws; one that can't finish tries again next launch.
+                keepKeyOnThisPhone(AsyncStorage).then((outcome) => {
+                    if (outcome !== 'not-needed') console.log(`[Identity] this-device-only key item: ${outcome}`);
+                });
             });
     }, []);
 

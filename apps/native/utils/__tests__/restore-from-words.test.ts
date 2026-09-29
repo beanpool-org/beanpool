@@ -23,6 +23,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),

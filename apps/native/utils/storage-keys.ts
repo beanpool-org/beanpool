@@ -76,3 +76,10 @@ export const PUSH_STAMP_STORE_KEY = 'beanpool_push_stamp';
  * phone, on purpose: they are how its push alerts stop there when the phone had no connection as it left.
  */
 export const PUSH_LEAVE_STATEMENTS_STORE_KEY = 'beanpool_push_leave_statements';
+
+/**
+ * iPhone only: the public key whose SecureStore item this phone has made this-device-only (utils/identity.ts
+ * `keepKeyOnThisPhone`), so the move runs once per key. Not secret. Kept through Sign Out: a later account's item is made
+ * this-device-only as it is written, and a key it doesn't name is simply moved once more.
+ */
+export const IDENTITY_THIS_DEVICE_STORE_KEY = 'beanpool_identity_this_device_only';

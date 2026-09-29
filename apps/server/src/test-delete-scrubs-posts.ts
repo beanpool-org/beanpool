@@ -378,7 +378,16 @@ async function main(): Promise<void> {
             && showed('admin: reports', 'Quorvex') && showed('the replication export', 'Xanthrip'),
             `before she deletes, the routes show her posts: ${shownBefore.length} of ${before.length} reads (${shownBefore.map((r) => `${r.route}: ${r.leaked.join('/')}`).join('; ')}; `
             + `none from ${before.filter((r) => r.leaked.length === 0).map((r) => `${r.route} ${r.status}`).join(', ')})`);
-        const photoRoute = (base: string, id: string, n: number, as: Id) => api(base, 'GET', `/api/marketplace/posts/${id}/photos/${n}`, { as });
+        // A photo is fetched by the URL a member's read hands out: where photos are keyed (privacy defaults: a local community
+        // with read auth on) that URL carries its key, and a bare one is 404 whether or not the photo exists. So the URLs are
+        // taken BEFORE the delete, and the same URLs are asked for after it: a 404 then means the photo is gone.
+        const photoUrls = new Map<string, string>();
+        const listed = await api(m, 'GET', `/api/marketplace/posts?author=${rhea.pk}`, { as: cy });
+        const listedPosts: any[] = Array.isArray(listed.body) ? listed.body : (listed.body?.posts ?? []);
+        for (const post of listedPosts) (post.photos ?? []).forEach((u: unknown, n: number) => { if (typeof u === 'string') photoUrls.set(`${post.id}/${n}`, u); });
+        require_(photoUrls.has(`${up.id}/1`), `M: a member's read of her posts hands out her listing's second photo URL (${photoUrls.size} photo URLs)`);
+        const photoRoute = (base: string, id: string, n: number, as: Id) =>
+            api(base, 'GET', photoUrls.get(`${id}/${n}`) ?? `/api/marketplace/posts/${id}/photos/${n}`, { as });
         require_((await photoRoute(m, up.id, 1, cy)).status === 200, 'M: her listing\'s second photo is served');
         const m1 = await main.send('posts', { ids: [...wiped, poll.id] });
         require_(m1[0].objects === 2 && m1[4].objects === 1 && m1[4].rsvps === 1 && m1[4].chat === WORDS.eventTitle,

@@ -233,7 +233,15 @@ async function main(): Promise<void> {
     assert(store.get(freshRow.storage_key)!.equals(freshBytes), 'the store holds exactly those bytes');
 
     // ── 3. serving, before evacuation ──────────────────────────────────────────────────────────
-    const legacyUrl = `${BASE}/api/marketplace/posts/${fixture.photos[0].postId}/photos/0`;
+    // A photo's URL is the one a read of its listing hands out, its key included on a local community, whose listings
+    // are its members' (engine/photo-keys.ts): the URL of the photo as its row is now. Evacuation keeps the row's
+    // `updated_at`, so the URL a member already holds keeps working.
+    const { postPhotoUrl } = await import('@beanpool/engine');
+    const photoUrlOf = (postId: string, orderNum: number): string => {
+        const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
+        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at)}`;
+    };
+    const legacyUrl = photoUrlOf(fixture.photos[0].postId, 0);
     const beforeRes = await fetch(legacyUrl);
     const beforeBytes = Buffer.from(await beforeRes.arrayBuffer());
     assert(beforeRes.status === 200, 'an inline photo still serves 200 before it is evacuated');
@@ -351,7 +359,7 @@ async function main(): Promise<void> {
     assert(afterBytes.equals(beforeBytes), 'the bytes served are BYTE-IDENTICAL after evacuation');
     assert(afterRes.headers.get('content-type') === beforeType, 'the content type is unchanged');
     assert(afterRes.headers.get('cache-control') === beforeCache, 'the cache headers are unchanged');
-    const wrappedRes = await fetch(`${BASE}/api/marketplace/posts/legacy-post-wrapped/photos/0`);
+    const wrappedRes = await fetch(photoUrlOf('legacy-post-wrapped', 0));
     assert(wrappedRes.status === 200, 'the photo that stayed inline still serves');
 
     // ── 5b. the sync export, after evacuation ──────────────────────────────────────────────────
@@ -425,9 +433,11 @@ async function main(): Promise<void> {
 
     // ── 6. the row decides, never the store ────────────────────────────────────────────────────
     const doomed = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ?').get(fixture.photos[2].postId) as any;
+    const doomedUrl = photoUrlOf(fixture.photos[2].postId, 0);
+    assert((await fetch(doomedUrl)).status === 200, 'setup: the photo about to be deleted serves at its URL');
     db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(fixture.photos[2].postId);
     assert(store.get(doomed.storage_key) !== null, 'the file is still on disk (the post-commit delete has not run)');
-    const goneRes = await fetch(`${BASE}/api/marketplace/posts/${fixture.photos[2].postId}/photos/0`);
+    const goneRes = await fetch(doomedUrl);
     assert(goneRes.status === 404, 'a deleted photo 404s even though its file lingers — the route reads the row');
     // And the reverse: an object with no row is never reachable.
     const orphanKey = postPhotoKey('no-such-post', 0, sha256Hex(freshBytes), 'image/jpeg');

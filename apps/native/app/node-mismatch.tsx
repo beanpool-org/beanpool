@@ -19,6 +19,7 @@ import {
 } from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
+import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import { colors, palette } from '../constants/colors';
 
@@ -260,10 +261,13 @@ export default function NodeMismatchScreen() {
                                             sign-in on a community that holds a recovery piece for you.
                                         </Text>
                                         <View style={styles.wordsBox}>
+                                            <NoScreenCapture>
                                             {words.map((w, i) => (
                                                 <Text key={`${w}-${i}`} style={styles.word}>{i + 1}. {w}</Text>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
+                                        <NoScreenLockNote style={[styles.wipeBody, { marginTop: 8 }]} />
                                     </>
                                 ) : (
                                     <>

@@ -6,6 +6,13 @@ vi.mock('expo-local-authentication', () => ({
     authenticateAsync: vi.fn(),
 }));
 
+// The phone's prompt opens through LocalAuth.ts (phoneLockPrompt), whose module reads these.
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
+}));
+
 vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };

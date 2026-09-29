@@ -26,6 +26,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { mem.delete(k); }),
     },
 }));
+// The phone's prompt opens through LocalAuth.ts (phoneLockPrompt), whose module reads these.
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
 vi.mock('expo-local-authentication', () => ({
     SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
     getEnrolledLevelAsync: vi.fn(async () => 3),

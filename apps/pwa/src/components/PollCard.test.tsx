@@ -34,6 +34,8 @@ describe('PollCard (PWA)', () => {
         pollClosesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         totalVotes: 5,
         userVotedOptionId: 'opt_1',
+        // An open vote: its creator chose to let members see who chose what (polls are anonymous otherwise).
+        pollOpenVote: true,
         pollVotes: [
             { voterPubkey: 'voter1', voterCallsign: 'Bob', optionId: 'opt_1', createdAt: new Date().toISOString() },
             { voterPubkey: 'voter2', voterCallsign: 'Charlie', optionId: 'opt_2', createdAt: new Date().toISOString() },
@@ -60,7 +62,23 @@ describe('PollCard (PWA)', () => {
 
     it('says the ballot is open before anyone votes', () => {
         render(<PollCard post={mockPost} identity={mockIdentity} />);
-        expect(screen.getByTestId('poll-open-ballot-note').textContent).toContain('Your vote is visible to members');
+        expect(screen.getByTestId('poll-open-ballot-note').textContent).toContain('Open vote: members can see who chose what');
+        expect(screen.queryByTestId('poll-anonymous-note')).not.toBeInTheDocument();
+    });
+
+    it('says an anonymous poll is anonymous, and offers no voter list', () => {
+        const { pollVotes: _voters, ...rest } = mockPost;
+        render(<PollCard post={{ ...rest, pollOpenVote: false }} identity={mockIdentity} />);
+        expect(screen.getByTestId('poll-anonymous-note').textContent).toContain('Anonymous: everyone sees only the totals');
+        expect(screen.queryByTestId('poll-open-ballot-note')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Show Voters/)).not.toBeInTheDocument();
+        expect(screen.getByText(/5 votes cast/)).toBeInTheDocument();
+    });
+
+    it('shows no voter list on an anonymous poll even if one arrives with it', () => {
+        render(<PollCard post={{ ...mockPost, pollOpenVote: false }} identity={mockIdentity} />);
+        expect(screen.queryByText(/Show Voters/)).not.toBeInTheDocument();
+        expect(screen.queryByText('Bob')).not.toBeInTheDocument();
     });
 
     it('submits a vote when an option is tapped', async () => {
@@ -88,20 +106,20 @@ describe('PollCard (PWA)', () => {
         });
     });
 
-    it('toggles the public village voter ballot', () => {
+    it('toggles the open vote\'s voter list', () => {
         render(<PollCard post={mockPost} identity={mockIdentity} />);
 
-        expect(screen.queryByText('Public Village Ballot')).not.toBeInTheDocument();
+        expect(document.getElementById('poll-voters-list')).toBeNull();
 
         const toggleBtn = screen.getByText(/Show Voters/);
         fireEvent.click(toggleBtn);
 
-        expect(screen.getByText('Public Village Ballot')).toBeInTheDocument();
+        expect(document.getElementById('poll-voters-list')).not.toBeNull();
         expect(screen.getByText('Bob')).toBeInTheDocument();
         expect(screen.getByText('Charlie')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText(/Hide Voters/));
-        expect(screen.queryByText('Public Village Ballot')).not.toBeInTheDocument();
+        expect(document.getElementById('poll-voters-list')).toBeNull();
     });
 
     it('shows closed badge and disables voting when poll is completed', () => {

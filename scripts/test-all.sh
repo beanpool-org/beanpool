@@ -389,6 +389,7 @@ run_federation_suites() {
       test-standby-in-flight
       test-standby-devices
       test-standby-refusal-keeps-copy
+      test-tombstone-retention
       test-recovery-tombstones
       test-github-sign-in-removed
       test-unlock-cancel

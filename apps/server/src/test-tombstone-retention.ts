@@ -1,0 +1,413 @@
+/**
+ * Test Suite: tombstones are kept 30 days on every server, and a standby that has been away longer takes a force-resync
+ * (T6 of scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3).
+ *
+ * A main server M and a standby S, each its own process with its own data dir (takeover-test-harness.ts), M serving its
+ * real HTTPS server (members act through it with signed requests) and S pulling through its real puller (`pullNow`, the
+ * loop's own step) from M's real backup routes. A delete travels to a standby only as its tombstone, so a tombstone
+ * pruned before a standby copied it leaves the row on that standby. Time is not waited for: tombstones are stamped 31 days
+ * ago, and a cursor that old stands for a standby switched off that long. The prune is the daily one
+ * (connector-manager.ts). Nothing leaves this machine.
+ *
+ *  1. M: members, a DM, a listing, a recovery code. S's first copy lands, exact, with M's take-over keys.
+ *  2. A standby whose cursor is `''` (an older version's refused force-resync left it so) prunes a 31-day-old tombstone and
+ *     keeps a 29-day-old one. (Before: the prune kept everything newer than the oldest cursor, so nothing.)
+ *  3. S away 31 days: M deleted a DM line 31 days ago and has pruned its tombstone. S's next pull is a force-resync, not a
+ *     delta, and lands exact: the line is gone from S, and the listing M made since is there. The pull after is a delta.
+ *     (Before: a delta, which left the line on S for good.)
+ *  4. The same, with the force-resync refused (members over the cap in whole copies only): a delta lands meanwhile and
+ *     moves the cursor, and S restarts; the resync is still owed, asked for again, and lands exact once M holds fewer
+ *     members. (A delta that lands never mends the deletes it missed.)
+ *  5. S takes over with the recovery code. The promoted server forgets its pull cursor, and prunes a tombstone written
+ *     35 days ago, after a take-over 40 days ago, and keeps a 29-day-old one. (Before: its last pull's cursor floored the
+ *     prune, so no tombstone written after the take-over was ever pruned.)
+ *
+ * Run:
+ *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-tombstone-retention.ts
+ */
+
+import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
+import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
+
+delete process.env.CF_RECORD_NAME;
+delete process.env.NODE_PROFILE;
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed certificates
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const PW_MAIN = 'Retention-Main-Pw-5528!';
+const PW_STANDBY = 'Retention-Standby-Pw-6613!';
+/** S's row cap, scaled down from 250,000 as test-dos-caps scales it. */
+const CAP = 150;
+const FLOOD = 160;
+/** The wait after a refused force-resync (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
+const RETRY_MS = 3000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TABLES = ['members', 'accounts', 'posts', 'conversations', 'conversation_participants', 'messages'];
+
+// ── The node processes' commands ───────────────────────────────────────────────────────────
+
+/** No node reaches anything but this machine (a push to Expo, the update check's ask of GitHub, are answered here). */
+function guardFetch(): { blocked: string[] } {
+    const seen = { blocked: [] as string[] };
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
+        if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        if (url.hostname === 'api.github.com') return new Response('{}', { status: 404 });
+        seen.blocked.push(url.hostname);
+        throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
+    }) as typeof fetch;
+    return seen;
+}
+
+async function child(): Promise<void> {
+    const fetches = guardFetch();
+    await runNodeChild({
+        ...serveCommands,
+        'setup-primary': async (a: { replicationToken: string; genesis: string }) => {
+            const { seedGenesisMember } = await import('./engine/members.js');
+            const { setReplicationToken } = await import('./config/local-config.js');
+            const { makeRecoveryCode, flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            seedGenesisMember(a.genesis, 'Gwen');
+            setReplicationToken(a.replicationToken);
+            const made = await makeRecoveryCode();
+            await flushTakeoverChecks();
+            return { code: made.code };
+        },
+        'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
+            const { addConnector } = await import('./connector-manager.js');
+            const { updateLocalConfig } = await import('./config/local-config.js');
+            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
+            return true;
+        },
+        /** One pull of the kind the loop makes next, and the take-over keys after it, as the loop fetches them. */
+        pull: async () => {
+            const { pullNow, getBackupStatus, pullTakeoverEnvelopeNow } = await import('./services/backup-puller.js');
+            await new Promise((r) => setTimeout(r, 5));
+            const result = await pullNow();
+            const s = getBackupStatus();
+            const envelope = await pullTakeoverEnvelopeNow();
+            return { ok: result.ok, error: result.error ?? null, mode: s.lastPullMode ?? null, envelope };
+        },
+        /** The puller's start as index.ts makes it: it resumes from the cursor this database saved. Its loop is stopped at once. */
+        'boot-puller': async () => {
+            const { initBackupPuller, stopBackupPuller, getBackupStatus } = await import('./services/backup-puller.js');
+            initBackupPuller();
+            stopBackupPuller();
+            return getBackupStatus().cursor;
+        },
+        /** Each table's rows, counted and hashed; the saved pull cursor; the standby's record of its copies. */
+        snapshot: async (a: { tables: string[] }) => {
+            const { db } = await import('./db/db.js');
+            const { readCopyRecord } = await import('./services/standby-copy-record.js');
+            const tables: Record<string, { count: number; hash: string }> = {};
+            for (const t of a.tables) {
+                const rows = (db.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[])
+                    .map(({ last_active_at: _l, ...rest }) => JSON.stringify(rest)).sort();
+                tables[t] = { count: rows.length, hash: crypto.createHash('sha256').update(rows.join('\n')).digest('hex').slice(0, 16) };
+            }
+            const cursorRow = db.prepare(`SELECT last_synced_at AS c FROM sync_cursors WHERE peer_id = 'backup:primary'`).get() as { c: string } | undefined;
+            const r = readCopyRecord() as any;
+            return {
+                tables, savedCursor: cursorRow ? cursorRow.c : null,
+                record: { lastWhole: r.lastWhole, lastOutcome: r.lastOutcome, lastWhy: r.lastWhy, pastRetentionAt: r.pastRetentionAt ?? null },
+            };
+        },
+        /** SQL on this server, as a bug, an older version or the passing of time would leave it. */
+        sql: async (a: { sql: string; args?: unknown[] }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(a.sql).run(...(a.args ?? [])).changes;
+        },
+        /** Whether a message is on this server. */
+        'has-message': async (a: { id: string }) => {
+            const { db } = await import('./db/db.js');
+            return !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(a.id);
+        },
+        /** A message deleted on this server, with its tombstone (db/db.ts writeTombstone), stamped `daysAgo` days ago. */
+        'delete-message': async (a: { id: string; daysAgo: number }) => {
+            const { db, writeTombstone } = await import('./db/db.js');
+            db.prepare('DELETE FROM messages WHERE id = ?').run(a.id);
+            writeTombstone('messages', a.id);
+            db.prepare(`UPDATE tombstones SET deleted_at = ? WHERE table_name = 'messages' AND row_key = ?`)
+                .run(new Date(Date.now() - a.daysAgo * DAY_MS).toISOString(), a.id);
+            return true;
+        },
+        /** Tombstones keyed `row_key`, stamped `daysAgo` days ago. */
+        plant: async (a: { tombstones: { key: string; daysAgo: number }[] }) => {
+            const { db } = await import('./db/db.js');
+            for (const t of a.tombstones) {
+                db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('messages', ?, ?)`)
+                    .run(t.key, new Date(Date.now() - t.daysAgo * DAY_MS).toISOString());
+            }
+            return true;
+        },
+        /** The daily prune (connector-manager.ts), then which of `keys` are still there. */
+        prune: async (a: { keys: string[] }) => {
+            const { db } = await import('./db/db.js');
+            const { pruneTombstones } = await import('./connector-manager.js');
+            pruneTombstones();
+            return a.keys.filter((k) => !!db.prepare(`SELECT 1 FROM tombstones WHERE table_name = 'messages' AND row_key = ?`).get(k));
+        },
+        /** `n` visitors' members rows stamped long ago, so no delta carries them and only a whole copy does (years of growth). */
+        flood: async (a: { n: number }) => {
+            const { db } = await import('./db/db.js');
+            const old = '2000-01-01T00:00:00.000Z';
+            db.transaction(() => {
+                for (let i = 0; i < a.n; i++) {
+                    const id = `flood-${crypto.randomUUID()}`;
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`)
+                        .run(id, `v-${id.slice(6, 22)}`, old, old);
+                }
+            })();
+            return true;
+        },
+        unflood: async () => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(`DELETE FROM members WHERE public_key LIKE 'flood-%'`).run().changes;
+        },
+        checkpoint: async () => {
+            const { db } = await import('./db/db.js');
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            return true;
+        },
+        fetches: async () => fetches,
+    });
+}
+
+// ── The orchestrator ───────────────────────────────────────────────────────────────────────
+
+let testsRun = 0;
+let testsPassed = 0;
+function assert(cond: unknown, msg: string): void {
+    testsRun++;
+    if (cond) {
+        testsPassed++;
+        console.log(`✓ ${msg}`);
+    } else {
+        console.error(`✗ ${msg}`);
+    }
+}
+function require_(cond: unknown, msg: string): void {
+    assert(cond, msg);
+    if (!cond) throw new Error(`cannot go on: ${msg}`);
+}
+
+interface Id { pk: string; priv: crypto.KeyObject; name: string }
+function newId(name: string): Id {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pk: (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex'), priv: privateKey, name };
+}
+
+interface Answer { status: number; body: any }
+
+/** A POST to a node's real HTTPS server, signed by `as`, or not signed. */
+async function api(base: string, route: string, as: Id | null, body: unknown = {}): Promise<Answer> {
+    const raw = JSON.stringify(body ?? {});
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (as) {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        headers['X-Public-Key'] = as.pk;
+        headers['X-Signature'] = crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64');
+        headers['X-Timestamp'] = String(ts);
+        headers['X-Nonce'] = nonce;
+    }
+    const res = await fetch(`${base}${route}`, { method: 'POST', headers, body: raw });
+    const text = await res.text();
+    let json: any = text;
+    try { json = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, body: json };
+}
+function built(what: string, a: Answer): any {
+    require_(a.status >= 200 && a.status < 300, `M: ${what} (${a.status} ${JSON.stringify(a.body)?.slice(0, 160)})`);
+    return a.body;
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
+
+type Snap = {
+    tables: Record<string, { count: number; hash: string }>; savedCursor: string | null;
+    record: { lastWhole: any; lastOutcome: string | null; lastWhy: string | null; pastRetentionAt: number | null };
+};
+const counts = (s: Snap, ...ts: string[]) => ts.map((t) => `${t} ${s.tables[t]?.count}`).join(', ');
+const same = (a: Snap, b: Snap, ...ts: string[]) => ts.every((t) => a.tables[t]?.hash === b.tables[t]?.hash);
+
+function withDb(dir: string, fn: (db: Database.Database) => void): void {
+    const db = new Database(path.join(dir, 'state.db'));
+    try { fn(db); } finally { db.close(); }
+}
+
+async function main(): Promise<void> {
+    const root = process.env.BEANPOOL_DATA_DIR;
+    if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+    const dir = (n: string) => path.join(root, n);
+    const nodes: NodeProc[] = [];
+    const started = Date.now();
+    const replicationToken = crypto.randomBytes(32).toString('hex');
+    const env = (pw: string, role: string) => ({
+        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        ...(role === 'backup' ? { MAX_IMPORT_ROWS_PER_CATEGORY: String(CAP), BACKUP_RESYNC_RETRY_MS: String(RETRY_MS) } : {}),
+    });
+    const gwen = newId('Gwen');
+    const [ann, bo] = ['Ann', 'Bo'].map(newId);
+    const refused: string[] = [];
+
+    try {
+        // ── 1. M, and S's first copy ──
+        console.log('\n— 1. the main server, and its standby\'s first copy —');
+        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        nodes.push(main);
+        const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
+        const m = `https://localhost:${await main.send('serve')}`;
+        for (const who of [ann, bo]) {
+            const inv = built(`Gwen makes an invite for ${who.name}`, await api(m, '/api/invite/generate', gwen, { publicKey: gwen.pk }));
+            built(`${who.name} joins with it`, await api(m, '/api/invite/redeem', null, { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name }));
+            built(`${who.name} sets a profile photo (listings need one)`, await api(m, '/api/profile/update', who, { avatar: TINY_PNG }));
+        }
+        const offer = async (who: Id, title: string) => built(`${who.name} offers ${title}`, await api(m, '/api/marketplace/posts', who, {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits: 3, priceType: 'fixed', authorPublicKey: who.pk,
+        })).post;
+        await offer(ann, 'Honey');
+        const conv = built('Ann opens a DM with Bo', await api(m, '/api/messages/conversation', ann, { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
+        const conversationId: string = conv.conversation?.id ?? conv.id;
+        const lines: string[] = [];
+        for (let i = 0; i < 3; i++) {
+            const r = built(`Ann sends Bo line ${i + 1}`, await api(m, '/api/messages/send', ann, { conversationId, authorPubkey: ann.pk, ...lockedDm() }));
+            lines.push(r.message?.id ?? r.id);
+        }
+        require_(lines.every((id) => typeof id === 'string'), `M: the DM's lines have ids (${JSON.stringify(lines)})`);
+
+        fs.mkdirSync(dir('standby'), { recursive: true });
+        fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
+        let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        const first1 = await standby.send('pull');
+        const s1: Snap = await standby.send('snapshot', { tables: TABLES });
+        const m1: Snap = await main.send('snapshot', { tables: TABLES });
+        require_(first1.ok === true && s1.record.lastWhole?.exact === true && s1.tables.messages.count === 3 && same(s1, m1, 'messages', 'posts')
+            && first1.envelope === 'stored',
+            `S's first copy lands, exact, with M's take-over keys (${JSON.stringify(first1)}; ${counts(s1, 'members', 'posts', 'messages')})`);
+
+        /** S stopped, its database changed as `patch` says (it is off meanwhile), and started again, its puller resuming. */
+        const restart = async (patch: (db: Database.Database) => void = () => {}) => {
+            refused.push(...(await standby.send('fetches')).blocked);
+            await standby.send('checkpoint');
+            await standby.kill('SIGTERM');
+            withDb(dir('standby'), patch);
+            standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+            nodes.push(standby);
+            return standby.send('boot-puller');
+        };
+        const awayCursor = (days: number) => (db: Database.Database) => {
+            db.prepare(`UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`).run(new Date(Date.now() - days * DAY_MS).toISOString());
+        };
+
+        // ── 2. A standby left with cursor '' prunes ──
+        console.log('\n— 2. a standby whose cursor an older version\'s refused force-resync left empty still prunes —');
+        const saved2 = s1.savedCursor;
+        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = '' WHERE peer_id = 'backup:primary'` });
+        await standby.send('plant', { tombstones: [{ key: 'retention-31d', daysAgo: 31 }, { key: 'retention-29d', daysAgo: 29 }] });
+        const left2 = await standby.send('prune', { keys: ['retention-31d', 'retention-29d'] });
+        assert(JSON.stringify(left2) === JSON.stringify(['retention-29d']),
+            `the 31-day-old tombstone is pruned and the 29-day-old one kept (left: ${JSON.stringify(left2)}; before: both kept, the empty cursor floored the prune)`);
+        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`, args: [saved2] });
+        await standby.send('sql', { sql: `DELETE FROM tombstones WHERE row_key LIKE 'retention-%'` });
+
+        // ── 3. S away 31 days ──
+        console.log('\n— 3. a standby away 31 days takes a force-resync, not a delta —');
+        await main.send('delete-message', { id: lines[0], daysAgo: 31 });
+        const mLeft3 = await main.send('prune', { keys: [lines[0]] });
+        require_(mLeft3.length === 0, `M: the line deleted 31 days ago has its tombstone pruned (${JSON.stringify(mLeft3)})`);
+        const jam = await offer(bo, 'Jam');
+        const resumed3 = await restart(awayCursor(31));
+        require_(!!resumed3 && Date.parse(resumed3) < Date.now() - 30 * DAY_MS, `S restarts with the cursor of a copy 31 days ago (${resumed3})`);
+        const pull3 = await standby.send('pull');
+        const s3: Snap = await standby.send('snapshot', { tables: TABLES });
+        const m3: Snap = await main.send('snapshot', { tables: TABLES });
+        assert(pull3.ok === true && pull3.mode === 'resync', `S's next pull is a force-resync, and it lands (${JSON.stringify(pull3)}; before: a delta)`);
+        assert(!(await standby.send('has-message', { id: lines[0] })) && same(s3, m3, 'messages', 'posts', 'members', 'accounts') && s3.record.lastWhole?.exact === true,
+            `S's copy is M's, exact: the line M deleted 31 days ago is gone, and Bo's jam is there (${counts(s3, 'messages', 'posts')}; M ${counts(m3, 'messages', 'posts')}; verdict ${JSON.stringify(s3.record.lastWhole?.differs)}; before: the line stayed on S)`);
+        assert(s3.record.pastRetentionAt === null && typeof jam?.id === 'string', `S owes no force-resync now (${s3.record.pastRetentionAt})`);
+        const after3 = await standby.send('pull');
+        assert(after3.ok === true && after3.mode === 'delta', `the pull after it is a delta (${JSON.stringify(after3)})`);
+
+        // ── 4. The force-resync refused: owed until one lands ──
+        console.log('\n— 4. the force-resync refused: a delta and a restart don\'t forget it —');
+        await main.send('delete-message', { id: lines[1], daysAgo: 31 });
+        require_((await main.send('prune', { keys: [lines[1]] })).length === 0, 'M: a second line deleted 31 days ago, its tombstone pruned');
+        await main.send('flood', { n: FLOOD });
+        await restart(awayCursor(31));
+        const pull4 = await standby.send('pull');
+        const s4a: Snap = await standby.send('snapshot', { tables: TABLES });
+        assert(pull4.mode === 'resync' && pull4.ok === false && /members/.test(pull4.error ?? '') && s4a.record.pastRetentionAt !== null,
+            `S's force-resync is refused (members over the cap in whole copies) and still owed (${JSON.stringify({ pull: pull4, owed: s4a.record.pastRetentionAt })})`);
+        const delta4 = await standby.send('pull');
+        const s4b: Snap = await standby.send('snapshot', { tables: TABLES });
+        assert(delta4.ok === true && delta4.mode === 'delta' && !!s4b.savedCursor && Date.parse(s4b.savedCursor) > Date.now() - DAY_MS
+            && await standby.send('has-message', { id: lines[1] }) && s4b.record.pastRetentionAt !== null,
+            `a delta lands meanwhile and moves the cursor to today, the line M deleted still on S, and the resync still owed (${JSON.stringify({ pull: delta4, cursor: s4b.savedCursor, owed: s4b.record.pastRetentionAt })})`);
+        const resumed4 = await restart();
+        const again4 = await standby.send('pull');
+        assert(resumed4 === s4b.savedCursor && again4.mode === 'resync' && again4.ok === false,
+            `S restarted with a cursor of today asks for the force-resync again, and it is refused again (${JSON.stringify({ cursor: resumed4, pull: again4 })})`);
+        await main.send('unflood');
+        await sleep(RETRY_MS + 300);
+        const land4 = await standby.send('pull');
+        const s4c: Snap = await standby.send('snapshot', { tables: TABLES });
+        const m4: Snap = await main.send('snapshot', { tables: TABLES });
+        assert(land4.ok === true && land4.mode === 'resync' && !(await standby.send('has-message', { id: lines[1] }))
+            && same(s4c, m4, 'messages', 'members', 'accounts') && s4c.record.lastWhole?.exact === true && s4c.record.pastRetentionAt === null,
+            `the members gone from M, the force-resync lands, exact: the second line is gone from S, and nothing is owed (${JSON.stringify({ pull: land4, verdict: s4c.record.lastWhole?.differs, owed: s4c.record.pastRetentionAt })}; ${counts(s4c, 'messages', 'members')}; M ${counts(m4, 'messages', 'members')})`);
+        const after4 = await standby.send('pull');
+        assert(after4.ok === true && after4.mode === 'delta', `the pull after it is a delta (${JSON.stringify(after4)})`);
+
+        // ── 5. The take-over ──
+        console.log('\n— 5. S takes over: it forgets its pull cursor and prunes what it writes —');
+        refused.push(...(await main.send('fetches')).blocked);
+        await main.kill('SIGKILL');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
+        refused.push(...(await standby.send('fetches')).blocked);
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        require_(confirmed.status === 200, `confirm (${confirmed.status})`);
+        require_(await standby.exited === 0, 'the standby restarts itself');
+        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        nodes.push(standby);
+        require_(standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId, `promoted, with M's PeerId (${standby.ready.role})`);
+        const s5: Snap = await standby.send('snapshot', { tables: TABLES });
+        assert(s5.savedCursor === null, `the promoted server holds no pull cursor (${s5.savedCursor}; before: its last pull's)`);
+        // Forty days on: whatever the last pull before the take-over left is that old, and the tombstones below were
+        // written 35 and 29 days ago, after the take-over.
+        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`, args: [new Date(Date.now() - 40 * DAY_MS).toISOString()] });
+        await standby.send('plant', { tombstones: [{ key: 'promoted-35d', daysAgo: 35 }, { key: 'promoted-29d', daysAgo: 29 }] });
+        const left5 = await standby.send('prune', { keys: ['promoted-35d', 'promoted-29d'] });
+        assert(JSON.stringify(left5) === JSON.stringify(['promoted-29d']),
+            `a tombstone the promoted server wrote 35 days ago is pruned, and one of 29 days kept (left: ${JSON.stringify(left5)}; before: both kept, floored by the last pull before the take-over)`);
+
+        refused.push(...(await standby.send('fetches')).blocked);
+        assert(refused.length === 0, `no node reached anything off this machine (${JSON.stringify(refused)})`);
+    } catch (e: any) {
+        console.error(`\n✗ suite aborted: ${e?.message || e}`);
+        if (e?.output) console.error(String(e.output).slice(-3000));
+        testsRun++;
+    } finally {
+        for (const n of nodes) await n.kill().catch(() => {});
+    }
+
+    console.log(`\n${testsPassed}/${testsRun} passed (${Math.round((Date.now() - started) / 1000)} s)`);
+    process.exit(testsPassed === testsRun ? 0 : 1);
+}
+
+if (process.argv.includes('--child')) {
+    child().catch((e) => { console.error('child failed:', e); process.exit(1); });
+} else {
+    main().catch((e) => { console.error('failed:', e?.message || e); process.exit(1); });
+}

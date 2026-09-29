@@ -46,6 +46,11 @@
  * 12. A table the delta's stateHash canary reads, over the cap (listings): twelve pulls ask M for no whole copy (before:
  *     every other pull). A whole copy that lands with a table left out holds the next back until the next routine one,
  *     drift the canary finds meanwhile included (before: the next pull).
+ * 13. Listings flooded under the cap per delta, each delta landing, then a whole copy that leaves them out, with routine
+ *     whole copies off for size (#1304 review 4128951076): S lacks no listing, so the canary still reads. A group
+ *     membership gone from S with no tombstone is drift it finds, and the next routine time's whole copy brings it back.
+ *     The flood gone from M, the canary finds that too, and the whole copy it asks for carries listings again: S's record
+ *     and report no longer name them. (Before: the canary was off while any copy left listings out, so neither came.)
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-refusal-keeps-copy.ts
@@ -114,6 +119,12 @@ async function child(): Promise<void> {
             const { updateLocalConfig } = await import('./config/local-config.js');
             addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
+            return true;
+        },
+        /** An environment setting the puller reads live (the whole copy's size gate, BACKUP_RECONCILE_MAX_BYTES). */
+        'set-env': async (a: { name: string; value: string | null }) => {
+            if (a.value === null) delete process.env[a.name];
+            else process.env[a.name] = a.value;
             return true;
         },
         /** The routine whole copy's interval, live (services/backup-puller.ts reads it at every pull). */
@@ -763,6 +774,57 @@ async function main(): Promise<void> {
         assert(mend12.ok === true && mend12.mode === 'full' && s12.tables.posts.hash === m12.tables.posts.hash,
             `at the next routine time the whole copy comes, and brings the listing back (${JSON.stringify(mend12)}; ${counts(s12, 'posts')}; M ${counts(m12, 'posts')})`);
         await main.send('unflood');
+
+        // ── 13. Listings flooded under the cap per delta: the canary still reads ──
+        console.log('\n— 13. listings flooded under the cap per delta, a whole copy leaving them out: the canary still reads, and clears it —');
+        for (let i = 0; i < 3; i++) {
+            await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
+            const d = await standby.send('pull', {});
+            require_(d.ok === true && d.mode === 'delta', `S's delta after 60 more listings on M lands (${JSON.stringify(d)})`);
+        }
+        const s13a: Snap = await standby.send('snapshot', { tables: HASHED });
+        const m13a: Snap = await main.send('snapshot', { tables: HASHED });
+        assert(s13a.tables.posts.hash === m13a.tables.posts.hash && s13a.tables.posts.count > CAP,
+            `every listing reached S by delta (${counts(s13a, 'posts')}; M ${counts(m13a, 'posts')})`);
+        // A restart, and its first pull is the routine whole copy: listings are over the cap in it, and every whole copy is
+        // over the size gate (2,000 bytes standing in for 8 MB), so routine whole copies go off.
+        await restart();
+        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
+        await standby.send('set-reconcile-ms', { ms: HOLD_MS });
+        const whole13 = await standby.send('pull', {});
+        const r13a = await standby.send('record');
+        assert(whole13.ok === true && whole13.mode === 'full' && JSON.stringify(r13a.lastLeftOut?.tables) === JSON.stringify(['posts'])
+            && Array.isArray(r13a.lastWhole?.differs) && r13a.lastWhole.differs.length === 0,
+            `the whole copy lands with listings left out, and nothing else differs (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut?.tables, differs: r13a.lastWhole?.differs })})`);
+        const t13 = Date.now();
+        require_((await standby.send('sql', { sql: 'DELETE FROM group_members WHERE group_id = ?', args: [groupId] })) > 0,
+            'S: the group\'s membership deleted, with no tombstone');
+        const drift13 = await standby.send('pull', {});
+        await sleep(HOLD_MS + 200);
+        const mend13 = await standby.send('pull', {});
+        const s13b: Snap = await standby.send('snapshot', { tables: HASHED });
+        const m13b: Snap = await main.send('snapshot', { tables: HASHED });
+        const served13 = await main.send('whole-copies', { since: t13 });
+        assert(drift13.ok === true && drift13.mode === 'delta' && mend13.ok === true && mend13.mode === 'full' && served13 === 1
+            && s13b.tables.group_members.hash === m13b.tables.group_members.hash,
+            `the next delta's canary finds the drift, and at the routine time one whole copy brings the membership back (${JSON.stringify({ drift: drift13.mode, mend: mend13.mode, served: served13 })}; ${counts(s13b, 'group_members')}; M ${counts(m13b, 'group_members')}; before: deltas only, and S kept 0)`);
+        await main.send('unflood');
+        const gone13 = await standby.send('pull', {});
+        await sleep(HOLD_MS + 200);
+        const clear13 = await standby.send('pull', {});
+        const r13c = await standby.send('record');
+        assert(gone13.mode === 'delta' && clear13.ok === true && clear13.mode === 'full' && r13c.lastLeftOut === null
+            && Array.isArray(r13c.report.leftOut) && r13c.report.leftOut.length === 0,
+            `the flood gone from M, the canary asks for a whole copy, which carries listings: S's record and report name no table left out (${JSON.stringify({ gone: gone13.mode, clear: clear13.mode, leftOut: r13c.lastLeftOut, report: r13c.report.leftOut })}; before: listings named until a restart)`);
+        // S still held the listings M deleted with no tombstone: that whole copy asked for the force-resync that mends it.
+        const resync13 = await standby.send('pull', {});
+        const s13c: Snap = await standby.send('snapshot', { tables: HASHED });
+        const m13c: Snap = await main.send('snapshot', { tables: HASHED });
+        const r13d = await standby.send('record');
+        assert(resync13.ok === true && resync13.mode === 'resync' && r13d.lastWhole?.exact === true && s13c.tables.posts.hash === m13c.tables.posts.hash,
+            `and the force-resync it asked for (S still held the listings M deleted) lands exact (${JSON.stringify({ pull: resync13, verdict: r13d.lastWhole })}; ${counts(s13c, 'posts')}; M ${counts(m13c, 'posts')})`);
+        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
+        await standby.send('set-reconcile-ms', { ms: 86400000 });
 
         refused.push(...(await standby.send('fetches')).blocked, ...(await main.send('fetches')).blocked);
         assert(refused.length === 0, `no node reached anything off this machine (${JSON.stringify(refused)})`);

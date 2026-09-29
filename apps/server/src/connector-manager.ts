@@ -412,9 +412,10 @@ export async function handshakeConnectedPeers(): Promise<void> {
 
 /**
  * Drop the tombstones older than the retention (db/db.ts pruneTombstones). A standby whose cursor is older than that
- * takes a force-resync instead of a delta (services/backup-puller.ts), so no cursor holds them back.
+ * takes a force-resync instead of a delta (services/backup-puller.ts), so no cursor holds them back. EXPORTED for tests
+ * (test-tombstone-retention.ts): `initConnectorManager`, its caller, needs a libp2p node.
  */
-function pruneTombstones(): void {
+export function pruneTombstones(): void {
     const n = pruneExpiredTombstones();
     if (n > 0) logger.info('P2P', `[Sync] Pruned ${n} tombstone(s) older than ${TOMBSTONE_RETENTION_DAYS} days`);
 }

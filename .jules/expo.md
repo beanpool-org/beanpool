@@ -111,3 +111,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `new-message.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `new-message.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-08 - [Export ErrorBoundary in welcome.tsx]
+**Issue:** `welcome.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `welcome.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.

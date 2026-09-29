@@ -23,7 +23,7 @@ These live on your community's server. You get them when your community's server
 - **New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.
 - **Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days.
 - **Payments.** Up to 100 payments a day, and up to 30 people you have never paid before. Up to 100 deals asked for, accepted or approved, and 20 pledges made or changed. Receiving is never limited.
-- **Enterprises and projects** have their own limits, ten times a member's. What a keeper does for one never counts against the keeper's own. A keeper can do one enterprise's worth a day for all the enterprises they keep together.
+- **Enterprises and projects** have their own limits, ten times a member's. What a keeper does for one counts against it, not against the keeper's own, except running it: keepers, pausing, winding up, and completing or turning down its deals. A keeper can do one enterprise's worth a day for all the enterprises they keep together.
 
 ## Version 1.2.38
 

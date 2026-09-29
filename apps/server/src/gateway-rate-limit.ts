@@ -32,6 +32,12 @@
  * together get its whole budget, and one person can't multiply their day by starting enterprises. A made-up, foreign or
  * wound-up enterprise in a path is no enterprise here, and the write counts against the signer as any other. The money
  * limits proper are engine/money-limits.ts.
+ *
+ * Except a shop's governance and settling (ENTERPRISE_GOVERNANCE_WRITE): taking keepers on, removing them, stepping
+ * down, succession, pausing, resuming, winding up, and completing or turning down a deal the shop already funded. Those
+ * count against the signer's own day, as on main, never the shop's or the keeper's enterprise work: otherwise one keeper
+ * who spent the shop's day left the others, its lead included, unable to remove them, pause, wind up, or pay a helper
+ * for a job the shop had already paid into escrow for (the review of 68ff4e4f).
  */
 import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
@@ -82,6 +88,25 @@ const budgetOf = (key: string) => key.startsWith(ENTERPRISE_KEY) ? WRITER_LIMITS
  *   - POST /api/notices/seen (routes/notices.ts): stamps seen_at once on the member's own kept notices.
  */
 export const DAY_BUDGET_READ_MARKS: ReadonlySet<string> = new Set(['/api/messages/mark-read', '/api/notices/seen']);
+
+/**
+ * A shop's governance and settling writes (routes/treasury.ts, at each of its path prefixes): counted against the
+ * signer's own day as on main, never against the enterprise's day or the keeper's enterprise work, so that a keeper who
+ * spent the shop's day can't lock its other keepers out of running it. Every one is a POST:
+ *   - keepers/request, keepers/requests/:id/approve, keepers/requests/:id/decline, keepers/:pubkey/remove,
+ *     keepers/changes/:id/object, keepers/step-down;
+ *   - succession/propose, succession/:id/vote;
+ *   - pause, resume;
+ *   - wind-up/initiate, wind-up/cancel, wind-up/finalise;
+ *   - complete (paying a helper out of the escrow its approval funded, which the money limits counted then), and reject
+ *     (turning a request down: the Beans stay or come back).
+ * Matched as the gateway sees the path (never decoded or lower-cased; isNonCanonicalPath refuses other casings first),
+ * with the router's one trailing slash. A spelling this misses only counts against the shop as before.
+ */
+export const ENTERPRISE_GOVERNANCE_WRITE = new RegExp('^/api/(?:treasury|enterprise|enterprises)/[^/]+/(?:'
+    + 'keepers/(?:request|step-down|requests/[^/]+/(?:approve|decline)|[^/]+/remove|changes/[^/]+/object)'
+    + '|succession/(?:propose|[^/]+/vote)|pause|resume|wind-up/(?:initiate|cancel|finalise)|complete|reject'
+    + ')/?$');
 
 /** Count one request against `key`. False (and 429 set) when the bucket is already full. */
 function take(ctx: Koa.Context, key: string, max: number, now: number): boolean {
@@ -190,14 +215,16 @@ function dayBudgetRefusal(key: string, limit: number, resetsAtMs: number, now: n
  * enterprise the signer keeps (enterpriseActingFor), against `enterprise`'s and the signer's enterprise work. False (and
  * 429 set) when one of those days already holds its budget: `day_budget` for a member's WRITER_LIMITS.signedWritesPerDay,
  * `enterprise_day_budget` for an enterprise's WRITER_LIMITS.enterpriseSignedWritesPerDay, `enterprise_work_day_budget`
- * for a keeper's WRITER_LIMITS.enterpriseWorkSignedWritesPerDay. A refused write isn't counted in any. Reads, the read
- * marks (DAY_BUDGET_READ_MARKS), unsigned requests and the admin surface pass untouched.
+ * for a keeper's WRITER_LIMITS.enterpriseWorkSignedWritesPerDay. A shop's governance and settling
+ * (ENTERPRISE_GOVERNANCE_WRITE) counts against the signer's own day whatever `enterprise` says. A refused write isn't
+ * counted in any. Reads, the read marks (DAY_BUDGET_READ_MARKS), unsigned requests and the admin surface pass untouched.
  */
 export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now(), enterprise: string | null = null): boolean {
     const actor = ctx.state.actor as string | undefined;
     if (!actor || !WRITE_METHODS.has(ctx.method) || ctx.path.startsWith('/api/local/admin/')) return true;
     if (ctx.method === 'POST' && DAY_BUDGET_READ_MARKS.has(ctx.path)) return true;
-    const keys = enterprise ? [`${ENTERPRISE_KEY}${enterprise}`, `${WORK_KEY}${actor}`] : [actor];
+    const forShop = enterprise && !(ctx.method === 'POST' && ENTERPRISE_GOVERNANCE_WRITE.test(ctx.path)) ? enterprise : null;
+    const keys = forShop ? [`${ENTERPRISE_KEY}${forShop}`, `${WORK_KEY}${actor}`] : [actor];
     const hour = Math.floor(now / HOUR_MS);
     for (const key of keys) {
         const entry = dayCounts.get(key);
@@ -209,7 +236,7 @@ export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now(), enterp
             ctx.status = 429;
             ctx.set('Retry-After', String(Math.max(1, Math.ceil((resetsAtMs - now) / 1000))));
             ctx.body = dayBudgetRefusal(key, limit, resetsAtMs, now);
-            logTrip(key.startsWith(ENTERPRISE_KEY) ? `dayent:${enterprise}` : key.startsWith(WORK_KEY) ? `daywork:${actor}` : `day:${actor}`, now);
+            logTrip(key.startsWith(ENTERPRISE_KEY) ? `dayent:${forShop}` : key.startsWith(WORK_KEY) ? `daywork:${actor}` : `day:${actor}`, now);
             return false;
         }
     }

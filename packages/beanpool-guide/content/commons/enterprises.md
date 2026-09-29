@@ -12,7 +12,7 @@ An **enterprise** is something people run together for the community: a tool lib
 - A **project** has a goal and usually a deadline, like raising 500 beans for a new roof.
 - An **ongoing** enterprise keeps going.
 
-An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits.
+An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits. Running the enterprise itself counts against the keeper's own changes instead: taking on, removing or replacing keepers, stepping down, pausing, winding up, and completing or turning down its deals. So one keeper who uses up its day can't stop the others from removing them, pausing it, or paying for work it has already paid into trust.
 
 ## Finding them
 

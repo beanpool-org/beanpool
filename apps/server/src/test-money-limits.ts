@@ -48,6 +48,12 @@
  *     posts; a keeper's removals share the same 30.
  * 13. A restart keeps one person's enterprise work: in a child node, 600 sweeps from two enterprises, a SIGKILL, 400
  *     more, and the 1,001st is 429 money_enterprise_work_payments_day though that enterprise has made only 500.
+ * 14. One keeper can't lock the others out of a shop (the review of 68ff4e4f). Rex, Leah Linens' second keeper, spends
+ *     its 1,000 posts, 1,000 payments and 50,000 writes. Leah's new payments, posts and thread lines for it are still
+ *     refused in the shop's words, but its governance and settling count on her own day: with the shop's day and her
+ *     own payments spent, she completes the job the shop funded (Hugo is paid), turns a request down, removes Rex,
+ *     pauses, resumes and starts winding it up, at both path prefixes and with a trailing slash; those 6 writes spend
+ *     her own day (the next is 429 day_budget) and not her enterprise work.
  *
  * Local only: the servers it starts on localhost. The peer a purchase asks is a made-up key at a closed local port.
  *
@@ -983,6 +989,79 @@ async function main(): Promise<void> {
             if (two) await two.stop(); else await one.stop();
             fs.rmSync(dir, { recursive: true, force: true });
         }
+    }
+
+    // ── 14. One keeper can't lock the others out of a shop ────────────────────────────────────────────────────
+    console.log('\n--- 14. a keeper who spends a shop\'s day leaves its lead able to run it: governance and settling count on the signer\'s own day ---');
+    {
+        const W = WRITER_LIMITS;
+        const lea = member('Leah');
+        const rex = member('Rex');
+        const hugo = member('Hugo', 0);
+        const hana = member('Hana', 0);
+        const ivo = member('Ivo', 0);
+        completedTrade(lea.pk, tradie.pk);
+        sync();
+        const shop = await enterprise(lea, 'Leah Linens');
+        const loft = await enterprise(lea, 'Leah Loft');
+        setBalance(shop, 5_000);
+        adminAssignTreasuryOperator(shop, rex.pk, owner.pk);
+        // A job the shop funded before Rex spent its day: Hugo helps on its need and Leah approves, its 5 Beans into escrow.
+        const need = plantPost(shop, 'need', 5);
+        const job = plantRequest(need, shop, hugo.pk, 5);
+        const funded = await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: job });
+        assert(funded.status === 200, `setup: Leah approves Hugo's help on Leah Linens' need, and the shop pays 5 into escrow (${show(funded)})`);
+        const hanaAsks = plantRequest(need, shop, hana.pk, 5);
+        const ivoAsks = plantRequest(need, shop, ivo.pk, 5);
+
+        // Rex spends the shop's posts and payments (each last one his, over HTTPS).
+        entPosts(shop, rex.pk, W.enterprisePostsPerDay - count('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?', shop) - 1);
+        const rexPosts = await entOffer(rex, shop);
+        moneyActs(shop, rex.pk, M.enterprisePaymentsPerDay - count(`SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = 'payment'`, shop) - 1, 'payment');
+        const rexSweeps = await sweep(rex, shop, 0.0001);
+        assert(rexPosts.status === 200 && rexSweeps.status === 200, `Rex, its second keeper, puts up its 1,000th post and makes its 1,000th payment (${show(rexPosts)}, ${show(rexSweeps)})`);
+        // New payments, deals and posts still count against the shop, as before.
+        const beforeLea = books();
+        refused(await sweep(lea, shop), 'money_payments_day', /Leah Linens can make 1,000 payments/, beforeLea, 'then Leah\'s sweep');
+        refused(await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: ivoAsks }), 'money_payments_day', /Leah Linens can make 1,000 payments/, beforeLea, 'and her approval of Ivo\'s help, a new payment');
+        const leaPosts = await entOffer(lea, shop);
+        assert(leaPosts.status === 429 && leaPosts.body?.code === 'enterprise_posts_per_day', `and her post for it is 429 enterprise_posts_per_day (${show(leaPosts)})`);
+
+        // Rex spends the shop's writes, the last one his thread line over HTTPS. Leah's own day is 6 short, her enterprise
+        // work 1 short (writes for Leah Loft), and her own payments are spent too.
+        resetGatewayRateLimit();
+        gatewayWrites(rex.pk, W.enterpriseSignedWritesPerDay - 1, shop);
+        const rexLine = await line(rex, shop);
+        assert(rexLine.status === 201, `Rex makes Leah Linens' 50,000th write (${show(rexLine)})`);
+        const leaLine = await line(lea, shop);
+        assert(leaLine.status === 429 && leaLine.body?.code === 'enterprise_day_budget', `then Leah's line in its thread is 429 enterprise_day_budget, as before (${show(leaLine)})`);
+        const governance = 6;
+        gatewayWrites(lea.pk, W.signedWritesPerDay - governance);
+        gatewayWrites(lea.pk, W.enterpriseWorkSignedWritesPerDay - 1, loft);
+        for (let i = 0; i < M.paymentsPerDay; i++) admitMoneyActs(lea.pk, [{ kind: 'payment', recipient: null }], Date.now());
+
+        const hugoBefore = bal(hugo.pk);
+        const completed = await call('POST', lea, `/api/treasury/${shop}/complete`, { transactionId: job });
+        assert(completed.status === 200 && completed.body?.transaction?.status === 'completed' && bal(hugo.pk) > hugoBefore,
+            `Leah completes the job the shop funded, and Hugo is paid from its escrow: no money limit refuses settling (${show(completed)}, Hugo ${hugoBefore} → ${bal(hugo.pk)})`);
+        const rejected = await call('POST', lea, `/api/treasury/${shop}/reject/`, { transactionId: hanaAsks });
+        assert(rejected.status === 200, `she turns Hana's request down (${show(rejected)})`);
+        const removed = await call('POST', lea, `/api/enterprise/${shop}/keepers/${rex.pk}/remove`, {});
+        assert(removed.status === 200 && removed.body?.success === true, `she removes Rex (${show(removed)})`);
+        console.log(`  (the removal is a keeper change like any other: applied ${removed.body?.applied}, it applies at ${removed.body?.change?.appliesAt}, after its objection window)`);
+        const paused = await call('POST', lea, `/api/enterprise/${shop}/pause`, {});
+        assert(paused.status === 200 && paused.body?.paused === true, `she pauses it (${show(paused)})`);
+        const resumed = await call('POST', lea, `/api/treasury/${shop}/resume`, {});
+        assert(resumed.status === 200 && resumed.body?.paused === false, `and resumes it (${show(resumed)})`);
+        const windUp = await call('POST', lea, `/api/enterprise/${shop}/wind-up/initiate`, {});
+        assert(windUp.status === 200 && windUp.body?.status === 'winding_up', `she starts winding it up (${show(windUp)})`);
+
+        const leaOwn = await call('POST', lea, '/api/community/me/area', {});
+        assert(leaOwn.status === 429 && leaOwn.body?.code === 'day_budget',
+            `those ${governance} writes counted on Leah's own day: her next own write is 429 day_budget (${show(leaOwn)})`);
+        const leaLoft = await line(lea, loft);
+        assert(leaLoft.status === 201, `and not on her enterprise work: she still writes for Leah Loft (${show(leaLoft)})`);
+        resetGatewayRateLimit();
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -320,7 +320,9 @@ measured. The measurement is recorded in the header comment of
 
 ### Added 2026-08-13 — each of these cost real time in one session
 
-9. **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
+9. *(Fixed 2026-09-28: `deploy.sh` no longer writes the fleet token, removes the copy it left, and
+   starts no sidecar. The diagnosis steps below still hold for a node's own tunnel.)*
+   **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
    single global `CF_TUNNEL_TOKEN` from your local `.env` over `<node>/data/tunnel-token`.
    Deploying to `test` took `test.beanpool.org` off the internet for ~20 minutes with
    Cloudflare **error 1033 / HTTP 530**, cloudflared logging `Unauthorized: Tunnel not found`.

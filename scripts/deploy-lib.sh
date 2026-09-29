@@ -38,6 +38,90 @@ disk_preflight() {
   [ "$free_kb" -ge $((need_mb * 1024)) ]
 }
 
+# FLEET SECRETS (sensitive-data report A8, 2026-09-28). deploy.sh used to hand every server four values from the Mac's .env:
+# a Cloudflare token that can rewrite DNS for the whole beanpool.org zone and its zone id (a server uses them only for its own
+# certificate, and no tunnel of ours checks that certificate), the one admin password all our servers shared (read only on a
+# server's first start), and the fleet's tunnel token, written to data/tunnel-token (its tunnel no longer exists). A break-in
+# at any one server could have repointed global.beanpool.org. deploy.sh sends none of them now, and these remove what earlier
+# deploys and hand edits left. scripts/test-deploy-no-fleet-secrets.sh fails the build if deploy.sh sends one again.
+
+# The names, in one place for the functions below and for the test.
+fleet_secret_names() {
+  echo "CF_API_TOKEN CF_ZONE_ID ADMIN_PASSWORD CF_TUNNEL_TOKEN"
+}
+
+# sha256 of stdin, as lowercase hex. sha256sum on the servers and in CI, shasum on a Mac.
+sha256_hex() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}'
+}
+
+# strip_fleet_secrets_env <env file>
+# Deletes the lines of a server's preserved .env that set one of fleet_secret_names, in each form docker compose reads
+# (NAME=, NAME:, export NAME=, a bare NAME, spaces around), and nothing else: every other line, comments included, stays as
+# it was. docker compose reads that file too, so a line left there would still reach the container. Prints the names it
+# removed, never a value. The file keeps its owner and mode: it is rewritten through a copy made with cp -p, then renamed.
+strip_fleet_secrets_env() {
+  local env_file=$1 re removed tmp
+  sudo test -f "$env_file" || return 0
+  re="^[[:space:]]*(export[[:space:]]+)?($(fleet_secret_names | tr ' ' '|'))[[:space:]]*([=:]|$)"
+  # LC_ALL=C on all three: in a UTF-8 locale GNU grep drops a line holding an invalid byte (deleting an unrelated line, or
+  # missing a secret), and a UTF-8 sed stops .* at that byte and would print the tail of a value.
+  removed=$(sudo env LC_ALL=C grep -aE "$re" "$env_file" | LC_ALL=C sed -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_]+).*/\2/' | sort -u | tr '\n' ' ')
+  [ -n "$removed" ] || return 0
+  tmp="$env_file.fleet-strip"
+  # grep -v exits 1 when it keeps no line at all, which is a result, not a failure; 2 is a failure.
+  if ! sudo cp -p "$env_file" "$tmp" \
+    || ! sudo sh -c 'LC_ALL=C grep -avE "$1" "$2" > "$3"; [ $? -le 1 ]' _ "$re" "$env_file" "$tmp" \
+    || ! sudo mv -f "$tmp" "$env_file"; then
+    sudo rm -f "$tmp"
+    echo "⚠️  Could not remove ${removed% } from $env_file: the file is as it was. Delete those lines by hand."
+    return 1
+  fi
+  echo "🧹 Removed ${removed% } from $env_file (values not shown): deploy.sh no longer gives servers the fleet's secrets."
+}
+
+# remove_fleet_tunnel_token <token file> <sha256 of the fleet tunnel token, or empty>
+# Deletes data/tunnel-token only when it holds the fleet's copy that earlier deploys wrote there. A server's OWN token, written
+# by public-address-agent.ts for a registrar-managed address, is a different token and is kept. The two are compared by
+# sha256, so the fleet token itself never leaves the Mac. deploy.sh wrote the token with a newline and the agent writes it
+# without one, so whitespace is left out of the hash on both sides.
+remove_fleet_tunnel_token() {
+  local file=$1 fleet_sha=$2 sha
+  sudo test -f "$file" || return 0
+  if [ -z "$fleet_sha" ]; then
+    echo "ℹ️  Kept $file: this Mac's .env has no CF_TUNNEL_TOKEN to tell the fleet's copy from this server's own."
+    return 0
+  fi
+  sha=$(sudo cat "$file" | tr -d '[:space:]' | sha256_hex)
+  if [ "$sha" != "$fleet_sha" ]; then
+    echo "ℹ️  Kept $file: it is this server's own tunnel token, not the fleet's."
+    return 0
+  fi
+  if sudo rm -f "$file"; then
+    echo "🧹 Removed $file: it held the fleet's tunnel token, which deploy.sh no longer sends."
+  else
+    echo "⚠️  Could not remove $file, which holds the fleet's tunnel token. Delete it by hand."
+    return 1
+  fi
+}
+
+# first_password_notice <data dir> <ssh target>
+# Run just before the container starts. A server with no locked admin password (no local-config.json yet, or one that is not
+# locked) makes one up on this start, because deploy.sh no longer sends ADMIN_PASSWORD. It never prints it: it keeps it in
+# data/first-admin-password.txt (FIRST_PASSWORD_FILE in apps/server/src/config/local-config.ts). This says where, never what.
+first_password_notice() {
+  local data_dir=$1 target=$2 file
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true' "$data_dir/local-config.json"; then
+    return 0
+  fi
+  file="$data_dir/first-admin-password.txt"
+  echo "🔑 This server has no admin password yet, so it makes one up as it starts. It is not in this output or in its log."
+  echo "   It will be in $file, which only root and the server can read:"
+  echo "     ssh $target 'sudo cat $file'"
+  echo "   Sign in at /settings with it, then change it there; the file is deleted when you do."
+}
+
 # --- Local side. ---
 
 # http_status <url> — the HTTP status code, or 000 when nothing answered.

@@ -423,6 +423,9 @@ importers:
       '@beanpool/engine':
         specifier: workspace:*
         version: link:../../packages/beanpool-engine
+      '@beanpool/signin':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-signin
       '@koa/router':
         specifier: ^13.1.0
         version: 13.1.1
@@ -590,6 +593,18 @@ importers:
         version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/beanpool-guide: {}
+
+  packages/beanpool-signin:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 

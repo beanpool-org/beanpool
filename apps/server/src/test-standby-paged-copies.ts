@@ -179,6 +179,16 @@ async function child(): Promise<void> {
                 ledgerSum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
             };
         },
+        /**
+         * M's pricing guide made now and its worker stopped (pricing-aggregator.ts): the worker rewrites the guide's rows 5 s
+         * after every start, which would move them between a copy's snapshot and a step's look at S.
+         */
+        'settle-pricing': async () => {
+            const { runPricingAggregationCycle, stopPricingAggregatorWorker } = await import('./pricing-aggregator.js');
+            stopPricingAggregatorWorker();
+            runPricingAggregationCycle();
+            return true;
+        },
         /** The copied tables' hashes as the whole-copy check makes them (engine/replica-hashes.ts). */
         hashes: async () => {
             const { tableContentHashes } = await import('./engine/replica-hashes.js');
@@ -528,6 +538,7 @@ async function main(): Promise<void> {
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         let m = `https://localhost:${await main.send('serve')}`;
+        await main.send('settle-pricing');
         const As = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         const join = async (who: Id) => {
             const inv = built(`Gwen makes an invite for ${who.name}`, await As(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
@@ -681,6 +692,7 @@ async function main(): Promise<void> {
             nodes.push(main);
             px.setTarget(main.base);
             m = `https://localhost:${await main.send('serve')}`;
+            await main.send('settle-pricing');
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             built('Bo offers eggs on M after its restart', await As(bo, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', credits: 2, priceType: 'fixed', authorPublicKey: bo.pk,
@@ -690,12 +702,9 @@ async function main(): Promise<void> {
             await sleep(4100);
             const w4 = await pullAndSwap(false);
             const r4w = await standby.send('record');
-            // M's own pricing guide worker, started again with it, may move its rows after the copy's snapshot: a delta
-            // brings them.
-            await standby.send('pull', {});
             const diff4 = await exactNow();
             assert(w4.ok === true && w4.mode === 'full' && w4.staged === true && r4w.lastWhole?.exact === true && diff4.length === 0,
-                `after the interval the whole copy is asked again, lands exact, and S is M's (${JSON.stringify({ pull: w4, whole: r4w.lastWhole })}; differences after a delta ${first(diff4)})`);
+                `after the interval the whole copy is asked again, lands exact, and S is M's (${JSON.stringify({ pull: w4, whole: r4w.lastWhole })}; differences ${first(diff4)})`);
             await standby.send('set-env', { vars: { BACKUP_RECONCILE_EVERY_MS: '86400000', BACKUP_BIG_COPY_EVERY_MS: null } });
         });
 

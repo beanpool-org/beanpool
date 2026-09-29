@@ -23,6 +23,12 @@
  * counted, nor are the read marks (DAY_BUDGET_READ_MARKS): the apps send those on a timer, and they make no new row. It
  * applies whether or not the operator has the minute throttle on: it is what keeps one key from growing the tables a
  * standby copies past its cap.
+ *
+ * An enterprise's day budget: a write whose path names an enterprise the signer keeps (https-server.ts passes it, from
+ * routes/money-limits-gate.ts enterpriseActingFor) is counted against that enterprise, WRITER_LIMITS
+ * .enterpriseSignedWritesPerDay, and not against the keeper's own: a keeper running a busy shop must not spend their own
+ * day on it, nor the shop's on their own. A made-up, foreign or wound-up enterprise in a path is no enterprise here, and
+ * the write counts against the signer as any other. The money limits proper are engine/money-limits.ts.
  */
 import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
@@ -42,13 +48,17 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_HOURS = 24;
 const WRITE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /**
- * The most keys the day budget holds counts for at once. Past it, keys with no write in the last day go first, then
- * the keys with the fewest writes: forgetting one can only forgive a small count, never a key near its budget.
+ * The most keys (members' and enterprises' together) the day budget holds counts for at once. Past it, keys with no write
+ * in the last day go first, then the keys that have used the least of their budget: forgetting one can only forgive a
+ * small part of a day, never a key near its budget.
  */
 export const DAY_BUDGET_MAX_KEYS = 50_000;
 /** Per key: the hours it wrote in (oldest first, within the day) and how many writes in each. */
 interface DayCount { hours: number[]; counts: number[]; total: number }
+/** Keyed by the member's key, or `ent:` and the enterprise's for an enterprise's own budget. */
 const dayCounts = new Map<string, DayCount>();
+const ENTERPRISE_KEY = 'ent:';
+const budgetOf = (key: string) => key.startsWith(ENTERPRISE_KEY) ? WRITER_LIMITS.enterpriseSignedWritesPerDay : WRITER_LIMITS.signedWritesPerDay;
 
 /**
  * The read marks, left out of the day budget (still under the minute bucket). Each only moves a marker on a row the
@@ -94,6 +104,10 @@ function logTrip(key: string, now: number): void {
     // carries one.
     if (key.startsWith('day:')) {
         try { logger.warn('AUTH', `[gateway] day budget reached for member ${key.slice(4, 16)}…; answering 429 day_budget to its writes`); } catch { /* logging never blocks a response */ }
+        return;
+    }
+    if (key.startsWith('dayent:')) {
+        try { logger.warn('AUTH', `[gateway] day budget reached for enterprise ${key.slice(7, 19)}…; answering 429 enterprise_day_budget to its writes`); } catch { /* logging never blocks a response */ }
         return;
     }
     const label = key.startsWith('m:') ? `member ${key.slice(2, 14)}…`
@@ -146,35 +160,44 @@ function inAbout(atMs: number, now: number): string {
 }
 
 /**
- * After signature verification: count a verified key's write against its day. False (and 429 `day_budget` set) when
- * the key has already made WRITER_LIMITS.signedWritesPerDay writes in the rolling day. A refused write isn't counted.
- * Reads, the read marks (DAY_BUDGET_READ_MARKS), unsigned requests and the admin surface pass untouched.
+ * After signature verification: count a verified key's write against its day, or against `enterprise`'s when the write's
+ * path names an enterprise the signer keeps (enterpriseActingFor). False (and 429 set) when that day already holds its
+ * budget: `day_budget` for a member's WRITER_LIMITS.signedWritesPerDay, `enterprise_day_budget` for an enterprise's
+ * WRITER_LIMITS.enterpriseSignedWritesPerDay. A refused write isn't counted. Reads, the read marks
+ * (DAY_BUDGET_READ_MARKS), unsigned requests and the admin surface pass untouched.
  */
-export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now()): boolean {
+export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now(), enterprise: string | null = null): boolean {
     const actor = ctx.state.actor as string | undefined;
     if (!actor || !WRITE_METHODS.has(ctx.method) || ctx.path.startsWith('/api/local/admin/')) return true;
     if (ctx.method === 'POST' && DAY_BUDGET_READ_MARKS.has(ctx.path)) return true;
+    const key = enterprise ? `${ENTERPRISE_KEY}${enterprise}` : actor;
     const hour = Math.floor(now / HOUR_MS);
-    let entry = dayCounts.get(actor);
+    let entry = dayCounts.get(key);
     if (entry) dropPastHours(entry, hour);
-    const limit = WRITER_LIMITS.signedWritesPerDay;
+    const limit = budgetOf(key);
     if (entry && entry.total >= limit) {
         // The oldest hour counted leaves the day at its end, 24 hours on, and gives back at least one write.
         const resetsAtMs = (entry.hours[0] + DAY_HOURS) * HOUR_MS;
         ctx.status = 429;
         ctx.set('Retry-After', String(Math.max(1, Math.ceil((resetsAtMs - now) / 1000))));
-        ctx.body = {
-            error: `You have made ${limit.toLocaleString('en')} changes today (posts, messages, edits and the like), the most one account can make in 24 hours. You can carry on ${inAbout(resetsAtMs, now)}.`,
-            code: 'day_budget',
-            resetsAt: new Date(resetsAtMs).toISOString(),
-        };
-        logTrip(`day:${actor}`, now);
+        ctx.body = enterprise
+            ? {
+                error: `This enterprise has made ${limit.toLocaleString('en')} changes today (posts, deals, payments and the like), the most one enterprise can make in 24 hours. Its keepers can carry on ${inAbout(resetsAtMs, now)}.`,
+                code: 'enterprise_day_budget',
+                resetsAt: new Date(resetsAtMs).toISOString(),
+            }
+            : {
+                error: `You have made ${limit.toLocaleString('en')} changes today (posts, messages, edits and the like), the most one account can make in 24 hours. You can carry on ${inAbout(resetsAtMs, now)}.`,
+                code: 'day_budget',
+                resetsAt: new Date(resetsAtMs).toISOString(),
+            };
+        logTrip(enterprise ? `dayent:${enterprise}` : `day:${actor}`, now);
         return false;
     }
     if (!entry) {
         if (dayCounts.size >= DAY_BUDGET_MAX_KEYS) shrinkDayCounts(hour);
         entry = { hours: [], counts: [], total: 0 };
-        dayCounts.set(actor, entry);
+        dayCounts.set(key, entry);
     }
     const last = entry.hours.length - 1;
     if (last >= 0 && entry.hours[last] === hour) entry.counts[last]++;
@@ -183,12 +206,15 @@ export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now()): boole
     return true;
 }
 
-/** Make room below DAY_BUDGET_MAX_KEYS: keys with nothing in the day first, then the smallest counts, down to 90%. */
+/**
+ * Make room below DAY_BUDGET_MAX_KEYS: keys with nothing in the day first, then those that have used the least of their
+ * own budget (a member's 5,000 or an enterprise's 50,000), down to 90%.
+ */
 function shrinkDayCounts(hour: number): void {
     pruneDayCounts(hour);
     const target = Math.floor(DAY_BUDGET_MAX_KEYS * 0.9);
     if (dayCounts.size <= target) return;
-    const smallest = [...dayCounts].sort((a, b) => a[1].total - b[1].total);
+    const smallest = [...dayCounts].sort((a, b) => a[1].total / budgetOf(a[0]) - b[1].total / budgetOf(b[0]));
     for (let i = 0; i < smallest.length && dayCounts.size > target; i++) dayCounts.delete(smallest[i][0]);
 }
 

@@ -38,6 +38,8 @@ import {
 import { SettlementError } from '../federation-settlement-exchange.js';
 import { getFederationLink } from '../federation-link.js';
 import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfCachedPost } from '../federation-commission.js';
+import { settlementStartedBy } from '../engine/money-limits.js';
+import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
 
 /** This node's own public address, or null. Same helper as the purchase route, same reasoning. */
@@ -250,6 +252,12 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         // 10. FUND IT. The first ledger movement in the whole flow, hence last. Re-checks the allowance,
         //     spends the enterprise's own balance before the pot, and refuses without moving anything if
         //     either is short.
+        // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
+        // against the enterprise (never the keeper) from the settlement row settleCrossNodePurchase writes as it escrows
+        // the Beans. Checked before the Commons tops the link up, with nothing awaited between here and that row. A retry
+        // of a commission already started is no new payment.
+        if (!settlementStartedBy(key, link.treasuryPubkey)
+            && refuseOverMoneyLimits(ctx, link.treasuryPubkey, [{ kind: 'payment', recipient: seller }])) return;
         const funding = fundCommission(peerId, amount);
         if (!funding.ok) {
             ctx.status = funding.reason === 'no_link' ? 404 : 409;

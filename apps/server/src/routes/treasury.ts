@@ -38,9 +38,21 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
-import { assertMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
+import { assertEnterpriseMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
+
+/**
+ * Which pledge `POST /api/(treasury|enterprise)/:treasury/pledge` makes: a keeper's backing, or a crowdfund pledge of
+ * Beans. The route dispatches on it, and the money limits count by it (routes/money-limits-gate.ts: a crowdfund pledge is
+ * a payment too).
+ */
+export function pledgeDispatchKind(treasury: string, body: { type?: unknown; memo?: unknown } | null | undefined): 'backing' | 'crowdfund' {
+    if (body?.type === 'backing') return 'backing';
+    if (body?.memo !== undefined) return 'crowdfund';
+    const ent = db.prepare('SELECT goal_amount FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as { goal_amount: number | null } | undefined;
+    return ent && ent.goal_amount != null ? 'crowdfund' : 'backing';
+}
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -739,9 +751,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            // The keeper's own 100 new posts a day count what they put up for the enterprise too (W-main), checked by the
-            // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertMayPostToday(actor) });
+            // What a keeper puts up for the enterprise counts against the enterprise's own 1,000 new posts a day, never the
+            // keeper's 100 (W-main), checked by the engine once every refusal of the post itself has passed (a wound-up
+            // enterprise, say).
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -761,7 +774,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertMayPostToday(actor) });
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -792,7 +805,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createEventFromBody(b, treasury, actor, () => assertMayPostToday(actor));
+            const post = createEventFromBody(b, treasury, actor, () => assertEnterpriseMayPostToday(treasury));
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -1201,18 +1214,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Unified pledge handler: dispatches to crowdfund pledge or keeper backing pledge
     const pledgeDispatchHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const body = (ctx as any).requestBody || {};
-        if (body.type === 'backing') {
-            return backingPledgeHandler(ctx);
-        }
-        if (body.memo !== undefined) {
-            return crowdfundPledgeHandler(ctx);
-        }
-        const ent = db.prepare('SELECT goal_amount, lifecycle FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
-        if (ent && ent.goal_amount != null) {
-            return crowdfundPledgeHandler(ctx);
-        }
-        return backingPledgeHandler(ctx);
+        return pledgeDispatchKind(treasury, (ctx as any).requestBody || {}) === 'crowdfund'
+            ? crowdfundPledgeHandler(ctx)
+            : backingPledgeHandler(ctx);
     };
 
     router.post('/api/treasury/:treasury/pledge', pledgeDispatchHandler);

@@ -430,6 +430,7 @@ export const TABLES: Record<string, TableEntry> = {
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
+    money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
 };

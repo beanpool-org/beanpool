@@ -117,6 +117,7 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
+import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
@@ -1454,11 +1455,14 @@ export async function startHttpsServer(port: number): Promise<number> {
     app.use(requireSignature);
 
     // The gateway limiter's member bucket: charged only once the signature above has been verified. Then the key's
-    // day budget for writes (W-main), whether or not the minute throttle is on.
+    // day budget for writes (W-main), whether or not the minute throttle is on: an enterprise's own, when the write's path
+    // names one the signer keeps (routes/money-limits-gate.ts enterpriseActingFor), and the signer's otherwise.
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
         if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
-        if (!gatewayAdmitDayBudget(ctx)) return;
+        const enterprise = ctx.state.actor && ctx.method !== 'GET' && ctx.method !== 'HEAD' && ctx.method !== 'OPTIONS'
+            ? enterpriseActingFor(ctx.state.actor as string, ctx.path) : null;
+        if (!gatewayAdmitDayBudget(ctx, Date.now(), enterprise)) return;
         await next();
     });
 
@@ -1468,6 +1472,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // On a standby, a write that moves Beans or steps a trade answers 409 standby before any handler runs
     // (routes/standby-ledger-gate.ts): its ledger is its main server's.
     app.use(standbyLedgerGate);
+    // The money limits (W-money, engine/money-limits.ts): a payment, a marketplace request or a pledge change past its
+    // account's day answers 429 before any handler runs, and one the handler refuses gives its count back.
+    app.use(moneyLimitsGate);
 
     // Trust endpoint — only for self-signed mode
     if (!isUsingLetsEncrypt()) {

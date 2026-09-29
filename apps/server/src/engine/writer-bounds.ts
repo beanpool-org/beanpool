@@ -15,7 +15,8 @@
  * (429, or 413 for a DM line too long), a stable `code`, plain words, and `resetsAt` with `Retry-After` when waiting
  * lets it up.
  *
- * The money routes are not limited here (design §7: W-money is its own PR); the gateway's day budget bounds them.
+ * An enterprise's posts count against the enterprise at its own, higher number (WRITER_LIMITS.enterprisePostsPerDay),
+ * never against the keeper who puts them up. The money routes have their own limits (engine/money-limits.ts).
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
@@ -32,6 +33,7 @@ export type WriterLimitCode =
     | 'enterprises_per_day'
     | 'enterprises_live'
     | 'posts_per_day'
+    | 'enterprise_posts_per_day'
     | 'groups_per_day'
     | 'invites_per_day'
     | 'invites_unused'
@@ -77,21 +79,28 @@ const since = (now: number) => iso(now - DAY_MS);
 
 // ── Posts ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Posts of any kind this member put up in the day: their own, and those they put up for an enterprise they keep. */
-function postTimes(member: string, now: number): string[] {
-    return [
-        ...column(db.prepare(`SELECT created_at AS t FROM posts WHERE author_pubkey = ? AND origin_node IS NULL AND created_at > ?`)
-            .all(member, since(now))),
-        ...column(db.prepare(`SELECT created_at AS t FROM posts WHERE created_by = ? AND author_pubkey != ? AND origin_node IS NULL AND created_at > ?`)
-            .all(member, member, since(now))),
-    ];
+/**
+ * Posts of any kind put up in the day as `author`: a member's own, or an enterprise's, whichever keepers put them up.
+ * What a keeper puts up for an enterprise is the enterprise's (its author), and never counts against the keeper.
+ */
+function postTimes(author: string, now: number): string[] {
+    return column(db.prepare(`SELECT created_at AS t FROM posts WHERE author_pubkey = ? AND origin_node IS NULL AND created_at > ?`)
+        .all(author, since(now)));
 }
 
-/** Before a new post by `member`, for themselves or an enterprise they keep. */
+/** Before a new post by `member` for themselves. */
 export function assertMayPostToday(member: string, now = Date.now()): void {
     const limit = WRITER_LIMITS.postsPerDay;
     assertUnderDaily(postTimes(member, now), limit, now, 'posts_per_day',
         (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.`);
+}
+
+/** Before a new post a keeper puts up for `enterprise` (an offer, a need or an event): the enterprise's own day. */
+export function assertEnterpriseMayPostToday(enterprise: string, now = Date.now()): void {
+    const limit = WRITER_LIMITS.enterprisePostsPerDay;
+    const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(enterprise) as { callsign: string | null } | undefined)?.callsign?.trim() || 'This enterprise';
+    assertUnderDaily(postTimes(enterprise, now), limit, now, 'enterprise_posts_per_day',
+        (when) => `${name} can put up ${limit.toLocaleString('en')} new posts in any 24 hours. It can post again ${when}.`);
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────────────────────────────────────────

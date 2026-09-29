@@ -176,6 +176,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL;
+-- Has this account ever paid that one (engine/money-limits.ts, before each payment to someone): one seek, where either
+-- single-column index above would scan all of a busy account's rows.
+CREATE INDEX IF NOT EXISTS idx_transactions_from_to ON transactions(from_pubkey, to_pubkey);
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -552,6 +555,23 @@ CREATE TABLE IF NOT EXISTS writes_by_address (
 );
 CREATE INDEX IF NOT EXISTS idx_writes_by_address_kind ON writes_by_address(kind, ip_hash);
 CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(made_at);
+
+-- 11d. The money limits' day (engine/money-limits.ts; the numbers are config/writer-limits.ts MONEY_LIMITS): one row per
+-- payment, marketplace request or pledge change an account made, for the account whose Beans or deal it was (a member's
+-- own key, or the enterprise a keeper acted for), written in the same step as the check so a restart keeps the day's
+-- counts. `recipient` is who a payment goes to when that is someone (a member, a visitor or an enterprise; NULL for the
+-- Commons or a crowdfund's escrow); `new_recipient` is 1 when this account had never completed a payment to them before.
+-- A purchase from another community is counted from its own settlements row instead. This server's own, never copied,
+-- and deleted once a day old.
+CREATE TABLE IF NOT EXISTS money_acts (
+    account TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('payment', 'request', 'pledge')),
+    recipient TEXT,
+    new_recipient INTEGER NOT NULL DEFAULT 0,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_acts_account ON money_acts(account, kind, made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_made_at ON money_acts(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

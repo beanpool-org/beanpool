@@ -526,8 +526,6 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         // A muted member (G3) starts nothing other members read, and an enterprise's name and purpose are its page.
         if (respondIfMuted(ctx, actor)) return;
-        // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main).
-        try { assertMayStartEnterprise(actor); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
@@ -553,6 +551,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
         const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
         const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
+        // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main). After the checks
+        // on what was sent, so a bad name or photo is still told as such, and right before anything is written.
+        try { assertMayStartEnterprise(actor); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
 
         try {
             const res = createTreasury(

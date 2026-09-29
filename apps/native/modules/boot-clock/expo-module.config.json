@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["BootClockModule"]
+  },
+  "android": {
+    "modules": ["org.beanpool.bootclock.BootClockModule"]
+  }
+}

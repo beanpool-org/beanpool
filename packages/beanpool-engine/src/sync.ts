@@ -575,7 +575,7 @@ export interface SyncPayload {
      * The importer only upserts what it is given, so an omitted row is normally harmless — the replica keeps
      * its own copy. A FORCE-RESYNC is the exception: it clears `post_photos` before importing, so without
      * this list the one case the omission exists for (the replica holds the only readable copy) is the case
-     * the resync destroys. `clearReplicatedTables` keeps exactly these rows.
+     * the resync destroys. The resync's clear (apps/server engine/sync.ts `clearReplicatedRows`) keeps exactly these rows.
      */
     photosOmitted?: string[];
     /**
@@ -626,6 +626,14 @@ export interface SyncPayload {
     signature?: string;
     publicKey?: string;
 }
+
+/**
+ * The tables getStateHash reads, by name. A standby whose copies leave one of them out (more rows than one copy carries,
+ * apps/server engine/sync.ts) can't read the hash as drift: it differs until a whole copy carries that table again.
+ */
+export const STATE_HASH_TABLES: readonly string[] = [
+    'members', 'posts', 'creator_channels', 'pulse_items', 'event_rsvps', 'groups', 'group_members',
+];
 
 export function getStateHash(db: Db): string {
     const pKeys = db.prepare("SELECT public_key FROM members ORDER BY public_key").all() as any[];

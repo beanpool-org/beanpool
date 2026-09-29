@@ -30,6 +30,21 @@ export function rowTiebreak(conn: Database.Database, table: string, order: reado
 }
 
 /**
+ * About how many bytes a row read from SQLite holds: its text and blobs by their length, anything else a few bytes. A slice
+ * is read a row at a time until these add up to its budget, so a slice of wide rows (a member with a photo inline) holds
+ * about the budget in memory, not a fixed number of rows of any width.
+ */
+export function rowBytes(row: Record<string, unknown> | readonly unknown[]): number {
+    let n = 0;
+    for (const v of Array.isArray(row) ? row : Object.values(row)) {
+        if (typeof v === 'string') n += v.length;
+        else if (Buffer.isBuffer(v)) n += v.length;
+        else n += 8;
+    }
+    return n;
+}
+
+/**
  * The rows after `last` in the order `order`, ascending, as SQLite sorts: NULL before any value. `last` holds the order's
  * columns' values in the last row read. With no NULL among them it is a row-value comparison, which an index on the order
  * serves; with one, the comparison is spelt out column by column, since a row value with a NULL compares as NULL.

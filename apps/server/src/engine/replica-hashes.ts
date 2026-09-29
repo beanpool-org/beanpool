@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { TABLES, BOOT_STAMPED, travellingRows } from './replication-manifest.js';
-import { afterRow, rowTiebreak, sqlColumn } from './keyset.js';
+import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
 
 export interface TableHash {
     rows: number;
@@ -150,12 +150,15 @@ export function tableContentHashes(opts: HashOptions = {}, conn: Database.Databa
  * table's rowid last so the order is total: rows equal in every column ordered on are equal in every column hashed, or
  * their key, which is among those, tells them apart), awaiting `pause()` between slices: a copy served in pages makes them
  * on its snapshot while it serves pages (engine/copy-pages.ts), so no single step holds the event loop for a whole table.
- * `except`: tables left for later. Throws what a read throws, and stops when `stopped()` says so.
+ * A slice ends at `sliceRows` rows or once its rows add up to `sliceBytes` (keyset.ts rowBytes), whichever first, and never
+ * before its first row: rows are read one at a time and hashed as they are read, so a slice of wide rows holds one row in
+ * memory and the event loop for about `sliceBytes` of hashing. `except`: tables left for later. Throws what a read
+ * throws, and stops when `stopped()` says so.
  */
 export async function tableContentHashesInSlices(
     conn: Database.Database,
     opts: HashOptions & { except?: readonly string[] },
-    pace: { sliceRows: number; pause: () => Promise<void>; stopped: () => boolean },
+    pace: { sliceRows: number; sliceBytes: number; pause: () => Promise<void>; stopped: () => boolean },
 ): Promise<TableHashes> {
     const tables: Record<string, TableHash> = {};
     for (const { table, columns, order, where } of hashedTables(conn)) {
@@ -168,11 +171,18 @@ export async function tableContentHashesInSlices(
             if (pace.stopped()) throw new Error('stopped');
             const after = last ? afterRow(walk, last) : null;
             const conditions = [where ? `(${where})` : null, after?.sql ?? null].filter((c): c is string => c !== null);
-            const rows = conn.prepare(`SELECT ${hasher.select}, ${extra} FROM ${q(table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
-                + ` ORDER BY ${walk.map((c) => sqlColumn(c)).join(', ')} LIMIT ?`).raw().all(...(after?.params ?? []), pace.sliceRows) as unknown[][];
-            for (const row of rows) hasher.add(row.slice(0, columns.length));
-            if (rows.length < pace.sliceRows) break;
-            last = rows[rows.length - 1].slice(columns.length);
+            const read = conn.prepare(`SELECT ${hasher.select}, ${extra} FROM ${q(table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
+                + ` ORDER BY ${walk.map((c) => sqlColumn(c)).join(', ')} LIMIT ?`).raw().iterate(...(after?.params ?? []), pace.sliceRows) as Iterable<unknown[]>;
+            let [rows, bytes, cut] = [0, 0, false];
+            for (const row of read) {
+                last = row.slice(columns.length);
+                hasher.add(row.slice(0, columns.length));
+                rows++;
+                bytes += rowBytes(row);
+                // Leaving the loop closes the statement, before the pause lets anything else read on this connection.
+                if (rows >= pace.sliceRows || bytes >= pace.sliceBytes) { cut = true; break; }
+            }
+            if (!cut) break;
             await pace.pause();
         }
         tables[table] = hasher.done();

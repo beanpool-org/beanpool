@@ -48,7 +48,7 @@ import { EXPORT_CATEGORIES, exportTreasuryOperators, getStateHash, plainTableRea
 import { PLAIN_TABLES, TABLES } from './replication-manifest.js';
 import { payloadRecords, restorePhotoRows, warnPhotosOmitted } from './sync.js';
 import { tableContentHashesInSlices, type TableHashes } from './replica-hashes.js';
-import { afterRow, rowTiebreak, sqlColumn } from './keyset.js';
+import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
 import { noteCopyClosed, noteCopyOpen } from './open-copies.js';
 
 /** A page ends at this many bytes of its rows' JSON (SYNC_PAGE_BYTES), or at SYNC_PAGE_ROWS rows, whichever first. */
@@ -58,11 +58,18 @@ export const SYNC_PAGE_ROWS = 25_000;
 export const COPY_IDLE_MS = 2 * 60_000;
 /** Any copy closes this long after it opened (SYNC_COPY_MAX_MS). */
 export const COPY_MAX_MS = 60 * 60_000;
-/** Rows read from the snapshot at once; between slices the event loop is let go. */
+/**
+ * Rows read from the snapshot at once, at most; a slice also ends once its rows add up to what is left of the page's bytes
+ * (keyset.ts rowBytes), so a slice of wide rows (members with a photo inline) holds about a page, never 1,000 of them.
+ * Between slices the event loop is let go.
+ */
 const SLICE_ROWS = 1000;
 /** Photo rows read at once: each one's bytes come back from the image store, so a slice is at most a few past a full page. */
 const PHOTO_SLICE_ROWS = 16;
-/** Rows hashed at once for the closing page's table hashes. */
+/**
+ * Rows hashed at once for the closing page's table hashes, at most; a hash slice also ends at the page's bytes (the copy's
+ * pageBytes, SYNC_PAGE_BYTES), and holds one row at a time (replica-hashes.ts tableContentHashesInSlices).
+ */
 const HASH_SLICE_ROWS = 5000;
 
 /** The key a signature is made with, as signSyncBody answers: null when this server has none yet. */
@@ -213,19 +220,34 @@ function stepsOf(conn: Database.Database, since: string | null): Step[] {
     return steps;
 }
 
-/** Up to `limit` rows of `step` after `after`, `SELECT *`, and each one's keyset values. */
-function readSlice(conn: Database.Database, step: Step, after: unknown[] | null, limit: number): { rows: any[]; keys: unknown[][] } {
+/**
+ * Up to `limit` rows of `step` after `after`, `SELECT *`, and each one's keyset values: read a row at a time, and ended
+ * early once the rows read add up to `maxBytes` (keyset.ts rowBytes), never before the first row, so one row bigger than
+ * that is a slice of its own. `ended`: the table has no rows after these (the read ran out, not cut short by a bound).
+ */
+function readSlice(
+    conn: Database.Database, step: Step, after: unknown[] | null, limit: number, maxBytes = Infinity,
+): { rows: any[]; keys: unknown[][]; ended: boolean } {
     const past = after ? afterRow(step.order, after) : null;
     const conditions = [step.where, past?.sql ?? null].filter((c): c is string => c !== null);
     const keyed = step.order.map((c, i) => `${sqlColumn(c)} AS "__copy_key_${i}"`).join(', ');
-    const rows = conn.prepare(`SELECT *, ${keyed} FROM ${quote(step.table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
-        + ` ORDER BY ${step.order.map(sqlColumn).join(', ')} LIMIT ?`).all(...step.params, ...(past?.params ?? []), limit) as any[];
+    const read = conn.prepare(`SELECT *, ${keyed} FROM ${quote(step.table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
+        + ` ORDER BY ${step.order.map(sqlColumn).join(', ')} LIMIT ?`).iterate(...step.params, ...(past?.params ?? []), limit) as Iterable<any>;
+    const rows: any[] = [];
+    let bytes = 0;
+    let ended = true;
+    for (const row of read) {
+        rows.push(row);
+        bytes += rowBytes(row);
+        // Leaving the loop closes the statement: nothing else reads on this connection until it has.
+        if (rows.length >= limit || bytes >= maxBytes) { ended = false; break; }
+    }
     const keys = rows.map((row) => step.order.map((_c, i) => {
         const v = row[`__copy_key_${i}`];
         delete row[`__copy_key_${i}`];
         return v;
     }));
-    return { rows, keys };
+    return { rows, keys, ended };
 }
 
 /** Whether any row of this copy is left to send; moves past the tables that have none. */
@@ -264,7 +286,7 @@ async function buildPage(copy: Copy, n: number): Promise<{ page: string; last: b
     while (!full && copy.at < copy.steps.length && rows < copy.pageRows && bytes < copy.pageBytes) {
         const step = copy.steps[copy.at];
         const limit = Math.min(copy.pageRows - rows, step.photos ? PHOTO_SLICE_ROWS : SLICE_ROWS);
-        const slice = readSlice(copy.conn, step, copy.after, limit);
+        const slice = readSlice(copy.conn, step, copy.after, limit, copy.pageBytes - bytes);
         const shaped: ({ row: unknown } | { omitted: string })[] = step.photos
             ? await restorePhotoRows(slice.rows)
             : step.shape(copy.conn, slice.rows).map((row) => ({ row }));
@@ -292,7 +314,7 @@ async function buildPage(copy: Copy, n: number): Promise<{ page: string; last: b
             copy.sent.set(step.key, (copy.sent.get(step.key) ?? 0) + 1);
             copy.after = slice.keys[i];
         }
-        if (!full && slice.rows.length < limit) {
+        if (!full && slice.ended) {
             copy.at++;
             copy.after = null;
         }
@@ -349,7 +371,7 @@ async function closingHashes(copy: Copy): Promise<TableHashes> {
 }
 
 function pace(copy: Copy) {
-    return { sliceRows: HASH_SLICE_ROWS, pause: letLoopGo, stopped: () => copy.closed };
+    return { sliceRows: HASH_SLICE_ROWS, sliceBytes: copy.pageBytes, pause: letLoopGo, stopped: () => copy.closed };
 }
 
 /** Close the copy's snapshot. Its last page stays for a retry while the copy is current. */

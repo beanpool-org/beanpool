@@ -41,12 +41,22 @@ let seq = 0;
 /**
  * Start a node process on `dataDir`. Resolves when it prints `ready`, or rejects with its output when it exits
  * first (a crash injected at a boot-time step exits before ready).
+ *
+ * `maxFileBytes`: no file the process writes may grow past it (RLIMIT_FSIZE, set by bash's `ulimit -f`, in 1024-byte
+ * blocks, before the node starts), as a disk that is full or failing stops it. Node ignores SIGXFSZ, so such a write fails
+ * (EFBIG, which SQLite reports as SQLITE_IOERR) and the process carries on.
  */
-export function spawnNode(script: string, dataDir: string, env: Record<string, string | undefined>): Promise<NodeProc> {
-    const proc = spawn(process.execPath, [...process.execArgv, script, '--child'], {
+export function spawnNode(
+    script: string, dataDir: string, env: Record<string, string | undefined>, opts: { maxFileBytes?: number } = {},
+): Promise<NodeProc> {
+    const argv = [...process.execArgv, script, '--child'];
+    const options = {
         env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env } as NodeJS.ProcessEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-    });
+        stdio: ['pipe', 'pipe', 'pipe'] as ('pipe')[],
+    };
+    const proc = opts.maxFileBytes
+        ? spawn('/bin/bash', ['-c', `ulimit -f ${Math.ceil(opts.maxFileBytes / 1024)} && exec "$0" "$@"`, process.execPath, ...argv], options)
+        : spawn(process.execPath, argv, options);
     let out = '';
     const waiting = new Map<number, (v: any) => void>();
     let readyResolve: (v: any) => void;

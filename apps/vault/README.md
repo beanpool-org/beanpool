@@ -119,7 +119,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   old one to finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release
   newer than the one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this
   too, whatever the API asks: it takes only a release newer than the one whose bundle is in service (and than any it
-  switched to), for the same image.
+  switched to), for the same image. An API that keeps exiting after a switch (three times in ten minutes) gives way to
+  the one in service before the switch, or the image's own if that one keeps exiting too. That step back is the
+  launcher's, not a release chosen: the release it fell back from may be taken again after a back-off (an hour,
+  doubling each time it fails again, never past the next monthly restart), and nothing else at or below the newest
+  release it switched to.
 - **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one
   booted, the API downloads that image from the release that brought it (the first to name it: an API-only release
   after it carries no image files, and the image's files are named for the version it was built as) into its inbox

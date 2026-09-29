@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { SwitchRequest } from '../api/updater.js';
 import { compareVersions, resolveChain, sha256Hex } from '../shared/release.js';
+import { nextMonthlyRestart } from '../shared/schedule.js';
 
 /**
  * vault-launcher (key vault design §3, "starts the new API beside itself and hands over traffic"): the process systemd
@@ -11,15 +12,20 @@ import { compareVersions, resolveChain, sha256Hex } from '../shared/release.js';
  *   1. the request's release must be in the chain from the launcher's own pinned keys, and the bundle file's SHA-256
  *      the one that release names (the API checked both; this checks again, from its own copy of the keys). Never
  *      backwards: it must be newer than the release of the API in service (the newest in that chain whose bundle is
- *      that API's file) and than any release this launcher has switched to, and for the same image;
+ *      that API's file) and than any release this launcher has switched to (bar one it fell back from, below), and
+ *      for the same image;
  *   2. the bundle's self-test (`--self-test`) must pass, and report the same pinned keys and its own hash;
  *   3. the new API starts beside the old one and, once it listens, points the API socket at itself: new connections
  *      go to it from that moment;
  *   4. the old one is told to drain: it stops taking connections, finishes what it has, and exits.
  *
  * The keyholder is another service: it stays unlocked throughout. Any failure before step 3 leaves the old API
- * serving, and it tries again at its next hourly check. An API that dies is started again (after a pause that grows);
- * one that keeps dying soon after a switch gives way to the image's own bundle.
+ * serving, and it tries again at its next hourly check. An API that dies is started again (after a pause that grows).
+ * One that keeps dying (three times in ten minutes) after a switch gives way to the API that was in service before
+ * that switch, and if that one keeps dying too (or there was none), to the image's own bundle. That step back is the
+ * launcher's own, not a release chosen: the release it fell back from may be switched to again after a back-off (an
+ * hour, doubling each time it fails again, never past the next monthly restart, which starts the launcher afresh),
+ * and nothing else at or below the newest release it has switched to is ever taken.
  *
  * Messages over the child's IPC channel: `{type: 'ready'}` and `{type: 'switch', id, request}` from a child;
  * `{type: 'switch-result', id, ok, reason?}` and `{type: 'drain'}` to it.
@@ -37,9 +43,18 @@ export interface LauncherOptions {
     readyTimeoutMs?: number;
     selfTestTimeoutMs?: number;
     drainTimeoutMs?: number;
+    /** The first pause before an API that died is started again (it doubles, to a minute). */
+    restartDelayMs?: number;
+    /** The first back-off before a release fallen back from is taken again (it doubles). */
+    retryBackoffMs?: number;
     log?: (line: string) => void;
     env?: NodeJS.ProcessEnv;
+    clock?: () => number;
 }
+
+/** A release the launcher fell back from is taken again after an hour at first; the back-off doubles to this. */
+export const RETRY_BACKOFF_MS = 60 * 60 * 1000;
+const RETRY_BACKOFF_MAX_MS = 35 * 24 * 60 * 60 * 1000;
 
 type ChildMessage = { type: 'ready' } | { type: 'switch'; id: number; request: SwitchRequest };
 
@@ -47,6 +62,8 @@ interface Running {
     child: ChildProcess;
     bundle: string;
     startedAt: number;
+    /** For an API switched to: the release it is, and the bundle in service before the switch (the fallback). */
+    switched: { version: string; before: string } | null;
 }
 
 export interface SelfTestReport {
@@ -72,14 +89,19 @@ export class Launcher {
     private current: Running | null = null;
     private switching = false;
     private stopping = false;
-    private restartDelayMs = 1000;
+    private restartDelayMs: number;
     private recentFailures: number[] = [];
-    /** The newest release this launcher has switched to: nothing at or below it is taken again. */
+    /** The newest release this launcher has switched to: nothing at or below it is taken again (but see `retry`). */
     private floor: string | null = null;
+    /** The release this launcher fell back from (always `floor`): switched to again once `notBefore` has passed. */
+    private retry: { version: string; notBefore: number; backoffMs: number } | null = null;
     private readonly log: (line: string) => void;
+    private readonly now: () => number;
 
     constructor(private readonly opts: LauncherOptions) {
         this.log = opts.log ?? (line => console.log(`vault-launcher: ${line}`));
+        this.now = opts.clock ?? (() => Date.now());
+        this.restartDelayMs = opts.restartDelayMs ?? 1000;
     }
 
     get currentPid(): number | null {
@@ -126,11 +148,11 @@ export class Launcher {
         });
     }
 
-    /** Starts `bundle` as the API in service; restarts it (or the image's) when it dies. */
-    private async run(bundle: string): Promise<void> {
+    /** Starts `bundle` as the API in service; restarts it (or falls back) when it dies. */
+    private async run(bundle: string, switched: Running['switched'] = null): Promise<void> {
         const child = this.spawnApi(bundle);
         this.log(`started the API (${bundle}) as pid ${child.pid}`);
-        this.current = { child, bundle, startedAt: Date.now() };
+        this.current = { child, bundle, startedAt: this.now(), switched };
         this.watch(this.current);
         await this.waitReady(child);
         this.log(`the API (pid ${child.pid}) is listening`);
@@ -140,17 +162,40 @@ export class Launcher {
         r.child.once('exit', (code, signal) => {
             if (this.stopping || this.current !== r) return;
             this.log(`the API (pid ${r.child.pid}) exited (${code ?? signal}); starting it again in ${this.restartDelayMs} ms`);
-            const now = Date.now();
+            const now = this.now();
             this.recentFailures = [...this.recentFailures.filter(t => t > now - 10 * 60_000), now];
-            const bundle = this.recentFailures.length >= 3 && r.bundle !== this.opts.imageBundle ? this.opts.imageBundle : r.bundle;
-            if (bundle !== r.bundle) this.log('it keeps failing: back to the image\'s own API');
+            let next: { bundle: string; switched: Running['switched'] } = { bundle: r.bundle, switched: r.switched };
+            if (this.recentFailures.length >= 3 && r.bundle !== this.opts.imageBundle) {
+                // The API in service before the switch to this one; a fallback that fails too (it has none) gives way to
+                // the image's own.
+                next = { bundle: r.switched?.before ?? this.opts.imageBundle, switched: null };
+                this.recentFailures = [];
+                const backTo = next.bundle === this.opts.imageBundle ? 'the image\'s own API' : `the API in service before it (${next.bundle})`;
+                if (r.switched) {
+                    const until = this.backOff(r.switched.version, now);
+                    this.log(`release ${r.switched.version} keeps failing: back to ${backTo}; it may be taken again from ${new Date(until).toISOString()}`);
+                } else {
+                    this.log(`it keeps failing: back to ${backTo}`);
+                }
+            }
             const delay = this.restartDelayMs;
             this.restartDelayMs = Math.min(this.restartDelayMs * 2, 60_000);
             setTimeout(() => {
                 if (this.stopping || this.current !== r) return;
-                this.run(bundle).then(() => { this.restartDelayMs = 1000; }, e => this.log(`the API did not start: ${(e as Error).message}`));
+                this.run(next.bundle, next.switched).then(() => { this.restartDelayMs = this.opts.restartDelayMs ?? 1000; }, e => this.log(`the API did not start: ${(e as Error).message}`));
             }, delay).unref();
         });
+    }
+
+    /**
+     * After falling back from `version` (the floor): when it may be switched to again. An hour the first time, twice the
+     * last back-off each time it fails again, and never past the next monthly restart (the launcher starts afresh then).
+     */
+    private backOff(version: string, now: number): number {
+        const first = this.opts.retryBackoffMs ?? RETRY_BACKOFF_MS;
+        const backoffMs = this.retry?.version === version ? Math.min(this.retry.backoffMs * 2, RETRY_BACKOFF_MAX_MS) : first;
+        this.retry = { version, backoffMs, notBefore: Math.min(now + backoffMs, nextMonthlyRestart(now)) };
+        return this.retry.notBefore;
     }
 
     /**
@@ -172,8 +217,14 @@ export class Launcher {
         const running = [...chain.releases].reverse().find(r => r.manifest.apiBundleHash === own);
         if (!running) return { ok: false, reason: 'the API in service is not a release in that chain' };
         const version = release.manifest.version;
-        for (const below of [running.manifest.version, this.floor]) {
-            if (below !== null && compareVersions(version, below) <= 0) return { ok: false, reason: `never backwards: ${version} is not newer than ${below}` };
+        if (compareVersions(version, running.manifest.version) <= 0) return { ok: false, reason: `never backwards: ${version} is not newer than ${running.manifest.version}` };
+        // At or below the newest release switched to: only that release, once this launcher fell back from it and the
+        // back-off has passed.
+        if (this.floor !== null && compareVersions(version, this.floor) <= 0) {
+            if (this.retry?.version !== version || version !== this.floor) return { ok: false, reason: `never backwards: ${version} is not newer than ${this.floor}` };
+            if (this.now() < this.retry.notBefore) {
+                return { ok: false, reason: `release ${version} kept failing after the switch: it may be taken again from ${new Date(this.retry.notBefore).toISOString()}` };
+            }
         }
         if (release.manifest.imageHash !== running.manifest.imageHash) return { ok: false, reason: `release ${version} is for another image: it waits for the monthly restart` };
         let bytes: Buffer;
@@ -236,8 +287,11 @@ export class Launcher {
                 this.log(`the new API did not take over: ${(e as Error).message}`);
                 return reply(false, `the new API did not start: ${(e as Error).message}`);
             }
-            this.current = { child: next, bundle: req.bundlePath, startedAt: Date.now() };
-            this.floor = resolveChain(req.chain, this.opts.rootKeys).releases.find(r => r.hash === sha256Hex(String(req.release.manifestText)))?.manifest.version ?? this.floor;
+            const version = resolveChain(req.chain, this.opts.rootKeys).releases.find(r => r.hash === sha256Hex(String(req.release.manifestText)))?.manifest.version as string;
+            this.current = { child: next, bundle: req.bundlePath, startedAt: this.now(), switched: { version, before: old.bundle } };
+            this.floor = version;
+            if (this.retry?.version !== version) this.retry = null;
+            this.recentFailures = [];
             this.watch(this.current);
             reply(true);
             this.log(`pid ${next.pid} is serving; pid ${old.child.pid} drains and exits`);

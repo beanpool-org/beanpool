@@ -746,6 +746,45 @@ describe('a pass given before a long absence but delivered after it: one prompt 
             expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool', 'Unlock BeanPool']);
         });
     });
+
+    // Review of #1311, 2026-09-29: a prompt's cover counts from when it opened, not from the leave. A prompt open across an
+    // earlier return that the return lock locked for used to cover up to PROMPT_COVER_MAX_MS of the next absence too, and
+    // the return lock's own takedown opened the app with the pass from over an hour ago.
+    const HELD_OPENERS = {
+        'the Unlock App button': (phone: Phone) => { phone.unlockApp(); },
+        "Settings' View Recovery Phrase": (phone: Phone) => { void phone.viewRecoveryPhrase(); },
+    };
+    describe.each(Object.keys(HELD_OPENERS) as Array<keyof typeof HELD_OPENERS>)('a pass held across a locked return, the prompt from %s', (opener) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            it.each([
+                [5, 'the lock screen stays, and nothing more is asked', false],
+                [20, 'the lock screen, and one prompt more', true],
+                [130, 'the lock screen, and one prompt more', true],
+                [140, 'the lock screen, and one prompt more', true],
+            ] as const)('away %s s the second time: %s', async (away2S, _outcome, askedAgain) => {
+                const phone = await phoneWithAppLock();
+                HELD_OPENERS[opener](phone);
+                await flush();
+                const before = phone.reasons();
+
+                phone.change(leave);                            // the phone's prompt: the pass is given, and held
+                phone.wait(3600 * SEC);
+                phone.change('active'); await flush();          // the first return, the prompt still open in JS
+                phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS); await flush();
+                expect(phone.locked()).toBe(true);              // it locks for that return
+                expect(phone.reasons()).toEqual(before);
+
+                phone.change(leave);
+                phone.wait(away2S * SEC);
+                phone.change('active'); await flush();
+                phone.answer(true); await flush();              // the pass from over an hour ago
+                await flush();
+
+                expect(phone.locked()).toBe(true);
+                expect(phone.reasons()).toEqual(askedAgain ? [...before, 'Unlock BeanPool'] : before);
+            });
+        });
+    });
 });
 
 describe("an 'active' with no leave seen while a prompt is open: the lock screen is up at once, before the answer", () => {
@@ -1453,7 +1492,7 @@ describe('returnLockAction: the rule', () => {
         ['a passed prompt covering 2 min 15 s less 1 ms away', 'none', 0, 135 * SEC - 1, [stretch(0, 135 * SEC - 1, true)]],
         ['a passed prompt covering 2 min 15 s away', 'ask', 0, 135 * SEC, [stretch(0, 135 * SEC, true)]],
         ['a passed prompt of 3 min, 10 s of it before the leave', 'ask', 10 * SEC, 180 * SEC, [stretch(0, 180 * SEC, true)]],
-        ['a passed prompt of 2 min 20 s, 10 s of it before the leave', 'none', 10 * SEC, 140 * SEC, [stretch(0, 140 * SEC, true)]],
+        ['a passed prompt of 2 min 20 s, 10 s of it before the leave', 'ask', 10 * SEC, 140 * SEC, [stretch(0, 140 * SEC, true)]],
         ['a prompt covering an hour away, not passed: the whole hour, locked, not asked', 'lock', 1, 3600 * SEC, [stretch(0, 3600 * SEC, false)]],
         ['a prompt still open after an hour away', 'lock', 1, 3600 * SEC, [stretch(0, null, true)]],
     ] as const)('%s: %s', (_name, action, left, active, stretches) => {

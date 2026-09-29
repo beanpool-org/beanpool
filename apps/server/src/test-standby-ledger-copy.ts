@@ -165,6 +165,19 @@ async function child(): Promise<void> {
                 held: cfg('replica_held_sum'),
             };
         },
+        /**
+         * Members who joined `days` ago. The trust engine flags a pair trading only with each other as an insular cluster
+         * while half of it joined under 14 days ago (engine trust.ts runWashTradingAnalysis), and a flagged member's earned
+         * credit is 0, so the send gate refuses them; that analysis is cached 10 s, so without this a send passed or not by
+         * how long the steps before it took (#1304 review 4128951523).
+         */
+        'backdate-members': async (a: { publicKeys: string[]; days: number }) => {
+            const { db } = await import('./db/db.js');
+            const at = new Date(Date.now() - a.days * 86_400_000).toISOString();
+            for (const pk of a.publicKeys) db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(at, pk);
+            return (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at = ? AND public_key IN (SELECT value FROM json_each(?))`)
+                .get(at, JSON.stringify(a.publicKeys)) as { c: number }).c;
+        },
         /** An old bug's drift, as a raw write, for the admin to accept as the audit baseline (the test node's -9.82 kind). */
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
@@ -800,6 +813,9 @@ async function main(): Promise<void> {
         const inv0 = built('M0: Gwen makes an invite for Yan', await Z_(gwen0, '/api/invite/generate', { publicKey: gwen0.pk }));
         built('M0: Yan joins with it', await api(z, 'POST', '/api/invite/redeem', { body: { code: inv0.invite?.code ?? inv0.code, publicKey: yan.pk, callsign: 'Yan' } }));
         built('M0: Yan sets a profile photo', await Z_(yan, '/api/profile/update', { avatar: TINY_PNG }));
+        // Gwen and Yan joined a month ago: their trades are with each other only, and a new pair's would be a flagged cluster
+        // with no earned credit, so each of Yan's sends (steps 11 and 17) would pass only on a wash analysis cached before it.
+        require_(await main0.send('backdate-members', { publicKeys: [gwen0.pk, yan.pk], days: 30 }) === 2, 'M0: Gwen and Yan joined a month ago');
         built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: PW_MAIN, body: { grant: true } }));
         const offer0 = async (who: Id, title: string, credits: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,

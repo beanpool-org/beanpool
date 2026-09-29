@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { db as defaultDb } from '../db/db.js';
+import { closeOpenCopies } from './open-copies.js';
 import {
     DiskImageStore, ImageStoreUnavailableError, deleteObjectUnless, getImageStore, imagesDir, scanOurObjectsAsync,
     type ImageStore, type ObjectInfo,
@@ -718,8 +719,15 @@ export async function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?
             }
         }
 
-        // Checkpoint WAL and truncate to immediately reclaim filesystem space
+        // Checkpoint WAL and truncate to immediately reclaim filesystem space. A copy being served to a standby holds a
+        // read on this database (engine/open-copies.ts) that the checkpoint would wait on for the whole busy timeout, with
+        // the event loop held, and then leave the WAL as it was: it is closed first, in the same step, as the recovery
+        // seal closes it, and the standby asks for a new copy.
         try {
+            if (db === defaultDb) {
+                const closed = closeOpenCopies('the operator cleaned storage (a truncating checkpoint)');
+                if (closed > 0) console.log(`[StorageHealth] Closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
+            }
             db.pragma('wal_checkpoint(TRUNCATE)');
             const autoVacuumMode = db.pragma('auto_vacuum', { simple: true });
             if (autoVacuumMode === 2) {

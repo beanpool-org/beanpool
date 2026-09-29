@@ -2,8 +2,11 @@
  * The copies this server is serving in pages (engine/copy-pages.ts) whose snapshot is open: each holds a read transaction
  * on a second connection to state.db, which keeps every page written since in the WAL until it closes. What needs the
  * database to itself closes them first: the recovery seal's VACUUM and its checkpoint (services/recovery-seal-key.ts),
- * which a reader holding the WAL makes fail, and a restore, which writes a new state.db over this one. A standby asking
- * for a page of a closed copy is told there is no such copy, and asks for a new one.
+ * which a reader holding the WAL makes fail; every other truncating checkpoint on this server's connection, which would
+ * wait on that reader for the whole busy timeout with the event loop held and then leave the WAL as it was (the operator's
+ * Clean storage, engine/storage-health.ts; the image evacuation's reclaim, services/image-evacuation.ts); and a restore,
+ * which writes a new state.db over this one. A standby asking for a page of a closed copy is told there is no such copy,
+ * and asks for a new one.
  *
  * Its own module, importing nothing, so the seal can reach it without importing the copy's code.
  */

@@ -750,6 +750,7 @@ const BACKUP_STATUS = {
 const TAKEOVER_MISSING = [
     'photos sent in chats',
     'Commons project proposals still waiting for a decision',
+    "price reports sent without signing in, or by someone who hadn't joined",
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
     'and, on top of everything above, whatever changed on the main server after this standby last copied it',
 ];

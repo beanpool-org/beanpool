@@ -665,6 +665,18 @@ const REGISTRAR_ALLOCATIONS = [
 ];
 
 /**
+ * Web app visits, 30 days ending 2026-09-29 (static, like everything here): a quiet start, a busy week, and a
+ * four-digit day so the card's big number and its table are measured at their widest.
+ */
+const WEB_VISITS = (() => {
+    const end = Date.UTC(2026, 8, 29);
+    return Array.from({ length: 30 }, (_, i) => {
+        const visits = i === 29 ? 1284 : i < 10 ? i : 20 + ((i * 37) % 90);
+        return { day: new Date(end - (29 - i) * 86400000).toISOString().slice(0, 10), visits, uniques: Math.ceil(visits * 0.4) };
+    });
+})();
+
+/**
  * The onboarding funnel, as the node's engine/funnel.ts actually writes it: (day, event, variant, count), with the
  * event names OnboardingModule looks for. The previous rows here used invented names (signup_started,
  * first_trade), which no step matched, so every screen built on this fixture drew an empty funnel and the phone
@@ -868,6 +880,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     }
     if (pathname === '/api/local/admin/logs') return ok({ logs: LOGS });
     if (pathname === '/api/local/admin/onboarding-funnel') return ok({ days: Number(searchParams.get('days')) || 30, rows: FUNNEL_ROWS });
+    if (pathname === '/api/local/admin/web-visits') return ok({ days: 30, retentionDays: 400, series: WEB_VISITS });
     if (pathname === '/api/local/admin/ledger-audit') return ok({ success: true, ok: true, drift: 0, sumBalances: 8492.75, baseline: 8492.75, strandedEscrows: 0 });
 
     // ---- gateway ----

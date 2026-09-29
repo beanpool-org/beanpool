@@ -177,8 +177,8 @@ export const TOMBSTONE_RETENTION_MS = TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 
 /**
  * Drops the tombstones older than TOMBSTONE_RETENTION_MS, whatever this server's role (connector-manager.ts, daily). No
  * floor from the pull cursors: only this server's own puller writes one (`backup:primary`), so a promoted server's last
- * pull kept every tombstone written after its take-over, for good, and a standby an older version's refused force-resync
- * left with cursor `''` kept every one. Returns how many went.
+ * pull kept every tombstone written after its take-over, for good, and a standby whose copies were refused for longer than
+ * this kept every one newer than its last copy that landed. Returns how many went.
  */
 export function pruneTombstones(now = Date.now()): number {
     return db.prepare('DELETE FROM tombstones WHERE deleted_at < ?').run(new Date(now - TOMBSTONE_RETENTION_MS).toISOString()).changes;

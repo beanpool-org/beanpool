@@ -9,12 +9,16 @@
  * ago, and a cursor that old stands for a standby switched off that long. The prune is the daily one
  * (connector-manager.ts). Nothing leaves this machine.
  *
- *  1. M: members, a DM, a listing, a recovery code. S's first copy lands, exact, with M's take-over keys.
- *  2. A standby whose cursor is `''` (an older version's refused force-resync left it so) prunes a 31-day-old tombstone and
- *     keeps a 29-day-old one. (Before: the prune kept everything newer than the oldest cursor, so nothing.)
+ *  1. M: members, a DM, a listing, a recovery code. S's first copy lands, exact, with M's take-over keys. S's routine
+ *     whole copies are off (Settings' cadence, as an operator sets it for a large community), so its next pull after a
+ *     restart is a delta, as between restarts.
+ *  2. A standby whose copies have been refused for 40 days (its cursor stays where the last copy that landed put it)
+ *     prunes a 35-day-old tombstone and keeps a 29-day-old one (before: the cursor floored the prune, and both stayed).
+ *     One whose cursor an older version's refused force-resync left `''` prunes too (it did before: `''` never floored it).
  *  3. S away 31 days: M deleted a DM line 31 days ago and has pruned its tombstone. S's next pull is a force-resync, not a
  *     delta, and lands exact: the line is gone from S, and the listing M made since is there. The pull after is a delta.
- *     (Before: a delta, which left the line on S for good.)
+ *     (Before: a delta, which left the line on S for good. With routine whole copies on, a restart's first pull was a
+ *     whole copy, which left the line too, and whose check asked for a force-resync only outside its six-hour limit.)
  *  4. The same, with the force-resync refused (members over the cap in whole copies only): a delta lands meanwhile and
  *     moves the cursor, and S restarts; the resync is still owed, asked for again, and lands exact once M holds fewer
  *     members. (A delta that lands never mends the deletes it missed.)
@@ -82,9 +86,11 @@ async function child(): Promise<void> {
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
-            const { updateLocalConfig } = await import('./config/local-config.js');
+            const { updateLocalConfig, updateBackupCadence } = await import('./config/local-config.js');
             addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
+            // Routine whole copies off, as Settings' cadence sets it: the pull after a restart is a delta.
+            updateBackupCadence({ reconcileMinutes: 0 });
             return true;
         },
         /** One pull of the kind the loop makes next, and the take-over keys after it, as the loop fetches them. */
@@ -310,14 +316,19 @@ async function main(): Promise<void> {
             db.prepare(`UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`).run(new Date(Date.now() - days * DAY_MS).toISOString());
         };
 
-        // ── 2. A standby left with cursor '' prunes ──
-        console.log('\n— 2. a standby whose cursor an older version\'s refused force-resync left empty still prunes —');
+        // ── 2. A standby whose copies were refused for 40 days prunes ──
+        console.log('\n— 2. a standby whose cursor is 40 days old (its copies refused since), or empty, still prunes —');
         const saved2 = s1.savedCursor;
-        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = '' WHERE peer_id = 'backup:primary'` });
-        await standby.send('plant', { tombstones: [{ key: 'retention-31d', daysAgo: 31 }, { key: 'retention-29d', daysAgo: 29 }] });
-        const left2 = await standby.send('prune', { keys: ['retention-31d', 'retention-29d'] });
+        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`, args: [new Date(Date.now() - 40 * DAY_MS).toISOString()] });
+        await standby.send('plant', { tombstones: [{ key: 'retention-35d', daysAgo: 35 }, { key: 'retention-29d', daysAgo: 29 }] });
+        const left2 = await standby.send('prune', { keys: ['retention-35d', 'retention-29d'] });
         assert(JSON.stringify(left2) === JSON.stringify(['retention-29d']),
-            `the 31-day-old tombstone is pruned and the 29-day-old one kept (left: ${JSON.stringify(left2)}; before: both kept, the empty cursor floored the prune)`);
+            `a 35-day-old tombstone is pruned and a 29-day-old one kept (left: ${JSON.stringify(left2)}; before: both kept, the 40-day-old cursor floored the prune)`);
+        await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = '' WHERE peer_id = 'backup:primary'` });
+        await standby.send('plant', { tombstones: [{ key: 'retention-31d', daysAgo: 31 }] });
+        const empty2 = await standby.send('prune', { keys: ['retention-31d', 'retention-29d'] });
+        assert(JSON.stringify(empty2) === JSON.stringify(['retention-29d']),
+            `with the cursor an older version's refused force-resync left empty, a 31-day-old tombstone is pruned too (left: ${JSON.stringify(empty2)})`);
         await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`, args: [saved2] });
         await standby.send('sql', { sql: `DELETE FROM tombstones WHERE row_key LIKE 'retention-%'` });
 

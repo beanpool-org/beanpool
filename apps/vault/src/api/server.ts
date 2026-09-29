@@ -94,6 +94,8 @@ interface KeyholderStatus {
     custodians: string[];
     /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
     pending: { purpose: string; generation: number; custodians: string[]; confirmed: string[] } | null;
+    /** The genesis or reshare that switched at this boot: who has shown they hold their new share (in memory only). */
+    switched: { generation: number; custodians: string[]; confirmed: string[] } | null;
     generation: number | null;
     platform: string;
     releaseHash: string;
@@ -259,7 +261,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             return { ...(await call<Omit<KeyholderStatus, 'reachable'>>('status')), reachable: true };
         } catch {
             return {
-                state: 'locked', since: startedAt, custodians: [], pending: null, generation: null, platform: 'none', releaseHash: 'unknown',
+                state: 'locked', since: startedAt, custodians: [], pending: null, switched: null, generation: null, platform: 'none', releaseHash: 'unknown',
                 restorePending: false, publicKeys: null, wrapVersion: null, memory: null, reachable: false,
             };
         }
@@ -760,6 +762,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
             backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow },
             pushes: { sent: push.sent, failed: push.failed },
+            // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
+            shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
         });
@@ -825,8 +829,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     route('POST', '/v1/unlock/confirm', 'custodian', true, async ctx => {
         const confirmation = ctx.body.confirmation as { custodian?: unknown } | undefined;
         if (!confirmation || confirmation.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A share is confirmed by the custodian it belongs to.');
-        const result = await call<{ state: string; switched: boolean }>('confirm', { confirmation });
-        if (result.switched && result.state === 'open') await unlocked();
+        const result = await call<{ state: string; switched: boolean; late?: boolean }>('confirm', { confirmation });
+        if (result.switched && !result.late && result.state === 'open') await unlocked();
         return json(200, result);
     });
 
@@ -861,6 +865,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             throw e;
         }
         renameSync(`${pendingPath}.part`, pendingPath);
+        // A database this API still has open (the keyholder came back fresh while it ran) is the one the backup replaces:
+        // the next open, after the unlock, runs the restore (ensureDb) rather than serving it.
+        await withWriteLock(async () => {
+            db?.close();
+            db = null;
+        });
         return json(200, { state: 'locked', vaultId: header.vaultId, generation: header.generation });
     });
 

@@ -330,6 +330,28 @@ describe('a restore from backup is finished before anything sees it', () => {
         await expectNoCopy(b, 'google', 'deleted-later');
     });
 
+    it('a keyholder that comes back fresh while the API keeps running: a custodian\'s restore runs, and the database the API had open is not served', async () => {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const kept = newMember();
+        await deposit(a, g, kept, 'google', 'in-the-backup');
+        const backup = await a.api.runBackup();
+        const late = newMember();
+        await deposit(a, g, late, 'apple', 'after-the-backup');
+        // The keyholder's state directory is lost and only the keyholder restarts: fresh, while the API has the database open.
+        rmSync(a.stateDir, { recursive: true, force: true });
+        await a.restartKeyholder();
+        expect(a.keyholder().status().state).toBe('fresh');
+
+        expect((await restoreFromBackup(a.baseUrl, a.custodians[1], backup, a.call())).body).toMatchObject({ state: 'locked' });
+        expect((await unlockWith(a, g.shares, [0, 1]))[1].body.state).toBe('open');
+        expect(a.keyholder().status().restorePending).toBe(false);
+        expect(readdirSync(a.dataDir)).not.toContain('restore-pending.bin');
+        expect((await get(a, '/v1/health')).body.state).toBe('open');
+        await expectNoCopy(a, 'apple', 'after-the-backup');
+        await expectCopy(a, 'google', 'in-the-backup', kept);
+    });
+
     it('never opens an empty database while the keyholder still names a backup', async () => {
         const { a, g, member, older } = await deletedAfterBackup();
         // The API died after the keyholder took the backup's state, before the file got its final name.

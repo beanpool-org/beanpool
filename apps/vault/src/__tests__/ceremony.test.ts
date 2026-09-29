@@ -206,6 +206,26 @@ describe('a genesis is in force only once two custodians hold their shares', () 
         expect((await signed(v, '/v1/ticket', { purpose: 'deposit', provider: 'google' }, newMember().seed)).status).toBe(200);
     });
 
+    it('the answer is lost: all three fetch their share, the third after the switch, and each confirms; the report counts them', async () => {
+        v = await startVault();
+        await begin(v); // thrown away: nobody saved the shares
+        const fetched: CustodianShare[] = [];
+        for (const i of [0, 1, 2]) {
+            const f = await fetchPendingShare(v.baseUrl, v.custodians[i], v.call());
+            expect({ i, status: f.call.status }).toEqual({ i, status: 200 });
+            expect(f.share).not.toBeNull();
+            fetched.push(f.share as CustodianShare);
+            if (i === 2) expect((await get(v, '/v1/report')).body.report.text).toContain('"shares":{"generation":1,"confirmed":2,"of":3}');
+            const confirmed = await confirmShare(v.baseUrl, v.custodians[i], f.share as CustodianShare, v.call());
+            expect({ i, status: confirmed.status, switched: confirmed.body.switched }).toEqual({ i, status: 200, switched: i >= 1 });
+        }
+        expect((await get(v, '/v1/report')).body.report.text).toContain('"shares":{"generation":1,"confirmed":3,"of":3}');
+        // The third share is one of the split in force: with either other, it opens the vault after a restart.
+        await v.restartKeyholder();
+        expect((await fetchPendingShare(v.baseUrl, v.custodians[2], v.call())).call.status).toBe(404);
+        expect((await unlockWith(v, fetched, [2, 0]))[1].body.state).toBe('open');
+    });
+
     it('the answer is lost and the keyholder restarts: nobody holds a share, and the next genesis replaces it', async () => {
         v = await startVault();
         const lost = await begin(v);

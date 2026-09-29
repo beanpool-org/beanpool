@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS } from '../api/server.js';
 import { addressBucket } from '../api/rate-limit.js';
-import { deposit, doGenesis, newMember, signed, startRestore, startVault, ticketFor, type VaultUnderTest } from './harness.js';
+import { deposit, doGenesis, newMember, signed, startRestore, startVault, type VaultUnderTest } from './harness.js';
 
 /** Rate limits (key vault design §1.6), in memory, keyed by address, by key or by sign-in account. */
 
@@ -26,31 +26,6 @@ describe('rate limits', () => {
         expect(refused.body.retryAfterSeconds).toBeGreaterThan(0);
         v.clock.advance(60_000);
         expect((await signed(v, '/v1/ticket', { purpose: 'deposit', provider: 'google' }, member.seed)).status).toBe(200);
-    });
-
-    it('GitHub starts: 5 an hour per address, under a vault-wide ceiling', async () => {
-        v = await startVault({ trustProxy: true });
-        await doGenesis(v);
-        const member = newMember();
-        const from = (addr: string) => ({ 'X-Forwarded-For': addr });
-        const startFrom = async (addr: string) => {
-            const ticket = await ticketFor(v!, member.seed, 'deposit', 'github');
-            return signed(v!, '/v1/github/start', { ticket }, member.seed, from(addr));
-        };
-        for (let i = 0; i < LIMITS.githubStartsPerAddressPerHour; i++) expect((await startFrom('198.51.100.7')).status).toBe(200);
-        expect((await startFrom('198.51.100.7')).status).toBe(429);
-        // Each further address may start its 5 until the vault-wide ceiling.
-        let started = LIMITS.githubStartsPerAddressPerHour;
-        let n = 0;
-        while (started < LIMITS.githubStartsPerHourVaultWide) {
-            if (n % 8 === 0) v.clock.advance(61_000); // tickets are limited per minute
-            expect((await startFrom(`203.0.113.${++n}`)).status).toBe(200);
-            started++;
-        }
-        v.clock.advance(61_000);
-        const ceiling = await startFrom('192.0.2.200');
-        expect(ceiling.status).toBe(429);
-        expect(ceiling.body.error).toMatch(/GitHub sign-ins/);
     });
 
     it('restores: 5 a day per sign-in account, counted after the sign-in is checked', async () => {

@@ -35,8 +35,7 @@ delete process.env.GOOGLE_CLIENT_IDS;
 delete process.env.CF_RECORD_NAME;
 
 // Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
-// should be shut (the GitHub start would then ask github.com for a device code): every request that is not to this
-// machine fails as unreachable, which the sign-in code answers with 503.
+// should be shut: every request that is not to this machine fails as unreachable, which the sign-in code answers with 503.
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);

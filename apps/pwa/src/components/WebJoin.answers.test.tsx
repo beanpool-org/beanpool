@@ -132,7 +132,7 @@ function stubNode(shape: Shape, world: World) {
         if (path === '/api/join/sso-nonce') {
             if (members.has(key)) return json(409, { code: 'already_member', error: 'This key is already a member of this community.' });
             return json(200, {
-                nonce: `nonce-${++nonces}`, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook', 'github'], githubFlow: 'node',
+                nonce: `nonce-${++nonces}`, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook'],
                 clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' },
             });
         }
@@ -197,7 +197,7 @@ async function toNameScreen(tab: Tab): Promise<boolean> {
         switch (name) {
             case 'name': return true;
             case 'providers': click(tab, '← Change name'); break;
-            case 'unknown': case 'unavailable': case 'github': click(tab, '← Choose another way'); break;
+            case 'unknown': case 'unavailable': click(tab, '← Choose another way'); break;
             case 'lobby': {
                 const join = tab.scope.getByTestId('join-start');
                 await waitFor(() => expect(join).not.toBeDisabled());
@@ -549,11 +549,11 @@ describe('the reviewers\' reproductions, one by one', () => {
     it('4106401367: under <StrictMode> the sign-in buttons appear', async () => {
         await seed();
         vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (String(input) === '/api/join/sso-nonce'
-            ? json(200, { nonce: 'n', expiresInSeconds: 600, providers: ['google', 'github'], githubFlow: 'node', clientIds: { google: 'g' } })
+            ? json(200, { nonce: 'n', expiresInSeconds: 600, providers: ['google', 'apple'], clientIds: { google: 'g', apple: 'org.beanpool.web' } })
             : json(404, { error: 'Not Found' }))));
         const tab = open({ strict: true });
         expect(await tab.scope.findByTestId('join-provider-google')).toBeInTheDocument();
-        expect(tab.scope.getByTestId('join-provider-github')).toBeInTheDocument();
+        expect(tab.scope.getByTestId('join-provider-apple')).toBeInTheDocument();
     });
 
     it('4106401367: under <StrictMode> a sent join settles: the node says member, and the member is in', async () => {

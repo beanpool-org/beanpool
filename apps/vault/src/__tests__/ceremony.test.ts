@@ -29,7 +29,7 @@ afterEach(async () => {
 
 /** Every route but health and unlock/*, with a body shaped like a real one. */
 const GATED: [string, string][] = [
-    ['POST', '/v1/ticket'], ['POST', '/v1/github/start'], ['POST', '/v1/github/poll'], ['POST', '/v1/copies'],
+    ['POST', '/v1/ticket'], ['POST', '/v1/copies'],
     ['POST', '/v1/copies/status'], ['POST', '/v1/copies/delete'], ['POST', '/v1/push-token'], ['POST', '/v1/restore'],
     ['POST', '/v1/restore/collect'], ['POST', '/v1/holds/cancel'], ['POST', '/v1/holds/approve'], ['GET', '/v1/report'],
     ['POST', '/v1/reshare/hello'], ['POST', '/v1/reshare/share'],

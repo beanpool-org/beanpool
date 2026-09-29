@@ -276,8 +276,6 @@ run_federation_suites() {
       test-recovery-shares
       test-sso
       test-sso-unavailable
-      test-github-device
-      test-github-poll-limit
       test-daily-pulse
       test-pairing-relay
       test-pairing-routes
@@ -391,6 +389,7 @@ run_federation_suites() {
       test-standby-in-flight
       test-standby-refusal-keeps-copy
       test-recovery-tombstones
+      test-github-sign-in-removed
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes

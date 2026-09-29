@@ -5,12 +5,11 @@
  * ## What is sealed, and to what
  *
  * The account's key, as the raw 32-byte Ed25519 seed, and its 12 words when they make that key, sealed with core's
- * `sealSeedToSso` to `provider:sub` (the sign-in's own id for the account: the token's `sub` claim, or GitHub's poll
- * answer). The browser keeps its key as 48-byte PKCS8 (identity.ts), the phone as the bare seed; `toEd25519Seed`
- * takes either, so what is sealed is the seed in both cases, and a phone restore (or the web's, G11-d) gets a key it
- * can sign with. The body is the phone's, byte for byte: `apps/native/utils/keeper-enrolment.ts sealSsoShares`
- * builds the same shares from the same key and sign-in, and both clients are held to one frozen list
- * (`@beanpool/core/sso-share-vectors`).
+ * `sealSeedToSso` to `provider:sub` (the sign-in's own id for the account: the token's `sub` claim). The browser
+ * keeps its key as 48-byte PKCS8 (identity.ts), the phone as the bare seed; `toEd25519Seed` takes either, so what is
+ * sealed is the seed in both cases, and a phone restore (or the web's, G11-d) gets a key it can sign with. The body
+ * is the phone's, byte for byte: `apps/native/utils/keeper-enrolment.ts sealSsoShares` builds the same shares from
+ * the same key and sign-in, and both clients are held to one frozen list (`@beanpool/core/sso-share-vectors`).
  *
  * ## Never a gate
  *
@@ -27,7 +26,7 @@
 
 import { recoveryWordsMatchSeed, sealSeedToSso, toEd25519Seed, type SealedShare } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
-import { getMnemonic, type BeanPoolIdentity, type JoinProvider } from './identity';
+import { getMnemonic, isJoinProvider, type BeanPoolIdentity, type JoinProvider } from './identity';
 import { providerLabel } from './web-join';
 
 /** The one piece a join carries: the whole seed (and the words, when they make it) sealed to the sign-in. */
@@ -79,13 +78,12 @@ export function recoveryStored(answered: unknown): boolean {
 }
 
 /**
- * The sign-ins the node names (its `enrolledSso`) as a member reads them: "Google", "Google and GitHub", "Google,
- * Apple and GitHub". One this app has no name for is left out rather than shown as the node spells it. Null when none.
+ * The sign-ins the node names (its `enrolledSso`) as a member reads them: "Google", "Google and Apple", "Google,
+ * Apple and Facebook". One that is not a sign-in this app offers is left out rather than shown as the node spells it.
+ * Null when none.
  */
 export function signInNames(providers: readonly string[]): string | null {
-    const names = [...new Set(providers)]
-        .filter((p): p is JoinProvider => ['google', 'apple', 'facebook', 'github'].includes(p))
-        .map(providerLabel);
+    const names = [...new Set(providers)].filter(isJoinProvider).map(providerLabel);
     if (names.length === 0) return null;
     return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

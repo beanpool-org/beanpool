@@ -3,7 +3,6 @@ import {
     configuredAudiences,
     createJwksCache,
     createSignInVerifier,
-    defaultAudiences,
     NONCE_TTL_MS,
     SsoVerificationError,
     webClientId as webClientIdFor,
@@ -15,13 +14,12 @@ import {
     type SsoProvider,
     type WebSignInProvider,
 } from '@beanpool/signin';
-import { consumeGithubSession } from './engine/github-device.js';
 
 /**
  * Sign-in verification for the sign-in keyholder, as this node runs it.
  *
- * The checks themselves (the provider table, `id_token` verification, the JWKS cache, BeanPool's client ids
- * and GitHub's device flow) live in @beanpool/signin (packages/beanpool-signin), shared with the key vault so
+ * The checks themselves (the provider table, `id_token` verification, the JWKS cache and BeanPool's client ids)
+ * live in @beanpool/signin (packages/beanpool-signin), shared with the key vault so
  * that both check a sign-in with exactly the same code (key vault V1). What stays here is what belongs to this
  * node: the nonces it issues, its one key cache and verifier, the keeper lookup hash, and the client ids its
  * operator configured in its env. Every name this file exported before the move is still exported from here.
@@ -33,7 +31,6 @@ export {
     isSsoProvider,
     ssoProviderLabel,
     SSO_PROVIDERS,
-    GITHUB_TOKEN_REFUSED,
     NONCE_TTL_MS,
     signInCredentialFrom,
     type SsoProvider,
@@ -126,12 +123,7 @@ export function _clearNoncesForTests(): void {
 
 // ─── verification ─────────────────────────────────────────────────────────────────────────────
 
-const verifier = createSignInVerifier({
-    jwks,
-    consumeNonce,
-    // Resolved at call time: engine/github-device.ts imports this file too.
-    consumeGithubSession: (sessionId, subject) => consumeGithubSession(sessionId, subject),
-});
+const verifier = createSignInVerifier({ jwks, consumeNonce });
 
 /**
  * Verify a provider `id_token` (packages/beanpool-signin/src/verify.ts has what is checked, and why).
@@ -153,13 +145,7 @@ export function verifyIdToken(
     return verifier.verifyIdToken(provider, idToken, allowedAudiences, expectedNonce, subject);
 }
 
-/**
- * Verify a sign-in, whichever provider it is. The one entry point every route uses.
- *
- * OIDC providers go to verifyIdToken. GitHub spends the node's own finished device-flow session, bound
- * to `subject` and single use (engine/github-device.ts); a GitHub `idToken` is refused before anything
- * else runs, network included.
- */
+/** Verify a sign-in, whichever provider it is: its `id_token`, through verifyIdToken. The one entry point every route uses. */
 export function verifySignIn(
     provider: SsoProvider,
     credential: SignInCredential,
@@ -212,32 +198,25 @@ export function newSsoLookupSalt(): string {
 // BeanPool's own ids, and the rule that an operator's list replaces them, are in
 // packages/beanpool-signin/src/audiences.ts. This node's settings come from its env.
 
-/** Read once, when this module loads: these two only ever were. */
+/** Read once, when this module loads: it only ever was. */
 const FACEBOOK_APP_ID_AT_START = process.env.FACEBOOK_APP_ID;
-const GITHUB_CLIENT_ID_AT_START = process.env.GITHUB_CLIENT_ID;
-
-/** BeanPool's GitHub client ids, plus this node's `GITHUB_CLIENT_ID`. */
-export const BEANPOOL_GITHUB_CLIENT_IDS = defaultAudiences('github', { githubClientId: GITHUB_CLIENT_ID_AT_START });
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {
     google: 'GOOGLE_CLIENT_IDS',
     apple: 'APPLE_CLIENT_IDS',
     facebook: 'FACEBOOK_CLIENT_IDS',
-    github: 'GITHUB_CLIENT_IDS',
 };
 
 /** This node's audience settings, read from its env at each call (APPLE_SERVICES_ID and the *_CLIENT_IDS lists). */
 function audienceSettings(): AudienceSettings {
     return {
         facebookAppId: FACEBOOK_APP_ID_AT_START,
-        githubClientId: GITHUB_CLIENT_ID_AT_START,
         appleServicesId: process.env.APPLE_SERVICES_ID,
         replace: {
             google: process.env[CLIENT_ID_ENV.google],
             apple: process.env[CLIENT_ID_ENV.apple],
             facebook: process.env[CLIENT_ID_ENV.facebook],
-            github: process.env[CLIENT_ID_ENV.github],
         },
     };
 }
@@ -258,8 +237,6 @@ export function getConfiguredAudiences(provider: SsoProvider): string[] {
  * The client id a BROWSER puts in its sign-in request to `provider`, or null when this node accepts none a browser
  * can use. Answered beside every sign-in nonce (`clientIds`), so the web app learns it from the node it is on, not
  * from its build: a self-hosted node with its own ids serves web sign-in with the same web app.
- *
- * GitHub has none: the node runs its sign-in itself (engine/github-device.ts).
  */
 export function webClientId(provider: WebSignInProvider): string | null {
     return webClientIdFor(provider, audienceSettings());

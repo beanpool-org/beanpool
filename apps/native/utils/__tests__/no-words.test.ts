@@ -19,7 +19,6 @@ vi.mock('../../components/SsoButton', () => {
         AppleButton: button('apple'),
         GoogleButton: button('google'),
         FacebookButton: button('facebook'),
-        GitHubButton: button('github'),
     };
 });
 
@@ -114,7 +113,7 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         expect(text.replace(NO_WORDS_WAY_BACK, '')).not.toMatch(/12 words|primary recovery|written down/i);
 
         const buttons = findAll(tree, 'SsoButton');
-        expect(buttons.map(b => b.props.name)).toEqual(['google', 'facebook', 'github']);
+        expect(buttons.map(b => b.props.name)).toEqual(['google', 'facebook']);
         buttons[1].props.onPress();
         expect(onProtectSso).toHaveBeenCalledWith('facebook');
     });

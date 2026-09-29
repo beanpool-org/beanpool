@@ -97,10 +97,15 @@ export interface CopyRecord {
     lastLeftOut: TablesNamed | null;
     /**
      * The ones of those this standby lacks rows of (#1304 review 4128951076): a delta left them out (its cursor moved past
-     * their rows), or a whole copy left them out while its own rows of them were not current (its first copy, or the
-     * force-resync after its main server pruned the deletes it needed), until a whole copy carries them. The delta's
-     * stateHash canary reads no table named here (services/backup-puller.ts). A table only whole copies leave out isn't one:
-     * its rows came by delta, and the canary reads it like any other.
+     * their rows), or a whole copy left them out and its own hash of them isn't this standby's rows of them after it
+     * landed (it moved the cursor past the rows written since the last delta; or they weren't current: its first copy, the
+     * force-resync after its main server pruned the deletes it needed; or it sent no hashes), until a whole copy carries
+     * them or its hash of them matches. The delta's stateHash canary reads no table named here (services/backup-puller.ts):
+     * drift in one would ask for whole copies that leave it out again, and each would move the cursor past more of its
+     * rows (#1315 review 4131868827). A table a whole copy leaves out whose hash matched isn't one: its rows came by delta,
+     * and the canary reads it like any other.
+     * A record written before this field (no `lastLacking` key) reads every table it names left out (lastLeftOut) as
+     * lacking: what the canary skipped then, so nothing it read before an update asks for a whole copy after it.
      */
     lastLacking: TablesNamed | null;
     /**
@@ -181,7 +186,7 @@ export function readCopyRecord(): CopyRecord {
             lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
             lastMismatchResyncTakenAt: num(r?.lastMismatchResyncTakenAt),
             lastLeftOut: tablesNamed(r?.lastLeftOut),
-            lastLacking: tablesNamed(r?.lastLacking),
+            lastLacking: r && typeof r === 'object' && Object.hasOwn(r, 'lastLacking') ? tablesNamed(r.lastLacking) : tablesNamed(r?.lastLeftOut),
             pastRetentionAt: num(r?.pastRetentionAt),
             lastOversized: ((o) => (o ? { ...o, whole: r?.lastOversized?.whole === true } : null))(tablesNamed(r?.lastOversized)),
         };
@@ -198,16 +203,15 @@ function write(r: CopyRecord): void {
  * A pull whose copy landed (or the main server said nothing changed since the last one: no `copy`). `copy.leftOut`: the
  * tables it left out. A whole copy's are the whole story (any it carried is current again, and so is the ledger set); a
  * delta's add to the ones already stale, which only a whole copy brings back.
- * `copy.lacking`: a whole copy onto rows of this standby's own that were not current (its first copy, or the force-resync
- * for deletes its main server pruned): every table it leaves out is one this standby lacks rows of. Otherwise a whole
- * copy's are lacking only where they were already (lastLacking). `copy.resync`: it was a force-resync, which owes
- * nothing for the deletes the main server pruned any more (pastRetentionAt).
+ * `copy.current`: of the tables a whole copy leaves out, the ones whose hash in the copy equals this standby's rows of
+ * them after it landed. Every other table it leaves out is one this standby lacks rows of (lastLacking). `copy.resync`:
+ * it was a force-resync, which owes nothing for the deletes the main server pruned any more (pastRetentionAt).
  */
-export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOut: readonly string[]; lacking?: boolean; resync?: boolean }): void {
+export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOut: readonly string[]; current?: readonly string[]; resync?: boolean }): void {
     const r = readCopyRecord();
     const lacking = !copy ? r.lastLacking
         : !copy.whole ? (copy.leftOut.length > 0 ? named(r.lastLacking, copy.leftOut, now, true) : r.lastLacking)
-            : named(r.lastLacking, copy.lacking ? copy.leftOut : (r.lastLacking?.tables ?? []).filter((t) => copy.leftOut.includes(t)), now, false);
+            : named(r.lastLacking, copy.leftOut.filter((t) => !(copy.current ?? []).includes(t)), now, false);
     write({
         ...r, lastPullAt: now, lastOutcome: 'ok', lastWhy: null, failedImportsInARow: 0, lastOkAt: now,
         lastLeftOut: copy ? (copy.whole || copy.leftOut.length > 0 ? named(r.lastLeftOut, copy.leftOut, now, !copy.whole) : r.lastLeftOut) : r.lastLeftOut,

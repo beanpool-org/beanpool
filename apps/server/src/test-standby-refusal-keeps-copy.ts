@@ -51,6 +51,11 @@
  *     membership gone from S with no tombstone is drift it finds, and the next routine time's whole copy brings it back.
  *     The flood gone from M, the canary finds that too, and the whole copy it asks for carries listings again: S's record
  *     and report no longer name them. (Before: the canary was off while any copy left listings out, so neither came.)
+ * 14. The same, with 20 more listings written on M just before the whole copy, and the flood still running after it
+ *     (#1315 review 4131868827): that copy moved the cursor past the 20, so S lacks listings, and its record says so (the
+ *     copy's own hash of them isn't S's). The canary stays off: pulls over two holds ask M for no whole copy, and the gap
+ *     stays 20 (before: a whole copy at every hold, each leaving listings out and moving the cursor past 5 more, the gap
+ *     20, 25, 30). A record an older version wrote (no lastLacking) reads its left-out listings as lacking too.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-refusal-keeps-copy.ts
@@ -183,7 +188,7 @@ async function child(): Promise<void> {
             const report = standbyReport() as any;
             return {
                 lastOutcome: r.lastOutcome, lastWhy: r.lastWhy, fails: r.failedImportsInARow, lastWhole: r.lastWhole,
-                lastLeftOut: r.lastLeftOut ?? null, lastOversized: r.lastOversized ?? null, lastMismatchResyncAt: r.lastMismatchResyncAt,
+                lastLeftOut: r.lastLeftOut ?? null, lastLacking: r.lastLacking ?? null, lastOversized: r.lastOversized ?? null, lastMismatchResyncAt: r.lastMismatchResyncAt,
                 report: { why: report.why, leftOut: report.leftOut ?? null, oversized: report.oversized ?? null, exact: report.exact, differs: report.differs },
             };
         },
@@ -794,8 +799,8 @@ async function main(): Promise<void> {
         const whole13 = await standby.send('pull', {});
         const r13a = await standby.send('record');
         assert(whole13.ok === true && whole13.mode === 'full' && JSON.stringify(r13a.lastLeftOut?.tables) === JSON.stringify(['posts'])
-            && Array.isArray(r13a.lastWhole?.differs) && r13a.lastWhole.differs.length === 0,
-            `the whole copy lands with listings left out, and nothing else differs (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut?.tables, differs: r13a.lastWhole?.differs })})`);
+            && Array.isArray(r13a.lastWhole?.differs) && r13a.lastWhole.differs.length === 0 && r13a.lastLacking === null,
+            `the whole copy lands with listings left out, nothing else differs, and S lacks no listing: the copy's hash of them is S's (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut?.tables, differs: r13a.lastWhole?.differs, lacking: r13a.lastLacking?.tables ?? null })})`);
         const t13 = Date.now();
         require_((await standby.send('sql', { sql: 'DELETE FROM group_members WHERE group_id = ?', args: [groupId] })) > 0,
             'S: the group\'s membership deleted, with no tombstone');
@@ -823,6 +828,58 @@ async function main(): Promise<void> {
         const r13d = await standby.send('record');
         assert(resync13.ok === true && resync13.mode === 'resync' && r13d.lastWhole?.exact === true && s13c.tables.posts.hash === m13c.tables.posts.hash,
             `and the force-resync it asked for (S still held the listings M deleted) lands exact (${JSON.stringify({ pull: resync13, verdict: r13d.lastWhole })}; ${counts(s13c, 'posts')}; M ${counts(m13c, 'posts')})`);
+        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
+        await standby.send('set-reconcile-ms', { ms: 86400000 });
+
+        // ── 14. The flood still running when the whole copy leaves listings out: the canary stays off ──
+        console.log('\n— 14. 20 listings written just before a whole copy that leaves listings out, the flood running on: the canary stays off, and the gap does not grow —');
+        for (let i = 0; i < 3; i++) {
+            await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
+            const d = await standby.send('pull', {});
+            require_(d.ok === true && d.mode === 'delta', `S's delta after 60 more listings on M lands (${JSON.stringify(d)})`);
+        }
+        await main.send('flood', { kind: 'posts', n: 20, author: gwen.pk });
+        await restart();
+        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
+        await standby.send('set-reconcile-ms', { ms: HOLD_MS });
+        const t14 = Date.now();
+        const whole14 = await standby.send('pull', {});
+        const r14a = await standby.send('record');
+        assert(whole14.ok === true && whole14.mode === 'full' && JSON.stringify(r14a.lastLeftOut?.tables) === JSON.stringify(['posts'])
+            && JSON.stringify(r14a.lastLacking?.tables) === JSON.stringify(['posts']),
+            `the whole copy lands with listings left out, and S's record says it lacks listings: the copy's hash of them isn't S's (${JSON.stringify({ pull: whole14, leftOut: r14a.lastLeftOut?.tables, lacking: r14a.lastLacking?.tables ?? null })}; before: not lacking)`);
+        /** Five more listings on M before each pull, for `ms`: each pull's mode, and M's listings less S's after it. */
+        const floodOn = async (ms: number) => {
+            const out: { mode: string; ok: boolean; whole: boolean; gap: number }[] = [];
+            const t0 = Date.now();
+            while (Date.now() - t0 < ms) {
+                await main.send('flood', { kind: 'posts', n: 5, author: gwen.pk });
+                const p = await standby.send('pull', {});
+                const gs: Snap = await standby.send('snapshot', { tables: ['posts'] });
+                const gm: Snap = await main.send('snapshot', { tables: ['posts'] });
+                out.push({ mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count });
+                await sleep(500);
+            }
+            return out;
+        };
+        const show = (ps: { mode: string; ok: boolean; whole: boolean; gap: number }[]) => ps.map((p) => `${p.mode}${p.ok ? '' : '!'}[${p.gap}]`).join(',');
+        const pulls14 = await floodOn(2 * HOLD_MS + 500);
+        const served14 = await main.send('whole-copies', { since: t14 });
+        assert(pulls14.length >= 4 && pulls14.every((p) => p.mode === 'delta' && p.ok && !p.whole) && served14 === 1,
+            `the flood running on, every pull over two holds is a delta that lands, and M serves no whole copy but the restart's (${JSON.stringify({ served: served14 })}; ${show(pulls14)}; before: a whole copy at each hold)`);
+        assert(pulls14.every((p) => p.gap === 20),
+            `the gap stays at the 20 listings that copy skipped, and does not grow (${pulls14.map((p) => p.gap).join(', ')}; before: 20, 25, 30)`);
+        // A record an older version wrote: no lastLacking, and lastLeftOut naming listings.
+        require_((await standby.send('sql', { sql: `UPDATE node_config SET value = json_remove(value, '$.lastLacking') WHERE key = 'standby_copy_record'` })) === 1,
+            'S: its record as a version before lastLacking wrote it');
+        const r14b = await standby.send('record');
+        const t14b = Date.now();
+        const pulls14b = await floodOn(HOLD_MS + 1000);
+        const served14b = await main.send('whole-copies', { since: t14b });
+        assert(JSON.stringify(r14b.lastLacking?.tables) === JSON.stringify(['posts'])
+            && pulls14b.every((p) => p.mode === 'delta' && p.ok && !p.whole && p.gap === 20) && served14b === 0,
+            `that record reads its left-out listings as lacking, and the canary stays off past a hold (${JSON.stringify({ lacking: r14b.lastLacking?.tables ?? null, served: served14b })}; ${show(pulls14b)})`);
+        await main.send('unflood');
         await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
         await standby.send('set-reconcile-ms', { ms: 86400000 });
 

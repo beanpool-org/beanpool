@@ -57,7 +57,7 @@ import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
-import { compareTableHashes, readTableHashes } from '../engine/replica-hashes.js';
+import { compareTableHashes, readTableHashes, tableContentHashes } from '../engine/replica-hashes.js';
 import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
@@ -405,12 +405,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
         const leftOut = result.tablesLeftOut ?? [];
-        // A whole copy onto rows of this standby's own that weren't current, its first or the one for the deletes the main
-        // server pruned: what it leaves out, this standby lacks rows of (the record's lastLacking, which the canary reads).
-        // A force-resync that lands owes nothing for those deletes any more.
-        recordQuietly(() => noteCopyLanded(lastSuccessAt!, {
-            whole: !isDelta, leftOut, lacking: !isDelta && (!hadCursor || why === 'retention'), resync: fresh,
-        }));
+        // A table a whole copy leaves out, this standby lacks rows of (the record's lastLacking, which the canary doesn't
+        // read) unless the copy's own hash of it equals this standby's rows of it now: the copy moved the cursor past that
+        // table's rows written since the last delta (#1315 review 4131868827), and its first copy, or the one for the
+        // deletes the main server pruned, landed onto rows that weren't current. A force-resync that lands owes nothing for
+        // those deletes any more.
+        const current = !isDelta && leftOut.length > 0 ? leftOutTablesCurrent(payload, leftOut) : [];
+        recordQuietly(() => noteCopyLanded(lastSuccessAt!, { whole: !isDelta, leftOut, current, resync: fresh }));
         if (leftOut.length > 0) {
             logger.warn('P2P', `[Backup] ⚠️ This copy landed without ${leftOut.join(', ')}: the main server holds more rows of `
                 + `${leftOut.length === 1 ? 'it' : 'them'} than one copy carries. This standby keeps its own rows of ${leftOut.length === 1 ? 'it' : 'them'}; the rest is copied.`);
@@ -434,9 +435,12 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 // the same way. Read as drift, it would have the main server build and sign its whole database, flood
                 // included, every other pull. The copy is reported not exact by that table's name instead (the record's
                 // lastLeftOut), and the next routine whole copy compares every other table by its own hash
-                // (checkWholeCopy). A table only whole copies leave out is read like any other: its rows came by delta, so
-                // the hash still says whether anything drifted (#1304 review 4128951076). Drift it finds waits for the
-                // next routine time all the same (nextMode's hold after a whole copy that left a table out).
+                // (checkWholeCopy). So is one a whole copy left out whose rows here weren't the copy's (lastLacking): that
+                // copy moved the cursor past its rows written since the last delta, and a whole copy the canary asked for
+                // would leave it out and skip more of them again (#1315 review 4131868827). One a whole copy left out whose
+                // hash matched is read like any other: its rows came by delta, so the hash still says whether anything
+                // drifted (#1304 review 4128951076). Drift it finds waits for the next routine time all the same (nextMode's
+                // hold after a whole copy that left a table out).
                 const stale = staleTablesOfCopy(leftOut).filter((t) => STATE_HASH_TABLES.includes(t));
                 if (localHash !== payload.stateHash && stale.length > 0) {
                     logger.sync('P2P', `[Backup] Delta stateHash canary not read: ${stale.join(', ')} left out of this standby's copies, so the hash `
@@ -529,6 +533,26 @@ function staleTablesOfCopy(thisDelta: readonly string[]): string[] {
     let recorded: readonly string[] = [];
     try { recorded = readCopyRecord().lastLacking?.tables ?? []; } catch { /* the record unreadable: this delta's alone */ }
     return [...new Set([...recorded, ...thisDelta])];
+}
+
+/**
+ * Of the tables a whole copy left out, the ones this standby holds exactly as the main server did when it made the copy:
+ * the copy's own hash of each (SyncPayload `tableHashes`, as checkWholeCopy reads them) equals this standby's, hashed now.
+ * None when the copy sent no hashes (one written to while it was being made), or they can't be read here.
+ */
+function leftOutTablesCurrent(payload: SyncPayload, leftOut: readonly string[]): string[] {
+    try {
+        const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
+        if (!theirs) return [];
+        const hashed = leftOut.filter((t) => Object.hasOwn(theirs, t));
+        if (hashed.length === 0) return [];
+        const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
+        const mine = tableContentHashes({ only: hashed, photosLeftOut }).tables;
+        return hashed.filter((t) => mine[t] !== undefined && mine[t].rows === theirs[t].rows && mine[t].hash === theirs[t].hash);
+    } catch (e: any) {
+        logger.warn('P2P', `[Backup] The tables this whole copy left out could not be hashed here: ${e?.message || e}`);
+        return [];
+    }
 }
 
 /** The standby's record of its copies (services/standby-copy-record.ts) never fails a pull, nor masks how one went. */

@@ -251,6 +251,11 @@ run_check "merge_gate" bash scripts/test-merge-gate.sh
 # imported multiformats, nothing here noticed, and no image built for main across seven merges.
 run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 
+# No new raw SQL writes to accounts.balance: beans move through the ledger functions, which pair every debit with its
+# credit. The places that write one today are a per-file baseline in the script; a new one fails until a PR raises
+# that baseline and says why. Instant.
+run_check "balance_writes" node scripts/check-balance-writes.mjs
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

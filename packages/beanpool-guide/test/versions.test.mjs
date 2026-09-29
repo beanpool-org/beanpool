@@ -49,6 +49,12 @@ function makeRepo() {
     for (const img of fs.readdirSync(images).filter(f => !f.startsWith('.'))) {
         fs.copyFileSync(path.join(repoRoot, 'apps/manager/public/images', img), path.join(work, 'apps/manager/public/images', img));
     }
+    // A published main, as on GitHub after the director's publish: a checkout of a PR that edits pages holds text that
+    // waits to be published, which the copy publishes first, or every test here would start from unpublished text.
+    if (build(work, '--pending').status !== 0) {
+        const published = build(work, '--publish');
+        if (published.status !== 0) throw new Error(`publishing the checkout's pending text in the throwaway copy failed: ${said(published)}`);
+    }
     git(root, 'init', '-q', '--bare', '-b', 'main', 'origin.git');
     git(work, 'init', '-q', '-b', 'main');
     git(work, 'config', 'user.email', 'guide-test@example.org');

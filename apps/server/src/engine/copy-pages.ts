@@ -115,7 +115,6 @@ interface Step {
 
 interface Copy {
     id: string;
-    since: string | null;
     nodeId: string;
     conn: Database.Database;
     sign: CopySigner;
@@ -428,7 +427,6 @@ export async function openCopy(opts: { nodeId: string; since: string | null; com
     const conn = new Database(db.name, { readonly: true, fileMustExist: true });
     const copy: Copy = {
         id: crypto.randomUUID(),
-        since: opts.since,
         nodeId: opts.nodeId,
         conn,
         sign: opts.sign,
@@ -455,8 +453,8 @@ export async function openCopy(opts: { nodeId: string; since: string | null; com
     current = copy;
     noteCopyOpen(copy.id, (why) => dropCopy(copy, why));
     touch(copy);
-    copy.maxTimer = setTimeout(() => dropCopy(copy, `open for ${Math.round(envCount('SYNC_COPY_MAX_MS', COPY_MAX_MS) / 60_000)} min`),
-        envCount('SYNC_COPY_MAX_MS', COPY_MAX_MS));
+    const maxMs = envCount('SYNC_COPY_MAX_MS', COPY_MAX_MS);
+    copy.maxTimer = setTimeout(() => dropCopy(copy, `open for ${Math.round(maxMs / 1000)} s, the most a copy stays open`), maxMs);
     copy.maxTimer.unref();
 
     let commonsBalance: number;
@@ -513,7 +511,8 @@ export async function openCopy(opts: { nodeId: string; since: string | null; com
 /** Page `n` of copy `copyId`: the next page, or the last one again. */
 export async function copyPage(copyId: string, n: number): Promise<CopyAnswer> {
     const copy = current;
-    if (!copy || copy.id !== copyId) return { status: 404, error: { error: 'no such copy' } };
+    // A copy still counting its rows has served nothing yet: its opening page is the POST's.
+    if (!copy || copy.id !== copyId || (copy.lastN < 0 && !copy.building)) return { status: 404, error: { error: 'no such copy' } };
     touch(copy);
     if (copy.building) {
         if (copy.building.n !== n) return { status: 409, error: { error: 'out of order', expected: copy.building.n } };

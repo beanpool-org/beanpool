@@ -4,7 +4,7 @@
  * picks up kernel and C library fixes; the vault then stays locked until two custodians unlock it.
  *
  * The image's `vault-monthly-restart.timer` says the same in systemd's words ({@link MONTHLY_RESTART_ON_CALENDAR});
- * a test keeps the two in step. `/v1/health` announces the next one.
+ * a test keeps the two in step. `/v1/report` announces the next one (`nextRestart`).
  */
 
 export const MONTHLY_RESTART_HOUR_UTC = 9;

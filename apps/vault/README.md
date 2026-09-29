@@ -11,7 +11,7 @@ custodians one person, BeanPool's founder, holds all three shares, every release
 nothing proves in hardware what it runs** (`platform: none`). Nothing here holds a real member's copy until the
 reshare is done.
 
-## Two programs, and the launcher
+## Two programs, the launcher and the install step
 
 - **`vault-keyholder`** (`src/keyholder/`) holds the shares while they arrive, the master secret `M` for as long as
   it takes to use it, and the working keys. It never hands out a key but one: `K_disk`, to root on the same machine,
@@ -24,6 +24,8 @@ reshare is done.
   never sees a copy in the clear.
 - **`vault-launcher`** (`src/launcher/`) is what systemd starts for the API. It runs the image's API, and hands over
   to a newer release's API without a restart or an unlock (below). It changes only with the image.
+- **`vault-install`** (`src/install/`) is root's step at the monthly restart: it installs a new image the API staged
+  only if its own check from the pinned keys passes (below). It changes only with the image.
 
 Any restart of the keyholder leaves the vault locked until two custodians unlock it. While locked, every route but
 `/v1/health` and `/v1/unlock/*` answers 503 `{locked: true}`.
@@ -124,11 +126,12 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   (`vault-install.mjs`, built with the genesis keys like the launcher, on the verified system partition;
   `src/install/install.ts`) walks the chain from those keys itself and checks, on its own copies: two custodian
   signatures, a release newer than the running one, file names carrying its version (and the partitions' names its
-  root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files
-  into `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs),
-  where systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to
-  the old one if it fails to boot three times. Anything else is refused, logged and deleted. Then two custodians
-  unlock.
+  root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files into
+  `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs), where
+  systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to the old
+  one if it fails to boot three times. Anything else is refused, logged and deleted. Then two custodians unlock. Not
+  yet run end to end: a real signed next image installed by systemd-sysupdate and booted. The test image checks the
+  refusals on the image; `install.test.ts` checks the checks and the move.
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
   under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
   the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.

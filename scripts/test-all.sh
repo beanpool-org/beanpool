@@ -34,6 +34,14 @@ done
 # No check sees a real admin password or Cloudflare credential from this shell (test-all-lib.sh says why).
 scrub_test_env
 
+# --all is the merge gate's run, and it records green, so it runs every server suite. SERVER_SUITES_ONLY (a
+# run-server-suites.mjs knob for reproducing one suite) would narrow it to those and still record a full green, so --all
+# drops it rather than refusing to record: the run then is what its name and its record say. Run without --all to narrow.
+if [ $ALL_REQUESTED -eq 1 ] && [ -n "${SERVER_SUITES_ONLY:-}" ]; then
+  echo "ℹ️  --all runs every server suite: ignoring SERVER_SUITES_ONLY=$SERVER_SUITES_ONLY (leave out --all to run only those)."
+fi
+[ $ALL_REQUESTED -eq 1 ] && unset SERVER_SUITES_ONLY
+
 # Stop before anything else if the install is older than a package.json. A missing dependency surfaces as "Cannot
 # find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
 node scripts/check-deps-installed.mjs || exit 1

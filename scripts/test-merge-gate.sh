@@ -44,6 +44,19 @@ expect 1 "deps: ...naming the package and where it is declared" "packages/p/pack
 rm -rf "$D/node_modules" "$D/apps/a/node_modules"
 expect 1 "deps: no node_modules at all says nothing is installed" "nothing is installed here" -- node "$REPO_ROOT/scripts/check-deps-installed.mjs" "$D"
 
+# ── The real test-all.sh: --all runs every server suite ──────────────────────────────────────────────────────────
+# Its first `node` call is the stale-install check, before any check starts. A stub node there prints what the run
+# would hand the server-suite runner, then stops the run.
+mkdir -p "$T/nodestub"
+cat > "$T/nodestub/node" <<'STUB'
+#!/bin/bash
+echo "stub node: SERVER_SUITES_ONLY=[${SERVER_SUITES_ONLY-unset}]"; exit 1
+STUB
+chmod +x "$T/nodestub/node"
+expect 1 "test-all --all drops SERVER_SUITES_ONLY, so a narrowed run cannot record a full green" "SERVER_SUITES_ONLY=[unset]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all --all ...and says it is ignoring it" "ignoring SERVER_SUITES_ONLY=test-x" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all without --all keeps SERVER_SUITES_ONLY, for reproducing one suite" "SERVER_SUITES_ONLY=[test-x]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --fast
+
 # ── A throwaway repository with a bare origin ────────────────────────────────────────────────────────────────────
 export TMPDIR="$T/tmp"; mkdir -p "$TMPDIR"
 export GIT_CONFIG_GLOBAL="$T/gitconfig" GIT_CONFIG_NOSYSTEM=1

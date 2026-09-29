@@ -62,6 +62,10 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { getMnemonic, type BeanPoolIdentity } from '../identity';
 import { authenticateUser } from '../LocalAuth';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 // Test phrase only (a BIP-39 vector), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
 const ACCOUNT: BeanPoolIdentity = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'Kim', createdAt: '', mnemonic: WORDS };

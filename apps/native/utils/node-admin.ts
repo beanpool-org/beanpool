@@ -9,6 +9,7 @@
  *   2. The phone's own unlock (fingerprint, face or device PIN) before any link is requested. A phone with
  *      no lock set gets an explanation, not a link — this path FAILS CLOSED, unlike the app-lock helper in
  *      LocalAuth.ts, which opens on a lockless phone on purpose so nobody is locked out of their own account.
+ *      A pass the phone held while the app was away (it reached the app too late) is no unlock either.
  *   3. The member key signs a sign-in text the phone builds from the node's challenge id (request binding: bound
  *      to this node's host, member-statements.ts); the node answers with a 60-second, single-use token (and
  *      still asks for its own 2FA code if the owner turned 2FA on).
@@ -18,7 +19,7 @@
  */
 
 import * as LocalAuthentication from 'expo-local-authentication';
-import { phoneLockPrompt } from './LocalAuth';
+import { phoneLockPrompt, timeDoorPrompt } from './LocalAuth';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
@@ -121,7 +122,11 @@ export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentit
 
 export type UnlockResult = 'ok' | 'no-device-lock' | 'failed';
 
-/** The phone's own unlock. Fails closed: no lock set, or anything unexpected, means no link. */
+/**
+ * The phone's own unlock. Fails closed: no lock set, or anything unexpected, means no link. So does a pass that reached
+ * the app too late to be one given for this request (LocalAuth.timeDoorPrompt: a pass the phone held while the app was
+ * away). What it opens is outside the app (a browser, another computer, a server), where App Lock covers nothing.
+ */
 export async function requireDeviceUnlock(communityName: string): Promise<UnlockResult> {
     let level: LocalAuthentication.SecurityLevel;
     try {
@@ -131,12 +136,13 @@ export async function requireDeviceUnlock(communityName: string): Promise<Unlock
     }
     if (level === LocalAuthentication.SecurityLevel.NONE) return 'no-device-lock';
     try {
+        const passCounts = timeDoorPrompt();
         const res = await phoneLockPrompt({
             promptMessage: `Confirm it's you to manage ${communityName}`,
             cancelLabel: 'Cancel',
             disableDeviceFallback: false,
         });
-        return res.success ? 'ok' : 'failed';
+        return res.success && passCounts() ? 'ok' : 'failed';
     } catch {
         return 'failed';
     }

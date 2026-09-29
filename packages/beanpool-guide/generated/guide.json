@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 84,
-  "hash": "134fd84ea6f64870e8919b336b5cc79265668646b3e0dd2978e1422e119b1c55",
+  "version": 87,
+  "hash": "f4d895d859ebe673535d24e64c16354cca8eb98561d6e4d03c94641a3a3c5f80",
   "sections": [
     {
       "id": "about",
@@ -1179,8 +1179,12 @@
           "type": "ul",
           "items": [
             "Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.",
-            "Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done. They also hide when you leave the screen, and the phone asks again next time."
+            "Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Either way, the words also hide when you leave that screen, or leave the app for 15 seconds or more, and the phone asks again next time. A lock screen check that takes more than two minutes shows nothing: tap again."
         },
         {
           "type": "p",

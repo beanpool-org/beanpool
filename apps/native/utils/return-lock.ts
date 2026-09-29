@@ -1,8 +1,9 @@
 import {
-    authenticateUser,
+    authenticateForAppLock,
     getAppLockEnabled,
     isLocalAuthPromptOpen,
     localAuthPromptStretches,
+    PROMPT_COVER_MAX_MS,
     whenLocalAuthPromptsClose,
     type LocalAuthPromptStretch,
 } from './LocalAuth';
@@ -20,23 +21,10 @@ export const RETURN_LOCK_GRACE_MS = 15000;
 export const PROMPT_SETTLE_MS = 10000;
 
 /**
- * How long after it opened one prompt that passed can cover time away: only the time away within this long of the prompt
- * opening counts as open, and the rest as away. The cover counts from the opening, not from the leave, so the part of a
- * prompt before the leave (an earlier absence or return included) uses it up first. A prompt's answer reaches the app
- * when the phone hands it over, not when the member gave it: Android 8-10 holds the PIN screen's result until BeanPool is
- * back in front, so a member who passes it and presses home during the moment it closes leaves a pass that arrives
- * whenever BeanPool is next opened, an hour later, by whoever has the phone. The app can't tell that pass from one given
- * just now.
- *
- * Two minutes, so such a pass opens the app only for whoever opens it within two minutes and 15 seconds of the prompt
- * opening (RETURN_LOCK_GRACE_MS on top). Long enough for the slowest prompts a member gives: Android's lock (AOSP
- * gatekeeper, ComputeRetryTimeout) makes the 5th and the 10th wrong PIN in a row wait 30 seconds each, so ten tries with
- * both waits come to about a minute and a half; iOS's first passcode wait, after the 4th wrong one, is a minute (Apple
- * Platform Security; the 5th brings five). A prompt longer than that is asked once more after it passes, as every prompt
- * of 15 seconds or more was before #1307: one more prompt, never a way in. A prompt that did not pass covers the whole
- * time it was open: it opens nothing, and the app stays behind the lock screen ('lock').
+ * How long after it opened one prompt that passed can cover time away: two minutes. Defined beside the prompt marker
+ * (LocalAuth.ts), where the doors' held-pass rule reads it too, and given here as the return lock's.
  */
-export const PROMPT_COVER_MAX_MS = 120000;
+export { PROMPT_COVER_MAX_MS };
 
 /**
  * What the return lock does when the app is back in front:
@@ -121,10 +109,12 @@ let lockedForReturn = 0;
  * app open. Whichever of the pass and the return lock's decision comes first, this pass doesn't take the lock screen down.
  * The return lock's own takedown, for a later return, follows its rule instead (returnLockAction): after a leave, a pass
  * opens the app only for a return within PROMPT_COVER_MAX_MS and RETURN_LOCK_GRACE_MS (2 min 15 s) of the prompt opening.
+ * It asks through LocalAuth.authenticateForAppLock, the one caller of it: the doors' own held-pass rule
+ * (LocalAuth.doorPassCounts) is not asked on top of this one.
  */
 export async function unlockWithPhoneLock(reason: string): Promise<boolean> {
     const openedAtReturn = returnsSeen;
-    const passed = await authenticateUser(reason);
+    const passed = await authenticateForAppLock(reason);
     return passed && lockedForReturn <= openedAtReturn;
 }
 

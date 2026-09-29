@@ -18,8 +18,9 @@
  * The day budget (`gatewayAdmitDayBudget`, W-main): beside the minute buckets, every verified key's writes (POST, PUT,
  * PATCH, DELETE) are counted over a rolling day, and past WRITER_LIMITS.signedWritesPerDay they are answered 429
  * `day_budget`. It bounds every table a member can write, the money tables included, without touching money code. The
- * admin surface (`/api/local/admin/*`) has its own limiter and is not counted. It applies whether or not the operator
- * has the minute throttle on: it is what keeps one key from growing the tables a standby copies past its cap.
+ * admin surface (`/api/local/admin/*`) has its own limiter and is not counted, nor are the read marks (DAY_BUDGET_READ_MARKS): the apps send those on a timer, and they make no new row. It
+ * applies whether or not the operator has the minute throttle on: it is what keeps one key from growing the tables a
+ * standby copies past its cap.
  */
 import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
@@ -46,6 +47,21 @@ export const DAY_BUDGET_MAX_KEYS = 50_000;
 /** Per key: the hours it wrote in (oldest first, within the day) and how many writes in each. */
 interface DayCount { hours: number[]; counts: number[]; total: number }
 const dayCounts = new Map<string, DayCount>();
+
+/**
+ * The read marks, left out of the day budget (still under the minute bucket). Each only moves a marker on a row the
+ * member already has, so it can't grow a table however often it is sent, and both apps send them on a timer while a chat
+ * is open (a phone ~300 an hour, the web app on every poll and doorbell), so counting them spent a real member's day
+ * without a change made (PR #1312 review). Exact POST paths as the gateway sees them (ctx.path, never decoded, trimmed
+ * or lower-cased), so no other spelling, and no write route, can ride the exemption:
+ *   - POST /api/messages/mark-read (routes/messaging.ts): moves last_read_at on the member's own participant row
+ *     (engine/messaging.ts markConversationRead), or a keeper's thread_read_cursors row (engine/enterprise-thread.ts
+ *     markKeeperThreadRead, one per keeper and enterprise, local and never copied). On a group chat it first mirrors
+ *     the member's group membership onto the participant row (syncGroupThreadMembership): one row per group they
+ *     joined, which the join itself paid for.
+ *   - POST /api/notices/seen (routes/notices.ts): stamps seen_at once on the member's own kept notices.
+ */
+export const DAY_BUDGET_READ_MARKS: ReadonlySet<string> = new Set(['/api/messages/mark-read', '/api/notices/seen']);
 
 /** Count one request against `key`. False (and 429 set) when the bucket is already full. */
 function take(ctx: Koa.Context, key: string, max: number, now: number): boolean {
@@ -130,11 +146,12 @@ function inAbout(atMs: number, now: number): string {
 /**
  * After signature verification: count a verified key's write against its day. False (and 429 `day_budget` set) when
  * the key has already made WRITER_LIMITS.signedWritesPerDay writes in the rolling day. A refused write isn't counted.
- * Reads, unsigned requests and the admin surface pass untouched.
+ * Reads, the read marks (DAY_BUDGET_READ_MARKS), unsigned requests and the admin surface pass untouched.
  */
 export function gatewayAdmitDayBudget(ctx: Koa.Context, now = Date.now()): boolean {
     const actor = ctx.state.actor as string | undefined;
     if (!actor || !WRITE_METHODS.has(ctx.method) || ctx.path.startsWith('/api/local/admin/')) return true;
+    if (ctx.method === 'POST' && DAY_BUDGET_READ_MARKS.has(ctx.path)) return true;
     const hour = Math.floor(now / HOUR_MS);
     let entry = dayCounts.get(actor);
     if (entry) dropPastHours(entry, hour);

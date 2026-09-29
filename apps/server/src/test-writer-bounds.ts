@@ -25,6 +25,10 @@
  *     younger one stay; a standby prunes nothing.
  * 10. The Pulse: 50 links by hand a day (the 51st 429 pulse_per_day); a link already there, spelled with share tracking
  *     and a fragment, is the same link and never refused; 300 synced items a day over HTTPS, the rest left for later.
+ * 11. Read marks (PR #1312 review): 4,999 read marks, then a DM line, is 200 (it used to be 429 day_budget); past the
+ *     budget a read mark (mark-read, notices seen) still goes and a real write is 429 day_budget; no other spelling or
+ *     method of the read-mark paths, and no real write dressed as one, rides the exemption; the minute bucket still
+ *     counts read marks.
  *
  * Local only: the server it starts on localhost, nothing else.
  *
@@ -503,6 +507,68 @@ async function main(): Promise<void> {
             `the same sync again: the 10 already in are found, the other 10 still wait (${show(syncAgain)})`);
         assert(count("SELECT COUNT(*) AS n FROM pulse_items WHERE owner_pubkey = ? AND source = 'oauth'", uma.pk) === WRITER_LIMITS.pulseSyncedItemsPerDay,
             `and ${WRITER_LIMITS.pulseSyncedItemsPerDay} are stored`);
+    }
+
+    // ── 11. Read marks are not counted in the day budget ──────────────────────────────────────────────────────
+    console.log('\n--- 11. read marks: under the minute bucket, outside the day budget ---');
+    {
+        resetGatewayRateLimit();
+        const BUDGET = WRITER_LIMITS.signedWritesPerDay;
+        const val = member('Val');
+        const wyn = member('Wyn');
+        const opened = await openDm(val, wyn.pk);
+        const conv = opened.body?.conversation?.id as string;
+        assert(!!conv, `setup: Val opens a DM with Wyn, her first change of the day (${show(opened)})`);
+        const markRead = () => call('POST', val, '/api/messages/mark-read', { conversationId: conv });
+        // The reviewer's repro: a phone with the DM open marks it read every ~12 s, for a day.
+        const marks = await many(BUDGET - 1, 16, markRead);
+        assert(marks.length === BUDGET - 1 && marks.every(s => s === 200), `${BUDGET - 1} read marks all go (${[...new Set(marks)].join(',')})`);
+        const first = await line(val, conv);
+        assert(first.status === 200, `then Val's first DM line of the day: 200, not day_budget (${show(first)})`);
+        const cursor = (db.prepare('SELECT last_read_at AS t FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(conv, val.pk) as { t: string | null })?.t;
+        assert(typeof cursor === 'string' && Date.now() - Date.parse(cursor) < 10 * 60_000, `a read mark is a real one: it moved her read cursor (${cursor})`);
+
+        // Now to the budget with real writes (2 so far: the DM opened and the line).
+        const bulk = BUDGET - 2;
+        const writes = await many(bulk, 16, () => call('POST', val, '/api/community/me/area', {}));
+        assert(writes.length === bulk && writes.every(s => s === 400), `${bulk} more real writes take her to ${BUDGET} (${[...new Set(writes)].join(',')})`);
+        const messagesBefore = count('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?', conv);
+        const over = await line(val, conv);
+        assert(over.status === 429 && over.body?.code === 'day_budget', `past the budget a real write (a DM line) is 429 day_budget (${show(over)})`);
+        const markOver = await markRead();
+        assert(markOver.status === 200 && markOver.body?.success === true, `past the budget a read mark still goes (${show(markOver)})`);
+        const seenOver = await call('POST', val, '/api/notices/seen', { ids: ['no-such-notice'] });
+        assert(seenOver.status === 200 && seenOver.body?.success === true, `and so does marking notices seen (${show(seenOver)})`);
+        const markWithQuery = await call('POST', val, '/api/messages/mark-read?from=poll', { conversationId: conv });
+        assert(markWithQuery.status === 200, `a read mark with a query string is the same path to the gateway, and still a read mark (${show(markWithQuery)})`);
+
+        // Nothing else rides it: other spellings and methods of the read-mark paths are counted as the writes they could
+        // be (429 day_budget), or refused before any handler as a spelling nothing lives at (404, isNonCanonicalPath),
+        // and a real write never passes for one.
+        const dressed: [string, Method, string, unknown, 'day_budget' | 'not_found'][] = [
+            ['a trailing slash', 'POST', '/api/messages/mark-read/', { conversationId: conv }, 'day_budget'],
+            ['an escaped letter', 'POST', '/api/messages/mark%2Dread', { conversationId: conv }, 'day_budget'],
+            ['PATCH', 'PATCH', '/api/messages/mark-read', { conversationId: conv }, 'day_budget'],
+            ['DELETE', 'DELETE', '/api/notices/seen', { ids: ['no-such-notice'] }, 'day_budget'],
+            ['a DM line with the read-mark path in its query', 'POST', '/api/messages/send?/api/messages/mark-read', { conversationId: conv, authorPubkey: val.pk, ...lockedDm() }, 'day_budget'],
+            ['capitals', 'POST', '/api/Messages/mark-read', { conversationId: conv }, 'not_found'],
+            ['a double slash', 'POST', '//api/messages/mark-read', { conversationId: conv }, 'not_found'],
+        ];
+        for (const [what, method, path, body, expect] of dressed) {
+            const r = await call(method, val, path, body);
+            assert(expect === 'day_budget' ? r.status === 429 && r.body?.code === 'day_budget' : r.status === 404 && r.body?.error === 'Not found',
+                `${what} (${method} ${path}): ${expect === 'day_budget' ? 'counted, 429 day_budget' : 'refused before any handler, 404'} (${show(r)})`);
+        }
+        assert(count('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?', conv) === messagesBefore, 'and no line was written past the budget');
+
+        // The minute bucket still counts them.
+        const PER_MINUTE = 5;
+        minuteThrottle(true, PER_MINUTE);
+        const minute: number[] = [];
+        for (let i = 0; i <= PER_MINUTE; i++) minute.push((await call('POST', wyn, '/api/messages/mark-read', { conversationId: conv })).status);
+        assert(minute.slice(0, PER_MINUTE).every(s => s === 200) && minute[PER_MINUTE] === 429,
+            `read marks still count in the minute bucket: the ${PER_MINUTE + 1}th in a minute is 429 (${minute.join(',')})`);
+        minuteThrottle(false);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

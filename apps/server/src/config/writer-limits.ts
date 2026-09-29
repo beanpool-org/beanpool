@@ -17,8 +17,10 @@
  * routes): the day budget bounds them from the gateway until their own limits land (design §7, W-money).
  */
 export const WRITER_LIMITS = {
-    /** Signed writes (POST, PUT, PATCH, DELETE) per key in any 24 hours, the admin surface aside. Heavy real user: a
-     *  very active member's few hundred messages, read marks and reactions, under 2,000. */
+    /** Signed writes (POST, PUT, PATCH, DELETE) per key in any 24 hours, the admin surface and the read marks aside
+     *  (gateway-rate-limit.ts DAY_BUDGET_READ_MARKS: the apps send those on a timer while a chat is open, ~300 an hour
+     *  from a phone, and they make no row). Heavy real user: a very active member's few hundred messages, reactions,
+     *  edits and deals, under 2,000. */
     signedWritesPerDay: 5_000,
     /** Lines per member per minute in a chat: a DM, a group chat or an event chat. Heavy real user: nobody types 30
      *  lines a minute. */

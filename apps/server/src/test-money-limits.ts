@@ -68,7 +68,6 @@ const HOUR = 60 * 60 * 1000, DAY = 24 * HOUR;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
 const r4 = (n: number) => Math.round(n * 10_000) / 10_000;
-const fmt = (n: number) => n.toLocaleString('en');
 
 // ── members and signed requests ─────────────────────────────────────────────────────────────────────────────────
 interface Id { pk: string; priv: crypto.KeyObject; name: string }

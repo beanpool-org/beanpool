@@ -387,6 +387,7 @@ run_federation_suites() {
       test-standby-listings-verbatim
       test-standby-standing
       test-standby-health
+      test-address-retention
       test-standby-in-flight
       test-recovery-tombstones
       test-unlock-cancel
@@ -469,6 +470,7 @@ run_federation_suites() {
       test-etag-short-circuit
       test-api-headers-and-feed-etag
       test-directory-publisher
+      test-website-directory-map
       test-members-holiday
       test-admin-seed-invite
       test-admin-genesis-pubkey
@@ -528,6 +530,7 @@ run_federation_suites() {
       test-groups-sync-and-removal
       test-groups-chat
       test-chat-parity
+      test-dm-never-plaintext
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession

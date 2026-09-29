@@ -534,7 +534,14 @@ export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
     publishLocation?: boolean;
     publishMembers?: boolean;
-    publishContacts?: boolean;
+    /**
+     * Whether the directory is sent the community's contact email, and its phone. Off unless an owner turned each on: only
+     * a stored `true` under these keys publishes. They replace `publishContacts`, one switch for both that read unset as
+     * "publish" and was written back as true by every save, so a stored true there was no choice anyone made; it is
+     * dropped on read, and nothing of it publishes a contact.
+     */
+    publishContactEmail?: boolean;
+    publishContactPhone?: boolean;
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
@@ -1077,6 +1084,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
@@ -7219,7 +7227,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
-    if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
+    // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    if (conv) {
+        sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
+            'text', undefined, undefined, undefined, { nodeAuthored: true });
+    }
 }
 
 export function migrateAdminConversations() {} // Deprecated, state is clean now.
@@ -7250,7 +7263,6 @@ export function getNodeConfig(): NodeConfig {
         const pub = config.publishToDirectory !== false;
         config.publishLocation = pub;
         config.publishMembers = pub;
-        config.publishContacts = pub;
         config.publishHealth = pub;
         delete config.publishToDirectory;
         delete config.password;
@@ -7260,7 +7272,8 @@ export function getNodeConfig(): NodeConfig {
         serviceRadius: config.serviceRadius,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
-        publishContacts: config.publishContacts !== false,
+        publishContactEmail: config.publishContactEmail === true,
+        publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -7342,16 +7355,19 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
     return host ? `https://${host}` : null;
 }
 
+/**
+ * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
+ * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
+ * directory gets the community's name and web address, so people on the global node can find it and ask to join, with
+ * every switch off. The switches leave out only what each covers, sent as null so the directory drops what it had.
+ */
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
-    if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
-        return null;
-    }
-    
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
         publicUrl: resolvePublicNodeUrl(config),
+        communityName: localConfig.communityName || null,
     };
 
     if (config.publishLocation) {
@@ -7366,16 +7382,9 @@ export function getDirectoryInfo(): any {
         info.memberCount = null;
     }
 
-    if (config.publishContacts) {
-        if (localConfig.communityName) info.name = localConfig.communityName;
-        info.communityName = localConfig.communityName || null;
-        if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
-        if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
-    } else {
-        info.communityName = null;
-        info.contactEmail = null;
-        info.contactPhone = null;
-    }
+    // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
+    info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
+    info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
 
     if (config.publishHealth) {
         const realVersion = getVersion();
@@ -7695,9 +7704,10 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // The snapshot-pull endpoint hands out the entire ledger (incl. DMs + recovery
 // data), so on the PRIMARY we record who pulls it — to attribute legitimate
 // backup traffic AND to surface rejected attempts (a leaked-credential / probing
-// signal) on the admin dashboard.
+// signal) on the admin dashboard. Each entry's address is kept 7 days, then
+// null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
@@ -7717,9 +7727,9 @@ const EMPTY_ACCESS_LOG: ReplicationAccessLog = {
 export function getReplicationAccessLog(): ReplicationAccessLog {
     try {
         const row = db.prepare(`SELECT value FROM node_config WHERE key='replication_access'`).get() as any;
-        if (row?.value) return { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) };
+        if (row?.value) return withoutOldAddresses('replication_access', { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) });
     } catch { /* fall through to empty */ }
-    return { ...EMPTY_ACCESS_LOG };
+    return { ...EMPTY_ACCESS_LOG, recent: [] };
 }
 
 export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
@@ -7736,6 +7746,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
             log.lastPullAuth = ev.auth;
         }
         log.recent = [ev, ...(log.recent || [])].slice(0, 20);
+        withoutOldAddresses('replication_access', log);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replication_access', ?)`).run(JSON.stringify(log));
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);

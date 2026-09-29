@@ -27,6 +27,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole, createPost } from '.
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
     assert(/private/.test(cache) && /no-store/.test(cache), `the answer is one member's own: private, no-store (got "${cache}")`);
 
     // A reply is never limited, and a line to Zed now is to someone already reached: still 1.
-    const lineToZed = await call('POST', nia, '/api/messages/send', { conversationId: opened.body?.conversation?.id, authorPubkey: nia.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const lineToZed = await call('POST', nia, '/api/messages/send', { conversationId: opened.body?.conversation?.id, authorPubkey: nia.pk, ...lockedDm() });
     assert(lineToZed.status === 200 && (await me(nia)).body?.probation?.limits?.new_dm_recipients?.used === 1,
         `a line to Zed after opening it counts nobody new: still 1 (${lineToZed.status})`);
 

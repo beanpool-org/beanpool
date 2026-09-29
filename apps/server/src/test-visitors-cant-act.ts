@@ -104,6 +104,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -316,7 +317,8 @@ async function main(): Promise<void> {
     // The visitor: Alice writes to her, and Beans reach her, as they reach every visitor.
     const vera = keypair('VeraVA');
     const veraDm = createConversation('dm', [alice.pk, vera.pk], alice.pk)!;
-    const aliceLine = sendMessage(veraDm.id, alice.pk, 'aGkgVmVyYQ==', 'bjE=')!;
+    const hiVera = lockedDm();
+    const aliceLine = sendMessage(veraDm.id, alice.pk, hiVera.ciphertext, hiVera.nonce)!;
     transfer('genesis', vera.pk, 30, 'welcome gift', 'direct', true);
     assert(isVisitorRow(vera.pk) && balanceOf(vera.pk) === 30, "setup: Vera's row is a visitor's, made by Alice's DM, holding 30 Beans");
     // What a visitor's row could get before this rule, so that nothing but the rule refuses her below.
@@ -664,7 +666,7 @@ async function main(): Promise<void> {
         participants: [a.pk, carol.pk], type: 'dm', id: aliceOffer.id, postId: aliceOffer.id, targetPostId: aliceOffer.id, groupId: group.id,
         conversationId: veraDm.id, messageId: aliceLine.id, transactionId: miaBuys.id, projectId: project,
         category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', credits: 1, priceType: 'fixed', amount: 1,
-        ciphertext: 'aGk=', nonce: `bm9uY2U${crypto.randomBytes(3).toString('hex')}`, emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
+        ...lockedDm(), emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
         bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
         duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount: 10, requestedAmount: 10,
         platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'grant_voucher', subject: bob.pk,
@@ -784,7 +786,7 @@ async function main(): Promise<void> {
         const dan = makeMember('DanVA');
         adminAssignTreasuryOperator(apiary, dan.pk, 'admin');
         const veraReplies = () => call('POST', vera, '/api/messages/send',
-            { conversationId: veraDm.id, authorPubkey: vera.pk, ciphertext: 'c3RpbGwgaGVyZQ==', nonce: `bj${crypto.randomBytes(4).toString('hex')}` });
+            { conversationId: veraDm.id, authorPubkey: vera.pk, ...lockedDm() });
         const quiet = () => db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(ago(40 * DAY), vera.pk);
         // The reviewer's case: she has been quiet 40 days, so Cody's proposal opens; then she replies in her own DM.
         quiet();
@@ -854,7 +856,7 @@ async function main(): Promise<void> {
     {
         const again = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, alice.pk], createdBy: vera.pk });
         assert(again.status === 200 && again.body?.conversation?.id === veraDm.id, `the app may ask for its DM again before it writes: the same one (${show(again)})`);
-        const reply = await call('POST', vera, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: vera.pk, ciphertext: 'dGhhbmtz', nonce: 'bjI=' });
+        const reply = await call('POST', vera, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: vera.pk, ...lockedDm() });
         assert(reply.status === 200 && reply.body?.message?.authorPubkey === vera.pk, `it replies in its DM (${show(reply)})`);
         const read = await call('POST', vera, '/api/messages/mark-read', { conversationId: veraDm.id });
         const mute = await call('POST', vera, '/api/messages/mute', { conversationId: veraDm.id, duration: '8h' });
@@ -862,13 +864,14 @@ async function main(): Promise<void> {
         // In its DM it edits and deletes its own lines and reacts, as anyone in a DM does (the director, 2026-09-26: messaging is
         // what Marty's answer gives a visitor, and a visitor that can't take its own words back is worse off for privacy).
         const ownLine = reply.body?.message?.id;
-        const edit = await call('POST', vera, '/api/messages/edit', { messageId: ownLine, ciphertext: 'ZWRpdGVk', nonce: 'bjM=' });
+        const newWords = lockedDm();
+        const edit = await call('POST', vera, '/api/messages/edit', { messageId: ownLine, ...newWords });
         const edited = db.prepare('SELECT ciphertext, edited_at FROM messages WHERE id = ?').get(ownLine) as any;
-        assert(edit.status === 200 && edited?.ciphertext === 'ZWRpdGVk' && !!edited.edited_at, `it edits its own line in its DM (${show(edit)})`);
+        assert(edit.status === 200 && edited?.ciphertext === newWords.ciphertext && !!edited.edited_at, `it edits its own line in its DM (${show(edit)})`);
         const react = await call('POST', vera, '/api/messages/react', { messageId: aliceLine.id, authorPubkey: vera.pk, emoji: '👍' });
         const aliceMeta = String((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(aliceLine.id) as any)?.metadata ?? '');
         assert(react.status === 200 && aliceMeta.includes('👍') && aliceMeta.includes(vera.pk), `it reacts to Alice's line in its DM (${show(react)})`);
-        const notHers = await call('POST', vera, '/api/messages/edit', { messageId: aliceLine.id, ciphertext: 'aGE=', nonce: 'bjY=' });
+        const notHers = await call('POST', vera, '/api/messages/edit', { messageId: aliceLine.id, ...lockedDm() });
         const notHersGone = await call('POST', vera, '/api/messages/delete', { messageId: aliceLine.id });
         assert(notHers.status === 400 && notHers.body?.error === 'Only the author can edit a message'
             && notHersGone.status === 403 && notHersGone.body?.error === 'Only the author can delete a message'
@@ -965,7 +968,7 @@ async function main(): Promise<void> {
         const groupLine = await call('POST', alice, `/api/groups/${group.id}/chat/message`, { text: 'Group secret: the key is under the pot' });
         const eventLine = await call('POST', bob, `/api/marketplace/posts/${event.id}/chat/message`, { text: 'Event secret: park by the shed' });
         const noteEdit = await call('POST', alice, '/api/marketplace/posts/update', { id: event.id, authorPublicKey: alice.pk, eventPrivateNote: `${NOTE}, new code 9902` });
-        const dmLine = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ciphertext: 'bW9yZQ==', nonce: 'bjQ=' });
+        const dmLine = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
         const paid = await call('POST', alice, '/api/ledger/transfer', { from: alice.pk, to: vera.pk, amount: 1, memo: 'thanks' });
         assert(groupLine.status < 300 && eventLine.status < 300 && noteEdit.status === 200 && dmLine.status === 200 && paid.status === 200,
             `setup: a group line, an event line, a new note, a DM line and a payment to Vera (${groupLine.status} ${eventLine.status} ${noteEdit.status} ${dmLine.status} ${paid.status})`);
@@ -1062,9 +1065,9 @@ async function main(): Promise<void> {
 
         // What Vera keeps, through the gate.
         const again = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, alice.pk], createdBy: vera.pk });
-        const reply = await call('POST', vera, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: vera.pk, ciphertext: 'Z2F0ZQ==', nonce: 'bjE3' });
+        const reply = await call('POST', vera, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: vera.pk, ...lockedDm() });
         const line = reply.body?.message?.id;
-        const edit = await call('POST', vera, '/api/messages/edit', { messageId: line, ciphertext: 'Z2F0ZSE=', nonce: 'bjE4' });
+        const edit = await call('POST', vera, '/api/messages/edit', { messageId: line, ...lockedDm() });
         const react = await call('POST', vera, '/api/messages/react', { messageId: aliceLine.id, emoji: '🌻' });
         const del = await call('POST', vera, '/api/messages/delete', { messageId: line });
         const read = await call('POST', vera, '/api/messages/mark-read', { conversationId: veraDm.id });
@@ -1099,7 +1102,7 @@ async function main(): Promise<void> {
         }
 
         // Members and suspended members are not the gate's: each reaches the route as before.
-        const aliceSays = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ciphertext: 'b2s=', nonce: 'bjE5' });
+        const aliceSays = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
         const sid = makeMember('SidVA');
         db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(sid.pk);
         const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk });
@@ -1321,10 +1324,11 @@ async function main(): Promise<void> {
         // line anywhere else is answered as for a key with no row (403 members_only), with nothing changed.
         const w = weekOld[1];
         const wDm = createConversation('dm', [carol.pk, w.pk], carol.pk)!;
-        const carolLine = sendMessage(wDm.id, carol.pk, 'aGVsbG8=', 'bjg=')!;
-        const wReply = await call('POST', w, '/api/messages/send', { conversationId: wDm.id, authorPubkey: w.pk, ciphertext: 'aGk=', nonce: 'bjk=' });
+        const hello = lockedDm();
+        const carolLine = sendMessage(wDm.id, carol.pk, hello.ciphertext, hello.nonce)!;
+        const wReply = await call('POST', w, '/api/messages/send', { conversationId: wDm.id, authorPubkey: w.pk, ...lockedDm() });
         const wLine = wReply.body?.message?.id;
-        const wEdit = await call('POST', w, '/api/messages/edit', { messageId: wLine, ciphertext: 'aGkh', nonce: 'bjEw' });
+        const wEdit = await call('POST', w, '/api/messages/edit', { messageId: wLine, ...lockedDm() });
         const wReact = await call('POST', w, '/api/messages/react', { messageId: carolLine.id, emoji: '👍' });
         const wDelete = await call('POST', w, '/api/messages/delete', { messageId: wLine });
         const wRead = await call('GET', w, `/api/messages/${wDm.id}`);
@@ -1333,7 +1337,7 @@ async function main(): Promise<void> {
             && JSON.stringify(wRead.body).includes('👍'),
             `a visitor replies, edits and deletes its own line and reacts, in its own DM, and reads it with the reaction (${[wReply, wEdit, wReact, wDelete, wRead].map(show).join('; ')})`);
         for (const [what, path, body] of [
-            ['edit', '/api/messages/edit', { messageId: aliceLine.id, ciphertext: 'aGE=', nonce: 'bjEx' }],
+            ['edit', '/api/messages/edit', { messageId: aliceLine.id, ...lockedDm() }],
             ['delete', '/api/messages/delete', { messageId: aliceLine.id }],
             ['react to', '/api/messages/react', { messageId: aliceLine.id, emoji: '👍' }],
         ] as const) {
@@ -1354,7 +1358,8 @@ async function main(): Promise<void> {
         const remote = keypair('RemoteVA');
         registerVisitor(remote.pk, 'Remote Rita', 'https://peer.example.org');
         const conv = createConversation('dm', [remote.pk, carol.pk], remote.pk);
-        const line = conv ? sendMessage(conv.id, remote.pk, 'aGVsbG8gZnJvbSBhZmFy', 'bjU=', 'text') : null;
+        const fromAfar = lockedDm();
+        const line = conv ? sendMessage(conv.id, remote.pk, fromAfar.ciphertext, fromAfar.nonce, 'text') : null;
         assert(isVisitorRow(remote.pk) && !!conv && !!line && line.authorPubkey === remote.pk,
             'the relayed sender is a visitor\'s row, and its DM with a member here opens and takes its line');
     }

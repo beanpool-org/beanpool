@@ -47,6 +47,7 @@ import {
 } from './engine/messaging.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -145,6 +146,8 @@ async function main(): Promise<void> {
     const edit = (actor: string | undefined, id: string, text: string) => mpost('/api/messages/edit', actor, editBody(id, text));
     const react = (actor: string | undefined, id: string, emoji = '👍') => mpost('/api/messages/react', actor, { messageId: id, authorPubkey: actor, emoji });
     const del = (actor: string | undefined, id: string) => mpost('/api/messages/delete', actor, { messageId: id });
+    /** A DM line through the engine, in the encrypted form the node requires of a member's direct message. */
+    const dmLine = (convId: string, author: string) => { const p = lockedDm(); return sendEngine(cb, convId, author, p.ciphertext, p.nonce); };
 
     // ── 1. Edit in a group chat ─────────────────────────────────────────────────────────────
     console.log('\n--- 1. Edit in a group chat ---');
@@ -308,7 +311,7 @@ async function main(): Promise<void> {
 
     // ── 3b. In a DM ──
     const dm = createConversation('dm', [bob, erin], bob)!;
-    const dmMsg = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ciphertext: 'ZW5jcnlwdGVk', nonce: 'dm-nonce-1' });
+    const dmMsg = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ...lockedDm() });
     const dmId = dmMsg.body.message.id;
     await react(erin, dmId, '👀');
     assert(metaOf(dmId).reactions?.length === 1, 'a DM message with a reaction on it');
@@ -317,7 +320,7 @@ async function main(): Promise<void> {
     assert(decode(rowOf(dmId).ciphertext) === 'This message was deleted' && rowOf(dmId).nonce === 'plaintext-v1',
         'the DM tombstone REPLACES the ciphertext on the node, readable without the conversation key, so both phones pick it up on their next sync');
     assert(!metaOf(dmId).reactions && metaOf(dmId).removedBy === bob, 'the reaction goes with it');
-    const dmLiveMsg = sendEngine(cb, dm.id, bob, 'YW5vdGhlcg==', 'dm-nonce-live')!;
+    const dmLiveMsg = dmLine(dm.id, bob)!;
     broadcasts.length = 0; pushes.length = 0;
     deleteEngine(cb, dmLiveMsg.id, bob);
     const dmLive = broadcasts.filter(b => b.event?.type === 'message_edited' && b.event?.message?.id === dmLiveMsg.id);
@@ -325,13 +328,14 @@ async function main(): Promise<void> {
         'the other phone hears it live, as a message_edited carrying the tombstone');
     assert(pushes.length === 0, 'and no push');
     assert(statusOf(await del(erin, dmId)) === 403, 'the other participant cannot delete it');
-    const dmMsg2 = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ciphertext: 'YWdhaW4=', nonce: 'dm-nonce-2' });
+    const dmMsg2 = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ...lockedDm() });
     assert(statusOf(await del(alice, dmMsg2.body.message.id)) === 403, 'nor can someone outside the DM');
 
     // A deleted image DM loses the photo too, or /api/attachment/:id would keep serving it.
+    const photo = lockedDm(64);
     const withPhoto = await mpost('/api/messages/send', bob, {
-        conversationId: dm.id, authorPubkey: bob, ciphertext: 'cGhvdG8=', nonce: 'dm-nonce-3',
-        type: 'image', attachment: { data: 'aW1hZ2VieXRlcw==', nonce: 'att-nonce' },
+        conversationId: dm.id, authorPubkey: bob, ...lockedDm(),
+        type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce },
     });
     const photoId = withPhoto.body.message.id;
     assert(!!db.prepare('SELECT 1 FROM message_attachments WHERE message_id = ?').get(photoId), 'the photo is stored');
@@ -418,23 +422,23 @@ async function main(): Promise<void> {
     console.log('\n--- 7. A muted DM sends no push ---');
     const quiet = createConversation('dm', [alice, erin], alice)!;
     pushes.length = 0;
-    sendEngine(cb, quiet.id, alice, 'aGk=', 'n1');
+    dmLine(quiet.id, alice);
     assert(pushes.flatMap(p => p.targets).includes(erin), 'an unmuted DM pushes the other person');
     // The mute is set through the ROUTE (the phone's only way in) and honoured where pushes are decided.
     const muted = await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: '8h' });
     assert(muted.body?.success === true && !!muted.body.mute?.mutedUntil, 'the other person mutes the DM for 8 hours through /api/messages/mute');
     pushes.length = 0;
-    sendEngine(cb, quiet.id, alice, 'aGkgYWdhaW4=', 'n2');
+    dmLine(quiet.id, alice);
     assert(pushes.length === 0, 'and the next DM pushes nobody');
     db.prepare('UPDATE chat_mutes SET muted_until = ? WHERE conversation_id = ? AND member_pubkey = ?')
         .run(new Date(Date.now() - 1000).toISOString(), quiet.id, erin);
     pushes.length = 0;
-    sendEngine(cb, quiet.id, alice, 'YmFjaw==', 'n3');
+    dmLine(quiet.id, alice);
     assert(pushes.flatMap(p => p.targets).includes(erin), 'an expired mute is no mute');
     const off = await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: 'always' });
     assert(off.body?.mute?.always === true, "'always' is accepted for a DM");
     pushes.length = 0;
-    sendEngine(cb, quiet.id, alice, 'cXVpZXQ=', 'n4');
+    dmLine(quiet.id, alice);
     assert(pushes.length === 0, "'always' silences it for good");
     assert((await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: 'off' })).body?.mute === null,
         "'off' unmutes the DM again");
@@ -515,7 +519,7 @@ async function main(): Promise<void> {
         'and edits, reactions and deletes share the one bucket — the chat bucket the group send route uses');
     // A DM is not a room: its fan-out is the other phone, so it keeps the DM rules.
     const franksDm = createConversation('dm', [frank, bob], frank)!;
-    const franksDmMsg = sendEngine(cb, franksDm.id, frank, b64('hello'), 'dm-nonce-frank')!;
+    const franksDmMsg = dmLine(franksDm.id, frank)!;
     assert((await del(frank, franksDmMsg.id)).body?.success === true, 'while a DM write goes through the brake untouched');
     resetChatRateLimit();
     assert((await del(frank, franksLine.id)).body?.success === true, 'and the next window lets the room write through again');

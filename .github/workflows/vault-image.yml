@@ -48,6 +48,18 @@ jobs:
         run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
       - name: Second build
         run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/two" --cache "${RUNNER_TEMP}/image-cache"
+      - name: What the first build listed (to compare with a build elsewhere)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-image-listing
+          path: |
+            ${{ runner.temp }}/keys.json
+            ${{ runner.temp }}/one/image.json
+            ${{ runner.temp }}/one/root-files.txt
+            ${{ runner.temp }}/one/uki-sections.txt
+          if-no-files-found: ignore
+          retention-days: 14
       - name: The same bytes
         run: |
           set -euo pipefail

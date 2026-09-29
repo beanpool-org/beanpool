@@ -67,10 +67,11 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, broadcast, seedGenesisMember, adminPruneUser, adminSetUserStatus, purgeMemberSelf,
-    exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables, signSyncPayload,
+    exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
@@ -494,9 +495,10 @@ async function main(): Promise<void> {
     assert(carried.every((r: any) => !('ipHash' in r) && !('ip_hash' in r)) && !JSON.stringify(carried).includes(rowsFor(carl.pk)[1]?.ip_hash ?? '~none~'),
         'and never the address hash');
     const bobId = rowsFor(bob.pk)[0]?.id;
-    // A standby: empty replicated tables, and none of the main server's invite codes yet (the copy brings them).
-    clearReplicatedTables();
-    assert(knockCount() === 0, 'a force-resync clears join_requests');
+    // A standby: empty copied tables, as its whole copy starts (engine/copied-tables.ts), and none of the main server's
+    // invite codes yet (the copy brings them).
+    emptyCopiedTables(db);
+    assert(knockCount() === 0, 'a whole copy starts without join_requests');
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode);
     setNodeRole('backup');
     await importRemoteState(payload);
@@ -528,7 +530,7 @@ async function main(): Promise<void> {
     // She joined on the "main". A standby copies her member row, the approval and the invite, used by her, as the main
     // server holds it. Once that invite is 30 days old, her status must still say approved there.
     const payload3: any = await exportSyncState(nodeId);
-    clearReplicatedTables();
+    emptyCopiedTables(db);
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode2);
     setNodeRole('backup');
     await importRemoteState(payload3);
@@ -575,9 +577,9 @@ async function main(): Promise<void> {
     const memberRow = (pk: string) => db.prepare('SELECT status, invited_by, invite_code FROM members WHERE public_key = ?').get(pk) as any;
     const knockById = (id: string) => db.prepare('SELECT * FROM join_requests WHERE id = ?').get(id) as any;
     const redeem = (code: string, id: Id) => call(null, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
-    /** This database becomes a standby holding `copy`: the replicated tables cleared, then imported. */
+    /** This database becomes a standby holding `copy`: the copied tables emptied, then imported. */
     async function becomeCopyOf(copy: any, dropCodes: string[] = []): Promise<void> {
-        clearReplicatedTables();
+        emptyCopiedTables(db);
         // Invite codes a standby doesn't hold yet: the copy brings them, as the main server holds them.
         for (const c of dropCodes) db.prepare('DELETE FROM invite_codes WHERE code = ?').run(c);
         setNodeRole('backup');

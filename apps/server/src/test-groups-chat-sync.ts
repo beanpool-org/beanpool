@@ -20,10 +20,11 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables, signSyncPayload,
+    initStateEngine, exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
     createGroup, joinGroup, removeGroupMember, setMemberRole, postGroupThreadMessage, canReadGroupThread,
 } from './state-engine.js';
 import { removeOldChatGroups } from './engine/messaging.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 
@@ -85,7 +86,7 @@ async function main(): Promise<void> {
     assert((payload.conversationParticipants ?? []).filter((p: any) => p.conversationId === g.id).length === 3, 'and its participants');
     assert((payload.messages ?? []).filter((m: any) => m.conversationId === g.id).length === expectedMsgs.length, 'and every message and system line');
 
-    clearReplicatedTables();
+    emptyCopiedTables(db); // a new standby's whole copy starts from nothing (engine/copied-tables.ts)
     assert(!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(g.id) && msgs(g.id).length === 0, 'the replica starts without the chat');
     await asReplica(payload);
     assert((db.prepare('SELECT type, name FROM conversations WHERE id = ?').get(g.id) as any)?.type === 'group_thread', 'the chat is back');
@@ -126,7 +127,7 @@ async function main(): Promise<void> {
     insertOld();
     const oldSnapshot: any = await exportSyncState(nodeId);
     assert((oldSnapshot.conversations ?? []).some((c: any) => c.id === oldId), 'fixture: a not-yet-updated primary would export it');
-    clearReplicatedTables();
+    emptyCopiedTables(db); // a new standby's whole copy starts from nothing (engine/copied-tables.ts)
     await asReplica(oldSnapshot);
     assert(!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(oldId), 'the replica does not import the old chat group');
     assert(parts(oldId).length === 0 && msgs(oldId).length === 0, 'nor its participants or messages');

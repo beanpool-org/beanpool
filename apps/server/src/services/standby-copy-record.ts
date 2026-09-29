@@ -120,6 +120,19 @@ export interface CopyRecord {
      * every whole copy is refused), or any whole copy.
      */
     lastOversized: (TablesNamed & { whole: boolean }) | null;
+    /**
+     * The last whole copy that landed (or that the main server said was unchanged): when, how many pages it took, and its
+     * `generatedAt`. The routine whole copy's cadence follows it across restarts (services/backup-puller.ts nextMode): a
+     * whole copy of more than one page restarts the standby to be swapped in (services/stager.ts), and without it the
+     * next start would ask for another at once.
+     */
+    lastWholeCopy: WholeCopyTaken | null;
+}
+
+export interface WholeCopyTaken {
+    at: number;
+    pages: number;
+    generatedAt: string | null;
 }
 
 /** Tables named by the manifest's names: since when, and the last time a copy named them. */
@@ -134,6 +147,7 @@ function fresh(): CopyRecord {
         id: crypto.randomBytes(16).toString('hex'), lastPullAt: null, lastOutcome: null, lastWhy: null,
         failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null, lastMismatchResyncAt: null,
         lastMismatchResyncTakenAt: null, lastLeftOut: null, lastLacking: null, pastRetentionAt: null, lastOversized: null,
+        lastWholeCopy: null,
     };
 }
 
@@ -189,6 +203,8 @@ export function readCopyRecord(): CopyRecord {
             lastLacking: r && typeof r === 'object' && Object.hasOwn(r, 'lastLacking') ? tablesNamed(r.lastLacking) : tablesNamed(r?.lastLeftOut),
             pastRetentionAt: num(r?.pastRetentionAt),
             lastOversized: ((o) => (o ? { ...o, whole: r?.lastOversized?.whole === true } : null))(tablesNamed(r?.lastOversized)),
+            lastWholeCopy: ((w) => (w && typeof w === 'object' && num(w.at) !== null && Number.isInteger(w.pages) && w.pages >= 0
+                ? { at: w.at, pages: w.pages, generatedAt: typeof w.generatedAt === 'string' ? w.generatedAt : null } : null))(r?.lastWholeCopy),
         };
     } catch {
         return fresh();
@@ -246,6 +262,12 @@ export function noteCopyFailed(
         failedImportsInARow: outcome === 'refused' ? r.failedImportsInARow + 1 : r.failedImportsInARow,
         lastOversized: named1 ? { ...named1, whole: whole || r.lastOversized?.whole === true } : r.lastOversized,
     });
+}
+
+/** A whole copy landed, or the main server said nothing changed since the last one (lastWholeCopy). */
+export function noteWholeCopyTaken(taken: WholeCopyTaken): void {
+    const r = readCopyRecord();
+    write({ ...r, lastWholeCopy: taken });
 }
 
 /** A whole copy's check that gave a verdict (services/backup-puller.ts checkWholeCopy). */

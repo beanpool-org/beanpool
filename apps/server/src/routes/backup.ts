@@ -13,7 +13,7 @@ import {
     recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
-import { openCopy, copyPage, type CopyAnswer } from '../engine/copy-pages.js';
+import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
@@ -1218,6 +1218,17 @@ router.get('/api/local/admin/sync-copy/:copyId/:n', async (ctx) => {
         ctx.status = 500;
         ctx.body = { error: 'Copy export failed' };
     }
+});
+
+// Close an open copy now, as its standby asks when it won't finish it (a delta too big to take, a page it refused), so the
+// next copy opens at once (engine/copy-pages.ts closeCopy). The same auth as the pages; a copy this server no longer holds
+// answers `closed: false`.
+router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { closed: closeCopy(String(ctx.params.copyId)) };
 });
 
 // Restore (sealed-keys.md §6.2). Takes either:

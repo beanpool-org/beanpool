@@ -26,12 +26,11 @@
  *  10. The database is measurably smaller afterwards.
  *  11. An import writes a peer's photos to disk BEFORE it opens its write transaction, so a big resync
  *      never holds the write lock across one fsync per photo.
- *  12. A FORCE-RESYNC does not destroy the replica's only good copy. The export omits a row whose object the
- *      primary cannot read, and names it in the payload; `clearReplicatedTables` keeps exactly those rows, so
- *      the row and its object survive the wipe that used to delete both. LAST, because it empties the tables.
- *  13. And it holds at the size that actually happens: a lost images directory omits EVERY evacuated photo,
- *      so a keep list of thousands spares exactly those rows rather than hitting SQLite's expression-depth
- *      limit — and a failure there aborts the resync instead of committing a table that was never cleared.
+ *  12. The export omits a row whose object the primary cannot read, and names it in the payload, so a replica
+ *      keeps its own good copy. (A standby's whole copy is built from nothing in a staging database since P2,
+ *      and the stager carries the rows a copy names over from the standby's live copy, thousands of them in one
+ *      statement: test-standby-paged-copies.ts step 7. The force-resync's clear this section and a 13th
+ *      checked, which spared the named rows, is gone with it.)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -632,29 +631,17 @@ async function main(): Promise<void> {
     );
     assert(sizeAfter < sizeBeforeUpgrade / 2, 'the database is less than half the size it was');
 
-    // ── 12. a force-resync keeps the rows the primary could not send ───────────────────────────
+    // ── 12. the export names the rows it could not send ─────────────────────────────────────────
     //
-    // This is LAST because it empties the replicated tables, and nothing may run after it.
-    //
-    // "What the importer does not receive it keeps" is true of a delta or a full pull, and FALSE of a
-    // force-resync: `pullOnce('resync')` calls `clearReplicatedTables()` — which lists `post_photos` — before
-    // importing. So the one case the export's omission exists for (§5: the replica holds the only readable
-    // copy) was the case a resync destroyed: the row went, its object became an orphan, and the daily sweep
-    // reclaimed the bytes after the grace period. And a resync is the natural thing an operator does when a
-    // replica "looks wrong".
-    //
-    // Here the LOCAL node plays both parts — it exports as the primary would, then clears as the replica
-    // does — because `clearReplicatedTables` works on this process's one database handle.
-    const { clearReplicatedTables } = await import('./state-engine.js');
-    const { referencedStorageKeys } = await import('./storage/image-columns.js');
-
+    // "What the importer does not receive it keeps" is true of a delta, and FALSE of a whole copy built from nothing in
+    // a staging database (services/stager.ts): the one case the export's omission exists for (§5: the replica holds the
+    // only readable copy) needs the payload to NAME the rows it left out, so the stager carries the replica's own rows
+    // over (test-standby-paged-copies.ts step 7, at a thousand rows and more).
     const kept = db.prepare('SELECT post_id, order_num, storage_key FROM post_photos WHERE storage_key IS NOT NULL LIMIT 1')
         .get() as { post_id: string; order_num: number; storage_key: string } | undefined;
     assert(!!kept, 'setup: there is an evacuated photo row to lose');
     const keptRowKey = `${kept!.post_id}|${kept!.order_num}`;
     const keptBytes = store.get(kept!.storage_key)!;
-    const rowsBefore = (db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c as number;
-    assert(rowsBefore > 1, `setup: and other photo rows a resync SHOULD clear (${rowsBefore} in all)`);
 
     // The primary cannot read that one object, so the export leaves the row out — and says which.
     store.delete(kept!.storage_key);
@@ -664,85 +651,7 @@ async function main(): Promise<void> {
         `the payload NAMES the row it left out, additively (${JSON.stringify(omitExport.photosOmitted)})`);
     assert(!((omitExport as any).photos as any[]).some(ph => ph.post_id === kept!.post_id && ph.order_num === kept!.order_num),
         'and does not carry it, as §5 requires');
-
-    // The replica's copy is the good one. It has the bytes; the primary does not.
     store.put(kept!.storage_key, keptBytes, { mime: 'image/jpeg' });
-
-    clearReplicatedTables(omitExport.photosOmitted);
-    const survivor = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = ?')
-        .get(kept!.post_id, kept!.order_num) as any;
-    assert(survivor?.storage_key === kept!.storage_key,
-        'a force-resync KEEPS the row the incoming payload could not carry — the only copy of it left');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 1,
-        'while every other photo row is cleared, as a resync must, so the import rebuilds them 1:1');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM members').get() as any).c === 0,
-        'and the rest of the replicated tables are cleared exactly as before');
-    assert(store.get(kept!.storage_key)?.equals(keptBytes) === true,
-        'the object is still on disk, byte for byte');
-    assert(referencedStorageKeys(db).includes(kept!.storage_key),
-        'and still REFERENCED, so the daily orphan sweep leaves it alone rather than reclaiming it');
-
-    // Nothing named: the wipe is total, exactly as it was. This is the behaviour a resync needs when the
-    // primary CAN read everything, and the line above is the one exception to it.
-    clearReplicatedTables();
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 0,
-        'with nothing named, a resync clears post_photos outright — the exception is only for omitted rows');
-
-    // ── 13. the keep list has no ceiling, and a failure aborts instead of committing half a clear ──
-    //
-    // §12 spares ONE row, which is the comfortable case. The case this argument exists for is not: a primary
-    // whose images directory is lost or unmounted can read none of its evacuated photos, so it omits every
-    // one of them — thousands of rows on a live node. Built as one `OR`-ed predicate per spared pair, that
-    // statement is parsed left-deep and throws "Expression tree is too large (maximum depth 1000)" from about
-    // 999 pairs on; the catch beside it logged and let the transaction COMMIT, so `post_photos` was not
-    // cleared at all — every orphan row survived, not only the spared ones — and the log said "KEEPING 0 of
-    // N". Self-contained: §12 left both tables empty, so this seeds its own rows.
-    const BULK = 5000;
-    const insertBulk = db.prepare(
-        `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
-    const bulkKeep: string[] = [];
-    db.transaction(() => {
-        for (let i = 0; i < BULK * 2; i++) {
-            const postId = `bulk-post-${String(i).padStart(6, '0')}`;
-            insertBulk.run(postId, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
-            if (i % 2 === 0) bulkKeep.push(`${postId}|0`); // spare every other row, so position proves identity
-        }
-    })();
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK * 2,
-        `setup: ${BULK * 2} photo rows, of which the payload names ${BULK} it could not carry`);
-
-    // Throwing here is the FIXED behaviour for a statement that fails; on the unfixed tree it returns
-    // quietly. Either way the assertions below are what report, rather than the run dying.
-    try { clearReplicatedTables(bulkKeep); } catch (e: any) { console.error(`  (threw: ${e?.message})`); }
-    const survivors = (db.prepare('SELECT post_id FROM post_photos').all() as { post_id: string }[])
-        .map(r => Number(r.post_id.slice('bulk-post-'.length)));
-    const unnamedSurvivor = survivors.find(n => !Number.isInteger(n) || n % 2 !== 0);
-    assert(survivors.length === BULK,
-        `a keep list of ${BULK} rows spares exactly that many — the spared-rows filter has no depth ceiling `
-        + `(${survivors.length} survived)`);
-    assert(unnamedSurvivor === undefined,
-        'and the survivors are the NAMED rows, not merely the right number of them'
-        + (unnamedSurvivor === undefined ? '' : ` (bulk-post-${String(unnamedSurvivor).padStart(6, '0')} survived)`));
-
-    // A failure in that statement must abort the WHOLE resync. Committing past it is worse than failing:
-    // the replica would be left with a table half-cleared of the very rows the payload cannot replace.
-    // The trigger fires on the DELETE, so there have to be rows for it to delete: the 5,000 spared ones
-    // above are all the table holds now, and a clear that matches nothing would never reach the trigger.
-    const DOOMED = 10;
-    for (let i = 0; i < DOOMED; i++) {
-        insertBulk.run(`abort-extra-${i}`, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
-    }
-    db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('abort-canary', 'AbortCanary')`).run();
-    db.exec(`CREATE TRIGGER zz_block_photo_delete BEFORE DELETE ON post_photos
-             BEGIN SELECT RAISE(ABORT, 'forced failure in the spared-rows clear'); END;`);
-    let aborted = false;
-    try { clearReplicatedTables(bulkKeep); } catch { aborted = true; }
-    db.exec('DROP TRIGGER zz_block_photo_delete');
-    assert(aborted, 'a failure clearing the spared rows THROWS, so the caller fails the resync');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK + DOOMED,
-        'and rolls back: post_photos is exactly as it was, neither cleared nor half-cleared');
-    assert((db.prepare(`SELECT COUNT(*) AS c FROM members WHERE public_key = 'abort-canary'`).get() as any).c === 1,
-        'along with the tables cleared before it — the whole resync aborted, not just this one table');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

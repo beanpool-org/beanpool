@@ -29,11 +29,13 @@ export interface NodeProc {
     port: number;
     base: string;
     ready: any;
-    /** Everything the process printed, stdout and stderr. */
+    /** Everything the process printed, stdout and stderr, every start of it. */
     output: () => string;
     send: (cmd: string, args?: Record<string, unknown>) => Promise<any>;
     exited: Promise<number | null>;
     kill: (signal?: NodeJS.Signals) => Promise<void>;
+    /** How many times the node restarted by itself to swap in a whole copy (services/stager.ts); each started again here. */
+    swaps: () => number;
 }
 
 let seq = 0;
@@ -42,6 +44,10 @@ let seq = 0;
  * Start a node process on `dataDir`. Resolves when it prints `ready`, or rejects with its output when it exits
  * first (a crash injected at a boot-time step exits before ready).
  *
+ * A standby that made a whole copy ready restarts to swap it in (services/backup-puller.ts, db/swap-at-boot.ts), as Docker
+ * starts it again: it prints `restarting` and exits, and this starts it again on the same data dir, environment and HTTP
+ * port. The NodeProc follows it: `send` waits for the new start, and `proc`, `ready` and `exited` are the current one's.
+ *
  * `maxFileBytes`: no file the process writes may grow past it (RLIMIT_FSIZE, set by bash's `ulimit -f`, in 1024-byte
  * blocks, before the node starts), as a disk that is full or failing stops it. Node ignores SIGXFSZ, so such a write fails
  * (EFBIG, which SQLite reports as SQLITE_IOERR) and the process carries on.
@@ -49,50 +55,91 @@ let seq = 0;
 export function spawnNode(
     script: string, dataDir: string, env: Record<string, string | undefined>, opts: { maxFileBytes?: number } = {},
 ): Promise<NodeProc> {
-    const argv = [...process.execArgv, script, '--child'];
-    const options = {
-        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env } as NodeJS.ProcessEnv,
-        stdio: ['pipe', 'pipe', 'pipe'] as ('pipe')[],
-    };
-    const proc = opts.maxFileBytes
-        ? spawn('/bin/bash', ['-c', `ulimit -f ${Math.ceil(opts.maxFileBytes / 1024)} && exec "$0" "$@"`, process.execPath, ...argv], options)
-        : spawn(process.execPath, argv, options);
     let out = '';
+    let swaps = 0;
+    interface Run { proc: ChildProcess; ready: Promise<any>; readyMsg: any; exited: Promise<number | null>; restarting: boolean; killed: boolean }
     const waiting = new Map<number, (v: any) => void>();
-    let readyResolve: (v: any) => void;
-    const readyP = new Promise<any>((r) => { readyResolve = r; });
-    const rl = readline.createInterface({ input: proc.stdout! });
-    rl.on('line', (line) => {
-        out += line + '\n';
-        if (!line.startsWith('@@ ')) return;
-        const msg = JSON.parse(line.slice(3));
-        if (msg.ready) readyResolve(msg);
-        else if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
-    });
-    proc.stderr!.on('data', (d) => { out += d.toString(); });
-    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
-    return new Promise((resolve, reject) => {
-        exited.then((code) => reject(Object.assign(new Error(`node exited (${code}) before it was ready`), { output: out, code })));
-        readyP.then((ready) => {
-            const base = `http://127.0.0.1:${ready.port}`;
-            resolve({
-                proc, port: ready.port, base, ready, exited,
-                output: () => out,
-                send: (cmd, args = {}) => new Promise((res, rej) => {
+    let run!: Run;
+    let current!: Promise<Run>;
+    const launch = (port: number): Promise<Run> => {
+        const argv = [...process.execArgv, script, '--child'];
+        const options = {
+            env: {
+                ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env,
+                ...(port ? { BEANPOOL_TEST_HTTP_PORT: String(port) } : {}),
+            } as NodeJS.ProcessEnv,
+            stdio: ['pipe', 'pipe', 'pipe'] as ('pipe')[],
+        };
+        const proc = opts.maxFileBytes
+            ? spawn('/bin/bash', ['-c', `ulimit -f ${Math.ceil(opts.maxFileBytes / 1024)} && exec "$0" "$@"`, process.execPath, ...argv], options)
+            : spawn(process.execPath, argv, options);
+        let readyResolve: (v: any) => void;
+        const ready = new Promise<any>((r) => { readyResolve = r; });
+        const exited = new Promise<number | null>((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
+        const r: Run = { proc, ready, readyMsg: null, exited, restarting: false, killed: false };
+        const rl = readline.createInterface({ input: proc.stdout! });
+        rl.on('line', (line) => {
+            out += line + '\n';
+            if (!line.startsWith('@@ ')) return;
+            const msg = JSON.parse(line.slice(3));
+            if (msg.ready) { r.readyMsg = msg; readyResolve(msg); } else if (msg.restarting) r.restarting = true;
+            else if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
+        });
+        proc.stderr!.on('data', (d) => { out += d.toString(); });
+        return new Promise((resolve, reject) => {
+            exited.then((code) => {
+                if (r.readyMsg === null) {
+                    reject(Object.assign(new Error(`node exited (${code}) before it was ready`), { output: out, code }));
+                    return;
+                }
+                // Restarted by itself to swap in a whole copy: started again here, as Docker does.
+                if (r.restarting && !r.killed) {
+                    swaps++;
+                    current = launch(r.readyMsg.port);
+                    current.then((next) => { run = next; }, () => {});
+                }
+            });
+            ready.then(() => resolve(r));
+        });
+    };
+    current = launch(0);
+    return current.then((first) => {
+        run = first;
+        const node: NodeProc = {
+            get proc() { return run.proc; },
+            get port() { return run.readyMsg.port; },
+            get base() { return `http://127.0.0.1:${run.readyMsg.port}`; },
+            get ready() { return run.readyMsg; },
+            get exited() { return run.exited; },
+            output: () => out,
+            swaps: () => swaps,
+            send: async (cmd, args = {}) => {
+                // A start under way (a swap's restart): this command waits for it.
+                let r = await current;
+                while (r.restarting && !r.killed) {
+                    await r.exited;
+                    const next = await current;
+                    if (next === r) break;
+                    r = next;
+                }
+                return new Promise((res, rej) => {
                     const id = ++seq;
                     waiting.set(id, (m) => {
                         waiting.delete(id);
                         if (m.error) rej(new Error(`${cmd}: ${m.error}`));
                         else res(m.result);
                     });
-                    proc.stdin!.write(JSON.stringify({ id, cmd, args }) + '\n');
-                }),
-                kill: async (signal = 'SIGKILL') => {
-                    if (proc.exitCode === null && proc.signalCode === null) proc.kill(signal);
-                    await exited;
-                },
-            });
-        });
+                    r.proc.stdin!.write(JSON.stringify({ id, cmd, args }) + '\n');
+                });
+            },
+            kill: async (signal = 'SIGKILL') => {
+                const r = run;
+                r.killed = true;
+                if (r.proc.exitCode === null && r.proc.signalCode === null) r.proc.kill(signal);
+                await r.exited;
+            },
+        };
+        return node;
     });
 }
 
@@ -127,6 +174,8 @@ function reply(msg: Record<string, unknown>): void {
 export async function runNodeChild(commands: Record<string, (args: any) => Promise<unknown>> = {}): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     fs.mkdirSync(dataDir, { recursive: true });
+    // As index.ts: a whole copy made ready before the last restart is swapped in before anything opens the database.
+    await import('./db/swap-at-boot.js');
     // The tunnel inside the server (services/tunnel-connector.ts) runs the fake, from before anything can start it.
     const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     await useFakeCloudflared(`${dataDir}.cloudflared`);
@@ -203,20 +252,44 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     app.use(createTakeoverEnvelopeRoutes(deps).routes());
     app.use(createOwnerUnlockRoutes(deps).routes());
     const server = http.createServer(app.callback());
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    // The port it had before a swap's restart, so the orchestrator's address for it stays good (spawnNode).
+    await new Promise<void>((r) => server.listen(Number(process.env.BEANPOOL_TEST_HTTP_PORT) || 0, '127.0.0.1', () => r()));
+
+    // A whole copy made ready (services/backup-puller.ts): the node restarts to swap it in, as it does in production, once the
+    // command that made it has answered (or at once, when the pull loop made it). The orchestrator starts it again.
+    // `restarting` goes out before the command's own answer, so the orchestrator sends nothing more to this process.
+    let running = 0;
+    let swapPending = false;
+    const announceRestart = () => process.stdout.write('@@ ' + JSON.stringify({ restarting: true }) + '\n');
+    const exitForSwap = () => process.stdout.write('', () => process.exit(0));
+    const { setSwapRestartForTests } = await import('./services/backup-puller.js');
+    setSwapRestartForTests(() => {
+        swapPending = true;
+        if (running === 0) {
+            announceRestart();
+            exitForSwap();
+        }
+    });
 
     const rl = readline.createInterface({ input: process.stdin });
     rl.on('line', async (line) => {
         let id = 0;
+        running++;
+        let answer: Record<string, unknown>;
         try {
             const msg = JSON.parse(line);
             id = msg.id;
             const fn = commands[msg.cmd];
             if (!fn) throw new Error(`no such command ${msg.cmd}`);
-            reply({ reply: id, result: await fn(msg.args || {}) });
+            answer = { reply: id, result: await fn(msg.args || {}) };
         } catch (e: any) {
-            reply({ reply: id, error: e?.message || String(e) });
+            answer = { reply: id, error: e?.message || String(e) };
         }
+        running--;
+        const restart = swapPending && running === 0;
+        if (restart) announceRestart();
+        reply(answer);
+        if (restart) exitForSwap();
     });
     rl.on('close', () => process.exit(0));
 

@@ -17,10 +17,11 @@ import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
 import { importPlainTables, deletePlainRow, plainRowStamp } from './plain-tables.js';
 import { PLAIN_TABLES, plainTableTriggers } from './replication-manifest.js';
+import type { CopyPageHeader, CopyRowCounts } from './copy-pages.js';
 import { RowRules } from '../db/table-rules.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
-import { mergeReplicatedDirectory, forgetListedCommunities } from './directory-cache.js';
+import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
 import { mergeReplicatedBlocks, noteMemberBlocksFromMainServer, PAIR_TOMBSTONES_OF } from './member-blocks.js';
 import { DELETED_POST_TITLE, dropSearchLeftovers } from './post-scrub.js';
@@ -76,16 +77,20 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     sent, the activity list, and the pricing guide as the main server priced and edited it, with members' price
  *     reports. A copy made by format 5 or older holds none of them, or rows this standby wrote itself (the pricing guide
  *     it seeded at boot, an activity line for a listing made on it, a phone that registered with it).
+ *  7. A whole copy is built from nothing, in pages, in a staging database, and swapped in at a restart (design
+ *     scratch/global-node/DESIGN-paged-copies-fable.md §4, P2; services/stager.ts): exact by construction, with no table
+ *     left out for its size. A copy made by format 6 or older was an import over the rows the standby held, cleared first
+ *     only by a force-resync, and may lack the rows of a table a copy left out for its size.
  */
-export const REPLICA_FORMAT = 6;
+export const REPLICA_FORMAT = 7;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
  * copies made before the record. With no cursor either, it holds no copy, and the next one is its first, a seed
  * (ImportOptions.seed); with a cursor, its copies are held to its ledger like any other's until its re-seed lands
- * (services/backup-puller.ts). Only this standby writes the record, when a force-resync lands: a copy can neither set it
- * nor take it away, and a refused one leaves it as it was (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md
- * §4.2, N).
+ * (services/backup-puller.ts). Only this standby writes the record, when a whole copy built in a staging database is
+ * swapped in (services/stager.ts): a copy can neither set it nor take it away, and a refused one leaves it as it was
+ * (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2, N).
  */
 export function replicaFormatOfCopy(): number {
     const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_format'`).get() as { value: string } | undefined;
@@ -93,7 +98,7 @@ export function replicaFormatOfCopy(): number {
     return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
-/** This standby's copy is now one this importer made: a force-resync landed. */
+/** This standby's copy is now one this importer made from nothing: written into a whole copy's staging database. */
 export function noteReplicaFormat(): void {
     db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_format', ?)`).run(String(REPLICA_FORMAT));
 }
@@ -140,81 +145,99 @@ export class OversizedCopyError extends Error {
 }
 
 /**
- * What a force-resync clears (services/backup-puller.ts): the rows the copy replaces, in the import's own transaction.
- *  - `keepPhotoRows`: the listing photos the main server could not read out of its own store and so left out of the copy
- *    (`SyncPayload.photosOmitted`): kept as they are, since this standby's may be the only readable copy left.
- *  - `invalidatedKeys`: the copy carries the main server's replaced keys; from one that predates them, this standby's are
- *    the only ones it has, and stay.
- *  - `standing`: the copy carries the members' preferences, keepers and pledges; likewise.
+ * A copy served in pages (engine/copy-pages.ts), as the importer reads each page: what every page carries beside its rows,
+ * and what the opening page and the last add. A whole payload (the old routes) has none of these.
  */
-export interface ResyncClear {
-    keepPhotoRows: readonly string[];
-    invalidatedKeys: boolean;
-    standing: boolean;
+export type CopyPage = SyncPayload & Partial<CopyPageHeader>;
+
+/**
+ * What a copy's opening page says of the whole copy, for a page imported on its own (ImportOptions.part): the categories
+ * and plain tables it carries (`rowCounts`, counted in the copy's snapshot), whether it carries the keepers
+ * (`treasuryOperators`, a whole set in the opening page alone), and its time (`generatedAt`).
+ */
+export interface CopyPart {
+    rowCounts: CopyRowCounts;
+    treasury: boolean;
+    generatedAt: string | null;
+}
+
+/** Whether a payload is a page of a copy served in pages: its copy's id and its number. */
+export function isCopyPage(p: unknown): p is CopyPage {
+    const page = p as Partial<CopyPageHeader> | null;
+    return !!page && typeof page.copyId === 'string' && typeof page.n === 'number';
+}
+
+/** What a copy's opening page says of the whole copy (CopyPart). */
+export function copyPartOf(opening: CopyPage): CopyPart {
+    return {
+        rowCounts: isPlainObject(opening.rowCounts) ? opening.rowCounts as CopyRowCounts : {},
+        treasury: Array.isArray(opening.treasuryOperators),
+        generatedAt: typeof opening.generatedAt === 'string' ? opening.generatedAt : null,
+    };
 }
 
 /**
- * The clear of a force-resync: every replicated table the copy writes again (the importer upserts and never deletes a row
- * a copy doesn't name, so a row the main server hard-deleted without a tombstone would otherwise stay). Node-local tables
- * (message_attachments, sync_cursors, node_config, …) are not cleared, and neither are the plain tables (push tokens,
- * invites and the rest, engine/replication-manifest.ts), whose whole copy deletes every row it doesn't name
- * (engine/plain-tables.ts). `spare`: tables the copy leaves out (over the row cap, design §5), which keep their rows here
- * as they are.
- *
- * Runs inside the caller's transaction and never commits on its own: importRemoteState runs it after every check, so a
- * copy refused anywhere rolls it back with the rest, and this standby keeps what it had (design §4.2, N). THROWS if it
- * cannot spare the photo rows named: a clear that half-happened would strand them, so the copy fails instead.
+ * Each category the copy carries, and each plain table, as an array on `payload`: its rows, or none. A category a copy
+ * carries has no key on a page that holds none of its rows (engine/copy-pages.ts), where a whole payload named it with an
+ * empty array: filled, a whole copy's pages read as that payload read, its sets whole (the keepers' pledges, each plain
+ * table), and each flag the importer reads off a category being there (the replaced keys, the block lists, the invites the
+ * knocks read) says what the copy carries, not what one page happens to hold.
  */
-export function clearReplicatedRows(clear: ResyncClear, spare: ReadonlySet<string> = new Set()): void {
-    const tables = [
-        'members', 'posts', 'projects', 'ratings', 'accounts',
-        'transactions', 'marketplace_transactions', 'friends', 'conversations',
-        'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'member_blocks', 'tombstones',
-        ...(clear.invalidatedKeys ? ['invalidated_keys'] : []),
-        ...(clear.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
-    ].filter((t) => !spare.has(t));
-    // A group's delete cancels the listings aimed at it (db/schema.sql posts_cleanup_on_group_delete), stamped with this
-    // server's clock. The clear is no group's delete: with the listings spared (left out of the copy), it would cancel
-    // every one aimed at a group, and the copy would bring none back. Set aside for the clear, as the database held it.
-    const putTriggerBack = setTouchTriggersAside(['posts_cleanup_on_group_delete']);
-    // Nothing here is caught. A delete that fails (a disk full or failing, a trigger's RAISE) may already have rolled the
-    // whole transaction back, and every delete after it would then commit on its own: the standby left with less, and the
-    // copy refused. Thrown, it fails the copy, and the transaction puts every table back, the trigger included.
-    for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
-    putTriggerBack();
-    if (spare.has('post_photos')) return;
-    // `post_photos` apart, so the named rows can be spared by primary key. A row key that is not `post_id|order_num` names
-    // no row, and is ignored rather than turned into SQL.
-    const keep: string[] = [];
-    for (const rowKey of clear.keepPhotoRows) {
-        const key = String(rowKey);
-        const cut = key.lastIndexOf('|');
-        if (cut <= 0) continue;
-        const postId = key.slice(0, cut);
-        const orderNum = Number(key.slice(cut + 1));
-        if (!postId || !Number.isInteger(orderNum)) continue;
-        keep.push(`${postId}|${orderNum}`);
+function withCarriedCategories(payload: CopyPage, part: CopyPart): CopyPage {
+    const out: Record<string, unknown> = { ...payload };
+    for (const key of Object.keys(part.rowCounts)) {
+        if (key !== 'plainTables' && !Array.isArray(out[key])) out[key] = [];
     }
-    if (keep.length === 0) {
-        db.prepare(`DELETE FROM post_photos`).run();
-        console.log('🧹 [Resync] Cleared the replicated tables in the copy\'s own transaction: they are replaced only if it lands.');
-        return;
+    const plainIn = isPlainObject(payload.plainTables) ? payload.plainTables : {};
+    const plainCarried = isPlainObject(part.rowCounts.plainTables) ? Object.keys(part.rowCounts.plainTables) : [];
+    if (plainCarried.length > 0 || isPlainObject(payload.plainTables)) {
+        const plain: Record<string, unknown> = { ...plainIn };
+        for (const table of plainCarried) if (!Array.isArray(plain[table])) plain[table] = [];
+        out.plainTables = plain;
     }
-    // The spared keys travel as ONE bound JSON array, matched through `json_each`, so the statement is the same size
-    // whether one row is spared or fifty thousand. An `OR`-ed predicate per pair throws "Expression tree is too large"
-    // from about 999 pairs, and a main server whose images directory is lost omits EVERY evacuated photo. Nothing here is
-    // caught: a throw fails the copy, and the transaction puts every table back.
-    const keepJson = JSON.stringify(keep);
-    const kept = (db.prepare(
-        `SELECT COUNT(*) AS n FROM post_photos WHERE (post_id || '|' || order_num) IN (SELECT value FROM json_each(?))`,
-    ).get(keepJson) as { n: number } | undefined)?.n || 0;
-    db.prepare(`DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`).run(keepJson);
-    console.log(
-        `🧹 [Resync] Cleared the replicated tables in the copy's own transaction, KEEPING ${kept} of the ${keep.length} photo row(s) `
-        + 'the primary could not read out of its own store: this replica holds the only readable copy of those, and the copy does not carry them.',
-    );
+    return out as unknown as CopyPage;
+}
+
+/**
+ * A whole copy's pages, or all of a delta's, as one payload: the opening page's fields, each category's rows and each plain
+ * table's from every page in page order, the last page's closing fields (`pages`, `rowsSent`, `photosOmitted`,
+ * `tableHashes`), and every category and plain table the copy carries (withCarriedCategories). The pages must be one copy,
+ * every page of it, in order; THROWS otherwise. What the importer imports (importRemoteState, each page's signature
+ * checked first), and what a whole copy's check reads (services/backup-puller.ts checkWholeCopy).
+ */
+export function mergeCopyPages(pages: readonly CopyPage[]): CopyPage {
+    if (pages.length === 0 || !pages.every(isCopyPage)) throw new Error('[Sync] Not the pages of a copy');
+    const copyId = pages[0].copyId;
+    pages.forEach((page, i) => {
+        if (page.copyId !== copyId || page.n !== i || page.last !== (i === pages.length - 1)) {
+            throw new Error(`[Sync] These pages are not one copy, every page in order (page ${i} is ${String(page.copyId).slice(0, 8)}/${page.n}${page.last ? ', its last' : ''})`);
+        }
+    });
+    const part = copyPartOf(pages[0]);
+    const categories = Object.keys(part.rowCounts).filter((k) => k !== 'plainTables');
+    const out: Record<string, unknown> = { ...pages[0] };
+    const plain: Record<string, unknown[]> = {};
+    for (const [i, page] of pages.entries()) {
+        if (i > 0) {
+            for (const key of categories) {
+                const rows = (page as unknown as Record<string, unknown>)[key];
+                if (!Array.isArray(rows)) continue;
+                out[key] = Array.isArray(out[key]) ? [...(out[key] as unknown[]), ...rows] : [...rows];
+            }
+        }
+        if (isPlainObject(page.plainTables)) {
+            for (const [table, rows] of Object.entries(page.plainTables)) {
+                if (Array.isArray(rows)) (plain[table] ??= []).push(...rows);
+            }
+        }
+    }
+    if (Object.keys(plain).length > 0 || isPlainObject(pages[0].plainTables)) out.plainTables = plain;
+    const last = pages[pages.length - 1];
+    for (const key of ['pages', 'rowsSent', 'photosOmitted', 'tableHashes'] as const) {
+        if (last[key] !== undefined) out[key] = last[key];
+    }
+    out.last = true;
+    return withCarriedCategories(out as unknown as CopyPage, part);
 }
 
 /**
@@ -231,6 +254,21 @@ export function noteLedgerMismatch(record: {
 export interface MainLedgerRecord extends LedgerSummary {
     /** The copy's `generatedAt`: when the main server's ledger was this. */
     generatedAt: string | null;
+}
+
+/**
+ * The main server's ledger as a copy carries it (every entry with a key), kept as node_config `replica_main_ledger` when it
+ * changes, so `generatedAt` is the first copy that carried it. Inside the import's transaction (importRemoteState), or once
+ * a whole copy built in a staging database has every page in (services/stager.ts).
+ */
+export function noteMainLedger(accounts: readonly SyncAccount[], generatedAt: string | null): void {
+    const summary = summariseLedger(accounts.filter((a) => typeof a?.publicKey === 'string')
+        .map((a) => ({ publicKey: a.publicKey, balance: a.balance })));
+    const last = mainLedgerAtLastCopy();
+    if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
+        const record: MainLedgerRecord = { ...summary, generatedAt };
+        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_main_ledger', ?)`).run(JSON.stringify(record));
+    }
 }
 
 export function mainLedgerAtLastCopy(): MainLedgerRecord | null {
@@ -357,7 +395,8 @@ export interface ImportResult {
      * The tables this copy left out whole because it carries more rows of them than one import takes (design §5, D), by
      * the manifest's names, sorted: this standby keeps its rows of each as they were, and the rest landed. Never one of the
      * ledger set (a copy over the cap there is refused, OversizedCopyError). `tombstones` here asks the puller for one
-     * force-resync; a force-resync's own copy skips them without naming them (it writes every row again).
+     * force-resync. Only a whole payload of the old routes leaves a table out: a copy served in pages never does
+     * (importRemoteState), so this is always empty for the puller's copies (P3 removes it).
      */
     tablesLeftOut: string[];
 }
@@ -440,15 +479,14 @@ export async function signSyncBody(cb: SyncCallbacks, rawBody: string): Promise<
  *
  * ## …and the payload SAYS which rows those were
  *
- * "What it does not receive it keeps" is true of an ordinary delta or full pull, and false of a FORCE-RESYNC:
- * a force-resync's import clears the replicated tables first (`clearReplicatedRows`, which lists `post_photos`), so a
- * row dropped here is a row the replica deletes and never gets back. Its object becomes an orphan and the
- * daily sweep reclaims it after the grace period. The one case this omission exists for would be destroyed by
- * the natural thing an operator does when a replica "looks wrong".
+ * "What it does not receive it keeps" is true of a delta or of a whole copy of one page taken over the rows a
+ * standby holds, and false of a whole copy built in a staging database (services/stager.ts), which starts from
+ * nothing: a row dropped here is one the replica would lose when that copy is swapped in. Its object would become
+ * an orphan and the daily sweep reclaim it after the grace period.
  *
  * So the keys of the omitted rows go into {@link SyncPayload.photosOmitted} — an additive, optional field a
- * peer that does not know it simply ignores — and the resync keeps exactly those rows and their objects. It
- * is logged on both sides: this node says it could not read them, and the replica says it is keeping them.
+ * peer that does not know it simply ignores — and the stager carries exactly those rows over from the standby's
+ * live copy. It is logged on both sides: this node says it could not read them, and the replica says it is keeping them.
  */
 /**
  * Put every photo in an incoming payload through the image store, keyed `post_id|order_num`.
@@ -905,7 +943,7 @@ function instantOrNull(v: unknown): string | null {
 }
 
 const ENFORCE_LEDGER_AUTH = process.env.ENFORCE_LEDGER_AUTH === 'true';
-const LEDGER_CONSERVATION_TOLERANCE = 0.5;
+export const LEDGER_CONSERVATION_TOLERANCE = 0.5;
 
 /**
  * The largest balance a copy may carry: 900,719,925,474.0991 Beans, Number.MAX_SAFE_INTEGER / 10,000. The ledger's
@@ -970,21 +1008,25 @@ export interface ImportOptions {
      * A seed, which the conservation guard lets in whatever it sums to. Only three: this standby's first copy (it holds
      * none: no `replica_format` record, replicaFormatOfCopy, and no cursor), the format re-seed (REPLICA_FORMAT, this
      * standby's own constant) and an operator's force-resync. Every other copy is held to the ledger here, a delta onto a
-     * copy made before the format record included.
+     * copy made before the format record included. A page of a whole copy built in a staging database is imported as one
+     * (services/stager.ts): the guard runs once, over the finished copy, against this standby's live ledger.
      */
     seed?: boolean;
-    /**
-     * A force-resync: the rows the copy replaces are cleared first, inside this import's transaction and after every check
-     * before it (clearReplicatedRows). A copy refused anywhere clears nothing. One that isn't a seed is held to the ledger
-     * as it was before the clear, and must carry a ledger to put back.
-     */
-    clear?: ResyncClear;
     /**
      * The copy is a whole one (the puller asked for the snapshot, not a delta), so the sets it carries whole are the main
      * server's entire sets: the keepers' pledges it doesn't name are deleted here (mergeEnterprisePledges), and so is a row
      * of a plain table it doesn't name (engine/plain-tables.ts).
      */
     whole?: boolean;
+    /**
+     * One page of a whole copy served in pages, imported on its own into an empty staging database (services/stager.ts,
+     * design scratch/global-node/DESIGN-paged-copies-fable.md §4.2): what the copy's opening page said of it. Each
+     * category the copy carries reads as that page's rows of it, or none (withCarriedCategories), and nothing is deleted
+     * for not being named on this page: not a keepers' pledge or a plain table's row (`whole` is ignored), and not an
+     * account (the staging holds only the pages before this one). The record of the main server's ledger is written once
+     * the last page is in (services/stager.ts).
+     */
+    part?: CopyPart;
 }
 
 /**
@@ -1179,20 +1221,17 @@ function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: num
     return { changes, skipped };
 }
 
-export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload, opts: ImportOptions = {}): Promise<ImportResult> {
-    const seed = opts.seed === true;
-    const clear = opts.clear ?? null;
-    let remote = received;
-    const role = getNodeRole();
-    if (role !== 'backup') {
-        throw new Error(`[Sync] This node runs as '${role}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
-    }
-
+/**
+ * A payload's signature, over its JSON without `signature` and `publicKey`, and its signer, which must be a `mirror`
+ * connector this standby trusts (its main server). Returns the signer's PeerId; throws otherwise. Each page of a copy
+ * served in pages is checked on its own, as a payload is (importRemoteState; services/backup-puller.ts before it writes a
+ * page for the stager).
+ */
+export async function verifySyncPayload(cb: Pick<SyncCallbacks, 'publicKeyFromProtobuf'>, remote: SyncPayload): Promise<string> {
     if (!remote.signature || !remote.publicKey) {
         throw new Error(`[Sync] Cryptographic validation failed: Missing SyncPayload signature or publicKey`);
     }
 
-    // #134: Hoist signerPeerId so it's available for the audit log write after the import.
     let signerPeerId = 'unknown';
     try {
         const { signature, publicKey, ...basePayload } = remote;
@@ -1227,14 +1266,46 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
         console.error(`[Sync] ❌ SyncPayload signature validation failed:`, e.message || e);
         throw new Error(`Cryptographic sync payload verification failed: ${e.message}`);
     }
+    return signerPeerId;
+}
+
+/**
+ * Import a copy of the main server: a whole payload (the old routes), a page of a copy served in pages, or every page of
+ * one copy (a delta, or a whole copy of one page), in order. Each page's signature and signer are checked before anything
+ * else (verifySyncPayload), and the pages of one copy are then imported as the one payload they make (mergeCopyPages):
+ * in one transaction, in the importer's own order. A page imported on its own is one of a whole copy built in a staging
+ * database (ImportOptions.part).
+ */
+export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload | readonly SyncPayload[], opts: ImportOptions = {}): Promise<ImportResult> {
+    const seed = opts.seed === true;
+    const role = getNodeRole();
+    if (role !== 'backup') {
+        throw new Error(`[Sync] This node runs as '${role}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
+    }
+    const pages: readonly CopyPage[] = Array.isArray(received) ? received : [received as SyncPayload];
+    if (pages.length === 0) throw new Error('[Sync] No copy to import');
+
+    // #134: Hoist signerPeerId so it's available for the audit log write after the import.
+    let signerPeerId = 'unknown';
+    for (const page of pages) signerPeerId = await verifySyncPayload(cb, page);
+
+    // A copy served in pages: every page of it, as one payload; or, for a whole copy built in a staging database, one page
+    // with what the copy's opening page said of it. A whole payload of the old routes is read as it came.
+    const part = opts.part ?? null;
+    if (part && pages.length !== 1) throw new Error('[Sync] A page of a copy built in a staging database is imported on its own');
+    let remote: CopyPage = part ? withCarriedCategories(pages[0], part) : isCopyPage(pages[0]) ? mergeCopyPages(pages) : pages[0];
+    if (!part && !isCopyPage(pages[0]) && pages.length > 1) throw new Error('[Sync] Only the pages of one copy are imported together');
+    const copied = part !== null || isCopyPage(pages[0]);
+    const whole = opts.whole === true && !part;
 
     // The row cap, which keeps one import from holding the event loop (design scratch/global-node/DESIGN-replica-flood-
-    // bounds-opus.md §5, D). A table of the ledger set over it refuses the copy, before anything is written. Any other is
-    // left out of this copy, and this standby keeps its rows of it: one table a writer floods goes stale, by name, and never
-    // stops the rest (members, trades, messages) reaching the standby. Tombstones over it are left out of a delta or a
-    // whole copy (the puller asks for one force-resync for them), and skipped by a force-resync's own copy, which writes
-    // every row again. Each category is looked at on a copy of the payload, never on the caller's (its whole-copy check
-    // compares the main server's full counts, the tables left out named apart).
+    // bounds-opus.md §5, D), for a whole payload of the old routes only. A table of the ledger set over it refuses the copy,
+    // before anything is written. Any other is left out of this copy, and this standby keeps its rows of it. A copy served in
+    // pages has none: each page is bounded by the main server's page bounds, a delta by the pages the puller takes (at
+    // most BACKUP_DELTA_PAGES), and a whole copy of any size is imported a page at a time into a staging database (design
+    // scratch/global-node/DESIGN-paged-copies-fable.md §4), so nothing refuses a copy for its size. Each category is looked
+    // at on a copy of the payload, never on the caller's (its whole-copy check compares the main server's full counts, the
+    // tables left out named apart).
     const MAX_IMPORT_ROWS = Number(process.env.MAX_IMPORT_ROWS_PER_CATEGORY) || 250_000;
     const oversized: string[] = [];
     const oversizedDetail: string[] = [];
@@ -1247,35 +1318,34 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             leftOut.add(table);
         }
     };
-    const trimmed: Record<string, unknown> = { ...received };
-    for (const [cat, table] of Object.entries(IMPORT_CATEGORIES)) {
-        const arr = trimmed[cat];
-        if (!Array.isArray(arr) || arr.length <= MAX_IMPORT_ROWS) continue;
-        shed(table, arr.length);
-        delete trimmed[cat];
-    }
-    const plainIn = isPlainObject(received.plainTables) ? received.plainTables : null;
-    if (plainIn) {
-        const plainKept: Record<string, unknown> = { ...plainIn };
-        for (const [table, arr] of Object.entries(plainIn)) {
+    if (!copied) {
+        const trimmed: Record<string, unknown> = { ...remote };
+        for (const [cat, table] of Object.entries(IMPORT_CATEGORIES)) {
+            const arr = trimmed[cat];
             if (!Array.isArray(arr) || arr.length <= MAX_IMPORT_ROWS) continue;
-            // Only a name the manifest knows is reported; the rest are left out all the same, and so is their count.
-            if (PLAIN_TABLES.some((p) => p.table === table)) shed(table, arr.length);
-            delete plainKept[table];
+            shed(table, arr.length);
+            delete trimmed[cat];
         }
-        trimmed.plainTables = plainKept;
+        const plainIn = isPlainObject(remote.plainTables) ? remote.plainTables : null;
+        if (plainIn) {
+            const plainKept: Record<string, unknown> = { ...plainIn };
+            for (const [table, arr] of Object.entries(plainIn)) {
+                if (!Array.isArray(arr) || arr.length <= MAX_IMPORT_ROWS) continue;
+                // Only a name the manifest knows is reported; the rest are left out all the same, and so is their count.
+                if (PLAIN_TABLES.some((p) => p.table === table)) shed(table, arr.length);
+                delete plainKept[table];
+            }
+            trimmed.plainTables = plainKept;
+        }
+        if (oversized.length > 0) {
+            throw new OversizedCopyError(oversized.sort(), oversizedDetail.join(', '));
+        }
+        remote = trimmed as unknown as SyncPayload;
     }
-    if (oversized.length > 0) {
-        throw new OversizedCopyError(oversized.sort(), oversizedDetail.join(', '));
-    }
-    remote = trimmed as unknown as SyncPayload;
-    // A force-resync's own copy writes every row again: its tombstones are skipped, not left out, and the ones here stay.
-    const tombstonesSkipped = clear !== null && leftOut.has('tombstones');
-    const tablesLeftOut = [...leftOut].filter((t) => !(tombstonesSkipped && t === 'tombstones')).sort();
+    const tablesLeftOut = [...leftOut].sort();
     if (leftOut.size > 0) {
-        console.warn(`[Sync] This copy has more rows than one import takes (> ${MAX_IMPORT_ROWS}) in ${[...leftOut].sort().join(', ')}: `
-            + `${tombstonesSkipped ? 'the tombstones are skipped by this force-resync, and ' : ''}`
-            + `${tablesLeftOut.length > 0 ? `${tablesLeftOut.join(', ')} left out, this standby keeping its own rows of ${tablesLeftOut.length === 1 ? 'it' : 'them'}; ` : ''}the rest lands`);
+        console.warn(`[Sync] This copy has more rows than one import takes (> ${MAX_IMPORT_ROWS}) in ${tablesLeftOut.join(', ')}: `
+            + `left out, this standby keeping its own rows of ${tablesLeftOut.length === 1 ? 'it' : 'them'}; the rest lands`);
     }
     // A balance no ledger holds (MAX_LEDGER_BALANCE), before anything is written, the photo store included. An entry with
     // no number for a balance isn't one: the import leaves that account as it is, and the whole-copy check counts it.
@@ -1315,23 +1385,15 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     db.pragma('foreign_keys = OFF');
 
     // A main server that sends its members' whole rows (`standing`) sends its keepers too, the whole set in every copy: the
-    // members' own triggers are set aside for such a copy (MEMBERS_KEEP_STAMPS).
-    const standingCopy = Array.isArray(remote.treasuryOperators) || (remote.members ?? []).some((rm) => isPlainObject(rm?.standing));
+    // members' own triggers are set aside for such a copy (MEMBERS_KEEP_STAMPS). A page after a whole copy's opening one
+    // carries no keepers: its opening page says (CopyPart.treasury).
+    const standingCopy = Array.isArray(remote.treasuryOperators) || part?.treasury === true
+        || (remote.members ?? []).some((rm) => isPlainObject(rm?.standing));
 
     try {
         db.transaction(() => {
-            // The ledger's total before this copy writes anything, a force-resync's clear included: what the conservation
-            // guard holds it to (below).
+            // The ledger's total before this copy writes anything: what the conservation guard holds it to (below).
             const totalBefore = ledgerTotal();
-            // A force-resync's clear, here and not before: this transaction is the copy's staging, and its commit the swap.
-            // Readers see the copy this standby had until then, and a copy refused anywhere below (the conservation guard, a
-            // row that won't go in) rolls the clear back with the rest, so a standby never holds less than it did (§4.2).
-            // A table this copy leaves out keeps its rows.
-            if (clear) {
-                clearReplicatedRows(clear, new Set([...tablesLeftOut, ...(tombstonesSkipped ? ['tombstones'] : [])]));
-                // The directory's listed communities are kept in memory for the reads: read again once this lands.
-                if (!leftOut.has('directory_cache')) afterTransactionCommit(forgetListedCommunities);
-            }
             const putTouchTriggersBack = setTouchTriggersAside(standingCopy ? [...IMPORT_KEEPS_STAMPS, ...MEMBERS_KEEP_STAMPS] : IMPORT_KEEPS_STAMPS);
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
@@ -1512,7 +1574,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 conflictsSkipped += kept.skipped;
             }
             if (Array.isArray(remote.enterprisePledges)) {
-                const pledged = mergeEnterprisePledges(remote.enterprisePledges, opts.whole === true);
+                const pledged = mergeEnterprisePledges(remote.enterprisePledges, whole);
                 standingChanges += pledged.changes;
                 conflictsSkipped += pledged.skipped;
             }
@@ -1767,23 +1829,22 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // compared with its first.
                     local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance, last_updated_at: stamp, last_demurrage_epoch: epoch });
                 }
-                const dropAccount = db.prepare('DELETE FROM accounts WHERE public_key = ?');
-                for (const pk of local.keys()) {
-                    if (named.has(pk)) continue; // every row the loop wrote is named: what is left here, it held before
-                    dropAccount.run(pk);
-                    accountChanges++;
+                // A page of a whole copy built in a staging database names only its own accounts, and the staging holds only
+                // the pages before it: nothing there is one the main server no longer holds (ImportOptions.part).
+                if (!part) {
+                    const dropAccount = db.prepare('DELETE FROM accounts WHERE public_key = ?');
+                    for (const pk of local.keys()) {
+                        if (named.has(pk)) continue; // every row the loop wrote is named: what is left here, it held before
+                        dropAccount.run(pk);
+                        accountChanges++;
+                    }
                 }
 
                 // The main server's ledger as this copy carries it, which a take-over's audit holds the promoted ledger to
                 // (services/takeover.ts). In this transaction, so it is the ledger of the last copy that landed; written
-                // when it changes, so `generatedAt` is the first copy that carried it.
-                const summary = summariseLedger(remote.accounts!.filter((a) => typeof a?.publicKey === 'string')
-                    .map((a) => ({ publicKey: a.publicKey, balance: a.balance })));
-                const last = mainLedgerAtLastCopy();
-                if (!last || last.digest !== summary.digest || last.sum !== summary.sum) {
-                    const record: MainLedgerRecord = { ...summary, generatedAt: remote.generatedAt ?? null };
-                    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_main_ledger', ?)`).run(JSON.stringify(record));
-                }
+                // when it changes, so `generatedAt` is the first copy that carried it. A whole copy built in a staging
+                // database writes it once, from every page (services/stager.ts noteMainLedger).
+                if (!part) noteMainLedger(remote.accounts!, remote.generatedAt ?? null);
             } else if (!Array.isArray(remote.accounts)) {
                 // A copy with no account set at all (none a main server sends: its export always carries every account).
                 // Each member it named without an account gets an empty one, as the members import used to give them, stamped
@@ -1801,12 +1862,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // here that the main server's ledger doesn't have. Every write this copy makes to the accounts is before this
             // point, a re-key's move included, whatever branch above it took.
             const totalAfter = ledgerTotal();
-            // A force-resync that isn't a seed (the one a whole copy that didn't match asks for) cleared the ledger above:
-            // only the copy's own ledger puts it back, so one that carries none (it names no account, above) is refused. Its
-            // total is held to the ledger before the clear (totalBefore), as any other copy's is.
-            if (clear && !seed && !carriesLedger) {
-                throw new Error('[Sync] Conservation violation: a force-resync copy that carries no ledger to put back; rejecting it');
-            }
             if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed
                 && Math.abs(totalAfter - totalBefore) > LEDGER_CONSERVATION_TOLERANCE) {
                 // A copy may not move this standby's total by more than the tolerance, unless the puller took it as a seed
@@ -2398,7 +2453,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // moved this standby's rows to the new keys the main server's rows name, and before the tombstones below, which
             // leave a row the main server made again after its delete. A main server older than this sends none, and this
             // standby keeps the rows it has.
-            const plain = importPlainTables(remote.plainTables, opts.whole === true, remote.generatedAt);
+            const plain = importPlainTables(remote.plainTables, whole, remote.generatedAt ?? part?.generatedAt);
             plainChanges += plain.changes;
             conflictsSkipped += plain.skipped;
             plainTablesLeftOut.push(...plain.leftOut);

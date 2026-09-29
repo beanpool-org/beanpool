@@ -14,8 +14,8 @@
  *   3. Live Primary-to-Backup Node Replication:
  *      Verifies that exportSyncState packs recoveryShares and recoveryPins, and that
  *      a NODE_ROLE=backup mirror accurately ingests both tables via importRemoteState.
- *   4. Force-Resync Sweep (clearReplicatedTables):
- *      Verifies that clearReplicatedTables flushes recovery_pin and recovery_shares.
+ *   4. A whole copy starts from nothing (engine/copied-tables.ts, as the stager builds one):
+ *      Verifies that recovery_shares is among the copied tables a copy starts without.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm --prefix apps/server exec tsx src/test-recovery-backup-durability.ts
@@ -25,10 +25,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
     exportSyncState, importRemoteState, initStateEngine,
-    setNodeRole, clearReplicatedTables,
+    setNodeRole,
 } from './state-engine.js';
 import { writeDbSnapshot } from './services/snapshot-scheduler.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 
@@ -108,10 +109,10 @@ async function run() {
         assert(Array.isArray(payload.recoveryShares), 'exportSyncState includes recoveryShares array');
         assert(payload.recoveryShares!.length >= 2, `exportSyncState exported ${payload.recoveryShares!.length} recovery shares`);
 
-        // Clear local replicated tables on the backup
-        clearReplicatedTables();
+        // The backup's copy starts from nothing, as a whole copy does (engine/copied-tables.ts)
+        emptyCopiedTables(db);
         const emptyShares = db.prepare(`SELECT COUNT(*) as count FROM recovery_shares`).get() as { count: number };
-        assert(emptyShares.count === 0, 'clearReplicatedTables cleared recovery_shares');
+        assert(emptyShares.count === 0, 'a whole copy starts without recovery_shares');
 
         // Set role to backup and configure trusted mirror
         setNodeRole('backup');

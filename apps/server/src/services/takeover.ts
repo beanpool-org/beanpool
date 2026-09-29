@@ -68,6 +68,7 @@ import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus, forgetPullCursor } from './backup-puller.js';
+import { abortStagedCopy } from './stager.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
@@ -870,6 +871,12 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
         throw new TakeoverError(400, 'This take-over session ran out (10 minutes). Type the recovery code again.', { sessionGone: true });
     }
     takeoverPreconditions();
+    // A whole copy being built in a staging database, or one made ready to swap in at the next start, goes first: the
+    // promoted server's copy is the last one that landed, and a copy made before the take-over must never replace what
+    // the take-over writes (services/stager.ts, db/swap-at-boot.ts).
+    if (abortStagedCopy('a take-over was confirmed')) {
+        logger.warn('SYS', '[Takeover] A whole copy of the old main server being built here was stopped and deleted: this server takes over on the copy it had.');
+    }
 
     const now = new Date();
     const progressToken = crypto.randomBytes(32).toString('hex');

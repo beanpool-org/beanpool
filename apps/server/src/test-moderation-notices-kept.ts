@@ -38,10 +38,11 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
-    adminPruneUser, runMarketplaceHygiene, clearReplicatedTables,
+    adminPruneUser, runMarketplaceHygiene,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
@@ -467,13 +468,13 @@ async function main(): Promise<void> {
         assert(m.invalid === 3 && m.kept === 1 && m.written === 0, `the merge counts what it left out, and a row it already has is kept (${JSON.stringify(m)})`);
     } else assert(false, 'the merge counts what it left out (no merge on this tree)');
 
-    // The replica audit counts the table, and a force-resync clears it.
+    // The replica audit counts the table, and a whole copy starts without it (engine/copied-tables.ts).
     const audit = attempt(() => getReplicaConsistency(db, { moderationNotices: exported }, 0));
     const auditRow = audit?.tables.find(t => t.name === 'moderation_notices');
     assert(!!auditRow && auditRow.primary === exported.length, `the replica audit counts moderation_notices (${JSON.stringify(auditRow)})`);
-    attempt(() => clearReplicatedTables());
+    attempt(() => emptyCopiedTables(db));
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM moderation_notices').get() as any).n);
-    assert(cleared === 0, `a force-resync clears the table before the full copy comes in (${cleared})`);
+    assert(cleared === 0, `a whole copy starts without the table, built from nothing in a staging database (${cleared})`);
     await p2p.stop();
 
     avaSock.ws.close(); beaSock.ws.close();

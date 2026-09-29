@@ -771,6 +771,17 @@ export function takeRecoverySealFullPull(): boolean {
 }
 
 /**
+ * On a standby, at the first start on a whole copy swapped in (services/backup-puller.ts, db/swap-at-boot.ts): this
+ * process has its whole copy of the main server, and asks for none after a delta. Asked for again, it would be built and
+ * swapped in at another restart, whose first delta would ask again: for good, while the main server holds copies in both
+ * forms. The next start that did not swap a copy in asks once, as before.
+ */
+export function noteWholeCopyThisProcess(): void {
+    wholeCopyAsked = true;
+    wholeCopyWanted = false;
+}
+
+/**
  * On a standby, after an import: remove the copies its main server deleted before the seal. No deletion made before the
  * seal reached a standby (the code then wrote no tombstone for a copy; this code does, engine/recovery-shares.ts
  * deleteAllShares). A re-deposit's older generation did go, because the import drops it; a member disconnecting their
@@ -827,6 +838,9 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
         } finally {
             db.pragma(`secure_delete = ${priorSecureDelete}`);
         }
+        // A copy this server is serving in pages holds a reader on the WAL, which a truncating checkpoint would wait on for
+        // the whole busy timeout with the event loop held, and then leave as it was (engine/open-copies.ts): closed first.
+        closeOpenCopies('the recovery seal empties the WAL of the copies it removed');
         try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
         console.log(`🔐 Recovery seal: removed ${copies(gone.length)} its main server deleted before the seal, zeroed where they lay.`);
     }

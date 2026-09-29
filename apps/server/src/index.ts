@@ -19,6 +19,9 @@
 // state crash-loops, so no boot ever reaches the scrub either. See report-privacy.ts; it imports nothing,
 // deliberately.
 import './report-privacy.js';
+// SECOND, and before anything that imports db/db.ts, which opens state.db as it is imported: a standby's whole copy built
+// in data/staging and made ready is swapped in here, by rename, before the database opens (db/swap-at-boot.ts).
+import './db/swap-at-boot.js';
 
 import fs from 'node:fs';
 import path from 'node:path';

@@ -34,6 +34,8 @@ You can also switch in **Settings**, under **System**, then **Advanced / Subsyst
 
 Neither deletes your account there, and your other communities are not affected.
 
+To delete your account in one community, open it and use **Permanently Delete Account** in Settings. The phone keeps your key for your other communities. See "Leaving or deleting your account".
+
 ## Visiting as a guest
 
 If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite.

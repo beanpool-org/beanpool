@@ -32,7 +32,7 @@ export async function anchorUrl(): Promise<string | null> {
 }
 
 export async function signedPost(
-    url: string, path: string, body: unknown, identity: BeanPoolIdentity,
+    url: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const bodyString = JSON.stringify(body);
     // Covered by "does not double the slash when the stored node URL ends in one" in
@@ -43,7 +43,7 @@ export async function signedPost(
         'POST', target, bodyString, identity.privateKey, identity.publicKey,
     );
     return fetch(target, {
-        method: 'POST', headers, body: bodyString,
+        method: 'POST', headers, body: bodyString, ...(signal ? { signal } : {}),
     });
 }
 
@@ -86,19 +86,55 @@ export async function signedDelete(
     });
 }
 
+/** How long the member's node has to answer Delete account before the phone stops waiting (PR #1303, 4128119830). */
+export const PURGE_TIMEOUT_MS = 20_000;
+
+/** What {@link purgeAccountOnNode} throws when the node doesn't answer in time: nothing on the phone changes. */
+export const PURGE_NO_ANSWER =
+    "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes " +
+    'the delete on this phone.';
+
+/** What it throws for a 2xx that isn't the purge route's `{ ok: true }` (a captive portal, a proxy's page). */
+export const PURGE_NOT_CONFIRMED =
+    "The community's answer didn't confirm the delete. Try again.";
+
 /**
  * Permanently purge the member's account and data from their community node (#99).
+ *
+ * Resolves only when the node answers `{ ok: true }`: the route (routes/community.ts, state-engine.ts
+ * `purgeMemberSelf`) always answers that way on a delete, and on a retry ("Account is already pruned"). Any other
+ * answer throws, a 2xx included: a captive portal or proxy on a plain `http://` address answers 200 with its own page,
+ * and a caller that took that for a delete would wipe the key while the account is still on the node (#1303,
+ * 4128110186). So does a node that hasn't answered within `timeoutMs` (4128119830): React Native's fetch never gives up
+ * by itself, and the screen would wait forever.
  */
-export async function purgeAccountOnNode(identity: BeanPoolIdentity): Promise<{ ok: boolean; message: string }> {
+export async function purgeAccountOnNode(
+    identity: BeanPoolIdentity, timeoutMs: number = PURGE_TIMEOUT_MS,
+): Promise<{ ok: true; message: string }> {
     const nodeUrl = await anchorUrl();
     if (!nodeUrl) {
         throw new Error('No community node connection found.');
     }
-    const res = await signedPost(nodeUrl, '/api/member/purge', { action: 'purge_account' }, identity);
-    const json = await res.json().catch(() => ({})) as any;
-    if (!res.ok) {
-        throw new Error(json.error || json.message || `Server returned ${res.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        let res: Response;
+        let parsed: unknown;
+        try {
+            res = await signedPost(nodeUrl, '/api/member/purge', { action: 'purge_account' }, identity, controller.signal);
+            parsed = await res.json().catch(() => ({}));
+        } catch (e) {
+            if (controller.signal.aborted) throw new Error(PURGE_NO_ANSWER);
+            throw e;
+        }
+        const json = (parsed && typeof parsed === 'object' ? parsed : {}) as { ok?: unknown; error?: unknown; message?: unknown };
+        const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+        if (!res.ok) {
+            throw new Error(text(json.error) || text(json.message) || `Server returned ${res.status}`);
+        }
+        if (json.ok !== true) throw new Error(PURGE_NOT_CONFIRMED);
+        return { ok: true, message: text(json.message) ?? '' };
+    } finally {
+        clearTimeout(timer);
     }
-    return json;
 }
-

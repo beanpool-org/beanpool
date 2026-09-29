@@ -762,8 +762,8 @@ export async function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?
  * Until now the orphan sweep ran only when an admin opened Settings → Storage and pressed *Clean*
  * (`routes/admin.ts`). Every path in the image store that says an object is "swept later" therefore meant
  * "kept until a human clicks": the objects a rolled-back `createPost`/`updatePost`/import transaction left
- * behind, the old object behind an `INSERT OR REPLACE` on a replica, what `clearReplicatedTables` leaves
- * after a force-resync, and any post-commit `deleteStoredObjects` that hit an I/O error.
+ * behind, the old object behind an `INSERT OR REPLACE` on a replica, what a force-resync's clear leaves
+ * once its copy lands, and any post-commit `deleteStoredObjects` that hit an I/O error.
  *
  * None of those is ever served — every serving path reads the row first, and the row is gone — so this is
  * not data leaking out of the node. It is a member's deleted photo still ON the disk, indefinitely, on a

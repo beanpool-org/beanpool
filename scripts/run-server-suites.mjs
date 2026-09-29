@@ -11,6 +11,13 @@
 // killed: its process group, and every process descended from it, by PID. Never by name or pattern: other worktrees
 // run the same suites on this machine. Anything its group left behind when it exited normally is killed too.
 //
+// The limit does not fix a hang; it turns one into a named failure. A suite that leaves the engine's timers open and
+// returns instead of calling process.exit never ends, and runs here have been cancelled at 14, 17, 22 and 360 minutes
+// for that, indistinguishable from a slow day until someone gave up. test-all.sh's old guard was timeout(1), which
+// this Mac does not have, so locally it guarded nothing. The slowest suite takes about 3 minutes (test-2fa-reenrol-
+// needs-code, on this Mac and on CI alike), so 300 s is room for it and not much more: a suite that grows past it
+// should be split or made quicker rather than the limit raised.
+//
 // ORDER. Longest first, from the durations the last run recorded in <git common dir>/server-suite-durations.json (shared
 // by every worktree of the checkout, never tracked). A run with no recorded duration goes first, so a new suite is never
 // the one holding up the end. SERIAL runs in the manifest go last, one at a time, with no other suite beside them.
@@ -111,6 +118,7 @@ function writeDurations(file, results) {
 // ── Running one ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 const live = new Map(); // pid -> the run, while it runs
+const pendingKills = []; // the SIGKILLs a timed-out run is still owed after its grace
 
 /** pid -> { ppid, pgid } for every process on the machine. */
 function processTable() {
@@ -184,7 +192,12 @@ function runOne(run, workDir) {
             timedOut = true;
             const tree = descendants(child.pid);
             signal(child.pid, tree, 'SIGTERM');
-            setTimeout(() => signal(child.pid, [...tree, ...descendants(child.pid)], 'SIGKILL'), KILL_GRACE_MS).unref();
+            // Awaited before the report, so the runner never exits with a SIGKILL still owed to a child that
+            // ignored the SIGTERM.
+            pendingKills.push(new Promise((done) => setTimeout(() => {
+                signal(child.pid, [...tree, ...descendants(child.pid)], 'SIGKILL');
+                done();
+            }, KILL_GRACE_MS)));
         }, TIMEOUT_S * 1000);
 
         const finish = (code, sig) => {
@@ -206,7 +219,11 @@ function runOne(run, workDir) {
 
 // ── The pool ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const fmt = (s) => (s >= 60 ? `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, '0')}s` : `${s.toFixed(1)}s`);
+const fmt = (s) => {
+    if (s < 60) return `${s.toFixed(1)}s`;
+    const whole = Math.round(s);
+    return `${Math.floor(whole / 60)}m${String(whole % 60).padStart(2, '0')}s`;
+};
 const header = (r) => `━━━ ${r.name}${r.label ? ` (${r.label})` : ''} ━━━`;
 const rollupName = (r) => (r.status === 'timeout' ? (r.tag ? `${r.name}(${r.tag},TIMEOUT)` : `${r.name}(TIMEOUT)`) : r.id);
 
@@ -268,6 +285,7 @@ async function main() {
     }
     const serialSeconds = (Date.now() - t1) / 1000;
     const wall = (Date.now() - t0) / 1000;
+    await Promise.all(pendingKills);
     writeDurations(file, results);
 
     // ── Report ──

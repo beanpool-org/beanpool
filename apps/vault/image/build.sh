@@ -14,7 +14,7 @@
 #   vault-root.raw                 the system partition alone, and its verity tree: with vault.efi, a new image's
 #   vault-root-verity.raw          release assets (installed into the other slot at a monthly restart)
 #   image.json                     {version, ukiSha256, roothash, imageHash}: what a release names
-#   root-files.txt, uki-sections.txt, initrd-files.txt, partitions.txt
+#   root-files.txt, uki-sections.txt, initrd-files.txt, partitions.txt, esp-files.txt
 #                                  every file of the system tree, every section of the UKI, every file of its
 #                                  initrd and every partition of the install image, with its hash: to compare two
 #                                  builds file by file
@@ -135,6 +135,10 @@ mv "${o}/beanpool-vault.root-x86-64.raw" "${out}/vault-root.raw"
 mv "${o}/beanpool-vault.root-x86-64-verity.raw" "${out}/vault-root-verity.raw"
 mv "${o}/beanpool-vault.raw" "${out}/beanpool-vault_${version}.raw"
 mv "${o}/beanpool-vault.root-files.txt" "${out}/root-files.txt"
+# The install image's ESP again, in a fixed order (rebuild-esp.py): otherwise its FAT follows the build machine's
+# directory order, and the install image differs between machines though nothing in it that boots does.
+docker run --rm -e "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" -v "${out}:/output" -v "${here}:/image:ro" "${builder}" \
+    python3 /image/rebuild-esp.py "/output/beanpool-vault_${version}.raw" > "${out}/esp-files.txt"
 # Each section of the UKI (kernel, initrd, command line, os-release...) with its SHA-256: where two builds differ.
 docker run --rm -v "${out}:/output" "${builder}" \
     python3 -c 'import hashlib,pefile,sys; pe=pefile.PE(sys.argv[1]); [print(s.Name.rstrip(b"\0").decode(), hashlib.sha256(s.get_data()).hexdigest()) for s in pe.sections]' \

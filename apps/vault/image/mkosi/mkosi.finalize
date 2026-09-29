@@ -9,6 +9,9 @@ cd "$BUILDROOT"
 # arm64 Mac differ from one on an x86-64 machine.
 rm -rf ./.cache/rosetta
 rmdir ./.cache 2>/dev/null || true
+# The kernel package's files in /boot would be copied to the ESP, where nothing boots them: the UKI carries its own
+# (mkosi has already copied the kernel to /usr/lib/modules/<version>/vmlinuz for it).
+rm -f ./boot/vmlinuz-* ./boot/System.map-* ./boot/config-* ./boot/initrd.img-*
 out="$OUTPUTDIR/beanpool-vault.root-files.txt"
 {
     find . -xdev -type f ! -path './var/*' ! -path './boot/*' ! -path './efi/*' -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum

@@ -15,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
         <div className="max-w-3xl w-full mt-2">
             <div className="space-y-2.5">
                 <div data-testid="case-one"><SignInRecoveryLine enrolled={['google']} hasWords /></div>
-                <div data-testid="case-many"><SignInRecoveryLine enrolled={['google', 'facebook', 'github']} hasWords /></div>
+                <div data-testid="case-many"><SignInRecoveryLine enrolled={['google', 'apple', 'facebook']} hasWords /></div>
                 <div data-testid="case-none"><SignInRecoveryLine enrolled={[]} hasWords /></div>
                 <div data-testid="case-one-nowords"><SignInRecoveryLine enrolled={['google']} hasWords={false} /></div>
                 <div data-testid="case-none-nowords"><SignInRecoveryLine enrolled={[]} hasWords={false} /></div>

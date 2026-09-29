@@ -63,10 +63,8 @@ import {
     webClientIds,
     type SsoProvider,
 } from '../sso.js';
-import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
 import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recovery-seal-key.js';
 import { recoverySealFailure, signInFailure } from './keepers.js';
-import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import type { RouteDeps } from './types.js';
 
 /** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
@@ -289,40 +287,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         ctx.body = {
             nonce: issueNonce(collection.requesterEphemeralPubkey),
             expiresInSeconds: 600,
-            githubFlow: GITHUB_FLOW,
             // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
             clientIds: webClientIds(),
         };
-    });
-
-    /**
-     * GitHub for the RECOVERING device, run by this node (engine/github-device.ts) and bound to the
-     * ephemeral key, like the nonce above. `start { collectionId }`, then `poll { collectionId, sessionId }`
-     * until ok, whose `sub` opens the blob; `/api/recovery/collect/sso` then carries
-     * `proof: { sessionId }`. Limited as keepers.ts's pair is: `start` on the auth limiter, `poll` on the
-     * per-address GitHub poll bucket (github-poll-rate-limit.ts), counted before the collection is looked up.
-     */
-    router.post('/api/recovery/collect/github/start', async (ctx) => {
-        const collection = sessionFor(ctx);
-        if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
-        try {
-            const started = await startGithubSession(collection.requesterEphemeralPubkey);
-            ctx.status = 200;
-            ctx.body = started;
-        } catch (e) { return signInFailure(ctx, e); }
-    });
-
-    router.post('/api/recovery/collect/github/poll', async (ctx) => {
-        if (!githubPollRateLimit(ctx)) return;
-        const collection = sessionFor(ctx);
-        if (!collection) return notMySession(ctx);
-        const sessionId = (ctx as any).requestBody?.sessionId;
-        try {
-            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', collection.requesterEphemeralPubkey);
-            ctx.status = 200;
-            ctx.body = polled;
-        } catch (e) { return signInFailure(ctx, e); }
     });
 
     /** K3 — released on a verified fresh sign-in with the provider account that is the keeper. */
@@ -339,15 +306,14 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         }
         try {
             // Every release is recorded wrapped, so a server without its recovery-seal key refuses before the sign-in
-            // is checked: the device keeps its nonce (or its GitHub session) for when the key is back.
+            // is checked: the device keeps its nonce for when the key is back.
             requireRecoverySealKey();
             const identity = await verifySignIn(
                 body.provider,
-                // `idToken` for Google, Apple and Facebook; `proof: { sessionId }` for GitHub.
                 signInCredentialFrom(body),
                 getConfiguredAudiences(body.provider),
                 typeof body.nonce === 'string' ? body.nonce : '',
-                // The nonce (or GitHub session) was issued to the ephemeral key, so it must be spent against it.
+                // The nonce was issued to the ephemeral key, so it must be spent against it.
                 collection.requesterEphemeralPubkey,
             );
             const alreadyReleased = new Set(listReleases(collection.id).map(r => r.shareId));

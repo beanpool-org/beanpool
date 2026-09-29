@@ -21,7 +21,7 @@ If you came from a link someone shared to a listing or an event, it opens first.
 
 - Tap **Join**, then **I'm new to BeanPool**.
 - Choose the name people will see. It needs at least 2 letters, and at most 20.
-- Sign in once, with one of the accounts the page shows: **Google**, **Apple**, **Facebook** or **GitHub**. The page takes you to that company's own sign-in and brings you back. With GitHub it shows a code instead: tap **Copy code**, then **Open GitHub**, enter the code there and come back.
+- Sign in once, with one of the accounts the page shows: **Google**, **Apple** or **Facebook**. The page takes you to that company's own sign-in and brings you back.
 - Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in**, **Your Photo**, **Safety Backup** and **How it Works**.
 
 The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
@@ -62,11 +62,13 @@ On the global community, the sign-in you joined with brings your account back to
 - Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)
 - A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.
 - Type your name here. Tap your account when it shows.
-- Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.
+- Choose the sign-in you joined with: **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.
 - The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.
 - You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them. If the copy didn't keep them, this browser doesn't have them, and Settings says so (see "Keep your 12 words" below).
 
 Your account's devices are told that it is being brought back, in case it isn't you.
+
+If you joined with GitHub, it can't bring your account back: BeanPool no longer uses GitHub (see "Getting your account back"). Use your 12 words instead.
 
 If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in).
 

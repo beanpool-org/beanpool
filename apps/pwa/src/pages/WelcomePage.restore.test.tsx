@@ -199,7 +199,7 @@ describe('where it starts on the open door', () => {
             '/api/join': () => json(409, { code: 'already_joined', error: 'This Google account already has a BeanPool identity here.' }),
             '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
             '/api/recovery/lookup/': () => json(200, [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
-            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'rn-1', githubFlow: 'node', clientIds: { google: 'web', apple: 'org.beanpool.web' } }),
+            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'rn-1', clientIds: { google: 'web', apple: 'org.beanpool.web' } }),
             '/api/recovery/collect': () => json(200, { collectionId: 'col-1' }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);

@@ -74,6 +74,7 @@ import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
@@ -130,6 +131,9 @@ async function main() {
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And GitHub's rows for that role (engine/github-sign-in-removal.ts): a standby that became the main server at this
+    // boot removes the GitHub copies it inherited before anything serves. Does nothing when the role did not change.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
     // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),

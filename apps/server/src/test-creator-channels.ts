@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     // The sync round-trip below needs a signed payload, and signing needs the node's peer
     // identity — so p2p comes up, exactly as test-backup-topology does it.
     initStateEngine();
-    const p2pNode = await startP2P(4032, 4033);
+    const p2pNode = await startP2P(0, 0);
     // Import also requires the signer to be a trusted peer, so the node trusts itself for the
     // round-trip — the same shape test-backup-topology uses.
     const nodeId = p2pNode.peerId.toString();

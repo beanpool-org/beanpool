@@ -43,8 +43,8 @@ import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling } from './app-document-csp.js';
 
-const PORT = 8734;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -135,7 +135,8 @@ async function main(): Promise<void> {
     initStateEngine();
     process.env.APPLE_PROBE = '1'; // its routes register only when on, as the node starts (routes/apple-probe.ts)
     const { startHttpsServer } = await import('./https-server.js');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. the Apple return ──────────────────────────────────────────────────────────────────────
     console.log('── 1. POST /app/auth/apple ──');

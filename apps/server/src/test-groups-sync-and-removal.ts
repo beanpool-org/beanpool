@@ -70,7 +70,7 @@ function groupPost(author: string, groupId: string, title: string) {
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4072, 4073);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 

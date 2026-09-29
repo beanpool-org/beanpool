@@ -36,8 +36,8 @@ import { initStateEngine, createTreasury, adminAssignTreasuryOperator } from './
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8697;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const HOUR = 60 * 60 * 1000;
@@ -85,7 +85,8 @@ async function main(): Promise<void> {
     console.log('\nAn enterprise hosting an event, over real HTTP\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const keeper = makeIdentity('KeeperKim');
     const stranger = makeIdentity('StrangerSam');

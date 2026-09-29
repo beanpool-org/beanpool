@@ -17,8 +17,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { __test_isPrivateSource } from './dns-shim.js';
 
-const PORT = 8549;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -38,7 +38,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // A2-13 — a signed request with a mismatched identity field gets a GENERIC error.
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');

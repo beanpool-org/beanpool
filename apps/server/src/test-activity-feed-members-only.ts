@@ -25,8 +25,8 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
 
-const PORT = 8598;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -67,7 +67,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const member = (callsign: string): Id => {
         const id = keypair();

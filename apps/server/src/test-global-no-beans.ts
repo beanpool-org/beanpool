@@ -32,8 +32,8 @@ process.env.ADMIN_PASSWORD = 'Global-No-Beans-Admin-83!';
 
 import crypto from 'node:crypto';
 
-const PORT = 8741;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ADMIN_PW = process.env.ADMIN_PASSWORD;
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -102,7 +102,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');

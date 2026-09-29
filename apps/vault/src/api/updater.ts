@@ -69,6 +69,8 @@ export interface ReleaseRef {
 
 export interface UpdateStatus {
     checkedAt: number | null;
+    /** The image this machine booted, as this API knows it (image-identity.ts), or null when unknown. */
+    image: string | null;
     /** Why the last check couldn't finish (the feed unreachable), or null. */
     error: string | null;
     running: ReleaseRef | null;
@@ -88,7 +90,7 @@ function ref(r: TrustedRelease): ReleaseRef {
 
 export class Updater {
     readonly status: UpdateStatus = {
-        checkedAt: null, error: null, running: null, newest: null, imageWaiting: null, stopped: null, refused: [], handover: null, note: null,
+        checkedAt: null, image: null, error: null, running: null, newest: null, imageWaiting: null, stopped: null, refused: [], handover: null, note: null,
     };
     private checking: Promise<UpdateStatus> | null = null;
     private readonly clock: () => number;
@@ -106,6 +108,7 @@ export class Updater {
     private async run(): Promise<UpdateStatus> {
         const s = this.status;
         s.checkedAt = this.clock();
+        s.image = this.opts.runningImageHash();
         if (!this.opts.rootKeys) {
             s.note = 'No pinned custodian keys (run from source): releases are not checked.';
             return s;
@@ -122,7 +125,7 @@ export class Updater {
         s.stopped = chain.stopped;
         s.refused = chain.problems.map(p => ({ release: p.label ?? p.hash?.slice(0, 12) ?? '?', reason: p.reason }));
         s.newest = chain.newest ? ref(chain.newest) : null;
-        const image = this.opts.runningImageHash();
+        const image = s.image;
         const own = this.opts.ownBundleHash;
         const newestFirst = [...chain.releases].reverse();
         const running = newestFirst.find(r => r.manifest.apiBundleHash === own && r.manifest.imageHash === image) ?? null;

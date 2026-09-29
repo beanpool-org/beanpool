@@ -198,3 +198,89 @@ describe('a release hands over the API', () => {
         expect(alive(secondPid)).toBe(false);
     }, 120_000);
 });
+
+describe('the API knows which image booted from the file root leaves (the image\'s config: no imageHash)', () => {
+    it('file missing: a plain "unknown", nothing handed over; once root\'s file is there: it finds itself in the feed and hands over', async () => {
+        const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const rootKeys = custodians.map(c => c.publicKey);
+        const base3 = path.join(dir, 'b3');
+        const bundles = path.join(base3, 'bundles');
+        await bundleVault({ outDir: bundles, rootKeys });
+        const nextBundle = path.join(base3, 'next', API_BUNDLE_ASSET);
+        mkdirSync(path.dirname(nextBundle), { recursive: true });
+        copyFileSync(path.join(bundles, API_BUNDLE_ASSET), nextBundle);
+        appendFileSync(nextBundle, '// release 1.1.0\n');
+        const hashA = sha256Hex(readFileSync(path.join(bundles, API_BUNDLE_ASSET)));
+        const hashB = sha256Hex(readFileSync(nextBundle));
+
+        const image = randomImage();
+        const feedDir = path.join(base3, 'feed');
+        const r1 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2), image, apiBundleHash: hashA });
+        publish(feedDir, r1);
+        const imageHash = r1.manifest.imageHash;
+        // What `vault-keyholder --identify` leaves in /run on the image.
+        const identity = `${JSON.stringify({ ok: true, image: { ...image, imageHash, ukiPath: '/boot/EFI/Linux/beanpool-vault_1.0.0.efi' } })}\n`;
+        const khIdentity = path.join(base3, 'kh-image.json');
+        writeFileSync(khIdentity, identity);
+        const apiIdentity = path.join(base3, 'api-image.json');
+
+        const run = path.join(base3, 'run');
+        mkdirSync(run, { recursive: true });
+        const khSocket = path.join(run, 'kh.sock');
+        const apiSocket = path.join(run, 'api.sock');
+        const cfg = (name: string, value: unknown) => {
+            const file = path.join(base3, name);
+            writeFileSync(file, JSON.stringify(value));
+            return file;
+        };
+        const kh = await start(['--disable-sigusr1', path.join(bundles, 'vault-keyholder.mjs'), '--config',
+            cfg('kh.json', { stateDir: path.join(base3, 'state'), socketPath: khSocket, genesisCustodians: rootKeys, imageIdentityFile: khIdentity })], 'listening');
+        const apiConfig = cfg('api.json', {
+            dataDir: path.join(base3, 'data'), keyholderSocket: khSocket, hosts: ['vault.test'], backupDir: path.join(base3, 'store'), socketPath: apiSocket,
+            releasesDir: path.join(base3, 'releases'), feed: { directory: feedDir }, updateCheckSeconds: 1, imageIdentityFile: apiIdentity,
+        });
+        const launcher = await start([path.join(bundles, 'vault-launcher.mjs'), '--config',
+            cfg('launcher.json', { apiBundle: path.join(bundles, API_BUNDLE_ASSET), apiConfig, nodeArgs: ['--disable-sigusr1'] })], 'vault-launcher: listening');
+        const firstPid = Number(/started the API \(.*\) as pid (\d+)/.exec(launcher.out())?.[1]);
+
+        const fetch = unixFetch(apiSocket);
+        const base = 'http://vault.test';
+        type Update = { checkedAt: number; image: string | null; note: string | null; running: { version: string } | null; handover: unknown };
+        const report = async () => JSON.parse(((await (await fetch(`${base}/v1/report`)).json()) as { report: { text: string } }).report.text) as { update: Update; api: string };
+        const opts = { fetch, acceptNoHardwareProof: true, trust: { feed: new LocalDirectoryFeed(feedDir), rootKeys } };
+        const g = await genesis(base, custodians[0], opts);
+        expect(g.status).toBe(200);
+        const shares = g.body.custodianShares as CustodianShare[];
+        await confirmShare(base, custodians[0], shares[0], opts);
+        expect((await confirmShare(base, custodians[1], shares[1], opts)).body.state).toBe('open');
+
+        // Release 1.1.0 for the same image, two-signed, with its bundle: taken only by an API that knows its image.
+        const r2 = makeRelease({ version: '1.1.0', previous: r1, custodianKeys: custodians, signers: custodians.slice(1), apiBundleHash: hashB });
+        publish(feedDir, r2, readFileSync(nextBundle));
+
+        // Root's file is missing: the image is unknown, said plainly, and nothing is handed over, check after check.
+        const since = Date.now();
+        const unknown = await until('checks without the file', async () => {
+            const u = (await report()).update;
+            return u.checkedAt > since + 2000 && u;
+        });
+        expect(unknown).toMatchObject({ image: null, running: null, handover: null, note: 'The booted image is unknown: no handover.' });
+        expect((await report()).api).toBe(hashA);
+        expect(alive(firstPid)).toBe(true);
+        expect(launcher.out()).not.toContain('switching');
+
+        // Root's file appears (the API reads it at every check): the API finds itself (1.0.0) and hands over to 1.1.0,
+        // whose API starts with the file there and knows its image at once.
+        writeFileSync(apiIdentity, identity);
+        await until('the new API to serve', async () => (await report()).api === hashB, 30_000);
+        const after = await until('the new API to know it is 1.1.0', async () => {
+            const r = await report();
+            return r.update.running?.version === '1.1.0' && r;
+        });
+        expect(after.update).toMatchObject({ image: imageHash, note: null });
+        await until('the old API to exit', async () => !alive(firstPid));
+
+        await stop(launcher.child);
+        await stop(kh.child);
+    }, 120_000);
+});

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
-import { identifyImage } from '../shared/image-identity.js';
+import { identifyImage, imageFromIdentityFile } from '../shared/image-identity.js';
 import { checkMemoryHygiene, hygieneRefusal } from './hygiene.js';
 import { Keyholder } from './keyholder.js';
 import { listenDiskKey, listenKeyholder } from './server.js';
@@ -31,17 +31,8 @@ function argValue(name: string): string | undefined {
 /** The image this machine booted, or why not, from a file root wrote (`--identify`) or from the machine itself. */
 function releaseFrom(config: { releaseHash?: string; imageIdentityFile?: string }): { hash?: string; why: string } {
     if (config.releaseHash) return { hash: config.releaseHash, why: 'from the config' };
-    let r: ReturnType<typeof identifyImage>;
-    if (config.imageIdentityFile) {
-        try {
-            r = JSON.parse(readFileSync(config.imageIdentityFile, 'utf8')) as ReturnType<typeof identifyImage>;
-        } catch {
-            return { why: `${config.imageIdentityFile} is missing or unreadable` };
-        }
-    } else {
-        r = identifyImage();
-    }
-    return r.ok && /^[0-9a-f]{64}$/.test(r.image?.imageHash ?? '') ? { hash: r.image.imageHash, why: 'booted' } : { why: r.ok ? 'malformed' : r.reason };
+    const r = config.imageIdentityFile ? imageFromIdentityFile(config.imageIdentityFile) : identifyImage();
+    return r.ok ? { hash: r.image.imageHash, why: 'booted' } : { why: r.reason };
 }
 
 async function main(): Promise<void> {

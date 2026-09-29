@@ -13,6 +13,10 @@ import { imageHashOf } from './release.js';
  * line carries `roothash=`. Read on a machine that booted another way (a developer's, a test), this finds nothing and
  * says why: the release is then `unreleased`.
  *
+ * The ESP is root's alone, so on the image root works this out before the vault's programs start
+ * (beanpool-vault-identity.service, `vault-keyholder --identify`) and leaves the answer in a file they read
+ * ({@link imageFromIdentityFile}): the keyholder and the API both.
+ *
  * What it proves: on platform `none`, nothing a hostile host couldn't fake (the host can change the ESP after boot, or
  * boot something else that answers the same). It catches mistakes: an image nobody signed, or an old one still running.
  */
@@ -80,6 +84,18 @@ export function identifyImage(paths: ImageIdentityPaths = {}): { ok: true; image
         return { ok: true, image: { ukiSha256, roothash, imageHash: imageHashOf({ ukiSha256, roothash }), ukiPath } };
     }
     return { ok: false, reason: `the booted entry ${entry} is not in EFI/Linux on the ESP` };
+}
+
+/** The answer root left in `file` (`vault-keyholder --identify <file>`, as {@link identifyImage} gives it). */
+export function imageFromIdentityFile(file: string): { ok: true; image: ImageIdentity } | { ok: false; reason: string } {
+    let r: { ok?: unknown; image?: Partial<ImageIdentity>; reason?: unknown };
+    try {
+        r = JSON.parse(readFileSync(file, 'utf8')) as typeof r;
+    } catch {
+        return { ok: false, reason: `${file} is missing or unreadable` };
+    }
+    if (r?.ok === true && r.image && /^[0-9a-f]{64}$/.test(r.image.imageHash ?? '')) return { ok: true, image: r.image as ImageIdentity };
+    return { ok: false, reason: r?.ok === false && typeof r.reason === 'string' ? r.reason : `${file} is malformed` };
 }
 
 export function runningImage(paths: ImageIdentityPaths = {}): ImageIdentity | null {

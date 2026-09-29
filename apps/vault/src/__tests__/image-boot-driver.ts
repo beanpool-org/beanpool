@@ -20,7 +20,9 @@ import { unixFetch } from './unix-fetch.js';
  *
  *   - a genesis, and the vault then opens: the data partition is mounted where the API sees it (#1314 BLOCKING 1);
  *   - files the API's user stages that no release signs are not installed by the monthly restart's install step, and
- *     that user can't write where root installs from (BLOCKING 2).
+ *     that user can't write where root installs from (BLOCKING 2);
+ *   - the API knows which image booted (from the file root leaves in /run; the ESP is root's alone): /v1/report's
+ *     `update.image` is it (BLOCKING 3).
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -123,6 +125,11 @@ async function main(): Promise<void> {
     check('the data partition is mounted in the machine\'s namespace', source === '/dev/mapper/vault-data', source || 'not mounted');
     const report = await getJson('/v1/report');
     check('the database opens on it: /v1/report answers', report.status === 200, `${report.status}`);
+
+    // BLOCKING 3: the API, not root, knows the image it runs on (its release check needs it to hand over or stage).
+    const text = (report.body.report as { text?: string } | undefined)?.text ?? '{}';
+    const update = (JSON.parse(text) as { update?: { image?: string | null; error?: string | null } }).update;
+    check('/v1/report names the booted image: the API knows it', update?.image === image.imageHash, `update.image ${update?.image ?? 'missing'}; ${update?.error ?? ''}`);
 
     // BLOCKING 2: as the API's user, stage a boot file and partitions no release signs (as the review did), then run
     // the monthly restart's install step (without its reboot). Nothing may be installed.

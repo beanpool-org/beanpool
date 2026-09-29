@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runningImage } from '../shared/image-identity.js';
+import { identifyImage, imageFromIdentityFile } from '../shared/image-identity.js';
 import { BUILT_ROOT_KEYS, rootKeysFor } from '../shared/pinned.js';
 import { GitHubReleaseFeed, LocalDirectoryFeed, type ReleaseFeed } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
@@ -26,8 +26,11 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
  * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
  * - `rootKeys`: for a run from source only (tests). A built bundle pins its keys and ignores these.
- * - `imageHash`: the image this machine booted, for tests and rehearsals; the image's own config leaves it out and it is
- *   read from the machine (image-identity.ts).
+ * - `imageIdentityFile`: where root leaves which image booted (the image: `/run/beanpool-vault-image.json`, written by
+ *   beanpool-vault-identity.service before the vault's programs start, as the keyholder reads it). The ESP it is
+ *   worked out from is root's alone. Read again at every release check; missing or unreadable, the image is unknown
+ *   and nothing is handed over or staged. Without it the API looks at the machine itself (image-identity.ts).
+ * - `imageHash`: the image this machine booted, for tests and rehearsals; it overrides both.
  *
  * Every hour: a backup, and holds, deletion records and nonces expire; and the release check (at start too).
  */
@@ -47,6 +50,7 @@ interface ApiConfig {
     feed?: { github?: string; directory?: string };
     updateCheckSeconds?: number;
     imageHash?: string;
+    imageIdentityFile?: string;
     rootKeys?: string[];
     requireDataMount?: boolean;
 }
@@ -97,9 +101,14 @@ async function main(): Promise<void> {
     const launcher = launcherLink();
     const feed: ReleaseFeed | null = config.feed?.directory ? new LocalDirectoryFeed(config.feed.directory)
         : config.feed?.github ? new GitHubReleaseFeed({ repo: config.feed.github }) : null;
-    const image = config.imageHash ?? runningImage()?.imageHash ?? null;
+    // As the keyholder does (keyholder/main.ts): the config's hash, else root's file, else the machine itself.
+    const image = (): string | null => {
+        if (config.imageHash) return config.imageHash;
+        const r = config.imageIdentityFile ? imageFromIdentityFile(config.imageIdentityFile) : identifyImage();
+        return r.ok ? r.image.imageHash : null;
+    };
     const updater = feed && config.releasesDir ? new Updater({
-        feed, rootKeys: rootKeysFor(config.rootKeys), ownBundleHash: own, runningImageHash: () => image, releasesDir: config.releasesDir, launcher,
+        feed, rootKeys: rootKeysFor(config.rootKeys), ownBundleHash: own, runningImageHash: image, releasesDir: config.releasesDir, launcher,
         stagedDir: config.stagedDir,
     }) : null;
 

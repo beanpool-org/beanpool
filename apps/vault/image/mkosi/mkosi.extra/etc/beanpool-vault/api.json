@@ -8,5 +8,6 @@
   "backupDir": "/var/lib/beanpool-vault/backups",
   "releasesDir": "/var/lib/beanpool-vault/releases",
   "stagedDir": "/var/lib/beanpool-vault/staged",
+  "imageIdentityFile": "/run/beanpool-vault-image.json",
   "feed": { "github": "beanpool-org/beanpool" }
 }

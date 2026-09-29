@@ -109,14 +109,15 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
 ## Updates without anyone logging in (design §3)
 
 - **The API.** At start and every hour, the API reads the feed and walks the chain. The release whose API bundle is
-  its own file and whose image is the one it booted is the one it runs; a newer release for the same image is taken:
-  its bundle is downloaded and checked against `apiBundleHash`, the launcher checks the release again from its own
-  pinned keys, runs the bundle's `--self-test` (it must report the same pinned keys and its own hash), starts it beside
-  the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the old one to
-  finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release newer than the
-  one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this too, whatever
-  the API asks: it takes only a release newer than the one whose bundle is in service (and than any it switched to),
-  for the same image.
+  its own file and whose image is the one it booted (from the file root leaves in `/run/beanpool-vault-image.json` at
+  boot, as the keyholder reads it: the ESP is root's alone) is the one it runs; a newer release for the same image is
+  taken: its bundle is downloaded and checked against `apiBundleHash`, the launcher checks the release again from its
+  own pinned keys, runs the bundle's `--self-test` (it must report the same pinned keys and its own hash), starts it
+  beside the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the
+  old one to finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release
+  newer than the one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this
+  too, whatever the API asks: it takes only a release newer than the one whose bundle is in service (and than any it
+  switched to), for the same image.
 - **A new image** (system, kernel, keyholder, Node): the API downloads it into its inbox
   (`/var/lib/beanpool-vault/staged`), with the chain of releases up to it, and `/v1/report` says `imageWaiting`. That
   decides nothing: the API is what this guards against. At the monthly restart root's install step
@@ -176,13 +177,14 @@ where two builds differ.
   mounted once the vault opens, opened (not formatted) again after a restart, and left alone under another key or when
   it holds a file system. It prints the throwaway public keys it used, so anyone can build the same image and compare.
 - **The test image** (CI, after those): the same image plus the boot test's driver and three throwaway custodian keys
-  made for the run, private halves included (`image/test-image/make.mjs`, `build.sh --extra`; never published, and
-  its hash is not a release's). `boot-test.sh --verdict vault-test` boots it, and the driver
+  made for the run, private halves included (`image/test-image/make.mjs`, `build.sh --extra`; never published, and its
+  hash is not a release's). `boot-test.sh --verdict vault-test` boots it, and the driver
   (`src/__tests__/image-boot-driver.ts`) runs as root inside: a genesis through the API's socket, then `/v1/health`
-  must say `open` with the data partition mounted in the machine's namespace and the database open on it. As the
-  API's user it stages a boot file and partitions no release signs, and fails to write root's install directories;
-  the install step must refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release
-  as current. (A signed next release installed and booted is not in it: that needs a second image build and a reboot.)
+  must say `open` with the data partition mounted in the machine's namespace and the database open on it, and
+  `/v1/report`'s `update.image` must be the image that booted (the API reads root's file). As the API's user it stages
+  a boot file and partitions no release signs, and fails to write root's install directories; the install step must
+  refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release as current. (A signed
+  next release installed and booted is not in it: that needs a second image build and a reboot.)
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow
@@ -231,8 +233,8 @@ planned, the rule stands: reinstall from the signed image first, then unlock.
   data partition is still being opened). Global checks it every minute.
 - `/v1/report` (while open) is signed with the ticket key and holds nothing per member: counts, copies, re-wrap
   progress, backups, pushes, memory hygiene, how many new custodians confirmed their share, and `api` (the running
-  bundle's hash), `update` (the release it runs, the newest, a waiting image, anything refused and why, the last
-  handover), `nextRestart`.
+  bundle's hash), `update` (the image this API knows it booted, the release it runs, the newest, a waiting image,
+  anything refused and why, the last handover), `nextRestart`.
 
 ## Tests
 

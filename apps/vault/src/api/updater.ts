@@ -223,7 +223,11 @@ export class Updater {
             writeFileSync(`${bundlePath}.part`, bytes, { mode: 0o600 });
             renameSync(`${bundlePath}.part`, bundlePath);
         } catch (e) {
-            rmSync(`${bundlePath}.part`, { force: true });
+            try {
+                rmSync(`${bundlePath}.part`, { force: true });
+            } catch {
+                // Written again at the next check.
+            }
             s.error = `Release ${target.manifest.version}'s API bundle could not be kept${isNoRoom(e) ? ' (no room on the state partition)' : ''}: ${(e as Error).message}`.slice(0, 300);
             return s;
         }

@@ -12,7 +12,8 @@
  * - A host name (apps/server/README.md tells them to set one) is announced as `/dns/<name>`. Measured on this libp2p
  *   (3.1, @libp2p/tcp 11): a node announcing `/dns/<name>/tcp/<port>` starts, and a peer dials that address; the name is
  *   looked up when a peer dials, so an address that changes behind the name is followed. It used to announce nothing.
- * - Every address is parsed by the multiaddr library libp2p parses it with before it is announced. An IPv6 address with
+ * - Every address is parsed by the multiaddr library libp2p parses it with before it is announced: apps/server depends on
+ *   the major libp2p does (13), so both load one copy, and test-p2p-announce checks they still do. An IPv6 address with
  *   a zone (fe80::1%eth0) is an IPv6 address to node:net but not to multiaddr, and libp2p threw at start on it: the same
  *   restart loop. It is refused here, with the reason, and the node announces its listen addresses instead.
  */

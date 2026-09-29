@@ -8,7 +8,8 @@
  * A hand-set value (#1135's review): a host name is announced as /dns, and a real libp2p node on localhost announcing one
  * starts and is dialled by a peer at that address (the p2p layer supports it, measured here rather than assumed); an IPv6
  * address with a zone, which node:net takes and libp2p refuses at start, is refused with the reason; so is anything
- * else that is neither an address nor a host name.
+ * else that is neither an address nor a host name. And the multiaddr p2p-announce.ts checks with is the copy libp2p
+ * parses with (#1333 review), so its check and libp2p's can't drift apart.
  */
 import assert from 'node:assert/strict';
 import { multiaddr } from '@multiformats/multiaddr';
@@ -128,6 +129,13 @@ async function libp2pChecks(): Promise<void> {
         assert.deepEqual(announced, [`/dns/localhost/tcp/${port}/p2p/${a.peerId.toString()}`]);
         passed++;
         console.log(`✓ a node announcing a host name starts, and announces ${announced[0].split('/p2p/')[0]}`);
+        // p2p-announce.ts checks each address with the multiaddr this file imports. That check is only as good as its
+        // agreement with the copy libp2p parses with (#1333 review: the server had 12.5.1, libp2p 13.0.1). One copy:
+        // what libp2p hands back is an instance of the very class the server's import makes.
+        assert.equal(Object.getPrototypeOf(a.getMultiaddrs()[0]), Object.getPrototypeOf(multiaddr('/ip4/127.0.0.1/tcp/1')),
+            'libp2p and apps/server load different copies of @multiformats/multiaddr: keep apps/server/package.json on the major libp2p uses');
+        passed++;
+        console.log('✓ libp2p parses with the same copy of @multiformats/multiaddr that p2p-announce.ts checks with');
         const conn = await b.dial(a.getMultiaddrs()[0], { signal: AbortSignal.timeout(10_000) });
         assert.equal(conn.status, 'open');
         assert.equal(conn.remotePeer.toString(), a.peerId.toString());

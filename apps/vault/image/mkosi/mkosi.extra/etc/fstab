@@ -1,6 +1,0 @@
-# The state partition (made at the first boot, usr/lib/repart.d): /var, with the keyholder's sealed state file, the
-# journal, Caddy's certificates, downloaded releases and staged images. Nothing on it is readable as a key.
-# The ESP, readable by the keyholder (it hashes the UKI it booted for its release hash) and written only by root.
-# The data partition is mounted by beanpool-vault-data.service once the vault is unlocked.
-PARTLABEL=vault-state  /var  ext4  defaults,nodev,nosuid,noexec  0 2
-PARTLABEL=ESP          /efi  vfat  umask=0022,nodev,nosuid,noexec  0 2

@@ -1,0 +1,11 @@
+# The ESP, readable by the keyholder (it hashes the UKI it booted for its release hash) and written only by root
+# (systemd-sysupdate at the monthly restart). Here rather than from systemd-gpt-auto-generator, which mounts it 0077.
+[Unit]
+Description=The EFI system partition
+Before=local-fs.target
+
+[Mount]
+What=/dev/disk/by-partlabel/ESP
+Where=/efi
+Type=vfat
+Options=umask=0022,nodev,nosuid,noexec

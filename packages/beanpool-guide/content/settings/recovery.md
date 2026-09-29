@@ -49,7 +49,7 @@ BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locke
 
 - If GitHub was the only account you linked and your 12 words are on this phone but not written down, write them down now (**Settings**, then **View Recovery Phrase**), or link Google, Facebook or (on an iPhone) Apple, as above. Until you do one of these, this phone is your only way into your account.
 - If your 12 words are written down, you have nothing to do. To have a sign-in account as well, link Google, Facebook or (on an iPhone) Apple, as above.
-- If GitHub was the only account you linked and this phone has no 12 words, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account.
+- If GitHub was the only account you linked, this phone has no 12 words and you have none written down, link Google, Facebook or (on an iPhone) Apple now. Until you do, this phone is your only way into your account.
 
 ## Who can open the copy
 

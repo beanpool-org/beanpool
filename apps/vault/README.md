@@ -123,7 +123,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   the one in service before the switch, or the image's own if that one keeps exiting too. That step back is the
   launcher's, not a release chosen: the release it fell back from may be taken again after a back-off (an hour,
   doubling each time it fails again, never past the next monthly restart), and nothing else at or below the newest
-  release it switched to.
+  release it switched to. All of that is the launcher process's memory, so it stays up while its API is down (only
+  systemd's stop ends it); `launcher-program.test.ts` runs the built program to check it.
 - **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one
   booted, the API downloads that image from the release that brought it (the first to name it: an API-only release
   after it carries no image files, and the image's files are named for the version it was built as) into its inbox

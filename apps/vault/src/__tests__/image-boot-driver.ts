@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, statfsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { confirmShare, custodianKey, genesis, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
-import { LocalDirectoryFeed, MANIFEST_ASSET, ROOT_ASSET, SIGNATURES_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
+import { API_BUNDLE_ASSET, LocalDirectoryFeed, MANIFEST_ASSET, ROOT_ASSET, SIGNATURES_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
 import {
     addSignature, formatManifest, formatSignatures, imageHashOf, manifestHash, sha256Hex, signRelease, type ReleaseImage, type ReleaseManifest, type ReleaseSignatures,
 } from '../shared/release.js';
@@ -35,6 +35,9 @@ import { unixFetch } from './unix-fetch.js';
  *     installs it (systemd-sysupdate into the other slot and the ESP), and /v1/report says so. The new image is small
  *     (a 16 MiB system partition with a real verity tree, and a UKI never booted): every check root makes is real,
  *     but nothing reboots into it.
+ *   - (round 3, BLOCKING) the launcher lives through its API's exits: a two-signed API-only release whose API listens
+ *     and then keeps exiting is started again by the launcher, which then steps back to the image's own API, with no
+ *     restart of the unit (on the image the launcher used to exit with its child, and systemd started it afresh).
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -50,6 +53,19 @@ const FEED = '/var/lib/beanpool-vault-test/feed';
 const NEXT = '/run/beanpool-vault-test/next';
 const BASE = 'http://vault.beanpool.org';
 const GIB = 1024 * 1024 * 1024;
+/**
+ * Appended to a copy of the image's API bundle: it passes its self-test and listens as the real one does, and exits 3 s
+ * after it tells the launcher it listens, every time it is started.
+ */
+const EXIT_AFTER_READY = `
+;if (typeof process.send === 'function' && !process.argv.includes('--self-test')) {
+    const send = process.send.bind(process);
+    process.send = (m, ...rest) => {
+        if (m && m.type === 'ready') setTimeout(() => process.exit(3), 3000);
+        return send(m, ...rest);
+    };
+}
+`;
 
 let failed = 0;
 
@@ -229,8 +245,36 @@ async function main(): Promise<void> {
     check('the state partition has room for two images, the journal and the local backups', space.avail >= 2 * 1.11 * GIB + 0.2 * GIB + 1 * GIB,
         `${gib(space.size)}, ${gib(space.avail)} free for the vault's users`);
 
-    // Round 2, BLOCKING: 0.0.2 brings a new image; 0.0.3, an API-only release after it, names the same image and carries
-    // none of its files. The API stages 0.0.2's files and keeps them staged; root's step installs 0.0.2.
+    // Round 3, BLOCKING: 0.0.2, two-signed for the booted image, has an API that passes its self-test, listens, and exits
+    // 3 s later, each time. The launcher starts it again, and after three exits steps back to the image's own API: all in
+    // one launcher process, which systemd never sees exit.
+    const unit = () => {
+        const o = sh('systemctl', ['show', '-p', 'MainPID', '-p', 'NRestarts', 'beanpool-vault-api.service']).out;
+        return `MainPID ${/MainPID=(\d+)/.exec(o)?.[1] ?? '?'}, NRestarts ${/NRestarts=(\d+)/.exec(o)?.[1] ?? '?'}`;
+    };
+    const unitBefore = unit();
+    const journal = () => sh('journalctl', ['-u', 'beanpool-vault-api.service', '-o', 'cat', '--no-pager']).out;
+    const exiting = Buffer.concat([readFileSync(API_BUNDLE), Buffer.from(EXIT_AFTER_READY)]);
+    mkdirSync(FEED, { recursive: true, mode: 0o755 });
+    const r1 = publish(FEED, custodians, '0.0.1', null, image, ownBundle);
+    const r2 = publish(FEED, custodians, '0.0.2', r1, image, sha256Hex(exiting), { [API_BUNDLE_ASSET]: exiting });
+    const stepped = await until(async () => journal().includes('release 0.0.2 keeps failing: back to the image\'s own API'), 300);
+    const lines = journal().split('\n');
+    check('the launcher switches to 0.0.2, whose API then keeps exiting', lines.some(l => /switching: started \/var\/lib\/beanpool-vault\/releases\/.* as pid/.test(l)),
+        lines.filter(l => /switching|serving/.test(l)).join(' | ').slice(0, 300));
+    check('the launcher, still running, starts it again and then steps back to the image\'s own API', !!stepped.value,
+        `after ${stepped.after} s: ${lines.filter(l => /exited|keeps failing/.test(l)).join(' | ').slice(0, 500)}`);
+    check('systemd never restarted the unit: the same launcher throughout', unit() === unitBefore, `${unitBefore} -> ${unit()}`);
+    const served = await until(async () => {
+        const r = await getJson('/v1/report');
+        return r.status === 200 && (JSON.parse((r.body.report as { text: string }).text) as { api?: string }).api === ownBundle;
+    }, 60);
+    check('the image\'s own API serves', !!served.value, `after ${served.after} s`);
+    // Withdrawn (its bundle), so a launcher started afresh below doesn't switch to it again.
+    rmSync(path.join(FEED, 'vault-v0.0.2', API_BUNDLE_ASSET));
+
+    // Round 2, BLOCKING: 0.0.3 brings a new image; 0.0.4, an API-only release after it, names the same image and carries
+    // none of its files. The API stages 0.0.3's files and keeps them staged; root's step installs 0.0.3.
     mkdirSync(NEXT, { recursive: true, mode: 0o700 });
     writeFileSync(path.join(NEXT, 'root.raw'), crypto.randomBytes(16 << 20));
     writeFileSync(path.join(NEXT, 'verity.raw'), '');
@@ -239,47 +283,45 @@ async function main(): Promise<void> {
     if (!check('a next image\'s system partition, with its verity tree', !!roothash, roothash ?? format.out.slice(-200))) return;
     const uki = Buffer.concat([Buffer.from('beanpool-vault boot test: a UKI that is never booted\n'), crypto.randomBytes(4096)]);
     const nextImage: ReleaseImage = { ukiSha256: sha256Hex(uki), roothash: roothash as string };
-    mkdirSync(FEED, { recursive: true, mode: 0o755 });
-    const r1 = publish(FEED, custodians, '0.0.1', null, image, ownBundle);
-    const r2 = publish(FEED, custodians, '0.0.2', r1, nextImage, ownBundle, {
+    const r3 = publish(FEED, custodians, '0.0.3', r2, nextImage, ownBundle, {
         [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
     });
-    const names = stagedNames('0.0.2', nextImage.roothash);
+    const names = stagedNames('0.0.3', nextImage.roothash);
     const stagedNow = () => readdirSync(IMAGE_INBOX).sort().join(' ');
     const nextStaged = await until(async () => {
         const u = await readUpdate();
-        return u.newest?.version === '0.0.2' && u.imageWaiting?.staged && u;
+        return u.newest?.version === '0.0.3' && u.imageWaiting?.staged && u;
     }, 180);
-    check('the API stages 0.0.2, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
+    check('the API stages 0.0.3, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
         `after ${nextStaged.after} s: ${JSON.stringify(await readUpdate()).slice(0, 600)}; inbox ${stagedNow()}`);
     const whileStaged = varSpace();
-    publish(FEED, custodians, '0.0.3', r2, nextImage, sha256Hex('an API-only release: 0.0.2\'s image, no image files'));
+    publish(FEED, custodians, '0.0.4', r3, nextImage, sha256Hex('an API-only release: 0.0.3\'s image, no image files'));
     const since = Date.now();
     const kept = await until(async () => {
         const u = await readUpdate();
-        return u.newest?.version === '0.0.3' && (u.checkedAt ?? 0) > since && u;
+        return u.newest?.version === '0.0.4' && (u.checkedAt ?? 0) > since && u;
     }, 120);
-    check('then 0.0.3, API-only for that image: 0.0.2 stays staged, from the release that brought it',
-        kept.value?.imageWaiting?.version === '0.0.2' && kept.value.imageWaiting.staged && stagedNow() === Object.values(names).sort().join(' '),
+    check('then 0.0.4, API-only for that image: 0.0.3 stays staged, from the release that brought it',
+        kept.value?.imageWaiting?.version === '0.0.3' && kept.value.imageWaiting.staged && stagedNow() === Object.values(names).sort().join(' '),
         `${JSON.stringify(kept.value?.imageWaiting ?? null)}; inbox ${stagedNow()}`);
     const installed = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
-    check('root\'s install step installs 0.0.2', installed.status === 0 && installed.out.includes('release 0.0.2 is installed'), installed.out.split('\n').slice(-3).join(' | '));
+    check('root\'s install step installs 0.0.3', installed.status === 0 && installed.out.includes('release 0.0.3 is installed'), installed.out.split('\n').slice(-3).join(' | '));
     const listed = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
     // It calls the newest installed version current, and keeps the running one (ProtectVersion=%A) to fall back to.
     const line = (v: string) => listed.split('\n').find(l => l.includes(` ${v} `)) ?? '';
-    check('systemd-sysupdate lists 0.0.2 installed, and the running 0.0.1 kept', /✓\s+current/.test(line('0.0.2')) && /✓\s+protected/.test(line('0.0.1')),
+    check('systemd-sysupdate lists 0.0.3 installed, and the running 0.0.1 kept', /✓\s+current/.test(line('0.0.3')) && /✓\s+protected/.test(line('0.0.1')),
         listed.replace(/\s+/g, ' '));
     const partitions = sh('lsblk', ['-rno', 'PARTLABEL']).out;
-    check('its system partition and verity tree are in the other slot', partitions.includes('beanpool-vault_0.0.2') && partitions.includes('beanpool-vault_0.0.2_verity'),
+    check('its system partition and verity tree are in the other slot', partitions.includes('beanpool-vault_0.0.3') && partitions.includes('beanpool-vault_0.0.3_verity'),
         partitions.replace(/\s+/g, ' '));
     const esp = readdirSync('/boot/EFI/Linux');
-    check('its boot file is on the ESP beside the running one', esp.some(f => f.startsWith('beanpool-vault_0.0.2')) && esp.some(f => f.startsWith('beanpool-vault_0.0.1')), esp.join(' '));
+    check('its boot file is on the ESP beside the running one', esp.some(f => f.startsWith('beanpool-vault_0.0.3')) && esp.some(f => f.startsWith('beanpool-vault_0.0.1')), esp.join(' '));
     const record = JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { installed?: boolean; version?: string };
     const reported = await until(async () => {
         const u = await readUpdate();
-        return u.lastInstall?.installed && u.lastInstall.version === '0.0.2' && u;
+        return u.lastInstall?.installed && u.lastInstall.version === '0.0.3' && u;
     }, 60);
-    check('what root did is left for the report, and /v1/report says it', record.installed === true && record.version === '0.0.2' && !!reported.value,
+    check('what root did is left for the report, and /v1/report says it', record.installed === true && record.version === '0.0.3' && !!reported.value,
         JSON.stringify((await readUpdate()).lastInstall ?? null));
     check('free on the state partition, before, with an image staged, and after (this image is small)', true,
         `${gib(space.avail)}, ${gib(whileStaged.avail)}, ${gib(varSpace().avail)}`);

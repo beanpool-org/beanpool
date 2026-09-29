@@ -180,10 +180,12 @@ export class Launcher {
             }
             const delay = this.restartDelayMs;
             this.restartDelayMs = Math.min(this.restartDelayMs * 2, 60_000);
+            // Referenced: with the API gone, this timer may be all that keeps the launcher's process alive until the next
+            // one starts (unref'd, the launcher exited with its child on the image, #1314 round 3).
             setTimeout(() => {
                 if (this.stopping || this.current !== r) return;
                 this.run(next.bundle, next.switched).then(() => { this.restartDelayMs = this.opts.restartDelayMs ?? 1000; }, e => this.log(`the API did not start: ${(e as Error).message}`));
-            }, delay).unref();
+            }, delay);
         });
     }
 

@@ -33,8 +33,14 @@ async function main(): Promise<void> {
         node: process.execPath, nodeArgs: config.nodeArgs ?? ['--disable-sigusr1'], imageBundle: config.apiBundle,
         apiArgs: ['--config', config.apiConfig], rootKeys,
     });
+    // The launcher lives until systemd stops it, whatever it waits on: between an API's exit and its restart (or a
+    // fallback) nothing else may hold the event loop open, and an unref'd timer would let the process end there.
+    const keepalive = setInterval(() => undefined, 1 << 30);
     const stop = () => {
-        void launcher.stop().finally(() => process.exit(0));
+        void launcher.stop().finally(() => {
+            clearInterval(keepalive);
+            process.exit(0);
+        });
     };
     process.on('SIGTERM', stop);
     process.on('SIGINT', stop);

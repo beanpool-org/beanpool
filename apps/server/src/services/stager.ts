@@ -295,6 +295,7 @@ async function stagerChild(): Promise<void> {
     const { copyPartOf, noteMainLedger, noteReplicaFormat, LEDGER_CONSERVATION_TOLERANCE } = await import('../engine/sync.js');
     const { tableContentHashes, readTableHashes } = await import('../engine/replica-hashes.js');
     const { emptyCopiedTables } = await import('../engine/copied-tables.js');
+    const { noteMainServerEpoch } = await import('./recovery-seal-key.js');
     const { keepMainServerRecords, LEDGER_RESYNC_EVERY_MS } = await import('./backup-puller.js');
     const { noteCopyLanded, noteWholeCopyCheck, noteUncomparedCheck, noteWholeCopyTaken, readCopyRecord } = await import('./standby-copy-record.js');
     const { LEDGER_DIFFERS } = await import('./standby-report.js');
@@ -503,6 +504,9 @@ async function stagerChild(): Promise<void> {
                 const carried = Object.fromEntries(Object.keys(part!.rowCounts).filter((k) => k !== 'plainTables').map((k) => [k, []]));
                 keepMainServerRecords({ ...carried, ...opening } as any, true);
                 noteMainLedger(accounts as any, typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null);
+                // The seal epoch the copy names, as an import keeps it (services/recovery-seal-key.ts): the recovery seal's
+                // look at the start on this database (before the puller's) then clears under it.
+                noteMainServerEpoch(opening!.sealEpoch);
                 noteReplicaFormat();
                 if (typeof opening!.cursor === 'string') setSyncCursor('backup:primary', opening!.cursor);
                 const now = Date.now();

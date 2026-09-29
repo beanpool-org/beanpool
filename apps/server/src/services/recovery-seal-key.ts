@@ -664,8 +664,11 @@ function mainServerEpoch(): string | null {
     return epochOf(db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(MAIN_EPOCH_KEY));
 }
 
-/** On a standby, at an import: keep the seal epoch its main server's payload names. None, or not an epoch: nothing. */
-function noteMainServerEpoch(sent: unknown): void {
+/**
+ * On a standby, at an import: keep the seal epoch its main server's payload names. None, or not an epoch: nothing. And
+ * into a whole copy's staging database (services/stager.ts), so the start on it clears under the epoch the copy names.
+ */
+export function noteMainServerEpoch(sent: unknown): void {
     const epoch = epochOf(sent);
     if (!epoch || epoch === mainServerEpoch()) return;
     db.prepare(UPSERT_CONFIG).run(MAIN_EPOCH_KEY, epoch);

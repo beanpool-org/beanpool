@@ -19,6 +19,10 @@
   that block, comments included, or the whole script fails with an error pointing at EOF.
 - Never merge, never deploy, never force-push, never touch another branch or PR. Never touch the live nodes.
 - Protected — never edit: apps/native/app/(tabs)/map.tsx, UnifiedMapPin, GlobalHeader*, logo assets, deploy.sh.
+- The members' guide and the operator manual: edit only their pages (packages/beanpool-guide/content, operators).
+  Never add or bump a "version" and never commit packages/beanpool-guide/generated or apps/website/guide: the
+  director publishes those after merge. Run `pnpm --filter @beanpool/guide generate` and its tests; a test that
+  pins a page's words reads the pages, not the bundled JSON (packages/beanpool-guide/README.md).
 - Ledger conservation is absolute: SUM(balances) + COMMONS_POOL = 0. Anything that mutates the ledger goes through
   conservingTransaction.
 - Migrations must be additive and idempotent and leave existing rows working; say in the PR body exactly what

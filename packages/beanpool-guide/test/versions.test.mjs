@@ -351,6 +351,55 @@ test('the check still catches a hand-edited or stray generated file, a stale pic
     }
 });
 
+test("in CI's checkout of a pull request — its merge commit, two commits deep, no origin/main — the check compares with main's tip", () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const mainTip = git(cwd, 'rev-parse', 'HEAD');
+        // GitHub's refs/pull/N/merge: main's tip merged with the PR branch, main first.
+        const mergeRef = (branch, edit) => {
+            git(cwd, 'checkout', '-q', '-b', branch, 'origin/main');
+            edit(cwd);
+            git(cwd, 'add', '-A');
+            git(cwd, 'commit', '-q', '-m', branch);
+            git(cwd, 'checkout', '-q', '--detach', 'origin/main');
+            git(cwd, 'merge', '--no-ff', '-q', '-m', `Merge ${branch} into main`, branch);
+            const ref = `refs/pull/${branch}/merge`;
+            git(cwd, 'push', '-q', 'origin', `HEAD:${ref}`);
+            git(cwd, 'checkout', '-q', 'main');
+            return ref;
+        };
+        // What actions/checkout does for a pull_request run.
+        const ciCheckout = (ref, depth) => {
+            const dir = fs.mkdtempSync(path.join(repo.root, 'ci-'));
+            git(dir, 'init', '-q');
+            git(dir, 'remote', 'add', 'origin', `file://${path.join(repo.root, 'origin.git')}`);
+            git(dir, 'fetch', '-q', '--no-tags', `--depth=${depth}`, 'origin', `+${ref}:refs/remotes/pull/merge`);
+            git(dir, 'checkout', '-q', '--detach', 'refs/remotes/pull/merge');
+            return build(dir, '--check');
+        };
+
+        const pagesOnly = mergeRef('pages', c => editPage(c, 'content/ledger/gifts.md', 'New words.'));
+        const ok = ciCheckout(pagesOnly, 2);
+        assert.equal(ok.status, 0, said(ok));
+        assert.match(ok.stdout, new RegExp(`checked against ${mainTip.slice(0, 10)}`));
+
+        const selfPublished = mergeRef('self', c => {
+            editPage(c, 'content/ledger/gifts.md', 'New words.');
+            assert.equal(build(c, '--publish').status, 0);
+        });
+        const refused = ciCheckout(selfPublished, 2);
+        assert.equal(refused.status, 1, said(refused));
+        assert.match(refused.stderr, /AND publishes them/);
+
+        const shallow = ciCheckout(pagesOnly, 1);
+        assert.equal(shallow.status, 1, said(shallow));
+        assert.match(shallow.stderr, /fetch-depth: 2/);
+    } finally {
+        repo.cleanup();
+    }
+});
+
 // ─── The director's one command ───────────────────────────────────────────────
 
 test("the director's publish command: nothing to do on a published main; otherwise one branch off origin/main holding only the published files", () => {

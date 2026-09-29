@@ -527,7 +527,9 @@ bash deploy.sh 6         # Test Mirror only
 ```
 
 One deploy at a time per server folder: a second one refuses and changes nothing. A deploy cut off part-way is safe to run
-again (it puts the data/ it had parked back before the node starts), and a FATAL changes nothing and says what to check.
+again (it puts the data/ it had parked back before the node starts). A FATAL before the node is stopped changes nothing; one after
+it leaves the node stopped, with data/ back in place or parked in the home folder, and what it printed says which. deploy.sh
+replaces everything in the server folder except data/ and .env, so keep any copy of data/ outside it (in the home folder).
 Operator manual: Updates, health checks and disk space → Updating with deploy.sh.
 
 ### SSH Access

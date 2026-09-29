@@ -122,9 +122,10 @@ exec /bin/rm "$@"
 STUB
 cat > "$BIN/df" << 'STUB'
 #!/bin/bash
-# df: the disk preflight reads free space on docker's filesystem; the stand-in has plenty, whatever this machine has.
+# df: the disk preflight reads free space on docker's filesystem; the stand-in has plenty, whatever this machine has, unless
+# DF_AVAIL_KB says otherwise.
 case "$*" in
-  *-Pk*) printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nstand-in 104857600 1048576 103809024 2%% /\n' ;;
+  *-Pk*) printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nstand-in 104857600 1048576 %s 2%% /\n' "${DF_AVAIL_KB:-103809024}" ;;
   *) exec /bin/df "$@" ;;
 esac
 STUB
@@ -192,7 +193,7 @@ start_c() {
 cmd=${1:-}; shift
 case "$cmd" in
   info) echo "$SRV" ;;
-  pull) ev "pull $*" ;;
+  pull) ev "pull $*"; [ -z "${DOCKER_PULL_FAILS:-}" ] || { echo "Error response from daemon: stand-in pull failure" >&2; exit 1; } ;;
   manifest|network|builder|system) ;;
   image) [ "${1:-}" = prune ] && ev "prune images $*" ;;
   logs) echo "(stand-in node log)" ;;
@@ -482,6 +483,57 @@ assert "the deploy fails, saying FATAL and naming it" \
   "$RC|$(grep -c 'FATAL' "$OUT" | sed 's/^[1-9][0-9]*$/yes/')|$(grep -c 'will-not-stop' "$OUT" | sed 's/^[1-9][0-9]*$/yes/')" "1|yes|yes"
 assert "data/ never moved, the project was not wiped" \
   "$(cat "$DATA/community.key" 2>/dev/null)|$(grep -c '^mv ' "$EVENTS")|$(cat "$PROJ/OLD-CODE" 2>/dev/null)" "ORIGINAL-KEY|0|old code"
+show
+
+# What the run says of the node when it stops before the stop. It must never say an old container runs, or is untouched, when
+# the node is down with its data parked (review of #1305: it said "old container still running" there).
+said() { grep -ciE "$1" "$OUT" | sed 's/^[1-9][0-9]*$/yes/'; }
+moved() { local h; h=$(grep -E '^(mv|rm|stop|start) ' "$EVENTS" | grep -v 'beanpool-deploy-.*\.tar\.gz' | head -3); echo "${h:-none}"; }
+
+section "an ordinary deploy stops at the pull: it says the running container is untouched, and it is"
+live_server
+old_pid=$(node_pid)
+deploy DEPLOY_PULL=1 DEPLOY_TAG=abc1234 DOCKER_PULL_FAILS=1
+assert "the deploy fails" "$RC" "1"
+assert "it says the running container is untouched, and this deploy stopped and moved nothing" \
+  "$(said 'docker pull .* failed\. The running container is untouched')|$(said 'test \(aborted; this deploy stopped and moved nothing\)')" "yes|yes"
+assert "and that is so: the node runs on data/, nothing moved" "$(node_pid)|$(written_to "$DATA")|$(moved)" "$old_pid|yes|none"
+show
+
+section "cut off with data/ parked (node stopped), then a deploy that stops at the pull: it says the node is stopped, the data parked"
+live_server
+deploy KILL_AFTER_MOVE_OF="$DATA"
+: > "$EVENTS"
+deploy DEPLOY_PULL=1 DEPLOY_TAG=abc1234 DOCKER_PULL_FAILS=1
+assert "the deploy fails" "$RC" "1"
+assert "it never says an old container is running or untouched" "$(said 'old container|untouched|still running')" "0"
+assert "it says the node is stopped and its data still parked in the home folder" \
+  "$(said "still parked at [^ ]*$R_PARKED")|$(said 'The node is STOPPED')|$(said "test \(aborted; node STOPPED, its data still parked in /home/bpfake; the next deploy puts it back\)")" "yes|yes|yes"
+assert "and that the next deploy puts it back" "$(said 'next deploy that gets past (this|that) step puts')" "yes"
+assert "and that is so: no node runs, data/ is still parked, nothing moved" \
+  "$(dk "ps -q" | wc -l | tr -d ' ')|$([ -e "$DATA" ] && echo data || echo no-data)|$(cat "$PARKED/community.key" 2>/dev/null)|$(moved)" \
+  "0|no-data|ORIGINAL-KEY|none"
+deploy
+assert "the next deploy puts it back, and the node runs on the ORIGINAL community" \
+  "$RC|$(cat "$DATA/community.key" 2>/dev/null)|$(written_to "$DATA")" "0|ORIGINAL-KEY|yes"
+assert "nothing was deleted" "$(deleted)" "nothing"
+show
+
+section "data/ parked with the node an older deploy.sh left writing into it, then a deploy that stops at the disk check"
+live_server
+old_pid=$(node_pid)
+mv "$DATA" "$PARKED"
+deploy DF_AVAIL_KB=1024
+assert "the deploy fails" "$RC" "1"
+assert "it never says an old container is untouched, or that the node is stopped" "$(said 'old container|untouched|STOPPED')" "0"
+assert "it says the data is parked, and a container still writes into it" \
+  "$(said "still parked at [^ ]*$R_PARKED")|$(said 'beanpool-fake-beanpool-node-1 still runs with .* writing into the parked copy')|$(said "test \(aborted; its data still parked in /home/bpfake, and a container still writing into it")" "yes|yes|yes"
+assert "and that is so: the old node still writes into the parked copy, nothing moved" \
+  "$(node_pid)|$(written_to "$PARKED")|$(moved)" "$old_pid|yes|none"
+deploy
+assert "the next deploy stops it, puts the data back, and the node runs on the ORIGINAL community" \
+  "$RC|$(kill -0 "$old_pid" 2>/dev/null && echo alive || echo gone)|$(cat "$DATA/community.key" 2>/dev/null)|$(written_to "$DATA")" "0|gone|ORIGINAL-KEY|yes"
+assert "nothing was deleted" "$(deleted)" "nothing"
 show
 
 section "a new server (no project, no data): the first deploy makes its community"

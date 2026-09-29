@@ -127,7 +127,7 @@ Once it has:
 - First download a new backup, under **Download Sovereign Database**. Wait for "✅ Backup downloaded" and put the file where you keep backups, off the server. Delete nothing below until you have it.
 - Delete the snapshots made before the seal finished, under **Point-in-Time Snapshots**. Or let them age out: data/snapshots keeps the last 7 daily ones, so they are gone in about a week.
 - Delete every backup that is not locked (.tar.gz, or a snapshot's .db) downloaded before the update, wherever it was copied: Downloads, other computers, Time Machine, cloud drives, email, the fleet manager's folder.
-- The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it.
+- The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it. Keep such a copy outside the server folder, in the home folder for example: an update with deploy.sh replaces everything in the server folder except the data folder and .env, so a copy kept inside it is deleted.
 - Think about locked backups (.bpsealed) made before the update as well. They need the recovery code or an owner's phone to open, but inside they hold the same copies.
 
 ### The fleet manager's copies

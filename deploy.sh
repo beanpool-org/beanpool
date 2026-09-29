@@ -230,7 +230,8 @@ for NODE in "${TARGETS[@]}"; do
 
   # Lock, check the data, check disk, pull, stop, preserve data, extract, start.
   # Remote exit 3 = aborted BEFORE the running container was touched. 4 = another deploy of this node holds the lock; nothing
-  # was touched.
+  # was touched. 5 = aborted before the stop, with this node's data still parked by a deploy that did not finish and the node
+  # stopped; 6 = the same, but something still runs with data/ mounted and writes into the parked copy.
   REMOTE_RC=0
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF || REMOTE_RC=$?
     $(declare -f docker_free_kb disk_preflight fleet_secret_names sha256_hex strip_fleet_secrets_env remove_fleet_tunnel_token first_password_notice check_data_copies describe_data_copy data_copy_file_line containers_using)
@@ -254,24 +255,43 @@ for NODE in "${TARGETS[@]}"; do
     # A copy of data/ or .env parked by a deploy that did not finish: put back if nothing is in its place, and otherwise
     # stop here, before anything changes.
     check_data_copies "$HOME_DIR" "$DIR" "$PROJECT_DIR" || exit 3
-    if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
-    disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || {
-      echo "🛑 ABORT $NAME: not enough free disk even after pruning unused images. The running container is untouched."
-      df -h / | sed 's/^/   /'
-      exit 3
+    # What check_data_copies found parked, and this deploy puts back only after the stop below. Until then the node is not
+    # running on its own data, so an abort before the stop must say so, not that the running container is untouched.
+    PARKED_NOW=""
+    for P in "$HOME_DIR/beanpool-data-backup-$DIR" "$HOME_DIR/beanpool-env-backup-$DIR"; do
+      if [ -e "\$P" ] || [ -L "\$P" ]; then PARKED_NOW="\$PARKED_NOW \$P"; fi
+    done
+    # abort_before_stop <why> [df]: stop here, before the node is stopped, and say the state this node is left in.
+    abort_before_stop() {
+      if [ -z "\$PARKED_NOW" ]; then
+        echo "🛑 ABORT $NAME: \$1 The running container is untouched."
+      else
+        echo "🛑 ABORT $NAME: \$1"
+      fi
+      if [ "\${2:-}" = "df" ]; then df -h / | sed 's/^/   /'; fi
+      [ -z "\$PARKED_NOW" ] && exit 3
+      echo "   This node's data is still parked at\$PARKED_NOW, where a deploy that did not finish left it; this run did not put it back."
+      STILL_ON_DATA=\$(containers_using "$PROJECT_DIR/data")
+      if [ -z "\$STILL_ON_DATA" ]; then
+        echo "   The node is STOPPED. The next deploy that gets past this step puts the data back and starts the node."
+        exit 5
+      fi
+      echo "   \$(echo \$STILL_ON_DATA) still runs with $PROJECT_DIR/data mounted and is writing into the parked copy."
+      echo "   The next deploy that gets past this step stops it, puts the data back and starts the node."
+      exit 6
     }
+    if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
+    disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || abort_before_stop "not enough free disk even after pruning unused images." df
     if [ "$PULL_FIRST" = "1" ]; then
       # Pull while the old container is still serving: a failed pull or a full disk then costs no downtime,
       # and compose cannot fall back to a surprise source build.
-      echo "📥 Pulling $IMAGE (the running $NAME container is untouched until this succeeds)..."
-      sudo docker pull "$IMAGE" || {
-        echo "🛑 ABORT $NAME: docker pull $IMAGE failed. The running container is untouched."
-        exit 3
-      }
-      disk_preflight $RUN_HEADROOM_MB "$NAME, after pull" no-prune || {
-        echo "🛑 ABORT $NAME: the pull left too little free disk to run safely. The running container is untouched."
-        exit 3
-      }
+      if [ -z "\$PARKED_NOW" ]; then
+        echo "📥 Pulling $IMAGE (the running $NAME container is untouched until this succeeds)..."
+      else
+        echo "📥 Pulling $IMAGE..."
+      fi
+      sudo docker pull "$IMAGE" || abort_before_stop "docker pull $IMAGE failed."
+      disk_preflight $RUN_HEADROOM_MB "$NAME, after pull" no-prune || abort_before_stop "the pull left too little free disk to run safely."
     fi
     # Stop the node before anything of its moves. This used to run only when cd $PROJECT_DIR worked, so after a deploy cut
     # off between the wipe and the extract, the old container was left running.
@@ -508,13 +528,25 @@ for NODE in "${TARGETS[@]}"; do
 EOF
 
   if [ "$REMOTE_RC" -eq 3 ]; then
-    echo "❌ $NAME: aborted before touching the running container (see above)."
-    FAILED_NODES+=("$NAME (aborted, old container still running)"); FAILED_HOSTS+=("$USER@$IP")
+    echo "❌ $NAME: aborted before this deploy stopped or moved anything (see above)."
+    FAILED_NODES+=("$NAME (aborted; this deploy stopped and moved nothing)"); FAILED_HOSTS+=("$USER@$IP")
+    echo ""
+    continue
+  fi
+  if [ "$REMOTE_RC" -eq 5 ] || [ "$REMOTE_RC" -eq 6 ]; then
+    echo "❌ $NAME: aborted with this node's data still parked in $HOME_DIR by a deploy that did not finish (see above)."
+    echo "   The next deploy that gets past that step puts it back and starts the node."
+    if [ "$REMOTE_RC" -eq 5 ]; then
+      FAILED_NODES+=("$NAME (aborted; node STOPPED, its data still parked in $HOME_DIR; the next deploy puts it back)")
+    else
+      FAILED_NODES+=("$NAME (aborted; its data still parked in $HOME_DIR, and a container still writing into it; the next deploy puts it back)")
+    fi
+    FAILED_HOSTS+=("$USER@$IP")
     echo ""
     continue
   fi
   if [ "$REMOTE_RC" -eq 4 ]; then
-    echo "❌ $NAME: another deploy of this node is running on $USER@$IP. Nothing was changed; this run leaves that host alone."
+    echo "❌ $NAME: another deploy of this node is running on $USER@$IP. Nothing was changed; this run skips this node, and the host's cleanup at the end."
     FAILED_NODES+=("$NAME (another deploy was running; nothing changed)"); FAILED_HOSTS+=("$USER@$IP"); BUSY_HOSTS+=("$USER@$IP")
     echo ""
     continue

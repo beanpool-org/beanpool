@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 67,
-  "hash": "d8561948505e3d7354428f284e99c6432bae7210a859daa457ff086967fd2a08",
+  "hash": "edb691e35b1401636638c5da08eefdc0b76b256a517c687c7f1c88ff5b37beef",
   "sections": [
     {
       "id": "setup",
@@ -1775,7 +1775,7 @@
             "First download a new backup, under **Download Sovereign Database**. Wait for \"✅ Backup downloaded\" and put the file where you keep backups, off the server. Delete nothing below until you have it.",
             "Delete the snapshots made before the seal finished, under **Point-in-Time Snapshots**. Or let them age out: data/snapshots keeps the last 7 daily ones, so they are gone in about a week.",
             "Delete every backup that is not locked (.tar.gz, or a snapshot's .db) downloaded before the update, wherever it was copied: Downloads, other computers, Time Machine, cloud drives, email, the fleet manager's folder.",
-            "The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it.",
+            "The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it. Keep such a copy outside the server folder, in the home folder for example: an update with deploy.sh replaces everything in the server folder except the data folder and .env, so a copy kept inside it is deleted.",
             "Think about locked backups (.bpsealed) made before the update as well. They need the recovery code or an owner's phone to open, but inside they hold the same copies."
           ]
         },
@@ -2041,8 +2041,8 @@
         {
           "type": "ul",
           "items": [
-            "**One update at a time.** A second deploy.sh to the same server folder while one is running stops at once, saying another deploy is running there. It changes nothing and leaves that machine alone. Let the first one finish.",
-            "**If an update stops part-way** (the connection drops, or you stop it), run it again. If the data folder is still waiting in the home folder, the next run says it is \"this node's data, parked by a deploy that did not finish\" and puts it back before the server starts.",
+            "**One update at a time.** A second deploy.sh to the same server folder while one is running stops at once, saying another deploy is running there. It changes nothing in that server folder. Let the first one finish.",
+            "**If an update stops part-way** (the connection drops, or you stop it), run it again. If the data folder is still waiting in the home folder, the next run says it is \"this node's data, parked by a deploy that did not finish\" and puts it back before the server starts. If that run stops before it gets that far (a failed download, a full disk), it says the data folder is still waiting in the home folder and the server is stopped; fix what it names and run it again, and it puts the data folder back.",
             "**\"this node's data is in two places\"**: the next run found a data folder and a waiting copy as well. It changes nothing and lists both: when each database last changed and how big it is, which community each holds and when that community was founded, and a fingerprint of each community key (never the key itself). Your community is normally the one founded long ago that changed last; one founded minutes ago is a new, empty community a server made on an empty folder. Set the other one aside with the dated command it prints, then run the update again.",
             "**\"data is missing, and a copy of this node's data was set aside\"**: there is no data folder, but an older copy sits beside it, such as one whose name ends in .stale. Starting would make a new, empty community, so it stops. Move the right copy back with the command it prints; or, if you really do want a new community there, make an empty data folder first.",
             "**\".env is in two places\"**: the same, for the settings file.",
@@ -2051,7 +2051,7 @@
         },
         {
           "type": "p",
-          "text": "deploy.sh never deletes a copy of your data. Once your server runs well on the right copy, delete any copies you set aside yourself, when you no longer need them."
+          "text": "deploy.sh replaces everything in the server folder except the data folder and .env, so a copy of the data folder kept inside the server folder is deleted by the next update. Keep any copy of it outside the server folder, for example in the home folder beside the parked copy, as the dated commands it prints do. deploy.sh never deletes a copy it parked or one you set aside there. Once your server runs well on the right copy, delete any copies you set aside yourself, when you no longer need them."
         },
         {
           "type": "h2",
@@ -2607,7 +2607,7 @@
       "blocks": [
         {
           "type": "p",
-          "text": "Stay calm and take a copy before you fix anything. Most problems are fixed by a restart; a lost database is not."
+          "text": "Stay calm and take a copy before you fix anything, and keep it outside the server folder, in the home folder for example: an update with deploy.sh replaces everything in the server folder except the data folder and .env. Most problems are fixed by a restart; a lost database is not."
         },
         {
           "type": "h2",
@@ -2636,7 +2636,7 @@
         },
         {
           "type": "p",
-          "text": "Run it again: a data folder it had moved out of the way is put back before the server starts. If it says FATAL, it changed nothing; read what it printed, and see Updating with deploy.sh under Updates, health checks and disk space. Never delete a copy of the data folder to make it go on."
+          "text": "Run it again: a data folder it had moved out of the way is put back before the server starts. A FATAL that comes before the server is stopped changes nothing. One after it leaves the server stopped, with its data folder back in place or waiting in the home folder; what it printed says which. Read what it printed, and see Updating with deploy.sh under Updates, health checks and disk space. Never delete a copy of the data folder to make it go on."
         },
         {
           "type": "h2",

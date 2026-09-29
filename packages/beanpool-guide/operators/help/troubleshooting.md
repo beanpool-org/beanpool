@@ -5,7 +5,7 @@ summary: The server has stopped answering, an update stopped part-way, members s
 related: updates-and-health, rate-limits, backups-and-replicas, signing-in
 ---
 
-Stay calm and take a copy before you fix anything. Most problems are fixed by a restart; a lost database is not.
+Stay calm and take a copy before you fix anything, and keep it outside the server folder, in the home folder for example: an update with deploy.sh replaces everything in the server folder except the data folder and .env. Most problems are fixed by a restart; a lost database is not.
 
 ## The server has stopped answering
 
@@ -20,7 +20,7 @@ The BeanPool source code has a small watchdog for Linux machines (ops/watchdog).
 
 ## An update with deploy.sh stopped part-way, or stopped with FATAL
 
-Run it again: a data folder it had moved out of the way is put back before the server starts. If it says FATAL, it changed nothing; read what it printed, and see Updating with deploy.sh under Updates, health checks and disk space. Never delete a copy of the data folder to make it go on.
+Run it again: a data folder it had moved out of the way is put back before the server starts. A FATAL that comes before the server is stopped changes nothing. One after it leaves the server stopped, with its data folder back in place or waiting in the home folder; what it printed says which. Read what it printed, and see Updating with deploy.sh under Updates, health checks and disk space. Never delete a copy of the data folder to make it go on.
 
 ## Members see "too many requests"
 

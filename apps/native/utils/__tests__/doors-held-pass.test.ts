@@ -37,9 +37,30 @@ const phoneState = vi.hoisted(() => ({
     bootBase: 0,
     /** While set, the since-boot clock's elapsedMs answers this instead. */
     bootClockFault: null as null | (() => unknown),
+    /** AppState.currentState, and its 'change' listeners: the screens' words watch (usePutAwayAfterLeave). */
+    appState: 'active' as string,
+    appStateListeners: new Set<(next: string) => void>(),
+    /** The effects' cleanups: a screen's hook, run as it would be once the screen has drawn the words. */
+    effectCleanups: [] as Array<() => void>,
 }));
 
-vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('react-native', () => ({
+    Platform: { OS: 'android' },
+    AppState: {
+        get currentState() { return phoneState.appState; },
+        addEventListener: (_type: 'change', listener: (next: string) => void) => {
+            phoneState.appStateListeners.add(listener);
+            return { remove: () => { phoneState.appStateListeners.delete(listener); } };
+        },
+    },
+}));
+// Screens can't be rendered here: a hook's effect runs when the hook is called, as React runs it after the screen drew.
+vi.mock('react', () => ({
+    useEffect: (effect: () => void | (() => void)) => {
+        const cleanup = effect();
+        if (typeof cleanup === 'function') phoneState.effectCleanups.push(cleanup);
+    },
+}));
 vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
@@ -132,7 +153,9 @@ async function phone() {
         doors,
         account: ACCOUNT,
         change(next: AppStateStatus) {
+            phoneState.appState = next;
             void onChange(next, true);
+            for (const listener of [...phoneState.appStateListeners]) listener(next);
         },
         wait(ms: number) {
             vi.advanceTimersByTime(ms);
@@ -256,10 +279,14 @@ beforeEach(() => {
     phoneState.appLock = 'true';
     phoneState.bootClock = true;
     phoneState.bootClockFault = null;
+    phoneState.appState = 'active';
+    phoneState.appStateListeners.clear();
+    phoneState.effectCleanups.length = 0;
     openedUrls.length = 0;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
+    for (const cleanup of phoneState.effectCleanups.splice(0)) cleanup();
     delete (globalThis as ExpoGlobalForTests).expo;
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -559,6 +586,72 @@ describe('the 12 words, once on screen, are put away after 15 seconds or more aw
         const w = await watcher();
         w.onChange('active');
         expect(w.putAway).not.toHaveBeenCalled();
+    });
+
+    describe("a leave that starts before the screen's watch does (#1313's review)", () => {
+        /** The words door, its prompt opened. `words` resolves with the words the screen draws, or null. */
+        async function wordsDoor(p: Phone) {
+            const words = p.doors.readWordsBehindLock(p.account, 'Confirm your security to view your recovery phrase.');
+            await flush();
+            expect(p.LocalAuth.isLocalAuthPromptOpen(), "the door's prompt is open").toBe(true);
+            return { words };
+        }
+
+        /** The screen draws the words, then its effect subscribes (usePutAwayAfterLeave). */
+        async function drawn(words: Promise<string[] | null>) {
+            expect(await words).toEqual(WORDS);
+            const { usePutAwayAfterLeave } = await import('../words-put-away');
+            const putAway = vi.fn();
+            usePutAwayAfterLeave(true, putAway);
+            return putAway;
+        }
+
+        const PROMPT_SHAPES = [
+            ['the app stays active through the prompt (Android 10+ BiometricPrompt, iOS Face ID)', null],
+            ['the prompt makes the app inactive (iOS passcode)', 'inactive'],
+        ] as const;
+
+        it.each(PROMPT_SHAPES)('%s: passed at 3 s, the member presses home before the screen subscribes, back an hour later: put away once', async (_shape, duringPrompt) => {
+            phoneState.appLock = 'false';
+            const p = await phone();
+            const { words } = await wordsDoor(p);
+            if (duringPrompt) p.change(duringPrompt);
+            p.wait(3 * SEC);
+            p.answer(true);
+            await flush();
+            p.change('background');
+            const putAway = await drawn(words);
+            p.wait(3600 * SEC);
+            p.change('active');
+            await flush();
+            expect(putAway).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(SHAPES)('%s: a real 40-second prompt whose pass lands before the app is active keeps the words; a later hour away puts them away', async (_shape, leave) => {
+            phoneState.appLock = 'false';
+            const p = await phone();
+            const { words } = await wordsDoor(p);
+            p.change(leave);
+            p.wait(40 * SEC);
+            p.answer(true);
+            await flush();
+            const putAway = await drawn(words);
+            p.wait(300);
+            p.change('active');
+            await flush();
+            expect(putAway).not.toHaveBeenCalled();
+
+            p.change('background');
+            p.wait(3600 * SEC);
+            p.change('active');
+            await flush();
+            expect(putAway).toHaveBeenCalledTimes(1);
+        });
+
+        it('the screen reads whether the app is in front when it subscribes', () => {
+            const src = fs.readFileSync(path.resolve(__dirname, '../words-put-away.ts'), 'utf-8');
+            expect(src).toContain("wordsLeaveWatcher(putAway, AppState.currentState !== 'active')");
+        });
     });
 
     describe('every screen that shows the words behind the lock puts them away so', () => {

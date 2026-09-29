@@ -18,17 +18,26 @@ import { returnLockAction } from './return-lock';
  * going backwards, since the leave) count as that. The watch starts once the words are on screen, so the leave of the
  * prompt that showed them (the prompt takes the app out of the front) isn't one. On iOS, inactive then background is one
  * leave, timed from the first.
+ *
+ * awayNow: the app is already out of the front as the watch starts, so a leave has started that this watch never saw
+ * begin (#1313's review): a pass handed over at once, the member pressing home in the same moment, and the words drawn
+ * into the backgrounded app. It counts from now, as utils/words-clipboard.ts does. A prompt's own leave, when its pass
+ * lands before the app is back, is as short as the moment between the pass and the return, and puts nothing away.
  */
-export function wordsLeaveWatcher(putAway: () => void): (next: string) => void {
+export function wordsLeaveWatcher(putAway: () => void, awayNow = false): (next: string) => void {
     let leftAt: number | null = null;
     let setBacksAtLeave = 0;
     let failuresAtLeave = 0;
+    const leave = () => {
+        if (leftAt !== null) return;
+        leftAt = appLockNow();
+        setBacksAtLeave = wallClockSetBacks();
+        failuresAtLeave = clockReadFailures();
+    };
+    if (awayNow) leave();
     return (next) => {
         if (next === 'background' || next === 'inactive') {
-            if (leftAt !== null) return;
-            leftAt = appLockNow();
-            setBacksAtLeave = wallClockSetBacks();
-            failuresAtLeave = clockReadFailures();
+            leave();
             return;
         }
         if (next !== 'active' || leftAt === null) return;
@@ -48,7 +57,7 @@ export function wordsLeaveWatcher(putAway: () => void): (next: string) => void {
 export function usePutAwayAfterLeave(shown: boolean, putAway: () => void): void {
     useEffect(() => {
         if (!shown) return;
-        const sub = AppState.addEventListener('change', wordsLeaveWatcher(putAway));
+        const sub = AppState.addEventListener('change', wordsLeaveWatcher(putAway, AppState.currentState !== 'active'));
         return () => sub.remove();
     }, [shown, putAway]);
 }

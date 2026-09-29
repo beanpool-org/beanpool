@@ -2,8 +2,6 @@ import crypto from 'node:crypto';
 import { SsoVerificationError } from './errors.js';
 import type { JwksCache } from './jwks.js';
 import {
-    GITHUB_TOKEN_REFUSED,
-    oidcConfig,
     providerConfig,
     type SsoIdentity,
     type SsoProvider,
@@ -82,8 +80,7 @@ export const MAX_ID_TOKEN_BYTES = 8192;
  *  survive that without meaningfully extending the life of a stolen token. */
 export const CLOCK_SKEW_SECONDS = 120;
 
-/** Nonces expire fast. The window only has to cover one sign-in round trip. A finished GitHub sign-in
- *  that has not been spent expires after the same window (github-device.ts). */
+/** Nonces expire fast. The window only has to cover one sign-in round trip. */
 export const NONCE_TTL_MS = 10 * 60 * 1000;
 
 /** Constant-time compare of the token's nonce against one candidate spelling of ours. */
@@ -114,23 +111,15 @@ function coerceBoolean(value: unknown): boolean | undefined {
     return undefined;
 }
 
-/**
- * The proof a sign-in arrives with. An OIDC provider's is its `id_token`; GitHub's is the id of the
- * device-flow session the checker ran itself (github-device.ts), sent as `proof: { sessionId }`.
- */
+/** The proof a sign-in arrives with: the provider's `id_token`. */
 export interface SignInCredential {
     idToken?: string;
-    sessionId?: string;
 }
 
-/** The credential in a deposit, collect or join body: `idToken`, or `proof: { sessionId }`. */
+/** The credential in a deposit, collect or join body: its `idToken`. */
 export function signInCredentialFrom(body: unknown): SignInCredential {
     const b = (body && typeof body === 'object' ? body : {}) as Record<string, any>;
-    const proof = b.proof && typeof b.proof === 'object' ? b.proof as Record<string, unknown> : {};
-    return {
-        idToken: typeof b.idToken === 'string' && b.idToken ? b.idToken : undefined,
-        sessionId: typeof proof.sessionId === 'string' && proof.sessionId ? proof.sessionId : undefined,
-    };
+    return { idToken: typeof b.idToken === 'string' && b.idToken ? b.idToken : undefined };
 }
 
 /** What a verifier is built from. Nothing here reaches a database or a node's config. */
@@ -143,11 +132,6 @@ export interface SignInVerifierOptions {
      * verifyIdToken), and must leave a nonce that belongs to someone else unspent.
      */
     consumeNonce: (nonce: string, subject: string) => boolean;
-    /**
-     * Spend a finished GitHub device-flow session, once, for the subject it was started for. Throws
-     * SsoVerificationError otherwise. A node passes its own (apps/server/src/engine/github-device.ts).
-     */
-    consumeGithubSession: (sessionId: string, subject: string) => SsoIdentity;
     /** Milliseconds since the epoch, for `exp` and `iat`. Defaults to `Date.now()`. */
     now?: () => number;
 }
@@ -170,7 +154,7 @@ export interface SignInVerifier {
 }
 
 export function createSignInVerifier(options: SignInVerifierOptions): SignInVerifier {
-    const { jwks, consumeNonce, consumeGithubSession } = options;
+    const { jwks, consumeNonce } = options;
     const now = options.now ?? (() => Date.now());
 
     /**
@@ -196,8 +180,8 @@ export function createSignInVerifier(options: SignInVerifierOptions): SignInVeri
         expectedNonce: string,
         subject: string,
     ): Promise<SsoIdentity> {
-        // First, before any check or request: a GitHub token proves nothing (see NodeRunProviderConfig).
-        const config = oidcConfig(provider);
+        // First, before any check or request: a provider this package does not know is refused by name.
+        const config = providerConfig(provider);
         if (!subject) {
             throw new SsoVerificationError(
                 `A ${config.label} sign-in must be verified against a known member.`,
@@ -319,14 +303,7 @@ export function createSignInVerifier(options: SignInVerifierOptions): SignInVeri
         };
     }
 
-    /**
-     * Verify a sign-in, whichever provider it is. The one entry point every route uses.
-     *
-     * OIDC providers go to verifyIdToken. GitHub spends the checker's own finished device-flow session,
-     * bound to `subject` and single use; it needs no nonce, because the session id is already a single-use,
-     * subject-bound challenge. A GitHub `idToken` is refused before anything else runs, network included:
-     * accepting a handed-in token is the hole this path exists to close, and a new app never sends one.
-     */
+    /** Verify a sign-in, whichever provider it is: its `id_token`, through verifyIdToken. The one entry point every route uses. */
     async function verifySignIn(
         provider: SsoProvider,
         credential: SignInCredential,
@@ -334,20 +311,7 @@ export function createSignInVerifier(options: SignInVerifierOptions): SignInVeri
         expectedNonce: string,
         subject: string,
     ): Promise<SsoIdentity> {
-        const config = providerConfig(provider);
-        if (config.kind === 'oidc') {
-            return verifyIdToken(provider, credential.idToken ?? '', allowedAudiences, expectedNonce, subject);
-        }
-        if (credential.idToken) throw new SsoVerificationError(GITHUB_TOKEN_REFUSED);
-        if (!credential.sessionId) throw new SsoVerificationError(`${config.label} sign-in is missing its session.`);
-        if (!subject) throw new SsoVerificationError(`A ${config.label} sign-in must be verified against a known member.`);
-        const identity = consumeGithubSession(credential.sessionId, subject);
-        // The session names the client id it ran under. One the caller no longer accepts (an operator
-        // changed GITHUB_CLIENT_IDS mid-sign-in) is refused like a token issued to another app.
-        if (!allowedAudiences?.includes(identity.audience)) {
-            throw new SsoVerificationError(`${config.label} sign-in was run for a different application.`);
-        }
-        return identity;
+        return verifyIdToken(provider, credential.idToken ?? '', allowedAudiences, expectedNonce, subject);
     }
 
     return { verifyIdToken, verifySignIn };

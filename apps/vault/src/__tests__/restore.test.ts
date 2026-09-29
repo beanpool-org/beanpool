@@ -21,7 +21,7 @@ afterEach(async () => {
     await v.close();
 });
 
-const SUBS: Record<SsoProvider, string> = { google: '111122223333444455556', apple: '000111.fedcba9876543210.0999', facebook: '10150000000000009', github: '31337' };
+const SUBS: Record<SsoProvider, string> = { google: '111122223333444455556', apple: '000111.fedcba9876543210.0999', facebook: '10150000000000009' };
 const PHONE = 'ExponentPushToken[member-phone]';
 
 async function collect(e: Uint8Array, holdId: string) {

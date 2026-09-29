@@ -3,8 +3,8 @@
  *
  * Builds the web app exactly as it ships (as app-csp-check.mjs does), serves it under the app document's
  * Content-Security-Policy read from apps/server/src/app-document-csp.ts, and at 1280 px and at 320 px with 1.3x text:
- *   - draws every join screen (lobby, "have you used BeanPool before?", name, sign-in, GitHub's code, the return),
- *     then the photo, 12 words and tour steps, into the app
+ *   - draws every join screen (lobby, "have you used BeanPool before?", name, sign-in, the return), then the photo,
+ *     12 words and tour steps, into the app
  *   - leaves the page for Google, Apple and Facebook and comes back: each provider is a Playwright route answering
  *     with a redirect to /app/auth/<provider> carrying a fixture token (Apple: a form POST to the return URL, answered
  *     303 as the node's apple-return route does), and a reload on the way through
@@ -18,10 +18,10 @@
  *   - the invite join's ← Back on the photo step (card invite-back-step): the name alone on the same key, a name another
  *     member has refused with suggestions of 20 characters or fewer checked with that key left out, then a new name and
  *     that key's 12 words
- *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google (the round
- *     trip through the same return page) and GitHub (the node's device flow): the stub node keeps the copy each join
- *     carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is opened
- *     in the page by core, for real
+ *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google and Apple
+ *     (each the round trip through the same return page, Apple's by its form POST): the stub node keeps the copy each
+ *     join carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is
+ *     opened in the page by core, for real
  * and fails on any horizontal scroll, any policy violation, a token left in the address bar, or a join the stub node
  * did not expect (wrong key, wrong nonce, an access token sent).
  *
@@ -75,7 +75,7 @@ class Failure extends Error {}
  * One browser context with the node and the providers stubbed. `join` answers POST /api/join; everything the stubs
  * saw is kept for the checks.
  */
-async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, github } = {}) {
+async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } = {}) {
     // membershipDown: the membership probe gets no answer, as when the node can't be reached. doorShut: an operator has
     // shut the door (open-join.ts reads it per request). probes: every key the membership probe was asked about.
     // enrolled: key → the sign-in whose recovery copy a join stored (G11-c).
@@ -192,14 +192,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             const nonce = `nonce-${++nonceCount}-${'x'.repeat(30)}`;
             seen.nonces.push({ nonce, key });
             const answer = nonceAnswer ? nonceAnswer(nonce) : null;
-            return reply(200, answer ?? { nonce, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook', 'github'], githubFlow: 'node', clientIds: CLIENT_IDS });
-        }
-        if (p === '/api/join/github/start') {
-            return reply(200, { sessionId: 'gh-session-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
-        }
-        if (p === '/api/join/github/poll') {
-            const r = github ? github() : { status: 200, body: { status: 'ok', sub: 'github-sub-1' } };
-            return reply(r.status, r.body, r.headers);
+            return reply(200, answer ?? { nonce, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook'], clientIds: CLIENT_IDS });
         }
         // The node's recovery routes (routes/recovery-collect.ts), for G11-d: a session bound to the key that opened it.
         // The lookup as the global node answers it (routes/community.ts, guestListingsOnly): the whole name, case forgiven.
@@ -227,24 +220,13 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             if (p === '/api/recovery/collect/sso-nonce') {
                 const nonce = `restore-nonce-${seen.restoreNonces.length + 1}-${'y'.repeat(24)}`;
                 seen.restoreNonces.push({ nonce, key });
-                return reply(200, { nonce, expiresInSeconds: 600, githubFlow: 'node', clientIds: CLIENT_IDS });
-            }
-            if (p === '/api/recovery/collect/github/start') {
-                return reply(200, { sessionId: 'gh-restore-1', userCode: 'RSTR-9QXK', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
-            }
-            if (p === '/api/recovery/collect/github/poll') {
-                return reply(200, body.sessionId === 'gh-restore-1' ? { status: 'ok', sub: 'github-sub-1' } : { status: 'expired' });
+                return reply(200, { nonce, expiresInSeconds: 600, clientIds: CLIENT_IDS });
             }
             if (p === '/api/recovery/collect/sso') {
-                let sub = null;
-                if (body.provider === 'github') {
-                    sub = body.proof?.sessionId === 'gh-restore-1' ? 'github-sub-1' : null;
-                } else {
-                    const issued = seen.restoreNonces.find((n) => n.nonce === body.nonce && n.key === key);
-                    const claims = JSON.parse(Buffer.from(String(body.idToken).split('.')[1] || '', 'base64url').toString() || '{}');
-                    sub = issued && claims.nonce === body.nonce ? claims.sub : null;
-                    if (issued) seen.restoreNonces = seen.restoreNonces.filter((n) => n !== issued);
-                }
+                const issued = seen.restoreNonces.find((n) => n.nonce === body.nonce && n.key === key);
+                const claims = JSON.parse(Buffer.from(String(body.idToken).split('.')[1] || '', 'base64url').toString() || '{}');
+                const sub = issued && claims.nonce === body.nonce ? claims.sub : null;
+                if (issued) seen.restoreNonces = seen.restoreNonces.filter((n) => n !== issued);
                 if (!sub) return reply(401, { error: 'That sign-in could not be matched to this request.', code: 'sign_in' });
                 if (!copy || copy.provider !== body.provider || copy.sub !== sub) return reply(400, { error: 'That sign-in account is not the keeper for this recovery.' });
                 col.released = true;
@@ -505,8 +487,8 @@ async function restoreScreenIs(page, name, where, timeout = 20_000) {
 }
 
 /**
- * The restore the stub node saw: every recovery call signed by one throwaway key that is not the account's, a Google
- * nonce issued to that key and sent back in the release, and the copy released to it.
+ * The restore the stub node saw: every recovery call signed by one throwaway key that is not the account's, the
+ * provider's nonce issued to that key and sent back in the release, and the copy released to it.
  */
 function checkRestore(seen, provider, accountKey, where) {
     const calls = seen.restoreCalls;
@@ -517,13 +499,9 @@ function checkRestore(seen, provider, accountKey, where) {
     if (stray.length) throw new Failure(`${where}: ${stray.length} recovery calls signed by another key`);
     const release = calls.filter((c) => c.path === '/api/recovery/collect/sso').at(-1);
     if (!release || release.body.provider !== provider) throw new Failure(`${where}: released with ${release?.body.provider}`);
-    if (provider === 'github') {
-        if (release.body.proof?.sessionId !== 'gh-restore-1' || release.body.idToken) throw new Failure(`${where}: the GitHub release carried ${JSON.stringify(release.body)}`);
-    } else {
-        const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
-        if (!visit || visit.state !== visit.nonce || release.body.nonce !== visit.nonce) throw new Failure(`${where}: the release's nonce is not the one sent to ${provider}`);
-        if (!visit.nonce.startsWith('restore-nonce-')) throw new Failure(`${where}: went to ${provider} with a join's nonce`);
-    }
+    const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
+    if (!visit || visit.state !== visit.nonce || release.body.nonce !== visit.nonce) throw new Failure(`${where}: the release's nonce is not the one sent to ${provider}`);
+    if (!visit.nonce.startsWith('restore-nonce-')) throw new Failure(`${where}: went to ${provider} with a join's nonce`);
     if (![...seen.collections.values()].some((c) => c.released && c.eph === eph && c.owner === accountKey)) throw new Failure(`${where}: no copy was released`);
 }
 
@@ -617,8 +595,8 @@ function joinOk(callsign = 'Alice') {
         const stored = Array.isArray(body.recovery?.shares) && body.recovery.shares.length === 1 && body.recovery.shares[0].holderRef === body.provider;
         if (stored) {
             seen.enrolled.set(key, body.provider);
-            // As the node keeps it: the copy, and the sign-in it opens with (the token's sub, or GitHub's).
-            const sub = body.provider === 'github' ? 'github-sub-1' : JSON.parse(Buffer.from(body.idToken.split('.')[1], 'base64url').toString()).sub;
+            // As the node keeps it: the copy, and the sign-in it opens with (the token's sub).
+            const sub = JSON.parse(Buffer.from(body.idToken.split('.')[1], 'base64url').toString()).sub;
             seen.copies.set(key, { share: body.recovery.shares[0], provider: body.provider, sub, callsign: body.callsign || callsign });
         }
         return {
@@ -638,17 +616,13 @@ function checkJoin(seen, provider, key, where) {
     if (j.key !== key) throw new Failure(`${where}: the join was signed by ${j.key}, not the pending key ${key}`);
     if (j.body.provider !== provider) throw new Failure(`${where}: joined with ${j.body.provider}`);
     if (/EAAB-fixture|LL-fixture|access_token|long_lived/.test(j.raw)) throw new Failure(`${where}: the join carried Facebook's access or long-lived token`);
-    if (provider !== 'github') {
-        const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
-        if (!visit) throw new Failure(`${where}: never went to ${provider}`);
-        if (visit.state !== visit.nonce) throw new Failure(`${where}: state ${visit.state} is not the nonce ${visit.nonce}`);
-        if (j.body.nonce !== visit.nonce) throw new Failure(`${where}: the join's nonce ${j.body.nonce} is not the one sent to ${provider} (${visit.nonce})`);
-        const issued = seen.nonces.find((n) => n.nonce === visit.nonce);
-        if (!issued || issued.key !== key) throw new Failure(`${where}: the nonce was not issued to the joining key`);
-        if (!j.body.idToken || j.body.idToken.split('.').length !== 3) throw new Failure(`${where}: no id_token in the join`);
-    } else if (j.body.proof?.sessionId !== 'gh-session-1') {
-        throw new Failure(`${where}: the GitHub join carried ${JSON.stringify(j.body.proof)}`);
-    }
+    const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
+    if (!visit) throw new Failure(`${where}: never went to ${provider}`);
+    if (visit.state !== visit.nonce) throw new Failure(`${where}: state ${visit.state} is not the nonce ${visit.nonce}`);
+    if (j.body.nonce !== visit.nonce) throw new Failure(`${where}: the join's nonce ${j.body.nonce} is not the one sent to ${provider} (${visit.nonce})`);
+    const issued = seen.nonces.find((n) => n.nonce === visit.nonce);
+    if (!issued || issued.key !== key) throw new Failure(`${where}: the nonce was not issued to the joining key`);
+    if (!j.body.idToken || j.body.idToken.split('.').length !== 3) throw new Failure(`${where}: no id_token in the join`);
     // G11-c: the key sealed to this sign-in (its 12 words with it) went with the join, one piece, in the phone's shape.
     const shares = j.body.recovery?.shares;
     const share = Array.isArray(shares) && shares.length === 1 ? shares[0] : null;
@@ -767,23 +741,6 @@ const SCENARIOS = [
         join: joinOk(),
     },
     {
-        name: "GitHub: the code screen, the wait, joined with the node's session",
-        async run(page, origin, view, seen) {
-            await toSignIn(page, origin, view, 'Alice');
-            const key = await pendingKey(page);
-            await page.getByTestId('join-provider-github').click();
-            await screenIs(page, 'github', 'after GitHub');
-            await page.getByTestId('join-github-code').waitFor();
-            await noSideScroll(page, 'GitHub code');
-            await shot(page, view, 'github-code');
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
-            checkJoin(seen, 'github', key, 'GitHub');
-        },
-        join: joinOk(),
-        // First poll pending (the code is being typed), then ok.
-        github: (() => { let n = 0; return () => (++n === 1 ? { status: 200, body: { status: 'pending', intervalSeconds: 1 } } : { status: 200, body: { status: 'ok', sub: 'github-sub-1' } }); })(),
-    },
-    {
         name: 'a 200 whose body is cut off: the key stays marked sent, the page says it cannot tell, and asking the node lets the member in',
         async run(page, origin, view, seen) {
             await toSignIn(page, origin, view, 'Alice');
@@ -887,22 +844,19 @@ const SCENARIOS = [
         join: joinOk(),
     },
     {
-        name: "G11-d: joined with GitHub, the browser cleared, the same key back with GitHub's device flow",
+        name: "G11-d: joined with Apple, the browser cleared, the same key back with Apple (its form POST return)",
         async run(page, origin, view, seen) {
             await toSignIn(page, origin, view, 'Alice');
             const key = await pendingKey(page);
-            await page.getByTestId('join-provider-github').click();
-            await throughOnboarding(page, view, { signIn: 'GitHub' });
+            await page.getByTestId('join-provider-apple').click();
+            await throughOnboarding(page, view, { signIn: 'Apple' });
 
             await toRestoreSignIns(page, origin, view);
-            await page.getByTestId('restore-provider-github').click();
-            await restoreScreenIs(page, 'github', 'GitHub for the restore');
-            if ((await page.getByTestId('restore-github-code').innerText()) !== 'RSTR-9QXK') throw new Failure('the restore did not show its own GitHub code');
-            await noSideScroll(page, 'restore GitHub code');
-            await shot(page, view, 'restore-github-code');
+            await page.getByTestId('restore-provider-apple').click();
             await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 30_000 });
+            if (page.url().includes('id_token')) throw new Failure(`the address bar still reads ${page.url()}`);
             if ((await storedIdentityKey(page)) !== key) throw new Failure('restored another key than the join made');
-            checkRestore(seen, 'github', key, 'restore with GitHub');
+            checkRestore(seen, 'apple', key, 'restore with Apple');
         },
         join: joinOk(),
     },
@@ -910,10 +864,10 @@ const SCENARIOS = [
         name: "G11-d: a Google account that isn't the account's: said plainly, nothing saved",
         async run(page, origin, view, seen) {
             await toSignIn(page, origin, view, 'Alice');
-            await page.getByTestId('join-provider-github').click();
-            await throughOnboarding(page, view, { signIn: 'GitHub' });
+            await page.getByTestId('join-provider-apple').click();
+            await throughOnboarding(page, view, { signIn: 'Apple' });
             await toRestoreSignIns(page, origin, view);
-            // Alice joined with GitHub; Google is not her way back.
+            // Alice joined with Apple; Google is not her way back.
             await page.getByTestId('restore-provider-google').click();
             const notice = page.getByTestId('join-notice');
             await notice.waitFor({ timeout: 30_000 });
@@ -1302,7 +1256,7 @@ async function main() {
                     await scenario.run(page, origin, view, seen);
                     await page.waitForTimeout(200);
                     if (seen.violations.length) throw new Failure(`policy violations: ${JSON.stringify(seen.violations)}`);
-                    const hosts = [...seen.unexpectedHosts].filter((h) => h !== 'github.com');
+                    const hosts = [...seen.unexpectedHosts];
                     if (hosts.length) throw new Failure(`asked hosts outside the stubs: ${hosts.join(', ')}`);
                     console.log(`✓ ${label}`);
                 } catch (e) {

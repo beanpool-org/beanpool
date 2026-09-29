@@ -5,8 +5,9 @@
  * ## Why
  *
  * A member's sign-in copy is their whole seed (and their 12 words) sealed by their app under `scrypt(provider:sub, salt)`,
- * with the salt in the same row. Nothing in that row is secret but the `sub`, and GitHub's is the public user id. So a
- * copy of the database opened every GitHub-linked account in it, one scrypt each. The apps' format stays exactly as it
+ * with the salt in the same row. Nothing in that row is secret but the `sub`, and GitHub's, while GitHub was a sign-in, was
+ * the public user id. So a copy of the database opened every GitHub-linked account in it, one scrypt each (GitHub is no
+ * longer a sign-in, and its copies are gone: engine/github-sign-in-removal.ts). The apps' format stays exactly as it
  * is (the vectors, both apps and every copy already made are untouched); the node adds a second lock, at the storage
  * boundary, with a key the database never holds.
  *

@@ -80,13 +80,13 @@ describe('vault boxes', () => {
 
     it('a release opens with the restoring key, and its copy with the sub gives the seed', async () => {
         const words = undefined;
-        const clientCopy = await sealSeedToSso(memberSeed, 'github', '583231', { words });
+        const clientCopy = await sealSeedToSso(memberSeed, 'facebook', '10150000000583231', { words });
         const eSeed = randomBytes(32);
         const eKey = bytesToHex(ed25519.getPublicKey(eSeed));
-        const release = sealVaultRelease({ provider: 'github', pubkey: memberKey, clientCopy }, eKey);
+        const release = sealVaultRelease({ provider: 'facebook', pubkey: memberKey, clientCopy }, eKey);
         const opened = openVaultRelease(release, eSeed);
         expect(opened.pubkey).toBe(memberKey);
-        const { seed } = await openSeedFromSso(opened.clientCopy, 'github', '583231');
+        const { seed } = await openSeedFromSso(opened.clientCopy, 'facebook', '10150000000583231');
         expect(bytesToHex(ed25519.getPublicKey(seed))).toBe(memberKey);
         expect(() => openVaultRelease(release, randomBytes(32))).toThrow();
     });

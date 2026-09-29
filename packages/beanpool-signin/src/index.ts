@@ -2,23 +2,18 @@
  * @beanpool/signin: the sign-in checks a community node and the key vault share (key vault V1).
  *
  * Google, Apple and Facebook `id_token`s are verified here (verify.ts) against the providers' published keys
- * (jwks.ts); GitHub's device flow is run here (github-device.ts). Nothing in this package reads a database, a
- * logger or a node's config: the caller passes in how it spends a nonce, which client ids it accepts
- * (audiences.ts), and, for tests, its fetch and its clock.
+ * (jwks.ts). Nothing in this package reads a database, a logger or a node's config: the caller passes in how it
+ * spends a nonce, which client ids it accepts (audiences.ts), and, for tests, its fetch and its clock.
  */
 export { SsoVerificationError, SsoProviderUnavailableError } from './errors.js';
 export {
     SSO_PROVIDERS,
-    GITHUB_TOKEN_REFUSED,
     isSsoProvider,
     ssoProviderLabel,
     providerConfig,
-    oidcConfig,
     type SsoProvider,
     type SsoIdentity,
     type OidcProviderConfig,
-    type NodeRunProviderConfig,
-    type ProviderConfig,
 } from './providers.js';
 export {
     createJwksCache,
@@ -45,7 +40,6 @@ export {
     BEANPOOL_APPLE_BUNDLE_ID,
     BEANPOOL_APPLE_SERVICES_ID,
     BEANPOOL_FACEBOOK_APP_ID,
-    BEANPOOL_GITHUB_CLIENT_IDS,
     appleServicesId,
     defaultAudiences,
     configuredAudiences,
@@ -54,10 +48,3 @@ export {
     type AudienceSettings,
     type WebSignInProvider,
 } from './audiences.js';
-export {
-    createGithubDeviceFlow,
-    type GithubDeviceFlow,
-    type GithubDeviceFlowOptions,
-    type GithubSessionStart,
-    type GithubPoll,
-} from './github-device.js';

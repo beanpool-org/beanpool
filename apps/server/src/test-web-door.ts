@@ -126,7 +126,6 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(publicDir, 'settings', 'index.html'), '<!doctype html><title>Settings</title><script>window.page = "settings"</script>');
     fs.writeFileSync(path.join(publicDir, 'manager', 'index.html'), '<!doctype html><title>Manager</title><script>window.page = "manager"</script>');
     fs.writeFileSync(path.join(publicDir, 'settings.html'), '<!doctype html><title>Old settings</title><script>window.page = "old settings"</script>');
-    fs.writeFileSync(path.join(publicDir, 'auth', 'github.html'), '<!doctype html><title>GitHub return</title><script>window.page = "github"</script>');
     fs.writeFileSync(path.join(publicDir, 'auth', 'facebook.html'), '<!doctype html><title>Facebook return</title><script>window.page = "facebook"</script>');
     fs.writeFileSync(path.join(publicDir, 'assets', 'app.js'), 'window.app = "the web app\'s script";');
     // https-server.ts and routes/settings.ts take public/ from the working directory when it has one, as they load.
@@ -315,7 +314,7 @@ async function main(): Promise<void> {
         ['/settings.html', 'window.page = "old settings"'], ['/settings-legacy', '<script'],
         ['/manager', 'window.page = "manager"'], ['/manager/fleet', 'window.page = "manager"'],
         ['/manager/index.html', 'window.page = "manager"'],
-        ['/auth/github.html', 'window.page = "github"'], ['/auth/facebook.html', 'window.page = "facebook"'],
+        ['/auth/facebook.html', 'window.page = "facebook"'],
         ['/?invite=BP-TEST-0002', '<script>'], ['/apple-probe', '<script>'],
     ];
     for (const [pagePath, marker] of pages) {
@@ -335,12 +334,12 @@ async function main(): Promise<void> {
     // ── 5. the rules underneath ──────────────────────────────────────────────────────────────────
     console.log('\n── 5. the rules underneath ──');
     const canonical = ['/', '/app', '/app/', '/app/auth/apple', '/index.html', '/settings/', '/settings/members/abc', '/assets/index-D1x.js',
-        '/avatars/avatar_bolt.jpg', '/auth/github.html', '/a%20b', '/%25'];
+        '/avatars/avatar_bolt.jpg', '/auth/facebook.html', '/a%20b', '/%25'];
     for (const p of canonical) assert(!isNonCanonicalSpelling(p), `${p} is a spelling the node answers`);
     for (const p of [...refused.map(r => r.split(/[?#]/)[0]), '/%', '/a/.', '/a/%2e']) {
         assert(isNonCanonicalSpelling(p), `${p} is refused as a spelling`);
     }
-    for (const f of ['settings.html', 'settings/index.html', 'manager/index.html', 'auth/github.html', 'auth/facebook.html', 'auth/github.html.gz']) {
+    for (const f of ['settings.html', 'settings/index.html', 'manager/index.html', 'auth/facebook.html', 'auth/facebook.html.gz']) {
         assert(isDocumentPolicyFile(f), `public/${f} keeps the older header`);
     }
     for (const f of ['index.html', 'index.html.gz', 'index.html.br', 'assets/index.html', 'auth/../index.html', 'auth/x/index.html', 'settings/assets/app.js', 'manager/other.html', 'INDEX.HTML']) {

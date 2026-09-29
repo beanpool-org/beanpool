@@ -89,7 +89,7 @@ describe('the event’s link', () => {
     it('leaves every other link alone — an invite, a callback, a bare host', () => {
         for (const other of [
             null, undefined, '', '/', 'https://mullum.beanpool.org/?invite=INV-ABCD-EFGH',
-            'beanpool://auth/github?code=abc', 'https://beanpool.org/auth/facebook#state=1', '/?post=',
+            'beanpool://auth/google?code=abc', 'https://beanpool.org/auth/facebook#state=1', '/?post=',
         ]) {
             expect(postIdFromLink(other)).toBeNull();
         }

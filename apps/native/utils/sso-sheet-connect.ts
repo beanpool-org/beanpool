@@ -7,19 +7,19 @@
  * that doesn't pass reads as a cancel (PR #1205 review 4112404429).
  *
  * The sheet offers Cancel only while a cancel is honoured, which is until the deposit is sent:
- * - While the provider is going (a GitHub code waiting to be entered), a cancel stops the sign-in.
- * - `onSignedIn` runs the moment the provider is done. The sheet takes the code and its Cancel down there.
+ * - While the provider is going, a cancel means nothing is deposited when it is done. (The provider's own
+ *   sheet has its own cancel.)
+ * - `onSignedIn` runs the moment the provider is done. The sheet takes its Cancel down there.
  * - A cancel that landed while the sign-in was finishing, before the sheet caught up, is still honoured
  *   after `onSignedIn`: nothing has been deposited, so nothing is.
  *
  * Past that the deposit goes ahead, and its outcome is reported even if the sheet was closed meanwhile.
  * Once sent it may be on the node, and "cancelled" over a deposit the node kept would be untrue the other
- * way round. With GitHub the sheet used to leave the code and Cancel up through the deposit: a tap closed
- * the sheet, the deposit went ahead, and a second later the sheet reported the account covered.
+ * way round.
  */
 
 import { startSsoSignIn, SsoSignInError } from './sso-signin';
-import type { SsoProvider, GithubDevicePrompt } from './sso-signin';
+import type { SsoProvider } from './sso-signin';
 import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 
@@ -52,9 +52,9 @@ export async function connectAndDeposit(options: {
      * null only for a key the join wizard has just made, the member's own new account.
      */
     phoneLock: (() => Promise<boolean>) | null;
-    onGithubPrompt: (prompt: GithubDevicePrompt) => void;
-    /** The provider is done and the deposit is next: the code and Cancel no longer apply. */
+    /** The provider is done and the deposit is next: Cancel no longer applies. */
     onSignedIn: () => void | Promise<void>;
+    /** The sheet closed: a sign-in still going deposits nothing once it is done. */
     signal: AbortSignal;
 }): Promise<KeeperEnrolmentResult> {
     const { provider, url, identity, signal } = options;
@@ -63,18 +63,15 @@ export async function connectAndDeposit(options: {
     }
     // Closed while the check was up: nothing starts.
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    const signin = await startSsoSignIn(provider, url, identity, options.onGithubPrompt, signal);
+    const signin = await startSsoSignIn(provider, url, identity);
     await options.onSignedIn();
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
 
-    // GitHub's proof is the node's own session, never a token (keeper-enrolment.ts).
-    return enrolSsoKeeper(signin.provider === 'github'
-        ? { identity, provider: 'github', sub: signin.sub, proof: { sessionId: signin.sessionId } }
-        : {
-            identity,
-            provider: signin.provider,
-            sub: extractSub(signin.idToken),
-            idToken: signin.idToken,
-            nonce: signin.nonce,
-        });
+    return enrolSsoKeeper({
+        identity,
+        provider: signin.provider,
+        sub: extractSub(signin.idToken),
+        idToken: signin.idToken,
+        nonce: signin.nonce,
+    });
 }

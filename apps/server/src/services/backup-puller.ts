@@ -155,7 +155,8 @@ let reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 // N2 (design §4.2): after a copy that came and was refused, when the next of its kind may be asked for. A whole copy waits
 // for the next routine one (a reconcile interval); a force-resync, and a first copy, RESYNC_RETRY_MS. An operator's
-// force-resync is always taken. A copy that never came (the main server restarting) keeps the usual cadence.
+// force-resync is always taken. A copy that never came (the main server restarting) keeps the usual cadence. The retention
+// resync waits RESYNC_RETRY_MS after a copy that never came too (pullOnce).
 let wholeRetryAt = 0;
 let resyncRetryAt = 0;
 // The last whole copy landed with tables left out (more rows than one copy carries, design §5): the next of any kind waits
@@ -496,12 +497,19 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             wholeRetryAt = now + (getReconcileMs() || resyncRetryMs());
             if (fresh || !hadCursor) resyncRetryAt = now + resyncRetryMs();
         }
+        // The retention resync waits RESYNC_RETRY_MS after any failure, a copy that never came too (the main server
+        // answering 503 or 500, or the fetch timing out: a community too large to build its whole copy in time). Asked for
+        // on the next tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile;
+        // the record keeps it owed (nextMode).
+        if (why === 'retention') resyncRetryAt = Date.now() + resyncRetryMs();
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
             logger.security('P2P', `[Backup] ❌ ${isDelta ? 'Delta' : 'Snapshot'} REJECTED by import guard: ${msg}`);
         } else {
-            const next = stage === 'import' && !isDelta
+            const next = why === 'retention'
+                ? `no force-resync asked for before ${new Date(resyncRetryAt).toISOString()}; deltas meanwhile`
+                : stage === 'import' && !isDelta
                 ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}`
                 : 'will retry in interval';
             logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${fresh ? 'resync' : isDelta ? 'delta' : 'full'}) failed: ${msg} (${next})`);
@@ -747,7 +755,8 @@ type Wait = 'wait';
 
 function nextMode(): PullMode | ResyncKind | Wait {
     const now = Date.now();
-    // A force-resync, or a first copy, refused at its import in the last RESYNC_RETRY_MS (N2): none asked for until then.
+    // A force-resync, or a first copy, refused at its import in the last RESYNC_RETRY_MS (N2), or a retention resync that
+    // failed in it at any stage (pullOnce): none asked for until then.
     const resyncWaits = now < resyncRetryAt;
     // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
     // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first

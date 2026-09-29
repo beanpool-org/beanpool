@@ -22,7 +22,11 @@
  *  4. The same, with the force-resync refused (members over the cap in whole copies only): a delta lands meanwhile and
  *     moves the cursor, and S restarts; the resync is still owed, asked for again, and lands exact once M holds fewer
  *     members. (A delta that lands never mends the deletes it missed.)
- *  5. S takes over with the recovery code. The promoted server forgets its pull cursor, and prunes a tombstone written
+ *  5. The same, with M unable to send a whole copy (it answers 503, as a community too large to build one in time does):
+ *     the failed force-resync is asked for again only after the retry wait (an hour, scaled down), deltas landing in
+ *     between (a listing M made meanwhile reaches S), and it stays owed until one lands exact. (Before: a copy that never
+ *     came was asked for again on every pull, and no delta ever landed.)
+ *  6. S takes over with the recovery code. The promoted server forgets its pull cursor, and prunes a tombstone written
  *     35 days ago, after a take-over 40 days ago, and keeps a 29-day-old one. (Before: its last pull's cursor floored the
  *     prune, so no tombstone written after the take-over was ever pruned.)
  *
@@ -37,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import http from 'node:http';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -91,6 +96,12 @@ async function child(): Promise<void> {
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             // Routine whole copies off, as Settings' cadence sets it: the pull after a restart is a delta.
             updateBackupCadence({ reconcileMinutes: 0 });
+            return true;
+        },
+        /** The main server's address this standby pulls from (read on each pull). */
+        'point-at': async (a: { url: string }) => {
+            const { updateLocalConfig } = await import('./config/local-config.js');
+            updateLocalConfig({ backupPrimaryUrl: a.url });
             return true;
         },
         /** One pull of the kind the loop makes next, and the take-over keys after it, as the loop fetches them. */
@@ -380,8 +391,81 @@ async function main(): Promise<void> {
         const after4 = await standby.send('pull');
         assert(after4.ok === true && after4.mode === 'delta', `the pull after it is a delta (${JSON.stringify(after4)})`);
 
-        // ── 5. The take-over ──
-        console.log('\n— 5. S takes over: it forgets its pull cursor and prunes what it writes —');
+        // ── 5. The force-resync's copy never comes: deltas meanwhile, asked for again after the wait ──
+        console.log('\n— 5. M can\'t send the force-resync\'s copy: deltas land meanwhile, and it is asked for again after the wait —');
+        // A localhost proxy in front of M: it passes everything, or answers 503 to a whole copy while deltas pass.
+        let failWhole = false;
+        const asked = { whole: 0, delta: 0 };
+        const proxy = http.createServer(async (req, res) => {
+            try {
+                const chunks: Buffer[] = [];
+                for await (const c of req) chunks.push(c as Buffer);
+                const p = req.url ?? '/';
+                if (p.startsWith('/api/local/admin/sync-snapshot')) asked.whole++;
+                if (p.startsWith('/api/local/admin/sync-delta')) asked.delta++;
+                if (failWhole && p.startsWith('/api/local/admin/sync-snapshot')) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Snapshot unavailable' }));
+                    return;
+                }
+                const headers: Record<string, string> = {};
+                for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string' && k !== 'host' && k !== 'content-length') headers[k] = v;
+                const r = await fetch(main.base + p, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+                const out: Record<string, string> = {};
+                r.headers.forEach((v, k) => { if (k !== 'content-encoding' && k !== 'content-length' && k !== 'transfer-encoding') out[k] = v; });
+                res.writeHead(r.status, out);
+                res.end(Buffer.from(await r.arrayBuffer()));
+            } catch (e: any) {
+                res.writeHead(502);
+                res.end(String(e?.message || e));
+            }
+        });
+        await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', () => r()));
+        try {
+            await standby.send('point-at', { url: `http://127.0.0.1:${(proxy.address() as any).port}` });
+            await main.send('delete-message', { id: lines[2], daysAgo: 31 });
+            require_((await main.send('prune', { keys: [lines[2]] })).length === 0, 'M: a third line deleted 31 days ago, its tombstone pruned');
+            await restart(awayCursor(31));
+            failWhole = true;
+            const bread = await offer(bo, 'Bread');
+            const before5 = { ...asked };
+            const pull5 = await standby.send('pull');
+            const s5a: Snap = await standby.send('snapshot', { tables: TABLES });
+            assert(pull5.mode === 'resync' && pull5.ok === false && s5a.record.pastRetentionAt !== null,
+                `S's force-resync gets no copy (M answers 503), and is still owed (${JSON.stringify({ pull: pull5, owed: s5a.record.pastRetentionAt })})`);
+            const between5: string[] = [];
+            for (let i = 0; i < 3; i++) {
+                const p = await standby.send('pull');
+                between5.push(`${p.mode}:${p.ok ? 'ok' : 'failed'}`);
+            }
+            const s5b: Snap = await standby.send('snapshot', { tables: TABLES });
+            const hasBread = (await standby.send('sql', { sql: 'UPDATE posts SET title = title WHERE id = ?', args: [bread.id] })) === 1;
+            assert(between5.every((x) => x === 'delta:ok') && asked.whole - before5.whole === 1 && asked.delta - before5.delta === 3,
+                `the next three pulls are deltas, and land; M was asked for one whole copy, not four (${between5.join(', ')}; whole ${asked.whole - before5.whole}, deltas ${asked.delta - before5.delta}; before: four failed force-resyncs, no delta)`);
+            assert(hasBread && !!s5b.savedCursor && Date.parse(s5b.savedCursor) > Date.now() - DAY_MS,
+                `Bo's bread, listed on M after S came back, is on S, and the cursor is today's (${JSON.stringify({ bread: hasBread, cursor: s5b.savedCursor })}; before: neither)`);
+            assert(s5b.record.pastRetentionAt !== null && await standby.send('has-message', { id: lines[2] }),
+                `the force-resync is still owed, and the line M deleted is still on S (${s5b.record.pastRetentionAt})`);
+            await sleep(RETRY_MS + 300);
+            const again5 = await standby.send('pull');
+            const next5 = await standby.send('pull');
+            assert(again5.mode === 'resync' && again5.ok === false && next5.mode === 'delta' && next5.ok === true,
+                `after the wait the force-resync is asked for again, fails again, and a delta follows (${JSON.stringify({ again: again5, next: next5 })})`);
+            failWhole = false;
+            await sleep(RETRY_MS + 300);
+            const land5 = await standby.send('pull');
+            const s5c: Snap = await standby.send('snapshot', { tables: TABLES });
+            const m5: Snap = await main.send('snapshot', { tables: TABLES });
+            assert(land5.ok === true && land5.mode === 'resync' && !(await standby.send('has-message', { id: lines[2] }))
+                && same(s5c, m5, 'messages', 'posts', 'members', 'accounts') && s5c.record.lastWhole?.exact === true && s5c.record.pastRetentionAt === null,
+                `M sending whole copies again, the force-resync lands, exact: the third line is gone from S, and nothing is owed (${JSON.stringify({ pull: land5, verdict: s5c.record.lastWhole?.differs, owed: s5c.record.pastRetentionAt })}; ${counts(s5c, 'messages', 'posts')}; M ${counts(m5, 'messages', 'posts')})`);
+            await standby.send('point-at', { url: main.base });
+        } finally {
+            proxy.close();
+        }
+
+        // ── 6. The take-over ──
+        console.log('\n— 6. S takes over: it forgets its pull cursor and prunes what it writes —');
         refused.push(...(await main.send('fetches')).blocked);
         await main.kill('SIGKILL');
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
@@ -393,15 +477,15 @@ async function main(): Promise<void> {
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
         nodes.push(standby);
         require_(standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId, `promoted, with M's PeerId (${standby.ready.role})`);
-        const s5: Snap = await standby.send('snapshot', { tables: TABLES });
-        assert(s5.savedCursor === null, `the promoted server holds no pull cursor (${s5.savedCursor}; before: its last pull's)`);
+        const s6: Snap = await standby.send('snapshot', { tables: TABLES });
+        assert(s6.savedCursor === null, `the promoted server holds no pull cursor (${s6.savedCursor}; before: its last pull's)`);
         // Forty days on: whatever the last pull before the take-over left is that old, and the tombstones below were
         // written 35 and 29 days ago, after the take-over.
         await standby.send('sql', { sql: `UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`, args: [new Date(Date.now() - 40 * DAY_MS).toISOString()] });
         await standby.send('plant', { tombstones: [{ key: 'promoted-35d', daysAgo: 35 }, { key: 'promoted-29d', daysAgo: 29 }] });
-        const left5 = await standby.send('prune', { keys: ['promoted-35d', 'promoted-29d'] });
-        assert(JSON.stringify(left5) === JSON.stringify(['promoted-29d']),
-            `a tombstone the promoted server wrote 35 days ago is pruned, and one of 29 days kept (left: ${JSON.stringify(left5)}; before: both kept, floored by the last pull before the take-over)`);
+        const left6 = await standby.send('prune', { keys: ['promoted-35d', 'promoted-29d'] });
+        assert(JSON.stringify(left6) === JSON.stringify(['promoted-29d']),
+            `a tombstone the promoted server wrote 35 days ago is pruned, and one of 29 days kept (left: ${JSON.stringify(left6)}; before: both kept, floored by the last pull before the take-over)`);
 
         refused.push(...(await standby.send('fetches')).blocked);
         assert(refused.length === 0, `no node reached anything off this machine (${JSON.stringify(refused)})`);

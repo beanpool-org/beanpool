@@ -396,6 +396,7 @@ run_federation_suites() {
       test-crowdfund-ledger-sync
       test-detached-pwa
       test-dos-caps
+      test-writer-bounds
       test-economic-hardening
       test-federation-api
       test-federation-receipt

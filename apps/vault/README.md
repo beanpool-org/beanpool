@@ -149,9 +149,13 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   (`/var/lib/beanpool-vault/restore`, the API's user's alone; it is sealed under `K_backup`), not in the mount point,
   which the mount would hide; it is deleted once the restore lands.
 - No SSH server, no getty, no rescue or debug shell, root locked, no login shell for any account.
-- Firewall (`etc/nftables.conf`): in, 443 and 80 (certificates); out, HTTPS only to addresses the vault's own resolver
-  (dnsmasq, `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names: the providers' key endpoints,
-  Expo push, GitHub (the release feed), Let's Encrypt, the NTP pool. The backup store is added with its client.
+- Firewall (`etc/nftables.conf`): in, 443 and 80 (certificates); out, each kind only from the one user that needs it:
+  HTTPS from the API and Caddy, only to addresses the vault's own resolver (dnsmasq,
+  `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names (the providers' key endpoints, Expo push,
+  GitHub (the release feed), Let's Encrypt); DNS from the resolver, only to Quad9; NTP from timesyncd, only to the
+  pool's addresses; DHCP from networkd's client (UDP 67 and 547 are refused to every other user: checked in the test
+  image). Past those, only ICMP errors, echo replies and IPv6 neighbour discovery. The backup store is added with its
+  client.
 - The kernel command line (fixed in the UKI) also carries `systemd.import_credentials=no`: nothing the host hands in
   through firmware (SMBIOS, fw_cfg) becomes a unit or a setting.
 - Memory hygiene: the keyholder runs with `LimitCORE=0` and `--disable-sigusr1` (it refuses to start without them),
@@ -187,8 +191,10 @@ where two builds differ.
   must say `open` with the data partition mounted in the machine's namespace and the database open on it, and
   `/v1/report`'s `update.image` must be the image that booted (the API reads root's file). As the API's user it stages
   a boot file and partitions no release signs, and fails to write root's install directories; the install step must
-  refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release as current. (A signed
-  next release installed and booted is not in it: that needs a second image build and a reboot.)
+  refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release as current. UDP to the
+  DHCP ports as the API's user or `nobody` must get EPERM, and a lease renewal by networkd pass the firewall (its
+  rule's counter goes up). (A signed next release installed and booted is not in it: that needs a second image build
+  and a reboot.)
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow

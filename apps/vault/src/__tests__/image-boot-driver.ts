@@ -22,7 +22,9 @@ import { unixFetch } from './unix-fetch.js';
  *   - files the API's user stages that no release signs are not installed by the monthly restart's install step, and
  *     that user can't write where root installs from (BLOCKING 2);
  *   - the API knows which image booted (from the file root leaves in /run; the ESP is root's alone): /v1/report's
- *     `update.image` is it (BLOCKING 3).
+ *     `update.image` is it (BLOCKING 3);
+ *   - UDP to the DHCP ports only from networkd's client: the API's user (and nobody) gets EPERM, and a lease
+ *     renewal still passes the firewall, counted by its rule (NON-BLOCKING, nftables.conf).
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -155,6 +157,28 @@ async function main(): Promise<void> {
     check('the ESP holds the running boot file alone', ukis.length === 1 && ukis[0].startsWith('beanpool-vault_0.0.1'), ukis.join(' '));
     const labels = sh('lsblk', ['-rno', 'PARTLABEL']).out;
     check('no partition is labelled 9.9.9', !labels.includes('9.9.9'), labels.replace(/\s+/g, ' '));
+
+    // NON-BLOCKING: the DHCP ports, only for networkd's DHCP client. Any other user's UDP to them is refused (EPERM:
+    // dropped on the way out). QEMU's restricted network gives no default route, so a route to a documentation range
+    // (203.0.113.0/24) is added for the test, as the review did: each packet then reaches the output chain.
+    const lease = () => sh('ip', ['-o', '-4', 'addr', 'show', 'scope', 'global']).out.split('\n').find(l => / dynamic /.test(l)) ?? '';
+    const link = lease().split(/\s+/)[1] ?? '';
+    check('a DHCP lease was obtained', !!link, lease() || sh('ip', ['-o', 'addr']).out.replace(/\s+/g, ' '));
+    const route = sh('ip', ['route', 'add', '203.0.113.0/24', 'dev', link]);
+    const udp = 'const s = require("dgram").createSocket("udp4"); s.send(Buffer.from("x"), Number(process.argv[1]), "203.0.113.5", e => { console.log(e ? e.code : "sent"); s.close(); });';
+    for (const [user, group] of [['vault-api', 'vault-api-socket'], ['nobody', 'nogroup']]) {
+        for (const port of ['67', '547']) {
+            const sent = sh('setpriv', [`--reuid=${user}`, `--regid=${group}`, '--init-groups', '/opt/node/bin/node', '-e', udp, port]).out;
+            check(`UDP to :${port} as ${user} is refused`, sent === 'EPERM', `${sent}${route.status === 0 ? '' : `; no test route: ${route.out}`}`);
+        }
+    }
+    sh('ip', ['route', 'del', '203.0.113.0/24', 'dev', link]);
+    const counted = () => Number(/packets (\d+)/.exec(sh('nft', ['list', 'counter', 'inet', 'vault', 'dhcp4']).out)?.[1] ?? NaN);
+    const before = counted();
+    const renew = sh('networkctl', ['renew', link]);
+    const passed = await until(async () => counted() > before, 60);
+    check('a DHCP renewal from networkd\'s client passes the firewall', !!passed.value && renew.status === 0, `${before} -> ${counted()} packets; ${renew.out}`);
+    check('and the lease stands', !!lease(), lease());
 }
 
 main().catch(e => {

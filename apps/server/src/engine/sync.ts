@@ -156,9 +156,10 @@ export interface ResyncClear {
 /**
  * The clear of a force-resync: every replicated table the copy writes again (the importer upserts and never deletes a row
  * a copy doesn't name, so a row the main server hard-deleted without a tombstone would otherwise stay). Node-local tables
- * (push_tokens, message_attachments, sync_cursors, node_config, …) and the plain tables (a whole copy deletes what it
- * doesn't name, engine/plain-tables.ts) are not cleared. `spare`: tables the copy leaves out (over the row cap, design §5),
- * which keep their rows here as they are.
+ * (message_attachments, sync_cursors, node_config, …) are not cleared, and neither are the plain tables (push tokens,
+ * invites and the rest, engine/replication-manifest.ts), whose whole copy deletes every row it doesn't name
+ * (engine/plain-tables.ts). `spare`: tables the copy leaves out (over the row cap, design §5), which keep their rows here
+ * as they are.
  *
  * Runs inside the caller's transaction and never commits on its own: importRemoteState runs it after every check, so a
  * copy refused anywhere rolls it back with the rest, and this standby keeps what it had (design §4.2, N). THROWS if it

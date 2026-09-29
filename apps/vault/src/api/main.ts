@@ -18,11 +18,13 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  *    "socketPath": "/run/beanpool-vault/api/api.sock", "trustProxy": true,
  *    "releasesDir": "/var/lib/beanpool-vault/releases", "feed": {"github": "beanpool-org/beanpool"}}
  *
+ * - `requireDataMount`: `dataDir` is the data partition's mount point (the image); nothing opens until it is mounted.
  * - `socketPath`: listen on a Unix socket behind that symlink (the image; Caddy connects through it), so a newer API
  *   can take over (updater.ts, launcher.ts). Without it, `port` and `host` (tests, a rehearsal).
  * - `backupDir` is a local directory standing in for the object store until its client and credentials exist (design
  *   §4: a second provider in another country).
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
+ * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
  * - `rootKeys`: for a run from source only (tests). A built bundle pins its keys and ignores these.
  * - `imageHash`: the image this machine booted, for tests and rehearsals; the image's own config leaves it out and it is
  *   read from the machine (image-identity.ts).
@@ -41,10 +43,12 @@ interface ApiConfig {
     trustProxy?: boolean;
     expoAccessToken?: string;
     releasesDir?: string;
+    stagedDir?: string;
     feed?: { github?: string; directory?: string };
     updateCheckSeconds?: number;
     imageHash?: string;
     rootKeys?: string[];
+    requireDataMount?: boolean;
 }
 
 function argValue(name: string): string | undefined {
@@ -96,6 +100,7 @@ async function main(): Promise<void> {
     const image = config.imageHash ?? runningImage()?.imageHash ?? null;
     const updater = feed && config.releasesDir ? new Updater({
         feed, rootKeys: rootKeysFor(config.rootKeys), ownBundleHash: own, runningImageHash: () => image, releasesDir: config.releasesDir, launcher,
+        stagedDir: config.stagedDir,
     }) : null;
 
     const api = createVaultApi({
@@ -105,6 +110,7 @@ async function main(): Promise<void> {
         store: new LocalDirectoryStore(config.backupDir),
         trustProxy: config.trustProxy,
         expoAccessToken: config.expoAccessToken,
+        requireDataMount: config.requireDataMount,
         about: () => ({ api: own ?? 'source', update: updater?.status ?? null, nextRestart: new Date(nextMonthlyRestart(Date.now())).toISOString() }),
     });
     const where = config.socketPath ? await api.listenUnix(config.socketPath) : `${config.host ?? '127.0.0.1'}:${await api.listen(config.port ?? 8443, config.host ?? '127.0.0.1')}`;

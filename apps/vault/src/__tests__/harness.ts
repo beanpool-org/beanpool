@@ -143,6 +143,8 @@ export async function startVault(opts: {
     store?: (inner: BackupStore) => BackupStore;
     /** What the keyholder reports of its memory hygiene, in place of checking this process. */
     hygiene?: MemoryHygiene;
+    /** The API waits for its data directory to be a mount point (the image's data partition). */
+    requireDataMount?: boolean;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -166,6 +168,7 @@ export async function startVault(opts: {
     const makeApi = async () => {
         const api = createVaultApi({
             dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy,
+            requireDataMount: opts.requireDataMount,
         });
         const port = await api.listen(0, '127.0.0.1');
         return { api, baseUrl: `http://127.0.0.1:${port}` };

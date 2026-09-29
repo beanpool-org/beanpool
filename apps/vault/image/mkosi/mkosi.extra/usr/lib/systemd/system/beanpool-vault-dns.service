@@ -1,0 +1,16 @@
+# The only resolver on the machine (127.0.0.1): it answers for the few names the vault may reach, and puts each
+# answer's addresses into the firewall's allowed set (etc/nftables.conf), so HTTPS out goes only there.
+[Unit]
+Description=BeanPool key vault: DNS for the allowed destinations
+After=nftables.service network.target
+Requires=nftables.service
+Before=beanpool-vault-api.service caddy.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/beanpool-vault/dnsmasq.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

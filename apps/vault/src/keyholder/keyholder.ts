@@ -940,6 +940,17 @@ export class Keyholder {
         }
     }
 
+    /**
+     * K_disk, for the data partition's LUKS2 volume (design §2.1), or null while locked. The one key that leaves this
+     * process, and only to root on this machine (server.ts `listenDiskKey`), which hands it to the kernel's dm-crypt:
+     * root can read this process's memory anyway, so it learns nothing it couldn't take. A restore from backup still
+     * waiting gets it too: the restore is built on that partition (on a new machine, formatted with the backup's key).
+     */
+    diskKey(): Buffer | null {
+        if (this.state !== 'open' || !this.keys) return null;
+        return Buffer.from(this.keys.kDisk);
+    }
+
     /** The restore a custodian started is finished: forget which backup it named. */
     restoreDone(): void {
         this.requireOpen();

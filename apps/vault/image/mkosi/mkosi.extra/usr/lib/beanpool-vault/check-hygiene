@@ -1,0 +1,44 @@
+#!/bin/sh
+# Memory hygiene on the running image (host design §5.1 item 6), checked at every boot by beanpool-vault-hygiene.service
+# and printed to the console. Each line is PASS or FAIL; the last says how many failed. None of this stops the host,
+# which can read the machine's memory from outside: it checks that nothing inside the machine keeps the keys longer
+# than the keyholder does. The keyholder also reports these in the signed /v1/report (hygiene.ts).
+#
+# What it can't check, said plainly: mlockall. Node can't lock its memory and the vault ships no native module, so
+# the keyholder's pages are kept out of swap by there being no swap at all.
+failed=0
+pass() { echo "hygiene: PASS $1"; }
+fail() { echo "hygiene: FAIL $1"; failed=$((failed + 1)); }
+check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
+
+check "no swap" '[ "$(wc -l < /proc/swaps)" -le 1 ]'
+check "no zram or zswap" '[ ! -e /sys/block/zram0 ] && { [ ! -e /sys/module/zswap/parameters/enabled ] || [ "$(cat /sys/module/zswap/parameters/enabled)" = N ]; }'
+check "no crash kernel loaded (kdump)" '[ "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null || echo 0)" = 0 ]'
+check "kexec disabled" '[ "$(cat /proc/sys/kernel/kexec_load_disabled)" = 1 ]'
+check "no hibernation" 'grep -qw nohibernate /proc/cmdline && ! grep -qw disk /sys/power/state'
+check "ptrace off (yama scope 3)" '[ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = 3 ]'
+check "core files piped to nothing" '[ "$(cat /proc/sys/kernel/core_pattern)" = "|/bin/false" ] && [ "$(cat /proc/sys/fs/suid_dumpable)" = 0 ]'
+check "kernel lockdown: confidentiality" 'grep -q "\[confidentiality\]" /sys/kernel/security/lockdown'
+check "freed memory zeroed (init_on_free)" 'grep -qw init_on_free=1 /proc/cmdline'
+check "system partition is dm-verity" 'grep -q "roothash=" /proc/cmdline && [ -e /dev/mapper/root ] && findmnt -n -o SOURCE / | grep -q "/dev/mapper/root"'
+check "system partition read-only" 'findmnt -n -o OPTIONS / | grep -qw ro'
+
+kh=$(systemctl show -p MainPID --value beanpool-vault-keyholder.service)
+if [ -n "$kh" ] && [ "$kh" != 0 ]; then
+    check "keyholder: no core file (RLIMIT_CORE 0)" 'grep "^Max core file size" /proc/$kh/limits | awk "{exit !(\$5 == 0 && \$6 == 0)}"'
+    check "keyholder: SIGUSR1 opens no inspector (--disable-sigusr1)" 'tr "\0" "\n" < /proc/$kh/cmdline | grep -qx -- --disable-sigusr1'
+    check "keyholder: no inspector flags" '! tr "\0" "\n" < /proc/$kh/cmdline | grep -Eq -- "^--(inspect|heapsnapshot|heap-prof|cpu-prof)"'
+    check "keyholder: no network (loopback only)" '[ "$(awk "NR > 2 {print \$1}" /proc/$kh/net/dev | tr -d " " | sort -u)" = "lo:" ]'
+    check "keyholder: not root" '[ "$(stat -c %U /proc/$kh)" = vault-keyholder ]'
+else
+    fail "keyholder is not running"
+fi
+
+check "no SSH server" '! command -v sshd >/dev/null && [ ! -e /usr/sbin/sshd ]'
+check "no login shell for any account" '! awk -F: "\$7 !~ /(nologin|false|sync)\$/ {print}" /etc/passwd | grep -q .'
+check "root can't log in (locked)" 'awk -F: "\$1 == \"root\" {exit !(\$2 ~ /^[!*]/)}" /etc/shadow'
+check "no getty on any console" '! systemctl is-active --quiet "getty@*" "serial-getty@*" console-getty.service'
+check "listening on the network: 80 and 443 only (and DNS on 127.0.0.1)" '[ -z "$(ss -Htuln | awk "{print \$5}" | grep -Ev "^(\*|0\.0\.0\.0|\[::\]):(80|443)$|^127\.0\.0\.1:53$|%lo:|^\[::1\]:53$")" ]'
+
+if [ "$failed" = 0 ]; then echo "hygiene: ALL PASS"; else echo "hygiene: $failed FAILED"; fi
+exit "$failed"

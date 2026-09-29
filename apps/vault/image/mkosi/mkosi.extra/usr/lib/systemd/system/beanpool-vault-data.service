@@ -1,0 +1,24 @@
+# The data partition (key vault design §2.1): LUKS2 under K_disk, which exists only once two custodians have unlocked
+# the vault. This waits for the keyholder to be open, takes K_disk from its root-only socket, opens the partition (it
+# formats it the first time), and mounts it where the API keeps its database. The API opens no database before that
+# (requireDataMount). After a restart it starts again and waits.
+[Unit]
+Description=BeanPool key vault: open the data partition once the vault is unlocked
+After=beanpool-vault-keyholder.service local-fs.target
+Requires=beanpool-vault-keyholder.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/node/bin/node /usr/lib/beanpool-vault/vault-data.mjs
+# It waits for the unlock as long as that takes; a partition that isn't this vault's (exit 3) is not tried again.
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=3
+LimitCORE=0
+PrivateNetwork=yes
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

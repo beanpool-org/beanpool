@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -77,6 +77,11 @@ export interface VaultApiOptions {
     trustProxy?: boolean;
     /** What this process is, for `/v1/report`: its API bundle, the release checks, the next restart. */
     about?: () => AboutThisApi;
+    /**
+     * `dataDir` is where the data partition is mounted once the vault is open (the image: LUKS2 under K_disk). Until
+     * it is, no database is opened (it would land on the partition underneath) and the vault answers as locked.
+     */
+    requireDataMount?: boolean;
 }
 
 export interface AboutThisApi {
@@ -258,6 +263,16 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const pendingPath = path.join(opts.dataDir, RESTORE_PENDING);
     const dbPath = path.join(opts.dataDir, DB_FILE);
 
+    /** The data directory is ready: always, unless it must be a mount point and isn't yet. */
+    function dataReady(): boolean {
+        if (!opts.requireDataMount) return true;
+        try {
+            return statSync(opts.dataDir).dev !== statSync(path.dirname(opts.dataDir)).dev;
+        } catch {
+            return false;
+        }
+    }
+
     function track<T>(p: Promise<T>): void {
         const job = p.catch(() => {
             counters.counts.errors++;
@@ -309,6 +324,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         opening = (async () => {
             const status = await keyholderStatus();
             if (status.state !== 'open') throw new KeyholderUnavailable();
+            if (!dataReady()) {
+                throw new HttpError(503, 'data_not_ready', 'The key vault is opening its data partition. Please try again shortly.', { locked: true });
+            }
             if (status.restorePending) {
                 // A crash after the keyholder took the backup's state but before the file got its name.
                 if (!existsSync(pendingPath) && existsSync(`${pendingPath}.part`)) renameSync(`${pendingPath}.part`, pendingPath);
@@ -557,7 +575,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     // A vault still finishing a restore from backup serves nothing yet: locked, to the outside.
     route('GET', '/v1/health', 'none', true, async ctx => json(200, {
-        state: ctx.status.state === 'open' && !ctx.status.restorePending ? 'open' : 'locked',
+        state: ctx.status.state === 'open' && !ctx.status.restorePending && dataReady() ? 'open' : 'locked',
         release: ctx.status.releaseHash,
         since: new Date(ctx.status.since).toISOString(),
     }));
@@ -827,6 +845,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             await ensureDb();
         } catch (e) {
             if (e instanceof HttpError && e.code === 'restoring') throw new HttpError(503, 'restoring', e.message, { ...e.extra, reason: restoreFailure });
+            // The keys are open; the data partition follows (the image's vault-data helper), and the database, its
+            // restore and re-wrap with it, at the first request after that.
+            if (e instanceof HttpError && e.code === 'data_not_ready') return;
             throw e;
         }
         track(rewrapAll());

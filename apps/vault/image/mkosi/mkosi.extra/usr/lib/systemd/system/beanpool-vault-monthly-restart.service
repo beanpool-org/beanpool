@@ -1,0 +1,8 @@
+# The monthly restart: installs a new image if the API staged one (checked against its two-signed release), then
+# reboots. The vault comes back locked; two custodians unlock it. Kernel and C library fixes take effect here.
+[Unit]
+Description=BeanPool key vault: install a waiting image and restart
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/beanpool-vault/monthly-restart

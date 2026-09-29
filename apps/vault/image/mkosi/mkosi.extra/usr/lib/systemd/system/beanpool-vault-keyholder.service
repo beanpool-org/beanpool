@@ -1,0 +1,52 @@
+# vault-keyholder (key vault design §3): the shares, M and the working keys, in this process's memory only. It comes
+# up locked after every start and stays so until two custodians unlock it. Memory hygiene (host design §5.1 item 6):
+# no core file (LimitCORE=0, and the keyholder refuses to start if one is possible), SIGUSR1 can't open an inspector
+# (--disable-sigusr1, likewise enforced), no network at all (it only answers its Unix sockets), no ptrace (the
+# kernel's yama scope 3), no swap in the image.
+[Unit]
+Description=BeanPool key vault: keyholder
+After=local-fs.target
+Before=beanpool-vault-api.service
+
+[Service]
+Type=simple
+User=vault-keyholder
+Group=vault-keyholder-socket
+ExecStart=/opt/node/bin/node --disable-sigusr1 /usr/lib/beanpool-vault/vault-keyholder.mjs --config /etc/beanpool-vault/keyholder.json
+Restart=always
+RestartSec=5
+LimitCORE=0
+UMask=0077
+RuntimeDirectory=beanpool-vault/keyholder beanpool-vault/disk-key
+RuntimeDirectoryMode=0750
+StateDirectory=beanpool-vault/keyholder
+StateDirectoryMode=0700
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @debug @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation
+# The UKI it booted, for its release hash (image-identity.ts).
+ReadOnlyPaths=/efi
+
+[Install]
+WantedBy=multi-user.target

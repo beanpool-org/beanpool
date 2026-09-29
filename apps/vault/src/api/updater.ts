@@ -1,6 +1,17 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { API_BUNDLE_ASSET, API_BUNDLE_MAX_BYTES, type FeedRelease, type ReleaseFeed } from '../shared/release-feed.js';
+import {
+    API_BUNDLE_ASSET,
+    API_BUNDLE_MAX_BYTES,
+    PARTITION_MAX_BYTES,
+    ROOT_ASSET,
+    UKI_ASSET,
+    UKI_MAX_BYTES,
+    VERITY_ASSET,
+    type FeedRelease,
+    type ReleaseFeed,
+} from '../shared/release-feed.js';
 import { compareVersions, resolveChain, sha256Hex, type ReleaseChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
 
 /**
@@ -31,6 +42,36 @@ export interface LauncherLink {
     requestSwitch(req: SwitchRequest): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
+/**
+ * Checks a system partition image against its verity tree and the root hash its release names: `veritysetup verify`
+ * on the image (cryptsetup-bin). Replaceable in tests.
+ */
+export type VerifyRoot = (rootFile: string, verityFile: string, roothash: string) => Promise<boolean>;
+
+export const veritysetupVerify: VerifyRoot = (rootFile, verityFile, roothash) => new Promise(resolve => {
+    const child = spawn('veritysetup', ['verify', rootFile, verityFile, roothash], { stdio: 'ignore' });
+    child.once('error', () => resolve(false));
+    child.once('exit', code => resolve(code === 0));
+});
+
+/** A GPT partition UUID from 16 bytes of hex, as systemd derives a verity pair's from the root hash's two halves. */
+export function uuidOfHex(hex32: string): string {
+    return `${hex32.slice(0, 8)}-${hex32.slice(8, 12)}-${hex32.slice(12, 16)}-${hex32.slice(16, 20)}-${hex32.slice(20, 32)}`;
+}
+
+/**
+ * The files of a staged image, named as the image's usr/lib/sysupdate.d transfers expect: the partition UUIDs are the
+ * halves of the root hash, which is how the new UKI's roothash= finds its own partitions.
+ */
+export function stagedNames(version: string, roothash: string) {
+    return {
+        uki: `beanpool-vault_${version}.efi`,
+        root: `beanpool-vault_${version}_${uuidOfHex(roothash.slice(0, 32))}.root.raw`,
+        verity: `beanpool-vault_${version}_${uuidOfHex(roothash.slice(roothash.length - 32))}.root-verity.raw`,
+        marker: `beanpool-vault_${version}.staged.json`,
+    };
+}
+
 export interface UpdaterOptions {
     feed: ReleaseFeed;
     /** The pinned genesis custodian keys; null (a source run) means no release is ever taken. */
@@ -41,6 +82,9 @@ export interface UpdaterOptions {
     runningImageHash: () => string | null;
     releasesDir: string;
     launcher: LauncherLink | null;
+    /** Where a new image is staged for the monthly restart; without it a new image is only reported. */
+    stagedDir?: string;
+    verifyRoot?: VerifyRoot;
     clock?: () => number;
 }
 
@@ -55,8 +99,8 @@ export interface UpdateStatus {
     error: string | null;
     running: ReleaseRef | null;
     newest: ReleaseRef | null;
-    /** A newer image, installed at the next monthly restart. */
-    imageWaiting: (ReleaseRef & { imageHash: string }) | null;
+    /** A newer image, installed at the next monthly restart; `staged` once its files are checked and in place. */
+    imageWaiting: (ReleaseRef & { imageHash: string; staged: boolean; error?: string }) | null;
     stopped: ReleaseChain['stopped'];
     /** Releases not taken at the last check, and why. */
     refused: { release: string; reason: string }[];
@@ -110,7 +154,9 @@ export class Updater {
         const running = newestFirst.find(r => r.manifest.apiBundleHash === own && r.manifest.imageHash === image) ?? null;
         s.running = running ? ref(running) : null;
         const newest = chain.newest;
-        s.imageWaiting = newest && image && newest.manifest.imageHash !== image ? { ...ref(newest), imageHash: newest.manifest.imageHash } : null;
+        s.imageWaiting = newest && image && newest.manifest.imageHash !== image
+            ? { ...ref(newest), imageHash: newest.manifest.imageHash, ...(await this.stage(newest, files)) }
+            : null;
         if (!running) {
             s.note = own === null ? 'Run from source: no handover.' : !image
                 ? 'The booted image is unknown: no handover.'
@@ -153,5 +199,47 @@ export class Updater {
         const result = await this.opts.launcher.requestSwitch(request).catch(e => ({ ok: false as const, reason: (e as Error).message }));
         s.handover = { to: ref(target), at: this.clock(), ok: result.ok, ...(result.ok ? {} : { reason: result.reason }) };
         return s;
+    }
+
+    /**
+     * A new image, into `stagedDir` for the monthly restart (usr/lib/beanpool-vault/monthly-restart): the UKI checked
+     * against the SHA-256 its release names, the system partition and its verity tree against the root hash it names.
+     * Anything that doesn't check is removed. Once staged it isn't fetched again; an older staged image goes.
+     */
+    private async stage(release: TrustedRelease, files: FeedRelease[]): Promise<{ staged: boolean; error?: string }> {
+        const dir = this.opts.stagedDir;
+        if (!dir) return { staged: false };
+        const { version, image, imageHash } = release.manifest;
+        const names = stagedNames(version, image.roothash);
+        const marker = path.join(dir, names.marker);
+        try {
+            if (existsSync(marker) && (JSON.parse(readFileSync(marker, 'utf8')) as { imageHash?: string }).imageHash === imageHash) return { staged: true };
+        } catch {
+            // Read again below.
+        }
+        const listed = files.find(f => sha256Hex(f.manifestText) === release.hash) as FeedRelease;
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        for (const old of readdirSync(dir)) {
+            if (old.startsWith('beanpool-vault_') && !Object.values(names).includes(old)) rmSync(path.join(dir, old), { force: true });
+        }
+        const drop = () => Object.values(names).forEach(n => rmSync(path.join(dir, n), { force: true }));
+        try {
+            const uki = await this.opts.feed.assetToFile(listed, UKI_ASSET, path.join(dir, names.uki), UKI_MAX_BYTES);
+            if (uki !== image.ukiSha256) {
+                drop();
+                return { staged: false, error: `the image's UKI is not the one release ${version} names` };
+            }
+            await this.opts.feed.assetToFile(listed, ROOT_ASSET, path.join(dir, names.root), PARTITION_MAX_BYTES);
+            await this.opts.feed.assetToFile(listed, VERITY_ASSET, path.join(dir, names.verity), PARTITION_MAX_BYTES);
+            if (!(await (this.opts.verifyRoot ?? veritysetupVerify)(path.join(dir, names.root), path.join(dir, names.verity), image.roothash))) {
+                drop();
+                return { staged: false, error: `the image's system partition does not match release ${version}'s root hash` };
+            }
+            writeFileSync(marker, `${JSON.stringify({ version, imageHash, stagedAt: this.clock() })}\n`, { mode: 0o600 });
+            return { staged: true };
+        } catch (e) {
+            drop();
+            return { staged: false, error: `the image could not be fetched: ${(e as Error).message}`.slice(0, 300) };
+        }
     }
 }

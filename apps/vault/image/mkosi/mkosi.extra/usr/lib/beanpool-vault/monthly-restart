@@ -1,0 +1,13 @@
+#!/bin/sh
+# The monthly restart (beanpool-vault-monthly-restart.timer). If the API staged a new image (its UKI checked against
+# the newest two-signed release, its system partition against the UKI's root hash), systemd-sysupdate writes it into
+# the other slot (usr/lib/sysupdate.d) and systemd-boot boots it next; the slot in use is kept to fall back to. Then
+# the machine restarts, and the vault waits locked for two custodians.
+set -eu
+staged=/var/lib/beanpool-vault/staged
+if ls "$staged"/beanpool-vault_*.efi >/dev/null 2>&1; then
+    echo "monthly restart: installing the staged image"
+    /usr/lib/systemd/systemd-sysupdate --definitions=/usr/lib/sysupdate.d update || echo "monthly restart: the staged image was not installed; restarting the current one"
+fi
+echo "monthly restart: restarting now"
+systemctl reboot

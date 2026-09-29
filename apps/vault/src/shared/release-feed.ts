@@ -1,5 +1,8 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import crypto from 'node:crypto';
+import { copyFileSync, createWriteStream, existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { FetchLike } from '@beanpool/signin';
 import { RELEASE_FILE_MAX_BYTES, type ReleaseFiles } from './release.js';
 
@@ -22,6 +25,8 @@ export const RELEASE_TAG_PREFIX = 'vault-v';
 export const DEFAULT_RELEASE_REPO = 'beanpool-org/beanpool';
 /** The API bundle is a few megabytes; a boot file tens; a system partition a few hundred. */
 export const API_BUNDLE_MAX_BYTES = 32 * 1024 * 1024;
+export const UKI_MAX_BYTES = 256 * 1024 * 1024;
+export const PARTITION_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 export interface FeedRelease extends ReleaseFiles {
     /** The asset names this release carries. */
@@ -33,6 +38,29 @@ export interface ReleaseFeed {
     list(): Promise<FeedRelease[]>;
     /** One asset of a release; refused past `maxBytes`. */
     asset(release: FeedRelease, name: string, maxBytes: number): Promise<Uint8Array>;
+    /** One asset written to `file` as it arrives (a system partition doesn't fit in memory); returns its SHA-256. */
+    assetToFile(release: FeedRelease, name: string, file: string, maxBytes: number): Promise<string>;
+}
+
+/** Streams `body` into `file` (through `file.part`), refusing past `maxBytes`; returns the SHA-256 of what was written. */
+async function streamToFile(body: ReadableStream<Uint8Array> | Readable, file: string, maxBytes: number, what: string): Promise<string> {
+    const hash = crypto.createHash('sha256');
+    let size = 0;
+    const source = body instanceof Readable ? body : Readable.fromWeb(body as import('node:stream/web').ReadableStream<Uint8Array>);
+    const counted = source.map((chunk: Buffer) => {
+        size += chunk.length;
+        if (size > maxBytes) throw new FeedError(`${what} is larger than ${maxBytes} bytes.`);
+        hash.update(chunk);
+        return chunk;
+    });
+    try {
+        await pipeline(counted, createWriteStream(`${file}.part`, { mode: 0o600 }));
+    } catch (e) {
+        rmSync(`${file}.part`, { force: true });
+        throw e;
+    }
+    renameSync(`${file}.part`, file);
+    return hash.digest('hex');
 }
 
 export class FeedError extends Error {
@@ -139,6 +167,16 @@ export class GitHubReleaseFeed implements ReleaseFeed {
         if (!a) throw new FeedError(`${release.label} has no ${name}.`);
         return this.download(a, maxBytes);
     }
+
+    async assetToFile(release: FeedRelease, name: string, file: string, maxBytes: number): Promise<string> {
+        const a = this.urls.get(release.label ?? '')?.get(name);
+        if (!a) throw new FeedError(`${release.label} has no ${name}.`);
+        if (!/^https:\/\/github\.com\//.test(a.browser_download_url)) throw new FeedError(`${a.name} is not on github.com.`);
+        const res = await this.fetchFn(a.browser_download_url, { headers: { Accept: 'application/octet-stream', 'User-Agent': 'beanpool-vault' }, redirect: 'follow' });
+        if (!res.ok || !res.body) throw new FeedError(`${name}: HTTP ${res.status}`);
+        if (Number(res.headers.get('content-length') ?? 0) > maxBytes) throw new FeedError(`${name} is larger than ${maxBytes} bytes.`);
+        return streamToFile(res.body, file, maxBytes, name);
+    }
 }
 
 /**
@@ -163,9 +201,21 @@ export class LocalDirectoryFeed implements ReleaseFeed {
     }
 
     async asset(release: FeedRelease, name: string, maxBytes: number): Promise<Uint8Array> {
+        const file = this.file(release, name, maxBytes);
+        return new Uint8Array(readFileSync(file));
+    }
+
+    async assetToFile(release: FeedRelease, name: string, file: string, maxBytes: number): Promise<string> {
+        const from = this.file(release, name, maxBytes);
+        copyFileSync(from, `${file}.part`);
+        renameSync(`${file}.part`, file);
+        return crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
+    }
+
+    private file(release: FeedRelease, name: string, maxBytes: number): string {
         if (!release.assets.includes(name) || name.includes('/')) throw new FeedError(`${release.label} has no ${name}.`);
         const file = path.join(this.dir, release.label ?? '', name);
         if (statSync(file).size > maxBytes) throw new FeedError(`${name} is larger than ${maxBytes} bytes.`);
-        return new Uint8Array(readFileSync(file));
+        return file;
     }
 }

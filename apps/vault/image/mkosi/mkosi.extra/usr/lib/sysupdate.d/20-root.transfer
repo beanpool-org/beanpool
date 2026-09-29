@@ -1,0 +1,16 @@
+# The system partition of a staged image (see 10-root-verity.transfer).
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=regular-file
+Path=/var/lib/beanpool-vault/staged
+MatchPattern=beanpool-vault_@v_@u.root.raw
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=beanpool-vault_@v
+MatchPartitionType=root
+PartitionFlags=0
+ReadOnly=1

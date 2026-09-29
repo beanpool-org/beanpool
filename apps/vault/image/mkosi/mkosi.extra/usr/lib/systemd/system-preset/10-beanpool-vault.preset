@@ -1,0 +1,24 @@
+# What runs on the vault (applied when the image is built).
+enable systemd-networkd.service
+enable systemd-networkd-wait-online.service
+enable systemd-timesyncd.service
+enable systemd-repart.service
+enable nftables.service
+enable beanpool-vault-dns.service
+enable beanpool-vault-keyholder.service
+enable beanpool-vault-api.service
+enable beanpool-vault-data.service
+enable beanpool-vault-hygiene.service
+enable beanpool-vault-monthly-restart.timer
+enable caddy.service
+disable ssh.service
+disable ssh.socket
+disable getty@.service
+disable serial-getty@.service
+disable console-getty.service
+disable systemd-resolved.service
+disable apt-daily.timer
+disable apt-daily-upgrade.timer
+disable e2scrub_all.timer
+disable e2scrub_reap.service
+disable fstrim.timer

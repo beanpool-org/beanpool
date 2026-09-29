@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { Updater, type LauncherLink, type SwitchRequest } from '../api/updater.js';
+import { stagedNames, Updater, uuidOfHex, type LauncherLink, type SwitchRequest } from '../api/updater.js';
 import { Launcher } from '../launcher/launcher.js';
-import { LocalDirectoryFeed } from '../shared/release-feed.js';
+import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
 import { keys3, makeRelease, publish, randomImage } from './release-kit.js';
 
@@ -72,8 +72,50 @@ describe('the release check', () => {
 
     it('a feed that can\'t be read changes nothing and says so', async () => {
         const { updater } = setUp();
-        const u = updater({ feed: { list: async () => { throw new Error('offline'); }, asset: async () => new Uint8Array() } });
+        const u = updater({ feed: { list: async () => { throw new Error('offline'); }, asset: async () => new Uint8Array(), assetToFile: async () => '' } });
         expect(await u.check()).toMatchObject({ error: expect.stringContaining('offline'), handover: null });
+    });
+});
+
+describe('a new image is staged for the monthly restart', () => {
+    function withImage(ukiBytes: Buffer, uki = ukiBytes) {
+        const t = setUp();
+        const image = { ukiSha256: sha256Hex(ukiBytes), roothash: crypto.randomBytes(32).toString('hex') };
+        const r2 = makeRelease({ version: '1.1.0', previous: t.r1, custodianKeys: t.root, signers: t.root, image, apiBundleHash: sha256Hex(t.bundleB) });
+        const d = publish(t.feedDir, r2, t.bundleB);
+        writeFileSync(path.join(d, UKI_ASSET), uki);
+        writeFileSync(path.join(d, ROOT_ASSET), Buffer.from('the system partition'));
+        writeFileSync(path.join(d, VERITY_ASSET), Buffer.from('its verity tree'));
+        return { ...t, image, r2, stagedDir: path.join(t.feedDir, '..', `staged-${n}`) };
+    }
+
+    it('its files, checked, under the names the image\'s sysupdate transfers take; not fetched again', async () => {
+        const uki = crypto.randomBytes(100);
+        const { image, stagedDir, updater, asked } = withImage(uki);
+        const verified: string[][] = [];
+        const u = updater({ stagedDir, verifyRoot: async (root, verity, roothash) => { verified.push([path.basename(root), path.basename(verity), roothash]); return true; } });
+        const s = await u.check();
+        expect(s.imageWaiting).toMatchObject({ version: '1.1.0', staged: true });
+        expect(asked).toEqual([]);
+        const names = stagedNames('1.1.0', image.roothash);
+        expect(names.root).toBe(`beanpool-vault_1.1.0_${uuidOfHex(image.roothash.slice(0, 32))}.root.raw`);
+        expect(readdirSync(stagedDir).sort()).toEqual([names.uki, names.marker, names.root, names.verity].sort());
+        expect(readFileSync(path.join(stagedDir, names.uki)).equals(uki)).toBe(true);
+        expect(verified).toEqual([[names.root, names.verity, image.roothash]]);
+        await u.check();
+        expect(verified).toHaveLength(1);
+    });
+
+    it('a UKI that is not the one its release names, or a partition that fails its verity check: nothing stays', async () => {
+        const bad = withImage(crypto.randomBytes(100), crypto.randomBytes(100));
+        const s = await bad.updater({ stagedDir: bad.stagedDir, verifyRoot: async () => true }).check();
+        expect(s.imageWaiting).toMatchObject({ staged: false, error: expect.stringContaining('UKI is not the one') });
+        expect(existsSync(bad.stagedDir) ? readdirSync(bad.stagedDir) : []).toEqual([]);
+
+        const tampered = withImage(crypto.randomBytes(100));
+        const t = await tampered.updater({ stagedDir: tampered.stagedDir, verifyRoot: async () => false }).check();
+        expect(t.imageWaiting).toMatchObject({ staged: false, error: expect.stringContaining('root hash') });
+        expect(readdirSync(tampered.stagedDir)).toEqual([]);
     });
 });
 

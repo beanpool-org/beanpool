@@ -19,7 +19,10 @@ describe('Manual in Settings', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Operator manual' });
         expect(within(dialog).getByRole('heading', { level: 1, name: page.title })).toBeInTheDocument();
-        expect(dialog.textContent).toContain('You cannot rule on a deal you are part of');
+        // The page's own words, from the published copy Settings bundles: a sentence pinned here would break when the
+        // director publishes a change to it, not in the PR that made it (lib/manual.test.ts pins what the page says).
+        const paragraph = page.blocks.find(b => b.type === 'p') as { text: string };
+        expect(dialog.textContent).toContain(paragraph.text.replace(/\*\*/g, ''));
         const related = manualPage(page.related[0])!;
         await user.click(within(dialog).getByRole('button', { name: new RegExp(related.title) }));
         expect(within(dialog).getByRole('heading', { level: 1, name: related.title })).toBeInTheDocument();
@@ -36,7 +39,8 @@ describe('Manual in Settings', () => {
 
         await user.type(within(dialog).getByRole('searchbox', { name: 'Search the manual' }), 'backup');
         const results = within(dialog).getByRole('region', { name: 'Search results' });
-        expect(within(results).getByRole('button', { name: /^Backups and replicas/ })).toBeInTheDocument();
+        const backups = manualPage('backups-and-replicas')!.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        expect(within(results).getByRole('button', { name: new RegExp(`^${backups}`) })).toBeInTheDocument();
 
         await user.keyboard('{Escape}');
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

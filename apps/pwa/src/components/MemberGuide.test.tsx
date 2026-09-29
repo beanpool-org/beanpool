@@ -12,10 +12,14 @@ vi.mock('../lib/api', () => api);
 import { MemberGuide } from './MemberGuide';
 import { BeanPoolSettingsGroup } from '../pages/SettingsPage';
 import { getBundledGuide, resetGuideSessionForTests } from '../lib/guide';
-import { validateGuide, manualSections, FEEDBACK_LIVE } from '@beanpool/core';
+import { validateGuide, manualSections, FEEDBACK_LIVE, findGuidePage, findGuideSection } from '@beanpool/core';
 
 const repo = path.resolve(__dirname, '../../../..');
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), 'utf8');
+// Titles come from the published guide the app bundles, by slug. The director publishes the guide after merge
+// (packages/beanpool-guide/README.md), so a title pinned here would break at the publish, not in the PR that changed it.
+const title = (slug: string) => findGuidePage(getBundledGuide(), slug)!.title;
+const sectionTitle = (id: string) => findGuideSection(getBundledGuide(), id)!.title;
 
 beforeEach(() => {
     resetGuideSessionForTests();
@@ -49,7 +53,7 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
     it('shows the guides, every manual section and the website link, and works with no connection', async () => {
         api.getCommunityHealth.mockRejectedValue(new Error('offline'));
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
-        expect(screen.getByText('How BeanPool works')).toBeInTheDocument();
+        expect(screen.getByText(title('how-it-works'))).toBeInTheDocument();
         for (const s of manualSections(getBundledGuide())) expect(screen.getByText(s.title)).toBeInTheDocument();
         expect(screen.getByText('beanpool.org').closest('a')).toHaveAttribute('href', 'https://beanpool.org');
         expect(screen.getByText('beanpool.org').closest('a')).toHaveAttribute('rel', 'noopener noreferrer');
@@ -60,14 +64,14 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
     it('opens a section, then a page with its Related pages, and Back walks back', () => {
         const onBack = vi.fn();
         render(<MemberGuide onBack={onBack} feedbackLive={false} />);
-        fireEvent.click(screen.getByText('Ledger'));
-        fireEvent.click(screen.getByText('Sending a gift'));
-        expect(screen.getByRole('heading', { level: 1, name: 'Sending a gift' })).toBeInTheDocument();
+        fireEvent.click(screen.getByText(sectionTitle('ledger')));
+        fireEvent.click(screen.getByText(title('gifts')));
+        expect(screen.getByRole('heading', { level: 1, name: title('gifts') })).toBeInTheDocument();
         expect(screen.getByText('Related')).toBeInTheDocument();
-        fireEvent.click(screen.getByText('Your balance and history'));
-        expect(screen.getByRole('heading', { level: 1, name: 'Your balance and history' })).toBeInTheDocument();
+        fireEvent.click(screen.getByText(title('your-balance')));
+        expect(screen.getByRole('heading', { level: 1, name: title('your-balance') })).toBeInTheDocument();
         fireEvent.click(screen.getByText('← Back'));
-        expect(screen.getByRole('heading', { level: 1, name: 'Sending a gift' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: title('gifts') })).toBeInTheDocument();
         fireEvent.click(screen.getByText('← Back'));
         fireEvent.click(screen.getByText('← Back'));
         expect(onBack).not.toHaveBeenCalled();
@@ -78,28 +82,28 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
     it('searches the bundled text offline', () => {
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
         fireEvent.change(screen.getByLabelText('Search the guide'), { target: { value: 'gift' } });
-        expect(screen.getByText('Sending a gift')).toBeInTheDocument();
+        expect(screen.getByText(title('gifts'))).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Search the guide'), { target: { value: 'zzqqxx' } });
         expect(screen.getByText('Nothing found')).toBeInTheDocument();
     });
 
     it('shows "Watch" only when a matching Learn video exists', async () => {
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
-        fireEvent.click(screen.getByText('Pulse'));
-        fireEvent.click(screen.getByText('The Learn lane'));
+        fireEvent.click(screen.getByText(sectionTitle('pulse')));
+        fireEvent.click(screen.getByText(title('learn')));
         await waitFor(() => expect(api.getPulseFeed).toHaveBeenCalled());
         expect(screen.queryByRole('link', { name: /^Watch:/ })).toBeNull();
     });
 
     it('links a Learn video whose title is the page title', async () => {
         api.getPulseFeed.mockResolvedValue({
-            items: [{ id: 'item_curated_abcdefghijk', category: 'learn', title: 'Sending a gift', url: 'https://www.youtube.com/watch?v=abcdefghijk', source: 'curated' }],
+            items: [{ id: 'item_curated_abcdefghijk', category: 'learn', title: title('gifts'), url: 'https://www.youtube.com/watch?v=abcdefghijk', source: 'curated' }],
             nextCursor: null,
         });
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
-        fireEvent.click(screen.getByText('Ledger'));
-        fireEvent.click(screen.getByText('Sending a gift'));
-        const link = await screen.findByText('Watch: Sending a gift');
+        fireEvent.click(screen.getByText(sectionTitle('ledger')));
+        fireEvent.click(screen.getByText(title('gifts')));
+        const link = await screen.findByText(`Watch: ${title('gifts')}`);
         expect(link.closest('a')).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abcdefghijk');
     });
 
@@ -107,18 +111,18 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
     it('links only the curated YouTube video on the 12-words page, never a member item titled like it', async () => {
         api.getPulseFeed.mockResolvedValue({
             items: [
-                { id: 'm1', category: 'learn', title: 'Your 12 words', url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', source: 'autolist' },
-                { id: 'm2', category: 'learn', title: 'YOUR 12 WORDS!!', url: 'https://evil.example/x', source: 'autolist' },
-                { id: 'm3', category: 'learn', title: 'Your 12 words', url: 'https://evil.example/watch?v=AAAAAAAAAAA', source: 'curated' },
+                { id: 'm1', category: 'learn', title: title('your-12-words'), url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', source: 'autolist' },
+                { id: 'm2', category: 'learn', title: `${title('your-12-words').toUpperCase()}!!`, url: 'https://evil.example/x', source: 'autolist' },
+                { id: 'm3', category: 'learn', title: title('your-12-words'), url: 'https://evil.example/watch?v=AAAAAAAAAAA', source: 'curated' },
                 // Last in the list: the members' items above would win if they were allowed to match.
-                { id: 'c1', category: 'learn', title: 'Your 12 words', url: 'https://www.youtube.com/watch?v=CCCCCCCCCCC', source: 'curated' },
+                { id: 'c1', category: 'learn', title: title('your-12-words'), url: 'https://www.youtube.com/watch?v=CCCCCCCCCCC', source: 'curated' },
             ],
             nextCursor: null,
         });
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
-        fireEvent.click(screen.getByText('Getting started'));
-        fireEvent.click(screen.getByText('Your 12 words'));
-        const link = await screen.findByText('Watch: Your 12 words');
+        fireEvent.click(screen.getByText(sectionTitle('getting-started')));
+        fireEvent.click(screen.getByText(title('your-12-words')));
+        const link = await screen.findByText(`Watch: ${title('your-12-words')}`);
         expect(link.closest('a')).toHaveAttribute('href', 'https://www.youtube.com/watch?v=CCCCCCCCCCC');
         expect(document.querySelector('a[href*="evil.example"]')).toBeNull();
         expect(document.querySelector('a[href*="AAAAAAAAAAA"]')).toBeNull();

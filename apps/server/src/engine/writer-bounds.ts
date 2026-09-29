@@ -16,7 +16,8 @@
  * lets it up.
  *
  * An enterprise's posts count against the enterprise at its own, higher number (WRITER_LIMITS.enterprisePostsPerDay),
- * never against the keeper who puts them up. The money routes have their own limits (engine/money-limits.ts).
+ * never against the keeper's own 100, and against the keeper's enterprise work across every enterprise they keep
+ * (WRITER_LIMITS.enterpriseWorkPostsPerDay). The money routes have their own limits (engine/money-limits.ts).
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
@@ -34,6 +35,7 @@ export type WriterLimitCode =
     | 'enterprises_live'
     | 'posts_per_day'
     | 'enterprise_posts_per_day'
+    | 'enterprise_work_posts_per_day'
     | 'groups_per_day'
     | 'invites_per_day'
     | 'invites_unused'
@@ -95,12 +97,21 @@ export function assertMayPostToday(member: string, now = Date.now()): void {
         (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.`);
 }
 
-/** Before a new post a keeper puts up for `enterprise` (an offer, a need or an event): the enterprise's own day. */
-export function assertEnterpriseMayPostToday(enterprise: string, now = Date.now()): void {
+/**
+ * Before a new post `keeper` puts up for `enterprise` (an offer, a need or an event): the enterprise's own day, and then
+ * the keeper's enterprise work, what they put up in the day for every enterprise they keep (created_by, the posts routes
+ * set it to the keeper whenever the author is an enterprise).
+ */
+export function assertEnterpriseMayPostToday(enterprise: string, keeper: string, now = Date.now()): void {
     const limit = WRITER_LIMITS.enterprisePostsPerDay;
     const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(enterprise) as { callsign: string | null } | undefined)?.callsign?.trim() || 'This enterprise';
     assertUnderDaily(postTimes(enterprise, now), limit, now, 'enterprise_posts_per_day',
         (when) => `${name} can put up ${limit.toLocaleString('en')} new posts in any 24 hours. It can post again ${when}.`);
+    const work = WRITER_LIMITS.enterpriseWorkPostsPerDay;
+    const forEnterprises = column(db.prepare(`SELECT created_at AS t FROM posts WHERE created_by = ? AND author_pubkey != ? AND origin_node IS NULL AND created_at > ?`)
+        .all(keeper, keeper, since(now)));
+    assertUnderDaily(forEnterprises, work, now, 'enterprise_work_posts_per_day',
+        (when) => `You can put up ${work.toLocaleString('en')} new posts in any 24 hours for the enterprises you keep, all of them together. You can post for them again ${when}. Your own posts are counted apart.`);
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────────────────────────────────────────

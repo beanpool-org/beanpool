@@ -5,7 +5,8 @@
  * (https-server.ts), whose 404 and 409 answer first.
  *
  * The account is the signer's own, or the enterprise the PATH names when the signer keeps it (enterpriseActingFor): never a
- * key in the body. A request here is checked, and its acts recorded, before the handler runs, outside any ledger
+ * key in the body. An enterprise's acts also count against the signing keeper's enterprise work, across every enterprise
+ * they keep (engine/money-limits.ts, ENTERPRISE WORK), and both must have room. A request here is checked, and its acts recorded, before the handler runs, outside any ledger
  * transaction; when the handler then answers 4xx or 5xx (it refused: not a keeper, a bad body, a deal already actioned) the
  * acts are taken back, so only what happened counts. A refused request moves nothing: the handler never runs.
  *
@@ -20,9 +21,10 @@
  *                                                                                           helper, who is paid, so R only
  *   POST /api/marketplace/transactions/approve              R, and P to the helper on the   the listing's author
  *                                                           author's own need
- *   POST /api/(treasury|enterprise)/:id/approve             R, and P to the helper on its   the enterprise
- *                                                           need
- *   POST /api/(treasury|enterprise)/:id/sweep               P (to the Commons: nobody new)  the enterprise
+ *   POST /api/(treasury|enterprise)/:id/approve             R, and P to the helper on its   the enterprise, and the
+ *                                                           need                            keeper's enterprise work
+ *   POST /api/(treasury|enterprise)/:id/sweep               P (to the Commons: nobody new)  the enterprise, and the
+ *                                                                                           keeper's enterprise work
  *   POST /api/(treasury|enterprise)/:id/pledge              L, and P when it is a crowdfund the member (pledges are a
  *                                                           pledge (pledgeDispatchKind)     member's act)
  *   POST /api/(treasury|enterprise)/:id/backing             L                               the member
@@ -31,7 +33,8 @@
  *   POST /api/crowdfund/projects/:id/pledge                 P (into its escrow), L          the member
  *   POST /api/federation/purchase, /api/federation/commission: checked in the route itself, just before the settlement
  *     escrows the Beans (a purchase: the buyer; a commission: the link's enterprise, known only once the route has found
- *     the listing's link), and counted from the settlements row that escrow writes.
+ *     the listing's link, and the keeper's enterprise work), and counted from the settlements row that escrow writes (a
+ *     commission's keeper, from the row recordSettlementKeeper writes beside it).
  *
  * Not counted, on purpose:
  *   - completing a trade (/api/marketplace/transactions/complete, /api/(treasury|enterprise)/:id/complete): it pays out of
@@ -58,7 +61,8 @@ import { getNodeRole } from '../config/node-role.js';
 import { admitMoneyActs, assertMoneyActsAllowed, MoneyLimitError, type MoneyAct, type MoneyActHold } from '../engine/money-limits.js';
 import { pledgeDispatchKind } from './treasury.js';
 
-type Plan = { account: string; acts: MoneyAct[] } | null;
+/** The account whose acts they are, and `keeper` when that is an enterprise the signer keeps (their enterprise work). */
+type Plan = { account: string; keeper?: string; acts: MoneyAct[] } | null;
 
 interface MoneyRoute {
     method: 'POST' | 'DELETE';
@@ -135,14 +139,14 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
         method: 'POST', path: at('approve'), ids: ['transactionId'],
         plan: (actor, m, b) => {
             const ent = enterpriseActingFor(actor, m[0]);
-            return ent ? { account: ent, acts: approval(ent, b.transactionId) } : null;
+            return ent ? { account: ent, keeper: actor, acts: approval(ent, b.transactionId) } : null;
         },
     },
     {
         method: 'POST', path: at('sweep'),
         plan: (actor, m) => {
             const ent = enterpriseActingFor(actor, m[0]);
-            return ent ? { account: ent, acts: [{ kind: 'payment', recipient: null }] } : null;
+            return ent ? { account: ent, keeper: actor, acts: [{ kind: 'payment', recipient: null }] } : null;
         },
     },
     {
@@ -199,12 +203,13 @@ export function respondMoneyLimit(ctx: { status: number; body: unknown; set?: (f
 }
 
 /**
- * For the two federation routes: answers the refusal and returns true when `account` may not make `acts` now. Checks
- * only: the settlement the route goes on to open is the record.
+ * For the two federation routes: answers the refusal and returns true when `account` may not make `acts` now (done by
+ * `keeper`, for a commission: their enterprise work too). Checks only: the settlement the route goes on to open is the
+ * record.
  */
-export function refuseOverMoneyLimits(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, account: string, acts: readonly MoneyAct[]): boolean {
+export function refuseOverMoneyLimits(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, account: string, acts: readonly MoneyAct[], keeper: string | null = null): boolean {
     try {
-        assertMoneyActsAllowed(account, acts);
+        assertMoneyActsAllowed(account, acts, Date.now(), keeper);
         return false;
     } catch (e) {
         if (respondMoneyLimit(ctx, e)) return true;
@@ -232,7 +237,7 @@ export async function moneyLimitsGate(ctx: Context, next: Next): Promise<void> {
     if (!plan) return next();
     let hold: MoneyActHold;
     try {
-        hold = admitMoneyActs(plan.account, plan.acts);
+        hold = admitMoneyActs(plan.account, plan.acts, Date.now(), plan.keeper ?? null);
     } catch (e) {
         if (respondMoneyLimit(ctx, e)) return;
         throw e;

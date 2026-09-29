@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 89,
-  "hash": "70db07ef56da868110daadf75ca6c491bd1510dab15deeddc1bf50279f15aa30",
+  "version": 90,
+  "hash": "92a47e3389473cc4159e5b793513e47c94c923635c9f4d8a1abc193978536212",
   "sections": [
     {
       "id": "about",
@@ -752,7 +752,7 @@
             "**New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.",
             "**Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days.",
             "**Payments.** Up to 100 payments a day, and up to 30 people you have never paid before. Up to 100 deals asked for, accepted or approved, and 20 pledges made or changed. Receiving is never limited.",
-            "**Enterprises and projects** have their own limits, ten times a member's. What a keeper does for one never counts against the keeper's own."
+            "**Enterprises and projects** have their own limits, ten times a member's. What a keeper does for one never counts against the keeper's own. A keeper can do one enterprise's worth a day for all the enterprises they keep together."
           ]
         },
         {
@@ -3894,7 +3894,7 @@
         },
         {
           "type": "p",
-          "text": "An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own."
+          "text": "An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits."
         },
         {
           "type": "h2",

@@ -561,17 +561,22 @@ CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(ma
 -- own key, or the enterprise a keeper acted for), written in the same step as the check so a restart keeps the day's
 -- counts. `recipient` is who a payment goes to when that is someone (a member, a visitor or an enterprise; NULL for the
 -- Commons or a crowdfund's escrow); `new_recipient` is 1 when this account had never completed a payment to them before.
--- A purchase from another community is counted from its own settlements row instead. This server's own, never copied,
--- and deleted once a day old.
+-- `keeper` is who did it when the account is an enterprise (the keeper who signed): one person's enterprise work is
+-- counted across every enterprise they keep. A purchase from another community is counted from its own settlements row
+-- instead; a commission's row (`settlement_key`, the settlement's key) is there only for its keeper's count, as the
+-- enterprise's is its settlement. This server's own, never copied, and deleted once a day old.
 CREATE TABLE IF NOT EXISTS money_acts (
     account TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (kind IN ('payment', 'request', 'pledge')),
     recipient TEXT,
     new_recipient INTEGER NOT NULL DEFAULT 0,
-    made_at TEXT NOT NULL
+    made_at TEXT NOT NULL,
+    keeper TEXT,
+    settlement_key TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_money_acts_account ON money_acts(account, kind, made_at);
 CREATE INDEX IF NOT EXISTS idx_money_acts_made_at ON money_acts(made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_keeper ON money_acts(keeper, kind, made_at) WHERE keeper IS NOT NULL;
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

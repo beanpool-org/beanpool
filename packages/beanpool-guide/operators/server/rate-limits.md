@@ -13,7 +13,7 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 - **Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.
 - **New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.
 - **Settings**: 300 requests a minute per internet address.
-- **Chats**: 30 lines a minute per member, in direct messages as well as group and event chats.
+- **Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.
 - **Checking an invite code** before joining: 30 a minute per internet address.
 - **Reports**: 10 an hour per member.
 
@@ -23,8 +23,8 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 These stop one account filling your server, and its standby copies, with rows: a standby can't copy a table of more than 250,000 rows whole. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
 
-- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server. What a keeper does for an enterprise counts against the enterprise's own 50,000, not the keeper's.
-- **Posts**: 100 new ones a day of their own. What they put up for an enterprise they keep counts against the enterprise: 1,000 a day.
+- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server. What a keeper does for an enterprise counts against the enterprise's own 50,000, not the keeper's, and against a second 50,000 for everything that keeper does for all the enterprises they keep.
+- **Posts**: 100 new ones a day of their own. What they put up for an enterprise they keep counts against the enterprise, 1,000 a day, and against 1,000 a day for all the enterprises they keep together.
 - **Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.
 - **Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.
 - **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.
@@ -39,6 +39,8 @@ These stop one account, or a stolen phone, spraying Beans or flooding your ledge
 - **New people paid**: 30 a day, 300 for an enterprise: people the account has never paid before. Paying someone it has paid before is not counted.
 - **Deals**: 100 a day asked for, accepted or approved, 1,000 approved for an enterprise.
 - **Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike. Pledges are a member's act, so an enterprise has no number of its own.
+
+What a keeper does for an enterprise also counts against what they do for all the enterprises they keep together, at the enterprise's numbers: 50,000 changes, 1,000 posts, 1,000 payments, 300 new people and 1,000 deals a day, on top of their own limits. Any member can start 3 enterprises a day, so without this one person could multiply their day by starting enterprises. An enterprise with several keepers still gets all of its own limits, as each keeper's share counts to their own. There is no smallest payment: a sweep of a fraction of a bean is a payment, and these limits bound how many there can be.
 
 ## The admin password brake
 
@@ -71,8 +73,8 @@ The message says which:
 - "Too many attempts": sign-in and recovery attempts, or checking invite codes.
 - "Too many administrative requests": Settings, 300 a minute.
 - "You're sending messages too fast": chats, direct messages included.
-- "You have made 5,000 changes today": the member's changes for the day. "This enterprise has made 50,000 changes today": an enterprise's.
-- "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day. "… can put up 1,000 new posts", with the enterprise's name: an enterprise's posts.
+- "You have made 5,000 changes today": the member's changes for the day. "This enterprise has made 50,000 changes today": an enterprise's. "You have made 50,000 changes today for the enterprises you keep": one keeper's, for all their enterprises.
+- "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day. "… can put up 1,000 new posts", with the enterprise's name: an enterprise's posts. "… for the enterprises you keep, all of them together": one keeper's posts, payments, new people or deals for all their enterprises.
 - "You can make 100 payments", "You can pay 30 people you have never paid before", "You can ask for, accept or approve 100 deals", "You can make or change 20 pledges", or the same with an enterprise's name and its numbers: payments and deals.
 - "This message is too long to send" (HTTP 413): a message's words.
 - "You have sent a lot of reports recently": reports, 10 an hour.

@@ -39,6 +39,7 @@ import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import { assertEnterpriseMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
+import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
 
@@ -752,9 +753,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             assertNotMuted(actor);
             assertNotMuted(treasury);
             // What a keeper puts up for the enterprise counts against the enterprise's own 1,000 new posts a day, never the
-            // keeper's 100 (W-main), checked by the engine once every refusal of the post itself has passed (a wound-up
-            // enterprise, say).
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury) });
+            // keeper's 100 (W-main), and against the keeper's 1,000 for every enterprise they keep together; checked by the
+            // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury, actor) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -774,7 +775,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury) });
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury, actor) });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -805,7 +806,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createEventFromBody(b, treasury, actor, () => assertEnterpriseMayPostToday(treasury));
+            const post = createEventFromBody(b, treasury, actor, () => assertEnterpriseMayPostToday(treasury, actor));
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -1622,6 +1623,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
+        // Each line is a row in a room its keepers and members read, so it is throttled as a group or event chat line is:
+        // 30 a minute per signed member, in the chat bucket they share. Before it, the thread had no chat limit, and a
+        // keeper's lines here spent their enterprise's day budget rather than their own.
+        if (!chatRateLimit(ctx, actor)) return;
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         // A visitor's row posts in no thread, as a key with no row posts in none (getActingMember).
         const actorStatus = getActingMember(actor) ? statusOf(actor) : undefined;
@@ -1708,6 +1713,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only a keeper of this enterprise can remove messages from its thread' };
             return;
         }
+        // A removal changes the room for everyone in it, so it is throttled as posting a line is (as a group chat's delete).
+        if (!chatRateLimit(ctx, actor)) return;
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;

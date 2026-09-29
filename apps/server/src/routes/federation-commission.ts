@@ -38,7 +38,7 @@ import {
 import { SettlementError } from '../federation-settlement-exchange.js';
 import { getFederationLink } from '../federation-link.js';
 import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfCachedPost } from '../federation-commission.js';
-import { settlementStartedBy } from '../engine/money-limits.js';
+import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
 import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
 
@@ -250,11 +250,12 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xc-${crypto.randomUUID()}`;
 
         // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
-        // against the enterprise (never the keeper) from the settlement row settleCrossNodePurchase writes as it escrows
-        // the Beans. Checked before the Commons tops the link up, with nothing awaited between here and that row. A retry
-        // of a commission already started is no new payment.
-        if (!settlementStartedBy(key, link.treasuryPubkey)
-            && refuseOverMoneyLimits(ctx, link.treasuryPubkey, [{ kind: 'payment', recipient: seller }])) return;
+        // against the enterprise (never the keeper's own) from the settlement row settleCrossNodePurchase writes as it
+        // escrows the Beans, and against the keeper's enterprise work from the row recorded just before that. Checked
+        // before the Commons tops the link up, with nothing awaited between here and those rows. A retry of a commission
+        // already started is no new payment.
+        const retry = settlementStartedBy(key, link.treasuryPubkey);
+        if (!retry && refuseOverMoneyLimits(ctx, link.treasuryPubkey, [{ kind: 'payment', recipient: seller }], keeper)) return;
 
         // 10. FUND IT. The first ledger movement in the whole flow, hence last. Re-checks the allowance,
         //     spends the enterprise's own balance before the pot, and refuses without moving anything if
@@ -271,6 +272,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        // Funded: the keeper's enterprise work counts it from here, given back below if no settlement was written after all.
+        const counted: MoneyActHold | null = retry ? null : recordSettlementKeeper(link.treasuryPubkey, keeper, seller, key);
         try {
             const outcome = await settleCrossNodePurchase(node, peerIdFromString(peerId), node.peerId.toString(), privateKey, {
                 key,
@@ -302,6 +305,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             // them before touching the pot. Said plainly in the error because a keeper watching the Commons
             // drop by 5 deserves to know where the 5 went.
             const parked = 'The beans stay with the link and will be spent by the next commission.';
+            // No settlement, no payment: neither the enterprise's count (its settlements) nor the keeper's has it.
+            if (counted && !settlementStartedBy(key, link.treasuryPubkey)) counted.release();
             if (e instanceof SettlementError) {
                 ctx.status = 400;
                 ctx.body = { error: `${e.message} ${parked}`, reason: e.reason, key };

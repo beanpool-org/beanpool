@@ -40,7 +40,7 @@ export type ReturnLockAction = 'none' | 'lock' | 'ask';
  *
  * leftAt is when the app last left the front (null: no leave seen, the first return after a launch in the background,
  * which asks as before); activeAt is when it came back. A prompt still open (closedAt null) counts as open until
- * activeAt and as not passed.
+ * activeAt and as not passed, whatever its passed says: only the answer that closes a stretch counts.
  */
 export function returnLockAction(
     leftAt: number | null,
@@ -49,7 +49,7 @@ export function returnLockAction(
 ): ReturnLockAction {
     const from = leftAt ?? activeAt;
     const during = stretches.filter(s => s.openedAt <= activeAt && (s.closedAt === null || s.closedAt >= from));
-    const passed = during.every(s => s.passed);
+    const passed = during.every(s => s.closedAt !== null && s.passed);
     if (leftAt === null) {
         if (during.length === 0) return 'ask';
         return passed ? 'none' : 'lock';

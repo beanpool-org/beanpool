@@ -495,7 +495,7 @@ describe("the prompt marker (LocalAuth.authenticateUser): open exactly while the
         expect(LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: START.getTime() + 20 * SEC, passed: true }]);
     });
 
-    it('two overlapping calls: open until both have ended, one stretch', async () => {
+    it('two overlapping calls: open until both have ended, one stretch, passed only if the last to close passed', async () => {
         const phone = await phoneWithAppLock();
         const { LocalAuth } = phone;
         const first = LocalAuth.authenticateUser('first');
@@ -505,16 +505,68 @@ describe("the prompt marker (LocalAuth.authenticateUser): open exactly while the
         await flush();
         expect(phone.prompts()).toBe(2);
 
-        // Android answers a second call at once with app_cancel while the first is open; here the first is answered first.
+        // The first passes while the second keeps the stretch open: not passed yet, and not passed once the second fails.
         phone.answer(true);
         expect(await first).toBe(true);
         expect(LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+        expect(LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: null, passed: false }]);
 
         phone.wait(1 * SEC);
         phone.answer(false);
         expect(await second).toBe(false);
         expect(LocalAuth.isLocalAuthPromptOpen()).toBe(false);
-        expect(LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: START.getTime() + 2 * SEC, passed: true }]);
+        expect(LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: START.getTime() + 2 * SEC, passed: false }]);
+    });
+
+    // expo-local-authentication answers a second call while one is open with app_cancel: 55.0.18 answers the new call at
+    // once and the first closes the stretch; 55.0.15 answers the first and the second takes over the prompt. The member's
+    // one answer closes the stretch either way.
+    it.each([
+        ['55.0.18: the second call is refused at once, the first carries the answer', 'second refused'],
+        ['55.0.15: the first call is refused, the second takes over the prompt and carries the answer', 'first refused'],
+    ] as const)('%s: the stretch says what the member answered', async (_name, shape) => {
+        for (const passes of [true, false]) {
+            const phone = await phoneWithAppLock();
+            const LA = await import('expo-local-authentication');
+            const answers: Array<(a: Answer) => void> = [];
+            vi.mocked(LA.authenticateAsync).mockImplementation(() => new Promise<Answer>(resolve => answers.push(resolve)) as never);
+            const { LocalAuth } = phone;
+            const first = LocalAuth.authenticateUser('first');
+            await flush();
+            const second = LocalAuth.authenticateUser('second');
+            await flush();
+            const [refused, carrier] = shape === 'second refused' ? [answers[1], answers[0]] : [answers[0], answers[1]];
+            refused({ success: false, error: 'app_cancel' });
+            await flush();
+            expect(LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+            phone.wait(20 * SEC);
+            carrier(passes ? { success: true } : { success: false, error: 'user_cancel' });
+            await Promise.all([first, second]);
+
+            expect(LocalAuth.localAuthPromptStretches()).toEqual([{ openedAt: START.getTime(), closedAt: START.getTime() + 20 * SEC, passed: passes }]);
+            vi.setSystemTime(START);
+        }
+    });
+
+    it('the first of two overlapping prompts passes, the member leaves, and an hour later the second is cancelled: locked', async () => {
+        const phone = await phoneWithAppLock();
+        const { LocalAuth } = phone;
+        void LocalAuth.authenticateUser('first');
+        await flush();
+        void phone.viewRecoveryPhrase();
+        await flush();
+        phone.wait(1 * SEC);
+        phone.answer(true);
+        await flush();
+        phone.change('background');
+        phone.wait(3600 * SEC);
+        phone.answer(false);
+        await flush();
+        phone.change('active');
+        await flush();
+
+        expect(phone.prompts()).toBe(2);
+        expect(phone.locked()).toBe(true);
     });
 
     it('a prompt that throws closes the marker, and the call is refused without throwing', async () => {
@@ -572,6 +624,7 @@ describe('returnLockAction: the rule', () => {
         ['a 20 s prompt covering the away, passed', 'none', 1, 20 * SEC, [stretch(0, 20 * SEC, true)]],
         ['a 20 s prompt covering the away, not passed', 'lock', 1, 20 * SEC, [stretch(0, 20 * SEC, false)]],
         ['a prompt still open (never answered)', 'lock', 1, 20 * SEC, [stretch(0, null, false)]],
+        ['a prompt still open counts as not passed, whatever passed says', 'lock', 2 * SEC, 3600 * SEC, [stretch(0, null, true)]],
         ['a prompt, then 15 s away with none open', 'ask', 1, 40 * SEC, [stretch(0, 25 * SEC, true)]],
         ['a prompt, then 14 s away with none open', 'none', 1, 39 * SEC, [stretch(0, 25 * SEC, true)]],
         ['a short prompt not passed, away under 15 s', 'none', 1, 5 * SEC, [stretch(0, 5 * SEC, false)]],

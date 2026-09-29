@@ -104,9 +104,11 @@ export async function phoneLockPrompt(
 }
 
 /**
- * A stretch of time the phone's own lock prompt was open: from the first authenticateUser prompt opening to the last one
- * closing, with passed true when one of them passed. Overlapping calls make one stretch (Android answers a second call
- * while one is open with app_cancel at once).
+ * A stretch of time the phone's own lock prompt was open: from the first phoneLockPrompt opening to the last one closing,
+ * with passed true when the one that closed it passed. Overlapping calls make one stretch. expo-local-authentication
+ * 55.0.18 answers a second call while one is open with app_cancel at once, so the first closes it; 55.0.15 answers the
+ * first with app_cancel and the second takes over the prompt and closes it. Either way the closing answer is the one the
+ * member gave last; an earlier pass inside the stretch doesn't count, and a stretch still open has not passed.
  *
  * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
  * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
@@ -127,17 +129,19 @@ function promptOpened(): void {
 }
 
 function promptClosed(passed: boolean): void {
-    const current = promptStretches[promptStretches.length - 1];
-    if (passed && current) current.passed = true;
     if (--openPrompts > 0) return;
     openPrompts = 0;
-    if (current) current.closedAt = Date.now();
+    const current = promptStretches[promptStretches.length - 1];
+    if (current) {
+        current.closedAt = Date.now();
+        current.passed = passed;
+    }
     const waiters = promptCloseWaiters;
     promptCloseWaiters = [];
     waiters.forEach(resolve => resolve());
 }
 
-/** Whether one of authenticateUser's prompts is open now. */
+/** Whether one of phoneLockPrompt's prompts is open now. */
 export function isLocalAuthPromptOpen(): boolean {
     return openPrompts > 0;
 }

@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "generate": "node scripts/build.mjs",
+    "pending": "node scripts/build.mjs --pending",
     "screenshots": "node ../../apps/manager/e2e/manual-shots.mjs",
-    "test": "node scripts/build.mjs --check && node --test test/guide.test.mjs"
+    "test": "node scripts/build.mjs --check && node --test test/guide.test.mjs test/versions.test.mjs"
   }
 }

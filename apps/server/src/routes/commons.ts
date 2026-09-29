@@ -86,12 +86,18 @@ router.post('/api/commons/projects/update', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!projectId || !title || !requestedAmount) return ctx.throw(400, 'Missing fields');
+    if (!projectId || !title || !requestedAmount) {
+        ctx.status = 400;
+        ctx.body = { error: 'Missing fields' };
+        return;
+    }
     if (respondIfMuted(ctx, actor)) return;
 
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
     if (!success) {
-        return ctx.throw(400, 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.');
+        ctx.status = 400;
+        ctx.body = { error: 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.' };
+        return;
     }
     ctx.body = { success: true };
 });
@@ -104,11 +110,17 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!projectId) return ctx.throw(400, 'Missing projectId');
+    if (!projectId) {
+        ctx.status = 400;
+        ctx.body = { error: 'Missing projectId' };
+        return;
+    }
     
     const success = deleteProject(actor, projectId);
     if (!success) {
-        return ctx.throw(400, 'Failed to delete project. It might not exist, you might not own it, or it is no longer in a proposed state.');
+        ctx.status = 400;
+        ctx.body = { error: 'Failed to delete project. It might not exist, you might not own it, or it is no longer in a proposed state.' };
+        return;
     }
     ctx.body = { success: true };
 });
@@ -155,7 +167,11 @@ router.get('/api/commons/decisions', async (ctx) => {
 
 router.get('/api/commons/decisions/:id', async (ctx) => {
     const decision = getDecision(ctx.params.id);
-    if (!decision) return ctx.throw(404, 'Decision not found');
+    if (!decision) {
+        ctx.status = 404;
+        ctx.body = { error: 'Decision not found' };
+        return;
+    }
     const tally = tallyDecision(decision.id);
     // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
     const actor = (ctx.state as any)?.actor as string | undefined;
@@ -256,7 +272,11 @@ router.get('/api/crowdfund/projects', async (ctx) => {
 
 router.get('/api/crowdfund/projects/:id', async (ctx) => {
     const project = getCrowdfundProject(ctx.params.id);
-    if (!project) return ctx.throw(404, 'Project not found');
+    if (!project) {
+        ctx.status = 404;
+        ctx.body = { error: 'Project not found' };
+        return;
+    }
     ctx.body = { project };
 });
 

@@ -150,3 +150,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-10-18 - Add dynamic accessibilityLabel, hint, and busy state to WantsToJoin action buttons
 **Learning:** In list items with asynchronous actions (such as join request approval/rejection), action buttons that become disabled when busy need explicit `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` and dynamic `accessibilityLabel` attributes so screen readers announce both the loading status and the member context.
 **Action:** Always provide dynamic `accessibilityLabel` (`busy === req.id ? ... : ...`), `accessibilityHint`, and `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` on async action buttons in list cards.
+
+## 2026-10-24 - Add dynamic accessibilityLabel to computer sign-in submit button
+**Learning:** Action buttons in modal flows whose text child is replaced by an `ActivityIndicator` during asynchronous actions leave screen readers without accessible text during loading states unless an explicit dynamic `accessibilityLabel` is assigned.
+**Action:** Always provide dynamic `accessibilityLabel` (`busy ? "Signing computer in..." : "Sign in"`) on action buttons that render `ActivityIndicator` in place of text when busy.

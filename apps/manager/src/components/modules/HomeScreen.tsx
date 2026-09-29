@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
-import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
+import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
 
@@ -49,7 +49,7 @@ export function HomeScreen({
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
     const pendingReportsCount = typeof nodeData?.reportCount === 'number'
         ? nodeData.reportCount
-        : reports.filter((r: any) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
+        : reports.filter((r: NodeReport) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
     
     // Calculate unclaimed invites from nodeData or invites count
     const membersCount = members.filter((m: MemberItem) => m && !m.isTreasury).length;

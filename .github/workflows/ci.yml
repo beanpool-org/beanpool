@@ -14,8 +14,15 @@ on:
   #
   # The concurrency group below already cancels superseded runs, so the extra cost is one run
   # per stacked branch push.
+  #
+  # Every path but Markdown, except the guide's pages: they are Markdown, and a PR that changes
+  # only them (every guide PR, since they no longer touch the published copies) must still get
+  # the guide check. Later patterns win, so the last line puts them back.
   pull_request:
-    paths-ignore: ['**/*.md']
+    paths:
+      - '**'
+      - '!**/*.md'
+      - 'packages/beanpool-guide/**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -27,8 +34,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Two commits deep: the guide check (packages/beanpool-guide/scripts/build.mjs, findBase) compares
+      # the published guide with the commit before HEAD — main before this push, or, for a pull request's
+      # merge commit, main's tip — and fails when a shallow clone lacks it. A workflow_dispatch run on a
+      # branch has no origin/main: when its tip is a merge, the check says the versions were not compared.
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

@@ -24,8 +24,10 @@ import {
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import { useGlobalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useGlobalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+
+export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';

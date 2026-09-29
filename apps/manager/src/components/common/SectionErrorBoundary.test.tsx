@@ -113,5 +113,34 @@ describe('SectionErrorBoundary', () => {
 
         spy.mockRestore();
     });
+
+    it('toggles stack trace details when Show Details / Hide Details button is clicked', () => {
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        render(
+            <SectionErrorBoundary sectionName="People & Safety">
+                <ThrowingComponent shouldThrow={true} />
+            </SectionErrorBoundary>
+        );
+
+        const detailsButton = screen.getByRole('button', { name: /show details/i });
+        expect(detailsButton).toBeInTheDocument();
+        expect(screen.queryByText(/Test render crash in section/)).toBeInTheDocument();
+        expect(screen.queryByText(/Error: Test render crash in section/)).not.toBeInTheDocument();
+
+        // Click to show stack details
+        fireEvent.click(detailsButton);
+
+        expect(screen.getByRole('button', { name: /hide details/i })).toBeInTheDocument();
+        expect(screen.getByText(/Error: Test render crash in section/)).toBeInTheDocument();
+
+        // Click again to hide stack details
+        fireEvent.click(screen.getByRole('button', { name: /hide details/i }));
+
+        expect(screen.getByRole('button', { name: /show details/i })).toBeInTheDocument();
+        expect(screen.queryByText(/Error: Test render crash in section/)).not.toBeInTheDocument();
+
+        spy.mockRestore();
+    });
 });
 

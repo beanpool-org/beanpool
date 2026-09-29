@@ -59,6 +59,7 @@ import {
     type CopyPage, type ValueLeftOut,
 } from '../engine/sync.js';
 import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
+import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull, clearCopiesDroppedBeforeSeal, noteWholeCopyThisProcess } from './recovery-seal-key.js';
@@ -526,7 +527,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 last = next.page.last === true;
             }
             openCopy = null;
-            const checked = await staged.finish({ seed, resync: fresh });
+            // The closing checks read this database, read-only, in one read transaction (services/stager.ts): a reader on
+            // its WAL for that long. What needs the WAL to itself first closes the open copies (engine/open-copies.ts), and
+            // this one then stops the copy, rather than waiting on it with the event loop held.
+            const reading = `staging:${opening.copyId}`;
+            const stagedNow = staged;
+            noteCopyOpen(reading, (whyClosed) => stagedNow.abort(whyClosed));
+            const checked = await staged.finish({ seed, resync: fresh }).finally(() => noteCopyClosed(reading));
             staged.markReady({ pages: checked.pages, rows: checked.rows, generatedAt: checked.generatedAt, cursor: checked.cursor, why: why ?? mode });
             staged = null;
             // Landed, as far as this process goes: the next start swaps it in, and the standby's record in it already says so.

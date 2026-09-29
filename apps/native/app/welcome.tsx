@@ -5,6 +5,7 @@ import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { authenticateUser } from '../utils/LocalAuth';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
@@ -343,6 +344,9 @@ export default function WelcomeScreen() {
         putPendingWordsAway();
         putOutgoingWordsAway();
     }, [putPendingWordsAway, putOutgoingWordsAway]));
+    // And when the member comes back to the app after 15 seconds or more away, App Lock on or off.
+    usePutAwayAfterLeave(pendingWords !== null, putPendingWordsAway);
+    usePutAwayAfterLeave(outgoingWords !== null, putOutgoingWordsAway);
 
     // Count step 3 being drawn — once per join, not once per render.
     //

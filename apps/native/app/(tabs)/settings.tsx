@@ -36,6 +36,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
+import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
@@ -871,6 +872,9 @@ export default function SettingsScreen() {
             putSeedWordsAway();
         }, [putProtectionWordsAway, putSeedWordsAway])
     );
+    // And when the member comes back to the app after 15 seconds or more away, App Lock on or off.
+    usePutAwayAfterLeave(revealWords, putProtectionWordsAway);
+    usePutAwayAfterLeave(seedWords !== null, putSeedWordsAway);
 
     const handleShowSeedWords = async () => {
         const turn = seedWordsTurnRef.current;

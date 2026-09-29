@@ -45,5 +45,12 @@ check "root can't log in (locked)" 'awk -F: "\$1 == \"root\" {exit !(\$2 ~ /^[!*
 check "no getty on any console" '! systemctl is-active --quiet "getty@*" "serial-getty@*" console-getty.service'
 check "TCP listeners: 80 and 443 only (and DNS on 127.0.0.1)" '[ -z "$(ss -Htln | awk "{print \$4}" | grep -Ev "^(\*|0\.0\.0\.0|\[::\]):(80|443)$|^127\.0\.0\.1:53$")" ]'
 
+if [ "$failed" != 0 ]; then
+    # What went wrong, for whoever watches the console (the programs log no keys, tokens or request data).
+    say "hygiene: failed units: $(systemctl --failed --no-legend --plain | awk '{print $1}' | tr '\n' ' ')"
+    for u in beanpool-vault-keyholder beanpool-vault-api beanpool-vault-dns beanpool-vault-data nftables caddy; do
+        journalctl -b -u "$u" -n 6 --no-pager -o cat 2>/dev/null | while IFS= read -r line; do say "hygiene: [$u] $line"; done
+    done
+fi
 if [ "$failed" = 0 ]; then say "hygiene: ALL PASS"; else say "hygiene: $failed FAILED"; fi
 exit "$failed"

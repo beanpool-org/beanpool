@@ -43,7 +43,8 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources @debug @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation
+SystemCallFilter=~@privileged @debug @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target

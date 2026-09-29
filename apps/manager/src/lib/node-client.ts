@@ -113,6 +113,9 @@ export interface DiagnosticsResponse {
     userCount?: number;
     communityName: string;
     callsign: string;
+    /** The community's contacts as stored (null for none); absent on a node from before they moved off the public route. */
+    contactEmail?: string | null;
+    contactPhone?: string | null;
     shutdownStatus?: ShutdownStatus;
     diskHealth?: DiskHealth;
     /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */

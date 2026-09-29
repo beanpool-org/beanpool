@@ -9,12 +9,12 @@
  * directory the promoted server publishes to is a door here too.
  *
  *  1. The main server M sets its community up: a name, place and contacts, a currency display, thresholds, directory
- *     choices with its contacts and member count OFF and a service area, a pricing source and seasonality, a snapshot
- *     schedule, and an accepted non-zero audit baseline (the test node's -9.82 kind).
- *  2. A standby S with settings of its own takes its first copy: it keeps M's record, and its own name, contacts,
- *     directory choices, thresholds, gateway and baseline stay its own.
+ *     choices with its contact email ON, its phone and member count OFF and a service area, a pricing source and
+ *     seasonality, a snapshot schedule, and an accepted non-zero audit baseline (the test node's -9.82 kind).
+ *  2. A standby S with settings of its own (its phone published, its email not) takes its first copy: it keeps M's
+ *     record, and its own name, contacts, directory choices, thresholds, gateway and baseline stay its own.
  *  3. M changes its phone and stops publishing its health (a save of that one switch, which leaves the others as they
- *     were: before, it published the contacts and member count M had turned off), and sets its gateway (other origins
+ *     were: before, it published the member count M had turned off), and sets its gateway (other origins
  *     for its web app, a switch, the request limit, and an admin IP allowlist of its own): the next delta brings the new
  *     record, applied to nothing. Neither the route nor a kept record takes a directory push interval the publisher's
  *     timer can't hold, or a snapshot interval the scheduler's can't (either would fire every millisecond), and a
@@ -32,8 +32,9 @@
  *     pull interval, avatar key and importer format are S's; the main server and its token are gone; the identity epoch
  *     is the bundle's plus one; the admin IP allowlist is S's own.
  *  7. The promotion audit ran on M's baseline: "the ledger adds up" (before, S's own baseline: "does NOT add up").
- *  8. The directory publisher on the promoted server sends the community's name and area, and not its contacts, member
- *     count or health, which the community had turned off; nothing of S's own name or contacts.
+ *  8. The directory publisher on the promoted server sends the community's name, area and contact email, and not its
+ *     phone, member count or health, which the community had not published (S's own choice to publish its phone does
+ *     not carry over to the community's phone); nothing of S's own name or contacts.
  *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed before the take-over
  *     resumes), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
  *     community-settings step and finished at the next start (resumeTakeoverAtBoot), with no restart after: the promoted
@@ -129,7 +130,7 @@ async function child(): Promise<void> {
                 thresholds: { ...DEFAULT_THRESHOLDS, circulationEpochDays: 20 }, backupPullSeconds: 30,
             });
             setReplicationToken(a.ownToken);
-            updateNodeConfig({ serviceRadius: { lat: 51.5, lng: -0.12, radiusKm: 50 }, directoryPushIntervalHours: 24 });
+            updateNodeConfig({ serviceRadius: { lat: 51.5, lng: -0.12, radiusKm: 50 }, directoryPushIntervalHours: 24, publishContactPhone: true });
             return true;
         },
         /** A local-config.json field no route sets (the currency display), or a change after a promotion. */
@@ -398,7 +399,7 @@ type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kep
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
 const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config'] as const;
-const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContacts', 'publishHealth', 'directoryPushIntervalHours'] as const;
+const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
 
@@ -448,8 +449,8 @@ async function main(): Promise<void> {
         built('the community names itself, its place and its contacts', await A('/api/local/update-identity', {
             callsign: 'riverbend', communityName: 'Riverbend Commons', lat: -33.71, lng: 151.1, contactEmail: 'hello@riverbend.example', contactPhone: '+61 2 5550 0101',
         }));
-        built('it keeps its contacts and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
-            publishContacts: false, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
+        built('it publishes its contact email, keeps its phone and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
+            publishContactEmail: true, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
         }));
         built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
@@ -483,12 +484,13 @@ async function main(): Promise<void> {
         let sNow: Settings = await standby.send('settings');
         assert(differing(sOwnCommunity, communitySettings(sNow)).length === 0,
             `while a standby, S keeps its own name, place, contacts, currency, thresholds, gateway, directory choices, baseline, pricing and snapshots (changed: ${first(differing(sOwnCommunity, communitySettings(sNow)))})`);
-        assert(sNow.directory?.contactEmail === 'ops@standby.example' && sNow.directory?.name === 'Standby Seven',
-            `what S would tell the directory is still its own (${j({ name: sNow.directory?.name, email: sNow.directory?.contactEmail })})`);
+        assert(sNow.directory?.contactPhone === '+44 20 7946 0000' && sNow.directory?.contactEmail === null && sNow.directory?.name === 'Standby Seven',
+            `what S would tell the directory is still its own: its name and phone, not its email (${j({ name: sNow.directory?.name, phone: sNow.directory?.contactPhone, email: sNow.directory?.contactEmail })})`);
         const kept1 = sNow.kept;
         assert(kept1 && kept1.installedAt === null && kept1.record?.localConfig?.communityName === 'Riverbend Commons'
-            && kept1.record?.directory?.publishContacts === false && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
-            `S keeps M's record, not installed: its name, its choice not to publish contacts, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, publishContacts: kept1.record?.directory?.publishContacts, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
+            && kept1.record?.directory?.publishContactEmail === true && kept1.record?.directory?.publishContactPhone === false
+            && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
+            `S keeps M's record, not installed: its name, its choice to publish its email and not its phone, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, email: kept1.record?.directory?.publishContactEmail, phone: kept1.record?.directory?.publishContactPhone, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
 
         // ── 3. M changes its settings; a delta brings them ──
         console.log('\n— 3. the main server changes its settings; a delta brings them —');
@@ -519,10 +521,10 @@ async function main(): Promise<void> {
         require_(mSettings.localConfig.gateway?.adminIpAllowlist?.[0] === '203.0.113.7' && mSettings.blob.publishHealth === false,
             `M: its gateway and its health choice are set (${j({ gateway: mSettings.localConfig.gateway, publishHealth: mSettings.blob.publishHealth })})`);
         // Before, the route passed the fields a request left out on as undefined, the stored object dropped them, and each
-        // switch read unset as "publish": this save published M's contacts and member count and dropped its service area.
-        assert(mSettings.blob.publishContacts === false && mSettings.blob.publishMembers === false && mSettings.blob.serviceRadius?.radiusKm === 9
-            && mSettings.blob.directoryPushIntervalHours === 6,
-            `a save that changes one directory switch leaves the others as the community set them (${j({ contacts: mSettings.blob.publishContacts, members: mSettings.blob.publishMembers, radius: mSettings.blob.serviceRadius, every: mSettings.blob.directoryPushIntervalHours })})`);
+        // switch read unset as "publish": this save published M's member count and dropped its service area.
+        assert(mSettings.blob.publishContactEmail === true && mSettings.blob.publishContactPhone === false && mSettings.blob.publishMembers === false
+            && mSettings.blob.serviceRadius?.radiusKm === 9 && mSettings.blob.directoryPushIntervalHours === 6,
+            `a save that changes one directory switch leaves the others as the community set them (${j({ email: mSettings.blob.publishContactEmail, phone: mSettings.blob.publishContactPhone, members: mSettings.blob.publishMembers, radius: mSettings.blob.serviceRadius, every: mSettings.blob.directoryPushIntervalHours })})`);
         const delta = await standby.send('pull');
         require_(delta.ok === true, `the delta lands (${delta.ok ? 'imported' : delta.error})`);
         sNow = await standby.send('settings');
@@ -657,8 +659,9 @@ async function main(): Promise<void> {
         const expected = { ...mCommunity, 'node_config.pricing_show_seasonality': sOwnCommunity['node_config.pricing_show_seasonality'] };
         assert(differing(expected, communitySettings(sAfter)).length === 0,
             `every community setting is M's; the one the record carried a value S couldn't take is S's own (differing: ${first(differing(expected, communitySettings(sAfter)))})`);
-        assert(sAfter.blob.publishContacts === false && sAfter.blob.publishMembers === false && sAfter.blob.publishHealth === false,
-            `a community that chose not to publish its contacts, member count or health still doesn't (${j({ contacts: sAfter.blob.publishContacts, members: sAfter.blob.publishMembers, health: sAfter.blob.publishHealth })})`);
+        assert(sAfter.blob.publishContactPhone === false && sAfter.blob.publishMembers === false && sAfter.blob.publishHealth === false,
+            `a community that didn't publish its phone, member count or health still doesn't, though S had its own phone published (${j({ phone: sAfter.blob.publishContactPhone, members: sAfter.blob.publishMembers, health: sAfter.blob.publishHealth })})`);
+        assert(sAfter.blob.publishContactEmail === true, `and the email it chose to publish still is (${j({ email: sAfter.blob.publishContactEmail })})`);
         const after = perServer(sAfter);
         const own = perServer(sBefore);
         const oneServer = [
@@ -694,11 +697,12 @@ async function main(): Promise<void> {
         const pushed = await standby.send('directory-push');
         const body = registry.bodies.at(-1);
         assert(pushed.success === true && registry.bodies.length === 1, `one push reaches the directory (${j(pushed)}; ${registry.bodies.length} received)`);
-        assert(body?.callsign === 'Riverbend Commons' && body?.name === 'riverbend' && j(body?.serviceRadius) === j(mSettings.blob.serviceRadius),
-            `it sends the community's name and service area (${j({ callsign: body?.callsign, name: body?.name, serviceRadius: body?.serviceRadius })})`);
-        assert(body && body.communityName === null && body.contactEmail === null && body.contactPhone === null && body.memberCount === null
-            && body.version === null && body.status === null,
-            `and not its contacts, member count or health, which the community turned off (${j(body && { communityName: body.communityName, contactEmail: body.contactEmail, contactPhone: body.contactPhone, memberCount: body.memberCount, version: body.version })})`);
+        assert(body?.callsign === 'Riverbend Commons' && body?.name === 'Riverbend Commons' && body?.communityName === 'Riverbend Commons'
+            && j(body?.serviceRadius) === j(mSettings.blob.serviceRadius),
+            `it sends the community's name and service area (${j({ callsign: body?.callsign, name: body?.name, communityName: body?.communityName, serviceRadius: body?.serviceRadius })})`);
+        assert(body?.contactEmail === 'hello@riverbend.example', `and the contact email the community chose to publish (${j(body?.contactEmail)})`);
+        assert(body && body.contactPhone === null && !/5550 0199|5550 0101/.test(j(body)) && body.memberCount === null && body.version === null && body.status === null,
+            `and not its phone, member count or health, which the community didn't publish (${j(body && { contactPhone: body.contactPhone, memberCount: body.memberCount, version: body.version })})`);
         assert(!/Standby Seven|standby-7|ops@standby\.example|\+44 20 7946/.test(j(body)), 'nothing of the standby\'s own name or contacts');
         refused.push(...(await standby.send('fetches')).blocked);
 

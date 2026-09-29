@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 65,
-  "hash": "07a0b96e0b5c60cf695a18f4eac74a0835e73142e2a85951a74a6ee0353921df",
+  "version": 66,
+  "hash": "1445c0f7a321796fdadabb669f4376df456700bc29b905fc6f8633ee2a4ed9de",
   "sections": [
     {
       "id": "setup",
@@ -1918,7 +1918,7 @@
             "installs the community's admin password and two-factor sign-in, and the record of the recovery code;",
             "brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);",
             "brings back the web address, with its tunnel token;",
-            "installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contacts or member count out of the directory still does), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;",
+            "installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contact email, phone or member count out of the directory still does, whatever the standby chose for its own), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;",
             "becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;",
             "stops copying from the old main server, and restarts;",
             "checks once that the ledger adds up, before members trade on it;",
@@ -2229,7 +2229,11 @@
         },
         {
           "type": "p",
-          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name, the area it serves, how many members it has, and the contact email and phone if you filled them in. That is how new people find you. Each part can be switched off here, and so can the whole thing. Your members' names and posts are never sent."
+          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it."
+        },
+        {
+          "type": "p",
+          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
         },
         {
           "type": "h2",
@@ -2495,7 +2499,7 @@
         {
           "type": "ul",
           "items": [
-            "The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.",
+            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.",
             "Members' Pulse channels are fetched from the sites they link to.",

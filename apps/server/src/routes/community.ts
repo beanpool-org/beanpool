@@ -26,7 +26,7 @@ import {
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
     dispatchPushNotification,
-    getNodeRole, exportSyncState,
+    getNodeRole, exportSyncState, getNodeConfig,
     createTreasury,
     purgeMemberSelf,
     getMembersVersion,
@@ -277,13 +277,18 @@ router.post('/api/local/update-identity', async (ctx) => {
     ctx.body = { success: true };
 });
 
-// Public community info — no auth required (landing page)
+// Public community info: no key and no password (everything under /api/local/ skips the signature middleware), and the
+// directory lists every community's web address. So each contact is said here only when its owner turned on publishing
+// it (the directory's switches, off unless turned on), and null otherwise; the owner's screens read both from the admin
+// route /api/local/admin/diagnostics. Not cached, so a contact turned off stops showing at once.
 router.get('/api/local/community-info', async (ctx) => {
     const config = getLocalConfig();
+    const published = getNodeConfig();
+    ctx.set('Cache-Control', 'no-store');
     ctx.body = {
         communityName: config.communityName || config.callsign || 'BeanPool Community',
-        contactEmail: config.contactEmail || null,
-        contactPhone: config.contactPhone || null,
+        contactEmail: published.publishContactEmail ? config.contactEmail || null : null,
+        contactPhone: published.publishContactPhone ? config.contactPhone || null : null,
         callsign: config.callsign || null,
     };
 });

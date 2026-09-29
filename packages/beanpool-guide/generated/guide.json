@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 73,
-  "hash": "b559e30abb86bf9b22169f4c4c8d57500cde241b05a5efe2b42997de1649e815",
+  "version": 74,
+  "hash": "4dee8af3c60b06e44649e555bcd7284ec66b3b6ea9e8f6e1a24b08563947f728",
   "sections": [
     {
       "id": "about",
@@ -1072,7 +1072,7 @@
           "type": "ul",
           "items": [
             "**Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.",
-            "**Start a community:** every community has its own small server, looked after by someone local. The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings."
+            "**Start a community:** every community has its own small server, looked after by someone local. The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there."
           ]
         },
         {

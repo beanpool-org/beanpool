@@ -212,7 +212,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 - installs the community's admin password and two-factor sign-in, and the record of the recovery code;
 - brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);
 - brings back the web address, with its tunnel token;
-- installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contacts or member count out of the directory still does), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;
+- installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contact email, phone or member count out of the directory still does, whatever the standby chose for its own), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;
 - becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
 - stops copying from the old main server, and restarts;
 - checks once that the ledger adds up, before members trade on it;

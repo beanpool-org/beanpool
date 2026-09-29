@@ -17,8 +17,10 @@
  *
  * The day budget (`gatewayAdmitDayBudget`, W-main): beside the minute buckets, every verified key's writes (POST, PUT,
  * PATCH, DELETE) are counted over a rolling day, and past WRITER_LIMITS.signedWritesPerDay they are answered 429
- * `day_budget`. It bounds every table a member can write, the money tables included, without touching money code. The
- * admin surface (`/api/local/admin/*`) has its own limiter and is not counted, nor are the read marks (DAY_BUDGET_READ_MARKS): the apps send those on a timer, and they make no new row. It
+ * `day_budget`. It bounds every table a member's signed requests write, the money tables included, without touching
+ * money code (the rows the server writes for a member on its own, the Pulse harvester's, have their own daily allowance:
+ * WRITER_LIMITS.pulseHarvestedItemsPerDay). The admin surface (`/api/local/admin/*`) has its own limiter and is not
+ * counted, nor are the read marks (DAY_BUDGET_READ_MARKS): the apps send those on a timer, and they make no new row. It
  * applies whether or not the operator has the minute throttle on: it is what keeps one key from growing the tables a
  * standby copies past its cap.
  */

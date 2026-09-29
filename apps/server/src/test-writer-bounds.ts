@@ -29,6 +29,10 @@
  *     budget a read mark (mark-read, notices seen) still goes and a real write is 429 day_budget; no other spelling or
  *     method of the read-mark paths, and no real write dressed as one, rides the exemption; the minute bucket still
  *     counts read marks.
+ * 12. The Pulse harvester (PR #1312 review): a feed its owner controls serving 20 new items at every visit stops at
+ *     WRITER_LIMITS.pulseHarvestedItemsPerDay for that owner, all their channels together, with no error on the
+ *     channel; items already listed still refresh; another owner is unaffected; a day later it resumes. The feed is a
+ *     stub at resolveChannel's fetch seam (ssrfSafeFetch refuses localhost), so nothing leaves the box.
  *
  * Local only: the server it starts on localhost, nothing else.
  *
@@ -56,6 +60,7 @@ import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, type PulseSubmitRouteDeps } from './routes/pulse-submit.js';
 import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
 import { lockedDm } from './dm-test-payload.js';
+import { resolveChannel, prunePulseItems, type SsrfSafeResponse } from './engine/pulse-resolver.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -569,6 +574,68 @@ async function main(): Promise<void> {
         assert(minute.slice(0, PER_MINUTE).every(s => s === 200) && minute[PER_MINUTE] === 429,
             `read marks still count in the minute bucket: the ${PER_MINUTE + 1}th in a minute is 429 (${minute.join(',')})`);
         minuteThrottle(false);
+    }
+
+    // ── 12. The Pulse harvester: a daily allowance per owner ───────────────────────────────────────────────────
+    console.log('\n--- 12. the Pulse harvester: new items a day per owner ---');
+    {
+        const ALLOWANCE = WRITER_LIMITS.pulseHarvestedItemsPerDay;
+        const PER_VISIT = 20;
+        const xan = member('Xan');
+        const yul = member('Yul');
+        // A feed its owner controls, serving 20 items no visit has seen before, every visit. `serve` pins it to one
+        // earlier visit's items instead.
+        let visit = 0;
+        let serve: number | null = null;
+        const fetched: string[] = [];
+        const feedFetch = async (rawUrl: string): Promise<SsrfSafeResponse> => {
+            const host = new URL(rawUrl).hostname;
+            if (!host.endsWith('.example.org')) throw new Error(`test stub: unexpected fetch to ${rawUrl}`);
+            fetched.push(rawUrl);
+            const v = serve ?? ++visit;
+            const items = Array.from({ length: PER_VISIT }, (_v, i) => {
+                const guid = `${host}-v${v}-i${i}`;
+                const at = new Date(Date.UTC(2026, 0, 1) + v * HOUR + i * 60_000).toUTCString();
+                return `<item><title>Post ${guid}</title><link>https://${host}/${guid}</link><guid>${guid}</guid><pubDate>${at}</pubDate></item>`;
+            }).join('');
+            const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>${host}</title><link>https://${host}/</link>${items}</channel></rss>`;
+            return { status: 200, statusText: 'OK', headers: { 'content-type': 'application/rss+xml' }, url: rawUrl, buffer: async () => Buffer.from(xml), text: async () => xml, json: async () => ({}) } as SsrfSafeResponse;
+        };
+        const rows = (owner: Id) => count("SELECT COUNT(*) AS n FROM pulse_items WHERE owner_pubkey = ? AND source = 'autolist'", owner.pk);
+        /** One scheduler visit to the channel: the prune the tick runs first, then the resolve. */
+        const visitOnce = async (channelId: string) => { prunePulseItems(); return resolveChannel(channelId, { fetchFn: feedFetch }); };
+
+        const feed = addChannel({ ownerPubkey: xan.pk, platform: 'website', raw: 'https://xan.example.org', category: 'other' });
+        const visits = ALLOWANCE / PER_VISIT + 5;
+        const results: Awaited<ReturnType<typeof resolveChannel>>[] = [];
+        for (let i = 0; i < visits; i++) results.push(await visitOnce(feed.id));
+        assert(fetched.length > 0 && fetched.every(u => new URL(u).hostname === 'xan.example.org'), `setup: every fetch went to the stub (${fetched.length})`);
+        assert(results.every(r => !r.error), `no visit is an error (${[...new Set(results.map(r => r.error ?? 'ok'))].join(', ')})`);
+        assert(rows(xan) === ALLOWANCE, `${visits} visits of 20 new items each: ${ALLOWANCE} rows for Xan, and no more (${rows(xan)})`);
+        const last = results[results.length - 1];
+        assert(last.count === 0 && last.leftForLater === PER_VISIT, `a visit past the allowance adds nothing and says so (${JSON.stringify(last)})`);
+        const ch = db.prepare('SELECT fail_count, last_error, is_stale, supports_autolist FROM creator_channels WHERE id = ?').get(feed.id) as any;
+        assert(ch.fail_count === 0 && ch.last_error === null && ch.is_stale === 0 && ch.supports_autolist === 1,
+            `the channel stays healthy and in the rotation: no error loop (${JSON.stringify(ch)})`);
+        serve = ALLOWANCE / PER_VISIT; // the last visit that was listed: its 20 are the channel's live ones
+        const refresh = await visitOnce(feed.id);
+        assert(refresh.count === PER_VISIT && !refresh.leftForLater && rows(xan) === ALLOWANCE,
+            `the items already listed, served again, still refresh and cost nothing (${JSON.stringify(refresh)}, ${rows(xan)} rows)`);
+        serve = null;
+        const second = addChannel({ ownerPubkey: xan.pk, platform: 'rss', raw: 'https://xan2.example.org/feed.xml', category: 'other' });
+        const other = await visitOnce(second.id);
+        assert(other.count === 0 && other.leftForLater === PER_VISIT && rows(xan) === ALLOWANCE,
+            `the allowance is Xan's, not the channel's: her second feed adds nothing today (${JSON.stringify(other)})`);
+
+        const yulFeed = addChannel({ ownerPubkey: yul.pk, platform: 'website', raw: 'https://yul.example.org', category: 'other' });
+        const yulVisit = await visitOnce(yulFeed.id);
+        assert(yulVisit.count === PER_VISIT && !yulVisit.leftForLater && rows(yul) === PER_VISIT, `another owner is unaffected: Yul's first visit lists 20 (${JSON.stringify(yulVisit)})`);
+
+        // A day later (her rows made 25 hours ago), the harvest resumes.
+        db.prepare("UPDATE pulse_items SET created_at = ? WHERE owner_pubkey = ? AND source = 'autolist'").run(ago(25 * HOUR), xan.pk);
+        const nextDay = await visitOnce(feed.id);
+        assert(nextDay.count === PER_VISIT && !nextDay.leftForLater && rows(xan) === ALLOWANCE + PER_VISIT,
+            `the next day it resumes: 20 new items listed (${JSON.stringify(nextDay)}, ${rows(xan)} rows)`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -255,8 +255,11 @@ export function assertMayReachNewPeople(member: string, participants: readonly s
 
 // ── The Pulse ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Pulse items `member` added in the day from `source` ('manual': by hand; 'oauth': synced from a connected account). */
-export function pulseItemsToday(member: string, source: 'manual' | 'oauth', now = Date.now()): string[] {
+/**
+ * Pulse items `member` added in the day from `source` ('manual': by hand; 'oauth': synced from a connected account;
+ * 'autolist': harvested by the server from their own feeds). An item pruned since still counts: its row stays, deleted.
+ */
+export function pulseItemsToday(member: string, source: 'manual' | 'oauth' | 'autolist', now = Date.now()): string[] {
     return column(db.prepare('SELECT created_at AS t FROM pulse_items WHERE owner_pubkey = ? AND source = ? AND created_at > ?')
         .all(member, source, since(now)));
 }
@@ -271,4 +274,13 @@ export function assertMaySubmitToPulse(member: string, now = Date.now()): void {
 /** How many new items a sync from `member`'s connected accounts may still add today. */
 export function pulseSyncAllowance(member: string, now = Date.now()): number {
     return Math.max(0, WRITER_LIMITS.pulseSyncedItemsPerDay - pulseItemsToday(member, 'oauth', now).length);
+}
+
+/**
+ * How many new items the Pulse harvester (engine/pulse-resolver.ts resolveChannel) may still add today from `member`'s
+ * own channels, all of them together. The server makes these rows itself on its schedule, so neither the gateway's day
+ * budget nor a route's limit sees them; without this a feed its owner controls could serve 20 new items at every visit.
+ */
+export function pulseHarvestAllowance(member: string, now = Date.now()): number {
+    return Math.max(0, WRITER_LIMITS.pulseHarvestedItemsPerDay - pulseItemsToday(member, 'autolist', now).length);
 }

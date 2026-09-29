@@ -11,7 +11,8 @@
  *   - the day budget: the gateway (gateway-rate-limit.ts gatewayAdmitDayBudget), in memory beside the minute buckets;
  *   - the DM minute: chat-rate-limit.ts (CHAT_LINES_PER_MINUTE), shared with group and event chats;
  *   - everything else: engine/writer-bounds.ts, which counts from the rows the member wrote (like probation), so a
- *     restart, a restore or a take-over carries the counts with them.
+ *     restart, a restore or a take-over carries the counts with them. The Pulse harvester's allowance is read there
+ *     too, by engine/pulse-resolver.ts resolveChannel: those rows are the server's own writes for a member.
  *
  * The money routes are not limited here (no change in conservingTransaction, the ledger guards or the transfer
  * routes): the day budget bounds them from the gateway until their own limits land (design §7, W-money).
@@ -55,4 +56,10 @@ export const WRITER_LIMITS = {
     /** New Pulse items a member's app syncs from their connected accounts in any 24 hours. Over it, the rest of a sync
      *  waits for a later one. Heavy real user: a creator's first sync of all 12 channels, about 25 items each. */
     pulseSyncedItemsPerDay: 300,
+    /** New Pulse items the server harvests in any 24 hours from one member's own feeds (website, RSS, YouTube,
+     *  SoundCloud), all their channels together. Over it, a visit adds nothing new for them (items already listed still
+     *  refresh) until the day's first ones age out. Heavy real user: a creator's first harvest of all 12 channels, the
+     *  newest 20 each (240), plus a day of new posts across them (a daily blog, a podcast and a busy video channel:
+     *  tens, not 160). Before it, a feed its owner controls could add ~57,600 rows a day. */
+    pulseHarvestedItemsPerDay: 400,
 };

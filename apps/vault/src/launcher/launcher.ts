@@ -10,10 +10,12 @@ import { nextMonthlyRestart } from '../shared/schedule.js';
  * bundle as its child, and on that child's request runs a newer one:
  *
  *   1. the request's release must be in the chain from the launcher's own pinned keys, and the bundle file's SHA-256
- *      the one that release names (the API checked both; this checks again, from its own copy of the keys). Never
- *      backwards: it must be newer than the release of the API in service (the newest in that chain whose bundle is
- *      that API's file) and than any release this launcher has switched to (bar one it fell back from, below), and
- *      for the same image;
+ *      the one that release names (the API checked both; this checks again, from its own copy of the keys). It must
+ *      be for the image this machine booted (from the file root leaves in /run, as the API and the keyholder read it;
+ *      unknown, nothing is switched to). Never backwards: it must be newer than the release of the API in service
+ *      (the newest in that chain whose bundle is that API's file and whose image is the booted one, as the API finds
+ *      itself: two images' releases may share a bundle) and than any release this launcher has switched to (bar one
+ *      it fell back from, below);
  *   2. the bundle's self-test (`--self-test`) must pass, and report the same pinned keys and its own hash;
  *   3. the new API starts beside the old one and, once it listens, points the API socket at itself: new connections
  *      go to it from that moment;
@@ -44,6 +46,8 @@ export interface LauncherOptions {
     /** What every API is started with (`--config <file>`). */
     apiArgs: string[];
     rootKeys: readonly string[];
+    /** The image this machine booted (its `imageHash`: image-identity.ts), or null when unknown. */
+    runningImage: () => string | null;
     readyTimeoutMs?: number;
     selfTestTimeoutMs?: number;
     drainTimeoutMs?: number;
@@ -253,7 +257,9 @@ export class Launcher {
         } catch {
             return { ok: false, reason: 'the API in service can\'t be read' };
         }
-        const running = [...chain.releases].reverse().find(r => r.manifest.apiBundleHash === own);
+        const image = this.opts.runningImage();
+        if (!image) return { ok: false, reason: 'the image this machine booted is unknown' };
+        const running = [...chain.releases].reverse().find(r => r.manifest.apiBundleHash === own && r.manifest.imageHash === image);
         if (!running) return { ok: false, reason: 'the API in service is not a release in that chain' };
         const version = release.manifest.version;
         if (compareVersions(version, running.manifest.version) <= 0) return { ok: false, reason: `never backwards: ${version} is not newer than ${running.manifest.version}` };
@@ -265,7 +271,7 @@ export class Launcher {
                 return { ok: false, reason: `release ${version} kept failing after the switch: it may be taken again from ${new Date(this.retry.notBefore).toISOString()}` };
             }
         }
-        if (release.manifest.imageHash !== running.manifest.imageHash) return { ok: false, reason: `release ${version} is for another image: it waits for the monthly restart` };
+        if (release.manifest.imageHash !== image) return { ok: false, reason: `release ${version} is for another image: it waits for the monthly restart` };
         let bytes: Buffer;
         try {
             bytes = readFileSync(req.bundlePath);

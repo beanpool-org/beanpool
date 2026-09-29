@@ -118,8 +118,9 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   beside the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the
   old one to finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release
   newer than the one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this
-  too, whatever the API asks: it takes only a release newer than the one whose bundle is in service (and than any it
-  switched to), for the same image. An API that keeps exiting after a switch (three times in ten minutes) gives way to
+  too, whatever the API asks: it reads which image booted from the same file in `/run` (unknown: it switches to
+  nothing), and takes only a release for that image, newer than the one in service (found by its bundle and that
+  image, as the API finds itself: two images' releases can share a bundle) and than any it switched to. An API that keeps exiting after a switch (three times in ten minutes) gives way to
   the one in service before the switch, or the image's own if that one keeps exiting too. That step back is the
   launcher's, not a release chosen: the release it fell back from may be taken again after a back-off (an hour,
   doubling each time it fails again, never past the next monthly restart), and nothing else at or below the newest

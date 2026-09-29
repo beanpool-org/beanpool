@@ -381,7 +381,9 @@ describe('the launcher checks a switch itself', () => {
         const inService = path.join(dir, `bundle-${n}-a.mjs`);
         writeFileSync(inService, bundleA);
         const request = { bundlePath: file, release: r2, chain: [r1, r2] };
-        const launcher = (keys: string[]) => new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: inService, apiArgs: [], rootKeys: keys, log: () => undefined });
+        const launcher = (keys: string[]) => new Launcher({
+            node: process.execPath, nodeArgs: [], imageBundle: inService, apiArgs: [], rootKeys: keys, runningImage: () => r1.manifest.imageHash, log: () => undefined,
+        });
         expect(launcher(root.map(k => k.publicKey)).verify(request)).toEqual({ ok: true });
         expect(launcher(keys3().map(k => k.publicKey)).verify(request)).toEqual({ ok: false, reason: 'that release is not in the chain from the pinned keys' });
         writeFileSync(file, Buffer.concat([bundleB, Buffer.from('\n')]));
@@ -396,7 +398,9 @@ describe('the launcher checks a switch itself', () => {
         const b = path.join(dir, `newer-${n}.mjs`);
         writeFileSync(a, bundleA);
         writeFileSync(b, bundleB);
-        const launcher = new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: a, apiArgs: [], rootKeys: root.map(k => k.publicKey), log: () => undefined });
+        const launcher = new Launcher({
+            node: process.execPath, nodeArgs: [], imageBundle: a, apiArgs: [], rootKeys: root.map(k => k.publicKey), runningImage: () => r1.manifest.imageHash, log: () => undefined,
+        });
         // (The API in service is named by the hash its file was checked as when it started.)
         // 1.1.0's API in service asks for 1.0.0's (the chain as it is, or cut short before 1.1.0): refused.
         expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1, r2] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'never backwards: 1.0.0 is not newer than 1.1.0' });
@@ -413,10 +417,49 @@ describe('the launcher checks a switch itself', () => {
         expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
     });
 
+    it('the release in service is found by bundle and booted image: two images sharing a bundle, and a chain cut short (#1314 round 3, 4138896586)', async () => {
+        // 1.0.0 (image A, bundle B0) -> 1.0.1 (A, B) -> 1.0.2 (A, B2) -> 1.1.0 (A2, B): 1.1.0 is A2 built from a newer
+        // snapshot with no API change, so the same bundle bytes as 1.0.1. This machine booted A2 and runs B.
+        const root = keys3();
+        const [b0, b, b2] = [0, 1, 2].map(() => crypto.randomBytes(64));
+        const imageA = randomImage();
+        const imageA2 = randomImage();
+        const r100 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b0) });
+        const r101 = makeRelease({ version: '1.0.1', previous: r100, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b) });
+        const r102 = makeRelease({ version: '1.0.2', previous: r101, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b2) });
+        const r110 = makeRelease({ version: '1.1.0', previous: r102, custodianKeys: root, signers: root.slice(0, 2), image: imageA2, apiBundleHash: sha256Hex(b) });
+        const inService = path.join(dir, `a2-bundle-${++n}.mjs`);
+        writeFileSync(inService, b);
+        const f102 = path.join(dir, `b2-bundle-${n}.mjs`);
+        writeFileSync(f102, b2);
+        const booted = { image: r110.manifest.imageHash as string | null };
+        const launcher = new Launcher({
+            node: process.execPath, nodeArgs: [], imageBundle: inService, apiArgs: [], rootKeys: root.map(k => k.publicKey), runningImage: () => booted.image, log: () => undefined,
+        });
+        const ask = (chain: MadeRelease[]) => launcher.verify({ bundlePath: f102, release: r102, chain });
+        // The whole chain: the API in service is 1.1.0 (bundle B on image A2), and 1.0.2 is older.
+        expect(ask([r100, r101, r102, r110])).toEqual({ ok: false, reason: 'never backwards: 1.0.2 is not newer than 1.1.0' });
+        // Cut at 1.0.2 (a feed withholding 1.1.0): B was 1.0.1's bundle too, but 1.0.1 is for image A, not the booted
+        // one, so the API in service is not placed: refused (it was taken, 1.0.1 standing in for the release in service).
+        expect(ask([r100, r101, r102])).toEqual({ ok: false, reason: 'the API in service is not a release in that chain' });
+        // On image A (booted A, running 1.0.1's B), 1.0.2 is taken, and on A2 a release for A never is.
+        booted.image = r101.manifest.imageHash;
+        expect(ask([r100, r101, r102])).toEqual({ ok: true });
+        booted.image = r110.manifest.imageHash;
+        const b3 = crypto.randomBytes(64);
+        const r111 = makeRelease({ version: '1.1.1', previous: r110, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b3) });
+        const f111 = path.join(dir, `b3-bundle-${n}.mjs`);
+        writeFileSync(f111, b3);
+        expect(launcher.verify({ bundlePath: f111, release: r111, chain: [r100, r101, r102, r110, r111] })).toEqual({ ok: false, reason: 'release 1.1.1 is for another image: it waits for the monthly restart' });
+        // The booted image unknown (root's file missing): nothing is switched to.
+        booted.image = null;
+        expect(ask([r100, r101, r102, r110])).toEqual({ ok: false, reason: 'the image this machine booted is unknown' });
+    });
+
     it('refuses a bundle whose self-test fails or was built with other keys', async () => {
         const file = path.join(dir, 'fails.mjs');
         writeFileSync(file, 'console.log(JSON.stringify({ ok: false, failed: ["sqlite"] })); process.exit(1);\n');
-        const l = new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: file, apiArgs: [], rootKeys: keys3().map(k => k.publicKey), log: () => undefined });
+        const l = new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: file, apiArgs: [], rootKeys: keys3().map(k => k.publicKey), runningImage: () => null, log: () => undefined });
         expect(await l.selfTest(file)).toEqual({ ok: false, reason: 'the self-test failed: sqlite' });
         const other = path.join(dir, 'other-keys.mjs');
         writeFileSync(other, `console.log(JSON.stringify({ ok: true, rootKeys: ${JSON.stringify(keys3().map(k => k.publicKey))} }));\n`);

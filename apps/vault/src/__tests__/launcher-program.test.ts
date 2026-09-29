@@ -79,8 +79,11 @@ describe('the launcher program lives through the exits of the API it runs', () =
         const r2 = makeRelease({ version: '1.0.1', previous: r1, custodianKeys: root, signers: root.slice(1), image, apiBundleHash: sha256Hex(readFileSync(failing)) });
         // The image's API asks for 1.0.1 as soon as it listens (the API's hourly check, in short).
         writeFileSync(ask, JSON.stringify({ id: 1, request: { bundlePath: failing, release: files(r2), chain: [files(r1), files(r2)] } }));
+        // Which image booted, as root leaves it in /run on the image (`vault-keyholder --identify`).
+        const identity = path.join(work, 'image.json');
+        writeFileSync(identity, JSON.stringify({ ok: true, image: { ...image, imageHash: r1.manifest.imageHash, ukiPath: '/boot/EFI/Linux/beanpool-vault_1.0.0.efi' } }));
         const config = path.join(work, 'launcher.json');
-        writeFileSync(config, JSON.stringify({ apiBundle: imageApi, apiConfig: path.join(work, 'api.json'), nodeArgs: [] }));
+        writeFileSync(config, JSON.stringify({ apiBundle: imageApi, apiConfig: path.join(work, 'api.json'), nodeArgs: [], imageIdentityFile: identity }));
 
         const launcher = spawn(process.execPath, [path.join(bundles, 'vault-launcher.mjs'), '--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
         children.push(launcher);

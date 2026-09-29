@@ -120,7 +120,7 @@ describe('a release hands over the API', () => {
             releasesDir: path.join(dir, 'releases'), feed: { directory: feedDir }, updateCheckSeconds: 1, imageHash,
         });
         const launcher = await start([path.join(bundles, 'vault-launcher.mjs'), '--config',
-            cfg('launcher.json', { apiBundle: path.join(bundles, API_BUNDLE_ASSET), apiConfig, nodeArgs: ['--disable-sigusr1'] })], 'vault-launcher: listening');
+            cfg('launcher.json', { apiBundle: path.join(bundles, API_BUNDLE_ASSET), apiConfig, nodeArgs: ['--disable-sigusr1'], imageHash })], 'vault-launcher: listening');
         const firstPid = Number(/started the API \(.*\) as pid (\d+)/.exec(launcher.out())?.[1]);
         expect(firstPid).toBeGreaterThan(0);
 
@@ -240,7 +240,7 @@ describe('the API knows which image booted from the file root leaves (the image\
             releasesDir: path.join(base3, 'releases'), feed: { directory: feedDir }, updateCheckSeconds: 1, imageIdentityFile: apiIdentity,
         });
         const launcher = await start([path.join(bundles, 'vault-launcher.mjs'), '--config',
-            cfg('launcher.json', { apiBundle: path.join(bundles, API_BUNDLE_ASSET), apiConfig, nodeArgs: ['--disable-sigusr1'] })], 'vault-launcher: listening');
+            cfg('launcher.json', { apiBundle: path.join(bundles, API_BUNDLE_ASSET), apiConfig, nodeArgs: ['--disable-sigusr1'], imageIdentityFile: apiIdentity })], 'vault-launcher: listening');
         const firstPid = Number(/started the API \(.*\) as pid (\d+)/.exec(launcher.out())?.[1]);
 
         const fetch = unixFetch(apiSocket);

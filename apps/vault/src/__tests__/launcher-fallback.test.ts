@@ -86,7 +86,7 @@ function setUp(start: number) {
     const clock = { now: start };
     const logs: string[] = [];
     const launcher = new Launcher({
-        node: process.execPath, nodeArgs: [], imageBundle: bundles['1.0.0'], apiArgs: [], rootKeys, restartDelayMs: 20,
+        node: process.execPath, nodeArgs: [], imageBundle: bundles['1.0.0'], apiArgs: [], rootKeys, runningImage: () => releases['1.0.0'].manifest.imageHash, restartDelayMs: 20,
         log: line => logs.push(line), clock: () => clock.now,
     });
     launchers.push(launcher);

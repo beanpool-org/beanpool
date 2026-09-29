@@ -11,7 +11,7 @@ import {
     markConversationRead, getListedUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
@@ -142,6 +142,13 @@ router.post('/api/messages/conversation', async (ctx) => {
     if (!uniqueParticipants.includes(createdBy)) {
         ctx.status = 403;
         ctx.body = { error: 'Creator must be a participant of the conversation' };
+        return;
+    }
+    // A name on a DM was the phone's "decline with a message": the member's words, stored as the conversation's
+    // name where the node could read them. They go as an encrypted message now (engine/messaging.ts).
+    if (name !== undefined && name !== null && name !== '') {
+        ctx.status = 400;
+        ctx.body = { error: DM_NAME_REFUSED_ERROR };
         return;
     }
     try {

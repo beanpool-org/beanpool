@@ -71,6 +71,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
 
 const MODE = READ_AUTH_OFF ? '[read auth off]' : '[defaults]';
 let BASE = '';
@@ -247,7 +248,8 @@ async function main() {
     const deeConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, dee.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
     assert(deeConv.status === 200 && !!deeConv.body?.conversation?.id, `Olive opens a DM to a key with no account here (${deeConv.status} ${deeConv.text.slice(0, 100)})`);
     const deeConvId = deeConv.body?.conversation?.id as string;
-    const deeMsg = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ciphertext: 'aGVsbG8=', nonce: 'bm9uY2U=' }, olive);
+    const deeLine = lockedDm();   // a DM line goes in encrypted; section 2 looks for this ciphertext
+    const deeMsg = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ...deeLine }, olive);
     assert(deeMsg.status === 200, `…and sends it a message (${deeMsg.status} ${deeMsg.text.slice(0, 80)})`);
     const tex = keypair('TransferTex');
     const texTx = se.transfer('genesis', tex.pubKeyHex, 5, 'welcome beans', 'direct', true);
@@ -372,7 +374,7 @@ async function main() {
         assert(convs.status === 200 && (convs.body?.conversations ?? []).some((c: any) => c.id === deeConvId),
             `the DM-made visitor reads its own conversation list, with Olive's DM in it (${convs.status})`);
         const thread = await get(`/api/messages/${deeConvId}`, dee);
-        assert(thread.status === 200 && thread.text.includes('aGVsbG8='), `…and the DM itself, with Olive's message (${thread.status})`);
+        assert(thread.status === 200 && thread.text.includes(deeLine.ciphertext), `…and the DM itself, with Olive's message (${thread.status})`);
         const deeBalance = await get(`/api/ledger/balance/${dee.pubKeyHex}`, dee);
         assert(deeBalance.status === 200, `…and its own balance (${deeBalance.status})`);
         const texBalance = await get(`/api/ledger/balance/${tex.pubKeyHex}`, tex);
@@ -408,7 +410,7 @@ async function main() {
         const disMe = await get('/api/community/me', dis);
         assert(disMe.status === 200, `a disabled member still reads their own standing (${disMe.status})`);
         const sueDm = se.createConversation('dm', [olive.pubKeyHex, sue.pubKeyHex], olive.pubKeyHex)!;
-        const sueSends = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: sue.pubKeyHex, ciphertext: 'c29ycnk=', nonce: 'bm9uY2U=' }, sue);
+        const sueSends = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: sue.pubKeyHex, ...lockedDm() }, sue);
         assert(sueSends.status === 200, `a suspended member still sends a message, as suspension allows (${sueSends.status} ${sueSends.text.slice(0, 80)})`);
 
         // ── 3. /ws ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -434,8 +436,8 @@ async function main() {
         }
 
         clear();
-        const oliveToDee = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ciphertext: 'YWdhaW4=', nonce: 'bm9uY2U=' }, olive);
-        const oliveToSue = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: olive.pubKeyHex, ciphertext: 'aGk=', nonce: 'bm9uY2U=' }, olive);
+        const oliveToDee = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ...lockedDm() }, olive);
+        const oliveToSue = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: olive.pubKeyHex, ...lockedDm() }, olive);
         assert(oliveToDee.status === 200 && oliveToSue.status === 200, 'Olive messages the visitor and the suspended member');
         await sleep(350);
         const gotMessage = (s: Socket, conv: string) => s.events.some(e => e.type === 'new_message' && e.conversationId === conv);

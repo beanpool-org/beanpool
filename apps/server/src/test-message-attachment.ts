@@ -18,6 +18,7 @@ import { initStateEngine, createConversation } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { getImageStore } from './storage/image-store.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8549;
 const BASE = `https://localhost:${PORT}`;
@@ -64,18 +65,18 @@ async function main() {
     const conv = createConversation('dm', [Alice.pubKeyHex, Bob.pubKeyHex], Alice.pubKeyHex);
     if (!conv) throw new Error('setup: failed to create conversation');
 
-    // 1. Send message with full attachment object (including explicit mime)
+    // 1. Send message with full attachment object (including explicit mime). A DM photo goes in the encrypted form.
+    const photo1 = lockedDm(64);
     const attachmentData1 = {
-        data: Buffer.from('fake-encrypted-image-bytes-1').toString('base64'),
-        nonce: 'nonce1234567890',
+        data: photo1.ciphertext,
+        nonce: photo1.nonce,
         mime: 'image/png'
     };
 
     const sendRes1 = await signedFetch('POST', '/api/messages/send', Alice, {
         conversationId: conv.id,
         authorPubkey: Alice.pubKeyHex,
-        ciphertext: 'encrypted-text',
-        nonce: 'text-nonce',
+        ...lockedDm(),
         type: 'image',
         attachment: attachmentData1
     });
@@ -107,16 +108,16 @@ async function main() {
     assert(getJson1.mime === 'image/png', 'Attachment MIME matches');
 
     // 3. Send message with attachment lacking explicit MIME (should default to image/jpeg)
+    const photo2 = lockedDm(64);
     const attachmentData2 = {
-        data: Buffer.from('fake-encrypted-image-bytes-2').toString('base64'),
-        nonce: 'nonce0987654321'
+        data: photo2.ciphertext,
+        nonce: photo2.nonce
     };
 
     const sendRes2 = await signedFetch('POST', '/api/messages/send', Alice, {
         conversationId: conv.id,
         authorPubkey: Alice.pubKeyHex,
-        ciphertext: 'encrypted-text-2',
-        nonce: 'text-nonce-2',
+        ...lockedDm(),
         type: 'image',
         attachment: attachmentData2
     });

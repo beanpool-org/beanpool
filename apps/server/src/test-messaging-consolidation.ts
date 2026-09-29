@@ -21,6 +21,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createConversation, sendMessage, toggleMessageReaction } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8573;
 let run = 0, passed = 0;
@@ -58,7 +59,8 @@ async function main() {
     // 1 + 2. Legacy send resolves to Y, preserving the original id and any client metadata.
     const LEGACY = 'legacy-' + crypto.randomUUID();
     seedConsolidatedMarker(Y, A, LEGACY);
-    const msg = sendMessage(LEGACY, A, 'CIPHER', 'NONCE', 'text', undefined, JSON.stringify({ foo: 'bar' }));
+    const words = lockedDm();
+    const msg = sendMessage(LEGACY, A, words.ciphertext, words.nonce, 'text', undefined, JSON.stringify({ foo: 'bar' }));
     assert(!!msg, 'send addressed to a legacy id resolves and returns a message');
     assert(!!msg && msg.conversationId === Y, `message stored under the active conv Y (got ${msg?.conversationId})`);
     const stored = db.prepare('SELECT metadata FROM messages WHERE id=?').get(msg!.id) as any;
@@ -71,7 +73,8 @@ async function main() {
         .run(crypto.randomUUID(), Y, A, 'ct', 'nc', 'text', '{not valid json', new Date().toISOString());
     let threw = false;
     let res: ReturnType<typeof sendMessage> = null;
-    try { res = sendMessage('unknown-' + crypto.randomUUID(), A, 'C', 'N', 'text', undefined, undefined); }
+    const unknownWords = lockedDm();
+    try { res = sendMessage('unknown-' + crypto.randomUUID(), A, unknownWords.ciphertext, unknownWords.nonce, 'text', undefined, undefined); }
     catch { threw = true; }
     assert(!threw, 'send to an unknown id does not throw despite a malformed-metadata row');
     assert(res === null, 'send to a genuinely unknown conversation returns null');

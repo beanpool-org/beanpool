@@ -9,7 +9,7 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## Private even from you
 
-- **Direct messages** between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read.
+- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
 
 ## What the server holds in the clear
 
@@ -17,7 +17,8 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
-- who messaged whom, and when, even for direct messages;
+- the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
+- who messaged whom, and when, and their emoji reactions, even for direct messages;
 - **how each member voted**.
 
 ## Secret ballots
@@ -45,9 +46,20 @@ GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could 
 
 ## What admins see in Settings
 
-- The logs, with passwords, keys and 12-word phrases removed before they are written.
-- The list of devices connected right now, with their internet address, device type and member name.
+- The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written.
+- The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.
 - Reports, and the people they are about.
+
+## Internet addresses
+
+Your server keeps no one's internet address for more than 7 days, and its logs never record one.
+
+- **Replication Access** shows the address each standby copy came from, and each refused try, so you can tell your standby from a stranger. It keeps each address for 7 days, then shows "address no longer kept" with the time and the outcome. The standby watch and the list of which standby holds which take-over keys do the same.
+- A log line that has to tell one address from another (wrong admin passwords, a proxy missing from TRUSTED_PROXIES, the gateway's limit) names it by a code such as ip#k3Jx9QaB7d. The code is the address scrambled with a key that changes every day, is never saved, and is new after a restart. So the same address has the same code all day, and nobody can turn a code back into the address.
+- The rate limits and the password brake count addresses in memory only. Joining with a sign-in and requests to join keep a scrambled address for a day, to limit how many come from one place.
+- Snapshots and backups hold no visitor's or standby's address, not even a scrambled one, and none is left in the file's free space. A standby's copy never has them. A downloaded backup also carries your settings, including any admin IP allowlist you typed in under Gateway & Peers.
+- A report file that a crash or a freeze leaves in the data folder lists each open connection by its port, with no address. The server takes the addresses out of its own crash report as soon as it writes it, and out of any other report file when it starts.
+- A server updated to this version clears what it kept before when it starts: addresses older than 7 days, and every address in older log lines, in the snapshots it keeps and in older report files. A backup you downloaded before the update is a file on your own computer, out of the server's reach. Docker's own log of the server keeps what was printed before the update until Docker replaces it. The tunnel helper (cloudflared) keeps its own log.
 
 ![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
 

@@ -385,6 +385,7 @@ run_federation_suites() {
       test-standby-listings-verbatim
       test-standby-standing
       test-standby-health
+      test-address-retention
       test-standby-in-flight
       test-recovery-tombstones
       test-github-sign-in-removed
@@ -527,6 +528,7 @@ run_federation_suites() {
       test-groups-sync-and-removal
       test-groups-chat
       test-chat-parity
+      test-dm-never-plaintext
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession

@@ -256,6 +256,10 @@ run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 # that baseline and says why. Instant.
 run_check "balance_writes" node scripts/check-balance-writes.mjs
 
+# A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
+# to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
+run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

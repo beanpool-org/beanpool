@@ -28,7 +28,8 @@
  *     40 more and refuses the 101st.
  *  9. Federation purchases count (settlement ON, in a child node with its own libp2p transport and a peer that isn't
  *     there): a purchase escrows the buyer's Beans before it asks, so it is a payment; the next send past 100 is 429,
- *     and a purchase past it is 429 before anything moves.
+ *     and a purchase past it is 429 before anything moves. A commission is the link enterprise's payment: 999 sweeps
+ *     and one commission make its 1,000, and past them a sweep and a commission are both 429 with nothing moved.
  *
  * Local only: the servers it starts on localhost. The peer a purchase asks is a made-up key at a closed local port.
  *
@@ -47,7 +48,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, getMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, getMember, createTreasury } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -223,7 +224,9 @@ interface Seed {
     tradie: string;
     members: { pk: string; name: string; balance: number; trades?: boolean }[];
     /** A trading peer that isn't there: its key, at a closed port on this machine. */
-    peer?: { address: string; url: string };
+    peer?: { address: string; url: string; peerId: string };
+    /** Its link enterprise, kept by `keeper`, holding `balance`; and one of its listings cached here, `postId`, by `seller`. */
+    link?: { keeper: string; balance: number; seller: string; postId: string };
 }
 
 async function runChild(): Promise<void> {
@@ -254,14 +257,30 @@ async function runChild(): Promise<void> {
         const { startP2P } = await import('./p2p.js');
         await startP2P(0, 0);
     }
+    let linkPk: string | null = null;
+    if (seed.peer && seed.link) {
+        const { ensureFederationLink, setCommissionCeiling } = await import('./federation-link.js');
+        const link = ensureFederationLink(seed.peer.peerId, 'Faraway', createTreasury, seed.link.keeper)!;
+        linkPk = link.treasuryPubkey;
+        if (first) {
+            setCommissionCeiling(seed.peer.peerId, 500);
+            db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), linkPk);
+            // The seller is a member of the other community (a visitor's row with its home), and the listing came from there.
+            db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, home_node_url, is_visitor) VALUES (?, 'Far Seller', ?, ?, 1)`)
+                .run(seed.link.seller, ago(7 * DAY), seed.peer.url);
+            db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, origin_node)
+                        VALUES (?, 'offer', 'other', 'A far thing', 'test', 1, ?, 'active', 1, ?)`).run(seed.link.postId, seed.link.seller, seed.peer.url);
+            sync();
+        }
+    }
     const port = await startHttpsServer(0);
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
-    process.stdout.write('@@ ' + JSON.stringify({ port }) + '\n');
+    process.stdout.write('@@ ' + JSON.stringify({ port, link: linkPk }) + '\n');
     process.stdin.on('data', () => { /* nothing is sent; the parent only closes it */ });
     process.stdin.on('end', () => process.exit(0));
 }
 
-interface Node { base: string; proc: ChildProcess; output: () => string; stop: () => Promise<void>; kill: () => Promise<void> }
+interface Node { base: string; link: string | null; proc: ChildProcess; output: () => string; stop: () => Promise<void>; kill: () => Promise<void> }
 
 /** Start a child node on `dataDir`, resolved once it serves. */
 function startNode(dataDir: string, seed: Seed, env: Record<string, string> = {}): Promise<Node> {
@@ -286,9 +305,10 @@ function startNode(dataDir: string, seed: Seed, env: Record<string, string> = {}
             if (!line) return;
             clearInterval(poll);
             clearTimeout(timer);
-            const { port } = JSON.parse(line.slice(3));
+            const { port, link } = JSON.parse(line.slice(3));
             resolve({
                 base: `https://127.0.0.1:${port}`,
+                link,
                 proc,
                 output: () => out,
                 stop: async () => { proc.stdin!.end(); const t = setTimeout(() => proc.kill('SIGKILL'), 10_000); await exited; clearTimeout(t); },
@@ -599,12 +619,13 @@ async function main(): Promise<void> {
         const peer = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
         // Port 9 on this machine: nothing listens, so the ask fails at once and nothing leaves the box.
         const peerAddress = `/ip4/127.0.0.1/tcp/9/p2p/${peer}`;
-        const jo = newId('Jo'), ben = newId('Ben');
+        const jo = newId('Jo'), ben = newId('Ben'), kit = newId('Kit');
         const remoteSeller = crypto.randomBytes(32).toString('hex');
         const seed: Seed = {
             owner: newId('Owner').pk, tradie: newId('Tradie').pk,
-            members: [{ pk: jo.pk, name: 'Jo', balance: 1_000, trades: true }, { pk: ben.pk, name: 'Ben', balance: 0 }],
-            peer: { address: peerAddress, url: 'https://faraway.invalid' },
+            members: [{ pk: jo.pk, name: 'Jo', balance: 1_000, trades: true }, { pk: ben.pk, name: 'Ben', balance: 0 }, { pk: kit.pk, name: 'Kit', balance: 100, trades: true }],
+            peer: { address: peerAddress, url: 'https://faraway.invalid', peerId: peer },
+            link: { keeper: kit.pk, balance: 2_000, seller: crypto.randomBytes(32).toString('hex'), postId: 'far-post' },
         };
         const node = await startNode(dir, seed, { FEDERATION_SETTLEMENT: 'true' });
         const their = new Database(path.join(dir, 'state.db'));
@@ -622,6 +643,24 @@ async function main(): Promise<void> {
             const again = await purchase();
             assert(again.status === 429 && again.body?.code === 'money_payments_day' && outbound() === 1 && balance() === afterPurchase,
                 `and a purchase past it is 429 before anything moves: no new settlement, the same balance (${show(again)}, ${outbound()}, ${balance()})`);
+
+            // A commission: the link enterprise's payment, counted against it (Kit, its keeper, signs).
+            const link = node.link!;
+            const linkOutbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound' AND buyer_pubkey = ?`).get(link) as { n: number }).n;
+            const sweeps = await many(M.enterprisePaymentsPerDay - 1, 8, () => callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 }));
+            assert(sweeps.every(s => s === 200), `Kit sweeps 999 from the link enterprise to the Commons (${distinct(sweeps)})`);
+            const commissioned = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
+            assert(linkOutbound() === 1 && commissioned.status !== 429, `and commissions a listing from the other community: its settlement is there, the enterprise's 1,000th payment (${show(commissioned)}, ${linkOutbound()} outbound)`);
+            const linkBalance = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            assert(sweepPast.status === 429 && sweepPast.body?.code === 'money_payments_day' && /can make 1,000 payments/.test(sweepPast.body?.error ?? ''),
+                `the commission counted: the enterprise's next sweep is 429 money_payments_day (${show(sweepPast)})`);
+            const commissionPast = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
+            const linkAfter = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            assert(commissionPast.status === 429 && commissionPast.body?.code === 'money_payments_day' && linkOutbound() === 1 && linkAfter === linkBalance,
+                `and a commission past it is 429 before anything moves: no new settlement, the same balance (${show(commissionPast)}, ${linkOutbound()}, ${linkAfter})`);
+            const kitOwn = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount: 1 });
+            assert(kitOwn.status === 200, `the enterprise's 1,000 took none of Kit's: his own payment goes (${show(kitOwn)})`);
         } finally {
             their.close();
             await node.stop();

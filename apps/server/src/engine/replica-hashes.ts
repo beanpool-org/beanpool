@@ -31,7 +31,7 @@ export interface TableHashes {
 export const TABLE_HASHES_VERSION = 1;
 
 /**
- * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (connector-manager.ts
+ * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts
  * pruneTombstones), so for up to a day one holds rows the other has dropped; a tombstone a copy failed to apply shows up
  * anyway as a row still there in the table it names.
  */

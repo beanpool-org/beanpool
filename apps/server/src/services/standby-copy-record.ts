@@ -96,6 +96,25 @@ export interface CopyRecord {
      */
     lastLeftOut: TablesNamed | null;
     /**
+     * The ones of those this standby lacks rows of (#1304 review 4128951076): a delta left them out (its cursor moved past
+     * their rows), or a whole copy left them out and its own hash of them isn't this standby's rows of them after it
+     * landed (it moved the cursor past the rows written since the last delta; or they weren't current: its first copy, the
+     * force-resync after its main server pruned the deletes it needed; or it sent no hashes), until a whole copy carries
+     * them or its hash of them matches. The delta's stateHash canary reads no table named here (services/backup-puller.ts):
+     * drift in one would ask for whole copies that leave it out again, and each would move the cursor past more of its
+     * rows (#1315 review 4131868827). A table a whole copy leaves out whose hash matched isn't one: its rows came by delta,
+     * and the canary reads it like any other.
+     * A record written before this field (no `lastLacking` key) reads every table it names left out (lastLeftOut) as
+     * lacking: what the canary skipped then, so nothing it read before an update asks for a whole copy after it.
+     */
+    lastLacking: TablesNamed | null;
+    /**
+     * When this standby's cursor was found older than its main server keeps deletes (db/db.ts TOMBSTONE_RETENTION_MS, less
+     * a day): it owes a force-resync from then until one lands (services/backup-puller.ts). A delta that lands meanwhile
+     * moves the cursor, not what it missed.
+     */
+    pastRetentionAt: number | null;
+    /**
      * The tables of the ledger set a copy was refused over (engine/sync.ts OversizedCopyError), until a copy of the kind
      * refused lands (`whole`: a whole copy was; then only a whole copy clears it, since deltas can land meanwhile while
      * every whole copy is refused), or any whole copy.
@@ -114,7 +133,7 @@ function fresh(): CopyRecord {
     return {
         id: crypto.randomBytes(16).toString('hex'), lastPullAt: null, lastOutcome: null, lastWhy: null,
         failedImportsInARow: 0, lastOkAt: null, lastWhole: null, lastUncompared: null, lastExactAt: null, lastMismatchResyncAt: null,
-        lastMismatchResyncTakenAt: null, lastLeftOut: null, lastOversized: null,
+        lastMismatchResyncTakenAt: null, lastLeftOut: null, lastLacking: null, pastRetentionAt: null, lastOversized: null,
     };
 }
 
@@ -167,6 +186,8 @@ export function readCopyRecord(): CopyRecord {
             lastMismatchResyncAt: num(r?.lastMismatchResyncAt),
             lastMismatchResyncTakenAt: num(r?.lastMismatchResyncTakenAt),
             lastLeftOut: tablesNamed(r?.lastLeftOut),
+            lastLacking: r && typeof r === 'object' && Object.hasOwn(r, 'lastLacking') ? tablesNamed(r.lastLacking) : tablesNamed(r?.lastLeftOut),
+            pastRetentionAt: num(r?.pastRetentionAt),
             lastOversized: ((o) => (o ? { ...o, whole: r?.lastOversized?.whole === true } : null))(tablesNamed(r?.lastOversized)),
         };
     } catch {
@@ -182,14 +203,32 @@ function write(r: CopyRecord): void {
  * A pull whose copy landed (or the main server said nothing changed since the last one: no `copy`). `copy.leftOut`: the
  * tables it left out. A whole copy's are the whole story (any it carried is current again, and so is the ledger set); a
  * delta's add to the ones already stale, which only a whole copy brings back.
+ * `copy.current`: of the tables a whole copy leaves out, the ones whose hash in the copy equals this standby's rows of
+ * them after it landed. Every other table it leaves out is one this standby lacks rows of (lastLacking). `copy.resync`:
+ * it was a force-resync, which owes nothing for the deletes the main server pruned any more (pastRetentionAt).
  */
-export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOut: readonly string[] }): void {
+export function noteCopyLanded(now = Date.now(), copy?: { whole: boolean; leftOut: readonly string[]; current?: readonly string[]; resync?: boolean }): void {
     const r = readCopyRecord();
+    const lacking = !copy ? r.lastLacking
+        : !copy.whole ? (copy.leftOut.length > 0 ? named(r.lastLacking, copy.leftOut, now, true) : r.lastLacking)
+            : named(r.lastLacking, copy.leftOut.filter((t) => !(copy.current ?? []).includes(t)), now, false);
     write({
         ...r, lastPullAt: now, lastOutcome: 'ok', lastWhy: null, failedImportsInARow: 0, lastOkAt: now,
         lastLeftOut: copy ? (copy.whole || copy.leftOut.length > 0 ? named(r.lastLeftOut, copy.leftOut, now, !copy.whole) : r.lastLeftOut) : r.lastLeftOut,
+        lastLacking: lacking,
+        pastRetentionAt: copy?.resync ? null : r.pastRetentionAt,
         lastOversized: copy && (copy.whole || r.lastOversized?.whole === false) ? null : r.lastOversized,
     });
+}
+
+/**
+ * This standby's cursor is older than its main server keeps deletes (services/backup-puller.ts): a force-resync is owed
+ * until one lands (noteCopyLanded). The first time is kept.
+ */
+export function notePastRetention(now = Date.now()): void {
+    const r = readCopyRecord();
+    if (r.pastRetentionAt !== null) return;
+    write({ ...r, pastRetentionAt: now });
 }
 
 /**

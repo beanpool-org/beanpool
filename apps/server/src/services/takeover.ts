@@ -67,7 +67,7 @@ import {
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
-import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
+import { stopBackupPuller, getBackupStatus, forgetPullCursor } from './backup-puller.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
@@ -801,6 +801,8 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         case 'pull-config': {
             stopBackupPuller();
             updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null, backupAdminPassword: null });
+            // And where its copies had reached: no pull follows that cursor (design §6.3 T6).
+            forgetPullCursor();
             return 'no longer copies from the old main server';
         }
         default:

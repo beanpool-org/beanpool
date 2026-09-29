@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
+import { postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -55,7 +56,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
 
     const coverImageRow = db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any;
     const coverImage = coverImageRow
-        ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
+        ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at)
         : null;
 
     return {
@@ -111,7 +112,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
         const postPhotos = photosByPost.get(r.post_id) || [];
         const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
         const coverImage = coverImageRow
-            ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
+            ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at)
             : null;
         return {
             id: r.id,

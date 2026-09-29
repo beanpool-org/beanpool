@@ -19,6 +19,7 @@ import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
+import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 
 const SYNC_TIMEOUT_MS = 20_000;
 const MAX_STORED_TRANSACTIONS = 1000;
@@ -394,11 +395,40 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
             }
             if (!postsRes.ok) {
+                // A local community refuses its listings to a phone whose key is no member there (2026-09-28): noted for
+                // the Market, which says so with the way to the global community (utils/members-only-listings.ts).
+                const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
+                const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
+                // A 401 (an unsigned read) leaves the note as it was: it says nothing about membership, and the Market's
+                // members-only card must never show a member for it (PR #1286). A key-holding phone always signs, so a
+                // real non-member gets the 403.
+                if (postsRes.status !== 401) await noteMembersOnly(anchorUrl, membersOnly);
+                // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
+                // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
+                // switch in flight), which says nothing about membership: the cache stays (PR #1286 review 4125870399).
+                if (membersOnly && postsRes.status === 403) {
+                    // What this phone cached of the community's listings before it was refused them (its key is no
+                    // member there) is not its to keep showing: it goes, never another community's and never the phone's
+                    // own posts (utils/db.ts applyDelta `postsRefused`), and the Market shows the members-only card. The
+                    // cursor and fingerprints go with it, so the sync after the phone may read them again is a whole one.
+                    const { DeviceEventEmitter } = require('react-native');
+                    try {
+                        if (await applyDelta({ postsRefused: true }, expectedDbName)) {
+                            await AsyncStorage.removeItem(kLastSync);
+                            forgetFingerprintsOf(anchorUrl);
+                            DeviceEventEmitter.emit('sync_data_updated');
+                        }
+                    } catch (e) {
+                        console.warn('[Pillar Sync] Could not drop the listings of a community that keeps them for its members:', e);
+                    }
+                    DeviceEventEmitter.emit('members_only_listings');
+                }
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
-                result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
+                result.errorMessage = membersOnly ? 'members_only' : `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
             }
+            await noteMembersOnly(anchorUrl, false);
             // The visitors' view reaching a member (G9c, utils/posts-view.ts) goes the same way as a failed
             // fetch: nothing written, the cursor not moved, and the next sync asks again.
             const viewRefusal = await postsViewRefusal(postsRes, anchorUrl, pubKey);

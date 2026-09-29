@@ -951,6 +951,8 @@ export interface MarketplacePost {
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
     pollClosesAt?: string;
+    /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
+    pollOpenVote?: boolean;
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
@@ -1045,6 +1047,8 @@ export async function createMarketplacePost(post: {
     reachPeers?: string[];
     pollOptions?: Array<{ id: string; text: string }>;
     durationDays?: number;
+    /** A poll only: true makes it an open vote (members see who chose what). Left out, it is anonymous. */
+    pollOpenVote?: boolean;
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;
     targetPubkey?: string;

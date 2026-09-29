@@ -276,7 +276,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         accepted_by: BOB, accepted_by_callsign: 'Bob', accepted_at: '2026-09-24T01:30:00.000Z',
         pending_transaction_id: 'tx-9', completed_at: null, lat: -28.5, lng: 153.4, origin_node: 'test.beanpool.org',
         photos: '["/api/marketplace/posts/post-g/photos/0?v=0"]', reach: 'local', reach_peers: null,
-        author_energy_cycled: 12, author_founding_needed: 0, poll_options: null, poll_closes_at: null,
+        author_energy_cycled: 12, author_founding_needed: 0, poll_options: null, poll_closes_at: null, poll_open_vote: 0,
         audience_scope: 'group', target_group_id: 'g1', target_pubkey: null, assigned_to: null,
         target_archetypes: null, // dormant: the node never sends it and nothing reads it
         event_start_at: null, event_end_at: null, event_place_name: null, event_state: null,

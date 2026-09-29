@@ -39,8 +39,9 @@
  *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
  *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
  *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
- *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
- *      the landing card's count is from each listing's place, as the listing shows it; a non-member signer reads a trust
+ *      carry no `k=` (a listing's photo URL carries its key: the listings are members'), and the recovery lookup matches
+ *      a prefix with photos; where an operator keeps the directory there, the landing card's count is a member's from
+ *      each listing's place and anyone else's from its area, so bisecting it finds the area; a non-member signer reads a trust
  *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
  *      as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
@@ -323,7 +324,8 @@ async function main(): Promise<void> {
         eventPlaceName: PLACE_NAME, eventPrivateNote: 'Sentinel side gate code 4417',
     }, 'event', 'community');
     const poll = post(alice, 'Sentinel poll: where should the tool library go', undefined, {
-        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }],
+        // An open vote, so a member's read names its voters (polls are anonymous unless their creator chooses this).
+        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true,
     }, 'poll', 'community');
     const trade = post(alice, 'Sentinel bike repair, done', TRADE_AT);
     const pendingPost = post(alice, 'Sentinel pumpkin seedlings', PENDING_AT);
@@ -1554,28 +1556,17 @@ async function main(): Promise<void> {
     }
 
     async function localChecks(): Promise<void> {
-        console.log('── a local node: a guest reads what the engine gives that reader, as before G9a ──');
+        // A local community's listings are its members' (Marty, 2026-09-28): with no visitors' view, a guest is refused
+        // every read of them, in words that send them to the global community. Until then a guest read what the engine
+        // gives that reader, authors and places included, as before G9a.
+        console.log("── a local node: a guest is refused the listings; the rest is as before G9a ──");
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
-            for (const p of postReads) {
+            for (const p of [...postReads, `${POSTS}?author=${alice.pk}`]) {
                 const r = await call('GET', id, p);
-                const params = new URL(`https://x${p}`).searchParams;
-                const want = getPosts({
-                    id: params.get('id') ?? undefined, types: params.has('types') ? ['offer', 'need', 'poll', 'event'] : undefined,
-                    excludeEvents: !params.get('id') && !params.has('types'), query: params.get('q') ?? undefined,
-                    limit: params.has('limit') ? Number(params.get('limit')) : 50, offset: 0,
-                    updatedAfter: params.get('updatedAfter') ?? undefined, viewerPubkey: id?.pk, sync: params.get('sync') === 'true', beansOnly: false,
-                    audienceScope: params.get('audienceScope') ?? undefined, includeHidden: false, includeVoters: false,
-                    near: params.has('lat') ? { lat: Number(params.get('lat')), lng: Number(params.get('lng')), radiusKm: params.has('radiusKm') ? Number(params.get('radiusKm')) : undefined } : undefined,
-                    sortByDistance: params.get('sort') === 'distance',
-                } as any);
-                assert(r.status === 200 && r.text === JSON.stringify(want) && r.headers.get('x-beanpool-view') === null,
-                    `${who} ${p.replace(POSTS, '')}: the engine's read for that reader, no view header`);
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === 'https://global.beanpool.org'
+                    && r.headers.get('x-beanpool-view') === null && !r.text.includes(alice.pk) && !r.text.includes('Sentinel'),
+                    `${who} ${p.replace(POSTS, '')}: refused members_only, naming the global community, with nothing of a listing (got ${r.status})`);
             }
-            const list = await call('GET', id, `${POSTS}?${ALL_TYPES}`);
-            assert(list.text.includes(alice.pk) && list.text.includes('SentinelAlice') && list.text.includes(String(OFFER_AT.lat)) && list.text.includes(PLACE_NAME),
-                `${who}: the listings name their authors and places, as on every local node`);
-            const byAuthor = await call('GET', id, `${POSTS}?author=${alice.pk}`);
-            assert(byAuthor.status === 200 && Array.isArray(byAuthor.body) && byAuthor.body.length > 0, `${who}: ?author= is answered (${byAuthor.status})`);
             const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
             assert(probe.body?.callsign === 'SentinelAlice', `${who}: the membership probe names the member (${JSON.stringify(probe.body)})`);
             for (const p of ['/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed']) {
@@ -1593,8 +1584,14 @@ async function main(): Promise<void> {
         }
         const members = await call('GET', bob, '/api/members');
         const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
-        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
+        // A local community's listings are its members', so their photos are keyed here (engine/photo-keys.ts); faces are not.
+        const keyedFace = /\/api\/avatar\/[^"]*&k=/;
+        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !keyedFace.test(members.text) && !keyedFace.test(posts.text),
             'avatar URLs carry no key here');
+        const offerPhoto = ((posts.body as any[]) ?? []).find(p => p.id === offer.id)?.photos?.[0] as string | undefined;
+        assert(!!offerPhoto && /&k=[A-Za-z0-9_-]{22}$/.test(offerPhoto) && (await call('GET', null, offerPhoto)).status === 200
+            && (await call('GET', null, `/api/marketplace/posts/${offer.id}/photos/0`)).status === 404,
+            `and a listing's photo URL carries its key, which opens it unsigned, and nothing else does (${offerPhoto})`);
 
         // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, and a
         // code's holder still gets a member's card. A pruned account is refused every read it signs, here as on every node
@@ -1619,21 +1616,31 @@ async function main(): Promise<void> {
         }
         assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
 
-        // The landing card (G5), where an operator keeps the directory on a local node: the count is from each listing's
-        // place, for anyone, as before G9a. The listing shows every reader that place anyway.
+        // The landing card (G5), where an operator keeps the directory on a local node. Its listings are its members'
+        // (2026-09-28), and this public count was the one way left to find them (#1286's deciding review, 4125322427): a
+        // member's count is from each listing's place, as their Market shows it; anyone else's from its area, as on global.
         db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.directoryMirror', 'true');
-        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+        const cell = cellOf(LONE_AT);
+        const countsAround = async (id: Id | null, from: Place) => {
             const counts: unknown[] = [];
             for (const d of [NEARBY_KM - 0.01, NEARBY_KM + 0.01]) {
-                const q = destination(LONE_AT, d, 0);
+                const q = destination(from, d, 0);
                 counts.push((await call('GET', id, `/api/global/home?lat=${q.lat}&lng=${q.lng}`)).body?.nearbyPosts?.count);
             }
-            assert(counts[0] === 1 && counts[1] === 0, `${who}: the card counts the lone listing 10 m inside its own 50 km, not 10 m outside (${counts.join(', ')})`);
+            return counts;
+        };
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+            const byArea = await countsAround(id, cell);
+            assert(byArea[0] === 1 && byArea[1] === 0, `${who}: the card counts the lone listing 10 m inside its area's 50 km, not 10 m outside (${byArea.join(', ')})`);
         }
-        const attack = await bisectHome(cellOf(LONE_AT));
+        const byPlace = await countsAround(bob, LONE_AT);
+        assert(byPlace[0] === 1 && byPlace[1] === 0, `a member: the card counts it 10 m inside its own 50 km, not 10 m outside (${byPlace.join(', ')})`);
+        const attack = await bisectHome(cell);
+        const fromCell = attack.drops.map(d => km(d, cell));
         const fromPlace = attack.drops.map(d => km(d, LONE_AT));
-        assert(attack.ok && fromPlace.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, LONE_AT) < 0.005,
-            `so the bisection finds the listing's place (drops ${span(fromPlace)} from it, the fit ${(km(attack.centre, LONE_AT) * 1000).toFixed(1)} m away), as before`);
+        assert(attack.ok && fromCell.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, cell) < 0.005 && km(attack.centre, LONE_AT) > 5,
+            `so the unsigned bisection finds the area's centre (drops ${span(fromCell)} from it, the fit ${(km(attack.centre, cell) * 1000).toFixed(1)} m away), `
+            + `never the listing (${span(fromPlace)} from it)`);
         db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.directoryMirror');
     }
 }

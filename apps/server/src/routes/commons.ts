@@ -8,7 +8,7 @@ import {
     getProjects, getAllProjects,
     getCommonsBalance,
     adminRejectProject,
-    createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
+    createDecision, getDecision, decisionForReader, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
@@ -141,7 +141,8 @@ router.get('/api/commons/decisions', async (ctx) => {
     const ownVotes = actor ? getOwnDecisionVotes(actor) : null;
     ctx.body = {
         decisions: decisions.map(d => ({
-            ...publicDecision(d),
+            // A member's balance recorded in a Decision about them goes to that Decision's voters only.
+            ...decisionForReader(d, actor),
             tally: tallyDecision(d.id),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
@@ -160,7 +161,7 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
-    ctx.body = { decision: publicDecision(decision), tally, voiceCredits, myVote };
+    ctx.body = { decision: decisionForReader(decision, actor), tally, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
@@ -195,7 +196,7 @@ router.post('/api/commons/decisions', async (ctx) => {
             params,
             closesAt: closesAtOverride,
         });
-        ctx.body = { success: true, decision: publicDecision(decision) };
+        ctx.body = { success: true, decision: decisionForReader(decision, actor) };
     } catch (err: any) {
         // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor). Formal Decisions
         // switched off: 404 feature_off, as the feature gate in front of this route answers.

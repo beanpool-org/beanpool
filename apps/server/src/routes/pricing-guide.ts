@@ -20,6 +20,35 @@ import {
     seedPricingGuideIfEmpty,
 } from '../db/pricing-guide-db.js';
 import { runPricingAggregationCycle } from '../pricing-aggregator.js';
+import { postPhotoUrl } from '@beanpool/engine';
+import { db } from '../db/db.js';
+import { passesReadGate } from '../state-engine.js';
+import { photoKeysRequired } from '../engine/photo-keys.js';
+
+/** A thumbnail that is one of this node's listing photos, as the aggregator writes one (pricing-aggregator.ts). */
+const LISTING_PHOTO = /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/posts\/([^/?#\s]+)\/photos\/(\d+)(?:\?\S*)?$/i;
+
+/**
+ * An item as this reader may have it. The aggregator takes a matching listing's photo as an item's thumbnail, and this
+ * list is public, while a listing's photo is only for those who may read the listing (engine/photo-keys.ts). So it stays
+ * only for a listing on the board for everyone who reads the board (not a group's or one person's, not hidden by
+ * reports), and only for a reader who may read the board here: anyone where the listings are a public read, a member of
+ * a local community (with its key). Anyone else gets the item without it.
+ */
+function withReadersThumbnail<T extends { thumbnailUrl?: string }>(item: T, readerMayReadListings: boolean): T {
+    const m = typeof item.thumbnailUrl === 'string' ? item.thumbnailUrl.trim().match(LISTING_PHOTO) : null;
+    if (!m) return item;
+    const postId = m[1];
+    const orderNum = Number(m[2]);
+    const row = db.prepare(`
+        SELECT pp.updated_at, p.audience_scope, p.hidden_by_reports_at
+        FROM post_photos pp JOIN posts p ON p.id = pp.post_id
+        WHERE pp.post_id = ? AND pp.order_num = ?
+    `).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null; hidden_by_reports_at: string | null } | undefined;
+    const onBoard = !!row && (row.audience_scope === null || row.audience_scope === 'public') && !row.hidden_by_reports_at;
+    if (!onBoard || !readerMayReadListings) return { ...item, thumbnailUrl: undefined };
+    return { ...item, thumbnailUrl: postPhotoUrl(postId, orderNum, row!.updated_at) };
+}
 
 export function createPricingGuideRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -34,9 +63,13 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         const category = ctx.query.category as string | undefined;
         const search = ctx.query.q as string | undefined;
 
-        const items = getPricingGuideItems(category, search);
+        // A listing photo as a thumbnail only for a reader who may read that listing (withReadersThumbnail).
+        const readerMayReadListings = !photoKeysRequired() || passesReadGate(ctx.state?.actor as string | undefined);
+        const items = getPricingGuideItems(category, search).map(item => withReadersThumbnail(item, readerMayReadListings));
         const config = getPricingConfig();
 
+        // Keyed photo URLs for a member: never kept by a shared cache for another reader.
+        if (photoKeysRequired()) ctx.set('Cache-Control', 'private, no-store');
         ctx.body = {
             items,
             config,

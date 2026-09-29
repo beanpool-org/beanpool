@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 90,
-  "hash": "92a47e3389473cc4159e5b793513e47c94c923635c9f4d8a1abc193978536212",
+  "version": 91,
+  "hash": "c9da20e1f22893ac2712ced74118bea93af7f12410d4cacbc3aab52069288582",
   "sections": [
     {
       "id": "about",
@@ -4320,7 +4320,7 @@
           "items": [
             "Gifts do not build trust. Only completed trades do.",
             "You can send gifts while on holiday.",
-            "You can make up to 100 payments in any 24 hours. Gifts, buying, asking to buy an Offer, approving help on your Need, pledges and buying from another community all count. Up to 30 of them can go to people you have never paid before; paying people you have paid before still works. Receiving is never limited. If you reach a limit, the app says which, and when you can pay again."
+            "You can make up to 100 payments in any 24 hours. Gifts, buying, asking to buy an Offer, approving help on your Need, pledges of beans to a project and buying from another community all count. A keeper's backing of an enterprise moves no beans, so it is not a payment: it counts only as one of your 20 pledge changes a day. Up to 30 of them can go to people you have never paid before; paying people you have paid before still works. Receiving is never limited. If you reach a limit, the app says which, and when you can pay again."
           ]
         }
       ]

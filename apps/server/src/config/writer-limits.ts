@@ -14,8 +14,12 @@
  *     restart, a restore or a take-over carries the counts with them. The Pulse harvester's allowance is read there
  *     too, by engine/pulse-resolver.ts resolveChannel: those rows are the server's own writes for a member.
  *
- * The money routes are not limited here (no change in conservingTransaction, the ledger guards or the transfer
- * routes): the day budget bounds them from the gateway until their own limits land (design §7, W-money).
+ * An enterprise or project (a treasury: in the commons model a project IS an enterprise, members.is_treasury = 1) has its
+ * own, higher allowance wherever it acts, counted against it and never against the keeper who signs (Marty, 2026-09-29:
+ * "maybe needs to be higher for enterprise/project"; the director set 10x). Each `enterprise…` number sits beside the
+ * member's one it replaces for an enterprise's acts.
+ *
+ * The money limits (W-money, design §7 row 5) are MONEY_LIMITS below, read by engine/money-limits.ts.
  */
 export const WRITER_LIMITS = {
     /** Signed writes (POST, PUT, PATCH, DELETE) per key in any 24 hours, the admin surface and the read marks aside
@@ -23,6 +27,12 @@ export const WRITER_LIMITS = {
      *  from a phone, and they make no row). Heavy real user: a very active member's few hundred messages, reactions,
      *  edits and deals, under 2,000. */
     signedWritesPerDay: 5_000,
+    /** Signed writes per enterprise or project in any 24 hours, for the writes whose path names it
+     *  (`/api/treasury/:id/…`, `/api/enterprise/:id/…`, `/api/enterprises/:id/…`) when the signer keeps that running
+     *  enterprise. They are counted here and not in the keeper's own signedWritesPerDay. Heavy real user: a large
+     *  project's or a busy shop's keepers together, listing, approving, paying and talking in its thread all day: a few
+     *  thousand. */
+    enterpriseSignedWritesPerDay: 50_000,
     /** Lines per member per minute in a chat: a DM, a group chat or an event chat. Heavy real user: nobody types 30
      *  lines a minute. */
     chatLinesPerMinute: 30,
@@ -38,9 +48,13 @@ export const WRITER_LIMITS = {
     enterprisesPerDay: 3,
     /** Enterprises a member started that are still running (not wound up). Heavy real user: a person runs one to three. */
     enterprisesLive: 20,
-    /** New posts (any kind) by one member in any 24 hours, their own and those they put up for an enterprise they
-     *  keep. Photos stay at 5 a post. Heavy real user: a shop putting its whole stock up in one day. */
+    /** New posts (any kind) by one member in any 24 hours, their own. What they put up for an enterprise they keep
+     *  counts against the enterprise (enterprisePostsPerDay). Photos stay at 5 a post. Heavy real user: a member putting
+     *  a garage's worth of things up in one day. */
     postsPerDay: 100,
+    /** New posts (offers, needs and events) an enterprise or project puts up in any 24 hours, whichever keepers put them
+     *  up. Heavy real user: a large shop or market putting its whole stock up in one day. */
+    enterprisePostsPerDay: 1_000,
     /** Groups a member starts in any 24 hours. Heavy real user: a convenor making several interest groups in a day. */
     groupsPerDay: 5,
     /** Invites a member makes in any 24 hours. Heavy real user: a member bringing a street in for a launch night. */
@@ -62,4 +76,40 @@ export const WRITER_LIMITS = {
      *  newest 20 each (240), plus a day of new posts across them (a daily blog, a podcast and a busy video channel:
      *  tens, not 160). Before it, a feed its owner controls could add ~57,600 rows a day. */
     pulseHarvestedItemsPerDay: 400,
+};
+
+/**
+ * What one account may do with Beans in any 24 hours (W-money: design scratch/global-node/DESIGN-replica-flood-bounds-opus.md
+ * §7 row 5; Marty's numbers, board card w-money-numbers, 2026-09-29, and 10x those for an enterprise or project, the
+ * director's). So that one account, or a stolen phone, can't spray Beans or flood the ledger. Enforced by
+ * engine/money-limits.ts (the routes: routes/money-limits-gate.ts, and the two federation routes themselves).
+ *
+ * Counted against the account whose Beans or deal it is: a member's own key, or the enterprise (its treasury) when a
+ * keeper acts for it, never against the keeper who signs. Receiving is never limited.
+ */
+export const MONEY_LIMITS = {
+    /** Payments a member's own account sends in any 24 hours: a send, a one-step buy, asking to buy an offer, approving
+     *  help on their own need, a pledge to a crowdfund, a purchase from another community. Heavy real user: a market
+     *  day's buying and a few gifts, a few dozen. */
+    paymentsPerDay: 100,
+    /** Payments an enterprise or project sends in any 24 hours: paying for help on its needs, sweeping to the Commons,
+     *  commissioning from another community. Heavy real user: a busy shop or project paying its suppliers and helpers,
+     *  a few hundred. */
+    enterprisePaymentsPerDay: 1_000,
+    /** People a member pays in any 24 hours whom they have never paid before (paying someone they have paid before is
+     *  not counted). Heavy real user: buying from a dozen new stalls on a market day. */
+    newRecipientsPerDay: 30,
+    /** People an enterprise or project pays in any 24 hours whom it has never paid before. Heavy real user: a project
+     *  taking on a hundred new helpers for a working bee. */
+    enterpriseNewRecipientsPerDay: 300,
+    /** Marketplace requests a member makes in any 24 hours: asking to buy or to help, accepting an offer, approving a
+     *  request on their own listing. Heavy real user: a busy market day on both sides of the stall, several dozen. */
+    marketRequestsPerDay: 100,
+    /** Marketplace requests an enterprise or project makes in any 24 hours: approving requests on its listings. Heavy
+     *  real user: a busy shop's orders on its best day, a few hundred. */
+    enterpriseMarketRequestsPerDay: 1_000,
+    /** Pledge changes a member makes in any 24 hours: backing an enterprise (a keeper's pledge), changing or releasing
+     *  it, or pledging to a crowdfund. Pledges are a member's act, so an enterprise has no number of its own. Heavy real
+     *  user: backing a handful of projects at a launch. */
+    pledgesPerDay: 20,
 };

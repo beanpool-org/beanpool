@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -225,6 +225,35 @@ describe('the image staged is the one the newest release names, from the release
         expect(t.asked).toHaveLength(1);
         expect(readFileSync(t.asked[0].bundlePath).equals(t.bundleB)).toBe(true);
         expect((await t.install()).result).toEqual({ installed: true, version: '1.1.0' });
+    });
+
+    it('a feed cut short below the running release, or a chain naming an older image again: nothing is staged (#1314 round 3, 4138896811)', async () => {
+        const t = setUpImages();
+        // 1.0.1 brings image A (with its files), 1.0.2 is its API fix, 1.1.0 brings A2: this machine booted A2 and runs
+        // 1.1.0's bundle.
+        const a = imageFiles();
+        const a2 = imageFiles();
+        const bundle110 = crypto.randomBytes(64);
+        const r101 = t.imageRelease('1.0.1', t.r1, a);
+        const r102 = t.apiRelease('1.0.2', r101);
+        const r110 = t.imageRelease('1.1.0', r102, a2, bundle110);
+        const check = () => t.updater({ stagedDir: t.stagedDir, verifyRoot, ownBundleHash: sha256Hex(bundle110), runningImageHash: () => r110.manifest.imageHash }).check();
+        const inbox = () => (existsSync(t.stagedDir) ? readdirSync(t.stagedDir) : []);
+        expect(await check()).toMatchObject({ running: { version: '1.1.0' }, newest: { version: '1.1.0' }, imageWaiting: null });
+
+        // The feed withholds 1.1.0: the API can't place itself, and the newest (1.0.2) names A, older than what runs.
+        const withheld = path.join(t.feedDir, 'vault-v1.1.0');
+        const kept = path.join(t.feedDir, '..', `withheld-${n}`);
+        renameSync(withheld, kept);
+        expect(await check()).toMatchObject({ running: null, newest: { version: '1.0.2' }, imageWaiting: null, note: expect.stringContaining('not a release in the feed') });
+        expect(inbox()).toEqual([]);
+
+        // Whole again, and 1.2.0 after 1.1.0 names A again (which 1.0.1 brought): older than 1.1.0, so nothing either.
+        renameSync(kept, withheld);
+        const r120 = makeRelease({ version: '1.2.0', previous: r110, custodianKeys: t.root, signers: t.root.slice(0, 2), image: a.image });
+        publish(t.feedDir, r120);
+        expect(await check()).toMatchObject({ running: { version: '1.1.0' }, newest: { version: '1.2.0' }, imageWaiting: null });
+        expect(inbox()).toEqual([]);
     });
 });
 

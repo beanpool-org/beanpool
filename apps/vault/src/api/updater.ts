@@ -33,7 +33,8 @@ export { stagedNames, uuidOfHex, veritysetupVerify, type VerifyRoot } from '../s
  *   bundle doesn't run on the old image.
  *
  * Never backwards: only a release newer than the one running is taken, and an API that can't find itself in the feed
- * (a withheld release, a source run) takes nothing.
+ * (a withheld release, a source run) takes nothing: no handover, and no image staged (the image's release must be
+ * newer than the running one too).
  */
 
 /**
@@ -187,7 +188,10 @@ export class Updater {
         // the one the image was built as (its UKI's and partitions' names), which root's step and systemd-sysupdate go by.
         // An API-only release after it names the same image and carries none of them.
         const newestImage = chain.newest && image && chain.newest.manifest.imageHash !== image ? chain.newest.manifest.imageHash : null;
-        const brought = newestImage ? chain.releases.find(r => r.manifest.imageHash === newestImage) ?? null : null;
+        let brought = newestImage ? chain.releases.find(r => r.manifest.imageHash === newestImage) ?? null : null;
+        // Only an image newer than the running release: a feed cut short below it (the API can't place itself) or a
+        // chain naming an older image again stages nothing (root would refuse it, after a download of the image).
+        if (brought && (!running || compareVersions(brought.manifest.version, running.manifest.version) <= 0)) brought = null;
         s.imageWaiting = brought ? { ...ref(brought), imageHash: brought.manifest.imageHash, ...(await this.stage(brought, files, chain).catch(e => ({
             staged: false, error: `the image could not be staged: ${(e as Error).message}`.slice(0, 300),
         }))) } : null;

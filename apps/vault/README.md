@@ -117,22 +117,24 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   own pinned keys, runs the bundle's `--self-test` (it must report the same pinned keys and its own hash), starts it
   beside the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the
   old one to finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release
-  newer than the one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this
-  too, whatever the API asks: it reads which image booted from the same file in `/run` (unknown: it switches to
-  nothing), and takes only a release for that image, newer than the one in service (found by its bundle and that
-  image, as the API finds itself: two images' releases can share a bundle) and than any it switched to. An API that keeps exiting after a switch (three times in ten minutes) gives way to
-  the one in service before the switch, or the image's own if that one keeps exiting too. That step back is the
-  launcher's, not a release chosen: the release it fell back from may be taken again after a back-off (an hour,
-  doubling each time it fails again, never past the next monthly restart), and nothing else at or below the newest
-  release it switched to. All of that is the launcher process's memory, so it stays up while its API is down (only
-  systemd's stop ends it); `launcher-program.test.ts` runs the built program to check it. A release's bundle sits
-  where the API's user writes, so the launcher keeps the SHA-256 it checked and hashes the file again before every
-  start (the switch, a restart, a step back): a file that changed is not run, the image's own API starts instead, and
-  that release is backed off from. (The launcher runs as the API's user: a hostile API could still race the moment
-  between that hash and Node reading the file. That gains it nothing it lacks: it can already refuse a handover.)
-- **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one
-  booted, the API downloads that image from the release that brought it (the first to name it: an API-only release
-  after it carries no image files, and the image's files are named for the version it was built as) into its inbox
+  newer than the one running, and an API that can't find itself in the feed takes nothing (no handover, and no image
+  staged). The launcher holds to this too, whatever the API asks: it reads which image booted from the same file in
+  `/run` (unknown: it switches to nothing), and takes only a release for that image, newer than the one in service
+  (found by its bundle and that image, as the API finds itself: two images' releases can share a bundle) and than any
+  it switched to. An API that keeps exiting after a switch (three times in ten minutes) gives way to the one in
+  service before the switch, or the image's own if that one keeps exiting too. That step back is the launcher's, not a
+  release chosen: the release it fell back from may be taken again after a back-off (an hour, doubling each time it
+  fails again, never past the next monthly restart), and nothing else at or below the newest release it switched to.
+  All of that is the launcher process's memory, so it stays up while its API is down (only systemd's stop ends it);
+  `launcher-program.test.ts` runs the built program to check it. A release's bundle sits where the API's user writes,
+  so the launcher keeps the SHA-256 it checked and hashes the file again before every start (the switch, a restart, a
+  step back): a file that changed is not run, the image's own API starts instead, and that release is backed off from.
+  (The launcher runs as the API's user: a hostile API could still race the moment between that hash and Node reading
+  the file. That gains it nothing it lacks: it can already refuse a handover.)
+- **A new image** (system, kernel, keyholder, Node): when the newest release names another image than the one booted,
+  the API downloads that image from the release that brought it (the first to name it: an API-only release after it
+  carries no image files, and the image's files are named for the version it was built as), if that release is newer
+  than the one running (so an API that can't find itself in the feed stages nothing either), into its inbox
   (`/var/lib/beanpool-vault/staged`), with the chain of releases up to it, and `/v1/report` says `imageWaiting`. That
   decides nothing: the API is what this guards against. At the monthly restart root's install step
   (`vault-install.mjs`, built with the genesis keys like the launcher, on the verified system partition;
@@ -142,8 +144,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs), where
   systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to the old
   one if it fails to boot three times. Anything else is refused, logged and deleted: root unlinks the inbox's files
-  (it never walks into a directory the API's user made there), and at its next check the API clears everything in
-  its inbox but the image it stages (a directory with all it holds; a link, never what it points at). What it can't
+  (it never walks into a directory the API's user made there), and at its next check the API clears everything in its
+  inbox but the image it stages (a directory with all it holds; a link, never what it points at). What it can't
   remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians
   unlock. The test image installs a signed next image this way (a small one that is never booted: the API stages it,
   root makes every check, and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals;

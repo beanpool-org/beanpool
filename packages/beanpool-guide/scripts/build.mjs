@@ -264,7 +264,13 @@ export function check({ base = findBase() } = {}) {
         }
     }
     if (base.broken) problems.push(`cannot compare the published copies with main's: ${base.why}`);
-    if (base.ref) problems.push(...versionProblems(published, pages, base.ref));
+    if (base.ref) {
+        try {
+            problems.push(...versionProblems(published, pages, base.ref));
+        } catch (e) {
+            problems.push(`cannot compare the published copies with ${base.ref.slice(0, 10)}'s: ${e.message}`);
+        }
+    }
     return problems;
 }
 

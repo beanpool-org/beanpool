@@ -18,7 +18,9 @@
  *                                                                                           when the seller says yes (the
  *                                                                                           seller's act, which counts nothing
  *                                                                                           of the buyer's); on a need the
- *                                                                                           helper, who is paid, so R only
+ *                                                                                           helper, who is paid, so R only;
+ *                                                                                           nothing when the same ask is
+ *                                                                                           still waiting (asked again)
  *   POST /api/marketplace/transactions/approve              R, and P to the helper on the   the listing's author
  *                                                           author's own need
  *   POST /api/(treasury|enterprise)/:id/approve             R, and P to the helper on its   the enterprise, and the
@@ -106,6 +108,16 @@ function listing(postId: unknown): { author: string; type: string } | null {
     return (db.prepare('SELECT author_pubkey AS author, type FROM posts WHERE id = ?').get(id) as { author: string; type: string } | undefined) ?? null;
 }
 
+/**
+ * Is `actor`'s ask for this listing still waiting (the same post, buyer and seller)? requestPost then returns that request
+ * and writes nothing, so asking again (a double tap, a retry after a timeout) counts nothing.
+ */
+function askedAlready(postId: string, post: { author: string; type: string }, actor: string): boolean {
+    const [buyer, seller] = post.type === 'offer' ? [actor, post.author] : [post.author, actor];
+    return !!db.prepare(`SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? AND seller_pubkey = ? AND status = 'requested'`)
+        .get(postId, buyer, seller);
+}
+
 /** A request waiting on its listing's author: who would pay (the buyer) and who would be paid (the seller). */
 function waiting(transactionId: unknown): { buyer: string; seller: string } | null {
     const id = str(transactionId);
@@ -134,6 +146,7 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
         method: 'POST', path: /^\/api\/marketplace\/posts\/request\/?$/, ids: ['postId'],
         plan: (actor, _m, b) => {
             const post = listing(b.postId);
+            if (post && askedAlready(b.postId as string, post, actor)) return null;
             return { account: actor, acts: post?.type === 'offer' ? [{ kind: 'payment', recipient: post.author }, { kind: 'request' }] : [{ kind: 'request' }] };
         },
     },

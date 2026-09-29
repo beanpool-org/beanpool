@@ -16,7 +16,7 @@
  *     is not new; the 31st new person is 429 money_new_recipients_day, and a key with no row gets no row; buying from a
  *     new seller counts too; so does an id that isn't text (400), buying or asking.
  *  3. Marketplace requests: asking, accepting and approving, 100 a day; the 101st is 429 money_requests_day and makes
- *     no trade row.
+ *     no trade row. Asking again for the same offer while the first ask waits returns that ask and counts nothing.
  *  4. Pledges: backing an enterprise, releasing it (every alias) and a crowdfund pledge, 20 a day; the 21st is 429
  *     money_pledges_day, and so is applying to keep another enterprise with a pledge (each way it can be sent), with no
  *     application stored; applying with none still goes; another member is unaffected.
@@ -417,6 +417,7 @@ async function main(): Promise<void> {
         const bo = member('Bo');
         for (const who of [ann, cal, bo]) { completedTrade(who.pk, tradie.pk); plantPost(who.pk, 'offer'); }
         const sellaOffer = plantPost(sella.pk, 'offer');
+        const sellaOther = plantPost(sella.pk, 'offer');
         const annNeed = plantPost(ann.pk, 'need');
         const annOffer = plantPost(ann.pk, 'offer');
         const project = plantProject(owner.pk);
@@ -437,7 +438,10 @@ async function main(): Promise<void> {
         const annBefore = bal(ann.pk), benBefore = bal(ben.pk);
         refused(await send(ann, ben.pk), 'money_payments_day', /100 payments/, before, 'the 101st payment, a send');
         refused(await accept(ann, sellaOffer), 'money_payments_day', /100 payments/, before, 'a one-step buy past it');
-        refused(await request(ann, sellaOffer), 'money_payments_day', /100 payments/, before, 'asking to buy an offer past it');
+        refused(await request(ann, sellaOther), 'money_payments_day', /100 payments/, before, 'asking to buy another offer past it');
+        const askedAgain = await request(ann, sellaOffer);
+        assert(askedAgain.status === 200 && askedAgain.body?.transaction?.id === kinds[1][1].body?.transaction?.id && sameBooks(before, books()),
+            `asking again for the offer her first ask still waits on is no new payment: that ask comes back and nothing moves (${show(askedAgain)})`);
         refused(await crowdfund(ann, project), 'money_payments_day', /100 payments/, before, 'a crowdfund pledge past it');
         assert(bal(ann.pk) === annBefore && bal(ben.pk) === benBefore, `neither balance moved (Ann ${annBefore}, Ben ${benBefore})`);
         await idNotText('a send past it', 'to', ben.pk, ann.pk, (to) => call('POST', ann, '/api/ledger/transfer', { to, amount: 1 }));
@@ -514,6 +518,18 @@ async function main(): Promise<void> {
         refused(await accept(eve, plantPost(nia.pk, 'offer')), 'money_requests_day', /100 deals/, before, 'a one-step buy past it');
         const boAsksToo = await request(bo2, needs[M.marketRequestsPerDay - 1]);
         assert(boAsksToo.status === 200, `another member still asks (${show(boAsksToo)})`);
+
+        // Asking twice for the same offer (a double tap, or a retry after a timeout): one ask, counted once.
+        const ivy = member('Ivy');
+        plantPost(ivy.pk, 'offer');
+        const ivyWants = plantPost(eve.pk, 'offer');
+        sync();
+        const kinds = (kind: string) => count('SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = ?', ivy.pk, kind);
+        const [first, second] = [await request(ivy, ivyWants), await request(ivy, ivyWants)];
+        const rows = count(`SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ?`, ivyWants, ivy.pk);
+        assert(first.status === 200 && second.status === 200 && second.body?.transaction?.id === first.body?.transaction?.id && rows === 1,
+            `Ivy asks twice for the same offer: the same request comes back, one stored (${show(second)}, ${rows} rows)`);
+        assert(kinds('request') === 1 && kinds('payment') === 1, `and it counts once: 1 request and 1 payment, not 2 (${kinds('request')}, ${kinds('payment')})`);
     }
 
     // ── 4. Pledges ────────────────────────────────────────────────────────────────────────────────────────────

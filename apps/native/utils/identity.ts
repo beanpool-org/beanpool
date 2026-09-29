@@ -8,13 +8,171 @@ import {
 import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import {
-    CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
+    CANONICAL_PROFILE_STORE_KEY, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY,
+    PUSH_REGISTRATIONS_DUE_STORE_KEY,
 } from './storage-keys';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
+const onIPhone = Platform.OS === 'ios';
 
 const KEY_ID = 'sovereign-identity';
+
+/**
+ * How every item that holds this phone's key and its 12 words is written: readable only while the phone is unlocked, as
+ * before, and never carried to another phone. On an iPhone that is the Keychain's
+ * kSecAttrAccessibleWhenUnlockedThisDeviceOnly: a backup restored onto a new iPhone no longer brings the key, and the
+ * member signs in there with their 12 words or their sign-in account, as on Android.
+ *
+ * Android has no such option (expo-secure-store ignores it there) and needs none: the item is encrypted with an Android
+ * Keystore key that never leaves the phone, and expo-secure-store's backup rules leave the item out of backups.
+ *
+ * On an iPhone the option takes effect only when the item is made: a write over an item that is already there changes its
+ * contents and keeps its old setting (expo-secure-store's update is SecItemUpdate of the data alone). An item made before
+ * this build is made again, once, by {@link keepKeyOnThisPhone}.
+ */
+export const KEY_ITEM_OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+
+/**
+ * iPhone only: the key's copy while {@link keepKeyOnThisPhone} makes its item again. Reads fall back to it when the item is
+ * missing, so a move stopped part-way (the app closed, a write failed) never leaves the phone without its key.
+ */
+export const KEY_ID_MOVING = 'sovereign-identity.moving';
+
+/**
+ * iPhone only: every read, write and removal of the key waits its turn, so none lands in the middle of a move (a read
+ * between the item going and the item coming back must not answer "no key", and a save must not be overwritten by the
+ * move's copy of the key before it). Android and the web have no move, and do what they always did.
+ */
+let keyItemTurn: Promise<unknown> = Promise.resolve();
+function keyItemJob<T>(job: () => Promise<T>): Promise<T> {
+    if (!onIPhone) return job();
+    const run = keyItemTurn.then(job);
+    keyItemTurn = run.catch(() => {});
+    return run;
+}
+
+async function readKeyItem(): Promise<string | null> {
+    return keyItemJob(async () => {
+        const data = await SecureStore.getItemAsync(KEY_ID);
+        if (data || !onIPhone) return data;
+        return SecureStore.getItemAsync(KEY_ID_MOVING);
+    });
+}
+
+async function writeKeyItem(payload: string): Promise<void> {
+    await keyItemJob(() => SecureStore.setItemAsync(KEY_ID, payload, KEY_ITEM_OPTIONS));
+}
+
+async function deleteKeyItem(): Promise<void> {
+    await keyItemJob(async () => {
+        await SecureStore.deleteItemAsync(KEY_ID);
+        // A copy left by a stopped move would otherwise bring the key back on the next read.
+        if (onIPhone) await SecureStore.deleteItemAsync(KEY_ID_MOVING);
+    });
+}
+
+/** Where {@link keepKeyOnThisPhone} records that it is done: AsyncStorage in the app, a map in tests. */
+export interface KeyMoveRecord {
+    getItem(key: string): Promise<string | null>;
+    setItem(key: string, value: string): Promise<void>;
+}
+
+/**
+ * - `not-needed`: nothing to move (not an iPhone, no key, or this key's item was made this-device-only already).
+ * - `moved`: the item was made again, this-device-only, and read back the same.
+ * - `kept`: a step failed or couldn't be checked; the phone keeps the key it had, and the next launch tries again.
+ */
+export type KeyMoveOutcome = 'not-needed' | 'moved' | 'kept';
+
+/** The public key an item holds, or null when it doesn't read as an identity. */
+function publicKeyIn(item: string): string | null {
+    try {
+        const parsed = JSON.parse(item);
+        return typeof parsed?.publicKey === 'string' && parsed.publicKey ? parsed.publicKey : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Writes `value` under `key`, this-device-only, and reads it back: true only if the same string comes back. */
+async function writeAndReadBack(key: string, value: string): Promise<boolean> {
+    try {
+        await SecureStore.setItemAsync(key, value, KEY_ITEM_OPTIONS);
+        return (await SecureStore.getItemAsync(key)) === value;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Make an iPhone's key item this-device-only, once per key, without ever risking the key (the move behind
+ * {@link KEY_ITEM_OPTIONS}). Run once at launch, after the first read (IdentityContext), never awaited by anything that
+ * draws: nothing waits on it but the next read or write of the key, and it never throws.
+ *
+ * The Keychain keeps an item's setting on every later write, so the item has to be made again. In order:
+ * 1. a copy, this-device-only, under {@link KEY_ID_MOVING}, read back the same (else it goes, and nothing else changed);
+ * 2. the old item deleted, and read again to be sure it is gone (a write over one still there would keep its old setting);
+ * 3. the item made again, this-device-only, and read back the same;
+ * 4. the record that this key is done, then the copy removed.
+ * A step that fails leaves the key readable: before step 2 in the old item, after it in the copy, which reads fall back
+ * to until the next launch puts the item back from it. A launch that finds both keeps the item and drops the copy: the
+ * item is never older than the copy (it is either the old item, the item made again, or a later save).
+ *
+ * The record is the public key moved: a new key on this phone (a restore, a new account) is moved once too. A key whose
+ * item this build made is moved again once, harmlessly, because a write can't tell whether it made the item or updated it.
+ */
+export function keepKeyOnThisPhone(record: KeyMoveRecord): Promise<KeyMoveOutcome> {
+    if (!onIPhone) return Promise.resolve('not-needed');
+    return keyItemJob(() => moveKeyItem(record)).catch((): KeyMoveOutcome => 'kept');
+}
+
+async function moveKeyItem(record: KeyMoveRecord): Promise<KeyMoveOutcome> {
+    const item = await SecureStore.getItemAsync(KEY_ID);
+    const copy = await SecureStore.getItemAsync(KEY_ID_MOVING);
+
+    if (!item) {
+        if (!copy) return 'not-needed';
+        // A move stopped after the old item went: the key is only in the copy. Put the item back from it.
+        const publicKey = publicKeyIn(copy);
+        if (!publicKey) return 'kept';
+        if (!(await writeAndReadBack(KEY_ID, copy))) {
+            // Whatever the failed write left goes, so reads keep finding the copy.
+            await SecureStore.deleteItemAsync(KEY_ID).catch(() => {});
+            return 'kept';
+        }
+        await record.setItem(IDENTITY_THIS_DEVICE_STORE_KEY, publicKey).catch(() => {});
+        await SecureStore.deleteItemAsync(KEY_ID_MOVING).catch(() => {});
+        return 'moved';
+    }
+
+    const publicKey = publicKeyIn(item);
+    // Not an identity this build can read: left exactly as it is.
+    if (!publicKey) return 'kept';
+    // Left over from a move that stopped: the item is there, and never older than the copy.
+    if (copy) await SecureStore.deleteItemAsync(KEY_ID_MOVING);
+
+    if ((await record.getItem(IDENTITY_THIS_DEVICE_STORE_KEY)) === publicKey) return 'not-needed';
+
+    // 1. The copy, proven before the item is touched.
+    if (!(await writeAndReadBack(KEY_ID_MOVING, item))) {
+        await SecureStore.deleteItemAsync(KEY_ID_MOVING).catch(() => {});
+        return 'kept';
+    }
+    // 2. The old item goes, and has to be gone. If it is still there, or the phone won't say, the copy stays: reads use
+    // the item while it is there and the copy if it isn't, and the next launch sorts it out.
+    await SecureStore.deleteItemAsync(KEY_ID);
+    if ((await SecureStore.getItemAsync(KEY_ID)) !== null) return 'kept';
+    // 3. Made again. A failure leaves the key in the copy.
+    if (!(await writeAndReadBack(KEY_ID, item))) {
+        await SecureStore.deleteItemAsync(KEY_ID).catch(() => {});
+        return 'kept';
+    }
+    // 4. Done.
+    await record.setItem(IDENTITY_THIS_DEVICE_STORE_KEY, publicKey).catch(() => {});
+    await SecureStore.deleteItemAsync(KEY_ID_MOVING).catch(() => {});
+    return 'moved';
+}
 
 export interface BeanPoolIdentity {
     publicKey: string;    // Hex-encoded Ed25519 public key
@@ -30,7 +188,7 @@ async function migrateLegacyIdentity(): Promise<void> {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const legacyIdentity = await AsyncStorage.getItem('beanpool:identity');
         if (legacyIdentity) {
-            await SecureStore.setItemAsync(KEY_ID, legacyIdentity);
+            await writeKeyItem(legacyIdentity);
             await AsyncStorage.removeItem('beanpool:identity');
             console.log('Successfully migrated legacy identity to SecureStore');
         }
@@ -46,7 +204,7 @@ export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
         if (isWeb) {
             data = localStorage.getItem(KEY_ID);
         } else {
-            data = await SecureStore.getItemAsync(KEY_ID);
+            data = await readKeyItem();
         }
         if (!data) return null;
         return JSON.parse(data);
@@ -136,7 +294,7 @@ export async function discardUnjoinedIdentity(publicKey: string): Promise<boolea
     if (isWeb) {
         localStorage.removeItem(KEY_ID);
     } else {
-        await SecureStore.deleteItemAsync(KEY_ID);
+        await deleteKeyItem();
     }
     announceAccountOnPhone(null);
     return true;
@@ -234,7 +392,7 @@ async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
     if (isWeb) {
         localStorage.setItem(KEY_ID, payload);
     } else {
-        await SecureStore.setItemAsync(KEY_ID, payload);
+        await writeKeyItem(payload);
     }
     announceAccountOnPhone(identity.publicKey);
 }
@@ -298,7 +456,7 @@ export async function removeStoredIdentity(): Promise<void> {
     if (isWeb) {
         localStorage.removeItem(KEY_ID);
     } else {
-        await SecureStore.deleteItemAsync(KEY_ID);
+        await deleteKeyItem();
     }
     announceAccountOnPhone(null);
 }

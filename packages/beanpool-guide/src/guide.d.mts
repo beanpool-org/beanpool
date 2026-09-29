@@ -1,5 +1,6 @@
-// Types for guide.mjs, for the TypeScript tests that read the pages themselves (apps/manager's manual tests): what a
-// page says is pinned on the pages, since the bundled copy only changes when the director publishes.
+// Types for guide.mjs, for the TypeScript tests that read the pages themselves (the member apps' guide tests and
+// apps/manager's manual tests): what a page says is pinned on the pages, since the bundled copy only changes when the
+// director publishes.
 
 export const GUIDE_SCHEMA: number;
 export const ABOUT_SECTION: string;
@@ -24,3 +25,6 @@ export function loadGuide(
 ): GuideCollection;
 
 export function contentHash(content: unknown): string;
+
+/** The exact bytes of a published copy (generated/guide.json, generated/operators.json). */
+export function serializeGuide(guide: GuideCollection): string;

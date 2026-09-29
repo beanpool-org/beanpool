@@ -1,6 +1,6 @@
 /**
  * On a standby, the routes that move Beans or step a trade answer 409 `standby` before any handler runs, and so do the
- * routes that write in-flight money and governance (STANDBY_WRITE_ROUTES).
+ * routes that write in-flight money and governance or members' devices and conveniences (STANDBY_WRITE_ROUTES).
  *
  * A standby makes no Bean move of its own (config/node-role.ts assertLedgerWritable): its ledger is its main server's
  * rows, verbatim, and members use the main server. The ledger primitives refuse underneath whoever calls, so this table
@@ -52,7 +52,7 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
 ];
 
 /**
- * The routes that write in-flight money and governance, the plain tables (engine/replication-manifest.ts, design G3): their
+ * The routes that write the plain tables (engine/replication-manifest.ts, design G3, G4): their
  * rows are the main server's, and a standby writes none of its own (config/node-role.ts assertPlainTablesWritable, which
  * the writers under these call too). Decisions and their ballots are above, with the Beans they can move.
  */
@@ -74,6 +74,12 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
     // A link's commissioning ceiling.
     /^\/api\/local\/federation\/links\/ceiling\/?$/,
+    // Members' devices and conveniences (design G4): a phone registered or removed, a leave statement, a chat muted or
+    // unmuted, and the pricing guide's items, prices and reports. A keeper's read mark on an enterprise thread is refused
+    // by its route's engine call (the same route marks group chats read, conversation_participants).
+    /^\/api\/push-tokens(\/leave\/[^/]+)?\/?$/,
+    /^\/api\/messages\/mute\/?$/,
+    /^\/api\/pricing-guide\/(report|reports\/[^/]+\/status|admin\/(item(\/[^/]+)?|pin|reset|aggregate))\/?$/,
 ];
 
 /** What a standby answers this request here: a write to a route above, refused with its message; null when it goes on. */

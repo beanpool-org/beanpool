@@ -1,20 +1,23 @@
 /**
- * The plain tables on a standby: in-flight money and governance, its main server's rows verbatim (design
- * scratch/global-node/DESIGN-standby-takeover-gaps-opus.md G3, §4.1, §4.2; engine/replication-manifest.ts
+ * The plain tables on a standby: in-flight money and governance, and members' devices and conveniences, its main server's
+ * rows verbatim (design scratch/global-node/DESIGN-standby-takeover-gaps-opus.md G3, G4, §4.1, §4.2; engine/replication-manifest.ts
  * PLAIN_TABLES_PAYLOAD). One generic path for every table the manifest marks `plain`, so the next table is one line there.
  *
  * The main server sends each table's rows `SELECT *` (engine sync.ts exportPlainTables): a delta the rows its watermark
  * moved past the cursor, a whole copy every row. Here each row is written as it is, the main server's stamp included, and
  * never judged by a stamp of this server's: the main server is a standby's only writer of these tables
  * (config/node-role.ts assertPlainTablesWritable), and the puller refuses a copy older than the last one. So a row that
- * differs in any column is the main server's newer one. A whole copy names every row the main server holds, and one here
- * it doesn't name is deleted. A row the main server deleted between two deltas comes as its tombstone (engine/sync.ts
- * applyTombstoneLocally, deletePlainRow).
+ * differs in any column is the main server's newer one. A whole copy names every row the main server holds (of a table
+ * with a RowRule, every one that travels), and one here it doesn't name is deleted. A row the main server deleted between
+ * two deltas comes as its tombstone (engine/sync.ts applyTombstoneLocally, deletePlainRow).
  *
  * A copy never puts a name into SQL unchecked: only this table's own columns (PRAGMA table_info) are written. And one
  * bad value never wedges copying: a value this table's own rules refuse (its CHECKs and NOT NULLs, db/table-rules.ts) is
  * left out of the write, and a row its unique indexes refuse is tried again after the rest and, if still refused, left
  * out; each is reported, and the whole-copy check counts the rows (engine audit.ts getReplicaConsistency).
+ *
+ * A table with an age rule (the manifest's `agedOut`) loses its old rows on each server with no tombstone: the main
+ * server before each whole copy it serves ({@link pruneAgedOut}), a standby after each copy it imports, by the copy's time.
  */
 import type Database from 'better-sqlite3';
 import { db, rethrowUnlessRowRefused } from '../db/db.js';
@@ -107,15 +110,27 @@ function isConstraintError(e: unknown): boolean {
     return typeof (e as { code?: unknown })?.code === 'string' && (e as { code: string }).code.startsWith('SQLITE_CONSTRAINT');
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * How much longer a standby keeps a row than its table's age rule says, past the copy's own time: the main server deletes
+ * the old rows just before it makes a whole copy (pruneAgedOut), and the copy's time is read a moment later, so a row
+ * the copy names is never one its age rule has taken here. An hour is far longer than a copy takes to make.
+ */
+export const AGED_OUT_SLACK_MS = 3_600_000;
+
 /**
  * Every plain table the copy carries (`remote.plainTables`), inside the import's transaction, with the tables' touch
  * triggers set aside (engine/sync.ts IMPORT_KEEPS_STAMPS). A table the copy doesn't carry (a main server older than its
  * line in the manifest) is left as it is here. `whole`: the copy is a whole one (the puller's snapshot), so it names every
- * row of each table it carries.
+ * row of each table it carries. `copiedAt`: the copy's time (its signed `generatedAt`, the main server's clock), by which
+ * each table the copy carries loses its rows past its age rule, as the main server's own do there (they go with no
+ * tombstone); none without it.
  */
-export function importPlainTables(incoming: unknown, whole: boolean): PlainImportResult {
+export function importPlainTables(incoming: unknown, whole: boolean, copiedAt?: string | null): PlainImportResult {
     const result: PlainImportResult = { changes: 0, skipped: 0, leftOut: [] };
     if (!isPlainObject(incoming)) return result;
+    const copiedMs = typeof copiedAt === 'string' ? Date.parse(copiedAt) : NaN;
     for (const spec of PLAIN_TABLES) {
         const rows = incoming[spec.table];
         if (!Array.isArray(rows)) continue;
@@ -125,8 +140,37 @@ export function importPlainTables(incoming: unknown, whole: boolean): PlainImpor
             continue;
         }
         importTable(spec, shape, rows, whole, result);
+        if (spec.agedOut && Number.isFinite(copiedMs)) {
+            const before = new Date(copiedMs - spec.agedOut.days * DAY_MS - AGED_OUT_SLACK_MS).toISOString();
+            result.changes += ageOut(spec, '?', before);
+        }
     }
     return result;
+}
+
+/** Deletes `spec`'s rows whose age-rule column is before `cutoff` (this code's SQL; `args` fill it), with no tombstone. */
+function ageOut(spec: PlainTable, cutoff: string, ...args: unknown[]): number {
+    if (!spec.agedOut || !shapeOf(spec.table)?.columns.includes(spec.agedOut.column)) return 0;
+    return db.prepare(`DELETE FROM ${q(spec.table)} WHERE ${q(spec.agedOut.column)} < ${cutoff}`).run(...args).changes;
+}
+
+/**
+ * On the main server, before each whole copy it serves (routes/backup.ts): every plain table's rows past its age rule, by
+ * this server's clock, deleted with no tombstone, so the copy, and the hashes sent with it, name none a standby's own age
+ * rule would then take (importPlainTables). The tables' own prunes do the same on their own schedules. Reads first, and
+ * writes nothing when there is nothing to delete, so a whole copy that hasn't changed is still answered "not modified".
+ * Returns how many rows went, by table.
+ */
+export function pruneAgedOut(): Record<string, number> {
+    const pruned: Record<string, number> = {};
+    for (const spec of PLAIN_TABLES) {
+        if (!spec.agedOut || !shapeOf(spec.table)?.columns.includes(spec.agedOut.column)) continue;
+        const cutoff = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+        const modifier = `-${spec.agedOut.days} days`;
+        const any = db.prepare(`SELECT 1 FROM ${q(spec.table)} WHERE ${q(spec.agedOut.column)} < ${cutoff} LIMIT 1`).get(modifier);
+        if (any) pruned[spec.table] = ageOut(spec, cutoff, modifier);
+    }
+    return pruned;
 }
 
 function importTable(spec: PlainTable, shape: Shape, rows: unknown[], whole: boolean, result: PlainImportResult): void {
@@ -154,11 +198,13 @@ function importTable(spec: PlainTable, shape: Shape, rows: unknown[], whole: boo
     }
 
     // A whole copy's deletes first: a row here the main server doesn't hold can't then stand in a unique index's way of
-    // one it does (a pending request here it has since answered and a new one it holds).
+    // one it does (a pending request here it has since answered and a new one it holds). Only among the rows that travel
+    // (the manifest's RowRule, `spec.where`): the copy names none of the rest, and deletes none.
     if (whole) {
         const keep = new Set(named.map((n) => plainRowKey(n.key)));
         const drop = db.prepare(`DELETE FROM ${table} WHERE ${where}`);
-        for (const here of db.prepare(`SELECT ${shape.key.map(q).join(', ')} FROM ${table}`).raw().all() as unknown[][]) {
+        const held = spec.where ? ` WHERE (${spec.where})` : '';
+        for (const here of db.prepare(`SELECT ${shape.key.map(q).join(', ')} FROM ${table}${held}`).raw().all() as unknown[][]) {
             if (!keep.has(plainRowKey(here))) result.changes += drop.run(...here).changes;
         }
     }

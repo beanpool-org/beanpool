@@ -607,9 +607,11 @@ export interface SyncPayload {
     /**
      * The plain tables (apps/server engine/replication-manifest.ts PLAIN_TABLES_PAYLOAD): in-flight money and governance
      * (keepers' wages owed, Decisions and their ballots, keeper and succession votes, invites, re-key codes, recovery
-     * releases, links with other communities), each under its table's name as the main server holds its rows, every
-     * column but the ones the manifest leaves out (exportPlainTables). The ballots go to a standby only: this payload is
-     * served to a standby's replication token alone. A table absent here is one the main server doesn't send (older
+     * releases, links with other communities) and members' devices and conveniences (push tokens and leave statements,
+     * chat mutes, enterprise thread read marks, event reminders sent, the activity list, the pricing guide and its
+     * reports), each under its table's name as the main server holds its rows, every column but the ones the manifest
+     * leaves out (exportPlainTables). The ballots and the push tokens go to a standby only: this payload is served to a
+     * standby's replication token alone. A table absent here is one the main server doesn't send (older
      * than its line in the manifest): a standby keeps its own rows of it. Signed with the rest.
      */
     plainTables?: PlainTableRows;
@@ -702,6 +704,11 @@ export interface PlainTableSpec {
     watermark: string;
     /** Columns never sent. */
     except?: readonly string[];
+    /**
+     * When not every row is sent: an SQL condition on the rows that are (the manifest's RowRule), from the server's own
+     * code, never from a copy or a request.
+     */
+    where?: string;
 }
 
 /** Each plain table's rows, by table name: every row a record of its columns as the main server holds them. */
@@ -712,23 +719,24 @@ const SQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * The rows of each plain table, `SELECT *`: those whose watermark is at or after `since`, or every row for a whole copy
- * (no `since`). In the watermark's order, then the key's, so a standby writes them in the order this server did: a
- * Decision closed before its author opened the next arrives before it, whatever the unique index on open ones would make
- * of the other order. Never a column the spec leaves out. A table this database doesn't have, or a name that isn't a
+ * (no `since`); only the ones its `where` holds, when it has one. In the watermark's order, then the key's, so a standby
+ * writes them in the order this server did: a Decision closed before its author opened the next arrives before it,
+ * whatever the unique index on open ones would make of the other order. Never a column the spec leaves out. A table this database doesn't have, or a name that isn't a
  * plain identifier, is left out of the answer, never sent empty: a standby keeps its own rows of a table no copy carries.
  */
 export function exportPlainTables(db: Db, specs: readonly PlainTableSpec[], since?: string | null): PlainTableRows {
     const delta = typeof since === 'string' && since.length > 0;
     const out: PlainTableRows = {};
-    for (const { table, watermark, except = [] } of specs) {
+    for (const { table, watermark, except = [], where } of specs) {
         if (!SQL_NAME.test(table) || !SQL_NAME.test(watermark)) continue;
         const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
         if (!info.some((c) => c.name === watermark)) continue;
         const key = info.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => `"${c.name}"`);
         const order = [`"${watermark}"`, ...key].join(', ');
+        const held = where ? ` AND (${where})` : '';
         const rows = (delta
-            ? db.prepare(`SELECT * FROM "${table}" WHERE "${watermark}" >= ? ORDER BY ${order}`).all(since)
-            : db.prepare(`SELECT * FROM "${table}" ORDER BY ${order}`).all()) as Record<string, unknown>[];
+            ? db.prepare(`SELECT * FROM "${table}" WHERE "${watermark}" >= ?${held} ORDER BY ${order}`).all(since)
+            : db.prepare(`SELECT * FROM "${table}" WHERE 1${held} ORDER BY ${order}`).all()) as Record<string, unknown>[];
         out[table] = except.length === 0 ? rows : rows.map((r) => {
             const kept = { ...r };
             for (const c of except) delete kept[c];

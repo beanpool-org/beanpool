@@ -10,6 +10,7 @@
 
 import { db } from './db.js';
 import { bumpActivityVersion } from '../engine/versions.js';
+import { standbyWritesNothing } from '../config/node-role.js';
 
 export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created' | 'dispute_resolved';
 
@@ -38,7 +39,9 @@ export const ACTIVITY_FEED_MAX_LIMIT = 100;
 let insertActivityStmt: { run: (...args: any[]) => { lastInsertRowid: number | bigint } } | null = null;
 
 /**
- * Records a new community activity event into the feed.
+ * Records a new community activity event into the feed. On a standby it records nothing and answers 0: the feed is its
+ * main server's, copied (a plain table, design G4), and a line of its own would be deleted by the next whole copy, or
+ * outlive a take-over.
  */
 export function recordActivity(
     eventType: ActivityEventType,
@@ -47,6 +50,7 @@ export function recordActivity(
     metadata?: Record<string, any>
 ): number {
     if (!eventType || !actorPubkey) return 0;
+    if (standbyWritesNothing()) return 0;
 
     const metaStr = metadata ? JSON.stringify(metadata) : null;
     if (!insertActivityStmt) {
@@ -158,17 +162,19 @@ export function renameMemberInActivity(publicKey: string, name: string): number 
 
 /**
  * Prunes activity feed events older than specified retention days.
- * Kept lean (default 30 days) to prevent unbound table growth.
+ * Kept lean (default 30 days) to prevent unbound table growth. With no tombstones: an age rule, which a standby applies
+ * itself after each copy it imports (engine/replication-manifest.ts `agedOut`, engine/plain-tables.ts), so a flood of
+ * lines never comes back a month later as a flood of tombstones in every copy (design
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1). On a standby, nothing (its feed is its main server's).
  */
 export function pruneOldActivity(days: number = 30): number {
-    const res = db.prepare(`
-        DELETE FROM activity_feed 
-        WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')
-    `).run(Math.max(1, days));
+    if (standbyWritesNothing()) return 0;
+    const pruned = db.prepare(`DELETE FROM activity_feed WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')`)
+        .run(Math.max(1, days)).changes;
 
-    if (res.changes > 0) {
+    if (pruned > 0) {
         bumpActivityVersion();
     }
 
-    return res.changes;
+    return pruned;
 }

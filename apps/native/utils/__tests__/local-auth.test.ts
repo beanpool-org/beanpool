@@ -33,6 +33,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuth from '../LocalAuth';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../LocalAuth';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 describe('LocalAuth - getAppLockEnabled & setAppLockEnabled', () => {
     beforeEach(() => {
         vi.clearAllMocks();

@@ -79,7 +79,8 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
     }
 
     const ids = posts.map(p => p.id);
-    // The activity feed (this server's own, never replicated) names a post by its title as it was.
+    // The activity feed names a post by its title as it was. It is a plain table (engine/replication-manifest.ts): the
+    // retitle stamps the rows through its touch trigger, so it reaches a standby by delta too.
     retitlePostsInActivity(ids, DELETED_POST_TITLE);
     // A pricing guide item's picture, when the aggregator took it from one of these posts. The next run finds another.
     db.prepare(`

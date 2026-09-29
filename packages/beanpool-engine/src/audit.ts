@@ -58,6 +58,12 @@ export interface ReplicaConsistency {
      * which its import left out (`<member key>.<column>`, the first few in `examples`). Any makes the copy not exact.
      */
     valuesLeftOut?: { count: number; examples: string[] } | null;
+    /**
+     * Set by the same check: the rows and values of the copy's plain tables (apps/server engine/plain-tables.ts) this
+     * standby's tables refuse, which its import left out (`<table>:<key>` or `<table>:<key>.<column>`), and the tables
+     * they are in. Any makes the copy not exact, and asks for no force-resync.
+     */
+    plainTablesLeftOut?: { count: number; tables: string[]; examples: string[] } | null;
     ok: boolean;
 }
 
@@ -268,12 +274,17 @@ function preferenceCount(members: readonly unknown[]): number {
 /**
  * Replica-fidelity check (backup side).
  * Compares the primary's sync payload statistics against local DB rows.
+ * `plainRows`: a plain table's condition on the rows that travel, by table (apps/server engine/replication-manifest.ts
+ * RowRule, from the server's own code): the main server sent only those, so only those are counted here.
  */
-export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCommonsBalance: number): ReplicaConsistency {
+export function getReplicaConsistency(
+    db: Db, payload: AuditSyncPayload, localCommonsBalance: number, plainRows: Readonly<Record<string, string>> = {},
+): ReplicaConsistency {
     // Guarded: a replica whose schema predates a table must report a mismatch on that one row,
     // not throw and abandon the whole consistency report.
     const count = (t: string) => {
-        try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as any).c) || 0; }
+        const where = Object.hasOwn(plainRows, t) ? ` WHERE (${plainRows[t]})` : '';
+        try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}${where}`).get() as any).c) || 0; }
         catch { return 0; }
     };
     const round2 = (n: number) => Math.round(n * 100) / 100;

@@ -110,9 +110,10 @@
  * `join_requests` tombstones keyed by the row's id, which is never used again, so a copied row this database has a
  * tombstone for stays deleted: a stale copy can't bring it back. A standby applies a copy's `join_requests` tombstones
  * before its rows (engine/sync.ts): a key's lapsed knock deleted and its next knock, a new row, can arrive in one copy,
- * and the new row fits the one-open index only once the old one is gone. `ip_hash` never leaves this database. Invite
- * codes do not replicate, so a standby that merges an approved row makes that invite too (the same code, by the same
- * member, for the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
+ * and the new row fits the one-open index only once the old one is gone. `ip_hash` never leaves this database. The
+ * invite an approved row names travels with the other invites (a plain table, design G3); only from a main server older
+ * than that does a standby that merges an approved row make that invite itself (the same code, by the same member, for
+ * the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
  * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';

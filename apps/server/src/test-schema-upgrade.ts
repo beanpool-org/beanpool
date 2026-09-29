@@ -1283,6 +1283,75 @@ END`;
         fs.rmSync(standbyDir, { recursive: true, force: true });
     }
 
+    // ── 23. Members' devices and conveniences gain their watermark; invite_links goes (design G4) ───────────────────────
+    // A node from before has no updated_at on push_tokens, push_token_leaves, chat_mutes, thread_read_cursors,
+    // event_reminders_sent, activity_feed or pricing_reports (engine/replication-manifest.ts), and still has the
+    // invite_links table nothing ever read or wrote. The upgrade adds the column, stamps each row it holds once on a main
+    // server (a standby's rows are its main server's), makes both triggers, and drops invite_links. A standby seeds no
+    // pricing guide of its own at boot.
+    console.log('\n--- 23. The devices tables gain their watermark, and invite_links goes ---');
+    {
+        const G4 = ['push_tokens', 'push_token_leaves', 'chat_mutes', 'thread_read_cursors', 'event_reminders_sent', 'activity_feed', 'pricing_reports'];
+        const triggersOn = (d: Database.Database, t: string) =>
+            (d.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? ORDER BY name`).all(t) as any[]).map((r) => r.name);
+        const plant = (dir: string) => {
+            assert(bootInto(dir).ok, 'a fresh node boots');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.pragma('foreign_keys = OFF');
+            assert(G4.every((t) => columns(d, t).includes('updated_at') && triggersOn(d, t).length === 2)
+                && !d.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'invite_links'`).get(),
+                'a fresh install has the column and both triggers on each, and no invite_links');
+            for (const t of G4) d.exec(`DROP TABLE ${t}; ${legacyDdl(t, ['updated_at'])}`);
+            d.exec(`CREATE TABLE invite_links (hash_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at DATETIME)`);
+            d.prepare(`INSERT INTO push_tokens (public_key, token, platform, created_at) VALUES ('k', 'ExponentPushToken[old]', 'ios', '2025-01-01T00:00:00.000Z')`).run();
+            d.prepare(`INSERT INTO chat_mutes (conversation_id, member_pubkey, muted_until, created_at) VALUES ('c', 'k', NULL, '2025-01-01T00:00:00.000Z')`).run();
+            d.prepare(`INSERT INTO activity_feed (event_type, actor_pubkey, created_at) VALUES ('post_created', 'k', '2025-01-01T00:00:00.000Z')`).run();
+            d.exec('DELETE FROM pricing_guide_items');
+            assert(G4.every((t) => !columns(d, t).includes('updated_at') && triggersOn(d, t).length === 0), 'the fixture genuinely lacks the column and the triggers');
+            d.close();
+        };
+        const look = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            const out = {
+                shaped: G4.every((t) => columns(d, t).includes('updated_at') && triggersOn(d, t).length === 2),
+                inviteLinks: !!d.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'invite_links'`).get(),
+                token: (d.prepare(`SELECT updated_at AS u FROM push_tokens WHERE token = 'ExponentPushToken[old]'`).get() as any)?.u ?? null,
+                mute: (d.prepare(`SELECT updated_at AS u FROM chat_mutes WHERE conversation_id = 'c'`).get() as any)?.u ?? null,
+                line: (d.prepare(`SELECT updated_at AS u FROM activity_feed WHERE actor_pubkey = 'k'`).get() as any)?.u ?? null,
+                guide: (d.prepare('SELECT COUNT(*) AS n FROM pricing_guide_items').get() as any).n as number,
+            };
+            d.close();
+            return out;
+        };
+        const mainDir = tmp('legacy-devices');
+        plant(mainDir);
+        const booted = bootInto(mainDir);
+        assert(booted.ok, 'a main server from before the column boots');
+        if (!booted.ok) console.error(booted.output.split('\n').slice(-20).join('\n'));
+        const onMain = look(mainDir);
+        assert(onMain.shaped && !onMain.inviteLinks && !!onMain.token && !!onMain.mute && !!onMain.line && onMain.guide > 0,
+            `each table has the column and both triggers, every row it held is stamped, invite_links is gone, and its guide is seeded (${JSON.stringify(onMain)})`);
+        const w = new Database(path.join(mainDir, 'state.db'));
+        w.pragma('foreign_keys = OFF'); // as db.ts runs it
+        w.prepare(`UPDATE chat_mutes SET updated_at = '2025-01-02T00:00:00.000Z' WHERE conversation_id = 'c'`).run();
+        w.prepare(`UPDATE chat_mutes SET muted_until = '2030-01-01T00:00:00.000Z' WHERE conversation_id = 'c'`).run();
+        w.prepare(`INSERT INTO push_tokens (public_key, token, platform, updated_at) VALUES ('k', 'ExponentPushToken[new]', 'ios', NULL)`).run();
+        const moved = (w.prepare(`SELECT updated_at AS u FROM chat_mutes WHERE conversation_id = 'c'`).get() as any).u as string;
+        const stampedNew = (w.prepare(`SELECT updated_at AS u FROM push_tokens WHERE token = 'ExponentPushToken[new]'`).get() as any).u as string | null;
+        w.close();
+        assert(moved > '2025-01-02T00:00:00.000Z' && !!stampedNew, 'a write moves the stamp, and a row inserted with none is stamped');
+        assert(bootInto(mainDir).ok && look(mainDir).shaped, 'booting it again is a no-op');
+        fs.rmSync(mainDir, { recursive: true, force: true });
+
+        const standbyDir = tmp('legacy-devices-standby');
+        plant(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the column boots');
+        const onStandby = look(standbyDir);
+        assert(onStandby.shaped && !onStandby.inviteLinks && onStandby.token === null && onStandby.mute === null && onStandby.line === null && onStandby.guide === 0,
+            `and has the columns and triggers, stamps no row itself and seeds no pricing guide: its rows are its main server's, which its next copy brings (${JSON.stringify(onStandby)})`);
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

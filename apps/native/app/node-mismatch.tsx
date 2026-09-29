@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
@@ -11,6 +11,7 @@ import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { hasMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import {
@@ -55,6 +56,10 @@ export default function NodeMismatchScreen() {
     // the member was ever shown it and wrote it down — so show it instead of claiming it.
     const [words, setWords] = useState<string[] | null>(null);
     const [showWipe, setShowWipe] = useState(false);
+    // The words drawn before the delete go with its panel, as its Cancel takes them, when the member comes back to the app
+    // after 15 seconds or more away, App Lock on or off: the next tap asks the phone's lock again.
+    const putWipeWordsAway = useCallback(() => { setShowWipe(false); setWords(null); }, []);
+    usePutAwayAfterLeave(words !== null, putWipeWordsAway);
     const lockBusyRef = useRef(false);
     // The delete takes the key off this phone only when no saved community keeps it (delete-here.ts): asked at each
     // tap, before the lock (`checking`). One that does is where the member is sent instead, and nothing is removed.

@@ -22,6 +22,10 @@
  *   unlocked phone could set the wall clock back and come back to an open app (#1307's confirmation review, 2026-09-29).
  * - A phone whose since-boot clock can't be read asks after every leave: the wall clock is App Lock's clock only in the web
  *   build (#1309's deciding review, inline 4129453720, 2026-09-29).
+ * - One prompt that passed covers at most PROMPT_COVER_MAX_MS (two minutes) of the time away: Android 8-10 holds a pass
+ *   given just before the member pressed home until BeanPool is next opened, by whoever has the phone (a cold check of
+ *   #1309, 2026-09-29). A prompt opened before a return the return lock locked for can't take the lock screen down
+ *   (unlockWithPhoneLock): its pass arrived too late to count.
  *
  * Screens can't be rendered here (see vitest.config.ts): the listener is driven the way AppState drives it, with the
  * phone's prompt mocked at expo-local-authentication and time faked. The since-boot clock is a fake native module on
@@ -155,7 +159,7 @@ async function phoneWithAppLock() {
         /** The launch lock and the Unlock App button (app/_layout.tsx): the lock screen up, the phone's lock asked. */
         unlockApp() {
             setLocked(true);
-            void LocalAuth.authenticateUser('Unlock BeanPool').then(ok => { if (ok) setLocked(false); });
+            void ReturnLock.unlockWithPhoneLock('Unlock BeanPool').then(ok => { if (ok) setLocked(false); });
         },
         /** Settings' View Recovery Phrase. */
         viewRecoveryPhrase() {
@@ -563,10 +567,13 @@ describe('leaving while a prompt is open', () => {
         expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
     });
 
+    // Until the cold check of #1309 (2026-09-29) a pass here opened the app: "whoever is holding the phone just gave its
+    // lock". The app can't tell it from a pass given an hour ago and held by Android 8-10 until BeanPool resumed (see
+    // PROMPT_COVER_MAX_MS below), so a pass after an hour away is asked once more, as any hour away is.
     it.each([
-        [false, 'the app stays behind the lock screen, nothing more asked', true],
-        [true, 'the app is open: whoever is holding the phone just gave its lock', false],
-    ] as const)('Android, the member goes home with the PIN screen open, and an hour later it is answered (passed: %s): %s', async (passes, _outcome, locked) => {
+        [false, 'the app stays behind the lock screen, nothing more asked', true, [VIEW_RECOVERY_PHRASE]],
+        [true, 'the lock screen, asked once more: one prompt covers at most PROMPT_COVER_MAX_MS', true, [VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']],
+    ] as const)('Android, the member goes home with the PIN screen open, and an hour later it is answered (passed: %s): %s', async (passes, _outcome, locked, reasons) => {
         const phone = await phoneWithAppLock();
         void phone.viewRecoveryPhrase();
         await flush();
@@ -579,7 +586,7 @@ describe('leaving while a prompt is open', () => {
         phone.change('active');
         await flush();
 
-        expect(phone.prompts()).toBe(1);
+        expect(phone.reasons()).toEqual(reasons);
         expect(phone.locked()).toBe(locked);
     });
 
@@ -603,6 +610,180 @@ describe('leaving while a prompt is open', () => {
         expect(phone.prompts()).toBe(1);
         phone.answer(false);
         await flush();
+    });
+});
+
+describe('a pass given before a long absence but delivered after it: one prompt covers at most PROMPT_COVER_MAX_MS of it', () => {
+    // A cold check of #1309, 2026-09-29 (on main since #1307). A stretch closes when the answer reaches the app, not when the
+    // member gave it. Android 8-10 holds the confirm-credential result until BeanPool resumes: the member passes the PIN,
+    // presses home during the ~300 ms transition, and whoever opens BeanPool an hour later on the still-unlocked phone got
+    // the held pass just before the app's return, and the app opened with no prompt. The app can't tell that pass from
+    // one given just now, so no prompt counts for more than PROMPT_COVER_MAX_MS of the time away.
+    it('a pass given before a 1 h absence but delivered after it does not open the app', async () => {
+        const phone = await phoneWithAppLock();
+        phone.unlockApp(); await flush();
+        phone.change('background');   // Android 8-10: the PIN screen
+        phone.wait(1 * SEC);          // PIN entered here; Android holds the result
+        phone.wait(3600 * SEC);       // home pressed during the transition; away an hour
+        phone.answer(true); await flush();
+        phone.change('active'); await flush();
+        expect(phone.locked()).toBe(true);
+    });
+
+    describe.each(Object.keys(OPENERS) as Array<keyof typeof OPENERS>)('the prompt from %s', (opener) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            it.each(ORDERS)('passed and held an hour, when %s: the lock screen and one prompt more; cancelling it leaves the app locked', async (_order, order) => {
+                const phone = await phoneWithAppLock();
+                await OPENERS[opener](phone);
+                const before = phone.reasons();
+
+                const { lockedBeforeAnswer } = await slowPrompt(phone, leave, order, 3601 * SEC, true);
+                await flush();
+
+                if (order === 'active first') expect(lockedBeforeAnswer).toBe(true);
+                expect(phone.locked()).toBe(true);
+                expect(phone.reasons()).toEqual([...before, 'Unlock BeanPool']);
+                expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(true);
+
+                // Whoever opened it can't give the phone's lock and cancels.
+                phone.answer(false);
+                await flush();
+                expect(phone.locked()).toBe(true);
+                expect(phone.prompts()).toBe(before.length + 1);
+            });
+
+            it.each(ORDERS)('passed and held an hour, when %s: the member passes the prompt that follows, and the app is open', async (_order, order) => {
+                const phone = await phoneWithAppLock();
+                await OPENERS[opener](phone);
+                const before = phone.prompts();
+
+                await slowPrompt(phone, leave, order, 3601 * SEC, true);
+                await flush();
+                phone.answer(true);
+                await flush();
+
+                expect(phone.locked()).toBe(false);
+                expect(phone.prompts()).toBe(before + 1);
+            });
+
+            it.each(ORDERS)('a 40-second prompt (Android waits 30 seconds after five wrong PINs) that passes, when %s: no second prompt', async (_order, order) => {
+                const phone = await phoneWithAppLock();
+                await OPENERS[opener](phone);
+                const before = phone.prompts();
+
+                await slowPrompt(phone, leave, order, 40 * SEC, true);
+                await flush();
+
+                expect(phone.locked()).toBe(false);
+                expect(phone.prompts()).toBe(before);
+            });
+        });
+    });
+
+    it('covers two minutes: ten wrong PINs on Android (two 30-second waits) or four on iOS (a minute) are asked once', async () => {
+        const { PROMPT_COVER_MAX_MS, RETURN_LOCK_GRACE_MS } = await import('../return-lock');
+        expect(PROMPT_COVER_MAX_MS).toBe(120 * SEC);
+        expect(RETURN_LOCK_GRACE_MS).toBe(15 * SEC);
+    });
+
+    describe.each(SHAPES)('the edge, %s', (_shape, leave) => {
+        const cap = () => 120 * SEC;
+        it.each(ORDERS)('a prompt that passes after the cap and 15 seconds less 1 ms, when %s: no second prompt', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            expect(phone.ReturnLock.PROMPT_COVER_MAX_MS).toBe(cap());
+            void phone.viewRecoveryPhrase();
+            await flush();
+
+            await slowPrompt(phone, leave, order, cap() + 15 * SEC - 1, true);
+            await flush();
+
+            expect(phone.locked()).toBe(false);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE]);
+        });
+
+        it.each(ORDERS)('a prompt that passes after the cap and 15 seconds, when %s: the lock screen, asked once more', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+
+            await slowPrompt(phone, leave, order, cap() + 15 * SEC, true);
+            await flush();
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE, 'Unlock BeanPool']);
+        });
+
+        it.each(ORDERS)('a prompt cancelled after an hour, when %s: the lock screen, nothing more asked (Unlock App asks)', async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            void phone.viewRecoveryPhrase();
+            await flush();
+
+            await slowPrompt(phone, leave, order, 3601 * SEC, false);
+            await flush();
+
+            expect(phone.locked()).toBe(true);
+            expect(phone.reasons()).toEqual([VIEW_RECOVERY_PHRASE]);
+        });
+    });
+
+    describe.each(SHAPES)('after the held pass, %s', (_shape, leave) => {
+        it.each(ORDERS)("the return lock's prompt is cancelled, then Unlock App is tapped and passes, when %s: the app is open", async (_order, order) => {
+            const phone = await phoneWithAppLock();
+            phone.unlockApp();
+            await flush();
+            await slowPrompt(phone, leave, order, 3601 * SEC, true);
+            await flush();
+            phone.answer(false);
+            await flush();
+            expect(phone.locked()).toBe(true);
+
+            phone.unlockApp();
+            await flush();
+            phone.answer(true);
+            await flush();
+
+            expect(phone.locked()).toBe(false);
+            expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool', 'Unlock BeanPool']);
+        });
+    });
+
+    // Review of #1311, 2026-09-29: a prompt's cover counts from when it opened, not from the leave. A prompt open across an
+    // earlier return that the return lock locked for used to cover up to PROMPT_COVER_MAX_MS of the next absence too, and
+    // the return lock's own takedown opened the app with the pass from over an hour ago.
+    const HELD_OPENERS = {
+        'the Unlock App button': (phone: Phone) => { phone.unlockApp(); },
+        "Settings' View Recovery Phrase": (phone: Phone) => { void phone.viewRecoveryPhrase(); },
+    };
+    describe.each(Object.keys(HELD_OPENERS) as Array<keyof typeof HELD_OPENERS>)('a pass held across a locked return, the prompt from %s', (opener) => {
+        describe.each(SHAPES)('%s', (_shape, leave) => {
+            it.each([
+                [5, 'the lock screen stays, and nothing more is asked', false],
+                [20, 'the lock screen, and one prompt more', true],
+                [130, 'the lock screen, and one prompt more', true],
+                [140, 'the lock screen, and one prompt more', true],
+            ] as const)('away %s s the second time: %s', async (away2S, _outcome, askedAgain) => {
+                const phone = await phoneWithAppLock();
+                HELD_OPENERS[opener](phone);
+                await flush();
+                const before = phone.reasons();
+
+                phone.change(leave);                            // the phone's prompt: the pass is given, and held
+                phone.wait(3600 * SEC);
+                phone.change('active'); await flush();          // the first return, the prompt still open in JS
+                phone.wait(phone.ReturnLock.PROMPT_SETTLE_MS); await flush();
+                expect(phone.locked()).toBe(true);              // it locks for that return
+                expect(phone.reasons()).toEqual(before);
+
+                phone.change(leave);
+                phone.wait(away2S * SEC);
+                phone.change('active'); await flush();
+                phone.answer(true); await flush();              // the pass from over an hour ago
+                await flush();
+
+                expect(phone.locked()).toBe(true);
+                expect(phone.reasons()).toEqual(askedAgain ? [...before, 'Unlock BeanPool'] : before);
+            });
+        });
     });
 });
 
@@ -933,10 +1114,10 @@ describe("a phone whose since-boot clock can't be read: the time away can't be t
 
                     expect(phone.reasons()).toEqual(['Unlock BeanPool', 'Unlock BeanPool', 'Unlock BeanPool']);
                     expect(phone.LocalAuth.isLocalAuthPromptOpen()).toBe(true);
-                    // Not pinned for passes: when the app is active before the answer, the pass that closes one prompt takes
-                    // the lock screen down after the next prompt has opened (a real pass, a second before). The next
-                    // prompt is open either way, and the loop is what this pins.
-                    if (!passes) expect(phone.locked()).toBe(true);
+                    // Passes too, since unlockWithPhoneLock: when the app is active before the answer, the pass that closed
+                    // one prompt used to take the lock screen down after the return lock had asked again and opened the
+                    // next. A prompt opened before a return the return lock locked for no longer takes it down.
+                    expect(phone.locked()).toBe(true);
                 });
             });
         });
@@ -1307,6 +1488,13 @@ describe('returnLockAction: the rule', () => {
         ['a prompt, then 14 s away with none open', 'none', 1, 39 * SEC, [stretch(0, 25 * SEC, true)]],
         ['a short prompt not passed, away under 15 s', 'none', 1, 5 * SEC, [stretch(0, 5 * SEC, false)]],
         ['a prompt opened after the return does not count', 'ask', 0, 60 * SEC, [stretch(61 * SEC, 70 * SEC, true)]],
+        ['a passed prompt covering an hour away covers two minutes of it', 'ask', 1, 3600 * SEC, [stretch(0, 3600 * SEC, true)]],
+        ['a passed prompt covering 2 min 15 s less 1 ms away', 'none', 0, 135 * SEC - 1, [stretch(0, 135 * SEC - 1, true)]],
+        ['a passed prompt covering 2 min 15 s away', 'ask', 0, 135 * SEC, [stretch(0, 135 * SEC, true)]],
+        ['a passed prompt of 3 min, 10 s of it before the leave', 'ask', 10 * SEC, 180 * SEC, [stretch(0, 180 * SEC, true)]],
+        ['a passed prompt of 2 min 20 s, 10 s of it before the leave', 'ask', 10 * SEC, 140 * SEC, [stretch(0, 140 * SEC, true)]],
+        ['a prompt covering an hour away, not passed: the whole hour, locked, not asked', 'lock', 1, 3600 * SEC, [stretch(0, 3600 * SEC, false)]],
+        ['a prompt still open after an hour away', 'lock', 1, 3600 * SEC, [stretch(0, null, true)]],
     ] as const)('%s: %s', (_name, action, left, active, stretches) => {
         expect(returnLockActionOf(T + left, T + active, stretches)).toBe(action);
     });
@@ -1355,9 +1543,19 @@ describe("app/_layout.tsx listens with it", () => {
 
     it('every AppState change goes to the return lock, with whether there is an account', () => {
         const s = layout();
-        expect(s).toContain("import { createReturnLock } from '../utils/return-lock';");
+        expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
         expect(s).toContain('if (!returnLock.current) returnLock.current = createReturnLock(setIsLocked);');
         expect(s).toMatch(/AppState\.addEventListener\('change', \(next\) => \{\s*onChange\(next, !!identity\);\s*\}\);/);
+    });
+
+    it('the launch lock and the Unlock App button take the lock screen down through unlockWithPhoneLock, never on a bare pass', () => {
+        const s = layout();
+        expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
+        expect(s.match(/await unlockWithPhoneLock\('Unlock BeanPool'\)/g)).toHaveLength(2);
+        expect(s).not.toMatch(/authenticateUser\(/);
+        const returnLock = fs.readFileSync(path.resolve(__dirname, '../return-lock.ts'), 'utf-8');
+        expect(returnLock).toContain("if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);");
+        expect(returnLock.match(/authenticateUser\(/g)).toHaveLength(1);
     });
 
     it('no second copy of the rule is left in the screen', () => {

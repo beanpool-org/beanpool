@@ -5,6 +5,16 @@ summary: What changed in each version of the app, in plain words.
 related: the-bean, how-it-works, rules, faq
 ---
 
+## Sign-in recovery: BeanPool's key vault
+
+You get these with an up-to-date app.
+
+- **One copy, for every community.** A linked Google, Apple or Facebook account keeps its locked copy of your account at BeanPool's key vault, not at your community. You link it once, and it works in every community you join. See "Getting your account back".
+- **No name or address to type.** **Recover with Social** finds your account from the sign-in. Afterwards you choose the community to open it in.
+- **A day's wait, and a way to stop it.** Getting back in with a sign-in waits a day, unless another phone or computer of yours taps **Yes, it's me**. Your phones are told, and can tap **Stop**.
+- **Moving your copy.** If your community still keeps a copy, **Settings** offers to move it to the key vault, with one sign-in.
+- **Who can open it.** Said plainly under "Who can open the copy" in "Getting your account back".
+
 ## Privacy by default
 
 These changes live on your community's server. You get them when your community's server is updated. The Poll choice needs an up-to-date app.

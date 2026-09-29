@@ -43,6 +43,7 @@ This cannot be undone, even with your 12 words.
 - The block list your community kept for you goes too.
 - If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
+- The copy BeanPool's key vault keeps for a linked sign-in account stays too: it brings back your key, which your other communities still know. To delete it, tap **Disconnect** next to each sign-in account under **Account Protection** first.
 - Your community can never bring the account back. To come back, join again with a new invite.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
@@ -65,6 +66,6 @@ The app shows **This community doesn't recognise you** when the community the ph
 
 When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:
 
-- Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.
+- Your name, photo, bio, contact details, friends and any sign-in recovery copy that community still kept are erased, and so are the words, photos and places of your posts, except your polls.
 - After that, your community cannot vote to bring the account back. To come back, join again with a new invite.
 - If a deal of yours is still under way, the other member or an admin must close it first.

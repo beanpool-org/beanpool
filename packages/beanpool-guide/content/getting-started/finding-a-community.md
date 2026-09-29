@@ -40,7 +40,7 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 - Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, you choose another.
 - Your posts, chats and trades stay in each community. On the new one you start fresh.
 - Next you check your name and photo for the new community.
-- A sign-in that protects your account is kept by each community. The app asks you to protect your account in the new community too: tap **Protect it**, or **Later**, and do it any time in **Settings**.
+- A sign-in account you linked to get back into your account works in the new community too: BeanPool keeps one copy for all your communities.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
 

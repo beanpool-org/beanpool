@@ -16,7 +16,7 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
 
-Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool keeps one copy for all your communities.
 
 The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: when the global community is open, tap **Explore BeanPool worldwide** there. See "Joining BeanPool". Joining it from an account you already have is not possible yet.
 

@@ -47,7 +47,7 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 ## A second way back: a sign-in account
 
-On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See "Getting your account back".
+On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account brings your account back on a new phone, in every community: BeanPool's key vault keeps a locked copy for it. It takes a day, or less if another phone or computer of yours says it's you. See "Getting your account back".
 
 A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it and pass your phone's lock screen check to include them. Keep the paper as well.
 

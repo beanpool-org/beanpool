@@ -62,11 +62,21 @@ export function recordActivity(
 }
 
 /**
- * Retrieves recent community activity events with member callsigns joined.
+ * The rows that are a trade: a completed one, or a dispute's ruling (one row per party). Balances and trades are private
+ * (Marty, 2026-09-28): a trade shows only its two people, so these reach only the member the row names (its actor or
+ * target: the seller and buyer of a completed trade, the party a ruling was about and the admin who ruled). Everyone
+ * else's feed leaves them out, with the Beans and the listing they name.
  */
-export function getActivityFeed(limit: number = 50, offset: number = 0): ActivityFeedItem[] {
+export const TRADE_ACTIVITY_TYPES: readonly ActivityEventType[] = ['trade_completed', 'dispute_resolved'];
+
+/**
+ * Retrieves recent community activity events with member callsigns joined, as `viewerPubkey` (the verified signer) may
+ * see them: every event but the trades of other people (TRADE_ACTIVITY_TYPES).
+ */
+export function getActivityFeed(limit: number = 50, offset: number = 0, viewerPubkey: string | null = null): ActivityFeedItem[] {
     const safeLimit = Math.max(1, Math.min(ACTIVITY_FEED_MAX_LIMIT, limit));
     const safeOffset = Math.max(0, offset);
+    const tradeTypes = TRADE_ACTIVITY_TYPES.map(t => `'${t}'`).join(', ');
 
     const rows = db.prepare(`
         SELECT 
@@ -87,9 +97,11 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
             SELECT 1 FROM posts hp
              WHERE hp.id = CASE WHEN json_valid(af.metadata) THEN json_extract(af.metadata, '$.postId') END
                AND hp.hidden_by_reports_at IS NOT NULL))
+          -- A trade only to the people in it.
+          AND (af.event_type NOT IN (${tradeTypes}) OR af.actor_pubkey = @viewer OR af.target_pubkey = @viewer)
         ORDER BY af.created_at DESC, af.id DESC
-        LIMIT ? OFFSET ?
-    `).all(safeLimit, safeOffset) as any[];
+        LIMIT @limit OFFSET @offset
+    `).all({ viewer: viewerPubkey ?? '', limit: safeLimit, offset: safeOffset }) as any[];
 
     return rows.map(r => {
         let metaObj: Record<string, any> | undefined = undefined;

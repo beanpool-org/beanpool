@@ -18,7 +18,7 @@ Beans come into it from:
 
 Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. Tap the **ⓘ** next to The Commons for how it works: **How It Works**, **Circulation Fees** and **Voting**.
 
-**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. These accounts are open to every member.
+**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. Every member sees the amounts; who paid or was paid, and the note, only its keepers and that member see.
 
 ## Spending it
 

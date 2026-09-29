@@ -19,7 +19,6 @@ import {
     type DecisionTouch,
     type DecisionEffect,
     createDecision,
-    getBalance,
 } from '../utils/db';
 
 interface Props {
@@ -83,7 +82,6 @@ export function ProposeDecisionModal({
         }
     }, [touches]);
 
-    const [fetchedBalance, setFetchedBalance] = useState<number | null>(null);
 
     // ⚡ Bolt: Pre-compute member map indexed by publicKey and callsign for O(1) lookups
     const membersMap = useMemo(() => {
@@ -101,44 +99,13 @@ export function ProposeDecisionModal({
         return membersMap.get(subject) || membersMap.get(subject.toLowerCase()) || null;
     }, [membersMap, subject]);
 
-    useEffect(() => {
-        if (effect !== 'remove_member' || !subject) {
-            setFetchedBalance(null);
-            return;
-        }
-        const targetPubkey = selectedMember ? selectedMember.publicKey : (subject.trim().length >= 32 ? subject.trim() : null);
-        if (!targetPubkey) {
-            setFetchedBalance(null);
-            return;
-        }
-        if (selectedMember && typeof selectedMember.balance === 'number') {
-            setFetchedBalance(null);
-            return;
-        }
-        let cancelled = false;
-        getBalance(targetPubkey)
-            .then(bal => {
-                if (!cancelled && bal && typeof bal.balance === 'number') {
-                    setFetchedBalance(bal.balance);
-                }
-            })
-            .catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-    }, [effect, subject, selectedMember]);
-
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? fetchedBalance ?? 0;
-    const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
     const poolAmount = Math.round(commonsBalance || 0);
 
-    // §3.8 verbatim line:
-    // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
-    // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = debtAmount > 0
-        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
-        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
+    // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
+    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it.
+    const debtWriteOffLine = `Balances are private: you can't see ${targetName}'s. When this vote opens, the community records their balance and any debt, `
+        + `and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds ${poolAmount} beans now.`;
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -359,9 +326,9 @@ export function ProposeDecisionModal({
                 return;
             }
         } else if (effect === 'remove_member') {
+            // The debt and balance are the node's to record when the vote opens (decisions-engine createDecision).
             params = {
                 memberName: targetName,
-                debt: debtAmount,
                 commonsPool: poolAmount,
             };
         }

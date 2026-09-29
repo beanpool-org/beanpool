@@ -71,16 +71,27 @@ describe('which welcome a visitor gets', () => {
         expect(screen.queryByTestId('join-start')).toBeNull();
     });
 
+    // A local community's listings are its members' (2026-09-28): its sign-in page sends a stranger to the global one.
+    it('a local community: no invite? the listings are for members, and a link to look around the global community', async () => {
+        stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        const card = await screen.findByTestId('welcome-no-invite');
+        expect(card.textContent).toContain("This community's listings are for its members");
+        expect(screen.getByTestId('look-around-global').getAttribute('href')).toBe('https://global.beanpool.org');
+    });
+
     it('a global node whose door is shut: the invite form', async () => {
         stubNode({ ...GLOBAL_OPEN, features: { openJoin: false } });
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByText(/Join with Invite Code/);
+        expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
     });
 
     it("an older node that says nothing about itself: the invite form", async () => {
         stubNode({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0 });
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByText(/Join with Invite Code/);
+        expect(await screen.findByTestId('welcome-no-invite')).toBeTruthy();
     });
 
     it('a sign-in return on an invite-only node: the token leaves the address bar, and the invite page shows as always', async () => {

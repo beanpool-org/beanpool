@@ -62,6 +62,20 @@ function wrapTxnFn(origFn: any) {
     return wrapped;
 }
 
+/**
+ * For a catch inside a transaction that leaves one row out and goes on (a copied row this table's rules refuse): rethrows
+ * unless the error is that row's own and the transaction is still open. SQLite rolls the WHOLE transaction back on some
+ * errors (a disk that is full or failing, a trigger's RAISE(ROLLBACK)), and every write after that would commit on its
+ * own, one by one: a standby's copy refused, and part of it landed anyway. A disk, memory or lock error is never one
+ * row's, whether or not the transaction survived it.
+ */
+export function rethrowUnlessRowRefused(e: unknown): void {
+    if (!(db as any).inTransaction) throw e;
+    const code = (e as { code?: unknown } | null)?.code;
+    if (typeof code === 'string' && NOT_A_ROWS_ERROR.test(code)) throw e;
+}
+const NOT_A_ROWS_ERROR = /^SQLITE_(IOERR|FULL|NOMEM|CORRUPT|NOTADB|READONLY|BUSY|LOCKED|INTERRUPT|CANTOPEN|PROTOCOL|ABORT|PERM)/;
+
 const origTransaction = db.transaction.bind(db);
 db.transaction = function (fn: any) {
     const txn = origTransaction(fn);

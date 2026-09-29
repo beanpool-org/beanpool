@@ -52,7 +52,7 @@ export const COMMUNITY_NODE_CONFIG_KEYS = [
 
 /** Fields of the `node_config` row's object that are the community's. */
 export const COMMUNITY_DIRECTORY_FIELDS = [
-    'serviceRadius', 'publishLocation', 'publishMembers', 'publishContacts', 'publishHealth', 'directoryPushIntervalHours',
+    'serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours',
 ] as const;
 
 /** Where a standby keeps its main server's record. */
@@ -102,7 +102,8 @@ export function readCommunitySettings(): SyncCommunitySettings {
             serviceRadius: n.serviceRadius ?? null,
             publishLocation: n.publishLocation !== false,
             publishMembers: n.publishMembers !== false,
-            publishContacts: n.publishContacts !== false,
+            publishContactEmail: n.publishContactEmail === true,
+            publishContactPhone: n.publishContactPhone === true,
             publishHealth: n.publishHealth !== false,
             directoryPushIntervalHours: n.directoryPushIntervalHours ?? 12,
         },
@@ -216,7 +217,8 @@ const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Chec
     serviceRadius: orNull(radius),
     publishLocation: bool,
     publishMembers: bool,
-    publishContacts: bool,
+    publishContactEmail: bool,
+    publishContactPhone: bool,
     publishHealth: bool,
     directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) ? v : BAD),
 };
@@ -333,6 +335,11 @@ export function installCommunitySettings(): InstallOutcome {
         (directory as Record<string, unknown>)[field] = (dir as Record<string, unknown>)[field] ?? undefined;
         count++;
     }
+    // The contacts installed are the community's, so only the community's own choice publishes them: a record without a
+    // contact switch (from a version before they were split) is "not published", never this server's own switch.
+    for (const field of ['publishContactEmail', 'publishContactPhone'] as const) {
+        if (!(field in directory)) directory[field] = false;
+    }
 
     const upsert = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     const remove = db.prepare('DELETE FROM node_config WHERE key = ?');
@@ -364,8 +371,8 @@ export function installCommunitySettings(): InstallOutcome {
     if ('autosnapshot_config' in nc) restartScheduler();
 
     const name = lc.communityName || lc.callsign || null;
-    const hidden = [dir.publishContacts === false ? 'contacts' : null, dir.publishMembers === false ? 'member count' : null]
-        .filter(Boolean);
+    const hidden = [dir.publishContactEmail !== true ? 'contact email' : null, dir.publishContactPhone !== true ? 'contact phone' : null,
+        dir.publishMembers === false ? 'member count' : null].filter(Boolean);
     return {
         installed: true,
         detail: `${name ? `"${name}"; ` : ''}${count} setting(s) as the main server had them${kept.copiedAt ? ` at ${kept.copiedAt}` : ''}`

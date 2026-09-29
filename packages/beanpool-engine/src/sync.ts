@@ -456,7 +456,8 @@ export interface SyncCommunitySettings {
         serviceRadius?: { lat: number; lng: number; radiusKm: number } | null;
         publishLocation?: boolean;
         publishMembers?: boolean;
-        publishContacts?: boolean;
+        publishContactEmail?: boolean;
+        publishContactPhone?: boolean;
         publishHealth?: boolean;
         directoryPushIntervalHours?: number;
     };

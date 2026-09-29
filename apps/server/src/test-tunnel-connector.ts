@@ -345,6 +345,8 @@ async function main(): Promise<void> {
             assert(gaps[0] >= 80 && gaps[1] > gaps[0] && gaps[2] > gaps[1], `the wait grows (${gaps.join(', ')} ms)`);
             assert(gaps.every((g) => g < 400 + 600) && gaps[3] >= 350 && gaps[4] >= 350, `and is capped (${gaps.join(', ')} ms; cap 400)`);
             assert(most <= 1, `never two children at once (at most ${most})`);
+            // waitForRuns resolves the moment the 6th child has STARTED; its exit (and so the retrying reason) lands slightly after.
+            await until(() => getTunnelStatus().state === 'retrying', 3_000);
             const st = getTunnelStatus();
             assert(st.state === 'retrying' && /exit code 1|has stopped \d+ times in a row/.test(st.reason || ''), `Settings says it keeps stopping (${st.reason})`);
             const fixedAt = Date.now();

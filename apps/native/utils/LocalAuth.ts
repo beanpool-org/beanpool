@@ -49,6 +49,20 @@ export async function isLocalAuthEnrolled(): Promise<boolean> {
 }
 
 /**
+ * True only when the phone says it has no screen lock at all: no PIN, pattern, password, fingerprint or face
+ * (getEnrolledLevelAsync is NONE; isEnrolledAsync above answers for fingerprints and faces only). A phone that can't
+ * say, or the web, answers false. For one plain line under the 12 words (words-on-screen.ts), never for a gate.
+ */
+export async function phoneHasNoScreenLock(): Promise<boolean> {
+    if (isWeb) return false;
+    try {
+        return (await LocalAuthentication.getEnrolledLevelAsync()) === LocalAuthentication.SecurityLevel.NONE;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Authenticates the user using biometric authentication (Face ID / Touch ID)
  * with a fallback to the device passcode, PIN, or pattern.
  *
@@ -70,7 +84,7 @@ export async function authenticateUser(reason: string): Promise<boolean> {
     if (lock === 'none') return true;
     if (lock === 'unknown' && !((await hasLocalAuthHardware()) && (await isLocalAuthEnrolled()))) return true;
     try {
-        const res = await LocalAuthentication.authenticateAsync({
+        const res = await phoneLockPrompt({
             promptMessage: reason,
             fallbackLabel: 'Use Passcode',
             disableDeviceFallback: false,
@@ -81,6 +95,80 @@ export async function authenticateUser(reason: string): Promise<boolean> {
         console.warn('Local authentication error:', e);
         return false;
     }
+}
+
+/**
+ * The phone's own lock prompt, the one way the app opens it: authenticateAsync, with the prompt marker below around it so
+ * the return lock knows the time it was open is not time away. authenticateUser and node-admin's requireDeviceUnlock
+ * (Manage community, sign in on a computer, take over with this phone) both ask through here, each with its own rule for
+ * a phone with no lock. Answers and throws what authenticateAsync does; the marker closes either way.
+ */
+export async function phoneLockPrompt(
+    options: LocalAuthentication.LocalAuthenticationOptions,
+): Promise<LocalAuthentication.LocalAuthenticationResult> {
+    promptOpened();
+    let passed = false;
+    try {
+        const res = await LocalAuthentication.authenticateAsync(options);
+        passed = res.success === true;
+        return res;
+    } finally {
+        promptClosed(passed);
+    }
+}
+
+/**
+ * A stretch of time the phone's own lock prompt was open: from the first phoneLockPrompt opening to the last one closing,
+ * with passed true when the one that closed it passed. Overlapping calls make one stretch. expo-local-authentication
+ * 55.0.18 answers a second call while one is open with app_cancel at once, so the first closes it; 55.0.15 answers the
+ * first with app_cancel and the second takes over the prompt and closes it. Either way the closing answer is the one the
+ * member gave last; an earlier pass inside the stretch doesn't count, and a stretch still open has not passed.
+ *
+ * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
+ * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
+ */
+export type LocalAuthPromptStretch = { openedAt: number; closedAt: number | null; passed: boolean };
+
+/** Kept to the last few: the return lock only looks at the ones since the app last left the front. */
+const PROMPT_STRETCHES_KEPT = 16;
+let openPrompts = 0;
+const promptStretches: LocalAuthPromptStretch[] = [];
+let promptCloseWaiters: Array<() => void> = [];
+
+function promptOpened(): void {
+    if (openPrompts++ === 0) {
+        promptStretches.push({ openedAt: Date.now(), closedAt: null, passed: false });
+        if (promptStretches.length > PROMPT_STRETCHES_KEPT) promptStretches.shift();
+    }
+}
+
+function promptClosed(passed: boolean): void {
+    if (--openPrompts > 0) return;
+    openPrompts = 0;
+    const current = promptStretches[promptStretches.length - 1];
+    if (current) {
+        current.closedAt = Date.now();
+        current.passed = passed;
+    }
+    const waiters = promptCloseWaiters;
+    promptCloseWaiters = [];
+    waiters.forEach(resolve => resolve());
+}
+
+/** Whether one of phoneLockPrompt's prompts is open now. */
+export function isLocalAuthPromptOpen(): boolean {
+    return openPrompts > 0;
+}
+
+/** The prompt stretches, oldest first; the last one has closedAt null while a prompt is open. Copies. */
+export function localAuthPromptStretches(): LocalAuthPromptStretch[] {
+    return promptStretches.map(s => ({ ...s }));
+}
+
+/** Resolves when no prompt is open: at once if none is. */
+export function whenLocalAuthPromptsClose(): Promise<void> {
+    if (openPrompts === 0) return Promise.resolve();
+    return new Promise(resolve => promptCloseWaiters.push(resolve));
 }
 
 /**

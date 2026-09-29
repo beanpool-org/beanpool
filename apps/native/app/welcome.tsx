@@ -31,6 +31,8 @@ import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/b
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
+import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
+import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
@@ -1260,7 +1262,7 @@ export default function WelcomeScreen() {
     async function handleCopyOutgoingSeed() {
         const words = outgoingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
@@ -1343,7 +1345,7 @@ export default function WelcomeScreen() {
         // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
         const words = pendingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -1621,7 +1623,7 @@ export default function WelcomeScreen() {
                         ) : (
                         <>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            💡 Take a screenshot or write them down somewhere safe.
+                            💡 Write them down on paper and keep it somewhere safe.
                         </Text>
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
@@ -1645,6 +1647,8 @@ export default function WelcomeScreen() {
                               hearing the phrase in order means twenty-four stops and working
                               out for yourself which number went with which word.
                             */}
+                            {/* No screenshots of the words (a screenshot is the copy most easily found by someone else): they wait for the block. */}
+                            <NoScreenCapture fallback={<ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />}>
                             {pendingWords ? pendingWords.map((word, i) => (
                                 <View
                                     key={i}
@@ -1658,11 +1662,14 @@ export default function WelcomeScreen() {
                             )) : (
                                 <ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />
                             )}
+                            </NoScreenCapture>
                         </View>
 
-                        {/* Copy to clipboard */}
+                        <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
+
+                        {/* Copy to clipboard: cleared from it a minute later (utils/words-clipboard.ts) */}
                         <Pressable
-                            style={[styles.secondaryBtn, { marginBottom: 12 }]}
+                            style={[styles.secondaryBtn, { marginBottom: 8 }]}
                             onPress={handleCopySeed}
                             accessibilityRole="button"
                         >
@@ -1670,6 +1677,7 @@ export default function WelcomeScreen() {
                                 {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
                             </Text>
                         </Pressable>
+                        <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.
@@ -2318,12 +2326,14 @@ export default function WelcomeScreen() {
                                     ) : (
                                         <>
                                             <View style={styles.seedGrid}>
+                                                <NoScreenCapture>
                                                 {outgoingWords?.map((word, i) => (
                                                     <View key={i} style={styles.seedCell}>
                                                         <Text style={styles.seedIndex}>{i + 1}.</Text>
                                                         <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                                     </View>
                                                 ))}
+                                                </NoScreenCapture>
                                             </View>
                                             <Pressable
                                                 style={[styles.secondaryBtn, { marginBottom: 8 }]}
@@ -2332,9 +2342,11 @@ export default function WelcomeScreen() {
                                             >
                                                 <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? '✅ Copied!' : '📋 Copy All Words'}</Text>
                                             </Pressable>
+                                            <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 8 }]} />
                                             <Text style={styles.fieldHint}>
-                                                Write these 12 words down somewhere safe — they bring {outCallsign} back on any phone.
+                                                Write these 12 words down on paper and keep it somewhere safe. They bring {outCallsign} back on any phone.
                                             </Text>
+                                            <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0 }]} />
                                         </>
                                     )}
                                 </>
@@ -2419,6 +2431,8 @@ export default function WelcomeScreen() {
                         </View>
 
                         <View style={styles.recoveryGrid}>
+                            {/* The boxes show the words as they are typed (and pasted). */}
+                            <NoScreenCapture>
                             {recoveryWords.map((word, i) => (
                                 <TextInput
                                     key={i}
@@ -2445,6 +2459,7 @@ export default function WelcomeScreen() {
                                     autoCorrect={false}
                                 />
                             ))}
+                            </NoScreenCapture>
                         </View>
 
                         <TextInput

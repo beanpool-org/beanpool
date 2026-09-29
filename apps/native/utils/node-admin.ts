@@ -18,6 +18,7 @@
  */
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import { phoneLockPrompt } from './LocalAuth';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
@@ -130,7 +131,7 @@ export async function requireDeviceUnlock(communityName: string): Promise<Unlock
     }
     if (level === LocalAuthentication.SecurityLevel.NONE) return 'no-device-lock';
     try {
-        const res = await LocalAuthentication.authenticateAsync({
+        const res = await phoneLockPrompt({
             promptMessage: `Confirm it's you to manage ${communityName}`,
             cancelLabel: 'Cancel',
             disableDeviceFallback: false,

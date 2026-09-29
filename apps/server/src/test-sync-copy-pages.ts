@@ -37,6 +37,10 @@
  *     server so), 6,000 more members each carrying a 70,000-character photo inline (the app's 512 px JPEG): a whole copy
  *     of it all completes, M's resident memory stays bounded, and neither the open nor any page holds the event loop long.
  *     With slices sized in rows (1,000 a page slice, 5,000 a hash slice) M ran out of heap here.
+ * 12. Wide chat lines under the same heap: 1,200 more chat lines of 500 KB each (600 MB). A whole copy of it all completes,
+ *     every row carried and each wide line whole, each page within 8 MB and 25,000 rows, M's heap and event loop bounded.
+ *     Step 11's members come first in the table hashes' order and so load the hash slices; these lines load the page
+ *     slices: with page slices ended by rows alone (1,000 a slice, 500 MB of these lines) M ran out of heap here.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sync-copy-pages.ts
@@ -69,6 +73,12 @@ const PAGE_ROWS = 200;
 const WIDE_LAG_MS = 1000;
 const WIDE_HEAP_BYTES = 320 * 1024 * 1024;
 const WIDE_RSS_GROWTH = 320 * 1024 * 1024;
+/**
+ * Step 12's chat lines: this many, each this many characters of ciphertext, more than a 512 MB heap holds at once. Held to
+ * step 11's bounds (measured 210 to 260 MB of heap, 80 to 160 ms of the loop a page); read 1,000 to a slice, M ran out of heap.
+ */
+const WIDE_LINES = 1200;
+const WIDE_LINE_BYTES = 500_000;
 
 // ── The node process's commands ────────────────────────────────────────────────────────────
 
@@ -367,26 +377,35 @@ async function main(): Promise<void> {
     /**
      * A whole copy, or a delta from `since`, page after page to its last, each page's signature and copy id and number
      * checked as it comes (a failure is kept in `unsigned`). `between(n)` runs before page n is asked for; `page(g)` after
-     * each page arrives.
+     * each page arrives. `lean`: each page's signature, copy id and number are checked as it arrives, after `page(g)`,
+     * and then its rows and text are dropped (its `copyId`, `n`, `last` and `rowCounts` kept), so a copy bigger than
+     * this process's heap can be walked.
      */
-    const copy = async (opts: { since?: string; between?: (n: number) => Promise<void>; onPage?: (g: Got) => Promise<void> } = {}): Promise<{ pages: any[]; got: Got[] }> => {
+    const copy = async (opts: { since?: string; between?: (n: number) => Promise<void>; onPage?: (g: Got) => Promise<void>; lean?: boolean } = {}): Promise<{ pages: any[]; got: Got[] }> => {
         const first = await open(opts.since);
         require_(first.status === 200 && first.page?.n === 0, `M opens a ${opts.since ? 'delta' : 'whole'} copy (${first.status} ${first.text.slice(0, 200)})`);
+        const copyId: string = first.page.copyId;
+        const check = async (g: Got, n: number) => {
+            if (!(await verifies(g.page)) || g.page.copyId !== copyId || g.page.n !== n) unsigned.push(`${copyId.slice(0, 8)}/${n}`);
+        };
+        const arrived = async (g: Got, n: number) => {
+            await opts.onPage?.(g);
+            if (!opts.lean) return;
+            await check(g, n);
+            g.page = { copyId: g.page.copyId, n: g.page.n, last: g.page.last, rowCounts: g.page.rowCounts };
+            g.text = '';
+        };
         const got = [first];
-        await opts.onPage?.(first);
+        await arrived(first, 0);
         while (!got[got.length - 1].page.last) {
             const n = got.length;
             await opts.between?.(n);
-            const g = await get(first.page.copyId, n);
+            const g = await get(copyId, n);
             require_(g.status === 200, `page ${n} of the copy arrives (${g.status} ${g.text.slice(0, 200)})`);
             got.push(g);
-            await opts.onPage?.(g);
+            await arrived(g, n);
         }
-        for (const g of got) {
-            if (!(await verifies(g.page)) || g.page.copyId !== first.page.copyId || g.page.n !== got.indexOf(g)) {
-                unsigned.push(`${first.page.copyId.slice(0, 8)}/${got.indexOf(g)}`);
-            }
-        }
+        if (!opts.lean) for (let n = 0; n < got.length; n++) await check(got[n], n);
         return { pages: got.map((g) => g.page), got };
     };
 
@@ -834,6 +853,63 @@ async function main(): Promise<void> {
                 `neither the open nor any page held M's event loop ${WIDE_LAG_MS} ms (the open ${opening.lag.toFixed(0)} ms, worst page ${worst.lag.toFixed(0)} ms)`);
             assert(peak.heap < WIDE_HEAP_BYTES && peak.rss - rssWide < WIDE_RSS_GROWTH,
                 `M's memory stays bounded: peak heap ${(peak.heap / 1e6).toFixed(0)} MB (< ${(WIDE_HEAP_BYTES / 1e6).toFixed(0)}), RSS grew ${((peak.rss - rssWide) / 1e6).toFixed(0)} MB (< ${(WIDE_RSS_GROWTH / 1e6).toFixed(0)})`);
+        }
+
+        // ── 12. Wide chat lines under the same heap ──
+        console.log(`\n— 12. wide chat lines under the deployed heap: ${WIDE_LINES.toLocaleString('en')} more chat lines of ${WIDE_LINE_BYTES / 1000} KB each, M still at 512 MB —`);
+        const tLines = Date.now();
+        // In batches of 100 (50 MB), each its own transaction. They are the newest rows of the messages table, so a whole
+        // copy reads them last, after 80,000 narrow lines, a page slice at a time: 1,000 of them would be 500 MB.
+        for (let i = 0; i < WIDE_LINES / 100; i++) {
+            await main.send('flood', { kind: 'messages', n: 100, prefix: `wline${i}`, conversationId, author: ann.pk, bytes: WIDE_LINE_BYTES });
+        }
+        const rssLines = (await main.send('lag-read')).rss;
+        console.log(`  (written in ${((Date.now() - tLines) / 1000).toFixed(1)} s; M's RSS ${(rssLines / 1e6).toFixed(0)} MB)`);
+        // Counted as the pages arrive and then dropped (`lean`): the whole copy is over a GB of rows.
+        const linePages: { n: number; rows: number; mb: number; ms: number; lag: number }[] = [];
+        const lineCounts: Record<string, number> = {};
+        let wideLines = 0;
+        let wholeLines = 0;
+        await main.send('peak-reset');
+        await main.send('lag-reset');
+        const tLineCopy = Date.now();
+        let wideLineCopy: { pages: any[] } | null = null;
+        let linesError = '';
+        try {
+            wideLineCopy = await copy({
+                lean: true,
+                onPage: async (g) => {
+                    const l = await main.send('lag-read');
+                    const rows = rowsOf(g.page);
+                    for (const { key, row } of rows) {
+                        lineCounts[key] = (lineCounts[key] ?? 0) + 1;
+                        if (key === 'messages' && /^wline\d+-/.test(row.id)) {
+                            wideLines++;
+                            if (row.ciphertext?.length === WIDE_LINE_BYTES) wholeLines++;
+                        }
+                    }
+                    linePages.push({ n: g.page.n, rows: rows.length, mb: rows.reduce((a, r) => a + r.bytes, 0) / 1e6, ms: g.ms, lag: l.maxMs });
+                    await main.send('lag-reset');
+                },
+            });
+        } catch (e: any) {
+            const code = await Promise.race([main.exited, sleep(2000).then(() => 'still running')]);
+            linesError = `${e?.message || e}; M ${code === 'still running' ? 'is still running' : `exited (${code})`}${/heap out of memory/.test(main.output()) ? ', out of heap' : ''}`;
+        }
+        const linesMs = Date.now() - tLineCopy;
+        require_(wideLineCopy !== null, `M serves the whole copy with the wide lines under a 512 MB heap: ${wideLineCopy ? `${wideLineCopy.pages.length} pages in ${(linesMs / 1000).toFixed(1)} s` : linesError}`);
+        if (wideLineCopy) {
+            const peak = await main.send('peak-read');
+            const worst = linePages.reduce((a, p) => (p.lag > a.lag ? p : a), linePages[0]);
+            const biggest = linePages.reduce((a, p) => (p.mb > a.mb ? p : a), linePages[0]);
+            console.log(`  pages ${linePages.length}; the open (page 0) loop blocked up to ${linePages[0].lag.toFixed(0)} ms; worst page ${worst.n}: ${worst.rows} rows,`
+                + ` ${worst.mb.toFixed(2)} MB, loop blocked up to ${worst.lag.toFixed(0)} ms; biggest page ${biggest.n}: ${biggest.rows} rows, ${biggest.mb.toFixed(2)} MB;`
+                + ` peak RSS ${(peak.rss / 1e6).toFixed(0)} MB (before ${(rssLines / 1e6).toFixed(0)} MB), peak heap ${(peak.heap / 1e6).toFixed(0)} MB of ${(peak.heapLimit / 1e6).toFixed(0)} MB`);
+            assert(sortKeys(flat(wideLineCopy.pages[0].rowCounts)) === sortKeys(lineCounts) && wideLines === WIDE_LINES && wholeLines === WIDE_LINES,
+                `it carries every row its opening page counts, the ${WIDE_LINES.toLocaleString('en')} wide lines among them, each whole (${wideLines}, ${wholeLines} whole)`);
+            assert(linePages.every((p) => p.rows <= 25_000 && p.mb * 1e6 <= 8 * 1024 * 1024), 'each page within 8 MB and 25,000 rows');
+            assert(worst.lag < WIDE_LAG_MS, `no page held M's event loop ${WIDE_LAG_MS} ms (worst ${worst.lag.toFixed(0)} ms)`);
+            assert(peak.heap < WIDE_HEAP_BYTES, `M's heap stays bounded: peak ${(peak.heap / 1e6).toFixed(0)} MB (< ${(WIDE_HEAP_BYTES / 1e6).toFixed(0)})`);
         }
 
         assert(unsigned.length === 0, `every page of every copy verifies, naming its copy and its number (${JSON.stringify(unsigned.slice(0, 5))})`);

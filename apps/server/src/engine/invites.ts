@@ -21,6 +21,7 @@ import {
     type GenesisInviteType
 } from '@beanpool/engine';
 import { ticketBinding } from './member-signature.js';
+import { ticketJoinRefusal } from './writer-bounds.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -38,10 +39,16 @@ const INVITER_GONE = 'The member who made this invite is no longer in this commu
 /**
  * Creates standard online invite code for an active member.
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
+/**
+ * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, W-main), run once the inviter is
+ * known to be a member who may bring someone in and before anything is written, so a limit never answers for someone
+ * who may not invite at all.
+ */
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void): InviteCode | null {
     assertPlainTablesWritable();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
+    beforeWrite?.();
 
     recordActivity(inviterPubkey);
 
@@ -285,12 +292,19 @@ export function redeemOfflineTicket(
     // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's
     // records and is stored below, but never constrains the joiner's chosen callsign.
     const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
-    if (existingInvite) {
-        if (existingInvite.used_by) {
-            recordFunnelEvent('invite_failed', 'already_used');
-            return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
-        }
-    } else {
+    if (existingInvite?.used_by) {
+        recordFunnelEvent('invite_failed', 'already_used');
+        return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+    }
+    // A ticket is an invite its maker makes on the phone, which this server first sees when someone joins with it, so it
+    // counts against the maker's 20 invites a day then (W-main, engine/writer-bounds.ts). Past it, nothing is written and
+    // the ticket stays unused.
+    const inviterAtLimit = ticketJoinRefusal(inviterPubkey);
+    if (inviterAtLimit) {
+        recordFunnelEvent('invite_failed', 'inviter_daily_limit');
+        return { success: false, error: inviterAtLimit };
+    }
+    if (!existingInvite) {
         const createdAt = new Date(timestamp).toISOString();
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
     }

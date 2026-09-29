@@ -26,6 +26,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
@@ -801,6 +802,10 @@ export function initStateEngine(): void {
             try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
         }, 60 * 1000);
     }
+
+    // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
+    // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
+    startPruningUnusedInvites();
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
@@ -4495,6 +4500,8 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
+        beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
     credits = beansOffPrice(credits);
@@ -5647,20 +5654,20 @@ function getMessagingCb() {
     };
 }
 
-export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite);
 }
 
-export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
-    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId);
+export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
+    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId, { beforeStore });
 }
 
 export function toggleMessageReaction(messageId: string, authorPubkey: string, emoji: string): any {
     return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string): Message {
-    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
+export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void): Message {
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore);
 }
 
 export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {

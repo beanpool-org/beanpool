@@ -5,7 +5,7 @@ summary: The limits that protect your server, what members see when they hit one
 related: troubleshooting, address-and-peers, signing-in, updates-and-health
 ---
 
-When someone goes over a limit the server answers "too many requests" (HTTP 429) and says how long to wait. The per-minute counts and the day's changes are kept in memory, so a restart clears them. What one member can make in a day is counted from what they have made, so a restart does not clear that.
+When someone goes over a limit the server answers "too many requests" (HTTP 429) and says how long to wait. The per-minute counts and the day's changes are kept in memory, so a restart clears them. What one member can make in a day is counted from what they have made, and the money limits from a record the server keeps for a day, so a restart does not clear those.
 
 ## The limits
 
@@ -23,13 +23,22 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 These stop one account filling your server, and its standby copies, with rows: a standby can't copy a table of more than 250,000 rows whole. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
 
-- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server.
-- **Posts**: 100 new ones a day, their own and those they put up for an enterprise they keep.
+- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server. What a keeper does for an enterprise counts against the enterprise's own 50,000, not the keeper's.
+- **Posts**: 100 new ones a day of their own. What they put up for an enterprise they keep counts against the enterprise: 1,000 a day.
 - **Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.
 - **Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.
 - **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.
 - **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.
 - **A message's words**: up to 64 KB. Photos are attachments and don't count.
+
+## Payments and deals
+
+These stop one account, or a stolen phone, spraying Beans or flooding your ledger. A member's are the first number, an enterprise's or project's the second: ten times as many, counted against the enterprise whichever keeper acts, and never against the keeper's own. Like the limits above they are in config/writer-limits.ts (MONEY_LIMITS), and Settings can't change them. Receiving is never limited, and neither are releasing held beans, cancelling a deal, or Settings' own tools.
+
+- **Payments**: 100 a day, 1,000 for an enterprise. A send, buying an Offer, asking to buy one, approving help on your own Need, an enterprise's payments and sweeps to the Commons, a pledge of beans, and buying or commissioning from another community all count.
+- **New people paid**: 30 a day, 300 for an enterprise: people the account has never paid before. Paying someone it has paid before is not counted.
+- **Deals**: 100 a day asked for, accepted or approved, 1,000 approved for an enterprise.
+- **Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike. Pledges are a member's act, so an enterprise has no number of its own.
 
 ## The admin password brake
 
@@ -62,8 +71,9 @@ The message says which:
 - "Too many attempts": sign-in and recovery attempts, or checking invite codes.
 - "Too many administrative requests": Settings, 300 a minute.
 - "You're sending messages too fast": chats, direct messages included.
-- "You have made 5,000 changes today": the member's changes for the day.
-- "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day.
+- "You have made 5,000 changes today": the member's changes for the day. "This enterprise has made 50,000 changes today": an enterprise's.
+- "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day. "… can put up 1,000 new posts", with the enterprise's name: an enterprise's posts.
+- "You can make 100 payments", "You can pay 30 people you have never paid before", "You can ask for, accept or approve 100 deals", "You can make or change 20 pledges", or the same with an enterprise's name and its numbers: payments and deals.
 - "This message is too long to send" (HTTP 413): a message's words.
 - "You have sent a lot of reports recently": reports, 10 an hour.
 - "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the password brake.

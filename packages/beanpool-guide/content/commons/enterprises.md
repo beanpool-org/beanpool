@@ -12,6 +12,8 @@ An **enterprise** is something people run together for the community: a tool lib
 - A **project** has a goal and usually a deadline, like raising 500 beans for a new roof.
 - An **ongoing** enterprise keeps going.
 
+An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, never against the keeper's own.
+
 ## Finding them
 
 Tap **Commons**, then **Enterprises**. The **Community Treasuries** come first, then every enterprise with its status, purpose and balance. Tap one to open it.
@@ -30,7 +32,7 @@ At the bottom, **Report Enterprise** if something is wrong.
 
 ## Backing an enterprise
 
-- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**.
+- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too.
 - **Trade with it:** its Offers and Needs are in the Market like anyone's.
 - **Become a keeper:** see "Keepers".
 

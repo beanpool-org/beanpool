@@ -24,7 +24,7 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '@beanpool/signin';
-import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import { NonceStore, verifySignedRequest } from './auth.js';
 import type { BackupStore } from './backup-store.js';
@@ -47,7 +47,6 @@ export const HOLD_MS = 24 * 60 * 60 * 1000;
 export const GLOBAL_ORIGIN = 'https://global.beanpool.org';
 export const BACKUP_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
-const RESTORE_PENDING = 'restore-pending.bin';
 const RESTORE_BUILD = `${DB_FILE}.restore`;
 /** After a restore from backup failed to finish, the next try waits this long (requests meanwhile get 503 at once). */
 export const RESTORE_RETRY_MS = 30_000;
@@ -277,7 +276,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         if (!opts.restoreDir || !outside) throw new Error('With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).');
     }
     const restoreDir = opts.restoreDir ?? opts.dataDir;
-    const pendingPath = path.join(restoreDir, RESTORE_PENDING);
+    const pendingPath = path.join(restoreDir, RESTORE_PENDING_NAME);
     const dbPath = path.join(opts.dataDir, DB_FILE);
 
     /** The data directory is ready: always, unless it must be a mount point and isn't yet. */

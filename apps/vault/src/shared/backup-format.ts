@@ -45,6 +45,9 @@ export interface ParsedBackup {
 
 export const BACKUP_NAME_RE = /^bv-\d{8}T\d{6}Z(?:-\d+)?\.bin$/;
 
+/** A restore from backup waiting for the unlock, in the API's `restoreDir`: a copy of one backup file. */
+export const RESTORE_PENDING_NAME = 'restore-pending.bin';
+
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */
 export function backupNameFor(ms: number): string {
     return `bv-${new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}.bin`;

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { custodianKey } from '../custodian/lib.js';
-import { INSTALL_SPARE_BYTES, installStaged, type InstallOptions } from '../install/install.js';
+import { INSTALL_SPARE_BYTES, installStaged, processesOf, type ApiDirs, type InstallOptions } from '../install/install.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
 import { stagedNames } from '../shared/staged-image.js';
 import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit.js';
@@ -211,5 +211,116 @@ describe('the monthly restart installs only what root checks from the pinned key
         expect(await installStaged(t.opts({ sysupdate: () => false }))).toEqual({ installed: false, reason: 'systemd-sysupdate failed' });
         expect(readdirSync(t.transferDir)).toEqual([]);
         expect(await installStaged(t.opts())).toEqual({ installed: false, reason: 'nothing is staged' });
+    });
+});
+
+describe('the monthly restart removes what the API left on the state partition, once the API is stopped (#1314 round 3, 4138896706)', () => {
+    /** The API's directories as a compromised API might leave them (the reviewer filled releases/ with fallocate). */
+    function planted() {
+        const base = path.join(dir, `api-${++n}`);
+        const d: ApiDirs = { releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700 };
+        for (const p of [d.releases, d.backups, d.restore]) mkdirSync(p, { recursive: true });
+        const outside = path.join(base, 'outside');
+        mkdirSync(outside);
+        writeFileSync(path.join(outside, 'precious'), 'not the API\'s');
+        // releases/: a big file, a release's bundle, a deep tree, a link out.
+        writeFileSync(path.join(d.releases, 'junk'), Buffer.alloc(2 << 20));
+        mkdirSync(path.join(d.releases, 'a'.repeat(64)));
+        writeFileSync(path.join(d.releases, 'a'.repeat(64), 'vault-api.mjs'), 'a bundle');
+        mkdirSync(path.join(d.releases, 'deep', 'b', 'c'), { recursive: true });
+        writeFileSync(path.join(d.releases, 'deep', 'b', 'c', 'f'), 'x');
+        symlinkSync(outside, path.join(d.releases, 'link-out'));
+        // backups/: three backups (300 bytes each: two fit in 700), a file that is no backup, a directory and a link
+        // under backup names, a partial write.
+        for (const day of ['01', '02', '03']) writeFileSync(path.join(d.backups, `bv-202609${day}T000000Z.bin`), Buffer.alloc(300));
+        writeFileSync(path.join(d.backups, 'junk'), Buffer.alloc(1 << 20));
+        mkdirSync(path.join(d.backups, 'bv-20260904T000000Z.bin'));
+        writeFileSync(path.join(d.backups, 'bv-20260904T000000Z.bin', 'inside'), 'x');
+        symlinkSync(path.join(outside, 'precious'), path.join(d.backups, 'bv-20260905T000000Z.bin'));
+        writeFileSync(path.join(d.backups, 'bv-20260906T000000Z.bin.part'), 'x');
+        // restore/: a pending restore (kept), its partial, a directory.
+        writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(500));
+        writeFileSync(path.join(d.restore, 'restore-pending.bin.part'), 'x');
+        mkdirSync(path.join(d.restore, 'junk'));
+        return { d, outside };
+    }
+
+    it('its releases, whatever in backups is no backup or past the budget, strays in restore, and a directory named like a boot file in the inbox go; the staged image installs', async () => {
+        const t = setUp();
+        const { d, outside } = planted();
+        t.stage(t.r2, t.next, [t.r1, t.r2]);
+        // A directory named like a second boot file: with the API running, root refuses "more than one boot file".
+        mkdirSync(path.join(t.inbox, 'beanpool-vault_1.2.0.efi'));
+        writeFileSync(path.join(t.inbox, 'beanpool-vault_1.2.0.efi', 'inside'), 'x');
+        const order: string[] = [];
+        const resultFile = path.join(dir, `result-${n}.json`);
+        const r = await installStaged(t.opts({
+            apiDirs: d, resultFile, clock: () => 7,
+            stopApi: () => { order.push(`stop, inbox ${readdirSync(t.inbox).length}, releases ${readdirSync(d.releases).length}`); return true; },
+            sysupdate: () => { order.push('sysupdate'); t.installed.push({}); return true; },
+        }));
+        expect(r).toEqual({ installed: true, version: '1.1.0' });
+        // Stopped first, before anything of the API's user was touched.
+        expect(order).toEqual(['stop, inbox 5, releases 4', 'sysupdate']);
+        expect(readdirSync(d.releases)).toEqual([]);
+        expect(readdirSync(d.backups).sort()).toEqual(['bv-20260902T000000Z.bin', 'bv-20260903T000000Z.bin']);
+        expect(readdirSync(d.restore)).toEqual(['restore-pending.bin']);
+        expect(readdirSync(t.inbox)).toEqual([]);
+        expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the API\'s');
+        const record = JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup?: string };
+        expect(record).toEqual({
+            at: 7, installed: true, version: '1.1.0',
+            cleanup: 'removed what the API left on the state partition: 4 in releases, 4 in backups that are not a backup, 1 backup past the budget, 2 in restore',
+        });
+    });
+
+    it('nothing staged: the API\'s leftovers go all the same (the reviewer\'s case: releases/ filled, nothing could be staged)', async () => {
+        const t = setUp();
+        const { d } = planted();
+        expect(await installStaged(t.opts({ apiDirs: d, stopApi: () => true }))).toEqual({ installed: false, reason: 'nothing is staged' });
+        expect(readdirSync(d.releases)).toEqual([]);
+        t.nothingInstalled();
+    });
+
+    it('a pending restore larger than the budget, and backups each larger than it: gone too', async () => {
+        const t = setUp();
+        const { d } = planted();
+        writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(701));
+        writeFileSync(path.join(d.backups, 'bv-20260903T000000Z.bin'), Buffer.alloc(701));
+        await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
+        // The newest (0903) alone is past the budget; 0902 and 0901 fit together.
+        expect(readdirSync(d.backups).sort()).toEqual(['bv-20260901T000000Z.bin', 'bv-20260902T000000Z.bin']);
+        expect(readdirSync(d.restore)).toEqual([]);
+    });
+
+    it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {
+        const t = setUp();
+        const { d } = planted();
+        t.stage(t.r2, t.next, [t.r1, t.r2]);
+        mkdirSync(path.join(t.inbox, 'beanpool-vault_1.2.0.efi'));
+        const resultFile = path.join(dir, `result-${n}.json`);
+        const r = await installStaged(t.opts({ apiDirs: d, resultFile, stopApi: () => false }));
+        expect(r).toMatchObject({ installed: false, reason: expect.stringContaining('more than one boot file') });
+        expect(readdirSync(d.releases)).toHaveLength(4);
+        expect(readdirSync(d.backups)).toHaveLength(7);
+        // Its files unlinked, the directory left alone.
+        expect(readdirSync(t.inbox)).toEqual(['beanpool-vault_1.2.0.efi']);
+        expect(JSON.parse(readFileSync(resultFile, 'utf8'))).toMatchObject({ cleanup: 'the API could not be stopped: what it left on the state partition stays until the next restart' });
+    });
+
+    it('whether a user still runs a process is read from /proc: any of its four user ids', () => {
+        const proc = path.join(dir, `proc-${++n}`);
+        const status = (pid: string, uids: string) => {
+            mkdirSync(path.join(proc, pid), { recursive: true });
+            writeFileSync(path.join(proc, pid, 'status'), `Name:\tnode\nUmask:\t0007\nUid:\t${uids}\nGid:\t0\t0\t0\t0\n`);
+        };
+        status('1', '0\t0\t0\t0');
+        status('20', '997\t997\t997\t997');
+        status('21', '0\t0\t997\t0');
+        status('22', '1997\t1997\t1997\t1997');
+        mkdirSync(path.join(proc, 'self'));
+        mkdirSync(path.join(proc, '23'));
+        expect(processesOf(997, proc).sort((a, b) => a - b)).toEqual([20, 21]);
+        expect(processesOf(998, proc)).toEqual([]);
     });
 });

@@ -37,7 +37,12 @@ import { unixFetch } from './unix-fetch.js';
  *     but nothing reboots into it.
  *   - (round 3, BLOCKING) the launcher lives through its API's exits: a two-signed API-only release whose API listens
  *     and then keeps exiting is started again by the launcher, which then steps back to the image's own API, with no
- *     restart of the unit (on the image the launcher used to exit with its child, and systemd started it afresh).
+ *     restart of the unit (on the image the launcher used to exit with its child, and systemd started it afresh);
+ *   - (round 3) the API's user filling the state partition (fallocate, as the review did) denies staging until the
+ *     monthly restart's root step, which stops the API and removes what its user left there; then staging works again.
+ *     The data partition's mount point underneath is root's, so nothing lands under it before an unlock.
+ *
+ * Root's install step stops the API (the machine restarts next on the vault); here the driver starts it again after.
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -106,6 +111,14 @@ const fetchApi = unixFetch(API_SOCKET);
 async function getJson(p: string): Promise<{ status: number; body: Record<string, unknown> }> {
     const res = await fetchApi(`${BASE}${p}`);
     return { status: res.status, body: await res.json() as Record<string, unknown> };
+}
+
+/** The API's unit started again after root's install step stopped it, and answering. */
+async function restartApi(): Promise<{ active: string; open: boolean; after: number }> {
+    const active = sh('systemctl', ['is-active', 'beanpool-vault-api.service']).out;
+    sh('systemctl', ['start', 'beanpool-vault-api.service']);
+    const up = await until(async () => (await getJson('/v1/health')).body.state === 'open', 180);
+    return { active, open: !!up.value, after: up.after };
 }
 
 /** `node -e <script> <args>` as the API's user, as a compromised API would run it. */
@@ -207,6 +220,8 @@ async function main(): Promise<void> {
     }
     const install = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
     check('the install step refuses them', install.status === 1 && /nothing installed/.test(install.out), install.out.split('\n').pop());
+    const back = await restartApi();
+    check('the install step stopped the API first; started again, it opens', back.active === 'inactive' && back.open, `${back.active}; after ${back.after} s`);
     check('and empties the inbox; nothing reaches the transfer source', readdirSync(IMAGE_INBOX).length === 0 && readdirSync(IMAGE_TRANSFER).length === 0,
         `inbox ${readdirSync(IMAGE_INBOX).join(' ')}; install ${readdirSync(IMAGE_TRANSFER).join(' ')}`);
     const list = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
@@ -273,6 +288,17 @@ async function main(): Promise<void> {
     // Withdrawn (its bundle), so a launcher started afresh below doesn't switch to it again.
     rmSync(path.join(FEED, 'vault-v0.0.2', API_BUNDLE_ASSET));
 
+    // Round 3: the data partition's mount point, under the mount, is root's (0700): the API's user can't write there
+    // before an unlock. A plain bind mount of its parent shows what the mount hides.
+    const under = '/run/beanpool-vault-test/under';
+    mkdirSync(under, { recursive: true });
+    const bound = sh('mount', ['--bind', '/var/lib/beanpool-vault', under]);
+    const st = sh('stat', ['-c', '%U %a', path.join(under, 'data')]).out;
+    const wroteUnder = asApi('try { require("fs").writeFileSync(process.argv[1], "x"); console.log("written"); } catch (e) { console.log(e.code); }', path.join(under, 'data', 'planted'));
+    sh('umount', [under]);
+    check('the data mount point under the mount is root\'s, and the API\'s user can\'t write there', bound.status === 0 && st === 'root 700' && wroteUnder === 'EACCES',
+        `${bound.out} ${st}; ${wroteUnder}`);
+
     // Round 2, BLOCKING: 0.0.3 brings a new image; 0.0.4, an API-only release after it, names the same image and carries
     // none of its files. The API stages 0.0.3's files and keeps them staged; root's step installs 0.0.3.
     mkdirSync(NEXT, { recursive: true, mode: 0o700 });
@@ -283,16 +309,43 @@ async function main(): Promise<void> {
     if (!check('a next image\'s system partition, with its verity tree', !!roothash, roothash ?? format.out.slice(-200))) return;
     const uki = Buffer.concat([Buffer.from('beanpool-vault boot test: a UKI that is never booted\n'), crypto.randomBytes(4096)]);
     const nextImage: ReleaseImage = { ukiSha256: sha256Hex(uki), roothash: roothash as string };
+    const names = stagedNames('0.0.3', nextImage.roothash);
+    const stagedNow = () => readdirSync(IMAGE_INBOX).sort().join(' ');
+
+    // Round 3: before 0.0.3 is published, the API's user fills the state partition (fallocate in its releases
+    // directory, as the review did) and leaves junk in its backups and its inbox. Staging 0.0.3 is refused for room.
+    const RELEASES = '/var/lib/beanpool-vault/releases';
+    const BACKUPS = '/var/lib/beanpool-vault/backups';
+    const fill = varSpace().avail - (4 << 20);
+    const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
+    asApi(`const fs = require('fs'), [b, s] = process.argv.slice(1);
+        fs.writeFileSync(b + '/junk', 'x');
+        fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
+        fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');`, BACKUPS, IMAGE_INBOX);
+    check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (8 << 20), `${filled.out}; ${gib(varSpace().avail)} free for the vault's users`);
     const r3 = publish(FEED, custodians, '0.0.3', r2, nextImage, ownBundle, {
         [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
     });
-    const names = stagedNames('0.0.3', nextImage.roothash);
-    const stagedNow = () => readdirSync(IMAGE_INBOX).sort().join(' ');
+    const noRoom = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.3' && /no room for the image/.test(u.imageWaiting?.error ?? '') && u;
+    }, 180);
+    check('staging 0.0.3 is refused for room, and /v1/report says so', !!noRoom.value, JSON.stringify((await readUpdate()).imageWaiting ?? null));
+    const tidy = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
+    const cleanup = (JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { cleanup?: string }).cleanup ?? '';
+    check('the monthly restart\'s root step removes what the API\'s user left: its releases, the junk in its backups and inbox',
+        readdirSync(RELEASES).length === 0 && !readdirSync(BACKUPS).includes('junk') && readdirSync(IMAGE_INBOX).length === 0 && /in releases/.test(cleanup),
+        `${tidy.out.split('\n').filter(l => /removed|nothing/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
+    check('and the room is back', varSpace().avail > GIB, `${gib(varSpace().avail)} free for the vault's users`);
+    const again = await restartApi();
+    check('the API, started again, opens', again.open, `after ${again.after} s`);
+
+    // Staging works again: 0.0.3's files, checked, in the inbox.
     const nextStaged = await until(async () => {
         const u = await readUpdate();
         return u.newest?.version === '0.0.3' && u.imageWaiting?.staged && u;
     }, 180);
-    check('the API stages 0.0.3, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
+    check('the API stages 0.0.3 again, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
         `after ${nextStaged.after} s: ${JSON.stringify(await readUpdate()).slice(0, 600)}; inbox ${stagedNow()}`);
     const whileStaged = varSpace();
     publish(FEED, custodians, '0.0.4', r3, nextImage, sha256Hex('an API-only release: 0.0.3\'s image, no image files'));
@@ -306,6 +359,8 @@ async function main(): Promise<void> {
         `${JSON.stringify(kept.value?.imageWaiting ?? null)}; inbox ${stagedNow()}`);
     const installed = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
     check('root\'s install step installs 0.0.3', installed.status === 0 && installed.out.includes('release 0.0.3 is installed'), installed.out.split('\n').slice(-3).join(' | '));
+    const third = await restartApi();
+    check('the API, started again, opens', third.open, `after ${third.after} s`);
     const listed = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
     // It calls the newest installed version current, and keeps the running one (ProtectVersion=%A) to fall back to.
     const line = (v: string) => listed.split('\n').find(l => l.includes(` ${v} `)) ?? '';

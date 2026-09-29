@@ -143,14 +143,20 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files into
   `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs), where
   systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to the old
-  one if it fails to boot three times. Anything else is refused, logged and deleted: root unlinks the inbox's files
-  (it never walks into a directory the API's user made there), and at its next check the API clears everything in its
-  inbox but the image it stages (a directory with all it holds; a link, never what it points at). What it can't
-  remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians
-  unlock. The test image installs a signed next image this way (a small one that is never booted: the API stages it,
-  root makes every check, and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals;
-  `install.test.ts` checks the checks and the move. Booting into a real next image is not in the repo's tests (the
-  review of round 1 did it with its own builds).
+  one if it fails to boot three times. Anything else is refused, logged and removed. Root's step first stops the API
+  (the machine restarts next anyway) and, once no process of the API's user runs, removes what that user left on the
+  state partition: the releases it downloaded (the image's own API starts after the restart and downloads a release's
+  bundle again), anything in `backups/` that is not a backup and the backups past their budget, anything in `restore/`
+  but a pending restore, and anything in the inbox but a staged image's files; `lastInstall.cleanup` in `/v1/report`
+  says what went. So an API that fills the state partition denies updates only until the next monthly restart
+  (`/v1/report` says so meanwhile), and the data partition's mount point is root's, so nothing is hidden under the
+  mount. Between restarts the API itself clears everything in its inbox but the image it stages, at every check (a
+  directory with all it holds; a link, never what it points at); what it can't remove, `/v1/report` says
+  (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians unlock. The test image
+  installs a signed next image this way (a small one that is never booted: the API stages it, root makes every check,
+  and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals; `install.test.ts` checks
+  the checks and the move. Booting into a real next image is not in the repo's tests (the review of round 1 did it
+  with its own builds).
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
   under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
   the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.
@@ -170,10 +176,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   moment, measured on a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and
   is there twice while root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most
   200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go
-  first, the newest always stays) and a few MiB of releases, certificates and state: about 3.7 GiB. On the booted test
-  image the file system is 5.82 GiB, 5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks
-  the room for its copies before it makes them, and a staging or install that fails for room says so in `/v1/report`
-  (`imageWaiting.error`, `lastInstall`).
+  first, the newest always stays, and at the monthly restart root keeps only the newest that fit in it together) and a
+  few MiB of releases, certificates and state: about 3.7 GiB. On the booted test image the file system is 5.82 GiB,
+  5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks the room for its copies before it
+  makes them, and a staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`,
+  `lastInstall`).
 - The data partition is LUKS2 under `K_disk`: after an unlock, a root helper takes the key from the keyholder's
   root-only socket, opens the partition (formats it the first time), and mounts it in the machine's own mount
   namespace (its unit has no setting that makes one), where the API sees it; the API opens no database before, and

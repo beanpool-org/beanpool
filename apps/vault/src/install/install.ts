@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
+import { BACKUP_NAME_RE, compareBackupNames, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
 import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
@@ -24,8 +25,17 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * What it did goes into `resultFile` too, for the API's `/v1/report` after the restart.
  *
  * The inbox belongs to the API's user, who may be hostile: entries are opened without following links, only regular
- * files are read, sizes are capped, every check runs on root's copy (made first), and entries are unlinked, never
- * walked into.
+ * files are read, sizes are capped, and every check runs on root's copy (made first).
+ *
+ * Before any of it, the API is stopped (`stopApi`: the machine restarts next anyway), so no process of its user can
+ * race what root does in that user's directories. Then everything that user may have left on the state partition goes
+ * (a compromised API could otherwise fill it, and deny every later update, until a reinstall): `releasesDir` is
+ * emptied (the launcher starts the image's own API after the restart, and the API downloads a release's bundle
+ * again), `backups/` keeps only backups (regular files under a backup name), the newest that fit in the budget
+ * together, `restore/` only a pending restore (a regular file, within that budget), and the inbox anything but the
+ * regular files a staged image is made of (a directory named like a boot file among them). The API's private /var/tmp
+ * goes with its unit's stop. If the API can't be stopped, its directories are left as they are, root only unlinks the
+ * inbox's files (never walking into a directory there), and the journal and the record say so.
  */
 
 export interface InstallOptions {
@@ -48,6 +58,20 @@ export interface InstallOptions {
     /** Bytes root may still write where `workDir` is (default: the file system's free blocks, reserved ones included). */
     freeBytes?: (dir: string) => number;
     clock?: () => number;
+    /**
+     * Stops the API (its unit) and says whether no process of its user runs any more: only then is anything of that
+     * user's walked into or removed whole. Without it, nothing is.
+     */
+    stopApi?: () => boolean;
+    /** The API's other directories on the state partition, and its local backups' budget (the image's api.json). */
+    apiDirs?: ApiDirs;
+}
+
+export interface ApiDirs {
+    releases: string;
+    backups: string;
+    restore: string;
+    backupMaxBytes: number;
 }
 
 /** What root's copies leave free at least, for the journal and the vault's own files. */
@@ -64,30 +88,114 @@ function refuse(reason: string): never {
 const UKI_NAME = /^beanpool-vault_((?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8}))\.efi$/;
 const PARTITION_NAME = /\.root(-verity)?\.raw$/;
 
+/** Pids with `uid` as any of their user ids (real, effective, saved, file system), from /proc. */
+export function processesOf(uid: number, proc = '/proc'): number[] {
+    const pids: number[] = [];
+    for (const name of readdirSync(proc)) {
+        if (!/^\d+$/.test(name)) continue;
+        try {
+            const line = /^Uid:\s+(.*)$/m.exec(readFileSync(`${proc}/${name}/status`, 'utf8'))?.[1] ?? '';
+            if (line.split(/\s+/).map(Number).includes(uid)) pids.push(Number(name));
+        } catch {
+            // Gone since.
+        }
+    }
+    return pids;
+}
+
 /** Every entry of a directory root owns, gone (its contents only). */
 function emptyOwn(dir: string): void {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     for (const name of readdirSync(dir)) rmSync(path.join(dir, name), { recursive: true, force: true });
 }
 
-/** The inbox's entries unlinked; a directory in it is left alone (never walked into), and said. */
-function emptyInbox(inbox: string, log: (line: string) => void): void {
-    let names: string[];
+function names(dir: string): string[] {
     try {
-        names = readdirSync(inbox);
+        return readdirSync(dir);
     } catch {
-        return;
+        return [];
     }
-    for (const name of names) {
+}
+
+/** One entry of the API's user's, gone whole (a link itself, never what it points at): only once the API is stopped. */
+function removeWhole(p: string): boolean {
+    try {
+        rmSync(p, { recursive: true, force: true });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The inbox's entries gone but `keep` (regular files only, by lstat). With the API running, a directory is left alone
+ * (never walked into) and said; with it stopped, it goes whole.
+ */
+function emptyInbox(inbox: string, log: (line: string) => void, apiStopped: boolean, keep: (name: string) => boolean = () => false): void {
+    for (const name of names(inbox)) {
         const p = path.join(inbox, name);
         try {
-            if (lstatSync(p).isDirectory()) log(`left a directory in the inbox alone: ${name}`);
+            const st = lstatSync(p);
+            if (st.isFile() && keep(name)) continue;
+            if (apiStopped) removeWhole(p);
+            else if (st.isDirectory()) log(`left a directory in the inbox alone: ${name}`);
             else unlinkSync(p);
         } catch {
             // Gone already.
         }
     }
 }
+
+/**
+ * The API's directories on the state partition, once the API is stopped: `releases` emptied; in `backups` only backups
+ * (regular files under a backup name), the newest that fit in `backupMaxBytes` together; in `restore` only a pending
+ * restore within that budget. Returns what went, in a few words, or null when nothing did.
+ */
+export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string | null {
+    const said: string[] = [];
+    const releases = names(dirs.releases).filter(n => removeWhole(path.join(dirs.releases, n)));
+    if (releases.length) said.push(`${releases.length} in releases`);
+
+    const backups: { name: string; size: number }[] = [];
+    let others = 0;
+    for (const name of names(dirs.backups)) {
+        const p = path.join(dirs.backups, name);
+        let st;
+        try {
+            st = lstatSync(p);
+        } catch {
+            continue;
+        }
+        if (st.isFile() && BACKUP_NAME_RE.test(name)) backups.push({ name, size: st.size });
+        else if (removeWhole(p)) others++;
+    }
+    let total = 0;
+    let dropped = 0;
+    for (const b of backups.sort((x, y) => compareBackupNames(y.name, x.name))) {
+        if (total + b.size <= dirs.backupMaxBytes) total += b.size;
+        else if (removeWhole(path.join(dirs.backups, b.name))) dropped++;
+    }
+    if (others) said.push(`${others} in backups that ${others === 1 ? 'is' : 'are'} not a backup`);
+    if (dropped) said.push(`${dropped} ${dropped === 1 ? 'backup' : 'backups'} past the budget`);
+
+    let restore = 0;
+    for (const name of names(dirs.restore)) {
+        const p = path.join(dirs.restore, name);
+        try {
+            const st = lstatSync(p);
+            if (name === RESTORE_PENDING_NAME && st.isFile() && st.size <= dirs.backupMaxBytes) continue;
+        } catch {
+            continue;
+        }
+        if (removeWhole(p)) restore++;
+    }
+    if (restore) said.push(`${restore} in restore`);
+    if (!said.length) return null;
+    const line = `removed what the API left on the state partition: ${said.join(', ')}`;
+    log(line);
+    return line;
+}
+
 
 /**
  * Copies `from` (in the inbox) to `to` (root's own, created new), without following a link, only if it is a regular
@@ -190,9 +298,9 @@ async function check(opts: InstallOptions, entries: string[]): Promise<{ release
 
 export async function installStaged(opts: InstallOptions): Promise<InstallResult> {
     const log = opts.log ?? (line => console.log(`vault-install: ${line}`));
-    const result = await attempt(opts, log);
+    const { result, cleanup } = await attempt(opts, log);
     if (opts.resultFile) {
-        const record: InstallRecord = { at: (opts.clock ?? Date.now)(), ...result };
+        const record: InstallRecord = { at: (opts.clock ?? Date.now)(), ...result, ...(cleanup ? { cleanup } : {}) };
         try {
             writeFileSync(`${opts.resultFile}.part`, `${JSON.stringify(record)}\n`, { mode: 0o644 });
             renameSync(`${opts.resultFile}.part`, opts.resultFile);
@@ -203,15 +311,25 @@ export async function installStaged(opts: InstallOptions): Promise<InstallResult
     return result;
 }
 
-async function attempt(opts: InstallOptions, log: (line: string) => void): Promise<InstallResult> {
+/** What root's step did about what the API left on the state partition (for the record), and whether it installed. */
+async function attempt(opts: InstallOptions, log: (line: string) => void): Promise<{ result: InstallResult; cleanup: string | null }> {
     emptyOwn(opts.transferDir);
     emptyOwn(opts.workDir);
-    let entries: string[];
-    try {
-        entries = readdirSync(opts.inbox);
-    } catch {
-        entries = [];
+    const apiStopped = opts.stopApi ? opts.stopApi() : false;
+    let cleanup: string | null = null;
+    if (apiStopped) {
+        cleanup = opts.apiDirs ? clearApiDirs(opts.apiDirs, log) : null;
+        // Nothing but regular files: a directory named like a boot file can't stand beside the image.
+        emptyInbox(opts.inbox, log, true, () => true);
+    } else if (opts.stopApi) {
+        cleanup = 'the API could not be stopped: what it left on the state partition stays until the next restart';
+        log(cleanup);
     }
+    return { result: await checkAndInstall(opts, log, apiStopped), cleanup };
+}
+
+async function checkAndInstall(opts: InstallOptions, log: (line: string) => void, apiStopped: boolean): Promise<InstallResult> {
+    const entries = names(opts.inbox);
     if (!entries.length) return { installed: false, reason: 'nothing is staged' };
     let checked: Awaited<ReturnType<typeof check>>;
     try {
@@ -227,7 +345,7 @@ async function attempt(opts: InstallOptions, log: (line: string) => void): Promi
         emptyOwn(opts.transferDir);
         return { installed: false, reason };
     } finally {
-        emptyInbox(opts.inbox, log);
+        emptyInbox(opts.inbox, log, apiStopped);
         emptyOwn(opts.workDir);
     }
     const version = checked.release.manifest.version;

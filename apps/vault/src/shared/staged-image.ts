@@ -27,6 +27,8 @@ export interface InstallRecord {
     installed: boolean;
     version?: string;
     reason?: string;
+    /** What root's step removed of what the API left on the state partition, or why it couldn't. */
+    cleanup?: string;
 }
 
 /** The install record in `file`, or null (none yet, or not one). */
@@ -39,6 +41,7 @@ export function readInstallRecord(file: string): InstallRecord | null {
             at: o.at, installed: o.installed,
             ...(typeof o.version === 'string' ? { version: o.version.slice(0, 32) } : {}),
             ...(typeof o.reason === 'string' ? { reason: o.reason.slice(0, 500) } : {}),
+            ...(typeof o.cleanup === 'string' ? { cleanup: o.cleanup.slice(0, 500) } : {}),
         };
     } catch {
         return null;

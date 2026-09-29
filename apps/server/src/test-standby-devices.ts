@@ -65,6 +65,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -572,7 +573,7 @@ async function main(): Promise<void> {
             return (c.conversation?.id ?? c.id) as string;
         };
         const say = (who: Id, conversationId: string, text: string) => S_(who, '/api/messages/send', {
-            conversationId, authorPubkey: who.pk, ciphertext: Buffer.from(text).toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
+            conversationId, authorPubkey: who.pk, ...lockedDm(text.length),
         });
         const chatAB = await chat(ann, bo);
         const chatAC = await chat(ann, cy);
@@ -1039,7 +1040,7 @@ async function main(): Promise<void> {
         assert(senders.handed.length === 0 && sent.length === 0,
             `the dispatcher for each category, the escrow and announcement senders and the timers hand nothing to the push service on S (${JSON.stringify(senders.answers)}; handed ${senders.handed.length})`);
         const chatOnS = await api(sv, 'POST', '/api/messages/send', { as: cy, body: {
-            conversationId: chatAC, authorPubkey: cy.pk, ciphertext: Buffer.from('on a standby').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
+            conversationId: chatAC, authorPubkey: cy.pk, ...lockedDm(),
         } });
         const threadOnS = await api(sv, 'POST', `/api/treasury/${probe.publicKey}/thread/message`, { as: kip, body: { text: 'On a standby' } });
         const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: PW_STANDBY, body: { title: 'On a standby', body: 'Never sent' } });
@@ -1164,10 +1165,10 @@ async function main(): Promise<void> {
         // Mutes.
         await standby.send('pushes');
         built('Bo writes to Ann, who muted their chat', await api(p, 'POST', '/api/messages/send', { as: bo, body: {
-            conversationId: chatAB, authorPubkey: bo.pk, ciphertext: Buffer.from('lunch?').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
+            conversationId: chatAB, authorPubkey: bo.pk, ...lockedDm(),
         } }));
         built('Cy writes to Ann, who unmuted theirs', await api(p, 'POST', '/api/messages/send', { as: cy, body: {
-            conversationId: chatAC, authorPubkey: cy.pk, ciphertext: Buffer.from('tools?').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
+            conversationId: chatAC, authorPubkey: cy.pk, ...lockedDm(),
         } }));
         await sleep(200);
         const chatPushes: Push[] = await standby.send('pushes');

@@ -114,11 +114,20 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   pinned keys, runs the bundle's `--self-test` (it must report the same pinned keys and its own hash), starts it beside
   the old API, and once the new one listens (it points `api.sock` at its own socket in one rename) tells the old one to
   finish what it has and exit. The keyholder isn't touched: no unlock. Never backwards: only a release newer than the
-  one running, and an API that can't find itself in the feed takes nothing.
-- **A new image** (system, kernel, keyholder, Node): the API stages it (the UKI against `ukiSha256`, the partitions
-  against `roothash` with `veritysetup verify`) and `/v1/report` says `imageWaiting`. The monthly restart installs it
-  into the other system slot with systemd-sysupdate and boots it; systemd-boot falls back to the old one if it fails to
-  boot three times. Then two custodians unlock.
+  one running, and an API that can't find itself in the feed takes nothing. The launcher holds to this too, whatever
+  the API asks: it takes only a release newer than the one whose bundle is in service (and than any it switched to),
+  for the same image.
+- **A new image** (system, kernel, keyholder, Node): the API downloads it into its inbox
+  (`/var/lib/beanpool-vault/staged`), with the chain of releases up to it, and `/v1/report` says `imageWaiting`. That
+  decides nothing: the API is what this guards against. At the monthly restart root's install step
+  (`vault-install.mjs`, built with the genesis keys like the launcher, on the verified system partition;
+  `src/install/install.ts`) walks the chain from those keys itself and checks, on its own copies: two custodian
+  signatures, a release newer than the running one, file names carrying its version (and the partitions' names its
+  root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files
+  into `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs),
+  where systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to
+  the old one if it fails to boot three times. Anything else is refused, logged and deleted. Then two custodians
+  unlock.
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
   under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
   the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.
@@ -170,7 +179,10 @@ where two builds differ.
   made for the run, private halves included (`image/test-image/make.mjs`, `build.sh --extra`; never published, and
   its hash is not a release's). `boot-test.sh --verdict vault-test` boots it, and the driver
   (`src/__tests__/image-boot-driver.ts`) runs as root inside: a genesis through the API's socket, then `/v1/health`
-  must say `open` with the data partition mounted in the machine's namespace and the database open on it.
+  must say `open` with the data partition mounted in the machine's namespace and the database open on it. As the
+  API's user it stages a boot file and partitions no release signs, and fails to write root's install directories;
+  the install step must refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release
+  as current. (A signed next release installed and booted is not in it: that needs a second image build and a reboot.)
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow
@@ -196,8 +208,10 @@ genesis, an unlock, a reshare or a restore, the tool:
    (`src/custodian/checker.ts`, V8); until then they are refused. An unknown platform is refused.
 
 These checks catch mistakes (an image nobody signed, an old one still running), not a hostile host, which can answer
-with any hash it likes. On `none` the guards against that are the reinstall-before-unlock rule and the split hosting
-login (design §2.2, §2.5).
+with any hash it likes. What guards against a planted image: a compromised API can't get one booted, since only root's
+check from the pinned keys installs anything, so a planned restart boots a two-signed image. A hostile host, on
+`none`, can boot anything it likes: against that there is nothing technical, only the reinstall-before-unlock rule after
+a restart nobody planned and the split hosting login (design §2.2, §2.5).
 
 ```
 vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --share share-1-1-xxxx.json
@@ -207,9 +221,9 @@ vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json -
 ## The monthly restart (D3)
 
 The first Sunday of each month at 09:00 UTC (`beanpool-vault-monthly-restart.timer`; `/v1/report` says when the next
-one is). It installs a staged image, if any, and restarts. The vault comes back locked: two custodians unlock it,
-within the 24-hour target. After a restart nobody planned, the rule stands: reinstall from the signed image first,
-then unlock.
+one is). It installs a new image the API staged, only if root's check from the pinned keys passes (above), and
+restarts. The vault comes back locked: two custodians unlock it, within the 24-hour target. After a restart nobody
+planned, the rule stands: reinstall from the signed image first, then unlock.
 
 ## Monitoring (design §3)
 

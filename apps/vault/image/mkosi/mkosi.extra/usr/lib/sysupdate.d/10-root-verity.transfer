@@ -1,12 +1,13 @@
-# A new image, staged by the API after checking it against its two-signed release (src/api/updater.ts), installed at
-# the monthly restart into the slot not in use. The partition UUIDs are the halves of the UKI's roothash=, which is how
-# the new UKI finds its own partitions.
+# A new image, installed at the monthly restart into the slot not in use. The source is root's alone: only files root's
+# install step (src/install/install.ts) has checked from the pinned custodian keys are moved there; the API's inbox
+# (/var/lib/beanpool-vault/staged) is never read. The partition UUIDs are the halves of the UKI's roothash=, which is
+# how the new UKI finds its own partitions.
 [Transfer]
 ProtectVersion=%A
 
 [Source]
 Type=regular-file
-Path=/var/lib/beanpool-vault/staged
+Path=/var/lib/beanpool-vault/install
 MatchPattern=beanpool-vault_@v_@u.root-verity.raw
 
 [Target]

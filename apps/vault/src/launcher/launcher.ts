@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { SwitchRequest } from '../api/updater.js';
-import { resolveChain, sha256Hex } from '../shared/release.js';
+import { compareVersions, resolveChain, sha256Hex } from '../shared/release.js';
 
 /**
  * vault-launcher (key vault design §3, "starts the new API beside itself and hands over traffic"): the process systemd
@@ -9,7 +9,9 @@ import { resolveChain, sha256Hex } from '../shared/release.js';
  * bundle as its child, and on that child's request runs a newer one:
  *
  *   1. the request's release must be in the chain from the launcher's own pinned keys, and the bundle file's SHA-256
- *      the one that release names (the API checked both; this checks again, from its own copy of the keys);
+ *      the one that release names (the API checked both; this checks again, from its own copy of the keys). Never
+ *      backwards: it must be newer than the release of the API in service (the newest in that chain whose bundle is
+ *      that API's file) and than any release this launcher has switched to, and for the same image;
  *   2. the bundle's self-test (`--self-test`) must pass, and report the same pinned keys and its own hash;
  *   3. the new API starts beside the old one and, once it listens, points the API socket at itself: new connections
  *      go to it from that moment;
@@ -72,6 +74,8 @@ export class Launcher {
     private stopping = false;
     private restartDelayMs = 1000;
     private recentFailures: number[] = [];
+    /** The newest release this launcher has switched to: nothing at or below it is taken again. */
+    private floor: string | null = null;
     private readonly log: (line: string) => void;
 
     constructor(private readonly opts: LauncherOptions) {
@@ -149,13 +153,29 @@ export class Launcher {
         });
     }
 
-    /** Step 1: the release from the launcher's own keys, and the bundle file it names. */
-    verify(req: SwitchRequest): { ok: true } | { ok: false; reason: string } {
+    /**
+     * Step 1: the release from the launcher's own keys, newer than the API in service (`inService`, the file it runs
+     * from), and the bundle file it names.
+     */
+    verify(req: SwitchRequest, inService = this.current?.bundle ?? this.opts.imageBundle): { ok: true } | { ok: false; reason: string } {
         if (!req || typeof req.bundlePath !== 'string' || !req.release || !Array.isArray(req.chain)) return { ok: false, reason: 'not a switch request' };
         const chain = resolveChain(req.chain, this.opts.rootKeys);
         const hash = sha256Hex(String(req.release.manifestText));
         const release = chain.releases.find(r => r.hash === hash);
         if (!release) return { ok: false, reason: 'that release is not in the chain from the pinned keys' };
+        let own: string;
+        try {
+            own = sha256Hex(readFileSync(inService));
+        } catch {
+            return { ok: false, reason: 'the API in service can\'t be read' };
+        }
+        const running = [...chain.releases].reverse().find(r => r.manifest.apiBundleHash === own);
+        if (!running) return { ok: false, reason: 'the API in service is not a release in that chain' };
+        const version = release.manifest.version;
+        for (const below of [running.manifest.version, this.floor]) {
+            if (below !== null && compareVersions(version, below) <= 0) return { ok: false, reason: `never backwards: ${version} is not newer than ${below}` };
+        }
+        if (release.manifest.imageHash !== running.manifest.imageHash) return { ok: false, reason: `release ${version} is for another image: it waits for the monthly restart` };
         let bytes: Buffer;
         try {
             bytes = readFileSync(req.bundlePath);
@@ -217,6 +237,7 @@ export class Launcher {
                 return reply(false, `the new API did not start: ${(e as Error).message}`);
             }
             this.current = { child: next, bundle: req.bundlePath, startedAt: Date.now() };
+            this.floor = resolveChain(req.chain, this.opts.rootKeys).releases.find(r => r.hash === sha256Hex(String(req.release.manifestText)))?.manifest.version ?? this.floor;
             this.watch(this.current);
             reply(true);
             this.log(`pid ${next.pid} is serving; pid ${old.child.pid} drains and exits`);

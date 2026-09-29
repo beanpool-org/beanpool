@@ -5,7 +5,7 @@ ProtectVersion=%A
 
 [Source]
 Type=regular-file
-Path=/var/lib/beanpool-vault/staged
+Path=/var/lib/beanpool-vault/install
 MatchPattern=beanpool-vault_@v.efi
 
 [Target]

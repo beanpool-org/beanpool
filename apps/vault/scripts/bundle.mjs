@@ -7,8 +7,9 @@
  *   node scripts/bundle.mjs --custodian-keys <file> --out <dir>
  *
  * `<file>` is `{"genesisCustodians": ["<hex>", "<hex>", "<hex>"]}` (public keys only). It writes vault-keyholder.mjs,
- * vault-api.mjs, vault-launcher.mjs and vault-custodian.mjs, and bundles.json with each file's SHA-256. The workspace
- * packages it imports (@beanpool/core, @beanpool/signin) must be built first (`pnpm --filter ... build`).
+ * vault-api.mjs, vault-launcher.mjs, vault-install.mjs and vault-custodian.mjs, and bundles.json with each file's
+ * SHA-256. The workspace packages it imports (@beanpool/core, @beanpool/signin) must be built first
+ * (`pnpm --filter ... build`).
  */
 /* global process, console */
 import crypto from 'node:crypto';
@@ -23,6 +24,7 @@ export const PROGRAMS = {
     'vault-keyholder.mjs': 'src/keyholder/main.ts',
     'vault-api.mjs': 'src/api/main.ts',
     'vault-launcher.mjs': 'src/launcher/main.ts',
+    'vault-install.mjs': 'src/install/main.ts',
     'vault-custodian.mjs': 'src/custodian/cli.ts',
 };
 
@@ -36,7 +38,7 @@ export function readCustodianKeys(file) {
     return keys;
 }
 
-/** Builds the four programs into `outDir`; returns {file: sha256}. */
+/** Builds the programs into `outDir`; returns {file: sha256}. */
 export async function bundleVault({ outDir, rootKeys }) {
     mkdirSync(outDir, { recursive: true });
     const hashes = {};

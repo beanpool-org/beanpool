@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -13,6 +12,9 @@ import {
     type ReleaseFeed,
 } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, sha256Hex, type ReleaseChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
+import { stagedNames, veritysetupVerify, type VerifyRoot } from '../shared/staged-image.js';
+
+export { stagedNames, uuidOfHex, veritysetupVerify, type VerifyRoot } from '../shared/staged-image.js';
 
 /**
  * Updates without anyone logging in (key vault design §3). Once an hour, and at start, the API reads the feed, walks the
@@ -23,8 +25,10 @@ import { compareVersions, resolveChain, sha256Hex, type ReleaseChain, type Relea
  * - **a newer release for the same image**: its bundle is downloaded, checked against the hash its manifest names, kept
  *   in `releasesDir`, and handed to the launcher, which checks it again, runs its self-test, starts it beside this one
  *   and moves the traffic to it. This process then drains and exits. The keyholder is untouched: no unlock;
- * - **a release with a new image** (system or keyholder): it waits for the monthly restart, which installs it. Until
- *   then the report says so. Its API bundle doesn't run on the old image.
+ * - **a release with a new image** (system or keyholder): its files are downloaded and checked into `stagedDir`, an
+ *   inbox this process owns, with the chain of releases up to it. At the monthly restart root checks them again from
+ *   the keys it was built with and installs only what passes (install/install.ts): nothing here decides what boots.
+ *   Until then the report says so. Its API bundle doesn't run on the old image.
  *
  * Never backwards: only a release newer than the one running is taken, and an API that can't find itself in the feed
  * (a withheld release, a source run) takes nothing.
@@ -42,36 +46,6 @@ export interface LauncherLink {
     requestSwitch(req: SwitchRequest): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
-/**
- * Checks a system partition image against its verity tree and the root hash its release names: `veritysetup verify`
- * on the image (cryptsetup-bin). Replaceable in tests.
- */
-export type VerifyRoot = (rootFile: string, verityFile: string, roothash: string) => Promise<boolean>;
-
-export const veritysetupVerify: VerifyRoot = (rootFile, verityFile, roothash) => new Promise(resolve => {
-    const child = spawn('veritysetup', ['verify', rootFile, verityFile, roothash], { stdio: 'ignore' });
-    child.once('error', () => resolve(false));
-    child.once('exit', code => resolve(code === 0));
-});
-
-/** A GPT partition UUID from 16 bytes of hex, as systemd derives a verity pair's from the root hash's two halves. */
-export function uuidOfHex(hex32: string): string {
-    return `${hex32.slice(0, 8)}-${hex32.slice(8, 12)}-${hex32.slice(12, 16)}-${hex32.slice(16, 20)}-${hex32.slice(20, 32)}`;
-}
-
-/**
- * The files of a staged image, named as the image's usr/lib/sysupdate.d transfers expect: the partition UUIDs are the
- * halves of the root hash, which is how the new UKI's roothash= finds its own partitions.
- */
-export function stagedNames(version: string, roothash: string) {
-    return {
-        uki: `beanpool-vault_${version}.efi`,
-        root: `beanpool-vault_${version}_${uuidOfHex(roothash.slice(0, 32))}.root.raw`,
-        verity: `beanpool-vault_${version}_${uuidOfHex(roothash.slice(roothash.length - 32))}.root-verity.raw`,
-        marker: `beanpool-vault_${version}.staged.json`,
-    };
-}
-
 export interface UpdaterOptions {
     feed: ReleaseFeed;
     /** The pinned genesis custodian keys; null (a source run) means no release is ever taken. */
@@ -82,7 +56,7 @@ export interface UpdaterOptions {
     runningImageHash: () => string | null;
     releasesDir: string;
     launcher: LauncherLink | null;
-    /** Where a new image is staged for the monthly restart; without it a new image is only reported. */
+    /** The inbox a new image is staged into for the monthly restart (root checks it again); without it, only reported. */
     stagedDir?: string;
     verifyRoot?: VerifyRoot;
     clock?: () => number;
@@ -155,7 +129,7 @@ export class Updater {
         s.running = running ? ref(running) : null;
         const newest = chain.newest;
         s.imageWaiting = newest && image && newest.manifest.imageHash !== image
-            ? { ...ref(newest), imageHash: newest.manifest.imageHash, ...(await this.stage(newest, files)) }
+            ? { ...ref(newest), imageHash: newest.manifest.imageHash, ...(await this.stage(newest, files, chain)) }
             : null;
         if (!running) {
             s.note = own === null ? 'Run from source: no handover.' : !image
@@ -202,16 +176,18 @@ export class Updater {
     }
 
     /**
-     * A new image, into `stagedDir` for the monthly restart (usr/lib/beanpool-vault/monthly-restart): the UKI checked
-     * against the SHA-256 its release names, the system partition and its verity tree against the root hash it names.
-     * Anything that doesn't check is removed. Once staged it isn't fetched again; an older staged image goes.
+     * A new image, into the inbox `stagedDir` for the monthly restart: the UKI checked against the SHA-256 its release
+     * names, the system partition and its verity tree against the root hash it names, and last the chain of releases up
+     * to it (`stagedNames().release`). Anything that doesn't check is removed. Once staged it isn't fetched again; an
+     * older staged image goes. These checks only spare a download that would fail: root makes them all again at the
+     * restart, from its own pinned keys (install/install.ts), since this process is the one they guard against.
      */
-    private async stage(release: TrustedRelease, files: FeedRelease[]): Promise<{ staged: boolean; error?: string }> {
+    private async stage(release: TrustedRelease, files: FeedRelease[], chain: ReleaseChain): Promise<{ staged: boolean; error?: string }> {
         const dir = this.opts.stagedDir;
         if (!dir) return { staged: false };
         const { version, image, imageHash } = release.manifest;
         const names = stagedNames(version, image.roothash);
-        const marker = path.join(dir, names.marker);
+        const marker = path.join(dir, names.release);
         try {
             if (existsSync(marker) && (JSON.parse(readFileSync(marker, 'utf8')) as { imageHash?: string }).imageHash === imageHash) return { staged: true };
         } catch {
@@ -235,7 +211,12 @@ export class Updater {
                 drop();
                 return { staged: false, error: `the image's system partition does not match release ${version}'s root hash` };
             }
-            writeFileSync(marker, `${JSON.stringify({ version, imageHash, stagedAt: this.clock() })}\n`, { mode: 0o600 });
+            const upTo = chain.releases.slice(0, chain.releases.indexOf(release) + 1).map(r => {
+                const f = files.find(x => sha256Hex(x.manifestText) === r.hash) as FeedRelease;
+                return { manifestText: f.manifestText, signaturesText: f.signaturesText, label: f.label };
+            });
+            writeFileSync(`${marker}.part`, `${JSON.stringify({ version, imageHash, stagedAt: this.clock(), chain: upTo })}\n`, { mode: 0o600 });
+            renameSync(`${marker}.part`, marker);
             return { staged: true };
         } catch (e) {
             drop();

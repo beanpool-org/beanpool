@@ -99,9 +99,12 @@ describe('a new image is staged for the monthly restart', () => {
         expect(asked).toEqual([]);
         const names = stagedNames('1.1.0', image.roothash);
         expect(names.root).toBe(`beanpool-vault_1.1.0_${uuidOfHex(image.roothash.slice(0, 32))}.root.raw`);
-        expect(readdirSync(stagedDir).sort()).toEqual([names.uki, names.marker, names.root, names.verity].sort());
+        expect(readdirSync(stagedDir).sort()).toEqual([names.uki, names.release, names.root, names.verity].sort());
         expect(readFileSync(path.join(stagedDir, names.uki)).equals(uki)).toBe(true);
         expect(verified).toEqual([[names.root, names.verity, image.roothash]]);
+        // The chain up to it, for root's own check at the restart (install.ts).
+        const staged = JSON.parse(readFileSync(path.join(stagedDir, names.release), 'utf8')) as { chain: { label: string }[] };
+        expect(staged.chain.map(c => c.label)).toEqual(['vault-v1.0.0', 'vault-v1.1.0']);
         await u.check();
         expect(verified).toHaveLength(1);
     });
@@ -121,17 +124,44 @@ describe('a new image is staged for the monthly restart', () => {
 
 describe('the launcher checks a switch itself', () => {
     it('refuses a release outside the chain from its own keys, and a bundle that is not the one the release names', async () => {
-        const { root, feedDir, bundleB, r1 } = setUp();
+        const { root, feedDir, bundleA, bundleB, r1 } = setUp();
         const r2 = makeRelease({ version: '1.0.1', previous: r1, custodianKeys: root, signers: root, apiBundleHash: sha256Hex(bundleB) });
         publish(feedDir, r2, bundleB);
         const file = path.join(dir, `bundle-${n}.mjs`);
         writeFileSync(file, bundleB);
+        // The API in service is 1.0.0's (the image's bundle).
+        const inService = path.join(dir, `bundle-${n}-a.mjs`);
+        writeFileSync(inService, bundleA);
         const request = { bundlePath: file, release: r2, chain: [r1, r2] };
-        const launcher = (keys: string[]) => new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: file, apiArgs: [], rootKeys: keys, log: () => undefined });
+        const launcher = (keys: string[]) => new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: inService, apiArgs: [], rootKeys: keys, log: () => undefined });
         expect(launcher(root.map(k => k.publicKey)).verify(request)).toEqual({ ok: true });
         expect(launcher(keys3().map(k => k.publicKey)).verify(request)).toEqual({ ok: false, reason: 'that release is not in the chain from the pinned keys' });
         writeFileSync(file, Buffer.concat([bundleB, Buffer.from('\n')]));
         expect(launcher(root.map(k => k.publicKey)).verify(request)).toEqual({ ok: false, reason: 'the bundle is not the one its release names' });
+    });
+
+    it('never backwards: not to an older or the same release (1.1.0 to 1.0.0 was taken), and not to another image\'s', async () => {
+        const { root, feedDir, bundleA, bundleB, r1 } = setUp();
+        const r2 = makeRelease({ version: '1.1.0', previous: r1, custodianKeys: root, signers: root, apiBundleHash: sha256Hex(bundleB) });
+        publish(feedDir, r2, bundleB);
+        const a = path.join(dir, `older-${n}.mjs`);
+        const b = path.join(dir, `newer-${n}.mjs`);
+        writeFileSync(a, bundleA);
+        writeFileSync(b, bundleB);
+        const launcher = new Launcher({ node: process.execPath, nodeArgs: [], imageBundle: a, apiArgs: [], rootKeys: root.map(k => k.publicKey), log: () => undefined });
+        // 1.1.0's API in service asks for 1.0.0's (the chain as it is, or cut short before 1.1.0): refused.
+        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1, r2] }, b)).toEqual({ ok: false, reason: 'never backwards: 1.0.0 is not newer than 1.1.0' });
+        expect(launcher.verify({ bundlePath: a, release: r1, chain: [r1] }, b)).toEqual({ ok: false, reason: 'the API in service is not a release in that chain' });
+        // The same release again: refused.
+        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, b)).toEqual({ ok: false, reason: 'never backwards: 1.1.0 is not newer than 1.1.0' });
+        // Forwards, from 1.0.0's: taken.
+        expect(launcher.verify({ bundlePath: b, release: r2, chain: [r1, r2] }, a)).toEqual({ ok: true });
+        // A newer release for another image waits for the restart: not taken by the launcher.
+        const bundleC = crypto.randomBytes(64);
+        const r3 = makeRelease({ version: '1.2.0', previous: r2, custodianKeys: root, signers: root, image: randomImage(), apiBundleHash: sha256Hex(bundleC) });
+        const c = path.join(dir, `other-image-${n}.mjs`);
+        writeFileSync(c, bundleC);
+        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, b)).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
     });
 
     it('refuses a bundle whose self-test fails or was built with other keys', async () => {

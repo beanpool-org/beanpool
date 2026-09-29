@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * What a TEST build of the vault's image adds (the boot test; never a release): three throwaway custodian keys made
- * now, and the boot test's driver (src/__tests__/image-boot-driver.ts) with a unit that runs it at boot.
+ * now, the boot test's driver (src/__tests__/image-boot-driver.ts) with a unit that runs it at boot, and the API's
+ * config with its release feed a directory the driver fills (/var/lib/beanpool-vault-test/feed, checked every 5 s)
+ * in place of GitHub.
  *
  *   node apps/vault/image/test-image/make.mjs --out <dir>
  *   apps/vault/image/build.sh --custodian-keys <dir>/keys.json --version 0.0.1 --out <image> --extra <dir>/extra
@@ -12,7 +14,7 @@
  */
 /* global process, console, Buffer */
 import crypto from 'node:crypto';
-import { cpSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -50,4 +52,9 @@ const driver = await build({
 mkdirSync(path.join(extra, 'usr/lib/beanpool-vault-test'), { recursive: true });
 writeFileSync(path.join(extra, 'usr/lib/beanpool-vault-test/driver.mjs'), driver.outputFiles[0].contents, { mode: 0o644 });
 cpSync(path.join(here, 'extra'), extra, { recursive: true });
+const api = JSON.parse(readFileSync(path.join(vault, 'image/mkosi/mkosi.extra/etc/beanpool-vault/api.json'), 'utf8'));
+api.feed = { directory: '/var/lib/beanpool-vault-test/feed' };
+api.updateCheckSeconds = 5;
+mkdirSync(path.join(extra, 'etc/beanpool-vault'), { recursive: true });
+writeFileSync(path.join(extra, 'etc/beanpool-vault/api.json'), `${JSON.stringify(api, null, 2)}\n`, { mode: 0o644 });
 console.log(`test image keys (public, throwaway): ${keys.join(' ')}`);

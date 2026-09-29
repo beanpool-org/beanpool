@@ -11,7 +11,9 @@ name: Key vault image (built twice, compared)
 #
 # Then a TEST image (image/test-image/make.mjs: the same image plus the boot test's driver and three throwaway custodian
 # keys made here, private halves included; never published) is built and booted: a genesis inside it, the vault opens,
-# its API names the image, unsigned files the API's user stages are not installed, and the firewall's DHCP rules.
+# its API names the image, unsigned files the API's user stages are not installed, the firewall's DHCP rules, room on
+# the state partition, and a signed new image followed by an API-only release: the API keeps the image staged and
+# root's install step installs it into the other slot.
 
 on:
   workflow_dispatch:

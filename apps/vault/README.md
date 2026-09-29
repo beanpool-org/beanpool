@@ -139,9 +139,10 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   (it never walks into a directory the API's user made there), and at its next check the API clears everything in
   its inbox but the image it stages (a directory with all it holds; a link, never what it points at). What it can't
   remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians
-  unlock. Not
-  yet run end to end: a real signed next image installed by systemd-sysupdate and booted. The test image checks the
-  refusals on the image; `install.test.ts` checks the checks and the move.
+  unlock. The test image installs a signed next image this way (a small one that is never booted: the API stages it,
+  root makes every check, and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals;
+  `install.test.ts` checks the checks and the move. Booting into a real next image is not in the repo's tests (the
+  review of round 1 did it with its own builds).
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
   under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
   the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.
@@ -157,13 +158,14 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   partition, made at the first boot with the second system slot and the data partition (`usr/lib/repart.d`).
 - The disk: the ESP (512 MiB), two system slots (1 GiB and a 64 MiB verity tree each), the state partition (6 GiB) and
   the data partition (the rest, at least 1 GiB): 9.63 GiB and the partition table, so a 10 GiB disk or more (1984's
-  smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the monthly restart's worst moment, measured on
-  a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and is there twice while
-  root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most 200 MiB), the local
-  backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go first, the newest
-  always stays) and a few MiB of releases, certificates and state. About 3.7 GiB of the 5.6 GiB ext4 leaves the
-  vault's users: 1.9 GiB to spare. Root's install step checks the room for its copies before it makes them, and a
-  staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`, `lastInstall`).
+  smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the monthly restart's worst
+  moment, measured on a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and
+  is there twice while root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most
+  200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go
+  first, the newest always stays) and a few MiB of releases, certificates and state: about 3.7 GiB. On the booted test
+  image the file system is 5.82 GiB, 5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks
+  the room for its copies before it makes them, and a staging or install that fails for room says so in `/v1/report`
+  (`imageWaiting.error`, `lastInstall`).
 - The data partition is LUKS2 under `K_disk`: after an unlock, a root helper takes the key from the keyholder's
   root-only socket, opens the partition (formats it the first time), and mounts it in the machine's own mount
   namespace (its unit has no setting that makes one), where the API sees it; the API opens no database before, and
@@ -215,8 +217,12 @@ where two builds differ.
   a boot file and partitions no release signs, and fails to write root's install directories; the install step must
   refuse them and empty the inbox, and `systemd-sysupdate list` still show the running release as current. UDP to the
   DHCP ports as the API's user or `nobody` must get EPERM, and a lease renewal by networkd pass the firewall (its
-  rule's counter goes up). (A signed next release installed and booted is not in it: that needs a second image build
-  and a reboot.)
+  rule's counter goes up). The state partition must have room for two images, the journal and the local backups.
+  Then, with the test image's API reading a directory feed (`make.mjs` writes its `api.json`), a signed release
+  bringing a new image (0.0.2: a small system partition with a real verity tree, and a UKI that is never booted), then
+  an API-only release after it (0.0.3): the API must stage 0.0.2 and keep it staged, root's install step must install
+  it (systemd-sysupdate writes it into the other slot and the ESP, and keeps the running 0.0.1), and `/v1/report`'s
+  `lastInstall` must say so. (Booting into a next image is not in it: that needs a real second image and a reboot.)
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow

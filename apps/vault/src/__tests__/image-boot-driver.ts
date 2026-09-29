@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import crypto from 'node:crypto';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { confirmShare, custodianKey, genesis, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
-import { LocalDirectoryFeed, MANIFEST_ASSET, SIGNATURES_ASSET } from '../shared/release-feed.js';
-import { addSignature, formatManifest, formatSignatures, imageHashOf, sha256Hex, signRelease, type ReleaseManifest, type ReleaseSignatures } from '../shared/release.js';
-import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK, stagedNames } from '../shared/staged-image.js';
+import { LocalDirectoryFeed, MANIFEST_ASSET, ROOT_ASSET, SIGNATURES_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
+import {
+    addSignature, formatManifest, formatSignatures, imageHashOf, manifestHash, sha256Hex, signRelease, type ReleaseImage, type ReleaseManifest, type ReleaseSignatures,
+} from '../shared/release.js';
+import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK, INSTALL_RESULT_FILE, stagedNames } from '../shared/staged-image.js';
 import { unixFetch } from './unix-fetch.js';
 
 /**
@@ -24,7 +27,14 @@ import { unixFetch } from './unix-fetch.js';
  *   - the API knows which image booted (from the file root leaves in /run; the ESP is root's alone): /v1/report's
  *     `update.image` is it (BLOCKING 3);
  *   - UDP to the DHCP ports only from networkd's client: the API's user (and nobody) gets EPERM, and a lease
- *     renewal still passes the firewall, counted by its rule (NON-BLOCKING, nftables.conf).
+ *     renewal still passes the firewall, counted by its rule (NON-BLOCKING, nftables.conf);
+ *   - (round 2) the state partition has room for the monthly restart: two copies of an image, the journal and the
+ *     local backups;
+ *   - (round 2, BLOCKING) a new image's release, then an API-only release after it: the API, reading the test image's
+ *     directory feed, stages the image from the release that brought it and keeps it staged; root's install step
+ *     installs it (systemd-sysupdate into the other slot and the ESP), and /v1/report says so. The new image is small
+ *     (a 16 MiB system partition with a real verity tree, and a UKI never booted): every check root makes is real,
+ *     but nothing reboots into it.
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -34,7 +44,12 @@ const SEEDS_FILE = '/etc/beanpool-vault-test/custodians.json';
 const API_BUNDLE = '/usr/lib/beanpool-vault/vault-api.mjs';
 const DATA_MOUNT = '/var/lib/beanpool-vault/data';
 const WORK = '/run/beanpool-vault-test';
+/** The API's release feed in the test image (make.mjs writes its api.json): on the state partition, readable by it. */
+const FEED = '/var/lib/beanpool-vault-test/feed';
+/** Root's scratch space for the next image's files (the API's user reads only the feed). */
+const NEXT = '/run/beanpool-vault-test/next';
 const BASE = 'http://vault.beanpool.org';
+const GIB = 1024 * 1024 * 1024;
 
 let failed = 0;
 
@@ -82,20 +97,47 @@ function asApi(script: string, ...args: string[]): string {
     return sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', '/opt/node/bin/node', '-e', script, ...args]).out;
 }
 
-/** Release 0.0.1 naming the image that booted and its API bundle, signed by two of the test custodians. */
-function publishRelease(feedDir: string, custodians: CustodianKey[], image: { ukiSha256: string; roothash: string }): ReleaseManifest {
+/**
+ * A release signed by two of the test custodians, into a directory feed (readable by the API's user), with its assets.
+ * Returns its manifest's hash (the next one's `previous`).
+ */
+function publish(feedDir: string, custodians: CustodianKey[], version: string, previous: string | null, image: ReleaseImage, apiBundleHash: string,
+    assets: Record<string, Buffer> = {}): string {
     const manifest: ReleaseManifest = {
-        v: 1, version: '0.0.1', previous: null, imageHash: imageHashOf(image), image,
-        apiBundleHash: sha256Hex(readFileSync(API_BUNDLE)), custodianKeys: custodians.map(c => c.publicKey), hostPolicy: { platform: 'none' },
+        v: 1, version, previous, imageHash: imageHashOf(image), image: { ukiSha256: image.ukiSha256, roothash: image.roothash },
+        apiBundleHash, custodianKeys: custodians.map(c => c.publicKey), hostPolicy: { platform: 'none' },
     };
     const text = formatManifest(manifest);
     let sigs: ReleaseSignatures | null = null;
     for (const c of custodians.slice(0, 2)) sigs = addSignature(text, sigs, signRelease(text, c.seed, c.publicKey));
-    const dir = path.join(feedDir, 'vault-v0.0.1');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, MANIFEST_ASSET), text);
-    writeFileSync(path.join(dir, SIGNATURES_ASSET), formatSignatures(sigs as ReleaseSignatures));
-    return manifest;
+    const dir = path.join(feedDir, `vault-v${version}`);
+    mkdirSync(dir, { recursive: true, mode: 0o755 });
+    // The assets first: the feed lists a release once its manifest and signatures are there.
+    for (const [name, bytes] of Object.entries(assets)) writeFileSync(path.join(dir, name), bytes, { mode: 0o644 });
+    writeFileSync(path.join(dir, SIGNATURES_ASSET), formatSignatures(sigs as ReleaseSignatures), { mode: 0o644 });
+    writeFileSync(path.join(dir, MANIFEST_ASSET), text, { mode: 0o644 });
+    return manifestHash(text);
+}
+
+/** Bytes free on /var for the vault's users (ext4 keeps 5% for root), and its size. */
+function varSpace(): { avail: number; size: number } {
+    const s = statfsSync('/var');
+    return { avail: s.bavail * s.bsize, size: s.blocks * s.bsize };
+}
+
+const gib = (bytes: number) => `${(bytes / GIB).toFixed(2)} GiB`;
+
+type Update = {
+    error?: string | null;
+    newest?: { version: string } | null;
+    checkedAt?: number;
+    imageWaiting?: { version: string; staged: boolean; error?: string } | null;
+    lastInstall?: { installed: boolean; version?: string; reason?: string } | null;
+};
+
+async function readUpdate(): Promise<Update> {
+    const r = await getJson('/v1/report');
+    return (JSON.parse((r.body.report as { text?: string } | undefined)?.text ?? '{}') as { update?: Update }).update ?? {};
 }
 
 async function main(): Promise<void> {
@@ -108,7 +150,8 @@ async function main(): Promise<void> {
     const image = identity.image as { ukiSha256: string; roothash: string; imageHash: string };
 
     const feedDir = path.join(WORK, 'feed');
-    publishRelease(feedDir, custodians, image);
+    const ownBundle = sha256Hex(readFileSync(API_BUNDLE));
+    publish(feedDir, custodians, '0.0.1', null, image, ownBundle);
     const opts: CallOptions = { fetch: fetchApi, acceptNoHardwareProof: true, trust: { feed: new LocalDirectoryFeed(feedDir), rootKeys: custodians.map(c => c.publicKey) } };
 
     // A genesis, and two custodians confirm their shares: the keyholder is open.
@@ -179,6 +222,67 @@ async function main(): Promise<void> {
     const passed = await until(async () => counted() > before, 60);
     check('a DHCP renewal from networkd\'s client passes the firewall', !!passed.value && renew.status === 0, `${before} -> ${counted()} packets; ${renew.out}`);
     check('and the lease stands', !!lease(), lease());
+
+    // Round 2: room on the state partition for the monthly restart's worst moment: a new image (1.11 GiB on a build)
+    // twice (the API's inbox and root's copies), the journal (200 MiB) and the local backups (1 GiB).
+    const space = varSpace();
+    check('the state partition has room for two images, the journal and the local backups', space.avail >= 2 * 1.11 * GIB + 0.2 * GIB + 1 * GIB,
+        `${gib(space.size)}, ${gib(space.avail)} free for the vault's users`);
+
+    // Round 2, BLOCKING: 0.0.2 brings a new image; 0.0.3, an API-only release after it, names the same image and carries
+    // none of its files. The API stages 0.0.2's files and keeps them staged; root's step installs 0.0.2.
+    mkdirSync(NEXT, { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(NEXT, 'root.raw'), crypto.randomBytes(16 << 20));
+    writeFileSync(path.join(NEXT, 'verity.raw'), '');
+    const format = sh('veritysetup', ['format', path.join(NEXT, 'root.raw'), path.join(NEXT, 'verity.raw')]);
+    const roothash = /Root hash:\s+([0-9a-f]{64})/.exec(format.out)?.[1];
+    if (!check('a next image\'s system partition, with its verity tree', !!roothash, roothash ?? format.out.slice(-200))) return;
+    const uki = Buffer.concat([Buffer.from('beanpool-vault boot test: a UKI that is never booted\n'), crypto.randomBytes(4096)]);
+    const nextImage: ReleaseImage = { ukiSha256: sha256Hex(uki), roothash: roothash as string };
+    mkdirSync(FEED, { recursive: true, mode: 0o755 });
+    const r1 = publish(FEED, custodians, '0.0.1', null, image, ownBundle);
+    const r2 = publish(FEED, custodians, '0.0.2', r1, nextImage, ownBundle, {
+        [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
+    });
+    const names = stagedNames('0.0.2', nextImage.roothash);
+    const stagedNow = () => readdirSync(IMAGE_INBOX).sort().join(' ');
+    const nextStaged = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.2' && u.imageWaiting?.staged && u;
+    }, 180);
+    check('the API stages 0.0.2, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
+        `after ${nextStaged.after} s: ${JSON.stringify(await readUpdate()).slice(0, 600)}; inbox ${stagedNow()}`);
+    const whileStaged = varSpace();
+    publish(FEED, custodians, '0.0.3', r2, nextImage, sha256Hex('an API-only release: 0.0.2\'s image, no image files'));
+    const since = Date.now();
+    const kept = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.3' && (u.checkedAt ?? 0) > since && u;
+    }, 120);
+    check('then 0.0.3, API-only for that image: 0.0.2 stays staged, from the release that brought it',
+        kept.value?.imageWaiting?.version === '0.0.2' && kept.value.imageWaiting.staged && stagedNow() === Object.values(names).sort().join(' '),
+        `${JSON.stringify(kept.value?.imageWaiting ?? null)}; inbox ${stagedNow()}`);
+    const installed = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
+    check('root\'s install step installs 0.0.2', installed.status === 0 && installed.out.includes('release 0.0.2 is installed'), installed.out.split('\n').slice(-3).join(' | '));
+    const listed = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
+    // It calls the newest installed version current, and keeps the running one (ProtectVersion=%A) to fall back to.
+    const line = (v: string) => listed.split('\n').find(l => l.includes(` ${v} `)) ?? '';
+    check('systemd-sysupdate lists 0.0.2 installed, and the running 0.0.1 kept', /✓\s+current/.test(line('0.0.2')) && /✓\s+protected/.test(line('0.0.1')),
+        listed.replace(/\s+/g, ' '));
+    const partitions = sh('lsblk', ['-rno', 'PARTLABEL']).out;
+    check('its system partition and verity tree are in the other slot', partitions.includes('beanpool-vault_0.0.2') && partitions.includes('beanpool-vault_0.0.2_verity'),
+        partitions.replace(/\s+/g, ' '));
+    const esp = readdirSync('/boot/EFI/Linux');
+    check('its boot file is on the ESP beside the running one', esp.some(f => f.startsWith('beanpool-vault_0.0.2')) && esp.some(f => f.startsWith('beanpool-vault_0.0.1')), esp.join(' '));
+    const record = JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { installed?: boolean; version?: string };
+    const reported = await until(async () => {
+        const u = await readUpdate();
+        return u.lastInstall?.installed && u.lastInstall.version === '0.0.2' && u;
+    }, 60);
+    check('what root did is left for the report, and /v1/report says it', record.installed === true && record.version === '0.0.2' && !!reported.value,
+        JSON.stringify((await readUpdate()).lastInstall ?? null));
+    check('free on the state partition, before, with an image staged, and after (this image is small)', true,
+        `${gib(space.avail)}, ${gib(whileStaged.avail)}, ${gib(varSpace().avail)}`);
 }
 
 main().catch(e => {

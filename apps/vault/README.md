@@ -158,14 +158,19 @@ where two builds differ.
   an empty `/.cache/rosetta` in the trees it runs in (removed from the system tree and the initrd), and
   systemd-repart fills the ESP's FAT in the build machine's directory order (`rebuild-esp.py` makes it again in a
   fixed order). zstd gives the same output at any thread count (checked at 1, 4 and 12).
-- **CI** (`.github/workflows/vault-image.yml`, on every change to `image/`, the bundle script or the workflow): two
-  builds on the runner must be byte-identical (`image.json`, `vault.efi`, `vault-root.raw`, `vault-root-verity.raw`,
-  the install image, the bundles); then `image/boot-test.sh` boots the first under QEMU (KVM, UEFI, a network that
-  reaches nothing outside) and passes only when the hygiene check prints `hygiene: ALL PASS` on the serial port and
-  the vault's `/v1/health` reports the build's `imageHash` as its release. Before that, `image/data-test.mjs` runs the
-  data partition helper as root on loop devices: a blank partition is formatted and mounted once the vault opens,
-  opened (not formatted) again after a restart, and left alone under another key or when it holds a file system. It
-  prints the throwaway public keys it used, so anyone can build the same image and compare.
+- **CI** (`.github/workflows/vault-image.yml`, on every change to `image/`, the programs, the bundle script or the
+  workflow): two builds on the runner must be byte-identical (`image.json`, `vault.efi`, `vault-root.raw`,
+  `vault-root-verity.raw`, the install image, the bundles); then `image/boot-test.sh` boots the first under QEMU (KVM,
+  UEFI, a network that reaches nothing outside) and passes only when the hygiene check prints `hygiene: ALL PASS` on
+  the serial port and the vault's `/v1/health` reports the build's `imageHash` as its release. Before that,
+  `image/data-test.mjs` runs the data partition helper as root on loop devices: a blank partition is formatted and
+  mounted once the vault opens, opened (not formatted) again after a restart, and left alone under another key or when
+  it holds a file system. It prints the throwaway public keys it used, so anyone can build the same image and compare.
+- **The test image** (CI, after those): the same image plus the boot test's driver and three throwaway custodian keys
+  made for the run, private halves included (`image/test-image/make.mjs`, `build.sh --extra`; never published, and
+  its hash is not a release's). `boot-test.sh --verdict vault-test` boots it, and the driver
+  (`src/__tests__/image-boot-driver.ts`) runs as root inside: a genesis through the API's socket, then `/v1/health`
+  must say `open` with the data partition mounted in the machine's namespace and the database open on it.
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow

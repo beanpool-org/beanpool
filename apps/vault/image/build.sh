@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the key vault's image (key vault design §3; host design §5.1 items 5 and 6).
 #
-#   apps/vault/image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir>
+#   apps/vault/image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir> [--extra <tree>]
 #
 # <file> is {"genesisCustodians": ["<hex>", "<hex>", "<hex>"]}: the three custodian PUBLIC keys, pinned into the image
 # (the keyholder takes a genesis only from them; the API and launcher check releases from them).
@@ -26,6 +26,9 @@
 # `--cache <dir>` (default ~/.cache/beanpool-vault-image) keeps the downloaded packages between runs: the snapshot
 # serves them slowly, and apt checks each one against the snapshot's signed index whether it came from there or the
 # cache. Node's tarball is kept there too.
+#
+# `--extra <tree>` lays more files over the image's (a TEST image: image/test-image/make.mjs, for the boot test). It
+# changes the image and its hash: a release is built without it.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,13 +36,14 @@ vault="$(cd "${here}/.." && pwd)"
 # shellcheck source=pins.env
 . "${here}/pins.env"
 
-keys="" version="" out="" cache="${HOME}/.cache/beanpool-vault-image"
+keys="" version="" out="" cache="${HOME}/.cache/beanpool-vault-image" more=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --custodian-keys) keys="$2"; shift 2 ;;
         --version) version="$2"; shift 2 ;;
         --out) out="$2"; shift 2 ;;
         --cache) cache="$2"; shift 2 ;;
+        --extra) more="$(cd "$2" && pwd)"; shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -95,6 +99,10 @@ node -e '
         genesisCustodians: keys,
     }, null, 2) + "\n");
 ' "${keys}" > "${extra}/etc/beanpool-vault/keyholder.json"
+if [ -n "${more}" ]; then
+    echo "build.sh: adding ${more} (not a release image)" >&2
+    cp -R "${more}/." "${extra}/"
+fi
 mkdir -p "${work}/mkosi.sandbox/etc/apt/sources.list.d" "${work}/mkosi.sandbox/etc/apt/apt.conf.d"
 cat > "${work}/mkosi.sandbox/etc/apt/sources.list.d/mkosi.sources" <<EOF
 Types: deb

@@ -8,12 +8,17 @@ name: Key vault image (built twice, compared)
 #
 # What test-all checks on every push instead: the bundles are the same bytes on two builds (bundle.test.ts), the
 # manifest, chain and imageHash vector (release.test.ts).
+#
+# Then a TEST image (image/test-image/make.mjs: the same image plus the boot test's driver and three throwaway custodian
+# keys made here, private halves included; never published) is built and booted: a genesis inside it, the vault opens,
+# its API names the image, unsigned files the API's user stages are not installed, and the firewall's DHCP rules.
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - 'apps/vault/image/**'
+      - 'apps/vault/src/**'
       - 'apps/vault/scripts/bundle.mjs'
       - '.github/workflows/vault-image.yml'
 
@@ -81,3 +86,11 @@ jobs:
       - name: The boot's serial log
         if: always()
         run: cat "${RUNNER_TEMP}/one/boot-test/serial.log" 2>/dev/null | tail -n 300 || true
+      - name: A test image (the driver and throwaway keys inside; never a release) booted, a genesis run in it
+        run: |
+          node apps/vault/image/test-image/make.mjs --out "${RUNNER_TEMP}/test-tree"
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/test-tree/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/test" --cache "${RUNNER_TEMP}/image-cache" --extra "${RUNNER_TEMP}/test-tree/extra"
+          apps/vault/image/boot-test.sh --image "${RUNNER_TEMP}/test" --limit 900 --verdict vault-test
+      - name: The test image's serial log
+        if: always()
+        run: cat "${RUNNER_TEMP}/test/boot-test/serial.log" 2>/dev/null | tail -n 300 || true

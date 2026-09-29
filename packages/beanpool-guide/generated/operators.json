@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 73,
-  "hash": "36aeda17125f845a0c5a093c831b838aed25f19cf1f32319289391ce9ad7fb33",
+  "version": 74,
+  "hash": "b669842ab778403800ee7f35ffb865be0aee6c65f0bc75c8a101e37ed1030e78",
   "sections": [
     {
       "id": "setup",
@@ -2361,12 +2361,12 @@
         {
           "type": "ul",
           "items": [
-            "**Changes**: 5,000 a day per member, whatever they are (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted.",
+            "**Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server.",
             "**Posts**: 100 new ones a day, their own and those they put up for an enterprise they keep.",
             "**Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.",
             "**Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.",
             "**New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.",
-            "**The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync).",
+            "**The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.",
             "**A message's words**: up to 64 KB. Photos are attachments and don't count."
           ]
         },

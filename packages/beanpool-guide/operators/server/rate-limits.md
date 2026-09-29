@@ -23,12 +23,12 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 These stop one account filling your server, and its standby copies, with rows: a standby can't copy a table of more than 250,000 rows whole. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
 
-- **Changes**: 5,000 a day per member, whatever they are (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted.
+- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server.
 - **Posts**: 100 new ones a day, their own and those they put up for an enterprise they keep.
 - **Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.
 - **Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.
 - **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.
-- **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync).
+- **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.
 - **A message's words**: up to 64 KB. Photos are attachments and don't count.
 
 ## The admin password brake

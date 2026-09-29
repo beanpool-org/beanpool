@@ -85,6 +85,10 @@ import { connectAndDeposit } from '../sso-sheet-connect';
 import { authenticateUser } from '../LocalAuth';
 import { getMnemonic } from '../identity';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 const NODE = 'https://test.example';
 const NONCE = '/api/recovery/sso-nonce';
 const START = '/api/recovery/sso/github/start';

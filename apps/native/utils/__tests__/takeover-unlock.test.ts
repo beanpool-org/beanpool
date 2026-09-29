@@ -37,6 +37,10 @@ import {
     runLockOpenCheck, readLockPin, lockPinKey, resetLockOpenCheckForTests, unlockRefusalMessage, openedFromLinkWarning, type CommunityLockPin,
 } from '../takeover-unlock';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 // A real Ed25519 PeerId for a real node key, so the header's signature checks out as it does on a device.
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 function peerIdOf(pub: Uint8Array): string {

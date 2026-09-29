@@ -383,19 +383,35 @@ describe("a phone whose since-boot clock can't be read: the door can't tell how 
     });
 });
 
-describe('the wall clock set back while a door is asking: the times cannot be trusted, so it refuses', () => {
-    it.each(DOOR_NAMES)('%s', async (name) => {
-        const p = await phone();
-        const acted = DOORS[name].press(p);
-        await flush();
-        p.change('background');
-        p.wait(2 * SEC);
-        p.setWallClock(-60 * SEC);
-        p.wait(1 * SEC);
-        p.answer(true);
-        await flush();
-        p.change('active');
-        expect(await acted).toBe(false);
+describe("the wall clock set while a door is asking: the since-boot clock times the prompt, whatever the wall clock did", () => {
+    describe.each(DOOR_NAMES)('%s', (name) => {
+        it('set back an hour during a 3-second prompt: the pass counts', async () => {
+            const p = await phone();
+            const acted = DOORS[name].press(p);
+            await flush();
+            p.change('background');
+            p.wait(2 * SEC);
+            p.setWallClock(-3600 * SEC);
+            p.wait(1 * SEC);
+            p.answer(true);
+            await flush();
+            p.change('active');
+            expect(await acted).toBe(true);
+        });
+
+        it('a pass held an hour, the wall clock set back 3595 s before it arrives: nothing', async () => {
+            const p = await phone();
+            const acted = DOORS[name].press(p);
+            await flush();
+            p.change('background');
+            p.wait(3600 * SEC);
+            p.setWallClock(-3595 * SEC);
+            p.answer(true);
+            await flush();
+            p.change('active');
+            expect(await acted).toBe(false);
+            expect(p.fetched).toEqual([]);
+        });
     });
 });
 
@@ -410,7 +426,7 @@ describe("the rule (LocalAuth.doorPassCounts)", () => {
         ['the opening unreadable', Number.NaN, 5 * SEC, false, false],
         ['the answer unreadable', 0, Number.NaN, false, false],
         ['the answer not a finite time', 0, Number.POSITIVE_INFINITY, false, false],
-        ['a clock seen set back or unreadable in between', 0, 1 * SEC, true, false],
+        ['a clock reading that failed in between', 0, 1 * SEC, true, false],
     ] as const)('%s: %s', async (_name, openedAt, answeredAt, untrusted, counts) => {
         const { doorPassCounts } = await import('../LocalAuth');
         expect(doorPassCounts(openedAt, answeredAt, untrusted)).toBe(counts);
@@ -443,7 +459,7 @@ describe('every door asks through the held-pass rule', () => {
 
     it("authenticateUser and requireDeviceUnlock time their own prompt and act only on a pass in time", () => {
         const localAuth = code(read('utils/LocalAuth.ts'));
-        expect(localAuth).toMatch(/async function askPhoneLock\([\s\S]*?const passCounts = timeDoorPrompt\(\);\s*const res = await phoneLockPrompt\(\{[\s\S]*?return res\.success && \(!door \|\| passCounts\(\)\);/);
+        expect(localAuth).toMatch(/async function askPhoneLock\([\s\S]*?const passCounts = door \? timeDoorPrompt\(\) : \(\) => true;\s*const res = await phoneLockPrompt\(\{[\s\S]*?return res\.success && passCounts\(\);/);
         expect(localAuth).toMatch(/export async function authenticateUser\(reason: string\): Promise<boolean> \{\s*return askPhoneLock\(reason, true\);/);
         const nodeAdmin = code(read('utils/node-admin.ts'));
         expect(nodeAdmin).toMatch(/export async function requireDeviceUnlock[\s\S]*?const passCounts = timeDoorPrompt\(\);\s*const res = await phoneLockPrompt\(\{[\s\S]*?return res\.success && passCounts\(\) \? 'ok' : 'failed';/);

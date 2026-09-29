@@ -1555,7 +1555,11 @@ describe("app/_layout.tsx listens with it", () => {
         expect(s).not.toMatch(/authenticateUser\(/);
         const returnLock = fs.readFileSync(path.resolve(__dirname, '../return-lock.ts'), 'utf-8');
         expect(returnLock).toContain("if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);");
-        expect(returnLock.match(/authenticateUser\(/g)).toHaveLength(1);
+        // The one prompt it asks is App Lock's (2026-09-29, doors-held-pass.test.ts: authenticateUser became the doors'
+        // check, with a held-pass rule of its own; App Lock's unlock keeps the return lock's). Once, in unlockWithPhoneLock,
+        // and no bare authenticateUser.
+        expect(returnLock.match(/authenticateForAppLock\(/g)).toHaveLength(1);
+        expect(returnLock).not.toMatch(/authenticateUser\(/);
     });
 
     it('no second copy of the rule is left in the screen', () => {

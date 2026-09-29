@@ -9,7 +9,7 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## Private even from you
 
-- **Direct messages** between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read.
+- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
 
 ## What the server holds in the clear
 
@@ -17,7 +17,8 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
-- who messaged whom, and when, even for direct messages;
+- the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
+- who messaged whom, and when, and their emoji reactions, even for direct messages;
 - **how each member voted**.
 
 ## Secret ballots
@@ -62,7 +63,7 @@ Your server keeps no one's internet address for more than 7 days, and its logs n
 
 ## What your server sends elsewhere
 
-- The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.
+- The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).
 - GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.
 - Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.
 - Members' Pulse channels are fetched from the sites they link to.

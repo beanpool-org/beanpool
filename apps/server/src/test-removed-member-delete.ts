@@ -53,6 +53,7 @@ import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -321,7 +322,8 @@ async function main(): Promise<void> {
     {
         const vic = keypair('VicRD');
         const dm = createConversation('dm', [alice.pk, vic.pk], alice.pk)!;
-        sendMessage(dm.id, alice.pk, 'aGkgVmlj', 'bjE=');
+        const hi = lockedDm();   // a DM line is sent encrypted
+        sendMessage(dm.id, alice.pk, hi.ciphertext, hi.nonce);
         transfer('genesis', vic.pk, 30, 'welcome gift', 'direct', true);
         const row = profileOf(vic.pk);
         assert(!!row && String(row.callsign).startsWith('Visitor-') && getBalance(vic.pk).balance === 30,
@@ -335,7 +337,7 @@ async function main(): Promise<void> {
         assert(getBalance(vic.pk).balance === 0 && Math.abs(getCommonsBalance() - (commonsBeforeV + 30)) < 1e-6
             && auditAfterV.ok && auditAfterV.drift === auditBeforeV.drift,
             `its 30 Beans go to the Commons, as a member's self-delete sends theirs, and the ledger audit is unchanged (Commons ${commonsBeforeV} → ${getCommonsBalance()})`);
-        const reply = await call('POST', '/api/messages/send', vic, { conversationId: dm.id, authorPubkey: vic.pk, ciphertext: 'aGk=', nonce: 'bjI=' });
+        const reply = await call('POST', '/api/messages/send', vic, { conversationId: dm.id, authorPubkey: vic.pk, ...lockedDm() });
         const join = await call('POST', '/api/join', vic, { callsign: 'Vic joins', provider: 'google', idToken: 'x' });
         assert(isClosed(reply) && isClosed(join), `its key is refused everything after, the open door included (reply ${show(reply)}; door ${show(join)})`);
         const proposal = await proposeReinstate(vic.pk);

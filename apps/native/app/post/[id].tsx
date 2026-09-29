@@ -13,7 +13,7 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance,
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject,
     fetchGroupDetails, deleteGroupPostApi
 } from '../../utils/db';
@@ -34,6 +34,7 @@ import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
+import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -823,12 +824,27 @@ export default function PostDetailModal() {
                 await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
             }
             
-            // Optionally send the reject message if provided
+            // The optional message goes as a message in the DM, locked like any other. It used to ride as the new
+            // conversation's name, where the node could read it (and was dropped when the two already had a chat).
             if (rejectMessage.trim() && peerPubkey) {
+                const words = rejectMessage.trim();
+                let convId: string | null = null;
                 try {
-                    await createConversationApi('dm', [peerPubkey, identity.publicKey], identity.publicKey, rejectMessage.trim(), post.id);
-                } catch (e) {
-                    console.error('Failed to send rejection message', e);
+                    const conv = await createConversationApi('dm', [peerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
+                    convId = conv?.id ?? null;
+                    if (!convId) throw new Error('The chat could not be opened.');
+                    await insertMessage(convId, identity.publicKey, words);
+                } catch (e: any) {
+                    // The offer is declined either way. The words are not lost: the chat opens with them in the box.
+                    console.error('Failed to send the decline message', e);
+                    if (convId) {
+                        Alert.alert('Offer declined', isDmNotLocked(e)
+                            ? dmNotLockedLine(null)
+                            : "Your message wasn't sent. It's in the chat, ready to send again.");
+                        router.push({ pathname: '/chat/[id]', params: { id: convId, prefill: words } });
+                    } else {
+                        Alert.alert('Offer declined', `Your message wasn't sent: ${e?.message || 'the chat could not be opened'}`);
+                    }
                 }
             }
             

@@ -474,7 +474,14 @@ async function main(): Promise<void> {
     const notCovered = [...new Set(writes.filter((w) => !covered(w.key)).map((w) => `${w.key} (${w.at})`))];
     assert(keys.size > 20 && keys.has('appAddressStaffSeen') && keys.has('nodeProfile.*') && keys.has('ledger_audit_baseline') && notCovered.length === 0,
         `every node_config row key the server's code writes is classified in NODE_CONFIG_KEYS (${keys.size} keys; unclassified: ${list(notCovered)})`);
-    assert(unread.length === 0, `every write to node_config names its key where this check can read it (unread: ${list(unread)})`);
+    // The stager's carry-over of a standby's own keys into a whole copy's staging database (services/stager.ts): it writes
+    // only keys it read from the standby's two databases, each of which the code above wrote, and it refuses the copy
+    // outright when either holds a key no entry classifies (test-standby-paged-copies.ts step 12). No key is new there.
+    const COPIES_KEYS = ['apps/server/src/services/stager.ts:'];
+    const copying = unread.filter((u) => COPIES_KEYS.some((f) => u.startsWith(f)));
+    const unreadElsewhere = unread.filter((u) => !copying.includes(u));
+    assert(copying.length <= 2, `the stager copies node_config keys in at most two statements (${list(copying)})`);
+    assert(unreadElsewhere.length === 0, `every write to node_config names its key where this check can read it (unread: ${list(unreadElsewhere)})`);
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

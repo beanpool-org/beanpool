@@ -174,8 +174,9 @@ function reply(msg: Record<string, unknown>): void {
 export async function runNodeChild(commands: Record<string, (args: any) => Promise<unknown>> = {}): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     fs.mkdirSync(dataDir, { recursive: true });
-    // As index.ts: a whole copy made ready before the last restart is swapped in before anything opens the database.
-    await import('./db/swap-at-boot.js');
+    // As index.ts: a whole copy made ready before the last restart is swapped in before anything opens the database. (A
+    // tree from before the swap has none: a suite run there to show what fails still starts.)
+    await import('./db/swap-at-boot.js').catch(() => null);
     // The tunnel inside the server (services/tunnel-connector.ts) runs the fake, from before anything can start it.
     const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     await useFakeCloudflared(`${dataDir}.cloudflared`);
@@ -262,8 +263,8 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     let swapPending = false;
     const announceRestart = () => process.stdout.write('@@ ' + JSON.stringify({ restarting: true }) + '\n');
     const exitForSwap = () => process.stdout.write('', () => process.exit(0));
-    const { setSwapRestartForTests } = await import('./services/backup-puller.js');
-    setSwapRestartForTests(() => {
+    const puller: { setSwapRestartForTests?: (fn: (() => void) | null) => void } = await import('./services/backup-puller.js');
+    puller.setSwapRestartForTests?.(() => {
         swapPending = true;
         if (running === 0) {
             announceRestart();

@@ -240,11 +240,11 @@ async function child(): Promise<void> {
         },
         /** A whole copy being built here: its stager's PID; and what the data directory holds of copies. */
         staging: async () => {
-            const { copyStaging } = await import('./services/stager.js');
+            const stager: { copyStaging?: () => { pid: number | null } | null } | null = await import('./services/stager.js').catch(() => null);
             const dir = process.env.BEANPOOL_DATA_DIR!;
             const staging = path.join(dir, 'staging');
             return {
-                building: copyStaging(), staging: fs.existsSync(staging), ready: fs.existsSync(path.join(staging, 'READY')),
+                building: stager?.copyStaging?.() ?? null, staging: fs.existsSync(staging), ready: fs.existsSync(path.join(staging, 'READY')),
                 previous: fs.existsSync(path.join(dir, 'state.previous.db')),
                 pages: fs.existsSync(path.join(staging, 'pages')) ? fs.readdirSync(path.join(staging, 'pages')).length : 0,
             };
@@ -727,13 +727,15 @@ async function main(): Promise<void> {
             await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
             await standby.send('checkpoint');
             const before = await snapS();
+            const opened = px.opened.length;
             const p6 = await standby.send('pull', { whole: true });
+            const served = px.copies.get(px.opened[opened] ?? '')?.pages.size ?? 0;
             const after = await snapS();
             const r6 = await standby.send('record');
             const st6 = await standby.send('staging');
-            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0
-                && Math.abs(after.ledgerSum - before.ledgerSum) < 1e-9 && !st6.staging,
-                `the routine whole copy is refused at the closing check, S's ledger as it was, the plant included (${JSON.stringify({ pull: p6, why: r6.lastWhy })}; total ${after.ledgerSum})`);
+            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '') && served >= 2
+                && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0 && Math.abs(after.ledgerSum - before.ledgerSum) < 1e-9 && !st6.staging,
+                `the routine whole copy, all ${served} pages of it built, is refused at the closing check against S's live ledger; S's ledger as it was, the plant included (${JSON.stringify({ pull: p6, why: r6.lastWhy })}; total ${after.ledgerSum}; before: one payload refused by the import's own guard)`);
             await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
             const p6b = await wholeCopy();
             assert(p6b.ok === true && p6b.staged === true && (await exactNow()).length === 0, `the plant gone, the next lands (${JSON.stringify(p6b)})`);

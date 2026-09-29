@@ -19,18 +19,23 @@
  *     delta, and lands exact: the line is gone from S, and the listing M made since is there. The pull after is a delta.
  *     (Before: a delta, which left the line on S for good. With routine whole copies on, a restart's first pull was a
  *     whole copy, which left the line too, and whose check asked for a force-resync only outside its six-hour limit.)
- *  4. The same, with the force-resync refused (members over the cap in whole copies only): a delta lands meanwhile and
- *     moves the cursor, and S restarts; the resync is still owed, asked for again, and lands exact once M holds fewer
- *     members. (A delta that lands never mends the deletes it missed.)
+ *  4. The same, with the force-resync refused (a node_config key on S that the replication manifest doesn't classify,
+ *     which the stager's closing check refuses a whole copy over and a delta never reads; members over the row cap
+ *     refused it before P2, and nothing refuses a copy for its size now): a delta lands meanwhile and moves the cursor,
+ *     and S restarts; the resync is still owed, asked for again, and lands exact once the key is gone. (A delta that
+ *     lands never mends the deletes it missed.)
  *  5. The same, with M unable to send a whole copy (it answers 503, as a community too large to build one in time does):
  *     the failed force-resync is asked for again only after the retry wait (an hour, scaled down), deltas landing in
  *     between (a listing M made meanwhile reaches S), and it stays owed until one lands exact. (Before: a copy that never
  *     came was asked for again on every pull, and no delta ever landed.) With routine whole copies on (5b), the routine
  *     whole copy due at once after the restart, which M can't send either, waits for the next routine time too: the pulls
- *     after it are deltas, and land. (Before: a routine whole copy on every pull, and no delta.) And (5c) a restart just
- *     under 29 days after the last delta, whose routine whole copy leaves listings out (M holding more than one copy
- *     carries), moves the cursor: that copy carried every tombstone M holds, so the pulls after it are deltas, even past
- *     the 29 days. (Before: it kept the cursor, which passed 29 days and asked for a force-resync.)
+ *     after it are deltas, and land. (Before: a routine whole copy on every pull, and no delta.) The routine whole copy
+ *     is due from when the last one landed, which S's record keeps across a restart (P2: a whole copy of more than one
+ *     page restarts the standby), so the restart comes with its last whole copy made 11 minutes before. And (5c) a
+ *     restart just under 29 days after the last delta, whose routine whole copy lands (M holding more listings than the
+ *     old row cap: nothing is left out now), moves the cursor: that copy carried every tombstone M holds, so the pulls
+ *     after it are deltas, even past the 29 days. (Before: a whole copy that left listings out kept the cursor, which
+ *     passed 29 days and asked for a force-resync.)
  *  6. S takes over with the recovery code. The promoted server forgets its pull cursor, and prunes a tombstone written
  *     35 days ago, after a take-over 40 days ago, and keeps a 29-day-old one. (Before: its last pull's cursor floored the
  *     prune, so no tombstone written after the take-over was ever pruned.)
@@ -185,24 +190,7 @@ async function child(): Promise<void> {
             pruneTombstones();
             return a.keys.filter((k) => !!db.prepare(`SELECT 1 FROM tombstones WHERE table_name = 'messages' AND row_key = ?`).get(k));
         },
-        /** `n` visitors' members rows stamped long ago, so no delta carries them and only a whole copy does (years of growth). */
-        flood: async (a: { n: number }) => {
-            const { db } = await import('./db/db.js');
-            const old = '2000-01-01T00:00:00.000Z';
-            db.transaction(() => {
-                for (let i = 0; i < a.n; i++) {
-                    const id = `flood-${crypto.randomUUID()}`;
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`)
-                        .run(id, `v-${id.slice(6, 22)}`, old, old);
-                }
-            })();
-            return true;
-        },
-        unflood: async () => {
-            const { db } = await import('./db/db.js');
-            return db.prepare(`DELETE FROM members WHERE public_key LIKE 'flood-%'`).run().changes;
-        },
-        /** `n` listings by `author`, written now: more than one whole copy carries, so a whole copy leaves listings out. */
+        /** `n` listings by `author`, written now: more than the old row cap (MAX_IMPORT_ROWS_PER_CATEGORY), which left them out of a whole copy. */
         'flood-posts': async (a: { n: number; author: string }) => {
             const { db } = await import('./db/db.js');
             const now = new Date().toISOString();
@@ -360,6 +348,13 @@ async function main(): Promise<void> {
         const awayCursor = (days: number) => (db: Database.Database) => {
             db.prepare(`UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`).run(new Date(Date.now() - days * DAY_MS).toISOString());
         };
+        /** S's record says its last whole copy landed `ms` ago (standby-copy-record.ts lastWholeCopy), as time passing would. */
+        const lastWholeCopyAgo = (ms: number) => (db: Database.Database) => {
+            const row = db.prepare(`SELECT value FROM node_config WHERE key = 'standby_copy_record'`).get() as { value: string } | undefined;
+            const r = row ? JSON.parse(row.value) : {};
+            r.lastWholeCopy = { ...(r.lastWholeCopy ?? { pages: 1, generatedAt: null }), at: Date.now() - ms };
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('standby_copy_record', ?)`).run(JSON.stringify(r));
+        };
 
         // ── 2. A standby whose copies were refused for 40 days prunes ──
         console.log('\n— 2. a standby whose cursor is 40 days old (its copies refused since), or empty, still prunes —');
@@ -399,12 +394,15 @@ async function main(): Promise<void> {
         console.log('\n— 4. the force-resync refused: a delta and a restart don\'t forget it —');
         await main.send('delete-message', { id: lines[1], daysAgo: 31 });
         require_((await main.send('prune', { keys: [lines[1]] })).length === 0, 'M: a second line deleted 31 days ago, its tombstone pruned');
-        await main.send('flood', { n: FLOOD });
-        await restart(awayCursor(31));
+        // A key no manifest entry classifies: the stager refuses a whole copy over it, and a delta never reads it.
+        await restart((db) => {
+            awayCursor(31)(db);
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('retention_test_unclassified', 'x')`).run();
+        });
         const pull4 = await standby.send('pull');
         const s4a: Snap = await standby.send('snapshot', { tables: TABLES });
-        assert(pull4.mode === 'resync' && pull4.ok === false && /members/.test(pull4.error ?? '') && s4a.record.pastRetentionAt !== null,
-            `S's force-resync is refused (members over the cap in whole copies) and still owed (${JSON.stringify({ pull: pull4, owed: s4a.record.pastRetentionAt })})`);
+        assert(pull4.mode === 'resync' && pull4.ok === false && /retention_test_unclassified/.test(pull4.error ?? '') && s4a.record.pastRetentionAt !== null,
+            `S's force-resync is refused (a key the manifest doesn't classify) and still owed (${JSON.stringify({ pull: pull4, owed: s4a.record.pastRetentionAt })})`);
         const delta4 = await standby.send('pull');
         const s4b: Snap = await standby.send('snapshot', { tables: TABLES });
         assert(delta4.ok === true && delta4.mode === 'delta' && !!s4b.savedCursor && Date.parse(s4b.savedCursor) > Date.now() - DAY_MS
@@ -414,14 +412,14 @@ async function main(): Promise<void> {
         const again4 = await standby.send('pull');
         assert(resumed4 === s4b.savedCursor && again4.mode === 'resync' && again4.ok === false,
             `S restarted with a cursor of today asks for the force-resync again, and it is refused again (${JSON.stringify({ cursor: resumed4, pull: again4 })})`);
-        await main.send('unflood');
+        await standby.send('sql', { sql: `DELETE FROM node_config WHERE key = 'retention_test_unclassified'` });
         await sleep(RETRY_MS + 300);
         const land4 = await standby.send('pull');
         const s4c: Snap = await standby.send('snapshot', { tables: TABLES });
         const m4: Snap = await main.send('snapshot', { tables: TABLES });
         assert(land4.ok === true && land4.mode === 'resync' && !(await standby.send('has-message', { id: lines[1] }))
             && same(s4c, m4, 'messages', 'members', 'accounts') && s4c.record.lastWhole?.exact === true && s4c.record.pastRetentionAt === null,
-            `the members gone from M, the force-resync lands, exact: the second line is gone from S, and nothing is owed (${JSON.stringify({ pull: land4, verdict: s4c.record.lastWhole?.differs, owed: s4c.record.pastRetentionAt })}; ${counts(s4c, 'messages', 'members')}; M ${counts(m4, 'messages', 'members')})`);
+            `the key gone, the force-resync lands, exact: the second line is gone from S, and nothing is owed (${JSON.stringify({ pull: land4, verdict: s4c.record.lastWhole?.differs, owed: s4c.record.pastRetentionAt })}; ${counts(s4c, 'messages', 'members')}; M ${counts(m4, 'messages', 'members')})`);
         const after4 = await standby.send('pull');
         assert(after4.ok === true && after4.mode === 'delta', `the pull after it is a delta (${JSON.stringify(after4)})`);
 
@@ -435,9 +433,12 @@ async function main(): Promise<void> {
                 const chunks: Buffer[] = [];
                 for await (const c of req) chunks.push(c as Buffer);
                 const p = req.url ?? '/';
-                if (p.startsWith('/api/local/admin/sync-snapshot')) asked.whole++;
-                if (p.startsWith('/api/local/admin/sync-delta')) asked.delta++;
-                if (failWhole && p.startsWith('/api/local/admin/sync-snapshot')) {
+                // A copy is opened by a POST to sync-copy: a whole one with no `since`, a delta with one (routes/backup.ts).
+                const opens = req.method === 'POST' && /^\/api\/local\/admin\/sync-copy(\?|$)/.test(p);
+                const isWhole = opens && !/[?&]since=/.test(p);
+                if (isWhole) asked.whole++;
+                if (opens && !isWhole) asked.delta++;
+                if (failWhole && isWhole) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'Snapshot unavailable' }));
                     return;
@@ -498,7 +499,7 @@ async function main(): Promise<void> {
             // due at once, and M can't send it either.
             console.log('\n— 5b. the same with routine whole copies on: the routine whole copy that never comes waits for the next routine time —');
             await standby.send('set-cadence', { minutes: 10 });
-            await restart(awayCursor(31));
+            await restart((db) => { awayCursor(31)(db); lastWholeCopyAgo(11 * 60_000)(db); });
             failWhole = true;
             const plums = await offer(bo, 'Plums');
             const before5b = { ...asked };
@@ -532,13 +533,16 @@ async function main(): Promise<void> {
             await main.send('flood-posts', { n: FLOOD, author: gwen.pk });
             const near5c = Date.now() - 29 * DAY_MS + NEAR_MS;
             const nearCursor = new Date(near5c).toISOString();
-            await restart((db) => { db.prepare(`UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`).run(nearCursor); });
+            await restart((db) => {
+                db.prepare(`UPDATE sync_cursors SET last_synced_at = ? WHERE peer_id = 'backup:primary'`).run(nearCursor);
+                lastWholeCopyAgo(11 * 60_000)(db);
+            });
             const before5c = { ...asked };
             const whole5c = await standby.send('pull');
             const s5f: Snap = await standby.send('snapshot', { tables: ['posts'] });
             const left5c = await standby.send('left-out');
-            require_(whole5c.ok === true && whole5c.mode === 'full' && JSON.stringify(left5c) === JSON.stringify(['posts']),
-                `S: the restart's whole copy lands with listings left out (${JSON.stringify({ pull: whole5c, leftOut: left5c })})`);
+            require_(whole5c.ok === true && whole5c.mode === 'full' && (left5c === null || left5c.length === 0),
+                `S: the restart's whole copy lands with nothing left out, M's ${FLOOD} more listings included (${JSON.stringify({ pull: whole5c, leftOut: left5c })}; before: listings left out over the cap)`);
             assert(!!s5f.savedCursor && s5f.savedCursor !== nearCursor && Date.parse(s5f.savedCursor) > Date.now() - DAY_MS,
                 `the whole copy moves the cursor to today, not keeping one 29 days less ${NEAR_MS / 1000} s old (${JSON.stringify({ was: nearCursor, now: s5f.savedCursor })}; before: kept)`);
             // Past the 29 days the old cursor would have reached by now.
@@ -554,7 +558,7 @@ async function main(): Promise<void> {
                 `past the 29 days, the next two pulls are deltas, and land; M was asked for one whole copy, and nothing is owed (full:ok, ${pulls5c.join(', ')}; whole ${asked.whole - before5c.whole}, deltas ${asked.delta - before5c.delta}; owed ${s5g.record.pastRetentionAt}; before: a retention force-resync, then a delta)`);
             // M's flood gone, a restart's whole copy carries listings again, so S's record leaves nothing out for the take-over.
             await main.send('unflood-posts');
-            await restart();
+            await restart(lastWholeCopyAgo(11 * 60_000));
             const clean5c = await standby.send('pull');
             const leftAfter5c = await standby.send('left-out');
             require_(clean5c.ok === true && clean5c.mode === 'full' && (leftAfter5c === null || leftAfter5c.length === 0),

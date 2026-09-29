@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { confirmShare, custodianKey, genesis, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
@@ -314,18 +314,22 @@ async function main(): Promise<void> {
 
     // Round 3: before 0.0.3 is published, the API's user fills the state partition (fallocate in its releases
     // directory, as the review did) and leaves junk in its backups and its inbox. Staging 0.0.3 is refused for room.
+    // (0.0.3's files are written first, beside the feed on the same file system, and moved into it after: the state
+    // partition keeps no blocks back for root either.)
+    const pending = '/var/lib/beanpool-vault-test/pending';
+    const r3 = publish(pending, custodians, '0.0.3', r2, nextImage, ownBundle, {
+        [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
+    });
     const RELEASES = '/var/lib/beanpool-vault/releases';
     const BACKUPS = '/var/lib/beanpool-vault/backups';
-    const fill = varSpace().avail - (4 << 20);
+    const fill = varSpace().avail - (12 << 20);
     const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
     asApi(`const fs = require('fs'), [b, s] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
         fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
         fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');`, BACKUPS, IMAGE_INBOX);
-    check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (8 << 20), `${filled.out}; ${gib(varSpace().avail)} free for the vault's users`);
-    const r3 = publish(FEED, custodians, '0.0.3', r2, nextImage, ownBundle, {
-        [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
-    });
+    check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (16 << 20), `${filled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
+    renameSync(path.join(pending, 'vault-v0.0.3'), path.join(FEED, 'vault-v0.0.3'));
     const noRoom = await until(async () => {
         const u = await readUpdate();
         return u.newest?.version === '0.0.3' && /no room for the image/.test(u.imageWaiting?.error ?? '') && u;

@@ -10,8 +10,10 @@
  */
 
 import crypto from 'node:crypto';
+import type Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { TABLES, BOOT_STAMPED, travellingRows } from './replication-manifest.js';
+import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
 
 export interface TableHash {
     rows: number;
@@ -72,11 +74,11 @@ export interface HashOptions {
  * Every copied table this server has, with the columns hashed, the order its rows are hashed in, and the condition on the
  * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server.
  */
-function hashedTables(): { table: string; columns: string[]; order: string[]; where: string | null }[] {
+function hashedTables(conn: Database.Database): { table: string; columns: string[]; order: string[]; where: string | null }[] {
     const out: { table: string; columns: string[]; order: string[]; where: string | null }[] = [];
     for (const [table, entry] of Object.entries(TABLES)) {
         if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
-        const info = db.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
+        const info = conn.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
         if (info.length === 0) continue;
         const have = new Set(info.map((c) => c.name));
         const columns = entry.columns.filter((c) => have.has(c) && !COLUMNS_NOT_HASHED[table]?.[c]);
@@ -90,28 +92,26 @@ function hashedTables(): { table: string; columns: string[]; order: string[]; wh
 }
 
 /**
- * This server's copied tables, each as a row count and a hash. A boot-stamped row's stamp (the manifest's BOOT_STAMPED:
- * every server writes it again at its own boot) is hashed as a placeholder. Only reads, and nothing else runs between
- * them: better-sqlite3 is synchronous.
+ * How one table's rows are hashed: the columns selected (a boot-stamped row's stamp, the manifest's BOOT_STAMPED: every
+ * server writes it again at its own boot, as a placeholder), what is done with each row, and the table's count and hash
+ * once every row went in, in its order.
  */
-export function tableContentHashes(opts: HashOptions = {}): TableHashes {
-    const tables: Record<string, TableHash> = {};
-    for (const { table, columns, order, where } of hashedTables()) {
-        if (opts.only && !opts.only.includes(table)) continue;
-        const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
-        const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
-        const asCopied = table === 'members' && opts.membersLeftOut && opts.membersLeftOut.size > 0 ? opts.membersLeftOut : null;
-        const keyAt = columns.indexOf('public_key');
-        const select = columns.map((c) => {
-            const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
-            return stamped.length === 0 ? q(c)
-                : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END`;
-        }).join(', ');
-        const h = crypto.createHash('sha256');
-        let rows = 0;
-        const held = where ? ` WHERE (${where})` : '';
-        for (const row of db.prepare(`SELECT ${select} FROM ${q(table)}${held} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
-            if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) continue;
+function tableHasher(table: string, columns: string[], opts: HashOptions): { select: string; add: (row: unknown[]) => void; done: () => TableHash } {
+    const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
+    const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
+    const asCopied = table === 'members' && opts.membersLeftOut && opts.membersLeftOut.size > 0 ? opts.membersLeftOut : null;
+    const keyAt = columns.indexOf('public_key');
+    const select = columns.map((c) => {
+        const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
+        return stamped.length === 0 ? q(c)
+            : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END`;
+    }).join(', ');
+    const h = crypto.createHash('sha256');
+    let rows = 0;
+    return {
+        select,
+        add: (row) => {
+            if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) return;
             const copied = asCopied && keyAt >= 0 ? asCopied.get(row[keyAt] as string) : undefined;
             if (copied) {
                 for (const [c, v] of Object.entries(copied)) {
@@ -122,8 +122,70 @@ export function tableContentHashes(opts: HashOptions = {}): TableHashes {
             h.update(JSON.stringify(row.map((v) => (Buffer.isBuffer(v) ? `x'${v.toString('hex')}'` : typeof v === 'bigint' ? v.toString() : v))));
             h.update('\n');
             rows++;
+        },
+        done: () => ({ rows, hash: h.digest('hex') }),
+    };
+}
+
+/**
+ * This server's copied tables, each as a row count and a hash, on `conn` (this server's database unless another
+ * connection is given). Only reads, and nothing else runs between them: better-sqlite3 is synchronous.
+ */
+export function tableContentHashes(opts: HashOptions = {}, conn: Database.Database = db): TableHashes {
+    const tables: Record<string, TableHash> = {};
+    for (const { table, columns, order, where } of hashedTables(conn)) {
+        if (opts.only && !opts.only.includes(table)) continue;
+        const hasher = tableHasher(table, columns, opts);
+        const held = where ? ` WHERE (${where})` : '';
+        for (const row of conn.prepare(`SELECT ${hasher.select} FROM ${q(table)}${held} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
+            hasher.add(row);
         }
-        tables[table] = { rows, hash: h.digest('hex') };
+        tables[table] = hasher.done();
+    }
+    return { v: TABLE_HASHES_VERSION, tables };
+}
+
+/**
+ * The same hashes as tableContentHashes, on `conn`, read `sliceRows` rows at a time in the same order (a keyset, with the
+ * table's rowid last so the order is total: rows equal in every column ordered on are equal in every column hashed, or
+ * their key, which is among those, tells them apart), awaiting `pause()` between slices: a copy served in pages makes them
+ * on its snapshot while it serves pages (engine/copy-pages.ts), so no single step holds the event loop for a whole table.
+ * A slice ends at `sliceRows` rows or once its rows add up to `sliceBytes` (keyset.ts rowBytes), whichever first, and never
+ * before its first row: rows are read one at a time and hashed as they are read, so a slice of wide rows holds one row in
+ * memory and the event loop for about `sliceBytes` of hashing. `except`: tables left for later. Throws what a read
+ * throws, and stops when `stopped()` says so.
+ */
+export async function tableContentHashesInSlices(
+    conn: Database.Database,
+    opts: HashOptions & { except?: readonly string[] },
+    pace: { sliceRows: number; sliceBytes: number; pause: () => Promise<void>; stopped: () => boolean },
+): Promise<TableHashes> {
+    const tables: Record<string, TableHash> = {};
+    for (const { table, columns, order, where } of hashedTables(conn)) {
+        if ((opts.only && !opts.only.includes(table)) || opts.except?.includes(table)) continue;
+        const hasher = tableHasher(table, columns, opts);
+        const walk = [...order, ...rowTiebreak(conn, table, order)];
+        const extra = walk.map((c) => sqlColumn(c)).join(', ');
+        let last: unknown[] | null = null;
+        for (;;) {
+            if (pace.stopped()) throw new Error('stopped');
+            const after = last ? afterRow(walk, last) : null;
+            const conditions = [where ? `(${where})` : null, after?.sql ?? null].filter((c): c is string => c !== null);
+            const read = conn.prepare(`SELECT ${hasher.select}, ${extra} FROM ${q(table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
+                + ` ORDER BY ${walk.map((c) => sqlColumn(c)).join(', ')} LIMIT ?`).raw().iterate(...(after?.params ?? []), pace.sliceRows) as Iterable<unknown[]>;
+            let [rows, bytes, cut] = [0, 0, false];
+            for (const row of read) {
+                last = row.slice(columns.length);
+                hasher.add(row.slice(0, columns.length));
+                rows++;
+                bytes += rowBytes(row);
+                // Leaving the loop closes the statement, before the pause lets anything else read on this connection.
+                if (rows >= pace.sliceRows || bytes >= pace.sliceBytes) { cut = true; break; }
+            }
+            if (!cut) break;
+            await pace.pause();
+        }
+        tables[table] = hasher.done();
     }
     return { v: TABLE_HASHES_VERSION, tables };
 }

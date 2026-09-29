@@ -8,11 +8,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import {
-    getNodeRole, exportSyncState, signSyncPayload, pruneAgedOutRows, type SyncPayload,
+    getNodeRole, exportSyncState, signSyncPayload, signSyncBody, pruneAgedOutRows, getCommonsBalanceExact, type SyncPayload,
     getConversationsByMember, getConversationMessages,
     recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
+import { openCopy, copyPage, type CopyAnswer } from '../engine/copy-pages.js';
+import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
     getLocalConfig, saveLocalConfig,
@@ -356,7 +358,8 @@ async function restoreFromTar(
         throw err;
     }
 
-    // Close current DB connection safely before overwriting
+    // Close current DB connection safely before overwriting, and any copy's snapshot being served from it.
+    closeOpenCopies('a restore replaces state.db');
     const { db } = await import('../db/db.js');
     try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
 
@@ -1009,43 +1012,44 @@ router.post('/api/local/admin/backup-config', async (ctx) => {
 // (304) to the mirror's every-60s pull without rebuilding the whole ledger.
 
 
-router.get('/api/local/admin/sync-snapshot', async (ctx) => {
-    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data). It is
-    // authenticated with a dedicated, scoped replication TOKEN (least privilege,
-    // independently rotatable). The all-powerful admin password is still accepted
-    // during rollout — until the operator enables token-only — so existing backups
-    // keep working. Every pull (and every rejected attempt) is logged for the
-    // primary's Replication Access panel.
-    const ip = replicationClientIp(ctx);
+/**
+ * Who asks for a copy of this server: its standby, with the replication token, or someone with the admin password, until
+ * the operator makes the token the only way (every copy route: the whole ledger, DMs and recovery data included). A
+ * dedicated, scoped token: least privilege, independently rotatable. Every rejected attempt is logged for the primary's
+ * Replication Access panel, and answered here (401, or checkAdminAuth's own answer and its brute-force tarpit delay):
+ * null then.
+ */
+async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-pw' | null> {
     const token = ctx.request.header['x-replication-token'];
     const headerPassword = ctx.request.header['x-admin-password'];
     const cfg = getLocalConfig();
-    let authMode: 'token' | 'admin-pw' | null = null;
-
     if (token) {
-        if (await verifyReplicationToken(String(token))) {
-            authMode = 'token';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid replication token' };
-            return;
-        }
-    } else if (headerPassword && !cfg.replicationTokenOnly) {
-        (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) {
-            authMode = 'admin-pw';
-        } else {
-            // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
-            return;
-        }
-    } else {
-        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+        if (await verifyReplicationToken(String(token))) return 'token';
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
         ctx.status = 401;
-        ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
-        return;
+        ctx.body = { error: 'Invalid replication token' };
+        return null;
     }
+    if (headerPassword && !cfg.replicationTokenOnly) {
+        (ctx as any).requestBody = { password: headerPassword };
+        if (await checkAdminAuth(ctx as any)) return 'admin-pw';
+        // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
+        return null;
+    }
+    recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+    ctx.status = 401;
+    ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
+    return null;
+}
+
+router.get('/api/local/admin/sync-snapshot', async (ctx) => {
+    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data), to its standby's replication token or the admin
+    // password (replicationAuth). Every pull (and every rejected attempt) is logged for the primary's Replication Access
+    // panel.
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
 
     // How the standby's copies have gone, for this community's owners (services/standby-health.ts): only a standby's own
     // channel, the replication token, is heard.
@@ -1124,34 +1128,8 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
 // full-snapshot import cap as DBs grow toward GB. See docs/delta-backup-plan.md.
 router.get('/api/local/admin/sync-delta', async (ctx) => {
     const ip = replicationClientIp(ctx);
-    const token = ctx.request.header['x-replication-token'];
-    const headerPassword = ctx.request.header['x-admin-password'];
-    const cfg = getLocalConfig();
-    let authMode: 'token' | 'admin-pw' | null = null;
-
-    if (token) {
-        if (await verifyReplicationToken(String(token))) {
-            authMode = 'token';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid replication token' };
-            return;
-        }
-    } else if (headerPassword && !cfg.replicationTokenOnly) {
-        (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) {
-            authMode = 'admin-pw';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
-            return;
-        }
-    } else {
-        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
-        ctx.status = 401;
-        ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
-        return;
-    }
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
 
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
@@ -1175,6 +1153,70 @@ router.get('/api/local/admin/sync-delta', async (ctx) => {
         console.error('[Backup] Delta export failed:', e);
         ctx.status = 500;
         ctx.body = { error: 'Delta export failed' };
+    }
+});
+
+/** A page of a copy as the route sends it: its signed text, byte for byte, so a retry gets what the first ask got. */
+function answerCopy(ctx: any, answer: CopyAnswer): void {
+    ctx.set('Cache-Control', 'no-store');
+    ctx.set('X-Node-Role', getNodeRole());
+    ctx.status = answer.status;
+    if (answer.status === 200) {
+        ctx.type = 'application/json';
+        ctx.body = answer.page;
+    } else {
+        ctx.body = answer.error;
+    }
+}
+
+// A copy in pages from one snapshot (engine/copy-pages.ts; design scratch/global-node/DESIGN-paged-copies-fable.md §3,
+// §5): a whole copy, or with `?since=<cursor>` the rows written since then. The same auth and log as sync-snapshot. The
+// answer is the opening page; the next ones are asked by number below.
+router.post('/api/local/admin/sync-copy', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
+
+    const since = typeof ctx.query.since === 'string' ? ctx.query.since : '';
+    if (since && (since.length > 64 || Number.isNaN(Date.parse(since)))) {
+        ctx.status = 400;
+        ctx.body = { error: 'since must be a cursor: the time a copy was made' };
+        return;
+    }
+    try {
+        // As before a whole copy (sync-snapshot): the plain tables' rows past their age rule go first, so the copy names
+        // none the standby's own age rule would take after it lands. Before the snapshot opens.
+        pruneAgedOutRows();
+        const nodeId = getP2PNode()?.peerId?.toString() ?? 'unknown';
+        const answer = await openCopy({ nodeId, since: since || null, commonsBalance: getCommonsBalanceExact, sign: signSyncBody });
+        answerCopy(ctx, answer);
+        if (answer.status === 200) recordReplicationAccess({ at: Date.now(), ip, auth: authMode, reason: since ? 'delta copy in pages' : 'whole copy in pages' });
+    } catch (e: any) {
+        console.error('[Backup] Opening a copy failed:', e);
+        ctx.status = 500;
+        ctx.body = { error: 'Copy export failed' };
+    }
+});
+
+// Page <n> of an open copy: the next one, or the last one again after a timeout. Any other number is 409; a copy this
+// server no longer holds (closed, expired, or from before a restart) is 404.
+router.get('/api/local/admin/sync-copy/:copyId/:n', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    const n = Number(ctx.params.n);
+    if (!/^\d{1,9}$/.test(ctx.params.n) || !Number.isSafeInteger(n)) {
+        ctx.status = 400;
+        ctx.body = { error: 'a page is asked for by its number' };
+        return;
+    }
+    try {
+        answerCopy(ctx, await copyPage(ctx.params.copyId, n));
+    } catch (e: any) {
+        console.error('[Backup] Serving a page of a copy failed:', e);
+        ctx.status = 500;
+        ctx.body = { error: 'Copy export failed' };
     }
 });
 

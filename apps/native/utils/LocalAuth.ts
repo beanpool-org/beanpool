@@ -2,6 +2,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { appLockNow } from './app-lock-clock';
 
 const APP_LOCK_KEY = 'beanpool_app_lock_enabled';
 const isWeb = Platform.OS === 'web';
@@ -112,6 +113,8 @@ export async function phoneLockPrompt(
  *
  * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
  * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
+ * openedAt and closedAt are on App Lock's clock (utils/app-lock-clock.ts), as the return lock's own times are: the phone's
+ * since-boot clock, which setting the phone's date and time can't move.
  */
 export type LocalAuthPromptStretch = { openedAt: number; closedAt: number | null; passed: boolean };
 
@@ -123,7 +126,7 @@ let promptCloseWaiters: Array<() => void> = [];
 
 function promptOpened(): void {
     if (openPrompts++ === 0) {
-        promptStretches.push({ openedAt: Date.now(), closedAt: null, passed: false });
+        promptStretches.push({ openedAt: appLockNow(), closedAt: null, passed: false });
         if (promptStretches.length > PROMPT_STRETCHES_KEPT) promptStretches.shift();
     }
 }
@@ -133,7 +136,7 @@ function promptClosed(passed: boolean): void {
     openPrompts = 0;
     const current = promptStretches[promptStretches.length - 1];
     if (current) {
-        current.closedAt = Date.now();
+        current.closedAt = appLockNow();
         current.passed = passed;
     }
     const waiters = promptCloseWaiters;

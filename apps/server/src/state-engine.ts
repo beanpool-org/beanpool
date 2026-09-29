@@ -406,6 +406,7 @@ import {
     recordSyncAttempt,
     getCurrentImportOrigin,
     signSyncPayload as signSyncPayloadEngine,
+    signSyncBody as signSyncBodyEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
     clearReplicatedRows,
@@ -5813,6 +5814,11 @@ export function pruneAgedOutRows(): number {
 
 export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
     return signSyncPayloadEngine(getSyncCb(), payload);
+}
+
+/** This server's signature over a payload's text, as signSyncPayload makes it (engine/sync.ts signSyncBody). */
+export function signSyncBody(body: string): Promise<{ signature: string; publicKey: string } | null> {
+    return signSyncBodyEngine(getSyncCb(), body);
 }
 
 /**

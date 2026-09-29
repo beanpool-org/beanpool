@@ -5,7 +5,8 @@
 # kernel's yama scope 3), no swap in the image.
 [Unit]
 Description=BeanPool key vault: keyholder
-After=local-fs.target
+After=local-fs.target beanpool-vault-identity.service
+Wants=beanpool-vault-identity.service
 Before=beanpool-vault-api.service
 
 [Service]
@@ -46,8 +47,6 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @debug @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation
 SystemCallErrorNumber=EPERM
-# The UKI it booted, for its release hash (image-identity.ts).
-ReadOnlyPaths=/efi
 
 [Install]
 WantedBy=multi-user.target

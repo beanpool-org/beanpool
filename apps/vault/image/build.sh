@@ -87,6 +87,7 @@ node -e '
         socketPath: "/run/beanpool-vault/keyholder/keyholder.sock",
         socketMode: 0o660,
         diskKeySocket: "/run/beanpool-vault/disk-key/disk.sock",
+        imageIdentityFile: "/run/beanpool-vault-image.json",
         genesisCustodians: keys,
     }, null, 2) + "\n");
 ' "${keys}" > "${extra}/etc/beanpool-vault/keyholder.json"

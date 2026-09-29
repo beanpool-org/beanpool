@@ -62,6 +62,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -355,7 +356,7 @@ async function main(): Promise<void> {
 
     const bobSock = await socket(bob, bobCaps);
     const dm = await call('POST', alice, '/api/messages/conversation', { type: 'dm', participants: [alice.pk, bob.pk], createdBy: alice.pk });
-    const line = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ciphertext: 'c2VjcmV0', nonce: 'bm9uY2U=' });
+    const line = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ...lockedDm() });
     await settle();
     assert(line.status === 200 && bobSock.events.some(e => e.type === 'new_message' && e.conversationId === dm.body?.conversation?.id),
         `Bob's /ws socket signed in capitals is Bob's: it gets the line Alice sent him (${show(line)}; ${bobSock.events.map(e => e.type).join(',')})`);
@@ -586,7 +587,7 @@ async function main(): Promise<void> {
     const piaSend = await call('POST', bob, '/api/ledger/transfer', { to: pia.pk, amount: 1, memo: 'welcome' });
     assert(piaSend.status === 200, `and Bob still sends Beans to Pia (${show(piaSend)})`);
     const seenBefore = bobOpen.events.length;
-    const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ciphertext: 'YWZ0ZXI=', nonce: 'bm9uY2U=' });
+    const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ...lockedDm() });
     await settle();
     const newLines = bobOpen.events.slice(seenBefore).filter(e => e.type === 'new_message' && e.conversationId === dm.body?.conversation?.id);
     assert(afterPrune.status === 200 && newLines.length === 1,

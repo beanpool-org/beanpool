@@ -14,12 +14,10 @@ import {
     makeEphemeralKey,
     openRestoreSession,
     openRestoredAccount,
-    pollGithubRestore,
     releaseRefusalMessage,
     releaseSignInCopy,
     requestRestoreNonce,
     restoreProviders,
-    startGithubRestore,
     type EphemeralKey,
 } from './web-restore';
 import { generateIdentity, identityFromMnemonic, type BeanPoolIdentity } from './identity';
@@ -82,30 +80,24 @@ describe('the throwaway key signs every call in the restore', () => {
         expect(makeEphemeralKey().publicKey).not.toBe(eph.publicKey);
     });
 
-    it('open, nonce, GitHub start and poll, release and fetch: each signed by the throwaway key, never the account', async () => {
+    it('open, nonce, release and fetch: each signed by the throwaway key, never the account', async () => {
         const eph: EphemeralKey = makeEphemeralKey();
         const calls = stubNode({
-            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'n-1', expiresInSeconds: 600, githubFlow: 'node', clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } }),
-            '/api/recovery/collect/github/start': () => json(200, { sessionId: 'gh-1', userCode: 'ABCD-EFGH', expiresInSeconds: 900, intervalSeconds: 5 }),
-            '/api/recovery/collect/github/poll': () => json(200, { status: 'ok', sub: 'gh-sub' }),
+            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'n-1', expiresInSeconds: 600, clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } }),
             '/api/recovery/collect/sso': () => json(200, { collected: 1 }),
             '/api/recovery/collect/fragments': () => json(200, { fragments: [] }),
             '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
         });
         expect(await openRestoreSession(eph, 'Alice')).toEqual({ collectionId: 'col-1' });
         const n = await requestRestoreNonce(eph, 'col-1');
-        expect(n).toMatchObject({ nonce: { nonce: 'n-1', githubFlow: 'node' } });
-        expect(await startGithubRestore(eph, 'col-1')).toMatchObject({ sessionId: 'gh-1', userCode: 'ABCD-EFGH' });
-        expect((await pollGithubRestore(eph, 'col-1', 'gh-1')).body).toEqual({ status: 'ok', sub: 'gh-sub' });
+        expect(n).toEqual({ nonce: { nonce: 'n-1', clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } } });
         await releaseSignInCopy(eph, 'col-1', { provider: 'google', idToken: 'a.b.c', nonce: 'n-1', sub: 's' });
-        await releaseSignInCopy(eph, 'col-1', { provider: 'github', sessionId: 'gh-1', sub: 'gh-sub' });
+        await releaseSignInCopy(eph, 'col-1', { provider: 'apple', idToken: 'd.e.f', nonce: 'n-2', sub: 'a' });
         await fetchSignInCopy(eph, 'col-1');
 
         expect(calls.map((c) => c.path)).toEqual([
             '/api/recovery/collect',
             '/api/recovery/collect/sso-nonce',
-            '/api/recovery/collect/github/start',
-            '/api/recovery/collect/github/poll',
             '/api/recovery/collect/sso',
             '/api/recovery/collect/sso',
             '/api/recovery/collect/fragments',
@@ -116,10 +108,10 @@ describe('the throwaway key signs every call in the restore', () => {
             expect(c.headers['X-Public-Key']).not.toBe(account.publicKey);
         }
         expect(calls[0].body).toEqual({ callsign: 'Alice' });
-        expect(calls[3].body).toEqual({ collectionId: 'col-1', sessionId: 'gh-1' });
-        // The token and its nonce for a redirect sign-in; the node's own session for GitHub, never a GitHub token.
-        expect(calls[4].body).toEqual({ collectionId: 'col-1', provider: 'google', idToken: 'a.b.c', nonce: 'n-1' });
-        expect(calls[5].body).toEqual({ collectionId: 'col-1', provider: 'github', proof: { sessionId: 'gh-1' } });
+        expect(calls[1].body).toEqual({ collectionId: 'col-1' });
+        // The token and its nonce, and nothing else of the sign-in: never its sub.
+        expect(calls[2].body).toEqual({ collectionId: 'col-1', provider: 'google', idToken: 'a.b.c', nonce: 'n-1' });
+        expect(calls[3].body).toEqual({ collectionId: 'col-1', provider: 'apple', idToken: 'd.e.f', nonce: 'n-2' });
     });
 
     it('a refused open or nonce hands the answer back rather than a session', async () => {
@@ -160,10 +152,17 @@ describe('the lookup', () => {
 });
 
 describe('which sign-ins are offered', () => {
-    it('each one the node gave a browser id for, and GitHub when the node runs it', () => {
-        expect(restoreProviders({ nonce: 'n', githubFlow: 'node', clientIds: { google: 'w', apple: 'org.beanpool.web', facebook: 'f' } }))
-            .toEqual(['google', 'apple', 'facebook', 'github']);
+    it('each one the node gave a browser id for, always in the same order', () => {
+        expect(restoreProviders({ nonce: 'n', clientIds: { google: 'w', apple: 'org.beanpool.web', facebook: 'f' } }))
+            .toEqual(['google', 'apple', 'facebook']);
+        expect(restoreProviders({ nonce: 'n', clientIds: { facebook: 'f', google: 'w' } })).toEqual(['google', 'facebook']);
         expect(restoreProviders({ nonce: 'n', clientIds: { google: 'w', apple: null } })).toEqual(['google']);
+        expect(restoreProviders({ nonce: 'n', clientIds: {} })).toEqual([]);
+    });
+
+    it('a name in the answer that is not a sign-in this app offers is never offered', () => {
+        const clientIds = { google: 'w', myspace: 'm', toString: 'x' } as Record<string, string>;
+        expect(restoreProviders({ nonce: 'n', clientIds })).toEqual(['google']);
     });
 });
 
@@ -217,7 +216,7 @@ describe('the copy is saved only when it opens to the account the lookup named',
 
 describe('what the member reads', () => {
     it("a sign-in that isn't the account's keeper, in plain words", () => {
-        expect(releaseRefusalMessage({ status: 400, body: { error: 'That sign-in account is not the keeper for this recovery.' }, retryAfterSeconds: null }, 'google', 'Alice'))
+        expect(releaseRefusalMessage({ status: 400, body: { error: 'That sign-in account is not the keeper for this recovery.' } }, 'google', 'Alice'))
             .toBe("That Google account isn't a way back into Alice. Try the sign-in you joined with, or your 12 words.");
     });
 });

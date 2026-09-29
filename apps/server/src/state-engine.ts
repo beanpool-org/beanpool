@@ -13,6 +13,7 @@ import {
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -30,7 +31,7 @@ import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
-import { pruneOldActivity } from './db/activity-feed-db.js';
+import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
@@ -40,7 +41,9 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
+import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -84,6 +87,7 @@ import {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -119,6 +123,7 @@ export {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -155,6 +160,7 @@ import {
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
+    exportLedgerFor as exportLedgerForEngine,
     persistDecayEvents as persistDecayEventsEngine,
     persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
@@ -220,6 +226,8 @@ import {
     type FriendEntry,
     getPosts as getPostsEngine,
     withoutPollVoters,
+    withoutTradeParty,
+    isTradeParty,
     getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
@@ -400,6 +408,7 @@ import {
     signSyncPayload as signSyncPayloadEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
+    clearReplicatedRows,
     writeSyncAuditLog,
     type ImportOptions,
     type ImportResult,
@@ -535,7 +544,14 @@ export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
     publishLocation?: boolean;
     publishMembers?: boolean;
-    publishContacts?: boolean;
+    /**
+     * Whether the directory is sent the community's contact email, and its phone. Off unless an owner turned each on: only
+     * a stored `true` under these keys publishes. They replace `publishContacts`, one switch for both that read unset as
+     * "publish" and was written back as true by every save, so a stored true there was no choice anyone made; it is
+     * dropped on read, and nothing of it publishes a contact.
+     */
+    publishContactEmail?: boolean;
+    publishContactPhone?: boolean;
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
@@ -580,6 +596,9 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
+    // A listing's photos behind a key in every photo URL, where the listings are members' (a local community with reads
+    // enforced, engine/photo-keys.ts): an <img> cannot sign. Decided here, once, as the faces are.
+    installPhotoKeysAtBoot(READ_AUTH_ON);
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -588,6 +607,10 @@ export function initStateEngine(): void {
     // Recovery copies whose deletion this database recorded without applying it (a standby on a version from before
     // recovery tombstones), deleted now (engine/recovery-shares.ts). Never throws.
     applyRecordedRecoveryTombstones();
+    // GitHub is no longer a sign-in: its recovery copies, their released copies and its open-door records go
+    // (engine/github-sign-in-removal.ts; a standby removes its open-door records only). After the seal is installed, so
+    // a released copy can be opened to tell whether it holds a GitHub copy. Never throws.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
     // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
@@ -1080,6 +1103,7 @@ export function removeWsClient(ws: any): void {
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
@@ -1111,15 +1135,22 @@ const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post
 // As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
 const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
 
+// The listings' own doorbells. A local community's listings are its members' (Marty, 2026-09-28; https-server.ts
+// PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT): a socket with no member's key reads them only where the visitors' view is on.
+const LISTING_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed']);
+
 /**
- * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
- * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
- * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
- * still is.
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node.
+ * On a node whose `guestListingsOnly` switch is on, only the listings' (GUEST_LISTINGS_WS_EVENTS). On every other node,
+ * every public doorbell but the listings': the Commons' reads are public there and the listings are members-only.
+ * With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell still is.
  */
 function keylessSocketMayUse(type: string): boolean {
-    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
-    return !getProfileSwitches().guestListingsOnly;
+    if (!READ_AUTH_ON) return true;
+    const guestView = getProfileSwitches().guestListingsOnly;
+    if (LISTING_WS_EVENTS.has(type)) return guestView;
+    if (GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
+    return !guestView;
 }
 
 export type ListingDoorbell = 'post_removed' | 'post_updated';
@@ -1135,7 +1166,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
- * post for no listing). Every node, whatever it lets such a socket read: it may read the listings everywhere.
+ * post for no listing). A socket with no member's key hears it only where it may read the listings: on a node with the
+ * visitors' view (keylessSocketMayUse). A visitor's and a suspended member's socket, which hold a key, hear it everywhere.
  *
  * One per change, never one per post, and those asked for in the same turn go as one (each type once). Sent after the
  * work in hand, so it may be asked for inside a transaction: one that then unwinds costs a read of what is there. The
@@ -1150,8 +1182,11 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
         listingDoorbellsDue = null;
         for (const t of due) {
             const out = JSON.stringify({ type: t });
+            // A socket with no member's key hears it only where it may read the listings (keylessSocketMayUse).
+            const keyless = keylessSocketMayUse(t);
             for (const ws of wsClients) {
                 if (ws._memberFeed || ws._openFeed) continue;
+                if (!ws._memberPubkey && !keyless) continue;
                 try { ws.send(out); } catch { wsClients.delete(ws); }
             }
         }
@@ -1248,6 +1283,11 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     return row.audience_scope === null || row.audience_scope === 'public';
 }
 
+/** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
+function isTreasuryKey(pk: string): boolean {
+    return !!(db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1').get(pk));
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1317,6 +1357,15 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
         && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
     let withoutVoters: string | null = null;
+    // Who took a listing, and its deal, go to that trade's two people only (withoutTradeParty): its author or the member
+    // who took it, and an enterprise's keepers for its side. Every other socket's copy leaves them off.
+    const tradePost = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && (!!event.post.acceptedBy || !!event.post.pendingTransactionId)
+        ? event.post as MarketplacePost : null;
+    const tradeSide = (pk: string | null | undefined): boolean => !!tradePost && (isTradeParty(tradePost, pk)
+        || (!!pk && [tradePost.authorPublicKey, tradePost.acceptedBy].some(side => !!side && isTreasuryKey(side) && canOperateTreasury(pk, side))));
+    let withoutParty: string | null = null;
+    let withoutPartyNorVoters: string | null = null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
@@ -1351,6 +1400,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
+        }
+        if (tradePost && (out === msg || out === withoutVoters) && !tradeSide(ws._memberPubkey)) {
+            out = out === msg
+                ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
+                : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
         }
         try {
             ws.send(out);
@@ -4432,6 +4486,7 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -4482,6 +4537,18 @@ function beansOffPrice(credits: unknown): number {
     if (getProfileSwitches().beans) return credits as number;
     if (Number(credits) > 0) throw new BeansOffError(BEANS_OFF_PRICE_MESSAGE);
     return 0;
+}
+
+/**
+ * Who hears that a deferred wage was paid: the keeper it paid, and the enterprise's keepers who may act for it
+ * (canOperateTreasury), the readers of its claims on its page (routes/treasury.ts `deferredClaims`). It names a person
+ * and what they were paid, so it never goes to the whole feed (balances and trades are private, 2026-09-28).
+ */
+function deferredWageRecipients(enterprisePubkey: string, keeperPubkey: string): string[] {
+    const out = new Set<string>([keeperPubkey]);
+    const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as { member_pubkey: string }[];
+    for (const k of keepers) if (canOperateTreasury(k.member_pubkey, enterprisePubkey)) out.add(k.member_pubkey);
+    return [...out];
 }
 
 /**
@@ -4568,9 +4635,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
                         amount: claim.amount,
-                    });
+                    }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
-                // deferred_wage_paid goes to the member feed only.
+                // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
+                // listing leave the board, if it did.
                 if (listingDone) ringListingDoorbell('post_removed');
             }
         }
@@ -5376,7 +5444,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const isStalled = daysInEscrow >= 7;
 
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
-        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at));
 
     // Chat context between buyer and seller
     const convRow = db.prepare(`
@@ -5750,21 +5818,23 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 /**
  * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
  * which recovery copies, which keepers' pledges and which rows of the plain tables the main server no longer holds. `seed`
- * and `heldToSum`: what the puller decided about the copy's conservation guard (engine/sync.ts ImportOptions); left out,
- * the copy is held to the ledger here.
+ * and `clear`: what the puller decided about the copy's conservation guard and a force-resync's clear (engine/sync.ts
+ * ImportOptions); left out, the copy is held to the ledger here and clears nothing.
  */
 export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum, whole: opts.full === true })
+    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, clear: opts.clear, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
             // seal epoch from its main server, or copies sent in the client's form after it cleared), it clears again
-            // (services/recovery-seal-key.ts). Never throws.
+            // (services/recovery-seal-key.ts). Never throws. Copies this import left out (more than one import takes) were
+            // neither imported nor compared, and change nothing here.
+            const shares = Array.isArray(remote.recoveryShares) && !result.tablesLeftOut.includes('recovery_shares') ? remote.recoveryShares : null;
             clearCopiesDroppedBeforeSeal({
                 standby: getNodeRole() === 'backup',
-                wholeCopy: opts.full && Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
-                imported: Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
+                wholeCopy: opts.full ? shares : null,
+                imported: shares,
                 mainEpoch: remote.sealEpoch,
             });
             return result;
@@ -6315,38 +6385,35 @@ export function getCommunityHealth(): CommunityHealth {
             if (seen.has(row.farmer_pubkey)) continue;
             seen.add(row.farmer_pubkey);
 
-            // Isolation check: do the puppets trade with ANYONE else?
+            // ⚡ Bolt: O(1) batch query to count isolated puppets instead of running 2N queries per invitee loop
             const puppetPubkeys = db.prepare(`
                 SELECT public_key FROM members WHERE invited_by = ?
-            `).all(row.farmer_pubkey) as any[];
-            
-            let isolatedPuppets = 0;
-            for (const p of puppetPubkeys) {
-                const marketPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT seller_pubkey as partner FROM marketplace_transactions
-                        WHERE buyer_pubkey = ? AND seller_pubkey != ? AND status = 'completed'
-                        UNION
-                        SELECT buyer_pubkey as partner FROM marketplace_transactions
-                        WHERE seller_pubkey = ? AND buyer_pubkey != ? AND status = 'completed'
-                    )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+            `).all(row.farmer_pubkey) as { public_key: string }[];
 
-                const directPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT to_pubkey as partner FROM transactions
-                        WHERE from_pubkey = ? AND to_pubkey != ?
+            let isolatedPuppets = 0;
+            if (puppetPubkeys.length > 0) {
+                const puppetKeysJson = JSON.stringify(puppetPubkeys.map(p => p.public_key));
+                const nonIsolatedCount = (db.prepare(`
+                    SELECT COUNT(DISTINCT puppet) as cnt FROM (
+                        SELECT buyer_pubkey as puppet FROM marketplace_transactions
+                        WHERE buyer_pubkey IN (SELECT value FROM json_each(?)) AND seller_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT seller_pubkey as puppet FROM marketplace_transactions
+                        WHERE seller_pubkey IN (SELECT value FROM json_each(?)) AND buyer_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT from_pubkey as puppet FROM transactions
+                        WHERE from_pubkey IN (SELECT value FROM json_each(?)) AND to_pubkey != ?
                           AND to_pubkey NOT LIKE 'escrow_%' AND to_pubkey NOT LIKE 'project_%'
                           AND to_pubkey != 'commons' AND to_pubkey != 'SYSTEM'
                         UNION
-                        SELECT from_pubkey as partner FROM transactions
-                        WHERE to_pubkey = ? AND from_pubkey != ?
+                        SELECT to_pubkey as puppet FROM transactions
+                        WHERE to_pubkey IN (SELECT value FROM json_each(?)) AND from_pubkey != ?
                           AND from_pubkey NOT LIKE 'escrow_%' AND from_pubkey NOT LIKE 'project_%'
                           AND from_pubkey != 'commons' AND from_pubkey != 'SYSTEM'
                     )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+                `).get(puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey) as any)?.cnt || 0;
 
-                if ((marketPartners?.cnt || 0) + (directPartners?.cnt || 0) === 0) isolatedPuppets++;
+                isolatedPuppets = puppetPubkeys.length - nonIsolatedCount;
             }
 
             flags.push({
@@ -6970,7 +7037,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 2. Settles positive or negative balance with COMMONS_POOL (a removal already settled it: then nothing moves).
  * 3. Anonymizes the profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area) and marks
  *    it deleted by its owner.
- * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
+ * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
+ *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
@@ -7069,6 +7137,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 updated_at = ?
             WHERE public_key = ?
         `).run(now, now, now, publicKey);
+        // The activity feed's own copies of their name (its join line, a ruling's other party): every other line reads it
+        // from the row above.
+        renameMemberInActivity(publicKey, 'Deleted Member');
 
         // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`
@@ -7079,12 +7150,15 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND type = 'poll' AND status IN ${POLLS_A_PRUNE_CLOSES}
         `).run(now, publicKey);
         db.prepare(`
-            UPDATE posts 
-            SET status = 'cancelled', 
-                active = 0, 
-                updated_at = ? 
+            UPDATE posts
+            SET status = 'cancelled',
+                active = 0,
+                updated_at = ?
             WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
+        // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
+        // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
+        scrubPostsOf(publicKey, now);
 
         // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
         // with a tombstone each, so a standby drops them too.
@@ -7221,7 +7295,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
-    if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
+    // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    if (conv) {
+        sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
+            'text', undefined, undefined, undefined, { nodeAuthored: true });
+    }
 }
 
 export function migrateAdminConversations() {} // Deprecated, state is clean now.
@@ -7252,7 +7331,6 @@ export function getNodeConfig(): NodeConfig {
         const pub = config.publishToDirectory !== false;
         config.publishLocation = pub;
         config.publishMembers = pub;
-        config.publishContacts = pub;
         config.publishHealth = pub;
         delete config.publishToDirectory;
         delete config.password;
@@ -7262,7 +7340,8 @@ export function getNodeConfig(): NodeConfig {
         serviceRadius: config.serviceRadius,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
-        publishContacts: config.publishContacts !== false,
+        publishContactEmail: config.publishContactEmail === true,
+        publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -7344,16 +7423,19 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
     return host ? `https://${host}` : null;
 }
 
+/**
+ * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
+ * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
+ * directory gets the community's name and web address, so people on the global node can find it and ask to join, with
+ * every switch off. The switches leave out only what each covers, sent as null so the directory drops what it had.
+ */
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
-    if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
-        return null;
-    }
-    
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
         publicUrl: resolvePublicNodeUrl(config),
+        communityName: localConfig.communityName || null,
     };
 
     if (config.publishLocation) {
@@ -7368,16 +7450,9 @@ export function getDirectoryInfo(): any {
         info.memberCount = null;
     }
 
-    if (config.publishContacts) {
-        if (localConfig.communityName) info.name = localConfig.communityName;
-        info.communityName = localConfig.communityName || null;
-        if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
-        if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
-    } else {
-        info.communityName = null;
-        info.contactEmail = null;
-        info.contactPhone = null;
-    }
+    // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
+    info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
+    info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
 
     if (config.publishHealth) {
         const realVersion = getVersion();
@@ -7396,6 +7471,11 @@ export function getDirectoryInfo(): any {
 // ===================== AUDIT EXPORT =====================
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
     return exportLedgerAuditEngine();
+}
+
+/** One member's own ledger export (engine/audit.ts exportLedgerFor): the Community Pool, their balance, their trades. */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    return exportLedgerForEngine(publicKey);
 }
 
 // ===================== COMMUNITY COMMONS =====================
@@ -7697,9 +7777,10 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // The snapshot-pull endpoint hands out the entire ledger (incl. DMs + recovery
 // data), so on the PRIMARY we record who pulls it — to attribute legitimate
 // backup traffic AND to surface rejected attempts (a leaked-credential / probing
-// signal) on the admin dashboard.
+// signal) on the admin dashboard. Each entry's address is kept 7 days, then
+// null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
@@ -7719,9 +7800,9 @@ const EMPTY_ACCESS_LOG: ReplicationAccessLog = {
 export function getReplicationAccessLog(): ReplicationAccessLog {
     try {
         const row = db.prepare(`SELECT value FROM node_config WHERE key='replication_access'`).get() as any;
-        if (row?.value) return { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) };
+        if (row?.value) return withoutOldAddresses('replication_access', { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) });
     } catch { /* fall through to empty */ }
-    return { ...EMPTY_ACCESS_LOG };
+    return { ...EMPTY_ACCESS_LOG, recent: [] };
 }
 
 export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
@@ -7738,6 +7819,7 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
             log.lastPullAuth = ev.auth;
         }
         log.recent = [ev, ...(log.recent || [])].slice(0, 20);
+        withoutOldAddresses('replication_access', log);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replication_access', ?)`).run(JSON.stringify(log));
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);
@@ -7745,95 +7827,18 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
 }
 
 /**
- * Force-resync support (backup side): wipe the locally-replicated tables so the
- * next full snapshot import rebuilds an exact 1:1 copy with no orphan rows. The
- * upsert+tombstone importer never deletes "rows not in the snapshot", so a row the
- * primary hard-deleted without a tombstone would otherwise linger forever. Only
- * the tables exportSyncState dumps are cleared — node-local tables (message_attachments,
- * sync_cursors, node_config, …) are untouched, and so are the plain tables (push tokens,
- * invites and the rest, engine/replication-manifest.ts), whose whole copy deletes every
- * row it doesn't name (engine/plain-tables.ts).
- *
- * ## One exception, and it is the whole reason the primary says anything
- *
- * `keepPhotoRows` names `post_id|order_num` rows the incoming payload deliberately does NOT carry: photos the
- * PRIMARY could not read out of its own image store (`SyncPayload.photosOmitted`). Clearing those would
- * destroy the only readable copy left — the replica's — and nothing would ever send them again, because the
- * omitted rows' `updated_at` never changed on the primary. The row survives, so its `storage_key` is still
- * referenced and the daily orphan sweep leaves the object alone too.
- *
- * Rows named here are kept AS THEY ARE. Any of them the payload turns out to carry after all is upserted by
- * the import that follows, exactly as it would have been. The list has no length limit.
- *
- * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
- * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
+ * A force-resync's clear on its own, committed: the replicated tables emptied, the photo rows named in `keepPhotoRows`
+ * kept (engine/sync.ts clearReplicatedRows, which says which tables and why). The suites start a copy from nothing with it.
+ * A force-resync never runs it: its import clears in the copy's own transaction, after every check, so a refused copy
+ * clears nothing (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2). THROWS if it cannot spare the named
+ * photo rows, leaving every table as it found them.
  */
 export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
-    const tables = [
-        'members', 'posts', 'projects', 'ratings', 'accounts',
-        'transactions', 'marketplace_transactions', 'friends', 'conversations',
-        'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'member_blocks', 'tombstones',
-        // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
-        // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
-        ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
-        // Only when the incoming copy carries the members' preferences, keepers and pledges (`opts.standing`, engine/sync.ts
-        // importRemoteState): from a main server that predates them, this node's are the only ones it has.
-        ...(opts.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
-    ];
-    // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
-    // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
-    const keep: { postId: string; orderNum: number }[] = [];
-    for (const rowKey of keepPhotoRows) {
-        const key = String(rowKey);
-        const cut = key.lastIndexOf('|');
-        if (cut <= 0) continue;
-        const postId = key.slice(0, cut);
-        const orderNum = Number(key.slice(cut + 1));
-        if (!postId || !Number.isInteger(orderNum)) continue;
-        keep.push({ postId, orderNum });
-    }
-    let kept = 0;
-    db.transaction(() => {
-        for (const t of tables) {
-            try { db.prepare(`DELETE FROM ${t}`).run(); }
-            catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
-        }
-        if (keep.length === 0) {
-            db.prepare(`DELETE FROM post_photos`).run();
-            return;
-        }
-        // The spared keys travel as ONE bound JSON array, matched through `json_each`, so the statement is
-        // the same size whether a single row is spared or fifty thousand. An `OR`-ed predicate per pair is
-        // the obvious spelling and a trap: SQLite parses it left-deep and throws "Expression tree is too
-        // large (maximum depth 1000)" from about 999 pairs on — and the case this argument exists for, a
-        // primary whose images directory is lost or unmounted, omits EVERY evacuated photo, which on a live
-        // node is thousands of rows. Values stay bound, never interpolated, exactly as before.
-        //
-        // Nothing here is caught. A clear that half-happened is the one outcome worse than a resync that
-        // failed: swallowing this let the transaction commit with `post_photos` not cleared at all, which
-        // left the orphan rows a resync exists to remove and reported "KEEPING 0" while doing it. Throwing
-        // rolls the whole clear back, so the replica keeps the data it had and the caller retries.
-        const keepJson = JSON.stringify(keep.map(k => `${k.postId}|${k.orderNum}`));
-        kept = (db.prepare(
-            `SELECT COUNT(*) AS n FROM post_photos WHERE (post_id || '|' || order_num) IN (SELECT value FROM json_each(?))`,
-        ).get(keepJson) as any)?.n || 0;
-        db.prepare(
-            `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
-        ).run(keepJson);
-    })();
+    db.transaction(() => clearReplicatedRows({
+        keepPhotoRows: [...keepPhotoRows], invalidatedKeys: opts.invalidatedKeys === true, standing: opts.standing === true,
+    }))();
     // The directory's listed communities are kept in memory for the reads; the table is empty now.
     forgetListedCommunities();
-    if (keep.length > 0) {
-        console.log(
-            `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `
-            + 'could not read out of its own store — this replica holds the only readable copy of those, and the '
-            + 'incoming payload does not carry them.',
-        );
-    } else {
-        console.log('🧹 [Resync] Cleared replicated tables — awaiting fresh snapshot import.');
-    }
 }
 
 // ===================== PUSH NOTIFICATIONS =====================

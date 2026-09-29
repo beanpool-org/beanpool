@@ -36,3 +36,4 @@ export * from './avatar-url.js';
 export * from './onboarding-funnel.js';
 export * from './live-updates.js';
 export * from './request-signing.js';
+export * from './vault-wire.js';

@@ -1301,10 +1301,8 @@ describe('a sent door join that can no longer land, beside a kept invite key, on
                 return json(200, { isMember: members.has(key), callsign: members.get(key) ?? null });
             },
             '/api/join/sso-nonce': () => json(200, {
-                nonce: 'n1', expiresInSeconds: 600, providers: ['github'], githubFlow: 'node', clientIds: {},
+                nonce: 'n1', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' },
             }),
-            '/api/join/github/start': () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 }),
-            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
             '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' } }),
         });
         const probes = () => n.calls.filter((c) => c.path.startsWith('/api/community/membership/')).map((c) => decodeURIComponent(c.path.split('/').pop()!));
@@ -1340,8 +1338,16 @@ describe('a sent door join that can no longer land, beside a kept invite key, on
         // Then the door join, which can no longer land, is offered again with its own key.
         expect(await screen.findByTestId('join-notice')).toHaveTextContent("Your join didn't reach the community. Sign in again to finish.");
         await screen.findByTestId('join-screen-providers');
-        fireEvent.click(await screen.findByTestId('join-provider-github'));
-        await screen.findByTestId('join-github-code');
+        // To Google and back: the page leaves (jsdom only says it can't), and the return opens it again.
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        fireEvent.click(await screen.findByTestId('join-provider-google'));
+        await waitFor(() => expect(peekPending()).toMatchObject({ identity: { publicKey: doorKey.publicKey }, provider: 'google', nonce: 'n1' }));
+        cleanup();
+        resetCapturedAuthReturn();
+        const b64url = (text: string) => btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
+        window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
+        render(<WelcomePage onComplete={vi.fn()} />);
 
         // Sent, not refused because of the invite key.
         await waitFor(() => expect(n.joins()).toHaveLength(1), { timeout: 4000 });

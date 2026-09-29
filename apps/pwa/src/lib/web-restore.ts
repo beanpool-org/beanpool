@@ -16,11 +16,11 @@
  *      It signs every call below, and the node binds the recovery session to it: the session id alone opens nothing.
  *   3. `POST /api/recovery/collect { callsign }` opens the session (the node tells the account's owner at once), and
  *      `POST /api/recovery/collect/sso-nonce` gives the sign-in nonce for the throwaway key, with the ids a browser
- *      puts in its request to each provider (`clientIds`) and whether the node runs GitHub's sign-in (`githubFlow`).
+ *      puts in its request to each provider (`clientIds`).
  *   4. The sign-in: Google, Apple and Facebook leave the page exactly as the join does (lib/web-join.ts builds the same
  *      requests, and they come back to the same `/app/auth/<provider>` page); the throwaway key and the session wait as
- *      a pending restore (identity.ts). GitHub is the node's device flow, as at the door.
- *   5. `POST /api/recovery/collect/sso` with the token (or GitHub's session) releases the account's sign-in copy, and
+ *      a pending restore (identity.ts).
+ *   5. `POST /api/recovery/collect/sso` with the token releases the account's sign-in copy, and
  *      `POST /api/recovery/collect/fragments` hands it over.
  *   6. core's `openSeedFromSso` opens it with the sign-in's `sub`: the account's seed, and its 12 words when the copy
  *      carried them. The format is core's alone: nothing here reads the blob but that function.
@@ -45,8 +45,8 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { isSingleBlobSso, openSeedFromSso, toEd25519Pkcs8, type SealedShare } from '@beanpool/core';
 import { getNodeApiUrl } from './api';
-import { identityFromMnemonic, type BeanPoolIdentity, type JoinProvider } from './identity';
-import { door, providerLabel, type DoorAnswer, type RedirectProvider } from './web-join';
+import { identityFromMnemonic, JOIN_PROVIDERS, type BeanPoolIdentity, type JoinProvider } from './identity';
+import { door, providerLabel, type DoorAnswer } from './web-join';
 
 // ===================== THE ACCOUNT (the node's lookup) =====================
 
@@ -118,8 +118,7 @@ export async function openRestoreSession(eph: EphemeralKey, callsign: string): P
 /** The node's answer to a recovery nonce request: which sign-ins a browser can use for it, and the nonce. */
 export interface RestoreNonce {
     nonce: string;
-    githubFlow?: string;
-    clientIds: Partial<Record<RedirectProvider, string | null>>;
+    clientIds: Partial<Record<JoinProvider, string | null>>;
 }
 
 export async function requestRestoreNonce(eph: EphemeralKey, collectionId: string): Promise<{ nonce: RestoreNonce } | { answer: DoorAnswer }> {
@@ -129,52 +128,31 @@ export async function requestRestoreNonce(eph: EphemeralKey, collectionId: strin
     return {
         nonce: {
             nonce: b.nonce,
-            githubFlow: typeof b.githubFlow === 'string' ? b.githubFlow : undefined,
             clientIds: b.clientIds && typeof b.clientIds === 'object' ? b.clientIds : {},
         },
     };
 }
 
-/** The order the sign-ins are offered in. The node does not say which one an account has: the member knows. */
-const RESTORE_ORDER: readonly JoinProvider[] = ['google', 'apple', 'facebook', 'github'];
-
 /**
- * The sign-ins to offer: each redirect one the node gave a browser id for (one without stays hidden rather than sending
- * the member to a sign-in the node would refuse), and GitHub when the node runs its sign-in itself.
+ * The sign-ins to offer, in JOIN_PROVIDERS' order (the node does not say which one an account has: the member knows):
+ * each one the node gave a browser id for. One without stays hidden rather than sending the member to a sign-in the
+ * node would refuse.
  */
 export function restoreProviders(n: RestoreNonce): JoinProvider[] {
-    return RESTORE_ORDER.filter((p) => p === 'github'
-        ? n.githubFlow === 'node'
-        : typeof n.clientIds[p] === 'string' && !!n.clientIds[p]);
+    return JOIN_PROVIDERS.filter((p) => typeof n.clientIds[p] === 'string' && !!n.clientIds[p]);
 }
 
-export async function startGithubRestore(eph: EphemeralKey, collectionId: string): Promise<{ sessionId: string; userCode: string; expiresInSeconds: number; intervalSeconds: number } | { answer: DoorAnswer }> {
-    const answer = await door('POST', '/api/recovery/collect/github/start', { collectionId }, signer(eph));
-    const b = answer.body;
-    if (answer.status !== 200 || typeof b.sessionId !== 'string' || typeof b.userCode !== 'string') return { answer };
-    return {
-        sessionId: b.sessionId,
-        userCode: b.userCode,
-        expiresInSeconds: typeof b.expiresInSeconds === 'number' && b.expiresInSeconds > 0 ? b.expiresInSeconds : 900,
-        intervalSeconds: typeof b.intervalSeconds === 'number' && b.intervalSeconds > 0 ? b.intervalSeconds : 5,
-    };
+/** The sign-in a restore releases the copy with: the provider's token and its nonce. */
+export interface RestoreProof {
+    provider: JoinProvider;
+    idToken: string;
+    nonce: string;
+    sub: string;
 }
-
-export function pollGithubRestore(eph: EphemeralKey, collectionId: string, sessionId: string): Promise<DoorAnswer> {
-    return door('POST', '/api/recovery/collect/github/poll', { collectionId, sessionId }, signer(eph));
-}
-
-/** The sign-in a restore releases the copy with: the provider's token and its nonce, or GitHub's finished session. */
-export type RestoreProof =
-    | { provider: RedirectProvider; idToken: string; nonce: string; sub: string }
-    | { provider: 'github'; sessionId: string; sub: string };
 
 /** Ask the node to release the account's sign-in copy to this session, with a fresh sign-in. */
 export function releaseSignInCopy(eph: EphemeralKey, collectionId: string, proof: RestoreProof): Promise<DoorAnswer> {
-    const credential = proof.provider === 'github'
-        ? { proof: { sessionId: proof.sessionId } }
-        : { idToken: proof.idToken, nonce: proof.nonce };
-    return door('POST', '/api/recovery/collect/sso', { collectionId, provider: proof.provider, ...credential }, signer(eph));
+    return door('POST', '/api/recovery/collect/sso', { collectionId, provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce }, signer(eph));
 }
 
 /** The released sign-in copy, as core opens it; null when the node has none for this session. */

@@ -1,7 +1,7 @@
 /**
  * Getting an account back in a web browser with the sign-in it joined with (design G11 §4.4, G11-d): your name here,
- * the sign-in (Google, Apple and Facebook leave the page and come back to the join's own return page; GitHub shows its
- * code), then the account, only if it is the one the name belongs to. The logic is lib/web-restore.ts; the throwaway
+ * the sign-in (Google, Apple and Facebook leave the page and come back to the join's own return page), then the
+ * account, only if it is the one the name belongs to. The logic is lib/web-restore.ts; the throwaway
  * key waits in identity.ts's pending restore while the page is away.
  *
  * WelcomePage shows it from the open door's "Already have BeanPool?" and from "You're already here" (a sign-in that
@@ -25,15 +25,11 @@ import {
     captureAuthReturn,
     consumeCapturedAuthReturn,
     DoorUnreachableError,
-    GITHUB_DEVICE_PAGE,
     matchAuthReturn,
     providerAuthUrl,
     providerLabel,
     refusalMessage,
-    runGithubPoll,
-    sleep,
     type AuthReturn,
-    type RedirectProvider,
 } from '../lib/web-join';
 import {
     fetchSignInCopy,
@@ -41,13 +37,11 @@ import {
     makeEphemeralKey,
     openRestoreSession,
     openRestoredAccount,
-    pollGithubRestore,
     releaseRefusalMessage,
     releaseSignInCopy,
     requestRestoreNonce,
     restoreProviders,
     sessionRefusalMessage,
-    startGithubRestore,
     type EphemeralKey,
     type RestoreCandidate,
     type RestoreNonce,
@@ -85,7 +79,6 @@ type Screen =
     /** Opening the node's recovery session and asking for a sign-in nonce. */
     | { name: 'starting' }
     | { name: 'providers' }
-    | { name: 'github'; userCode: string }
     /** Released, fetched and opened: the sign-in copy becoming the account. */
     | { name: 'restoring' }
     /** Handed to WelcomePage, which asks the node and saves it. */
@@ -121,8 +114,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
     const [nonceHeld, setNonceHeld] = useState<{ value: RestoreNonce; at: number } | null>(null);
     const [fetchingNonce, setFetchingNonce] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [githubSessionId, setGithubSessionId] = useState<{ sessionId: string; expiresAt: number; intervalSeconds: number } | null>(null);
     // The account once it has opened, kept in memory only, for "Try again" when the node could not be asked.
     const opened = useRef<BeanPoolIdentity | null>(null);
     const mounted = useRef(true);
@@ -325,39 +316,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         return () => { cancelled = true; clearTimeout(t); };
     }, [name, screen.name]);
 
-    // GitHub: wait for the code to be entered, then release with the node's session.
-    useEffect(() => {
-        if (screen.name !== 'github' || !session || !githubSessionId) return;
-        const s = session;
-        const gh = githubSessionId;
-        const controller = new AbortController();
-        runGithubPoll({
-            poll: () => pollGithubRestore(s.eph, s.collectionId, gh.sessionId),
-            sleep,
-            intervalSeconds: gh.intervalSeconds,
-            expiresAt: gh.expiresAt,
-            signal: controller.signal,
-        }).then(async (result) => {
-            if (controller.signal.aborted) return;
-            switch (result.status) {
-                case 'ok':
-                    return finishSignIn(s, { provider: 'github', sessionId: gh.sessionId, sub: result.sub }).catch(fail);
-                case 'denied':
-                    return toProviders({ tone: 'error', text: 'GitHub said no. Try again, or choose another way.' });
-                case 'expired':
-                    return toProviders({ tone: 'error', text: 'That GitHub code expired. Choose GitHub again for a new one.' });
-                case 'failed': {
-                    const said = typeof result.answer.body.error === 'string' && result.answer.body.error ? result.answer.body.error : null;
-                    return toProviders({ tone: 'error', text: said ?? 'GitHub sign-in could not be checked. Try again, or choose another way.' });
-                }
-            }
-        }).catch((e) => {
-            console.error('[WebRestore] GitHub wait failed:', e);
-            if (!controller.signal.aborted) toProviders({ tone: 'error', text: UNREACHABLE });
-        });
-        return () => controller.abort();
-    }, [screen.name, session, githubSessionId, finishSignIn, toProviders, fail]);
-
     // ---------- the screens' actions ----------
 
     /** "That's me": this browser first (nothing replaces an account here), then the node's session for it. */
@@ -411,26 +369,12 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setBusy(true);
         setNotice(null);
         try {
-            if (provider === 'github') {
-                let got;
-                try {
-                    got = await startGithubRestore(s.eph, s.collectionId);
-                } catch (e) {
-                    if (!(e instanceof DoorUnreachableError)) throw e;
-                    return toProviders({ tone: 'error', text: UNREACHABLE });
-                }
-                if ('answer' in got) return toProviders({ tone: 'error', text: sessionRefusalMessage(got.answer, s.account.callsign) });
-                setCopied(false);
-                setGithubSessionId({ sessionId: got.sessionId, expiresAt: Date.now() + got.expiresInSeconds * 1000, intervalSeconds: got.intervalSeconds });
-                setScreen({ name: 'github', userCode: got.userCode });
-                return;
-            }
             // A nonce is single use and lives ten minutes: every trip to a provider takes a fresh one.
             const fresh = nonceHeld && Date.now() - nonceHeld.at < NONCE_FRESH_MS ? nonceHeld.value : null;
             const n = fresh ?? await fetchNonce(s);
             // fetchNonce has said why.
             if (!n) return;
-            const clientId = n.clientIds[provider as RedirectProvider];
+            const clientId = n.clientIds[provider];
             if (!clientId) return toProviders({ tone: 'error', text: `${providerLabel(provider)} sign-in isn't available here.` });
             const now = Date.now();
             await savePendingRestore({
@@ -444,7 +388,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 expiresAt: now + PENDING_RESTORE_TTL_MS,
             });
             setNonceHeld(null); // spent: this one is on its way to the provider
-            go(providerAuthUrl(provider as RedirectProvider, { clientId, origin: here, nonce: n.nonce }));
+            go(providerAuthUrl(provider, { clientId, origin: here, nonce: n.nonce }));
         } catch (e) {
             console.error('[WebRestore] could not start the sign-in:', e);
             toProviders({ tone: 'error', text: WENT_WRONG });
@@ -476,15 +420,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         const identity = opened.current;
         if (!identity) return backToName();
         await hand(identity).catch(fail);
-    }
-
-    async function copyCode(code: string) {
-        try {
-            await navigator.clipboard.writeText(code);
-            setCopied(true);
-        } catch {
-            setCopied(false);
-        }
     }
 
     // ---------- drawing ----------
@@ -595,30 +530,6 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         {callsign} is told on their devices that the account is being brought back, in case it isn't them.
                     </p>
                     <button type="button" style={quietButton} disabled={busy} onClick={() => void backToName()}>← Not {callsign}</button>
-                </>
-            );
-            break;
-
-        case 'github':
-            body = (
-                <>
-                    <h3 style={heading}>Your GitHub code</h3>
-                    <p style={lede}>Enter this code at GitHub, then come back here. We'll notice.</p>
-                    <p data-testid="restore-github-code" style={{
-                        fontFamily: 'monospace', fontSize: 'min(1.4rem, 7.5vw)', fontWeight: 800, letterSpacing: '0.08em',
-                        margin: '0 0 0.75rem', overflowWrap: 'anywhere',
-                    }}>
-                        {screen.userCode}
-                    </p>
-                    <button type="button" style={secondaryButton} onClick={() => void copyCode(screen.userCode)}>
-                        {copied ? 'Copied ✓' : 'Copy code'}
-                    </button>
-                    <a href={GITHUB_DEVICE_PAGE} target="_blank" rel="noopener noreferrer"
-                        style={{ ...primaryButton, display: 'block', textDecoration: 'none', boxSizing: 'border-box' }}>
-                        Open GitHub
-                    </a>
-                    <p role="status" style={{ ...lede, marginBottom: '0.5rem' }}>Waiting for GitHub…</p>
-                    <button type="button" style={quietButton} onClick={() => toProviders(null)}>← Choose another way</button>
                 </>
             );
             break;

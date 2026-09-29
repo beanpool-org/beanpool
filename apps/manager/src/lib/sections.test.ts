@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { SECTION_SUB_TABS, defaultSubTab, subTabLabel } from './sections';
+import { describe, it, expect, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { SECTION_SUB_TABS, defaultSubTab, subTabLabel, isSettingsSection, useSectionSubTab } from './sections';
 import { singleNodeNavItems } from '../components/layout/FleetSidebar';
 
 const SOURCES: Record<string, string> = {
@@ -30,5 +31,60 @@ describe('the phone menu lists every Settings screen', () => {
         expect(subTabLabel('economy', 'disputes')).toBe('Escrow Disputes');
         expect(subTabLabel('people', undefined)).toBe('Members');
         expect(subTabLabel('home', undefined)).toBeUndefined();
+    });
+});
+
+describe('sections helper functions', () => {
+    it('isSettingsSection validates section names', () => {
+        expect(isSettingsSection('home')).toBe(true);
+        expect(isSettingsSection('people')).toBe(true);
+        expect(isSettingsSection('economy')).toBe(true);
+        expect(isSettingsSection('bulletin')).toBe(true);
+        expect(isSettingsSection('appliance')).toBe(true);
+        expect(isSettingsSection('invalid')).toBe(false);
+        expect(isSettingsSection('')).toBe(false);
+    });
+
+    it('defaultSubTab handles invalid and empty sections', () => {
+        expect(defaultSubTab('invalid')).toBeUndefined();
+        expect(defaultSubTab('home')).toBeUndefined();
+        expect(defaultSubTab('people')).toBe('directory');
+    });
+
+    it('subTabLabel handles unknown subtabs and invalid sections', () => {
+        expect(subTabLabel('invalid', 'disputes')).toBeUndefined();
+        expect(subTabLabel('economy', 'nonexistent')).toBeUndefined();
+    });
+});
+
+describe('useSectionSubTab', () => {
+    it('initializes with the provided initial subtab', () => {
+        const { result } = renderHook(() => useSectionSubTab('directory'));
+        expect(result.current[0]).toBe('directory');
+    });
+
+    it('updates subtab state and triggers onChange callback', () => {
+        const onChange = vi.fn();
+        const { result } = renderHook(() => useSectionSubTab<string>('directory', onChange));
+
+        act(() => {
+            result.current[1]('invites');
+        });
+
+        expect(result.current[0]).toBe('invites');
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith('invites');
+    });
+
+    it('syncs internal state when initial prop changes', () => {
+        const { result, rerender } = renderHook(({ initial }) => useSectionSubTab<string>(initial), {
+            initialProps: { initial: 'directory' },
+        });
+
+        expect(result.current[0]).toBe('directory');
+
+        rerender({ initial: 'roles' });
+
+        expect(result.current[0]).toBe('roles');
     });
 });

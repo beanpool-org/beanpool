@@ -126,7 +126,7 @@ client can appear to miss a route it reaches dynamically. Method mismatches are 
 - /api/local/admin/public-address/claim
 - /api/local/admin/public-address/logs
 - /api/local/admin/public-address/offline
-- /api/local/admin/public-address/restart-sidecar
+- /api/local/admin/public-address/restart-tunnel
 - /api/local/admin/public-address/status
 - /api/local/admin/public-address/update
 - /api/local/admin/pulse/channels

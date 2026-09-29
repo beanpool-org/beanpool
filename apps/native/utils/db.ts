@@ -6,6 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
+import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -283,6 +284,7 @@ async function _doInitDB() {
             author_founding_needed INTEGER DEFAULT 1,
             poll_options TEXT,
             poll_closes_at DATETIME,
+            poll_open_vote INTEGER DEFAULT 0,
             audience_scope TEXT DEFAULT 'public',
             target_group_id TEXT,
             target_pubkey TEXT,
@@ -531,6 +533,8 @@ async function _doInitDB() {
         // Community Polls migrations
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
+        // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -1700,7 +1704,9 @@ export async function createPost(post: any) {
         // Flatten poll parameters to top-level request body
         ...(post.type === 'poll' ? {
             pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
-            durationDays: post.durationDays || 7
+            durationDays: post.durationDays || 7,
+            // Anonymous unless its creator chose an open vote (2026-09-28); only `true` opens one.
+            pollOpenVote: post.pollOpenVote === true,
         } : {}),
         // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
         ...(post.type === 'event' ? {
@@ -1783,14 +1789,15 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
          post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
          post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
          post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null),
+         post.type === 'poll' && post.pollOpenVote === true ? 1 : 0,
          post.audienceScope || post.audience_scope || 'public',
          post.targetGroupId || post.target_group_id || null,
          ...eventCacheColumns(post)]
@@ -2697,7 +2704,7 @@ function emitOwnProfileUpdated(pubkey: string): void {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2728,6 +2735,8 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             await syncedReachPeers(txn, p, reach),
             p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
             p.poll_closes_at || p.pollClosesAt || null,
+            // Every column is written here (INSERT OR REPLACE), so the ballot too: an open vote only when the node says so.
+            (p.pollOpenVote ?? p.poll_open_vote) === true || (p.pollOpenVote ?? p.poll_open_vote) === 1 ? 1 : 0,
             // The node sends 'public' for a row with no scope (rowToPost); the table's default says the same.
             p.audienceScope || p.audience_scope || 'public',
             p.targetGroupId || p.target_group_id || null,
@@ -2750,6 +2759,23 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
     if (Array.isArray(peers)) return JSON.stringify(peers);
     const held = await txn.getFirstAsync<{ reach_peers: string | null }>('SELECT reach_peers FROM posts WHERE id = ?', [p.id]);
     return held?.reach_peers ?? null;
+}
+
+/**
+ * A community that refuses this phone its listings (a members_only answer, services/pillar-sync.ts): every listing this
+ * phone cached of it goes, with its poll votes and RSVPs, but the phone's own posts and everything of its own member's
+ * (messages, deals, Beans) stay. Only this community's database is written: applyDelta checks it is the one asked.
+ * The next sync that may read the listings is a whole one (pillar-sync drops the cursor).
+ */
+async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfPubkey: string | null): Promise<void> {
+    // Without the phone's own key it can't tell its own posts from the others': drop nothing.
+    if (!selfPubkey) return;
+    const own = selfPubkey;
+    const others = 'SELECT id FROM posts WHERE author_pubkey IS NOT ?';
+    await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${others})`, [own]);
+    await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${others})`, [own]);
+    const gone = await txn.runAsync('DELETE FROM posts WHERE author_pubkey IS NOT ?', [own]);
+    if (gone.changes > 0) console.log(`[DB] applyDelta: ${gone.changes} listing(s) of a community that keeps its listings for its members left this phone`);
 }
 
 /**
@@ -2931,6 +2957,11 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
             if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
         }
+
+        // The community refused this phone its listings (a local community's are its members', utils/members-only-listings.ts):
+        // what it kept of them from before goes, so no old listing or pin stays on show and the Market shows the
+        // members-only card.
+        if (delta.postsRefused === true) await dropListingsOfARefusedCommunity(txn, selfPubkey);
 
         // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they
         // arrived. They come after `posts` so that a catch-up sync whose pull left the node BEFORE a push replays
@@ -3572,6 +3603,78 @@ async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | n
     return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId };
 }
 
+/**
+ * The conversation and its people as the node has them now, written to this phone: the other person may have arrived
+ * since the chat was opened (a push, a link, a sync that hasn't run yet). Quiet on any failure; the caller decides.
+ */
+async function refreshConversationFromNode(conversationId: string): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal });
+        if (!res.ok) return;
+        const conv = (await res.json())?.conversation;
+        if (!conv?.id || typeof conv.type !== 'string') return;
+        const database = await getDb();
+        await database.runAsync(
+            'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [conv.id, conv.type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
+        );
+        for (const pk of Array.isArray(conv.participants) ? conv.participants : []) {
+            if (typeof pk === 'string' && pk) {
+                await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
+            }
+        }
+    } catch {
+        // Offline or refused: the lock simply fails, and says so.
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+/** This DM's key context, asking the node for the conversation once if the phone can't resolve the other person. */
+async function requireDmKeyContext(conversationId: string): Promise<DMKeyContext> {
+    let ctx = await getDmKeyContext(conversationId).catch(() => null);
+    if (!ctx) {
+        await refreshConversationFromNode(conversationId);
+        ctx = await getDmKeyContext(conversationId).catch(() => null);
+    }
+    if (!ctx) throw new DmNotLockedError();
+    return ctx;
+}
+
+function lockWith(ctx: DMKeyContext, text: string): { ciphertext: string; nonce: string } {
+    try {
+        return encryptDM(text, ctx);
+    } catch {
+        throw new DmNotLockedError();
+    }
+}
+
+async function isNodeReadableConversation(conversationId: string): Promise<boolean> {
+    const database = await getDb();
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    if (!row) {
+        // Not on this phone yet (a group chat opened from a push): ask the node what it is before deciding, or a
+        // group chat's first line would be taken for a DM and refused as unlockable.
+        await refreshConversationFromNode(conversationId);
+        row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    }
+    return isNodeReadableChatType(row?.type);
+}
+
+/**
+ * A line as it goes to the node (utils/dm-lock.ts). A node-readable chat (group, event, enterprise) takes
+ * plaintext-v1, as designed. Every other conversation is a DM, locked or not sent: DmNotLockedError when the other
+ * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
+ */
+async function lockForConversation(conversationId: string, text: string): Promise<{ ciphertext: string; nonce: string }> {
+    if (await isNodeReadableConversation(conversationId)) {
+        return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+    }
+    return lockWith(await requireDmKeyContext(conversationId), text);
+}
+
 export async function getMessages(conversationId: string, opts?: { limit?: number }) {
     const database = await getDb();
     // With a limit, return only the NEWEST `limit` messages (WhatsApp-style history
@@ -3723,24 +3826,9 @@ const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
     const database = await getDb();
 
-    // E2E-encrypt direct messages (NAT-1). Falls back to legacy plaintext-v1 for
-    // group/system threads or if the peer key can't be resolved or crypto fails.
-    let nonce: string;
-    let ciphertext: string;
-    try {
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (dmCtx) {
-            const enc = encryptDM(text, dmCtx);
-            ciphertext = enc.ciphertext;
-            nonce = enc.nonce;
-        } else {
-            nonce = 'plaintext-v1';
-            ciphertext = encodeBase64(encodeUtf8(text));
-        }
-    } catch {
-        nonce = 'plaintext-v1';
-        ciphertext = encodeBase64(encodeUtf8(text));
-    }
+    // E2E-encrypt direct messages (NAT-1), or send nothing: DmNotLockedError before anything is written, so the chat
+    // can put the words back in the box. A group chat stays plaintext-v1 (lockForConversation).
+    const { ciphertext, nonce } = await lockForConversation(conversationId, text);
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
@@ -3767,6 +3855,9 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     if (metadata) {
         try { baseMeta = JSON.parse(metadata) || {}; } catch {}
     }
+    // A resend replaces its failed row only now, with the words locked: one that can't be locked (or finds no node)
+    // leaves the failed bubble where it was, to be tried again.
+    if (reuseId) await database.runAsync('DELETE FROM messages WHERE id = ?', [reuseId]);
     await database.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [tempId, conversationId, authorPubkey, ciphertext, nonce, JSON.stringify({ ...baseMeta, __sendState: 'sending' }), new Date().toISOString()]
@@ -3853,22 +3944,8 @@ export async function deleteLocalMessage(messageId: string) {
 export async function editMessage(conversationId: string, messageId: string, newText: string) {
     const database = await getDb();
 
-    let nonce: string;
-    let ciphertext: string;
-    try {
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (dmCtx) {
-            const enc = encryptDM(newText, dmCtx);
-            ciphertext = enc.ciphertext;
-            nonce = enc.nonce;
-        } else {
-            nonce = 'plaintext-v1';
-            ciphertext = encodeBase64(encodeUtf8(newText));
-        }
-    } catch {
-        nonce = 'plaintext-v1';
-        ciphertext = encodeBase64(encodeUtf8(newText));
-    }
+    // New words: locked like a new message, or not sent (DmNotLockedError).
+    const { ciphertext, nonce } = await lockForConversation(conversationId, newText);
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
@@ -3901,11 +3978,12 @@ export async function editMessage(conversationId: string, messageId: string, new
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
-    const dmCtx = await getDmKeyContext(conversationId);
-    if (!dmCtx) throw new Error('Photos can only be sent in direct messages.');
+    if (await isNodeReadableConversation(conversationId)) throw new Error('Photos can only be sent in direct messages.');
+    // The picture and its caption are locked, or neither goes (DmNotLockedError).
+    const dmCtx = await requireDmKeyContext(conversationId);
 
-    const encImg = encryptDM(dataUri, dmCtx);   // big blob -> stored as attachment
-    const encCap = encryptDM(caption, dmCtx);   // (optional) caption -> message body
+    const encImg = lockWith(dmCtx, dataUri);   // big blob -> stored as attachment
+    const encCap = lockWith(dmCtx, caption);   // (optional) caption -> message body
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');

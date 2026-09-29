@@ -2,12 +2,32 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { appLockNow } from './app-lock-clock';
 
 const APP_LOCK_KEY = 'beanpool_app_lock_enabled';
 const isWeb = Platform.OS === 'web';
 
+export type ScreenLock = 'none' | 'set' | 'unknown';
+
 /**
- * Check if the device hardware supports local authentication.
+ * What the phone has to ask with: 'set' for any screen lock (a PIN, pattern, password or passcode, with or without a
+ * fingerprint or face), 'none' for no screen lock at all, 'unknown' when the phone can't say.
+ *
+ * From getEnrolledLevelAsync, which counts the screen lock (Android: KeyguardManager#isDeviceSecure; iOS: the
+ * deviceOwnerAuthentication policy). hasHardwareAsync and isEnrolledAsync below answer for a fingerprint or face only.
+ * The web build has none (the module's web stub answers NONE).
+ */
+export async function getScreenLock(): Promise<ScreenLock> {
+    try {
+        const level = await LocalAuthentication.getEnrolledLevelAsync();
+        return level === LocalAuthentication.SecurityLevel.NONE ? 'none' : 'set';
+    } catch {
+        return 'unknown';
+    }
+}
+
+/**
+ * Whether the phone has a fingerprint or face sensor. Not a screen lock check: see getScreenLock.
  */
 export async function hasLocalAuthHardware(): Promise<boolean> {
     try {
@@ -18,7 +38,8 @@ export async function hasLocalAuthHardware(): Promise<boolean> {
 }
 
 /**
- * Check if the user has enrolled any biometrics or passcode/PIN on the device.
+ * Whether a fingerprint or face is enrolled. A phone with only a PIN, pattern or passcode answers false: see
+ * getScreenLock.
  */
 export async function isLocalAuthEnrolled(): Promise<boolean> {
     try {
@@ -29,24 +50,42 @@ export async function isLocalAuthEnrolled(): Promise<boolean> {
 }
 
 /**
+ * True only when the phone says it has no screen lock at all: no PIN, pattern, password, fingerprint or face
+ * (getEnrolledLevelAsync is NONE; isEnrolledAsync above answers for fingerprints and faces only). A phone that can't
+ * say, or the web, answers false. For one plain line under the 12 words (words-on-screen.ts), never for a gate.
+ */
+export async function phoneHasNoScreenLock(): Promise<boolean> {
+    if (isWeb) return false;
+    try {
+        return (await LocalAuthentication.getEnrolledLevelAsync()) === LocalAuthentication.SecurityLevel.NONE;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Authenticates the user using biometric authentication (Face ID / Touch ID)
  * with a fallback to the device passcode, PIN, or pattern.
- * 
- * Returns true if authentication succeeds or if the device has no local
- * security credentials enrolled (to prevent permanent lockouts).
+ *
+ * The phone's lock, before a step that shows or moves the account (the 12 words, pairing a computer, linking a sign-in,
+ * taking the account off the phone) and for App Lock.
+ *
+ * Whatever screen lock the phone has is asked, through its own prompt: a fingerprint or face where one is enrolled,
+ * its PIN, pattern or passcode otherwise (disableDeviceFallback: false). Biometrics stay at the default WEAK: Android
+ * can't offer the PIN beside STRONG on Android 9 and 10. A phone with a PIN but no fingerprint or face used to pass
+ * here unasked, as if it had no lock.
+ *
+ * True when the prompt passes, or when there is nothing to ask with: no screen lock at all, so a member is never
+ * locked out by their phone. A phone that can't say what lock it has keeps the rule from before this check read the
+ * screen lock: asked only with a fingerprint or face enrolled. A prompt that fails, is cancelled or throws gives false:
+ * every caller then does nothing, and the launch lock keeps its Unlock App button to ask again.
  */
 export async function authenticateUser(reason: string): Promise<boolean> {
+    const lock = await getScreenLock();
+    if (lock === 'none') return true;
+    if (lock === 'unknown' && !((await hasLocalAuthHardware()) && (await isLocalAuthEnrolled()))) return true;
     try {
-        const hasHardware = await hasLocalAuthHardware();
-        const isEnrolled = await isLocalAuthEnrolled();
-        
-        if (!hasHardware || !isEnrolled) {
-            // Fail-open: If the device doesn't support local authentication or has
-            // no security passcode set up, do not lock the user out.
-            return true;
-        }
-
-        const res = await LocalAuthentication.authenticateAsync({
+        const res = await phoneLockPrompt({
             promptMessage: reason,
             fallbackLabel: 'Use Passcode',
             disableDeviceFallback: false,
@@ -57,6 +96,83 @@ export async function authenticateUser(reason: string): Promise<boolean> {
         console.warn('Local authentication error:', e);
         return false;
     }
+}
+
+/**
+ * The phone's own lock prompt, the one way the app opens it: authenticateAsync, with the prompt marker below around it so
+ * the return lock knows the time it was open is not time away. authenticateUser and node-admin's requireDeviceUnlock
+ * (Manage community, sign in on a computer, take over with this phone) both ask through here, each with its own rule for
+ * a phone with no lock. Answers and throws what authenticateAsync does; the marker closes either way.
+ */
+export async function phoneLockPrompt(
+    options: LocalAuthentication.LocalAuthenticationOptions,
+): Promise<LocalAuthentication.LocalAuthenticationResult> {
+    promptOpened();
+    let passed = false;
+    try {
+        const res = await LocalAuthentication.authenticateAsync(options);
+        passed = res.success === true;
+        return res;
+    } finally {
+        promptClosed(passed);
+    }
+}
+
+/**
+ * A stretch of time the phone's own lock prompt was open: from the first phoneLockPrompt opening to the last one closing,
+ * with passed true when the one that closed it passed. Overlapping calls make one stretch. expo-local-authentication
+ * 55.0.18 answers a second call while one is open with app_cancel at once, so the first closes it; 55.0.15 answers the
+ * first with app_cancel and the second takes over the prompt and closes it. Either way the closing answer is the one the
+ * member gave last; an earlier pass inside the stretch doesn't count, and a stretch still open has not passed.
+ *
+ * The prompt takes the app out of the front while it is open: Android 8-10's PIN screen backgrounds it, iOS's makes it
+ * inactive. The return lock (utils/return-lock.ts) reads these so that time is not counted as the member being away.
+ * openedAt and closedAt are on App Lock's clock (utils/app-lock-clock.ts), as the return lock's own times are: the phone's
+ * since-boot clock, which setting the phone's date and time can't move. NaN where a phone couldn't read it: such a stretch
+ * covers none of the time away.
+ */
+export type LocalAuthPromptStretch = { openedAt: number; closedAt: number | null; passed: boolean };
+
+/** Kept to the last few: the return lock only looks at the ones since the app last left the front. */
+const PROMPT_STRETCHES_KEPT = 16;
+let openPrompts = 0;
+const promptStretches: LocalAuthPromptStretch[] = [];
+let promptCloseWaiters: Array<() => void> = [];
+
+function promptOpened(): void {
+    if (openPrompts++ === 0) {
+        promptStretches.push({ openedAt: appLockNow(), closedAt: null, passed: false });
+        if (promptStretches.length > PROMPT_STRETCHES_KEPT) promptStretches.shift();
+    }
+}
+
+function promptClosed(passed: boolean): void {
+    if (--openPrompts > 0) return;
+    openPrompts = 0;
+    const current = promptStretches[promptStretches.length - 1];
+    if (current) {
+        current.closedAt = appLockNow();
+        current.passed = passed;
+    }
+    const waiters = promptCloseWaiters;
+    promptCloseWaiters = [];
+    waiters.forEach(resolve => resolve());
+}
+
+/** Whether one of phoneLockPrompt's prompts is open now. */
+export function isLocalAuthPromptOpen(): boolean {
+    return openPrompts > 0;
+}
+
+/** The prompt stretches, oldest first; the last one has closedAt null while a prompt is open. Copies. */
+export function localAuthPromptStretches(): LocalAuthPromptStretch[] {
+    return promptStretches.map(s => ({ ...s }));
+}
+
+/** Resolves when no prompt is open: at once if none is. */
+export function whenLocalAuthPromptsClose(): Promise<void> {
+    if (openPrompts === 0) return Promise.resolve();
+    return new Promise(resolve => promptCloseWaiters.push(resolve));
 }
 
 /**
@@ -107,3 +223,9 @@ export async function setAppLockEnabled(enabled: boolean): Promise<void> {
         console.error('Failed to save app lock preference:', e);
     }
 }
+
+/** Settings' App Lock, turned on on a phone with no screen lock: it would ask nothing, so it stays off and says why. */
+export const APP_LOCK_NEEDS_SCREEN_LOCK =
+    "App Lock asks for your phone's own screen lock (a PIN, pattern, password, fingerprint or face) when BeanPool " +
+    "opens. This phone has no screen lock set, so there is nothing for it to ask. Set one in your phone's settings, " +
+    'then turn App Lock on.';

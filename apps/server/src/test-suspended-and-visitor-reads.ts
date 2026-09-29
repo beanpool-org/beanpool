@@ -71,6 +71,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
 
 const MODE = READ_AUTH_OFF ? '[read auth off]' : '[defaults]';
 let BASE = '';
@@ -226,11 +227,12 @@ async function main() {
     const oonaJoin = joinOpenDoor(oona, 'oona-sub');
     assert(oonaJoin.ok === true, `a member joins through the open door (${JSON.stringify(oonaJoin).slice(0, 120)})`);
 
-    // A poll Vic votes on: its voters are member-only.
+    // A poll Vic votes on: an open vote, whose voters are member-only. (Polls are anonymous unless their creator chooses
+    // an open vote, 2026-09-28: an anonymous one names its voters to nobody, test-privacy-defaults.)
     const poll = se.createPost('poll', 'community', 'Where should the seed bank go?', '', 0, 'fixed', olive.pubKeyHex,
         undefined, undefined, undefined, false, undefined, false,
-        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }] });
-    assert(!!poll?.id, 'Olive opens a poll');
+        { pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true });
+    assert(!!poll?.id && poll.pollOpenVote === true, 'Olive opens a poll, an open vote');
     const pollId = poll!.id;
     let voteIndex = 0;
     const vote = async () => {
@@ -247,7 +249,8 @@ async function main() {
     const deeConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, dee.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
     assert(deeConv.status === 200 && !!deeConv.body?.conversation?.id, `Olive opens a DM to a key with no account here (${deeConv.status} ${deeConv.text.slice(0, 100)})`);
     const deeConvId = deeConv.body?.conversation?.id as string;
-    const deeMsg = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ciphertext: 'aGVsbG8=', nonce: 'bm9uY2U=' }, olive);
+    const deeLine = lockedDm();   // a DM line goes in encrypted; section 2 looks for this ciphertext
+    const deeMsg = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ...deeLine }, olive);
     assert(deeMsg.status === 200, `…and sends it a message (${deeMsg.status} ${deeMsg.text.slice(0, 80)})`);
     const tex = keypair('TransferTex');
     const texTx = se.transfer('genesis', tex.pubKeyHex, 5, 'welcome beans', 'direct', true);
@@ -372,7 +375,7 @@ async function main() {
         assert(convs.status === 200 && (convs.body?.conversations ?? []).some((c: any) => c.id === deeConvId),
             `the DM-made visitor reads its own conversation list, with Olive's DM in it (${convs.status})`);
         const thread = await get(`/api/messages/${deeConvId}`, dee);
-        assert(thread.status === 200 && thread.text.includes('aGVsbG8='), `…and the DM itself, with Olive's message (${thread.status})`);
+        assert(thread.status === 200 && thread.text.includes(deeLine.ciphertext), `…and the DM itself, with Olive's message (${thread.status})`);
         const deeBalance = await get(`/api/ledger/balance/${dee.pubKeyHex}`, dee);
         assert(deeBalance.status === 200, `…and its own balance (${deeBalance.status})`);
         const texBalance = await get(`/api/ledger/balance/${tex.pubKeyHex}`, tex);
@@ -408,7 +411,7 @@ async function main() {
         const disMe = await get('/api/community/me', dis);
         assert(disMe.status === 200, `a disabled member still reads their own standing (${disMe.status})`);
         const sueDm = se.createConversation('dm', [olive.pubKeyHex, sue.pubKeyHex], olive.pubKeyHex)!;
-        const sueSends = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: sue.pubKeyHex, ciphertext: 'c29ycnk=', nonce: 'bm9uY2U=' }, sue);
+        const sueSends = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: sue.pubKeyHex, ...lockedDm() }, sue);
         assert(sueSends.status === 200, `a suspended member still sends a message, as suspension allows (${sueSends.status} ${sueSends.text.slice(0, 80)})`);
 
         // ── 3. /ws ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -428,14 +431,19 @@ async function main() {
         clear();
         await vote();
         assert(gotVoters(sockets.member), "a member's socket gets the vote with its voters");
+        // A socket with no member's key (the re-key-invalidated key's, one with no row yet, an unsigned one) hears no
+        // listing doorbell on a local node, whose listings are its members' (2026-09-28); it heard a bare one before. A
+        // socket that holds a member's or a visitor's key still hears it, bare.
+        const keyless = new Set(['rex', 'nia', 'unsigned']);
         for (const [label, key] of noFeed) {
             const s = sockets[key];
-            assert(heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears the poll changed and gets no voter`);
+            if (keyless.has(key)) assert(!heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears nothing of the vote, and gets no voter`);
+            else assert(heardVote(s) && !gotVoters(s) && !s.raw.some(namesVoter), `${label} socket hears the poll changed and gets no voter`);
         }
 
         clear();
-        const oliveToDee = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ciphertext: 'YWdhaW4=', nonce: 'bm9uY2U=' }, olive);
-        const oliveToSue = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: olive.pubKeyHex, ciphertext: 'aGk=', nonce: 'bm9uY2U=' }, olive);
+        const oliveToDee = await post('/api/messages/send', { conversationId: deeConvId, authorPubkey: olive.pubKeyHex, ...lockedDm() }, olive);
+        const oliveToSue = await post('/api/messages/send', { conversationId: sueDm.id, authorPubkey: olive.pubKeyHex, ...lockedDm() }, olive);
         assert(oliveToDee.status === 200 && oliveToSue.status === 200, 'Olive messages the visitor and the suspended member');
         await sleep(350);
         const gotMessage = (s: Socket, conv: string) => s.events.some(e => e.type === 'new_message' && e.conversationId === conv);

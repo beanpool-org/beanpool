@@ -78,6 +78,7 @@ import type Koa from 'koa';
 import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
 import { clientLimiterKey, isSharedSourceKey } from './client-ip.js';
 import { logger } from './logger.js';
+import { logAddressTag } from './log-address.js';
 
 export const SOURCE_FREE_FAILURES = 5;
 export const BASE_DELAY_MS = 2_000;
@@ -328,13 +329,14 @@ export function notePasswordFailure(key: string, now = Date.now()): void {
         if (shared) s.closedUntil = Math.min(s.closedUntil, now + SHARED_SOURCE_MAX_DELAY_MS);
         if (s.failures === SOURCE_FREE_FAILURES + 1) {
             try {
-                logger.security('AUTH', `[password-brake] ${s.failures} wrong admin passwords from ${key}; that address now backs off (up to ${(shared ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) / 60_000} min between attempts). Other addresses and key sign-in are unaffected.`);
+                // The address by its daily keyed hash, never itself (log-address.ts).
+                logger.security('AUTH', `[password-brake] ${s.failures} wrong admin passwords from ${logAddressTag(key)} (the address, hashed with a key that changes daily); that address now backs off (up to ${(shared ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) / 60_000} min between attempts). Other addresses and key sign-in are unaffected.`);
             } catch { /* logging never blocks auth */ }
         }
         if (shared && now - lastSharedLog > 10 * 60_000) {
             lastSharedLog = now;
             try {
-                logger.warn('AUTH', `[password-brake] ${key} passes on requests for other people, but it is not in TRUSTED_PROXIES, so this node sees everyone behind it as one address: wrong admin passwords from any of them make all of them wait (up to ${SHARED_SOURCE_MAX_DELAY_MS / 60_000} min). Add the proxy's address to TRUSTED_PROXIES in the node's .env and restart the node; the restart also clears the brake.`);
+                logger.warn('AUTH', `[password-brake] A proxy (${logAddressTag(key)}) passes on requests for other people, but it is not in TRUSTED_PROXIES, so this node sees everyone behind it as one address: wrong admin passwords from any of them make all of them wait (up to ${SHARED_SOURCE_MAX_DELAY_MS / 60_000} min). Add your proxy's address to TRUSTED_PROXIES in the node's .env and restart the node; the restart also clears the brake.`);
             } catch { /* logging never blocks auth */ }
         }
     }

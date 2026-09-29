@@ -86,6 +86,7 @@ import {
 import Database from 'better-sqlite3';
 import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
+import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
@@ -535,8 +536,11 @@ export async function createSealedBackup(opts: BackupSource = {}): Promise<Seale
         // Only these names go in the tar — the database, the config, the take-over bundle and the image
         // store — so it never swallows data/snapshots/ or anything else in data/.
         const dbPath = path.join(stage, 'state.db');
-        if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
-        else writeDbSnapshot(dbPath);
+        if (opts.dbFile) {
+            fs.copyFileSync(opts.dbFile, dbPath);
+            // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
+            forgetAddressesInStoredCopy(dbPath);
+        } else writeDbSnapshot(dbPath);
         const configPath = path.join(dataDir(), 'node_config.json');
         if (fs.existsSync(configPath)) {
             fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
@@ -605,8 +609,11 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
     try {
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
         const dbPath = path.join(stage, 'state.db');
-        if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
-        else writeDbSnapshot(dbPath);
+        if (opts.dbFile) {
+            fs.copyFileSync(opts.dbFile, dbPath);
+            // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
+            forgetAddressesInStoredCopy(dbPath);
+        } else writeDbSnapshot(dbPath);
         const configPath = path.join(dataDir(), 'node_config.json');
         if (fs.existsSync(configPath)) {
             fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));

@@ -92,7 +92,7 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.getByText('Step 4/4')).toBeInTheDocument();
 
         // Operational buttons
-        expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Take offline/i })).toBeInTheDocument();
     });
 
@@ -260,12 +260,12 @@ describe('PublicAddressPanel Component', () => {
         });
     });
 
-    it('requires confirmation step before restarting the tunnel sidecar', async () => {
+    it('requires confirmation step before restarting the tunnel inside the server', async () => {
         let restartCalled = false;
 
         vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
             const strUrl = String(url);
-            if (strUrl.includes('/api/local/admin/public-address/restart-sidecar') && opts?.method === 'POST') {
+            if (strUrl.includes('/api/local/admin/public-address/restart-tunnel') && opts?.method === 'POST') {
                 restartCalled = true;
                 return Promise.resolve({
                     ok: true,
@@ -294,24 +294,64 @@ describe('PublicAddressPanel Component', () => {
         render(<PublicAddressPanel activeNode={mockActiveNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         });
 
-        // Click Reset Tunnel
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        // Click Restart tunnel
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
 
         // Confirmation modal appears
-        expect(screen.getByText('Restart Tunnel Sidecar')).toBeInTheDocument();
-        expect(screen.getByText(/Are you sure you want to force-restart the Cloudflare tunnel sidecar process/i)).toBeInTheDocument();
+        expect(screen.getByText('Restart the tunnel')).toBeInTheDocument();
+        expect(screen.getByText(/Restart the Cloudflare tunnel inside this server\?/i)).toBeInTheDocument();
         expect(restartCalled).toBe(false);
 
         // Click Confirm inside modal
-        const confirmBtn = screen.getByRole('button', { name: 'Restart Sidecar' });
+        const confirmBtn = screen.getByRole('button', { name: 'Restart now' });
         fireEvent.click(confirmBtn);
 
         await waitFor(() => {
             expect(restartCalled).toBe(true);
         });
+        expect(screen.queryByText(/sidecar/i)).not.toBeInTheDocument();
+    });
+
+    const statusOnly = (payload: Record<string, unknown>) =>
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? payload : { logs: [] }),
+        } as Response));
+
+    it('shows the tunnel inside the server as it really is: connected, or retrying and why', async () => {
+        statusOnly({
+            status: 'live', hostname: 'cairns.beanpool.org', mode: 'tunnel',
+            tunnel: { state: 'connected', since: '2026-09-28T10:00:00Z', connections: 4, reason: null, version: '2026.9.3' },
+        });
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('public-address-tunnel')).toHaveTextContent('Tunnel: connected (4)');
+        });
+        unmount();
+
+        vi.restoreAllMocks();
+        statusOnly({
+            status: 'live', hostname: 'cairns.beanpool.org', mode: 'tunnel',
+            tunnel: { state: 'retrying', since: '2026-09-28T10:02:00Z', connections: 0, reason: 'Unauthorized: Tunnel not found' },
+        });
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('public-address-tunnel')).toHaveTextContent(/Tunnel: retrying: Unauthorized: Tunnel not found since/);
+        });
+        expect(screen.queryByTestId('docker-socket-warning')).not.toBeInTheDocument();
+    });
+
+    it('warns when docker-compose.yml still mounts Docker\'s control socket', async () => {
+        statusOnly({ status: 'none', dockerSocket: true, tunnel: { state: 'off', connections: 0, reason: null } });
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('docker-socket-warning')).toHaveTextContent(/still mounts Docker's control socket/);
+        });
+        expect(screen.getByTestId('docker-socket-warning')).toHaveTextContent(/controls the whole machine/);
     });
 
     it('requires confirmation step before taking the node offline', async () => {
@@ -471,11 +511,11 @@ describe('PublicAddressPanel Component', () => {
         render(<PublicAddressPanel activeNode={mockActiveNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         });
 
         // Open modal
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
         expect(screen.getByRole('dialog')).toBeInTheDocument();
 
         // Dismiss via Escape key
@@ -483,7 +523,7 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
         // Open modal again
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeInTheDocument();
 

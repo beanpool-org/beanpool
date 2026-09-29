@@ -273,7 +273,9 @@ async function main(): Promise<void> {
         const conns = after.connectors as { address: string; trustLevel: string }[];
         assert(conns.length === 1 && conns[0].address.includes(setup.neighbour) && conns[0].trustLevel === 'peer', 'the link with the other community is back; no mirror pin');
         assert(after.lastPromotionAudit?.ok === true && after.promotionAuditPending === false, 'the ledger adds up');
-        assert(after.tunnelTokenFile === TUNNEL_TOKEN && after.publicAddress?.hostname === 'phonetown.beanpool.org', 'the web address and its tunnel token are back');
+        assert(after.tunnel.wantedToken === TUNNEL_TOKEN && after.tunnel.childToken === TUNNEL_TOKEN && ['starting', 'connected'].includes(after.tunnel.state)
+            && after.publicAddress?.hostname === 'phonetown.beanpool.org',
+            `the web address is back, and its tunnel runs inside this server on its token (${after.tunnel.state})`);
         assert(after.envelope.state === 'sealed' && JSON.stringify(after.envelope.owners) === '["Anna"]' && JSON.stringify(after.envelope.codes) === '[1]',
             'the keys are locked again on this server, to @Anna and code #1');
         assert(after.progress.codeUsed === null, 'no "your recovery code was used" notice: an owner\'s phone spends nothing');

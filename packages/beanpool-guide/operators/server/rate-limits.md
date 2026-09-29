@@ -34,13 +34,13 @@ This one slows down anyone guessing the admin password, without ever letting the
 
 Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app.
 
-If it keeps happening, someone is guessing your password. The logs say which address. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
+If it keeps happening, someone is guessing your password. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes the next day. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
 
 ## Many people on one connection
 
 A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again.
 
-If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES. Add the proxy's address there and restart the server; the restart also clears the brake.
+If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
 
 ## Finding out which limit
 

@@ -276,8 +276,6 @@ run_federation_suites() {
       test-recovery-shares
       test-sso
       test-sso-unavailable
-      test-github-device
-      test-github-poll-limit
       test-daily-pulse
       test-pairing-relay
       test-pairing-routes
@@ -375,19 +373,24 @@ run_federation_suites() {
       test-open-join-failover
       test-standby-visitor-marks
       test-standby-owner-deleted
+      test-delete-scrubs-posts
       test-standby-board-standing
       test-place-watch-failover
       test-standby-rekey
       test-takeover-parity
       test-replication-manifest
       test-standby-ledger-copy
+      test-standby-ledger-gate
       test-standby-community-settings
       test-standby-listings-verbatim
       test-standby-standing
       test-standby-health
+      test-address-retention
       test-standby-in-flight
       test-standby-devices
+      test-standby-refusal-keeps-copy
       test-recovery-tombstones
+      test-github-sign-in-removed
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes
@@ -414,6 +417,7 @@ run_federation_suites() {
       test-registrar-names-record
       test-registrar-name-watch
       test-read-auth-default
+      test-privacy-defaults
       test-activity-feed-members-only
       test-members-contact-visibility
       test-contact-trade-partners
@@ -426,6 +430,8 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-tunnel-connector
+      test-no-docker-socket
       test-node-config-public
       test-registrar-contract
       test-invite-trampoline
@@ -466,6 +472,7 @@ run_federation_suites() {
       test-etag-short-circuit
       test-api-headers-and-feed-etag
       test-directory-publisher
+      test-website-directory-map
       test-members-holiday
       test-admin-seed-invite
       test-admin-genesis-pubkey
@@ -525,6 +532,7 @@ run_federation_suites() {
       test-groups-sync-and-removal
       test-groups-chat
       test-chat-parity
+      test-dm-never-plaintext
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession

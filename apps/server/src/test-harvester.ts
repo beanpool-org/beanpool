@@ -22,6 +22,9 @@
  *   short, on the FIRST pull and every pull (round 4 — there is no opt-in to wait for any more). The harvester
  *   keeps it, keeps saying it is short, and the shortfall survives to the manager's download. A node whose
  *   backups are whole is never marked.
+ * - a readable backup from a server older than this one, whose database names internet addresses (its copy-access
+ *   record, and main's log at its 2,500-line cap): kept without them, in the file's bytes too, with every entry and log
+ *   line; one that holds none is kept byte for byte (services/address-retention.ts).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-harvester.ts
  */
@@ -34,6 +37,7 @@ import Koa from 'koa';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import Database from 'better-sqlite3';
 import { generateKeyPair, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromString, peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -44,6 +48,7 @@ import {
     type FleetNodeConfig,
 } from './services/harvester.js';
 import { sealFileVerified, MISSING_MEMBER } from './services/sealed-backup.js';
+import { writeDbSnapshot } from './services/snapshot-scheduler.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { attachmentKey, getImageStore, postPhotoKey, sha256Hex } from './storage/image-store.js';
 import { ensureGenesis } from './genesis.js';
@@ -201,6 +206,45 @@ async function harvestLocalNode(): Promise<void> {
         'state.db': oldStateDb, 'node_config.json': Buffer.from('{}'),
         [MISSING_MEMBER]: shortManifest, ...shortImages,
     }));
+    // Two stand-ins that send a real database (services/address-retention.ts). One as a server older than this one
+    // sends it: internet addresses in its copy-access record and in its log (main's, at its 2,500-line cap, 1 line in
+    // 10 naming one as main wrote them). One that holds none, with free pages in it, so that a rewrite could not come
+    // back byte for byte.
+    const realDbs = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-dbs-'));
+    const olderDbFile = path.join(realDbs, 'older.db');
+    db.exec(`VACUUM INTO '${olderDbFile.replace(/'/g, "''")}'`);
+    {
+        const older = new Database(olderDbFile);
+        older.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('replication_access', JSON.stringify({
+            lastPullAt: Date.now() - 60_000, lastPullIp: '203.0.113.5', lastPullAuth: 'token', totalPulls: 1,
+            recent: [{ at: Date.now() - 60_000, ip: '198.51.100.5', auth: 'token' }],
+        }));
+        older.prepare('DELETE FROM system_logs').run();
+        const line = older.prepare('INSERT INTO system_logs (level, category, message) VALUES (?, ?, ?)');
+        older.transaction(() => {
+            for (let i = 0; i < 2500; i++) {
+                const n = i % 250;
+                if (i % 30 === 0) line.run('SECURITY', 'AUTH', `[password-brake] 6 wrong admin passwords from 198.51.100.${n}; that address now backs off`);
+                else if (i % 30 === 10) line.run('WARN', 'AUTH', `[gateway] rate limit reached for ip:203.0.113.${n}; answering 429 until the window resets`);
+                else if (i % 30 === 20) line.run('WARN', 'AUTH', `[gateway] rate limit reached for ip:2001:db8:15::${i.toString(16)}; answering 429 until the window resets`);
+                else line.run('INFO', 'P2P', `[Sync] pulled ${i % 37} posts and ${i % 11} offers from a peer in ${100 + (i % 900)} ms`);
+            }
+        })();
+        older.close();
+    }
+    const olderDbBytes = fs.readFileSync(olderDbFile);
+    const olderTar = fs.readFileSync(tarOf({ 'state.db': olderDbBytes, 'node_config.json': Buffer.from('{}') }));
+    const cleanDbFile = path.join(realDbs, 'clean.db');
+    writeDbSnapshot(cleanDbFile);
+    {
+        const clean = new Database(cleanDbFile);
+        clean.pragma('secure_delete = ON');
+        clean.prepare("INSERT INTO node_config (key, value) VALUES ('harvest-free-pages', ?)").run('x'.repeat(40_000));
+        clean.prepare("DELETE FROM node_config WHERE key = 'harvest-free-pages'").run();
+        clean.close();
+    }
+    const cleanDbBytes = fs.readFileSync(cleanDbFile);
+    const cleanTar = fs.readFileSync(tarOf({ 'state.db': cleanDbBytes, 'node_config.json': Buffer.from('{}') }));
     const app = new Koa();
     app.use(async (ctx, next) => {
         if (ctx.path === '/old-node/api/local/admin/backup') {
@@ -236,7 +280,14 @@ async function harvestLocalNode(): Promise<void> {
             ctx.body = { memberCount: 3 + hits.short, postCount: 7 };
             return;
         }
-        if (ctx.path === '/old-node/api/community/info' || ctx.path === '/down-node/api/community/info') {
+        if (ctx.path === '/older-node/api/local/admin/backup' || ctx.path === '/clean-node/api/local/admin/backup') {
+            ctx.set('X-Backup-Contents', 'database+images');
+            ctx.set('X-Backup-Images', '0/0');
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.body = ctx.path.startsWith('/older-node/') ? olderTar : cleanTar;
+            return;
+        }
+        if (['/old-node', '/down-node', '/older-node', '/clean-node'].some((p) => ctx.path === `${p}/api/community/info`)) {
             ctx.body = { memberCount: 3, postCount: 7 };
             return;
         }
@@ -587,6 +638,37 @@ async function harvestLocalNode(): Promise<void> {
         // A node whose backups are whole is never marked short.
         assert(!(await harvestNode(oldNodeForCheck, true)).shortImages,
             'a node whose backups are whole is never marked short');
+
+        // ── A readable backup from a server older than this one: kept without its internet addresses ──
+        //
+        // Main never expired an address, and logged them: the harvester keeps none, in the file's bytes either, and
+        // keeps the record's entries and every log line (services/address-retention.ts). One that holds none is
+        // kept byte for byte.
+        const madeUp = /203\.0\.113\.\d{1,3}|198\.51\.100\.\d{1,3}|2001:db8:/g;
+        const addressesInFile = (file: string) => [...new Set(fs.readFileSync(file).toString('latin1').match(madeUp) ?? [])];
+        assert(addressesInFile(olderDbFile).length >= 3, `(the older server's backup has addresses in it: ${addressesInFile(olderDbFile).length})`);
+        const olderNode: FleetNodeConfig = { id: 'bindarrabi', name: 'Older Node', url: url + '/older-node', replicationToken: TOKEN };
+        const h1 = await harvestNode(olderNode, true);
+        const olderDir = path.join(dataDir, 'backups', nodeSlug(olderNode));
+        for (const kept of [path.join(olderDir, 'state.db'), path.join(olderDir, 'history', `beanpool-${today}.db`)]) {
+            const left = fs.existsSync(kept) ? addressesInFile(kept) : ['(no file)'];
+            let access: { lastPullIp?: unknown; lastPullAuth?: unknown; recent?: { ip?: unknown }[] } | null = null;
+            let lines = 0;
+            if (fs.existsSync(kept)) {
+                const conn = new Database(kept, { readonly: true });
+                access = JSON.parse((conn.prepare("SELECT value FROM node_config WHERE key = 'replication_access'").get() as { value: string }).value);
+                lines = (conn.prepare('SELECT COUNT(*) AS n FROM system_logs').get() as { n: number }).n;
+                conn.close();
+            }
+            assert(h1.status === 'ok' && left.length === 0 && access?.lastPullIp === null && access?.recent?.[0]?.ip === null
+                && access?.lastPullAuth === 'token' && lines === 2500,
+                `an older server's readable backup is kept without its internet addresses, file bytes included, with its record's entries and ${lines}/2500 log lines (${path.relative(dataDir, kept)}: ${left.join(', ') || 'none'})`);
+        }
+        const cleanNode: FleetNodeConfig = { id: 'gippsland', name: 'Clean Node', url: url + '/clean-node', replicationToken: TOKEN };
+        const h2 = await harvestNode(cleanNode, true);
+        const cleanKept = path.join(dataDir, 'backups', nodeSlug(cleanNode), 'state.db');
+        assert(h2.status === 'ok' && fs.existsSync(cleanKept) && fs.readFileSync(cleanKept).equals(cleanDbBytes),
+            `a readable backup that holds no address is kept byte for byte, as before (${h2.status}: ${h2.error})`);
 
         // A wrong admin password: the harvest reports it; nothing crashes.
         const wrongPw: FleetNodeConfig = { ...tokenOnly, replicationToken: undefined, adminPassword: 'wrong-password-1!' };

@@ -17,6 +17,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createConversation } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8546;
 const BASE = `https://localhost:${PORT}`;
@@ -85,20 +86,24 @@ async function main() {
         { type: 'dm', createdBy: C.pubKeyHex, participants: [A.pubKeyHex, B.pubKeyHex], name: 'scam' });
     assert(a15bad.status === 403, `A2-15: creator-not-a-participant is DENIED (got ${a15bad.status} ${a15bad.error ?? ''})`);
     const a15ok = await signedFetch('POST', '/api/messages/conversation', C,
-        { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
+        { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex] });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
+    // A DM has no name: one typed for it would be the member's words, stored where the node can read them.
+    const a15named = await signedFetch('POST', '/api/messages/conversation', C,
+        { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
+    assert(a15named.status === 400, `a DM created with a name is REFUSED (got ${a15named.status} ${a15named.error ?? ''})`);
     const a15group = await signedFetch('POST', '/api/messages/conversation', C,
         { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex, B.pubKeyHex], name: 'old style' });
     assert(a15group.status === 410, `the removed chat group answers 410 Gone (got ${a15group.status} ${a15group.error ?? ''})`);
 
     // Send message — spoof check (signed by A but claiming to be B) is DENIED.
     const msgSpoofed = await signedFetch('POST', '/api/messages/send', A,
-        { conversationId: conv.id, authorPubkey: B.pubKeyHex, ciphertext: 'impersonating B', nonce: '123' });
+        { conversationId: conv.id, authorPubkey: B.pubKeyHex, ...lockedDm() });
     assert(msgSpoofed.status === 403, `send message: spoofed authorPubkey is DENIED (got ${msgSpoofed.status} ${msgSpoofed.error ?? ''})`);
 
     // Send message — participant A sends valid message.
     const msgRes = await signedFetch('POST', '/api/messages/send', A,
-        { conversationId: conv.id, authorPubkey: A.pubKeyHex, ciphertext: 'hello', nonce: '123' });
+        { conversationId: conv.id, authorPubkey: A.pubKeyHex, ...lockedDm() });
     assert(msgRes.status === 200, `send message: A sends message in A-B DM (got ${msgRes.status})`);
 
     const msgId = (db.prepare("SELECT id FROM messages WHERE conversation_id=? LIMIT 1").get(conv.id) as any)?.id;

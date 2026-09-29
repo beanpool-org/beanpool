@@ -1,14 +1,15 @@
 /**
  * Linking a sign-in asks the phone's lock first (PR #1205 review 4112404429).
  *
- * Account Protection's "Protect with" Google/GitHub/… (and Connect again) seals the account's private key AND its 12
+ * Account Protection's "Protect with" Google/Facebook/… (and Connect again) seals the account's private key AND its 12
  * words to whichever sign-in account is used. With no check, anyone holding the unlocked phone could link THEIR OWN
  * Google account, then restore the account on their own phone with it. The global door does the same for the phone's
  * account when it joins with it: the join carries a recovery copy sealed to the door's sign-in.
  *
  * - connectAndDeposit asks the lock it is handed before anything starts: no node, no provider, no read of the words.
- *   The sheet hands it Settings' check (LocalAuth.authenticateUser), so a phone with no lock is let through, as
- *   Settings lets it through. A check that doesn't pass reads as a cancel: the sheet closes, nothing linked.
+ *   The sheet hands it Settings' check (LocalAuth.authenticateUser), so a phone with no screen lock is let through, as
+ *   Settings lets it through, and one with a screen PIN but no fingerprint or face is asked for its PIN. A check that
+ *   doesn't pass reads as a cancel: the sheet closes, nothing linked.
  * - The only account that skips it is a key the join wizard has just made (the member's own new account).
  * - The global door asks the same check before its sign-in when the key is the phone's own (not one the door made).
  *
@@ -23,7 +24,6 @@ import * as path from 'node:path';
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
-    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),
@@ -51,11 +51,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),
 }));
 vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(),
     hasHardwareAsync: vi.fn(),
     isEnrolledAsync: vi.fn(),
     authenticateAsync: vi.fn(),
@@ -76,6 +79,7 @@ vi.mock('../identity', async (importOriginal) => {
 });
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as WebBrowser from 'expo-web-browser';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { authenticateUser } from '../LocalAuth';
@@ -83,8 +87,6 @@ import { getMnemonic } from '../identity';
 
 const NODE = 'https://test.example';
 const NONCE = '/api/recovery/sso-nonce';
-const START = '/api/recovery/sso/github/start';
-const POLL = '/api/recovery/sso/github/poll';
 const DEPOSIT = '/api/recovery/shares/sso';
 
 // Test phrase only (a BIP-39 vector), never a real account's.
@@ -96,12 +98,17 @@ const MEMBER = {
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no hardware' | 'nothing enrolled';
+type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no screen lock and no sensor'
+    | 'no screen lock and a sensor with nothing enrolled';
+/** The lock a prompt asks for: a fingerprint or face, or a screen PIN, pattern or passcode alone. */
+type Lock = 'a fingerprint or face' | 'a PIN and no sensor' | 'a PIN and a sensor with nothing enrolled';
 
 /** The phone's lock, as expo-local-authentication reports it. */
-function phone(kind: Phone) {
-    vi.mocked(LocalAuthentication.hasHardwareAsync).mockResolvedValue(kind !== 'no hardware');
-    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(kind !== 'nothing enrolled');
+function phone(kind: Phone, lock: Lock = 'a fingerprint or face') {
+    const noLock = kind === 'no screen lock and no sensor' || kind === 'no screen lock and a sensor with nothing enrolled';
+    vi.mocked(LocalAuthentication.getEnrolledLevelAsync).mockResolvedValue((noLock ? 0 : lock === 'a fingerprint or face' ? 3 : 1) as never);
+    vi.mocked(LocalAuthentication.hasHardwareAsync).mockResolvedValue(kind !== 'no screen lock and no sensor' && lock !== 'a PIN and no sensor');
+    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(!noLock && lock === 'a fingerprint or face');
     vi.mocked(LocalAuthentication.authenticateAsync).mockImplementation(async () => {
         events.push('prompt');
         if (kind === 'prompt throws') throw new Error('prompt failed');
@@ -120,24 +127,25 @@ function answer(status: number, body: unknown = {}): Response {
     } as unknown as Response;
 }
 
-/** The member's node, through a GitHub sign-in and a deposit. Every request is an event. */
+/** The member's node, through a Facebook sign-in and a deposit. Every request is an event, and so is the provider. */
 function installNode(): void {
     globalThis.fetch = vi.fn(async (input: any) => {
         const url = String(input);
         if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
         const p = url.slice(NODE.length);
         events.push(p);
-        if (p === NONCE) return answer(200, { nonce: 'n-1', expiresInSeconds: 600, providers: ['github'], githubFlow: 'node' });
-        if (p === START) {
-            return answer(200, {
-                sessionId: 'node-session-1', userCode: 'WXYZ-9876',
-                verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 5,
-            });
-        }
-        if (p === POLL) return answer(200, { status: 'ok', sub: '987654' });
-        if (p === DEPOSIT) return answer(200, { generation: 1, enrolledSso: ['github'], threshold: 1 });
+        if (p === NONCE) return answer(200, { nonce: 'n-1', expiresInSeconds: 600, providers: ['facebook'] });
+        if (p === DEPOSIT) return answer(200, { generation: 1, enrolledSso: ['facebook'], threshold: 1 });
         return answer(404, { error: 'Not Found' });
     }) as any;
+    // Facebook's dialog, answering with an id_token bound to the nonce it was asked with.
+    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementation(async (authUrl: string) => {
+        events.push('provider');
+        const nonce = new URL(authUrl).searchParams.get('nonce') ?? '';
+        const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+        const idToken = `${b64({ alg: 'RS256' })}.${b64({ sub: '10229876543210987', nonce })}.c2ln`;
+        return { type: 'success', url: `https://beanpool.org/auth/facebook#${new URLSearchParams({ id_token: idToken, state: nonce })}` } as any;
+    });
 }
 
 const REASON = 'Confirm authentication to link a sign-in to your account.';
@@ -145,11 +153,10 @@ const REASON = 'Confirm authentication to link a sign-in to your account.';
 /** The sheet's connect, handed the lock the sheet hands it. */
 async function connect(phoneLock: (() => Promise<boolean>) | null, signal = new AbortController().signal) {
     const outcome = connectAndDeposit({
-        provider: 'github',
+        provider: 'facebook',
         url: NODE,
         identity: MEMBER,
         phoneLock,
-        onGithubPrompt: () => {},
         onSignedIn: () => {},
         signal,
     }).then((value) => ({ value, error: undefined as unknown }), (error) => ({ value: undefined, error }));
@@ -181,7 +188,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         const { value, error } = await connect(settingsCheck);
 
         expect(error).toBeUndefined();
-        expect(value?.enrolledSso).toEqual(['github']);
+        expect(value?.enrolledSso).toEqual(['facebook']);
         expect(events[0]).toBe('prompt');
         expect(events.filter((e) => e === 'prompt')).toHaveLength(1);
         expect(events).toContain(DEPOSIT);
@@ -205,7 +212,34 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         },
     );
 
-    it.each(['no hardware', 'nothing enrolled'] as const)(
+    // A screen PIN, pattern or passcode is a lock: no fingerprint or face is not "nothing to ask with".
+    it.each(['a PIN and no sensor', 'a PIN and a sensor with nothing enrolled'] as const)(
+        'a phone with %s is asked for its PIN: a cancel links nothing and reads nothing, a pass links',
+        async (lock) => {
+            phone('cancelled', lock);
+            const refused = await connect(settingsCheck);
+
+            expect((refused.error as SsoSignInError).reason).toBe('cancelled');
+            expect(events).toEqual(['prompt']);
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+            expect(getMnemonic).not.toHaveBeenCalled();
+
+            vi.clearAllMocks();
+            events.length = 0;
+            phone('passes', lock);
+            const { value, error } = await connect(settingsCheck);
+
+            expect(error).toBeUndefined();
+            expect(value?.enrolledSso).toEqual(['facebook']);
+            expect(events[0]).toBe('prompt');
+            expect(vi.mocked(LocalAuthentication.authenticateAsync).mock.calls[0][0]).toMatchObject({
+                promptMessage: REASON,
+                disableDeviceFallback: false,
+            });
+        },
+    );
+
+    it.each(['no screen lock and no sensor', 'no screen lock and a sensor with nothing enrolled'] as const)(
         'a phone with %s has nothing to ask with and is let through, as Settings lets it through',
         async (kind) => {
             phone(kind);
@@ -215,7 +249,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
 
             expect(settingsLetsThrough).toBe(true);
             expect(error).toBeUndefined();
-            expect(value?.enrolledSso).toEqual(['github']);
+            expect(value?.enrolledSso).toEqual(['facebook']);
             expect(LocalAuthentication.authenticateAsync).not.toHaveBeenCalled();
         },
     );
@@ -240,7 +274,7 @@ describe("connectAndDeposit: the phone's lock before a sign-in is linked", () =>
         const { value, error } = await connect(null);
 
         expect(error).toBeUndefined();
-        expect(value?.enrolledSso).toEqual(['github']);
+        expect(value?.enrolledSso).toEqual(['facebook']);
         expect(LocalAuthentication.authenticateAsync).not.toHaveBeenCalled();
     });
 });

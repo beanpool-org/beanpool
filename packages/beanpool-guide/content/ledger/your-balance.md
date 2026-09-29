@@ -25,6 +25,8 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 
 Every trade, gift and fee, newest first, with who it was with, a note, the time, and plus or minus. If a note mentions a post, tap **View Offer** to open it.
 
+Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
+
 The list has no search or filters yet.
 
 ## ⓘ buttons

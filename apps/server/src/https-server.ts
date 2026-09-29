@@ -131,6 +131,7 @@ import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
+import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
@@ -145,7 +146,6 @@ import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
-import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
@@ -185,7 +185,8 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //     before. An unsigned socket, or one signed by a key that is not (yet) a member, is accepted
 //     but gets only a bare doorbell for public changes (PUBLIC_WS_EVENTS in state-engine.ts) — the
 //     same things anyone can already read without signing, so on a node that shows visitors only
-//     the listings (`guestListingsOnly`), only the listings' (state-engine keylessSocketMayUse).
+//     the listings (`guestListingsOnly`), only the listings', and elsewhere every one but the
+//     listings', which are members-only there (state-engine keylessSocketMayUse).
 //     A signature that is forged, stale or replayed is refused with 401.
 //   - ENFORCE_WS_AUTH=true: only member-signed sockets are accepted; everything else gets 401.
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
@@ -289,7 +290,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',        // governance transparency: list of decisions
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
-    '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
+    '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
@@ -316,7 +317,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
     /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
-    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
+    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed where the listings are members' (engine/photo-keys.ts)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
@@ -352,6 +353,32 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/projects(\/|$)/,
 ];
 
+// Public reads that are the listings, and public only on a node that shows visitors the listings and not the people
+// (`guestListingsOnly`, the global node): there anyone looks around, in the visitors' view (rough areas, no people). On
+// every other node, a local community's, the listings are its members' (Marty, 2026-09-28: "nothing on a private node
+// should be public now that we have a global node"), so these fall to the ordinary gate: a signed read by a member of this
+// node (passesReadGate, a suspended member included), and nobody else, a visitor's row and a signed non-member included.
+// The refusal names the global community (LISTINGS_MEMBERS_ONLY), where the apps send a stranger to look around. A
+// listing's photos keep their public route, because an `<img>` cannot sign, but here each is served only to a URL
+// carrying its key, which only a read of the listing hands out (engine/photo-keys.ts). A linked peer's app browsing
+// here unsigned (routes/marketplace.ts isPeerRequest) is refused too, until linked communities get signed access of
+// their own.
+export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/marketplace/posts',
+]);
+
+/** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
+export const LISTINGS_MEMBERS_ONLY = {
+    error: "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    code: 'members_only',
+    global: 'https://global.beanpool.org',
+} as const;
+
+function isListingsRead(path: string): boolean {
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed);
+}
+
 function isAllowlisted(path: string): boolean {
     return PUBLIC_READ_EXACT.has(path) || PUBLIC_READ_PATTERNS.some(re => re.test(path));
 }
@@ -368,6 +395,8 @@ function namesMembers(path: string): boolean {
 
 function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
+    // The listings: public only where visitors get the listings' view.
+    if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
     // The switches are read only for these few paths, so no other request pays for them.
     if (!namesMembers(path)) return true;
     const switches = getProfileSwitches();
@@ -1115,7 +1144,6 @@ export async function startHttpsServer(port: number): Promise<number> {
             else adminRateLimits.set(ip, valid);
         }
         pruneAuthAttempts(now);
-        pruneGithubPolls(now);
         pruneChatLines(now);
         requestNonces.prune(now);
     }, 60 * 1000);
@@ -1123,6 +1151,10 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
     // a day old on this timer too, not only when somebody joins (engine/open-join.ts).
     startForgettingJoinAddresses();
+    // Nobody's internet address is kept longer than 7 days: the copying routes' access list, the standby watch and the
+    // take-over keys' holders forget theirs, now (the first boot of a version clears older ones) and hourly after
+    // (services/address-retention.ts).
+    startForgettingOldAddresses();
     // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();
@@ -1225,7 +1257,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         } else {
             if (!pubKeyHex || !signatureBase64) {
                 ctx.status = 401;
-                ctx.body = { error: 'Missing cryptographic signature headers' };
+                ctx.body = isGatedRead && isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Missing cryptographic signature headers' };
                 return;
             }
         }
@@ -1344,7 +1376,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             // membership isn't required there — e.g. first-time registration.)
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
-                ctx.body = { error: 'Read access requires a member identity' };
+                ctx.body = isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Read access requires a member identity' };
                 return;
             }
 

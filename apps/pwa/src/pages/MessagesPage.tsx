@@ -14,7 +14,8 @@ import {
     getEventChat,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
-import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from '../lib/e2e-crypto';
+import { decodePlaintext, decryptDM, isEncryptedNonce, type DMKeyContext } from '../lib/e2e-crypto';
+import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine } from '../lib/dm-lock';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
@@ -570,10 +571,40 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // E2E key context for a 2-party DM, or null for groups/unknown peer (NAT-1).
     function dmCtxFor(conv: Conversation | null): DMKeyContext | null {
-        if (!conv || conv.type !== 'dm') return null;
+        return dmKeyContext(conv, identity);
+    }
+
+    /** The other person's name for the "couldn't be locked" line; never a slice of their key. */
+    function peerNameFor(conv: Conversation | null): string | null {
+        if (!conv) return null;
+        if (conv.peerCallsign) return conv.peerCallsign;
         const peer = (conv.participants || []).find(p => p && p !== identity.publicKey);
-        if (!peer) return null;
-        return { myEdPrivHex: identity.privateKey, peerEdPubHex: peer, conversationId: conv.id };
+        return (peer && membersByPublicKey.get(peer)?.callsign) || null;
+    }
+
+    /** The conversation as the node has it now: the other person may have arrived since it was opened. */
+    async function freshConversation(conv: Conversation): Promise<Conversation> {
+        try {
+            const result = await getConversationMessages(conv.id);
+            if (!result.conversation) return conv;
+            setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...result.conversation } : prev));
+            return { ...conv, ...result.conversation };
+        } catch {
+            return conv;
+        }
+    }
+
+    /**
+     * A line as it goes to the node: readable in a group chat, locked in a DM. A DM that can't be locked gets one more
+     * try with the node's copy of the conversation, then throws DmNotLockedError — never a readable fallback.
+     */
+    async function payloadFor(text: string, conv: Conversation): Promise<{ ciphertext: string; nonce: string }> {
+        try {
+            return payloadForChat(text, conv, identity);
+        } catch (e) {
+            if (!isDmNotLocked(e)) throw e;
+            return payloadForChat(text, await freshConversation(conv), identity);
+        }
     }
 
     async function handleSend() {
@@ -582,8 +613,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         const wasEditing = editingMessage;
         try {
-            const ctx = dmCtxFor(activeConv);
-            const { ciphertext, nonce } = ctx ? encryptDM(draft.trim(), ctx) : encodePlaintext(draft.trim());
+            // Nothing is sent, and the draft stays, when a DM can't be locked (caught below).
+            const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv);
 
             if (wasEditing) {
                 const prevMessages = messages;
@@ -599,6 +630,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
                     setEditingMessage(null);
                     setDraft('');
+                    setChatRefusal(null);
                     await loadMessages(activeConv.id);
                 } catch (err: any) {
                     setMessages(prevMessages);
@@ -618,7 +650,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 await loadMessages(activeConv.id);
             }
         } catch (err: any) {
-            showChatError(err, wasEditing ? 'Failed to edit message' : 'Failed to send message');
+            if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
+            else showChatError(err, wasEditing ? 'Failed to edit message' : 'Failed to send message');
         } finally {
             setSending(false);
         }
@@ -632,13 +665,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     async function handleSendImage(file: File, caption = ''): Promise<boolean> {
         if (!activeConv) return false;
-        const ctx = dmCtxFor(activeConv);
-        if (!ctx) { alert('Photos can only be sent in direct messages.'); return false; }
+        if (activeConv.type !== 'dm') { alert('Photos can only be sent in direct messages.'); return false; }
         setSending(true);
         try {
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
-            const encImg = encryptDM(dataUri, ctx);       // big blob -> lazy attachment
-            const encCap = encryptDM(caption, ctx);        // caption (often empty) -> message body
+            // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
+            const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
+            const encImg = lockForDm(dataUri, conv, identity);       // big blob -> lazy attachment
+            const encCap = lockForDm(caption, conv, identity);        // caption (often empty) -> message body
             let metadata: string | undefined = undefined;
             if (replyToMessage) {
                 metadata = JSON.stringify({ replyToId: replyToMessage.id });
@@ -650,7 +684,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             await loadMessages(activeConv.id);
             return true;
         } catch (err: any) {
-            showChatError(err, 'Failed to send image');
+            if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
+            else showChatError(err, 'Failed to send image');
             return false;
         } finally {
             setSending(false);
@@ -676,8 +711,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (!activeConv) return;
 
         // Groups and event chats have no photos — the node refuses them, so we
-        // never start. Say so where the person is looking and send nothing.
-        if (!dmCtxFor(activeConv)) {
+        // never start. Say so where the person is looking and send nothing. (A DM
+        // whose other person isn't known yet still opens the preview: Send says it
+        // couldn't be locked and keeps the picture there.)
+        if (activeConv.type !== 'dm') {
             clearPendingImage();
             setImageNotice('Photos can only be sent in direct messages');
             return;

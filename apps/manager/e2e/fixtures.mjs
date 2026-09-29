@@ -376,6 +376,9 @@ const DIAGNOSTICS = {
     userCount: MEMBERS.length,
     communityName: COMMUNITY_NAME,
     callsign: CALLSIGN,
+    // The contacts as stored: the Node Identity screen reads them here, not from the public community-info.
+    contactEmail: `admin@${NODE_HOSTNAME}`,
+    contactPhone: '+61 3 5472 1234',
     shutdownStatus: SHUTDOWN_STATUS,
     diskHealth: DISK_HEALTH,
 };
@@ -550,6 +553,9 @@ const PUBLIC_ADDRESS_STATUS = {
     cached: false,
     communityName: COMMUNITY_NAME,
     contact: `admin@${NODE_HOSTNAME}`,
+    // The tunnel inside the server (apps/server services/tunnel-connector.ts).
+    tunnel: { state: 'connected', since: '2026-09-28T10:00:00.000Z', connections: 4, reason: null, version: '2026.9.3' },
+    dockerSocket: false,
 };
 
 const PUBLIC_ADDRESS_LOGS = [
@@ -951,7 +957,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/public-address/status') return ok(PUBLIC_ADDRESS_STATUS);
     if (pathname === '/api/local/admin/public-address/logs') return ok({ logs: PUBLIC_ADDRESS_LOGS });
     if (pathname === '/api/local/admin/public-address/claim') return ok({ success: true, status: 'pending' });
-    if (pathname === '/api/local/admin/public-address/restart-sidecar') return ok({ success: true });
+    if (pathname === '/api/local/admin/public-address/restart-tunnel') return ok({ success: true, tunnel: PUBLIC_ADDRESS_STATUS.tunnel });
     if (pathname === '/api/local/admin/public-address/offline') return ok({ success: true });
 
     // ---- connectors ----
@@ -1004,14 +1010,16 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
 
     // ---- identity / node config ----
     if (pathname === '/api/local/community-info') {
-        return ok({ communityName: COMMUNITY_NAME, contactEmail: `admin@${NODE_HOSTNAME}`, contactPhone: '+61 3 5472 1234', callsign: CALLSIGN });
+        // Public: neither contact is published (both switches off below), so neither is said.
+        return ok({ communityName: COMMUNITY_NAME, contactEmail: null, contactPhone: null, callsign: CALLSIGN });
     }
     if (pathname === '/api/node/config' || pathname === '/api/local/admin/node/config') {
         return ok({
             serviceRadius: { radiusKm: 15, lat: -37.0625, lng: 144.2086 },
             publishLocation: true,
             publishMembers: true,
-            publishContacts: true,
+            publishContactEmail: false,
+            publishContactPhone: false,
             publishHealth: true,
             directoryPushIntervalHours: 12,
             lastDirectoryPush: '2026-09-19T00:00:00.000Z',

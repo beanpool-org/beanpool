@@ -54,7 +54,10 @@ Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **Fo
 
 ## What is private
 
-- A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.
+- A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.
+- A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.
+- The notices BeanPool adds to a chat about a deal are not encrypted: beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.
+- The server also knows who messaged whom, and when, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.
 - Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.
 - Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.
 - A group's chat can also be read by the group's members.

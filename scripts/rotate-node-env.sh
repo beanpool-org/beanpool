@@ -45,7 +45,7 @@ Security Guarantees:
   • No secret values are ever echoed, printed, or passed on remote process arguments.
   • Secrets are streamed directly over SSH stdin to an atomic update handler.
   • Remote .env permissions are strictly enforced to 0600.
-  • Only the beanpool-node container is restarted; cloudflared tunnel sidecars are untouched.
+  • Only the beanpool-node container is restarted; a host cloudflared.service is untouched. A registrar tunnel runs inside beanpool-node, so it reconnects with it.
 
 Available Nodes (from deploy-targets.conf):
 EOF
@@ -368,7 +368,7 @@ finally:
     os.umask(old_umask)
 
 # Restart only beanpool-node container
-print(f"  [restart] Recreating beanpool-node container (cloudflared untouched)...")
+print(f"  [restart] Recreating beanpool-node container (a host cloudflared is untouched)...")
 cmd = ["docker", "compose", "-p", proj_name, "up", "-d", "--no-deps", "--force-recreate", "beanpool-node"]
 res = subprocess.run(cmd, cwd=project_dir, capture_output=True, text=True)
 if res.returncode != 0:

@@ -6,22 +6,29 @@
  * 2. Public Attestation endpoint (GET /api/attest?nonce=...) cryptographic signature verification.
  * 3. Apple Domain Association endpoint (GET /.well-known/apple-developer-domain-association.txt).
  * 4. Subdomain & Cloudflare Tunnel Claim (POST /api/local/admin/public-address/claim) with signed registrar client.
- * 5. Node config persistence and tunnel-token file write (data/tunnel-token).
+ * 5. Node config persistence, and the tunnel inside the server started on the provisioned token (no data/tunnel-token).
  * 6. Public address status synchronization (GET /api/local/admin/public-address/status).
  * 7. Metadata update route (POST /api/local/admin/public-address/update).
- * 8. Sidecar restart trigger (POST /api/local/admin/public-address/restart-sidecar).
- * 9. Take Offline & Token Teardown (POST /api/local/admin/public-address/offline).
+ * 8. Tunnel restart (POST /api/local/admin/public-address/restart-tunnel): a new child.
+ * 9. Take Offline & Tunnel Teardown (POST /api/local/admin/public-address/offline).
  * 10. Admin authentication enforcement across all management endpoints.
+ *
+ * The tunnel's cloudflared is the fake (__fixtures__/fake-cloudflared.mjs), and Settings' probes of Cloudflare's edge are
+ * refused here: this suite reaches neither Docker nor Cloudflare (before 2026-09-28 it restarted cloudflared containers
+ * through the Docker socket of whatever machine ran it, and probed the edge).
  */
 
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import Koa from 'koa';
 import { startP2P } from './p2p.js';
 import { initStateEngine, getNodeConfig } from './state-engine.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, nodePubkeyHex } from './services/registrar-client.js';
+import { tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN } from './services/tunnel-connector.js';
+import { useFakeCloudflared } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
 
 let testsRun = 0;
@@ -41,10 +48,32 @@ function assert(cond: boolean, msg: string): void {
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TOKEN_FILE = path.join(DATA_DIR, 'tunnel-token');
 
+/** Settings' probe of Cloudflare's edge (routes/public-address.ts verifyEdgeStatus), refused at once. */
+const CF_EDGE_IP = '104.21.93.179';
+function refuseEdge(): void {
+    const real = http.request;
+    (http as any).request = function (this: unknown, ...args: any[]) {
+        const o = args[0];
+        const opts = o && typeof o === 'object' && !(o instanceof URL) ? o : null;
+        if (opts && (opts.hostname === CF_EDGE_IP || opts.host === CF_EDGE_IP)) {
+            const req: any = new EventEmitter();
+            req.setTimeout = () => req;
+            req.destroy = () => req;
+            req.write = () => true;
+            req.end = () => { setImmediate(() => req.emit('error', new Error('refused in tests'))); return req; };
+            return req;
+        }
+        return (real as any).apply(this, args);
+    };
+}
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+
 async function run() {
     console.log('🚀 Starting Public Address & Cloudflare Tunnel Test Suite (#101)...\n');
 
+    refuseEdge();
     initStateEngine();
+    const fake = await useFakeCloudflared(path.join(DATA_DIR, 'fake-cloudflared'));
     const p2pNode = await startP2P(4020, 4021);
     const pubkey = nodePubkeyHex();
 
@@ -79,6 +108,7 @@ async function run() {
     let registrarName = '';
     let registrarCommunityName = '';
     let registrarContact = '';
+    let registrarOrigin: unknown = undefined;
     const registrarToken = 'cf-tunnel-token-secret-123456789';
 
     const mockRegistrar = http.createServer(async (req, res) => {
@@ -104,6 +134,7 @@ async function run() {
                 registrarName = b.name;
                 registrarCommunityName = b.community_name;
                 registrarContact = b.contact;
+                registrarOrigin = b.origin;
                 registrarStatus = 'live';
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
@@ -266,10 +297,14 @@ async function run() {
         assert(config.publicAddress.hostname === 'mullum-test.beanpool.org', 'Node config records full hostname');
         assert(config.publicAddress.tunnelToken === registrarToken, 'Node config records tunnel token');
 
-        // Verify Tunnel Token File written on disk
-        assert(fs.existsSync(TOKEN_FILE), 'tunnel-token file exists on disk');
-        const savedToken = fs.readFileSync(TOKEN_FILE, 'utf-8').trim();
-        assert(savedToken === registrarToken, 'tunnel-token file contains exact provisioned secret');
+        // The tunnel runs inside the server, on exactly the provisioned secret (it was a file for a sidecar until 2026-09-28)
+        assert(tunnelConnectorForTests().wantedToken === registrarToken, "the connector's wanted token is exactly the provisioned secret");
+        const firstRun = (await fake.waitForRuns(1)).at(-1);
+        assert(tunnelConnectorForTests().runningToken === registrarToken && firstRun?.env.TUNNEL_TOKEN === registrarToken,
+            'and a tunnel child runs with exactly that secret');
+        assert(!fs.existsSync(TOKEN_FILE), 'no copy of the secret is written to data/tunnel-token');
+        assert(registrarOrigin === LOOPBACK_ORIGIN && config.publicAddress.origin === LOOPBACK_ORIGIN,
+            `the claim points the tunnel at this server's own loopback (${String(registrarOrigin)})`);
 
         // --- Test 5: Status Check ---
         const statusRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
@@ -294,11 +329,15 @@ async function run() {
         assert(updatedConfig.publicAddress.communityName === 'Updated Community Name', 'Node config reflects updated community name');
         assert(updatedConfig.publicAddress.contact === 'new-contact@beanpool.org', 'Node config reflects updated contact');
 
-        // --- Test 7: Sidecar Restart Route ---
-        const restartRes = await fetch(`${baseUrl}/api/local/admin/public-address/restart-sidecar`, { method: 'POST' });
-        assert(restartRes.status === 200, 'POST /restart-sidecar returns HTTP 200');
+        // --- Test 7: Tunnel Restart Route ---
+        const pidBefore = tunnelConnectorForTests().pid;
+        const restartRes = await fetch(`${baseUrl}/api/local/admin/public-address/restart-tunnel`, { method: 'POST' });
+        assert(restartRes.status === 200, 'POST /restart-tunnel returns HTTP 200');
         const restartBody = await restartRes.json();
-        assert(restartBody.success === true, 'Sidecar restart response has success: true');
+        assert(restartBody.success === true, 'Tunnel restart response has success: true');
+        const pidAfter = tunnelConnectorForTests().pid;
+        assert(!!pidBefore && !!pidAfter && pidAfter !== pidBefore && !alive(pidBefore!), `the restart is a new tunnel child (pid ${pidBefore} → ${pidAfter})`);
+        assert(tunnelConnectorForTests().runningToken === registrarToken, 'on the same secret');
 
         // --- Test 8: Probe Logs ---
         const logsRes = await fetch(`${baseUrl}/api/local/admin/public-address/logs`);
@@ -316,13 +355,17 @@ async function run() {
         const postOfflineConfig = getNodeConfig() as any;
         assert(postOfflineConfig.publicAddress === null, 'Node config publicAddress is cleanly cleared to null');
 
-        // Verify Tunnel Token File is Removed
-        assert(!fs.existsSync(TOKEN_FILE), 'tunnel-token file is deleted from disk on teardown');
+        // The tunnel is stopped (it was the token file's deletion until 2026-09-28)
+        const offTunnel = tunnelConnectorForTests();
+        assert(offTunnel.pid === null && offTunnel.runningToken === null && offTunnel.status.state === 'off' && !alive(pidAfter!),
+            `the tunnel is stopped on teardown: no child (${offTunnel.status.state})`);
+        assert(!fs.existsSync(TOKEN_FILE), 'and no token file is left on disk');
 
         console.log(`\n⭐️ ALL ${testsPassed}/${testsRun} PUBLIC ADDRESS & TUNNEL TESTS PASSED.`);
     } finally {
         server.close();
         mockRegistrar.close();
+        await resetTunnelConnectorForTests();
         if (p2pNode) await p2pNode.stop();
         if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
     }

@@ -193,3 +193,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-25 - NodeAdminLink Focus Ring Styling
 **Learning:** `NodeAdminLink.tsx` rendered the community admin settings link `<a>` without explicit focus-visible ring styling, making keyboard focus highlights invisible during navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl` to the `<a>` element in `NodeAdminLink.tsx` and added test coverage in `NodeAdminLink.test.tsx`.
+
+## 2026-09-26 - NewAccountCard Touch Target Sizing & Focus Ring Styling
+**Learning:** `NewAccountCard.tsx` close button `✕` had a size of `w-8 h-8` (32px x 32px), failing minimum touch target sizing guidelines (< 44px), and lacked explicit focus-visible ring styling for keyboard navigation.
+**Action:** Updated close button to `min-w-[44px] min-h-[44px] w-11 h-11` touch target sizing with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, dark mode hover styling, and updated test coverage in `NewAccountCard.test.tsx`.

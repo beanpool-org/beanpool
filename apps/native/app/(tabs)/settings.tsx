@@ -9,6 +9,10 @@ import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { updateCallsign, hasMnemonic } from '../../utils/identity';
 import { signOutOfThisPhone } from '../../utils/account-leaves-phone';
+import {
+    DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, deleteFailedLine, deletePlanFailedLine,
+    deletedButLine, keepsKeyLine, lastCommunityLine, listNames, planDelete, type DeletePlan,
+} from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
@@ -30,11 +34,13 @@ import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
-import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
+import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
+import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
+import { copyWordsForAMinute } from '../../utils/words-clipboard';
 import { ADD_WORDS_COPY, viewWordsOpens } from '../../utils/add-words';
 import {
     NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_VIEW_LINE, VIEW_WORDS_MENU,
@@ -44,8 +50,8 @@ import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
-import type { SsoProvider } from '../../utils/sso-signin';
-import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
+import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
+import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
@@ -385,23 +391,13 @@ export default function SettingsScreen() {
         }
     };
 
+    // Cleared from the clipboard a minute later, if it still holds them (utils/words-clipboard.ts).
     const handleCopyWords = async () => {
         if (!mnemonicWords) return;
-        await Clipboard.setStringAsync(mnemonicWords);
+        await copyWordsForAMinute(mnemonicWords);
         hapticTick();
         setCopiedWords(true);
         setTimeout(() => setCopiedWords(false), 2000);
-
-        // Auto-wipe system clipboard after 30 seconds
-        const wordsSnapshot = mnemonicWords;
-        setTimeout(async () => {
-            try {
-                const current = await Clipboard.getStringAsync();
-                if (current === wordsSnapshot) {
-                    await Clipboard.setStringAsync('');
-                }
-            } catch {}
-        }, 30000);
     };
 
     // Resolves a human label for the node we are actually anchored to, preferring the
@@ -466,7 +462,7 @@ export default function SettingsScreen() {
 
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
-        const provName = provider === 'apple' ? 'Apple' : provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'GitHub';
+        const provName = SSO_PROVIDER_NAMES[provider];
         // Name the community: this only ever affects recovery on THIS node, and saying
         // so plainly is the difference between a member knowing where they're covered
         // and assuming they're covered everywhere.
@@ -829,6 +825,22 @@ export default function SettingsScreen() {
     const [wipeConfirm, setWipeConfirm] = useState('');
     const [wipeType, setWipeType] = useState<'options' | 'local' | 'purge'>('options');
     const [purgeConfirm, setPurgeConfirm] = useState('');
+    // What Permanently Delete Account does on this phone (delete-here.ts): the other saved communities are asked as the
+    // member opens it, so the screen and its confirmation say whether the key stays. Null while they are asked.
+    const [deletePlan, setDeletePlan] = useState<DeletePlan | null>(null);
+    const [deletePlanError, setDeletePlanError] = useState<string | null>(null);
+    const deletePlanTurnRef = React.useRef(0);
+    const askDeletePlan = () => {
+        const turn = ++deletePlanTurnRef.current;
+        setDeletePlan(null);
+        setDeletePlanError(null);
+        if (!identity?.publicKey) return;
+        planDelete(identity.publicKey)
+            .then((plan) => { if (turn === deletePlanTurnRef.current) setDeletePlan(plan); })
+            .catch((e: unknown) => {
+                if (turn === deletePlanTurnRef.current) setDeletePlanError(e instanceof Error ? e.message : String(e));
+            });
+    };
     const [seedConfirm, setSeedConfirm] = useState('');
     const [seedVisible, setSeedVisible] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
@@ -916,6 +928,11 @@ export default function SettingsScreen() {
     }, []);
 
     const handleToggleAppLock = async () => {
+        // With no screen lock, "App Lock enabled" would ask nothing at the next launch. Turning it off never waits on this.
+        if (!appLockEnabled && (await getScreenLock()) === 'none') {
+            Alert.alert('Set a screen lock first', APP_LOCK_NEEDS_SCREEN_LOCK);
+            return;
+        }
         const success = await authenticateUser(appLockEnabled ? 'Confirm your security to disable App Lock.' : 'Confirm your security to enable App Lock.');
         if (success) {
             const newValue = !appLockEnabled;
@@ -925,11 +942,11 @@ export default function SettingsScreen() {
         }
     };
 
-    // Copy Words is drawn only once the words are shown: it copies what the phone's lock let through.
+    // Copy Words is drawn only once the words are shown: it copies what the phone's lock let through, for a minute.
     const handleCopySeed = async () => {
         const words = seedWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -1412,6 +1429,10 @@ export default function SettingsScreen() {
 
     async function handleNodePurge() {
         if (!identity) return;
+        // Asked as the screen opened, and the button waits for it: the member confirms what the plan says, and exactly
+        // that happens.
+        const plan = deletePlan;
+        if (!plan) return;
         // Accept either the node-held callsign (what the profile card shows) or the
         // device-global one — they differ per node, and demanding the invisible one
         // would leave the user typing the name in front of them and being rejected.
@@ -1425,29 +1446,48 @@ export default function SettingsScreen() {
         const success = await authenticateUser('Confirm authentication to permanently purge your account from the node.');
         if (!success) return;
 
+        const words = hasMnemonic(identity);
+        const cannotUndo = words ? 'This CANNOT be undone, even with your 12-word phrase.' : 'This CANNOT be undone.';
         Alert.alert(
             "Permanent Node Purge",
-            hasMnemonic(identity)
-                ? "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone, even with your 12-word phrase."
-                : "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone.",
+            plan.kind === 'this-one'
+                ? `This will permanently delete your profile, listings, and data at ${plan.hereName}. Your Bean balance there will be settled with its Commons Pool. ${cannotUndo}\n\n${keepsKeyLine(plan, words)}`
+                : `This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. ${cannotUndo}\n\n${lastCommunityLine(plan, words)}`,
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Permanently Purge", 
+                {
+                    text: "Permanently Purge",
                     style: "destructive",
                     onPress: async () => {
                         setAdvancedLoading(true);
                         try {
-                            // 1. Send signed purge request to community node
-                            await purgeAccountOnNode(identity);
-
-                            // 2. Wipe this phone as Sign Out does. This community dropped the key's push tokens with
-                            // the account; the other communities it registered with are asked there.
-                            await signOutOfThisPhone(identity);
-                            setIdentity(null);
-                            Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
-                        } catch (e: any) {
-                            Alert.alert("Purge Failed", e.message || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.");
+                            // The node deletes the account here; only once it has, the phone leaves this community
+                            // (other communities keep the key) or is wiped as Sign Out wipes it (the last one).
+                            const outcome = await deleteAccountHere(identity, plan);
+                            const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
+                            switch (outcome.kind) {
+                                case 'not-deleted':
+                                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
+                                    return;
+                                case 'left-unfinished':
+                                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
+                                    return;
+                                case 'left':
+                                    Alert.alert(
+                                        "Account Deleted Here",
+                                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
+                                    );
+                                    // Through Welcome for the next community, as switching community does.
+                                    router.replace('/welcome');
+                                    return;
+                                case 'wipe-unfinished':
+                                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
+                                    return;
+                                case 'wiped':
+                                    setIdentity(null);
+                                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
+                                    return;
+                            }
                         } finally {
                             setAdvancedLoading(false);
                         }
@@ -1678,7 +1718,7 @@ export default function SettingsScreen() {
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>App Lock</Text>
-                            <Text style={styles.menuSub}>Require security passcode on app launch</Text>
+                            <Text style={styles.menuSub}>Asks for your phone's screen lock when BeanPool opens</Text>
                         </View>
                         <Pressable 
                             style={[styles.toggle, appLockEnabled && styles.toggleOn]} 
@@ -1976,6 +2016,7 @@ export default function SettingsScreen() {
                                 ) : (
                                     <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                            <NoScreenCapture>
                                             {mnemonicWords?.split(' ').map((word, idx) => (
                                                 <View
                                                     key={`${word}-${idx}`}
@@ -1987,6 +2028,7 @@ export default function SettingsScreen() {
                                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
                                                 </View>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
 
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -2009,6 +2051,8 @@ export default function SettingsScreen() {
                                                 <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
                                             </Pressable>
                                         </View>
+                                        <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
+                                        <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
                                     </View>
                                 )}
                             </View>
@@ -2585,6 +2629,7 @@ export default function SettingsScreen() {
                                           twenty-four stops and leaves the listener to pair
                                           the numbers with the words themselves.
                                         */}
+                                        <NoScreenCapture>
                                         {seedWords?.map((word, i) => (
                                             <View
                                                 key={i}
@@ -2596,6 +2641,7 @@ export default function SettingsScreen() {
                                                 <Text style={styles.seedWordText}>{word}</Text>
                                             </View>
                                         ))}
+                                        </NoScreenCapture>
                                     </View>
                                     <Pressable
                                         style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, marginTop: 16 }]}
@@ -2606,6 +2652,8 @@ export default function SettingsScreen() {
                                             {seedCopied ? '✅ Copied!' : '📋 Copy Words'}
                                         </Text>
                                     </Pressable>
+                                    <CopyClearsNote style={[styles.infoText, { marginTop: 10, marginBottom: 0 }]} />
+                                    <NoScreenLockNote style={[styles.infoText, { marginTop: 8, marginBottom: 0 }]} />
                                 </>
                             )}
                         </>
@@ -2676,7 +2724,7 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, lineHeight: 18 }}>
-                                    Permanently purges your account from this community node and clears this phone. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <Text style={{ fontWeight: 'bold' }}>{hasMnemonic(identity) ? 'Cannot be undone, even with your 12-word phrase.' : 'Cannot be undone.'}</Text>
+                                    {DELETE_CARD_LINE} <Text style={{ fontWeight: 'bold' }}>{hasMnemonic(identity) ? 'Cannot be undone, even with your 12-word phrase.' : 'Cannot be undone.'}</Text>
                                 </Text>
                                 <Pressable
                                     style={{
@@ -2692,6 +2740,7 @@ export default function SettingsScreen() {
                                     onPress={() => {
                                         setPurgeConfirm('');
                                         setWipeType('purge');
+                                        askDeletePlan();
                                     }}
                                     accessibilityRole="button"
                                     accessibilityLabel="Permanently delete account and node data"
@@ -2784,6 +2833,9 @@ export default function SettingsScreen() {
                             .map(c => c.trim().toLowerCase());
                         const typedPurge = purgeConfirm.trim().toLowerCase();
                         const isPurgeInputValid = purgeConfirm === 'DELETE' || purgeNames.includes(typedPurge);
+                        // The button waits for the other communities' answers: the confirmation says what stays.
+                        const purgeBlocked = advancedLoading || !isPurgeInputValid || !deletePlan;
+                        const words = hasMnemonic(identity);
 
                         return (
                             <View style={{ gap: 12, marginTop: 4 }}>
@@ -2792,9 +2844,61 @@ export default function SettingsScreen() {
                                         ⚠️ Warning: Irreversible Node Purge
                                     </Text>
                                     <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, marginTop: 4 }}>
-                                        This will permanently delete your identity, profile, listings, and messages from the community node.
+                                        {deletePlan
+                                            ? `This will permanently delete your profile, listings, and messages at ${deletePlan.hereName}.`
+                                            : 'This will permanently delete your profile, listings, and messages at this community.'}
                                     </Text>
                                 </View>
+
+                                {/* What stays on this phone: the key for the other communities, or nothing at the last one. */}
+                                {!deletePlan && !deletePlanError && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} accessibilityLiveRegion="polite">
+                                        <ActivityIndicator size="small" color={colors.text.secondary} />
+                                        <Text style={[styles.infoText, { flex: 1 }]}>{DELETE_CHECKING_LINE}</Text>
+                                    </View>
+                                )}
+                                {deletePlanError && (
+                                    <View style={{ gap: 8 }}>
+                                        <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18 }} accessibilityLiveRegion="polite">
+                                            {deletePlanFailedLine(deletePlanError)}
+                                        </Text>
+                                        <Pressable style={styles.backBtn} onPress={askDeletePlan} accessibilityRole="button" accessibilityLabel="Check your other communities again">
+                                            <Text style={styles.backBtnText}>Try Again</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
+                                {deletePlan?.kind === 'this-one' && (
+                                    <View style={{ backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12, gap: 6 }}>
+                                        <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
+                                            🔑 {keepsKeyLine(deletePlan, words)}
+                                        </Text>
+                                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{SIGN_OUT_INSTEAD_LINE}</Text>
+                                    </View>
+                                )}
+                                {deletePlan?.kind === 'last' && (words ? (
+                                    <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 12, gap: 8 }}>
+                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, lineHeight: 18 }}>
+                                            {lastCommunityLine(deletePlan, true)}
+                                        </Text>
+                                        <Pressable
+                                            style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
+                                            onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="View recovery words first"
+                                        >
+                                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>🔑 View Recovery Words First</Text>
+                                        </Pressable>
+                                    </View>
+                                ) : (
+                                    <View style={{ gap: 8 }}>
+                                        <Text style={styles.infoText}>{lastCommunityLine(deletePlan, false)}</Text>
+                                        <NoWordsNotice
+                                            kind="before-wipe"
+                                            colors={colors}
+                                            action={{ label: NO_WORDS_CHECK_FIRST, onPress: () => setMode('protection') }}
+                                        />
+                                    </View>
+                                ))}
 
                                 <Text style={styles.label}>TYPE 'DELETE' OR '{nodeCallsign || identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
                                 <TextInput
@@ -2812,14 +2916,16 @@ export default function SettingsScreen() {
                                     style={[
                                         styles.dangerBtn, 
                                         { minHeight: 48, justifyContent: 'center' },
-                                        (advancedLoading || !isPurgeInputValid) && { opacity: 0.5 }
-                                    ]} 
-                                    onPress={handleNodePurge} 
-                                    disabled={advancedLoading || !isPurgeInputValid} 
+                                        purgeBlocked && { opacity: 0.5 }
+                                    ]}
+                                    onPress={handleNodePurge}
+                                    disabled={purgeBlocked}
                                     accessibilityRole="button"
                                     accessibilityLabel="Permanently purge account from node"
-                                    accessibilityHint="Irreversibly deletes account data from the community node and wipes this phone"
-                                    accessibilityState={{ disabled: advancedLoading || !isPurgeInputValid }}
+                                    accessibilityHint={deletePlan?.kind === 'this-one'
+                                        ? 'Irreversibly deletes account data at this community; this phone keeps your key for your other communities'
+                                        : 'Irreversibly deletes account data from the community node and wipes this phone'}
+                                    accessibilityState={{ disabled: purgeBlocked }}
                                 >
                                     <Text style={styles.dangerBtnText}>
                                         {advancedLoading ? 'Purging Account...' : '🔥 Permanently Purge Account'}

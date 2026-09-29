@@ -180,6 +180,19 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(handleRefresh).not.toHaveBeenCalled();
     });
 
+    it('displays loading state indicator when nodeDataLoading is true and members list is empty', async () => {
+        render(
+            <AncestryTreePanel
+                nodeData={null}
+                nodeDataLoading={true}
+                activeNode={mockNode}
+            />
+        );
+
+        expect(screen.getByText(/Hierarchical Ancestry Tree & Lineage Audit/i)).toBeInTheDocument();
+        expect(screen.getByText(/Loading lineage ancestry tree.../i)).toBeInTheDocument();
+    });
+
     it('renders safely with an empty payload', async () => {
         render(
             <AncestryTreePanel

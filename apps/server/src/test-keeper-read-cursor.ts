@@ -27,6 +27,7 @@ import {
 import { postEnterpriseThreadMessage } from './engine/enterprise-thread.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
     // ── 6. DMs and group chats still send through /api/messages/send ───────────────────────
     console.log('\n--- 6. DMs and group chats are unaffected ---');
     const dm = createConversation('dm', [bob, erin], bob)!;
-    const dmSend = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ciphertext: 'c', nonce: 'n' });
+    const dmSend = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ...lockedDm() }); // a DM goes in encrypted
     assert(statusOf(dmSend) !== 400 && dmSend.body?.success === true, 'a DM still sends');
     const garden = createGroup({ name: 'Garden Crew', joinPolicy: 'open', createdBy: bob });
     joinGroup(garden.id, erin);

@@ -246,7 +246,8 @@ function publicNodeConfig(config: NodeConfig) {
         serviceRadius: r && typeof r === 'object' ? { lat: r.lat, lng: r.lng, radiusKm: r.radiusKm } : r,
         publishLocation: config.publishLocation,
         publishMembers: config.publishMembers,
-        publishContacts: config.publishContacts,
+        publishContactEmail: config.publishContactEmail,
+        publishContactPhone: config.publishContactPhone,
         publishHealth: config.publishHealth,
         directoryPushIntervalHours: config.directoryPushIntervalHours,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -271,12 +272,21 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         console.log("Auth failed for updateNodeConfig");
         return;
     }
-    const { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks } = (ctx as any).requestBody || {};
+    // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
+    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks } = (ctx as any).requestBody || {};
     // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
     if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'acceptKnocks must be true or false' };
         return;
+    }
+    // The contact switches are an owner's choice to publish, so only a real true or false is taken.
+    for (const [name, v] of [['publishContactEmail', publishContactEmail], ['publishContactPhone', publishContactPhone]] as const) {
+        if (v !== undefined && typeof v !== 'boolean') {
+            ctx.status = 400;
+            ctx.body = { error: `${name} must be true or false` };
+            return;
+        }
     }
     // Whole hours up to what the publisher's timer can hold (config/community-settings.ts isDirectoryPushInterval): past
     // it, below zero or a sliver of an hour, the timer fires every millisecond at the directory registry.
@@ -285,12 +295,12 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
     if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
-    // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and each
-    // directory switch reads unset as "publish": a request that changed one switch published the contacts and member
-    // count the community had turned off. Settings sends every field (null clears the service area).
-    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours })
+    // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and the
+    // location, member count and health switches read unset as "publish": a request that changed one switch published
+    // the member count the community had turned off. Settings sends every field (null clears the service area).
+    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours })
         .filter(([, v]) => v !== undefined));
     ctx.body = withKnockSetting(updateNodeConfig(sent));
     
@@ -311,16 +321,10 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     ctx.body = result;
 });
 
-// Local directory info endpoint (used by settings preview)
+// Local directory info endpoint (used by settings preview): what a push sends, which holds only what the switches publish.
 // No CORS headers - should only be called from same origin (admin PWA)
 router.get('/api/directory/info', async (ctx) => {
-    const info = getDirectoryInfo();
-    if (!info) {
-        ctx.status = 403;
-        ctx.body = { error: 'This node has opted out of the directory' };
-        return;
-    }
-    ctx.body = info;
+    ctx.body = getDirectoryInfo();
 });
 
 

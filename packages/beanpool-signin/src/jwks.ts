@@ -1,5 +1,5 @@
 import { SsoProviderUnavailableError, SsoVerificationError } from './errors.js';
-import { oidcConfig, providerConfig, type SsoProvider } from './providers.js';
+import { providerConfig, type SsoProvider } from './providers.js';
 
 /** A provider's published signing key, as its JWKS endpoint lists it. */
 export interface Jwk {
@@ -89,7 +89,7 @@ export function createJwksCache(options: JwksCacheOptions = {}): JwksCache {
         const pending = inFlight.get(provider);
         if (pending) return pending;
 
-        const config = oidcConfig(provider);
+        const config = providerConfig(provider);
         const request = (async () => {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), JWKS_TIMEOUT_MS);

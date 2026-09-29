@@ -26,6 +26,7 @@ import { startHttpsServer } from './https-server.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { ledger } from './engine/ledger.js';
 import { db, createCrowdfundProject } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
 
 const PORT = 8641;
 const BASE = `https://localhost:${PORT}`;
@@ -132,7 +133,8 @@ async function main() {
 
     const conv = createConversation('dm', [victim.pub, other.pub], victim.pub);
     if (!conv) throw new Error('fixture: conversation not created');
-    const msg = sendMessage(conv.id, victim.pub, 'original-ciphertext', 'original-nonce');
+    const original = lockedDm();
+    const msg = sendMessage(conv.id, victim.pub, original.ciphertext, original.nonce);
     if (!msg) throw new Error('fixture: message not created');
     registerPushToken(victim.pub, 'victim-existing-token', 'android');
     addFriend(victim.pub, other.pub);
@@ -159,7 +161,8 @@ async function main() {
         { method: 'POST', path: '/api/reports', body: { reporterPubkey: victim.pub, targetPubkey: other.pub, reason: 'filed in their name' } },
         { method: 'POST', path: '/api/friends/add', body: { ownerPubkey: victim.pub, friendPubkey: third.pub } },
         { method: 'POST', path: '/api/friends/remove', body: { ownerPubkey: victim.pub, friendPubkey: other.pub } },
-        { method: 'POST', path: '/api/messages/edit', body: { messageId: msg.id, ciphertext: 'replaced', nonce: 'replaced', authorPubkey: victim.pub } },
+        // The forged edit is itself in the encrypted form a DM takes, so what refuses it is the authentication, not the form.
+        { method: 'POST', path: '/api/messages/edit', body: { messageId: msg.id, ...lockedDm(), authorPubkey: victim.pub } },
         { method: 'POST', path: '/api/messages/mark-read', body: { pubkey: victim.pub, conversationId: conv.id } },
         { method: 'POST', path: '/api/messages/react', body: { messageId: msg.id, authorPubkey: victim.pub, emoji: '👍' } },
         { method: 'POST', path: `/api/crowdfund/projects/${crowdfundId}/pledge`, body: { fromPubkey: victim.pub, amount: 5 } },
@@ -269,7 +272,7 @@ async function main() {
         assert(r.status === 200, `signed report succeeds (got ${r.status} ${r.error ?? ''})`);
     }
     {
-        const e = await send('POST', '/api/messages/edit', { messageId: msg.id, ciphertext: 'my-edit', nonce: 'my-nonce' }, victim);
+        const e = await send('POST', '/api/messages/edit', { messageId: msg.id, ...lockedDm() }, victim);
         assert(e.status === 200, `signed message edit by the author succeeds (got ${e.status} ${e.error ?? ''})`);
         const mr = await send('POST', '/api/messages/mark-read', { conversationId: conv.id }, victim);
         assert(mr.status === 200, `signed mark-read by a participant succeeds (got ${mr.status} ${mr.error ?? ''})`);

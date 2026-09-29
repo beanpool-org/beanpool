@@ -633,9 +633,14 @@ async function main(): Promise<void> {
         const heldResync = await pull();
         assert(heldResync.mode === 'resync' && !heldResync.ok && /conservation/i.test(heldResync.error ?? ''),
             `the next pull is the force-resync it asked for, held to the ledger (not a seed): a copy that makes Beans is refused (${heldResync.mode}: ${heldResync.error?.slice(0, 90)})`);
+        // A refused force-resync clears nothing (scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2, N): S keeps its
+        // copy, the listing planted on it included, and its next pull is a delta from the cursor it kept, which doesn't carry
+        // that listing. The copy stays recorded as not matching, and mends at its next force-resync (the six-hour limit).
+        // Before, the refused resync had already committed its clear, so the next copy rebuilt S from nothing, exact.
         const mended = await pull();
         rec = await standby.send('record');
-        assert(mended.ok && rec?.lastWhole?.exact === true, `M's real copy after it lands, and is exact (${mended.mode}; ${brief(rec?.lastWhole)})`);
+        assert(mended.ok && mended.mode === 'delta' && rec?.lastWhole?.exact === false && JSON.stringify(rec.lastWhole.differs) === JSON.stringify(['posts']),
+            `M's real copy after it lands as a delta; the refused force-resync cleared nothing, so the copy still doesn't match, the listings only (${mended.mode}; ${brief(rec?.lastWhole)})`);
         health = await main.send('health');
         const mending = health?.state.standbys.find((x: any) => x.id === rec?.id);
         assert(mending?.exact === false && mending.healing === true && health?.state.incident === null,

@@ -146,3 +146,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-10-02 - Add dynamic accessibilityLabel and busy state to profile setup submit button
 **Learning:** In profile setup completion, replacing text with an ActivityIndicator during save leaves the button unlabelled to screen readers unless provided with dynamic accessibilityLabel and accessibilityState={{ disabled: loading, busy: loading }}.
 **Action:** Supply dynamic accessibilityLabel (e.g. `loading ? "Saving profile..." : "Done"`) and accessibilityState={{ disabled: loading, busy: loading }} on profile completion buttons that conditionally render ActivityIndicator.
+
+## 2026-10-18 - Add dynamic accessibilityLabel, hint, and busy state to WantsToJoin action buttons
+**Learning:** In list items with asynchronous actions (such as join request approval/rejection), action buttons that become disabled when busy need explicit `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` and dynamic `accessibilityLabel` attributes so screen readers announce both the loading status and the member context.
+**Action:** Always provide dynamic `accessibilityLabel` (`busy === req.id ? ... : ...`), `accessibilityHint`, and `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` on async action buttons in list cards.

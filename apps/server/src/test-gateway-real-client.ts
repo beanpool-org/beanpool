@@ -214,6 +214,17 @@ async function part2Http() {
         assert(await get(ADMIN, viaTunnel('198.51.100.9')) === 403,
             'tunnel: allowlisting the local peer no longer admits the whole internet through the tunnel');
         assert(await get(ADMIN) !== 403, 'a local request with no forwarding headers still matches 127.0.0.1');
+
+        // The tunnel runs inside the server now (services/tunnel-connector.ts): every tunnel request arrives from loopback.
+        // It must never count as local on /api/local/admin/*, under the other spelling of loopback either.
+        assert(resolveClientIp('127.0.0.1', viaTunnel('198.51.100.9')) === '198.51.100.9',
+            'a request from 127.0.0.1 carrying CF-Connecting-IP resolves to that address');
+        const LOCAL_ADMIN = '/api/local/admin/gateway';
+        updateGatewayConfig({ ...unlimited, adminIpAllowlist: ['localhost'] });
+        assert(await get(LOCAL_ADMIN, viaTunnel('198.51.100.9')) === 403,
+            'tunnel over loopback: allowlist "localhost" does not admit the internet to /api/local/admin/*');
+        const localStatus = await get(LOCAL_ADMIN);
+        assert(localStatus !== 403, `a local request with no forwarding headers still matches localhost (${localStatus})`);
         updateGatewayConfig(unlimited);
     }
 

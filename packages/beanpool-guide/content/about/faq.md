@@ -35,7 +35,11 @@ On a Decision or a Poll, yes, until the vote closes. On a keeper or convenor vot
 
 ## Can anyone see how I voted?
 
-On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. On a Poll: yes, everyone can see. Polls are an open show of hands.
+On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. A Poll is anonymous in the same way, unless the person who started it made it an **open vote**: then members can see who chose what. The poll says which it is before you vote.
+
+## Can other members see my balance?
+
+No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only.
 
 ## I lost my phone. Is my account gone?
 
@@ -51,7 +55,7 @@ Turn on Holiday Mode in Settings. Your Offers are hidden and nobody can send you
 
 ## How do I leave?
 
-You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words.
+You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words. It deletes your account only in the community you are using. If another community on the phone still has you, the phone keeps your key for it; the key goes only when you delete at your last one.
 
 ## Something is wrong or could be better. Who do I tell?
 

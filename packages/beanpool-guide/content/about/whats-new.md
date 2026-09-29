@@ -5,6 +5,15 @@ summary: What changed in each version of the app, in plain words.
 related: the-bean, how-it-works, rules, faq
 ---
 
+## Privacy by default
+
+These changes live on your community's server. You get them when your community's server is updated. The Poll choice needs an up-to-date app.
+
+- **Your balance and trades are yours.** Nobody else in your community can read your balance or your history. A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.
+- **Listings are for members.** Someone who has not joined can't see your community's listings or their photos. They are shown the way to the global community instead, where anyone can look around.
+- **Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.
+- **Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see.
+
 ## Version 1.2.38
 
 Some of these changes live on your community's server. You get them when your community's server is updated.
@@ -47,6 +56,7 @@ Some of these changes live on your community's server. You get them when your co
 - Only an owner can give back or take away an owner's or admin's role.
 - An admin cannot settle a stuck trade they are part of.
 - Group and event chats limit how fast one person can post.
+- **Chats between two people are always locked.** The app used to send a message without the lock if it could not find the other person's key. Now it does not send it: your words stay in the message box, and you can send again in a moment. Your community's server refuses a message between two people that is not locked.
 
 ### Fixes
 

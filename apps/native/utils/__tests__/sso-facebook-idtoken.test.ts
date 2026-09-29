@@ -63,6 +63,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),
@@ -282,7 +283,7 @@ describe("Facebook's dialog is asked for an id_token bound to this attempt", () 
 
 function enrolNode(): Seen[] {
     return installNode({
-        [NONCE_PATH]: { status: 200, body: { nonce: MEMBER_NONCE, expiresInSeconds: 600, providers: ['google', 'facebook', 'github'] } },
+        [NONCE_PATH]: { status: 200, body: { nonce: MEMBER_NONCE, expiresInSeconds: 600, providers: ['google', 'facebook'] } },
         [DEPOSIT]: { status: 200, body: { generation: 1, enrolledSso: ['facebook'], threshold: 1 } },
     });
 }
@@ -294,7 +295,6 @@ function protectWithFacebook() {
         identity: MEMBER,
         // The phone's lock is sign-in-link-behind-lock.test.ts's: this is about the Facebook token.
         phoneLock: null,
-        onGithubPrompt: () => {},
         onSignedIn: () => {},
         signal: new AbortController().signal,
     });
@@ -501,7 +501,7 @@ async function recoveryNode() {
 }
 
 function recoverWithFacebook() {
-    return recoverAccountWithSso({ callsign: 'member', anchorUrl: NODE, provider: 'facebook', onDeviceCode: () => {} });
+    return recoverAccountWithSso({ callsign: 'member', anchorUrl: NODE, provider: 'facebook' });
 }
 
 const BEFORE_THE_RELEASE = ['/api/recovery/collect', '/api/recovery/collect/sso-nonce'];

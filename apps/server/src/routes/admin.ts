@@ -803,6 +803,11 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
+            // The community's contacts as stored, for the owner's Node Identity screens (the manager, static/settings.js):
+            // the public /api/local/community-info says each only when it is published. Null for none, so a screen
+            // can tell "none stored" from an answer that didn't load.
+            contactEmail: config.contactEmail || null,
+            contactPhone: config.contactPhone || null,
             shutdownStatus: getShutdownStatus(),
             // The Settings banner when this server's standby needs its owners (services/standby-health.ts): the
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or

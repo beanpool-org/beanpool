@@ -93,11 +93,15 @@ async function getJson(path: string, id: Id): Promise<any[]> {
     return JSON.parse(await getText(path, id));
 }
 
-/** A read nobody signs: what any stranger gets. */
+/**
+ * A read by a member with no tie to anyone here (no listing, deal or enterprise): what any stranger got while the board
+ * was public on every node. A local community's board is its members' since 2026-09-28, so a stranger reads none of it
+ * (test-privacy-defaults); this bystander stands where the stranger stood.
+ */
+let BYSTANDER: Id | null = null;
 async function getUnsigned(path: string): Promise<any[]> {
-    const res = await fetch(`${BASE}${path}`);
-    if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
-    return res.json() as Promise<any[]>;
+    if (!BYSTANDER) throw new Error('setup: no bystander');
+    return getJson(path, BYSTANDER);
 }
 
 async function postJson(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
@@ -302,6 +306,7 @@ async function main() {
 
     // ── Who is who ──
     const carol = seed('ReaderCarol');   // reads the board, and syncs her phone
+    BYSTANDER = seed('BystanderBea');    // reads the board as a stranger once could: no listing, deal or enterprise
     const hana = seed('HolidayHana');    // goes on holiday
     const olly = seed('OtherOlly');      // nobody changes: his listing is in no delta
     const bob = seed('BuyerBob');        // has an open deal on the paused enterprise's listing
@@ -477,18 +482,22 @@ async function main() {
         ['the board', `/api/marketplace/posts?limit=200&${TYPES}`, carol],
         ['a delta', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, carol],
         ['the by-id refresh of a sync (getPost)', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}&sync=true`, carol],
-        ['an unsigned read of the event by id', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, null],
     ];
     for (const [what, path, id] of stillConfirmed) {
         const status = await revalidated(path, id);
         assert(status === 304, `${what}, asked again with its ETag and nothing changed, is still a 304 (got ${status})`);
     }
-    // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps.
+    // An unsigned read of the event by id was confirmed with a 304 here too. A local community's listings are its
+    // members' since 2026-09-28: it is refused, and nothing is confirmed to it.
+    const unsignedById = await fetch(`${BASE}/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`);
+    assert(unsignedById.status === 401, `an unsigned read of the event by id is refused (got ${unsignedById.status})`);
+    // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps. Such a
+    // key read the event page and was noted nothing; now the signature gate refuses it the page before any handler runs,
+    // so nothing can be noted for it.
     const stranger = keypair();
-    const strangerRead = (await getJson(`/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, stranger))[0];
-    const strangerDelta = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, stranger);
-    assert(strangerRead?.id === seedSwap && !strangerDelta.some(r => r.id === seedSwap),
-        'a key with no member row reads the event page too, and nothing is noted for it: its next delta doesn\'t carry the event');
+    const strangerPath = `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`;
+    const strangerRead = await fetch(`${BASE}${strangerPath}`, { headers: signedHeaders('GET', strangerPath, '', stranger) });
+    assert(strangerRead.status === 403, `a key with no member row is refused the event page (got ${strangerRead.status})`);
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
     // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.
@@ -704,7 +713,7 @@ async function main() {
     assert(shutPosts.every(id => !kimAfter.has(id)), 'the orchard\'s listings are off Kim\'s Market');
     const strangerSaw = await deltaFrom(kimSince);
     assert(shutPosts.every(id => strangerSaw.some(r => r.id === id && r.status === 'paused')) && !strangerSaw.some(r => r.authorPublicKey === shut && r.status !== 'paused'),
-        'an unsigned delta from just before gets them too, as paused only');
+        'a bystander\'s delta from just before gets them too, as paused only');
 
     // An admin binds Nell (over HTTP): her next delta carries them as they are.
     const bound = await asAdmin('POST', `/api/local/admin/treasury/${shut}/operators`, { pubkey: nell.pubKeyHex });
@@ -761,7 +770,7 @@ async function main() {
         const kimOpen = await kimPhone.sync();
         const unsigned = await deltaFrom(since);
         assert(!carolDelta.some(r => r.id === pears) && !kimOpen.some(r => r.id === pears) && !unsigned.some(r => r.id === pears),
-            `${what}: neither Carol's next delta, nor Kim's, nor an unsigned delta from just before carries its Pears`);
+            `${what}: neither Carol's next delta, nor Kim's, nor a bystander's delta from just before carries its Pears`);
     }
     await matchesBoard(phone, 'keepers changed on both orchards, Carol\'s next delta');
 
@@ -855,7 +864,7 @@ async function main() {
         const delta = await phone.sync();
         assert(!delta.some(r => r.id === ollyPost), `${what}: Carol's next delta doesn't carry his listing (${delta.filter(r => r.authorPublicKey === olly.pubKeyHex).map(r => r.title).join(', ') || 'none of his'})`);
         const open = await getUnsigned(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`);
-        assert(!open.some(r => r.id === ollyPost), `${what}: nor does an unsigned delta from just before it`);
+        assert(!open.some(r => r.id === ollyPost), `${what}: nor does a bystander's delta from just before it`);
         await matchesBoard(phone, `${what}, next delta`);
     }
 

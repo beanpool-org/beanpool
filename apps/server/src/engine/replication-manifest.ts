@@ -192,7 +192,7 @@ export const TABLES: Record<string, TableEntry> = {
     // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -250,7 +250,7 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
         columns: cols('id type post_id created_by created_at'),
         except: {
-            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net)", gap: 'G1b' },
+            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
         },
     },
     conversation_participants: {
@@ -585,9 +585,12 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
             + 'so in-flight governance, not a setting',
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
+    photoKeySecret: { kind: 'per-server', reason: "the key behind listings' photo URLs, made at boot (engine/photo-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
+    // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
+    // (services/address-retention.ts).
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
     replication_access: { kind: 'per-server', reason: "this server's replication access log" },
     replicated_member_blocks_v1: { kind: 'per-server', reason: "a standby's own marker" },
@@ -595,7 +598,6 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     replica_main_ledger: { kind: 'per-server', reason: "a standby's record of its main server's ledger at its last copy, which a take-over's audit holds it to" },
     replica_ledger_mismatch: { kind: 'per-server', reason: "a standby's last whole copy whose ledger wasn't its main server's (services/backup-puller.ts)" },
     replica_community_settings: { kind: 'per-server', reason: "a standby's kept copy of its main server's community settings, until a take-over or a hand promotion installs it (config/community-settings.ts)" },
-    replica_held_sum: { kind: 'per-server', reason: "the total a standby's next copy is held to after it cleared its ledger for a force-resync that isn't a seed (engine/sync.ts clearForResync)" },
     standby_copy_record: { kind: 'per-server', reason: "a standby's record of how its copies went, which it reports to its main server, and of its last force-resync for a copy that didn't match (services/standby-copy-record.ts)" },
     standby_health: { kind: 'per-server', reason: "a main server's watch on its own standbys, for its owners (services/standby-health.ts)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
@@ -610,7 +612,8 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     serviceRadius: { kind: 'community-settings', reason: "the community's service area: the map, the Market, the directory" },
     publishLocation: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     publishMembers: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
-    publishContacts: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishContactEmail: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
+    publishContactPhone: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
     publishHealth: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     directoryPushIntervalHours: { kind: 'community-settings', reason: 'how often the directory is told' },
     lastDirectoryPush: { kind: 'per-server', reason: 'when this server last told the directory' },

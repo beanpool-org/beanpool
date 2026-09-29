@@ -5,6 +5,7 @@
  * - GET /api/activity/feed
  */
 
+import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { getActivityFeed, ACTIVITY_FEED_MAX_LIMIT } from '../db/activity-feed-db.js';
 import { getActivityVersion, getMembersVersion } from '../engine/versions.js';
@@ -16,7 +17,8 @@ export function createActivityRouter(deps: RouteDeps): Router {
     /**
      * GET /api/activity/feed
      * Recent community pulse activity, readable by any member of this community. Not on the
-     * public-read allowlist: it names the members in every trade and join, and the Beans involved.
+     * public-read allowlist: it names the members who join, post and rate. A trade (who with whom, the listing
+     * and the Beans) reaches only the people in it (TRADE_ACTIVITY_TYPES).
      */
     router.get('/api/activity/feed', async (ctx) => {
         // Clamped to the SAME bound the query applies. deps.clampLimit allows up to 200 while
@@ -33,11 +35,15 @@ export function createActivityRouter(deps: RouteDeps): Router {
         // indefinitely, since a 304 never reads the database to notice. Reusing membersVersion
         // rather than adding more bump sites also means any future member column added to that
         // join is invalidated automatically instead of silently going stale.
-        const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}"`;
+        // And by the reader: a trade reaches only the people in it (TRADE_ACTIVITY_TYPES), so two members asking for
+        // the same page get different bodies, and one member's copy must never confirm another's.
+        const viewer = (ctx.state.actor as string | undefined) ?? null;
+        const viewerSig = crypto.createHash('sha256').update(viewer ?? '').digest('hex').slice(0, 8);
+        const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}-${viewerSig}"`;
         ctx.set('ETag', etag);
 
-        // `private`: the body is the same for every member, but only a signed member may read it, so
-        // no shared cache (a CDN or proxy in front of the node) may store it and hand it to a stranger.
+        // `private`: the body varies by member, and only a signed member may read it, so no shared cache (a CDN
+        // or proxy in front of the node) may store it and hand it to a stranger.
         // `max-age=0, must-revalidate` still lets the member's own client revalidate with the ETag.
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
@@ -51,7 +57,7 @@ export function createActivityRouter(deps: RouteDeps): Router {
             }
         }
 
-        const feed = getActivityFeed(limit, offset);
+        const feed = getActivityFeed(limit, offset, viewer);
         ctx.status = 200;
         ctx.body = { feed };
     });

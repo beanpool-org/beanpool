@@ -17,6 +17,7 @@
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-password-brake-fairness.ts
  */
 import { resolveClientIp, limiterKeyForIp, isSharedSourceKey, resetUntrustedForwardersForTests, setTrustConfigForTests } from './client-ip.js';
+import { logAddressTag } from './log-address.js';
 import {
     SOURCE_FREE_FAILURES, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, TYPO_FAILURES, PENDING_HOLD_MS,
     SHARED_SOURCE_MAX_DELAY_MS, MAX_SOURCES, MAX_PREFIXES, TYPO_PREFIX_FAILURES,
@@ -264,7 +265,9 @@ function part2SharedSource() {
         const key = limiterKeyForIp(ip);
         assert(ip === proxy, `an untrusted proxy's X-Forwarded-For is still not believed (${ip})`);
         assert(isSharedSourceKey(key), 'but the node notes that this one address stands for others');
-        assert(warnings.some(w => w.includes('TRUSTED_PROXIES') && w.includes(proxy)), 'and says so once in the log, naming TRUSTED_PROXIES');
+        // The log names the proxy by its daily keyed hash, never by its address (log-address.ts; fix/server-ip-logs).
+        assert(warnings.some(w => w.includes('TRUSTED_PROXIES') && w.includes(logAddressTag(key)) && !w.includes(proxy)),
+            'and says so once in the log, naming TRUSTED_PROXIES and the proxy by its daily hash, never its address');
         resolveClientIp(proxy, { 'x-forwarded-for': '203.0.113.6' });
         assert(warnings.filter(w => w.includes('TRUSTED_PROXIES')).length === 1, 'only once, not per request');
 
@@ -309,10 +312,12 @@ function part2SharedSource() {
         resolveClientIp(scanner, { 'x-forwarded-for': '1.2.3.4' });
         clock = T0 + 60_000;
         resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
-        assert(warnings.length === 1 && warnings[0].includes(scanner), 'a scanner sending X-Forwarded-For takes the one warning of the next ten minutes');
+        assert(warnings.length === 1 && warnings[0].includes(logAddressTag(limiterKeyForIp(scanner))) && !warnings[0].includes(scanner),
+            'a scanner sending X-Forwarded-For takes the one warning of the next ten minutes');
         clock = T0 + 11 * 60_000;
         resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
-        assert(warnings.length === 2 && warnings[1].includes(realProxy), 'the real proxy, seen inside that window, is still warned about on its next request after it (before: never)');
+        assert(warnings.length === 2 && warnings[1].includes(logAddressTag(limiterKeyForIp(realProxy))) && !warnings[1].includes(realProxy),
+            'the real proxy, seen inside that window, is still warned about on its next request after it (before: never)');
         resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
         clock = T0 + 30 * 60_000;
         resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });

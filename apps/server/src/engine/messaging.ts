@@ -132,6 +132,50 @@ function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey
 export const CHAT_GROUP_REMOVED_ERROR =
     'Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.';
 
+/**
+ * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members
+ * the server keeps them "in a form only the two of you can read", and that has to be true of every line, not of
+ * most. Both apps used to fall back to readable `plaintext-v1` whenever they could not find the other person's key;
+ * they now refuse to send instead, and this is the node refusing what an older app still sends (PR #1283 review).
+ * What the node writes itself into a DM is not a member's message and stays as it was: the deal notices
+ * (injectSystemMessage), a removed message's tombstone, and a message from the node's admin page, which the
+ * operator typed on the node.
+ */
+export const DM_NOT_ENCRYPTED_ERROR =
+    "This message wasn't locked for the other person, so it wasn't sent. Only the two of you can read a direct message. Try again in a moment, or update the app.";
+export const DM_NOT_ENCRYPTED_CODE = 'dm_not_encrypted';
+/** A direct conversation is named by its two people; a name typed for one would be words the node can read. */
+export const DM_NAME_REFUSED_ERROR =
+    'A direct conversation has no name. Send the words as a message: it is locked so only the two of you can read it.';
+
+/** The nonce prefix of an end-to-end encrypted DM (apps/pwa/src/lib/e2e-crypto.ts, apps/native/utils/e2e-crypto.ts). */
+export const DM_ENCRYPTED_NONCE_PREFIX = 'x25519-xc20p-v2:';
+const DM_NONCE_BYTES = 24;       // XChaCha20
+const AEAD_TAG_BYTES = 16;       // Poly1305: what encrypting an empty caption produces
+
+/** `s` is standard, padded base64 exactly as both apps write it, of at least `minBytes` bytes. */
+function isCanonicalBase64(s: unknown, minBytes: number): boolean {
+    if (typeof s !== 'string' || s.length === 0 || s.length % 4 !== 0) return false;
+    const bytes = Buffer.from(s, 'base64');
+    return bytes.length >= minBytes && bytes.toString('base64') === s;
+}
+
+/**
+ * Whether a DM payload is in the encrypted form (v2): the versioned nonce carrying a 24-byte nonce, and a ciphertext
+ * at least as long as the AEAD tag. The node cannot check the words are really encrypted — it has no key, which is the
+ * point — but it can refuse every form that is not, `plaintext-v1` first among them.
+ */
+export function isEncryptedDmPayload(ciphertext: unknown, nonce: unknown): boolean {
+    if (typeof nonce !== 'string' || !nonce.startsWith(DM_ENCRYPTED_NONCE_PREFIX)) return false;
+    const nonceBody = nonce.slice(DM_ENCRYPTED_NONCE_PREFIX.length);
+    if (!isCanonicalBase64(nonceBody, DM_NONCE_BYTES) || Buffer.from(nonceBody, 'base64').length !== DM_NONCE_BYTES) return false;
+    return isCanonicalBase64(ciphertext, AEAD_TAG_BYTES);
+}
+
+function refuseUnencryptedDm(ciphertext: unknown, nonce: unknown): void {
+    if (!isEncryptedDmPayload(ciphertext, nonce)) throw new MessagingError(DM_NOT_ENCRYPTED_ERROR, 400, DM_NOT_ENCRYPTED_CODE);
+}
+
 /** One DM per pair, never keyed to a post (chat consolidation): the pair's conversation row, if they have one. */
 function findDirectConversationRow(a: string, b: string): any {
     return db.prepare(`
@@ -206,7 +250,9 @@ export function sendMessage(
     type: 'text' | 'image' = 'text',
     attachment?: { data: string; nonce: string; mime?: string },
     metadata?: string,
-    clientId?: string
+    clientId?: string,
+    /** The node's own words into a DM (the admin page's message), not a member's: stored as written. */
+    opts: { nodeAuthored?: boolean } = {}
 ): Message | null {
     assertMemberActive(authorPubkey);
     // A visitor's row (isLiveVisitor) writes only in a direct conversation it is already in (checked again below, once
@@ -300,6 +346,15 @@ export function sendMessage(
             }
             throw new MessagingError('Message id already exists', 409, 'ID_CONFLICT');
         }
+    }
+
+    // Everything that reaches this store is a direct conversation's: a group chat returned above, an event or
+    // enterprise chat was refused. So a member's words — the text and a photo alike — go in encrypted or not at
+    // all. Checked after the participant check, so an outsider learns nothing from it, and after the idempotent
+    // retry above, which stores nothing new.
+    if (!opts.nodeAuthored) {
+        refuseUnencryptedDm(ciphertext, nonce);
+        if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
     }
 
     const msg: Message = {
@@ -498,6 +553,8 @@ export function editMessage(
     if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
     // A keeper-removed message is a tombstone: never editable, by any route.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
+    // An edit is new words: in a direct conversation, encrypted or not at all (see sendMessage).
+    if (!isGroupChat) refuseUnencryptedDm(ciphertext, nonce);
 
     // A group chat is editable under the group's own rules (chat parity, 2026-09-23 — slice 1 refused it here
     // because this route had no size bound and no membership re-check; it has both now, from the engine the

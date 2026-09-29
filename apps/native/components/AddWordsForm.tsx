@@ -11,6 +11,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, Vi
 import * as Clipboard from 'expo-clipboard';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { addMnemonicToIdentity, type BeanPoolIdentity } from '../utils/identity';
+import { NoScreenCapture } from './WordsOnScreen';
 import {
     ADD_WORDS_COPY,
     applyWordBoxChange,
@@ -85,6 +86,8 @@ export function AddWordsForm({
             </Pressable>
 
             <View style={styles.grid}>
+                {/* The boxes show the words as they are typed. */}
+                <NoScreenCapture>
                 {boxes.map((word, i) => {
                     const state = check.states[i];
                     const bad = state === 'unknown';
@@ -117,6 +120,7 @@ export function AddWordsForm({
                         </View>
                     );
                 })}
+                </NoScreenCapture>
             </View>
 
             <Text

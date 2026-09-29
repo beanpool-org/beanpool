@@ -133,7 +133,9 @@ async function main() {
             { id: 'opt_yes', text: 'Yes, definitely' },
             { id: 'opt_no', text: 'No, busy' }
         ],
-        durationDays: 7
+        durationDays: 7,
+        // An open vote: its creator chose to let members see who chose what (polls are anonymous otherwise, 2026-09-28).
+        pollOpenVote: true,
     });
 
     assert(poll1 !== null, 'Poll created successfully');
@@ -145,6 +147,7 @@ async function main() {
     assert(poll1!.photos === undefined || poll1!.photos.length === 0, 'Photos forced empty');
     assert(poll1!.status === 'active', 'Initial status is active');
     assert(Array.isArray(poll1!.pollOptions) && poll1!.pollOptions.length === 2, 'Poll options stored');
+    assert(poll1!.pollOpenVote === true, 'Poll is the open vote its creator chose');
 
     // Offer counting & credit covenant isolation
     assert(liveOfferCount(db, 'pub-alice') === 0, 'liveOfferCount does NOT count polls');
@@ -250,10 +253,19 @@ async function main() {
     assert(optYesAfter?.votes === 0 && optYesAfter?.percentage === 0, 'opt_yes now has 0 votes (0%)');
     assert(voteRes2.post.userVotedOptionId === 'opt_no', 'Carol sees updated vote choice');
 
-    // Open ballot check: voter list is visible
+    // Open ballot check: on an open vote, the voter list is visible to a member
     assert(Array.isArray(voteRes2.post.pollVotes) && voteRes2.post.pollVotes.length === 1, 'pollVotes contains public vote records');
     assert(voteRes2.post.pollVotes![0].voterPubkey === 'pub-carol', 'Voter pubkey is Carol');
     assert(voteRes2.post.pollVotes![0].optionId === 'opt_no', 'Voted option is opt_no');
+
+    // Anonymous ballot check: a poll made without the choice (Grace's, as every app before it makes one) names no voter,
+    // to its voter, its author or any member; the counts stay.
+    const voteAnon = votePoll(pollGrace!.id, 'pub-carol', '1');
+    assert(voteAnon.success && pollGrace!.pollOpenVote === false, 'Carol votes on Grace\'s anonymous poll');
+    assert(voteAnon.post.totalVotes === 1 && voteAnon.post.userVotedOptionId === '1', 'She sees the count and her own choice');
+    assert(!('pollVotes' in voteAnon.post), 'and no voter list');
+    const anonRead = getPosts({ id: pollGrace!.id, viewerPubkey: 'pub-grace', includeVoters: true })[0];
+    assert(!!anonRead && anonRead.totalVotes === 1 && !('pollVotes' in anonRead), 'Its author, a member, reads the count and no voters');
 
     console.log('\n--- 5. Immutability (Cannot Edit Question or Options After Votes) ---');
     errThrew = false;
@@ -463,6 +475,7 @@ async function main() {
     assert(!!exportedPoll, 'exportSyncState exports poll1');
     assert(Array.isArray(exportedPoll?.pollOptions) && exportedPoll!.pollOptions.length === 2, 'exportSyncState exports pollOptions');
     assert(!!exportedPoll?.pollClosesAt, 'exportSyncState exports pollClosesAt');
+    assert(exportedPoll?.pollOpenVote === true, 'exportSyncState exports the open-vote choice');
     assert(Array.isArray(syncSnapshot.pollVotes), 'exportSyncState includes pollVotes');
     const exportedVote = syncSnapshot.pollVotes?.find(v => v.postId === poll1!.id && v.voterPubkey === 'pub-carol');
     assert(!!exportedVote, 'exportSyncState exports ballot for poll1');
@@ -493,6 +506,7 @@ async function main() {
         assert(!!restoredPost, 'Restored database contains poll post');
         assert(restoredPost.poll_options.includes('Yes, definitely'), 'Restored database preserves poll options');
         assert(!!restoredPost.poll_closes_at, 'Restored database preserves poll_closes_at');
+        assert(restoredPost.poll_open_vote === 1, 'Restored database preserves the open-vote choice');
 
         const restoredVotes = restoredDb.prepare('SELECT * FROM poll_votes WHERE post_id = ?').all(poll1!.id) as any[];
         assert(restoredVotes.length === 1, 'Restored database preserves ballots count');
@@ -518,12 +532,12 @@ async function main() {
         const pollOptionsJson = rp.pollOptions != null
             ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
             : null;
-        replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits, rp.authorPublicKey, rp.createdAt,
             rp.active ? 1 : 0, rp.status, rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null, rp.originNode || 'node',
             rp.priceType || 'fixed', rp.acceptedBy || null, rp.acceptedAt || null, rp.pendingTransactionId || null,
-            rp.completedAt || null, rp.updatedAt || rp.createdAt, pollOptionsJson, rp.pollClosesAt || null
+            rp.completedAt || null, rp.updatedAt || rp.createdAt, pollOptionsJson, rp.pollClosesAt || null, rp.pollOpenVote === true ? 1 : 0
         );
     }
     for (const pv of syncSnapshot.pollVotes ?? []) {

@@ -39,4 +39,14 @@ try {
     // it runs before any handler exists to catch it.
 }
 
+// Nor this machine's network interfaces, nor a DNS lookup of the address at the far end of each open
+// connection while the report is written: on a server in direct mode those are members' addresses. The
+// addresses themselves are taken out of each report by the scrub in `process-handlers.ts`. Untyped in
+// @types/node, so the cast.
+try {
+    if (process.report) (process.report as { excludeNetwork?: boolean }).excludeNetwork = true;
+} catch {
+    // Before Node 22 the property does nothing; the scrub still runs.
+}
+
 export {};

@@ -456,7 +456,8 @@ export interface SyncCommunitySettings {
         serviceRadius?: { lat: number; lng: number; radiusKm: number } | null;
         publishLocation?: boolean;
         publishMembers?: boolean;
-        publishContacts?: boolean;
+        publishContactEmail?: boolean;
+        publishContactPhone?: boolean;
         publishHealth?: boolean;
         directoryPushIntervalHours?: number;
     };
@@ -574,7 +575,7 @@ export interface SyncPayload {
      * The importer only upserts what it is given, so an omitted row is normally harmless — the replica keeps
      * its own copy. A FORCE-RESYNC is the exception: it clears `post_photos` before importing, so without
      * this list the one case the omission exists for (the replica holds the only readable copy) is the case
-     * the resync destroys. `clearReplicatedTables` keeps exactly these rows.
+     * the resync destroys. The resync's clear (apps/server engine/sync.ts `clearReplicatedRows`) keeps exactly these rows.
      */
     photosOmitted?: string[];
     /**
@@ -627,6 +628,14 @@ export interface SyncPayload {
     signature?: string;
     publicKey?: string;
 }
+
+/**
+ * The tables getStateHash reads, by name. A standby whose copies leave one of them out (more rows than one copy carries,
+ * apps/server engine/sync.ts) can't read the hash as drift: it differs until a whole copy carries that table again.
+ */
+export const STATE_HASH_TABLES: readonly string[] = [
+    'members', 'posts', 'creator_channels', 'pulse_items', 'event_rsvps', 'groups', 'group_members',
+];
 
 export function getStateHash(db: Db): string {
     const pKeys = db.prepare("SELECT public_key FROM members ORDER BY public_key").all() as any[];
@@ -859,6 +868,8 @@ export function exportSyncState(
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
             : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        // A poll's ballot: an open vote or anonymous (the default), as its creator chose.
+        ...(row.type === 'poll' ? { pollOpenVote: row.poll_open_vote === 1 } : {}),
         // Who may see it. Without these a replica takes the column defaults — 'public' and 'local' — so a
         // group-only or direct post would be shown to everyone on a restored node.
         audienceScope: row.audience_scope || 'public',
@@ -965,7 +976,13 @@ export function exportSyncState(
         updatedAt: row.updated_at || row.added_at,
     }));
 
-    const conversationRows = sel('conversations', 'created_at');
+    // An event's chat is named with the event's title (apps/server engine/event-thread.ts), and a deleted account's event
+    // is renamed with its post (apps/server engine/post-scrub.ts): a delta carries the chat of each event it carries, so a
+    // standby's copy of the name goes too, not only at its next whole copy.
+    const conversationRows = delta
+        ? db.prepare(`SELECT * FROM conversations WHERE created_at >= ?
+                      OR (type = 'event_thread' AND id IN (SELECT id FROM posts WHERE type = 'event' AND updated_at >= ?))`).all(since, since) as any[]
+        : sel('conversations', 'created_at');
     const conversations: SyncConversation[] = conversationRows.map(row => ({
         id: row.id,
         type: row.type,

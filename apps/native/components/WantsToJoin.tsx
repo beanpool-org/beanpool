@@ -106,7 +106,9 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                             onPress={() => answer(req, 'approve')}
                             disabled={!!busy}
                             accessibilityRole="button"
-                            accessibilityLabel={`Invite ${req.callsign}`}
+                            accessibilityLabel={busy === req.id ? `Inviting ${req.callsign}...` : `Invite ${req.callsign}`}
+                            accessibilityHint={`Approves join request from ${req.callsign}`}
+                            accessibilityState={{ disabled: !!busy, busy: busy === req.id }}
                         >
                             <Text style={styles.inviteText}>Invite</Text>
                         </Pressable>
@@ -115,7 +117,9 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                             onPress={() => answer(req, 'decline')}
                             disabled={!!busy}
                             accessibilityRole="button"
-                            accessibilityLabel={`Not now, ${req.callsign}`}
+                            accessibilityLabel={busy === req.id ? `Declining ${req.callsign}...` : `Not now, ${req.callsign}`}
+                            accessibilityHint={`Declines join request from ${req.callsign}`}
+                            accessibilityState={{ disabled: !!busy, busy: busy === req.id }}
                         >
                             <Text style={styles.notNowText}>Not now</Text>
                         </Pressable>

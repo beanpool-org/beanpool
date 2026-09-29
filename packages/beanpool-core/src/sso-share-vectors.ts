@@ -47,8 +47,8 @@ export interface SsoShareVectorShare {
 export interface SsoShareVector {
     /** Also the label the seeded random source is made from. */
     name: string;
-    provider: 'google' | 'apple' | 'github';
-    /** The provider's subject claim (Google's 21 digits, Apple's dotted id, GitHub's numeric user id). */
+    provider: 'google' | 'apple';
+    /** The provider's subject claim (Google's 21 digits, Apple's dotted id). */
     sub: string;
     /** Whether the 12 words are sealed with the seed (a key brought here without them seals the seed alone). */
     withWords: boolean;
@@ -80,19 +80,6 @@ export const SSO_SHARE_VECTORS: readonly SsoShareVector[] = [
             shareIv: '7smfZ82Pc3kVwfGyzAZxahttyz1H4i7a',
             shareTag: 'p7kI4sTwKEyOHawPaiIuuQ==',
             kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"T9hjiWhwZ/P7F/1rKepP0E3jTK5qQhrTYz4GdjMuJKA=","N":16384,"r":8,"p":1,"words":{"alg":"bip39-bits-xc20p-v1","iv":"cRQ4zc384/eT45CPxCAfg23yz1GaeM/V","ct":"73MR8XrTdfZKYPiA3BIV5/M=","tag":"UTwQ86WLkTeUi230Eoa4XQ=="}}',
-        }],
-    },
-    {
-        name: 'github, with the words',
-        provider: 'github',
-        sub: '24680',
-        withWords: true,
-        shares: [{
-            holderType: 'sso', holderRef: 'github', shareIndex: 1,
-            encryptedShare: 'ob58FryEwm+M88yGwrmSRu5waQu7NA7UPChJkkWBbkw=',
-            shareIv: 'MyL/lEeb+X7lhy427qveU1V+BQRCQdKl',
-            shareTag: 'AsmZKy1/2avOelgCZR4vZQ==',
-            kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"dwrvD7bQS++I79+ELMH+T1QqL1rnaSt0h0AG1qCflfw=","N":16384,"r":8,"p":1,"words":{"alg":"bip39-bits-xc20p-v1","iv":"jhlCesRuXGPJprHcv9q5XCniC0zhX483","ct":"6t0Qngprm2ZVqK5L6bvBMe8=","tag":"+iRpS2efwC8JwQjxIIhDaw=="}}',
         }],
     },
     {

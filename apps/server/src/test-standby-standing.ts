@@ -575,7 +575,9 @@ async function main(): Promise<void> {
         nodes.push(standby);
         const sb = `https://localhost:${await standby.send('serve')}`;
         const boardOn = async (base: string) => {
-            const b = await api(base, 'GET', '/api/marketplace/posts');
+            // Read by Gwen, a member who keeps no enterprise and isn't on holiday: a local community's board is its
+            // members' since 2026-09-28, and this read was unsigned while the board was public.
+            const b = await api(base, 'GET', '/api/marketplace/posts', { as: gwen });
             return (Array.isArray(b.body) ? b.body : b.body?.posts ?? []).map((p: any) => p.id).sort();
         };
         const backingOn = async (base: string) => {
@@ -726,10 +728,12 @@ async function main(): Promise<void> {
         console.log('\n— 9. M dies; S takes over with the recovery code —');
         const last = await standby.send('pull', {});
         require_(last.ok === true && last.envelope !== undefined, `S: a last pull, and the take-over envelope (${last.ok ? last.mode : last.error})`);
-        const everyone: [string, string][] = [gwen, ann, bo, cy, kip2, lou, eve, fay, dee2, hal].map((w) => [w.name, w.pk]);
-        everyone.push(['Probe Co', probe.publicKey], ['Seed Fund', seed.publicKey]);
+        // Each member's read by that member (a balance is its owner's only, 2026-09-28), an enterprise's by Gwen (its
+        // balance is open). Read by Gwen for everyone while balances were member-visible.
+        const everyone: [string, string, Id][] = [gwen, ann, bo, cy, kip2, lou, eve, fay, dee2, hal].map((w) => [w.name, w.pk, w]);
+        everyone.push(['Probe Co', probe.publicKey, gwen], ['Seed Fund', seed.publicKey, gwen]);
         const standingOn = async (base: string) => Object.fromEntries(await Promise.all(
-            everyone.map(async ([n, pk]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: gwen }))])));
+            everyone.map(async ([n, pk, reader]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: reader }))])));
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
         require_((onMain.standing as any).Eve?.elderVouchedBy === bo.pk && (onMain.standing as any).Lou?.elderVouchedBy === null

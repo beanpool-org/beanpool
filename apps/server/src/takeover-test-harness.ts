@@ -10,6 +10,9 @@
  *
  * The orchestrator talks to a node over HTTP like Settings does, and over stdin for what only a test does (set up
  * members, pull now, look inside). Replies are `@@ {json}` lines on stdout.
+ *
+ * Every node's tunnel runs the fake cloudflared (tunnel-test-fake.ts), controlled from `<data dir>.cloudflared`: no suite
+ * starts the real one.
  */
 
 import fs from 'node:fs';
@@ -38,12 +41,22 @@ let seq = 0;
 /**
  * Start a node process on `dataDir`. Resolves when it prints `ready`, or rejects with its output when it exits
  * first (a crash injected at a boot-time step exits before ready).
+ *
+ * `maxFileBytes`: no file the process writes may grow past it (RLIMIT_FSIZE, set by bash's `ulimit -f`, in 1024-byte
+ * blocks, before the node starts), as a disk that is full or failing stops it. Node ignores SIGXFSZ, so such a write fails
+ * (EFBIG, which SQLite reports as SQLITE_IOERR) and the process carries on.
  */
-export function spawnNode(script: string, dataDir: string, env: Record<string, string | undefined>): Promise<NodeProc> {
-    const proc = spawn(process.execPath, [...process.execArgv, script, '--child'], {
+export function spawnNode(
+    script: string, dataDir: string, env: Record<string, string | undefined>, opts: { maxFileBytes?: number } = {},
+): Promise<NodeProc> {
+    const argv = [...process.execArgv, script, '--child'];
+    const options = {
         env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env } as NodeJS.ProcessEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-    });
+        stdio: ['pipe', 'pipe', 'pipe'] as ('pipe')[],
+    };
+    const proc = opts.maxFileBytes
+        ? spawn('/bin/bash', ['-c', `ulimit -f ${Math.ceil(opts.maxFileBytes / 1024)} && exec "$0" "$@"`, process.execPath, ...argv], options)
+        : spawn(process.execPath, argv, options);
     let out = '';
     const waiting = new Map<number, (v: any) => void>();
     let readyResolve: (v: any) => void;
@@ -114,6 +127,9 @@ function reply(msg: Record<string, unknown>): void {
 export async function runNodeChild(commands: Record<string, (args: any) => Promise<unknown>> = {}): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     fs.mkdirSync(dataDir, { recursive: true });
+    // The tunnel inside the server (services/tunnel-connector.ts) runs the fake, from before anything can start it.
+    const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
+    await useFakeCloudflared(`${dataDir}.cloudflared`);
     const Koa = (await import('koa')).default;
     const { ensureGenesis } = await import('./genesis.js');
     const { initAdminPassword } = await import('./config/local-config.js');
@@ -129,6 +145,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
     const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
+    const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
     initAdminPassword();
@@ -140,12 +157,17 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
         initSnapshotScheduler();
     }
     const boot = resumeTakeoverAtBoot();
-    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
+    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot), and GitHub's rows.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });
     await finishTakeoverAfterBoot();
+    // index.ts step 10.4: the tunnel inside the server, on a main server with a tunnel address (a take-over's own step
+    // started it above when this start finished one).
+    const { initTunnelConnector } = await import('./services/tunnel-connector.js');
+    await initTunnelConnector();
     // As index.ts does, but awaited so a suite can see the first answer, and only when the suite says where this
     // node's "public address" is: the suites' main servers have real-looking hostnames that must never be asked.
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
@@ -302,6 +324,20 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
     const config = getLocalConfig();
     const status = await getTakeoverStatus();
     const tokenFile = path.join(dataDir, 'tunnel-token');
+    // The tunnel inside the server: what it wants, what it runs, and the token its child (the fake) was started with.
+    const { tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
+    const t = tunnelConnectorForTests();
+    const runsFile = path.join(`${dataDir}.cloudflared`, 'runs.jsonl');
+    const childRun = async () => {
+        for (let i = 0; i < 150 && t.pid !== null; i++) {
+            const runs = fs.existsSync(runsFile) ? fs.readFileSync(runsFile, 'utf-8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+            const mine = runs.find((r: any) => r.pid === t.pid);
+            if (mine) return mine;
+            await new Promise((r) => setTimeout(r, 20));
+        }
+        return null;
+    };
+    const run = await childRun();
     return {
         role: getNodeRole(),
         peerId: peerIdFromPrivateKey(getPrivateKey()).toString(),
@@ -315,6 +351,7 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         backupReplicationToken: config.backupReplicationToken ? 'set' : null,
         publicAddress: (getNodeConfig() as any).publicAddress ?? null,
         tunnelTokenFile: fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, 'utf-8') : null,
+        tunnel: { wantedToken: t.wantedToken, runningToken: t.runningToken, state: t.status.state, childToken: run?.env?.TUNNEL_TOKEN ?? null },
         heldDirExists: fs.existsSync(path.join(dataDir, 'held-takeover-envelopes')),
         bundleFileExists: fs.existsSync(path.join(dataDir, 'takeover-bundle.json')),
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),

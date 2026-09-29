@@ -54,8 +54,6 @@ import {
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
 import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
-import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
-import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import {
     issueNonce,
     signInCredentialFrom,
@@ -236,7 +234,7 @@ function unauthenticated(ctx: any): void {
 
 /**
  * A sign-in that did not work, on the keeper and recovery routes: 503 when the provider could not be asked
- * (its keys, or GitHub, failed or could not be reached: the member did nothing wrong and should try again, in
+ * (its keys failed or could not be reached: the member did nothing wrong and should try again, in
  * the open door's shape), 400 when the sign-in itself did not check out. The outage is tested first because
  * SsoProviderUnavailableError is also an SsoVerificationError. Anything else is a bug and is left to the
  * error handler.
@@ -294,45 +292,9 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             // enforce anything — expiry is checked here.
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
-            githubFlow: GITHUB_FLOW,
             // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
             clientIds: webClientIds(),
         };
-    });
-
-    /**
-     * GitHub, run by this node for the signed member (engine/github-device.ts). `start` answers the
-     * code the member types at GitHub; `poll { sessionId }` answers pending, ok with the `sub` the
-     * client seals to, denied or expired. The deposit then carries `proof: { sessionId }`.
-     *
-     * `start` is on the auth limiter: one call per sign-in. `poll` is on its own per-address bucket
-     * (github-poll-rate-limit.ts), shared with the recovery and door polls, never the auth limiter: a phone
-     * waits there for up to 15 minutes, and two of them on one address would otherwise lock that address out of
-     * callsign checks, recovery and pairing. Every poll counts, whatever session it names. A device polling at
-     * GitHub's interval (5 seconds, or longer after a slow_down) stays well inside it; one answered 429 should
-     * treat it as still pending and wait `intervalSeconds`.
-     */
-    router.post('/api/recovery/sso/github/start', async (ctx) => {
-        const owner = activeSigner(ctx);
-        if (!owner) return unauthenticated(ctx);
-        if (!rateLimit(ctx)) return;
-        try {
-            const started = await startGithubSession(owner);
-            ctx.status = 200;
-            ctx.body = started;
-        } catch (e) { return signInFailure(ctx, e); }
-    });
-
-    router.post('/api/recovery/sso/github/poll', async (ctx) => {
-        if (!githubPollRateLimit(ctx)) return;
-        const owner = activeSigner(ctx);
-        if (!owner) return unauthenticated(ctx);
-        const sessionId = (ctx as any).requestBody?.sessionId;
-        try {
-            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', owner);
-            ctx.status = 200;
-            ctx.body = polled;
-        } catch (e) { return signInFailure(ctx, e); }
     });
 
     /**
@@ -406,7 +368,6 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 provider: body.provider,
                 ownerPubkey: owner,
                 shares,
-                // `idToken` for Google, Apple and Facebook; `proof: { sessionId }` for GitHub.
                 ...signInCredentialFrom(body),
                 nonce: typeof body.nonce === 'string' ? body.nonce : '',
             });

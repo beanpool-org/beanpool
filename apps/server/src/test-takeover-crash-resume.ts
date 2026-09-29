@@ -182,7 +182,8 @@ async function main(): Promise<void> {
         assert(a.connectors.length === 1 && a.connectors[0].trustLevel === 'peer', `[${r.step}] the link with the other community is restored, no mirror pin`);
         assert(a.configNodeRole === 'primary' && !a.promotionAuditPending && a.lastPromotionAudit?.ok === true && a.backupPrimaryUrl === null,
             `[${r.step}] nodeRole in the config, the audit done and passed, the pull settings cleared`);
-        assert(a.tunnelTokenFile === TUNNEL_TOKEN && a.publicAddress?.tunnelToken === TUNNEL_TOKEN, `[${r.step}] the tunnel token is back`);
+        assert(a.tunnel.wantedToken === TUNNEL_TOKEN && a.tunnel.childToken === TUNNEL_TOKEN && ['starting', 'connected'].includes(a.tunnel.state)
+            && a.publicAddress?.tunnelToken === TUNNEL_TOKEN, `[${r.step}] the tunnel token is back, and the tunnel runs on it (${a.tunnel.state})`);
         assert(a.envelope.state === 'sealed' && !a.heldDirExists && !a.bundleFileExists, `[${r.step}] the keys are re-sealed here; no held copies, no opened keys left`);
         assert(count(r.outputs, AUDIT_BANNER) === 1, `[${r.step}] the conservation audit ran exactly once across every start (${count(r.outputs, AUDIT_BANNER)})`);
         assert(count(r.outputs, ANNOUNCED) === 1, `[${r.step}] the community was told exactly once (${count(r.outputs, ANNOUNCED)})`);

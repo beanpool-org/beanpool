@@ -67,12 +67,14 @@ import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
+import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
@@ -129,6 +131,9 @@ async function main() {
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And GitHub's rows for that role (engine/github-sign-in-removal.ts): a standby that became the main server at this
+    // boot removes the GitHub copies it inherited before anything serves. Does nothing when the role did not change.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
     // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),
@@ -290,10 +295,15 @@ async function main() {
     // Step 10.2: The watch on this server's standbys (design G8): when one stops copying or copies wrongly, the community's
     // owners are told. Set on every node like the mirror: each tick reads the role.
     startStandbyHealthWatch();
+    // Step 10.4: the tunnel for <name>.beanpool.org runs inside this server (services/tunnel-connector.ts), on the token in
+    // node_config, on the main server only, and after a take-over's own tunnel step. On every server: it also deletes a
+    // leftover data/tunnel-token and warns when docker-compose.yml still mounts Docker's control socket. Never throws;
+    // not awaited, so the boot never waits on it.
+    void initTunnelConnector();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
-        // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
-        // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
+        // Step 10.5: the public-address agent. Every 5 min it refreshes a tunnel address this server holds (the tunnel
+        // above runs the answer), and with PUBLIC_ADDRESS_* set it also claims <name>.beanpool.org from the registrar.
         initPublicAddress();
     }
 

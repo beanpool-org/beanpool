@@ -45,6 +45,7 @@ import { GROUP_CATEGORIES, DEFAULT_GROUP_CATEGORY, GROUP_CATEGORY_LABELS } from 
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { chatRateLimit, resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -363,7 +364,7 @@ async function main(): Promise<void> {
     // A DM push honours a mute too (decision 12: every chat is mutable).
     const dm = createConversation('dm', [alice, bob], alice)!;
     setChatMute(dm.id, bob, 'always');
-    const dmRes = await mpost('/api/messages/send', alice, { conversationId: dm.id, authorPubkey: alice, ciphertext: 'ZW5j', nonce: 'n1' });
+    const dmRes = await mpost('/api/messages/send', alice, { conversationId: dm.id, authorPubkey: alice, ...lockedDm() }); // a DM goes in encrypted
     assert(dmRes.body?.success === true, 'a DM still sends');
     const listed = await mget(`/api/messages/conversations/${bob}`, bob);
     assert(listed.body.conversations.find((c: any) => c.id === dm.id)?.mute?.always === true, 'the Talk list tells the app which chats are muted');
@@ -475,7 +476,7 @@ async function main(): Promise<void> {
     assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before8b, 'and nothing is written');
     const dmPair = createConversation('dm', [bob, erin], bob)!;
     const dmSent = await dispatch(limited, 'POST', '/api/messages/send',
-        ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ciphertext: 'c', nonce: 'n' }));
+        ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ...lockedDm() }));
     assert(dmSent.body?.success === true && authLimiterCalls === 0, 'a DM is not put through either limiter');
     resetChatRateLimit();
 

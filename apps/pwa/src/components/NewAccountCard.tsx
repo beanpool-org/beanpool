@@ -95,7 +95,7 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
                         type="button"
                         onClick={onClose}
                         aria-label="Hide this for now"
-                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 cursor-pointer"
+                        className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                         ✕
                     </button>

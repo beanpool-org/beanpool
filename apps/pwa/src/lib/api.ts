@@ -119,7 +119,7 @@ export async function buildOfflineInviteCode(
 }
 
 // Base request helper with auth
-export async function request<T>(method: string, path: string, body?: any): Promise<T> {
+export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal): Promise<T> {
     const opts: RequestInit = {
         method,
         cache: 'no-cache',
@@ -127,6 +127,7 @@ export async function request<T>(method: string, path: string, body?: any): Prom
             'Content-Type': 'application/json',
         } as Record<string, string>,
     };
+    if (signal) opts.signal = signal;
 
     const bodyString = body ? JSON.stringify(body) : '';
     if (body) {
@@ -951,6 +952,8 @@ export interface MarketplacePost {
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
     pollClosesAt?: string;
+    /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
+    pollOpenVote?: boolean;
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
@@ -1045,6 +1048,8 @@ export async function createMarketplacePost(post: {
     reachPeers?: string[];
     pollOptions?: Array<{ id: string; text: string }>;
     durationDays?: number;
+    /** A poll only: true makes it an open vote (members see who chose what). Left out, it is anonymous. */
+    pollOpenVote?: boolean;
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;
     targetPubkey?: string;
@@ -2397,10 +2402,14 @@ export async function getActivityFeedApi(limit: number = 50, offset: number = 0)
 
 // ===================== ACCOUNT DELETION & PURGE (#99) =====================
 
-export async function purgeAccountApi(): Promise<{ ok: boolean; message: string }> {
+/**
+ * Settings' Delete account: the node the web app talks to deletes the account. Callers go through lib/delete-here.ts
+ * `purgeHere`, which gives up after a timeout (`signal`) and counts only `{ ok: true }` as a delete.
+ */
+export async function purgeAccountApi(signal?: AbortSignal): Promise<{ ok: boolean; message: string }> {
     return request<{ ok: boolean; message: string }>('POST', '/api/member/purge', {
         action: 'purge_account',
-    });
+    }, signal);
 }
 
 

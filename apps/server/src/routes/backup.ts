@@ -1297,8 +1297,9 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
 // under it: a chat attachment's (they never leave this server: replication-manifest.ts message_attachments, G4), anything a
 // shared bucket holds, and an avatar's (no object: it sits in its members row). The same auth as a copy's pages, under the
 // same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace
-// (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too, and the standby keeps its own
-// row of it, as for one a copy names in `photosOmitted`; a store that doesn't answer is 503, and the standby's pull fails.
+// (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too; either 404 fails the standby's
+// pull, and its next copy names what this server holds then (a photo whose object is lost here is left out of that copy
+// and named in `photosOmitted`). A store that doesn't answer is 503, and the pull fails the same way.
 router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
     const ip = replicationClientIp(ctx);
     const authMode = await replicationAuth(ctx, ip);

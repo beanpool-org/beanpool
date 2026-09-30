@@ -228,6 +228,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 - becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
 - stops copying from the old main server, forgets how far its copies had reached, and restarts;
 - checks once that the ledger adds up, before members trade on it;
+- deletes state.previous.db, the database the standby had before its last whole copy, once that check finds the ledger adds up. If the check found trouble, it keeps that file for 30 days so you can look into it, says at every start the date it goes, and then deletes it;
 - posts a notice, "This community moved to a new server", with the date and who opened the keys: the recovery code and its number, or the owner by name. People connected at that moment see it live, and members get it as a notification on the phones the standby copied;
 - locks the keys again, on this server, to the owners and the same recovery code, and deletes the copies it held from the old main server;
 - starts the tunnel for the web address.

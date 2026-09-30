@@ -62,6 +62,7 @@ import { updateGatewayConfig } from './config/local-config.js';
 import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
 import { beginOutboundSettlement, abandonOutboundSettlement, SettlementError } from './federation-settlement-exchange.js';
 import { getSettlement } from './federation-settlement-state.js';
+import { rotateDailyPulse } from './daily-pulse.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--settlement-key-child';
@@ -316,6 +317,18 @@ async function engineChecks(): Promise<void> {
     assert(bal(buyer) === 100 && bal(`escrow_${key}`) === 0 && getSettlement(key)?.state === 'abandoned' && nodeTotal() === baseline,
         `1. abandoning it gives the buyer back exactly their own 10.15, and the escrow ends at 0 (buyer ${bal(buyer)}, escrow ${bal(`escrow_${key}`)}, total ${nodeTotal()})`);
     assert(held() === heldBefore, `1. and the project's, the deal's and the enterprise's Beans are where they were (${held()})`);
+
+    // An inbound settlement's key is the peer's choice and names no account here, so it takes no id the node makes itself.
+    const pulseDay = new Date('2026-08-16T05:00:00Z');
+    const pulseKey = `pulse_${new Date(pulseDay.getTime() - pulseDay.getTimezoneOffset() * 60_000).toISOString().split('T')[0]}`;
+    db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state)
+                VALUES (?, 'inbound', ?, ?, ?, 1, 0, 'reserved')`).run(pulseKey, PEER, crypto.randomBytes(32).toString('hex'), holder);
+    let pulsePost: any = null;
+    let pulseError = '';
+    try { pulsePost = rotateDailyPulse(pulseDay).post; } catch (e: any) { pulseError = String(e?.message ?? e); }
+    assert(pulsePost?.id === pulseKey && !pulseError,
+        `1. a trading peer's inbound key ${pulseKey} doesn't stop the node's own Daily Pulse post under that id (${pulsePost?.id ?? pulseError})`);
+    assert(nodeTotal() === baseline, `1. and nothing moves (${baseline} → ${nodeTotal()})`);
 
     // ── 7. The operators' data checks ─────────────────────────────────────────────────────────────────────────
     console.log('\n--- 7. the operators\' data checks ---');

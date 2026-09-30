@@ -1946,6 +1946,8 @@ export function isFreshProjectId(id: unknown): id is string {
  * or a deal's escrow had that escrow paid out to whoever abandoned the settlement (federation-settlement-exchange.ts
  * beginOutboundSettlement). A post's id once named `escrow_<post id>` too. Every other id that names an account is made
  * by the node (a deal's, a pledge's, a project's, an enterprise's key), so it names nothing until the node makes it.
+ * Only an outbound settlement counts: an inbound one's key is the peer's choice and names no account here (the seller's
+ * side has no escrow), so counting it would let a trading peer take ids the node makes itself, like `pulse_<date>`.
  */
 export function idNamesMoney(id: string): boolean {
     if (isSyntheticAccount(id)) return true;
@@ -1954,7 +1956,7 @@ export function idNamesMoney(id: string): boolean {
         UNION ALL SELECT 1 FROM accounts WHERE public_key = @id OR public_key = 'escrow_' || @id
         UNION ALL SELECT 1 FROM projects WHERE id = @id
         UNION ALL SELECT 1 FROM marketplace_transactions WHERE id = @id
-        UNION ALL SELECT 1 FROM settlements WHERE key = @id
+        UNION ALL SELECT 1 FROM settlements WHERE key = @id AND direction = 'outbound'
         LIMIT 1
     `).get({ id });
 }

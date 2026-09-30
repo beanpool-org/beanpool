@@ -49,6 +49,13 @@ function makeRepo() {
     for (const img of fs.readdirSync(images).filter(f => !f.startsWith('.'))) {
         fs.copyFileSync(path.join(repoRoot, 'apps/manager/public/images', img), path.join(work, 'apps/manager/public/images', img));
     }
+    // Every test starts from a published main: nothing waits to be published. The working tree this copies may hold
+    // text that does (a PR's page edits, or main between a merge and the director's publish), so publish it here, in
+    // the copy, before the first commit. With nothing waiting this writes the same files and changes nothing.
+    const seeded = build(work, '--publish');
+    assert.equal(seeded.status, 0, `publishing the copy's pages: ${said(seeded)}`);
+    const waiting = build(work, '--pending');
+    assert.equal(waiting.status, 0, `the copy starts with nothing to publish: ${said(waiting)}`);
     git(root, 'init', '-q', '--bare', '-b', 'main', 'origin.git');
     git(work, 'init', '-q', '-b', 'main');
     git(work, 'config', 'user.email', 'guide-test@example.org');
@@ -56,14 +63,6 @@ function makeRepo() {
     git(work, 'config', 'commit.gpgsign', 'false');
     git(work, 'add', '-A');
     git(work, 'commit', '-q', '-m', 'base');
-    // A published main, as main is once the director has published: a branch's page edits that wait to be published
-    // (every guide PR's since #1328) are published in the copy first, or "nothing to publish" could never hold here.
-    const published = build(work, '--publish');
-    if (published.status !== 0) throw new Error(`publishing the copy failed: ${published.stderr || published.stdout}`);
-    if (git(work, 'status', '--porcelain')) {
-        git(work, 'add', '-A');
-        git(work, 'commit', '-q', '-m', 'published');
-    }
     git(work, 'remote', 'add', 'origin', path.join(root, 'origin.git'));
     git(work, 'push', '-q', '-u', 'origin', 'main');
     return { root, work, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };

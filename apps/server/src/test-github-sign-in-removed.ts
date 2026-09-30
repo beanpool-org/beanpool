@@ -234,7 +234,7 @@ async function child(): Promise<void> {
         /** The door's record arriving from a main server (a pull, a take-over's keys), as engine/sync.ts hands it over. */
         'write-open-joins': async (a: { joins: unknown }) => {
             const { writeOpenJoinRecord } = await import('./engine/open-join.js');
-            return writeOpenJoinRecord(undefined, a.joins);
+            return writeOpenJoinRecord(a.joins);
         },
         reseal: async () => {
             const { flushTakeoverChecks } = await import('./services/takeover-envelope.js');

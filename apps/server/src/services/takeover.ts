@@ -77,6 +77,9 @@ import {
 } from '../config/node-profile.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
 import { installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import {
+    adoptCarriedOpenJoinKey, installCarriedOpenJoinKey, liveOpenJoinRecords, openJoinKeyOffLine, openJoinKeyState, OPEN_JOIN_KEY_FILE,
+} from './open-join-key.js';
 import { installCommunitySettings, keptCommunitySettings } from '../config/community-settings.js';
 import { notePhotoUrlShapeNow } from '../engine/photo-keys.js';
 
@@ -611,7 +614,11 @@ async function startSession(
                 : null,
         },
         copy,
-        missing: [...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]), ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS])],
+        missing: [
+            ...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]),
+            ...(carriedOpenJoinKey(bundle) || !holdsOpenJoinRecords() ? [] : [MISSING_OPEN_JOIN_KEY]),
+            ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS]),
+        ],
         afterwards: AFTER_A_TAKEOVER,
     };
 }
@@ -625,6 +632,26 @@ function carriesSealKey(bundle: TakeoverBundle): boolean {
 /** In the preview's list of what will be missing, when the keys carry no recovery-seal key. */
 const MISSING_SEAL_KEY = "members' sign-in recovery copies: these keys were locked before they carried the key that opens them, so "
     + 'members connect their sign-in again (their 12 words still work)';
+
+/**
+ * The open door's key an opened bundle carries (services/open-join-key.ts), as base64: the `open-join.key` file, or, in a
+ * bundle sealed before the key was a file, the old record's `salt` (base64url). Null when it carries none.
+ */
+function carriedOpenJoinKey(bundle: TakeoverBundle): string | null {
+    const file = bundle.files[OPEN_JOIN_KEY_FILE];
+    if (typeof file === 'string' && file) return file;
+    const legacy = bundle.openJoins?.salt;
+    return typeof legacy === 'string' && /^[A-Za-z0-9_-]+$/.test(legacy) ? Buffer.from(legacy, 'base64url').toString('base64') : null;
+}
+
+/** Whether this standby holds open-door records a sign-in could match, with no key here they were made with. */
+function holdsOpenJoinRecords(): boolean {
+    return !openJoinKeyState({ create: false }).on && liveOpenJoinRecords() > 0;
+}
+
+/** In the preview's list of what will be missing, when the keys carry no open-door key and this standby holds records. */
+const MISSING_OPEN_JOIN_KEY = 'joining through the open door with a sign-in: these keys were locked before they carried the key its records '
+    + 'are made with, so the door refuses sign-ins until that key is back (members already here are not affected)';
 
 /** In the preview's list of what will be missing, when this standby holds no copy of the community's settings. */
 const MISSING_SETTINGS = "the community's own settings (its name, place, contacts, thresholds and directory choices): the main server never "
@@ -659,10 +686,10 @@ function bundleEpoch(bundle: TakeoverBundle): number {
     return Number.isSafeInteger(n) && n > 0 ? n : 0;
 }
 
-// recovery-seal.key: a standby holds none of its own unless it was once a main server; then its key is kept here too,
-// byte for byte (and beside the carried one, installCarriedRecoverySealKey), so undoing puts back exactly what was there.
+// recovery-seal.key and open-join.key: a standby holds neither of its own unless it was once a main server; then each is
+// kept here too, byte for byte (and beside the carried one, installCarried…Key), so undoing puts back exactly what was there.
 // No tunnel-token: the tunnel runs from publicAddress in node_config (services/tunnel-connector.ts), which is kept below.
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE];
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
@@ -685,7 +712,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'identity-files': {
             for (const f of BUNDLED_FILES) {
-                if (f === 'connectors.json' || f === RECOVERY_SEAL_KEY_FILE) continue;
+                if (f === 'connectors.json' || f === RECOVERY_SEAL_KEY_FILE || f === OPEN_JOIN_KEY_FILE) continue;
                 const b64 = bundle.files[f];
                 if (!b64) continue;
                 writeAtomic(dataPath(f), Buffer.from(b64, 'base64'), f === 'genesis.json' ? 0o644 : 0o600);
@@ -766,17 +793,19 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'open-door': {
             // Who joined through the open door, and the key their records are hashed with (engine/open-join.ts), so
-            // the promoted server refuses a sign-in account that already joined. Merged over what this standby
-            // copied: per member the newer row stands, and a row for a member this standby never copied is left
-            // out, so that account can join again rather than be locked out of an identity that is not here.
+            // the promoted server refuses a sign-in account that already joined. The key is installed as the file
+            // data/open-join.key (services/open-join-key.ts), never over a different key this standby holds, which is
+            // kept beside it. The rows are merged over what this standby copied: per member the newer row stands, and a
+            // row for a member this standby never copied is left out, so that account can join again rather than be
+            // locked out of an identity that is not here. Safe to run again.
             const record = bundle.openJoins;
-            if (!record) return 'the keys were sealed before the open door\'s record travelled with them; kept what this standby copied';
-            const merged = writeOpenJoinRecord(record.salt ?? undefined, record.joins);
+            const merged = record ? writeOpenJoinRecord(record.joins) : null;
+            const key = installOpenJoinKey(bundle);
+            if (!record || !merged) return `the keys were sealed before the open door's record travelled with them; kept what this standby copied; ${key}`;
             const held = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
             return `${held} sign-in account(s) on record here (the main server had ${Number(record.total) || 0} when it sealed); `
                 + `${merged.written} brought from the keys, ${merged.kept} already copied`
-                + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}`
-                + `${merged.saltWritten ? '; the key for their hashes brought from the keys' : ''}`;
+                + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}; ${key}`;
         }
         case 'community-settings': {
             // The community's own settings, as this standby last copied them from the main server (config/community-
@@ -827,6 +856,35 @@ function installSealKey(bundle: TakeoverBundle): string {
     const line = noCarriedKeyLine('envelope');
     logger.warn('SYS', `[Takeover] ${line}`);
     return line;
+}
+
+/**
+ * The open door's key, from the keys (services/open-join-key.ts), recorded as the key this database's records were made
+ * with. Safe to run again. Keys that carry none promote anyway: the door then refuses sign-ins while this server holds
+ * records it cannot check, and says so. Never logs or returns the key's bytes.
+ */
+function installOpenJoinKey(bundle: TakeoverBundle): string {
+    const carried = carriedOpenJoinKey(bundle);
+    const done = installCarriedOpenJoinKey(carried);
+    if (done.outcome === 'absent' || done.outcome === 'invalid') {
+        const state = openJoinKeyState({ create: false });
+        const records = liveOpenJoinRecords();
+        if (state.on || records === 0) return 'no key for the open door\'s hashes in the keys, and none needed here';
+        const line = openJoinKeyOffLine(records, state.why, 'envelope');
+        logger.warn('SYS', `[Takeover] ${line}`);
+        return line;
+    }
+    const kept = done.outcome === 'replaced' ? ` (this server's own is kept as data/${done.retiredAs})` : '';
+    if (done.outcome === 'replaced') {
+        logger.warn('SYS', `[Takeover] This server already had an open-door key of its own; it is kept as data/${done.retiredAs}`);
+    }
+    if (adoptCarriedOpenJoinKey(carried!) === 'other-key-recorded') {
+        const state = openJoinKeyState({ create: false });
+        const line = state.on ? null : openJoinKeyOffLine(liveOpenJoinRecords(), state.why);
+        if (line) logger.warn('SYS', `[Takeover] ${line}`);
+        return `the key for the open door's hashes brought from the keys${kept}; ${line ?? 'it is the key its records were made with'}`;
+    }
+    return `the key for the open door's hashes brought from the keys${kept}`;
 }
 
 function runPreRestartSteps(j: Journal, plan: Plan): void {

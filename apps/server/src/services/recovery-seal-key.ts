@@ -120,6 +120,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
+import { createKeyFileOnce, fsyncDir, writeExclusive } from './key-files.js';
 
 export const RECOVERY_SEAL_KEY_FILE = 'recovery-seal.key';
 
@@ -259,27 +260,6 @@ export function noCarriedKeyLine(where: 'envelope' | 'backup'): string {
         + 'Their 12 words still work.';
 }
 
-/** Write a file exclusively (never over another), 0600, synced. False when a file is already there. */
-function writeExclusive(target: string, bytes: Buffer): boolean {
-    let fd: number;
-    try {
-        fd = fs.openSync(target, 'wx', 0o600);
-    } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
-        throw e;
-    }
-    try {
-        fs.writeSync(fd, bytes);
-        fs.fsyncSync(fd);
-    } catch (e) {
-        try { fs.closeSync(fd); } catch { /* closed */ }
-        fs.rmSync(target, { force: true });
-        throw e;
-    }
-    fs.closeSync(fd);
-    return true;
-}
-
 /**
  * Install the recovery-seal key a take-over bundle carried (a take-over's identity-files step, a sealed-backup restore),
  * as base64 from the bundle, or nothing when the bundle had none (sealed before the key travelled).
@@ -335,81 +315,15 @@ export function installCarriedRecoverySealKey(b64: string | null | undefined): C
 }
 
 /**
- * What `link()` says on a data folder that has no hard links: FAT/exFAT, many SMB/CIFS and some FUSE mounts (Linux gives
- * EPERM, macOS ENOTSUP). The same list sealed-backup.ts falls back on, with ENOTSUP.
- */
-const NO_HARD_LINKS = new Set(['EPERM', 'ENOTSUP', 'EMLINK', 'ENOSYS', 'EXDEV']);
-
-/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
-function fsyncDir(dir: string): void {
-    let fd: number | null = null;
-    try {
-        fd = fs.openSync(dir, 'r');
-        fs.fsyncSync(fd);
-    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
-        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
-    }
-}
-
-/**
  * Make the key file if there is none. Written to a temporary file and linked into place, so a crash leaves no half a key
  * and an existing file (a key, or something that is not one) is never overwritten. On a data folder without hard links,
  * the key is created in place instead, exclusively (`wx`), so that still never overwrites a file: a crash in the moment
- * between the create and the one 32-byte write would leave an empty file, which the boot then names.
+ * between the create and the one 32-byte write would leave an empty file, which the boot then names (services/key-files.ts).
  */
 export function ensureRecoverySealKey(): { created: boolean } {
     const target = recoverySealKeyPath();
     if (fs.existsSync(target)) return { created: false };
-    const dir = path.dirname(target);
-    fs.mkdirSync(dir, { recursive: true });
-    const key = crypto.randomBytes(KEY_BYTES);
-    const tmp = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    try {
-        const fd = fs.openSync(tmp, 'wx', 0o600);
-        try {
-            fs.writeSync(fd, key);
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-        fs.chmodSync(tmp, 0o600);
-        try {
-            fs.linkSync(tmp, target);
-        } catch (e) {
-            const code = (e as NodeJS.ErrnoException).code ?? '';
-            if (code === 'EEXIST') return { created: false };
-            if (!NO_HARD_LINKS.has(code)) throw e;
-            return { created: createKeyInPlace(target, key) };
-        }
-        fsyncDir(dir);
-        return { created: true };
-    } finally {
-        fs.rmSync(tmp, { force: true });
-    }
-}
-
-/** The fallback without hard links: create the key file exclusively and write it. False if a file is already there. */
-function createKeyInPlace(target: string, key: Buffer): boolean {
-    let fd: number;
-    try {
-        fd = fs.openSync(target, 'wx', 0o600);
-    } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
-        throw e;
-    }
-    try {
-        fs.writeSync(fd, key);
-        fs.fsyncSync(fd);
-    } catch (e) {
-        // This process made the file a moment ago and nothing has used it: a key that did not go down whole is removed,
-        // so the next boot makes one rather than finding a file that is not a key.
-        try { fs.closeSync(fd); } catch { /* closed */ }
-        fs.rmSync(target, { force: true });
-        throw e;
-    }
-    fs.closeSync(fd);
-    fsyncDir(path.dirname(target));
-    return true;
+    return { created: createKeyFileOnce(target, crypto.randomBytes(KEY_BYTES)) };
 }
 
 function parseKdf(kdfParams: string | null | undefined): Record<string, unknown> | null {

@@ -217,6 +217,9 @@ async function child(): Promise<void> {
             sealKey: sealKeyOf(), sealKeyMode: fs.existsSync(path.join(dataDir, 'recovery-seal.key'))
                 ? (fs.statSync(path.join(dataDir, 'recovery-seal.key')).mode & 0o777).toString(8) : null,
             retired: retiredKeys(),
+            doorKey: fs.existsSync(path.join(dataDir, 'open-join.key')) ? sha(fs.readFileSync(path.join(dataDir, 'open-join.key'))) : null,
+            doorKeyMode: fs.existsSync(path.join(dataDir, 'open-join.key'))
+                ? (fs.statSync(path.join(dataDir, 'open-join.key')).mode & 0o777).toString(8) : null,
         },
     }));
     process.exit(0);
@@ -290,6 +293,9 @@ async function main(): Promise<void> {
     assert(deposited.status === 200 && deposited.body?.threshold === 1, `S2 setup: @Dee deposits a sign-in copy on the main server over HTTPS (${deposited.status})`);
     const mainSealKeyBytes = fs.readFileSync(path.join(dataDir!, 'recovery-seal.key'));
     const mainSealKey = sha(mainSealKeyBytes);
+    // C12: the open door's key (services/open-join-key.ts), made at its first use, travels the same way.
+    (await import('./engine/open-join.js')).openJoinAddressHash('198.51.100.9');
+    const mainDoorKeyBytes = fs.readFileSync(path.join(dataDir!, 'open-join.key'));
     const main = {
         key: sha(nodeKeyBytes),
         communityKey: sha(fs.readFileSync(path.join(dataDir!, 'community.key'))),
@@ -322,6 +328,8 @@ async function main(): Promise<void> {
         const bundleText = spawnSync('tar', ['-xzOf', tarFile, './takeover-bundle.json'], { encoding: 'utf-8' }).stdout;
         assert(JSON.parse(bundleText).files['recovery-seal.key'] === mainSealKeyBytes.toString('base64'),
             "S2: the sealed backup's take-over bundle carries data/recovery-seal.key, byte for byte");
+        assert(JSON.parse(bundleText).files['open-join.key'] === mainDoorKeyBytes.toString('base64'),
+            "C12: and data/open-join.key, byte for byte");
     }
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
@@ -349,6 +357,8 @@ async function main(): Promise<void> {
     assert(rt.after.leftovers.length === 0, `1. no restore temp files left (${rt.after.leftovers.join(', ')})`);
     assert(rt.before.sealKey && rt.before.sealKey !== mainSealKey && rt.after.sealKey === mainSealKey && rt.after.sealKeyMode === '600',
         "1. S2: the restore installs the community's recovery-seal key, byte for byte, 0600 (the fresh server had made its own)");
+    assert(rt.after.doorKey === sha(mainDoorKeyBytes) && rt.after.doorKeyMode === '600',
+        "1. C12: the restore installs the community's open-door key too, byte for byte, 0600");
     const keptOwn = Object.values(rt.after.retired as Record<string, { sha: string; mode: string }>);
     assert(keptOwn.length === 1 && keptOwn[0].sha === rt.before.sealKey && keptOwn[0].mode === '600',
         "1. S2: …and keeps the fresh server's own key beside it, never lost");

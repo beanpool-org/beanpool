@@ -17,8 +17,10 @@
  *      shut. At runtime first, then at boot, where a loud line says why; every door route is 404, openJoin false.
  *   4. What travels (engine/open-join.ts; test-open-join-failover runs it across processes): a release and a re-key
  *      stamp `updated_at`, so a delta export carries them; the merge keeps the newer row per member, moves a hash a
- *      re-key moved and never moves it back, leaves out a member this database lacks, and keeps its own key when
- *      the one sent is missing or too short to hash with.
+ *      re-key moved and never moves it back, and leaves out a member this database lacks. The key never comes with
+ *      the rows (it is a file, services/open-join-key.ts): the take-over's install keeps the key here when the one
+ *      carried is missing or too short to hash with, and replaces it with the main server's once, keeping the one it
+ *      replaced beside it, byte for byte, 0600.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-door-hardening.ts
  */
@@ -30,6 +32,8 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.GOOGLE_CLIENT_IDS;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
 // should be shut: every request that is not to this machine fails as unreachable, which the sign-in code answers with 503.
@@ -291,39 +295,56 @@ async function main(): Promise<void> {
     assert((await deltaMembers(beforeRekey)).includes(umaNew.pk), 'so a delta export carries it');
 
     // The merge, as a standby or a take-over runs it, against rows this database already holds.
-    const saltHere = oj.readOpenJoinSalt();
+    const doorKey = await import('./services/open-join-key.js');
+    const keyFile = path.join(process.env.BEANPOOL_DATA_DIR!, doorKey.OPEN_JOIN_KEY_FILE);
+    const keyHere = fs.readFileSync(keyFile);
     const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
     const incoming = (pk: string, hash: string, updatedAt: string) => ({ memberPubkey: pk, provider: 'google', joinHash: hash, joinedAt: iso(3_600_000), updatedAt });
     // A standby that copied Uma before the re-key: the old key's row, older.
     db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(umaNew.pk);
     db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, updated_at) VALUES (?, 'google', ?, ?, ?)")
         .run(uma.pk, umaHash, iso(3_600_000), iso(60_000));
-    const rekeyMerge = oj.writeOpenJoinRecord(undefined, [incoming(umaNew.pk, umaHash, iso(1_000))]);
+    const rekeyMerge = oj.writeOpenJoinRecord([incoming(umaNew.pk, umaHash, iso(1_000))]);
     assert(rekeyMerge.written === 1 && rowOf(umaNew.pk)?.join_hash === umaHash && !rowOf(uma.pk),
         `a newer row whose hash a re-key moved: written, and the old key's row goes (${JSON.stringify(rekeyMerge)})`);
     // A standby keeps the replaced key's member row (replication never removes a re-keyed member), so the stale row's
     // member is there, and only the newer row under the new key keeps it out.
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by)
                 VALUES (?, 'Uma old copy', 'active', ?, ?, 'open:google')`).run(uma.pk, iso(3_600_000), iso(3_600_000));
-    const staleMerge = oj.writeOpenJoinRecord(undefined, [incoming(uma.pk, umaHash, iso(120_000))]);
+    const staleMerge = oj.writeOpenJoinRecord([incoming(uma.pk, umaHash, iso(120_000))]);
     assert(staleMerge.kept === 1 && staleMerge.written === 0 && rowOf(umaNew.pk)?.join_hash === umaHash && !rowOf(uma.pk),
         `an older row with that hash under the replaced key: kept out, the re-key stands (${JSON.stringify(staleMerge)})`);
-    const olderMerge = oj.writeOpenJoinRecord(undefined, [incoming(nia.pk, 'an-older-hash', iso(3_000_000))]);
+    const olderMerge = oj.writeOpenJoinRecord([incoming(nia.pk, 'an-older-hash', iso(3_000_000))]);
     assert(olderMerge.kept === 1 && rowOf(nia.pk).join_hash.startsWith('released:'), `an older row for a member: the newer one here stands (${JSON.stringify(olderMerge)})`);
-    const newerMerge = oj.writeOpenJoinRecord(undefined, [incoming(nia.pk, 'released:from-the-main-server', new Date(Date.now() + 1_000).toISOString())]);
+    const newerMerge = oj.writeOpenJoinRecord([incoming(nia.pk, 'released:from-the-main-server', new Date(Date.now() + 1_000).toISOString())]);
     assert(newerMerge.written === 1 && rowOf(nia.pk).join_hash === 'released:from-the-main-server', `a newer row for a member: written (${JSON.stringify(newerMerge)})`);
     const nobody = newId();
-    const strangerMerge = oj.writeOpenJoinRecord(undefined, [incoming(nobody.pk, 'hash-of-nobody-here', iso(1_000)), { memberPubkey: 7 }, null]);
+    const strangerMerge = oj.writeOpenJoinRecord([incoming(nobody.pk, 'hash-of-nobody-here', iso(1_000)), { memberPubkey: 7 }, null]);
     assert(strangerMerge.skipped === 1 && strangerMerge.invalid === 2 && strangerMerge.written === 0 && !rowOf(nobody.pk),
         `a row for a member this database lacks is left out, and what is not a row is counted and ignored (${JSON.stringify(strangerMerge)})`);
-    const shortKey = oj.writeOpenJoinRecord('c2hvcnQ', []);
-    const noKey = oj.writeOpenJoinRecord(null, []);
-    assert(!shortKey.saltWritten && !noKey.saltWritten && oj.readOpenJoinSalt() === saltHere,
-        'a key too short to hash with, or none at all, leaves the key here as it was');
-    const newKey = crypto.randomBytes(32).toString('base64url');
-    const keyMerge = oj.writeOpenJoinRecord(newKey, []);
-    assert(keyMerge.saltWritten && oj.readOpenJoinSalt() === newKey && !oj.writeOpenJoinRecord(newKey, []).saltWritten,
-        'the main server\'s key replaces this one, once');
+    assert(JSON.stringify(Object.keys(strangerMerge).sort()) === JSON.stringify(['invalid', 'kept', 'skipped', 'written']),
+        `the merge takes rows only, never a key (${JSON.stringify(Object.keys(strangerMerge))})`);
+    const shortKey = doorKey.installCarriedOpenJoinKey(Buffer.from('short').toString('base64'));
+    const noKey = doorKey.installCarriedOpenJoinKey(null);
+    assert(shortKey.outcome === 'invalid' && noKey.outcome === 'absent' && fs.readFileSync(keyFile).equals(keyHere),
+        `a carried key too short to hash with, or none at all, leaves the key here as it was (${shortKey.outcome}, ${noKey.outcome})`);
+    const newKey = crypto.randomBytes(32);
+    const keyMerge = doorKey.installCarriedOpenJoinKey(newKey.toString('base64'));
+    const retired = keyMerge.outcome === 'replaced' ? path.join(process.env.BEANPOOL_DATA_DIR!, keyMerge.retiredAs) : null;
+    assert(keyMerge.outcome === 'replaced' && fs.readFileSync(keyFile).equals(newKey)
+        && doorKey.installCarriedOpenJoinKey(newKey.toString('base64')).outcome === 'same',
+        `the main server's key replaces this one, once (${keyMerge.outcome})`);
+    assert(!!retired && fs.readFileSync(retired).equals(keyHere) && (fs.statSync(retired).mode & 0o777) === 0o600
+        && (fs.statSync(keyFile).mode & 0o777) === 0o600,
+        'and the one it replaced is kept beside it, byte for byte, 0600, as the new one is');
+    // Which key the records here were made with decides whether the door checks a sign-in with the key now in the file.
+    assert(doorKey.adoptCarriedOpenJoinKey(newKey.toString('base64')) === 'other-key-recorded' && !doorKey.openJoinKeyState().on
+        && (doorKey.openJoinKeyState() as { why?: string }).why === 'other-key',
+        'a carried key other than the one the records here were made with is not adopted: the door stays shut');
+    assert(doorKey.adoptCarriedOpenJoinKey(keyHere.toString('base64')) === 'same', 'the key the records were made with is the one recorded');
+    db.prepare("DELETE FROM node_config WHERE key = 'openJoinKeyId'").run();
+    assert(doorKey.adoptCarriedOpenJoinKey(newKey.toString('base64')) === 'recorded' && doorKey.openJoinKeyState().on,
+        'with no record of which key made them (a copy that never carried one), the carried key is theirs, and the door opens');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -476,7 +476,7 @@ async function main(): Promise<void> {
         assert(opening.stateHash === payload.stateHash && opening.commonsBalance === payload.commonsBalance
             && JSON.stringify(opening.treasuryOperators) === JSON.stringify(payload.treasuryOperators)
             && JSON.stringify(opening.communitySettings) === JSON.stringify(payload.communitySettings)
-            && JSON.stringify(opening.nodeProfile) === JSON.stringify(payload.nodeProfile) && opening.openJoinSalt === payload.openJoinSalt,
+            && JSON.stringify(opening.nodeProfile) === JSON.stringify(payload.nodeProfile) && opening.openJoinKeyId === payload.openJoinKeyId,
             `its opening page carries the payload's listing hash, pot, keepers, settings and records (${opening.stateHash} / ${payload.stateHash})`);
         assert(JSON.stringify(closing.tableHashes) !== undefined && JSON.stringify(Object.entries(closing.tableHashes?.tables ?? {}).sort())
             === JSON.stringify(Object.entries(payload.tableHashes?.tables ?? {}).sort()),

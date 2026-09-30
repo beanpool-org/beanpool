@@ -3,7 +3,7 @@
  *
  * A backup is the tar.gz it always was — `state.db`, `node_config.json` — plus the take-over bundle
  * (`takeover-bundle.json`: node key, community key, genesis, connectors, the recovery-seal key that opens members'
- * sign-in recovery copies, admin and 2FA fields, roles, the public
+ * sign-in recovery copies, the open door's key, admin and 2FA fields, roles, the public
  * address), streamed through a `bpseal/v1` envelope of kind `backup` locked to the same people as the take-over
  * envelope: every owner, plus the printed recovery code. One file restores a whole community, and nobody who
  * finds the file can read it.
@@ -48,9 +48,10 @@
  * - A lost object leaves a node with no backup at all.
  * - An I/O error is reported as a known shortfall.
  * - A snapshot's keys are resolved against the LIVE store: a snapshot ships the objects it captured.
- * - A readable backup carries the node keys, or the recovery-seal key. The take-over bundle goes only into a locked
- *   file, so a server restored from a readable one cannot open members' sign-in recovery copies, and
- *   {@link NOT_LOCKED_MESSAGE} says so.
+ * - A readable backup carries the node keys, the recovery-seal key, or the open door's key. The take-over bundle goes
+ *   only into a locked file, so a server restored from a readable one cannot open members' sign-in recovery copies,
+ *   and {@link NOT_LOCKED_MESSAGE} says so; nor can it tell a returning sign-in from a new one at the open door, which
+ *   then refuses sign-ins until the key is back (services/open-join-key.ts).
  * - A restore trusts the archive inside the envelope. Opening only proves the file was locked to a key someone
  *   here holds; the tar inside goes through exactly the hostile-archive checks a legacy upload does.
  * - A restore takes a file signed by someone else when this server knows who should have signed it (966
@@ -96,6 +97,7 @@ import {
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { installCarriedOpenJoinKey, OPEN_JOIN_KEY_FILE } from './open-join-key.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -913,7 +915,7 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const dir = dataDir();
     const written: string[] = [];
     for (const f of BUNDLED_FILES) {
-        if (f === RECOVERY_SEAL_KEY_FILE) continue;
+        if (f === RECOVERY_SEAL_KEY_FILE || f === OPEN_JOIN_KEY_FILE) continue;
         const b64 = bundle.files[f];
         if (!b64) continue;
         writeAtomic(path.join(dir, f), Buffer.from(b64, 'base64'), f === 'genesis.json' || f === 'connectors.json' ? 0o644 : 0o600);
@@ -925,6 +927,11 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const sealKey = installCarriedRecoverySealKey(bundle.files[RECOVERY_SEAL_KEY_FILE]);
     if (sealKey.outcome === 'installed' || sealKey.outcome === 'same') written.push(RECOVERY_SEAL_KEY_FILE);
     else if (sealKey.outcome === 'replaced') written.push(`${RECOVERY_SEAL_KEY_FILE} (this server's own kept as ${sealKey.retiredAs})`);
+    // The open door's key, the same way (services/open-join-key.ts). The database in this backup records which key its
+    // sign-in records were made with, so a backup that carries none, or another, leaves the door refusing sign-ins.
+    const doorKey = installCarriedOpenJoinKey(bundle.files[OPEN_JOIN_KEY_FILE]);
+    if (doorKey.outcome === 'installed' || doorKey.outcome === 'same') written.push(OPEN_JOIN_KEY_FILE);
+    else if (doorKey.outcome === 'replaced') written.push(`${OPEN_JOIN_KEY_FILE} (this server's own kept as ${doorKey.retiredAs})`);
     // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
     // server signs owners in with the community's password and keeps locking to the same paper. Everything else
     // in this server's config (its own replication token, callsign, gateway) stays.

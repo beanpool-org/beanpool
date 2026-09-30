@@ -32,7 +32,7 @@ import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
 } from '../services/snapshot-scheduler.js';
-import { db, getDbDataVersion } from '../db/db.js';
+import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, readObject, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
@@ -415,9 +415,16 @@ async function restoreFromTar(
         throw err;
     }
 
-    // Close current DB connection safely before overwriting, and any copy's snapshot being served from it.
+    // Close current DB connection safely before overwriting, and any copy's snapshot being served from it, and the
+    // change probe a standby's pulls open: `db` must be the last connection, so its close folds state.db-wal in and
+    // removes it. A -wal left behind is played over the restored file at the next open: a database of the old one's
+    // pages and the new one's (a main server that had served its standby since boot did exactly that).
     closeOpenCopies('a restore replaces state.db');
+    closeDbDataVersionProbe();
     try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
+    for (const sidecar of ['state.db-wal', 'state.db-shm', 'state.db-journal']) {
+        fs.rmSync(path.join(DATA_DIR, sidecar), { force: true });
+    }
 
     // Replace files: the database is the one checked above.
     fs.copyFileSync(restoredDb, path.join(DATA_DIR, 'state.db'));

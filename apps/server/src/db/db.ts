@@ -150,6 +150,14 @@ export function getDbDataVersion(): number {
     if (!changeProbe) changeProbe = new Database(DB_PATH, { readonly: true });
     return changeProbe.pragma('data_version', { simple: true }) as number;
 }
+/**
+ * Close the probe, for a restore about to replace state.db (routes/backup.ts). While it is open, closing `db` is not the
+ * last close, so SQLite leaves state.db-wal behind unfolded, and the next open plays it over whatever file is put there.
+ */
+export function closeDbDataVersionProbe(): void {
+    try { changeProbe?.close(); } catch { /* closed either way */ }
+    changeProbe = null;
+}
 // A2-31 / SRV-7 — ACCEPTED RISK (documented, intentional): FK enforcement is OFF so
 // out-of-order P2P/backup sync can insert rows whose referenced parent hasn't
 // arrived yet (e.g. a transaction before its account, a message before its

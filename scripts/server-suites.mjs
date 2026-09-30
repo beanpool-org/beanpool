@@ -128,6 +128,7 @@ export const SUITES = [
     'test-backup-hardening',
     'test-request-binding-ledger',
     'test-backup-identity-bundle',
+    'test-backup-owner-gate',
     'test-sealed-backups',
     'test-takeover-envelope',
     'test-owner-words-check',

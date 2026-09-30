@@ -1034,19 +1034,20 @@ const REDEEM_UNSIGNED_ERROR = 'This join must be signed by the key it registers.
  * directory) under a name of their choosing: an account that key's holder never asked for and cannot see. Both apps
  * have signed their redeems since the first public release (native utils/db.ts redeemInvite; the web join passes its new
  * key), so no app in the stores sends one unsigned. Answered before the code or ticket is looked at, so it stays unused.
- * A redeem signed for another community is 421 and an old-format one after the switch 426, as for any signed request.
+ * Not signed by that key at all: 401 `redeem_unsigned`. Signed by it and refused: the verifier's own answer, as for any
+ * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format after the switch).
  * Returns false, with the answer set, when refused.
  */
 function requireRedeemSignature(ctx: any, joiner: string): boolean {
     const verdict = redeemSignature(ctx, joiner);
     if (verdict?.ok) return true;
-    if (verdict && (verdict.status === 421 || verdict.status === 426)) {
+    if (verdict) {
         ctx.status = verdict.status;
         ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
         return false;
     }
     ctx.status = 401;
-    ctx.body = { error: verdict ? verdict.error : REDEEM_UNSIGNED_ERROR, code: 'redeem_unsigned' };
+    ctx.body = { error: REDEEM_UNSIGNED_ERROR, code: 'redeem_unsigned' };
     return false;
 }
 

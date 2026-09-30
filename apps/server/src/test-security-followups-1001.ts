@@ -81,8 +81,8 @@ function stranger(callsign: string): Key {
 const signText = (k: Key, text: string) => Buffer.from(ed25519.sign(Buffer.from(text, 'utf-8'), k.priv)).toString('base64');
 
 /** An old-format signed POST (METHOD\nPATH\nTS\nNONCE\nBODY), as the phone app has signed every request since its first release. */
-function unboundHeaders(k: Key, path: string, raw: string): Record<string, string> {
-    const ts = String(Date.now());
+function unboundHeaders(k: Key, path: string, raw: string, at = Date.now()): Record<string, string> {
+    const ts = String(at);
     const nonce = crypto.randomBytes(16).toString('hex');
     return { 'X-Public-Key': k.pub, 'X-Signature': signText(k, `POST\n${path}\n${ts}\n${nonce}\n${raw}`), 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
@@ -294,6 +294,14 @@ async function part3Redeem(owner: Key): Promise<void> {
     const ticketByMallory = await signedBy(mallory, '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: victim.pub, callsign: 'Official Admin' });
     assert(ticketUnsigned.status === 401 && ticketByMallory.status === 401 && !hasRow(victim.pub),
         `the same for an offline ticket, unsigned or signed by another key (${ticketUnsigned.status}, ${ticketByMallory.status})`);
+
+    // Signed by the key, but by a phone whose clock is ten minutes out: the verifier's own answer, not "unsigned".
+    const skewed = stranger('SkewedClock');
+    const skewedCode = generateInvite(owner.pub)!.code;
+    const skewedRaw = JSON.stringify({ code: skewedCode, publicKey: skewed.pub, callsign: skewed.callsign });
+    const skewedJoin = await req('/api/invite/redeem', { method: 'POST', raw: skewedRaw, headers: { ...unboundHeaders(skewed, '/api/invite/redeem', skewedRaw, Date.now() - 10 * 60_000), ...viaTunnel(freshIp()) } });
+    assert(skewedJoin.status === 401 && /timestamp/i.test(skewedJoin.json?.error ?? '') && skewedJoin.json?.code !== 'redeem_unsigned' && !hasRow(skewed.pub) && codeUser(skewedCode) === null,
+        `a redeem signed with a clock ten minutes out is refused with the verifier's answer, and nobody joins (${show(skewedJoin)})`);
 
     // A real join: the phone app's old-format signature (every version in the stores), and a current app's.
     const oldApp = stranger('OldApp');

@@ -21,7 +21,8 @@
  * a stranger can charge neither an owner's key nor their address. A thief who holds a key does close that key for its
  * owner too; the owner's ways in are then the password, another owner's key, or a new key (and the stolen one revoked).
  */
-import { SOURCE_FREE_FAILURES, BASE_DELAY_MS, MAX_DELAY_MS, FORGET_MS } from './password-brake.js';
+import { SOURCE_FREE_FAILURES, BASE_DELAY_MS, MAX_DELAY_MS, FORGET_MS, SHARED_SOURCE_MAX_DELAY_MS } from './password-brake.js';
+import { isSharedSourceKey } from './client-ip.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 
@@ -56,12 +57,16 @@ export function keySigninBraked(memberPubkey: string, address: string | undefine
     return now < until ? { braked: true, retryAfter: Math.max(1, Math.ceil((until - now) / 1000)) } : { braked: false };
 }
 
-function charge(map: Map<string, BrakeRecord>, id: string, now: number): BrakeRecord {
+/**
+ * `maxDelay`: an address that is really a proxy for everyone (client-ip.ts isSharedSourceKey) waits at most
+ * SHARED_SOURCE_MAX_DELAY_MS, as in the password brake: every admin behind it shares its record.
+ */
+function charge(map: Map<string, BrakeRecord>, id: string, now: number, maxDelay = MAX_DELAY_MS): BrakeRecord {
     const r = live(map, id, now) ?? { failures: 0, lastFailureAt: 0, closedUntil: 0 };
     r.failures++;
     r.lastFailureAt = now;
     const over = r.failures - SOURCE_FREE_FAILURES;
-    if (over > 0) r.closedUntil = Math.max(r.closedUntil, now + Math.min(BASE_DELAY_MS * 2 ** Math.min(over - 1, 30), MAX_DELAY_MS));
+    if (over > 0) r.closedUntil = Math.min(Math.max(r.closedUntil, now + Math.min(BASE_DELAY_MS * 2 ** Math.min(over - 1, 30), maxDelay)), now + maxDelay);
     // In order of last failure, stalest first, so a full map drops from the front.
     map.delete(id);
     map.set(id, r);
@@ -72,7 +77,7 @@ function charge(map: Map<string, BrakeRecord>, id: string, now: number): BrakeRe
 /** A wrong code (or backup code) from `memberPubkey` at `address`: counted against both, and logged. */
 export function noteKeySigninFailure(memberPubkey: string, address: string | undefined, who: string, now = Date.now()): void {
     const k = charge(byKey, memberPubkey, now);
-    const a = address ? charge(byAddress, address, now) : undefined;
+    const a = address ? charge(byAddress, address, now, isSharedSourceKey(address, now) ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) : undefined;
     const from = address ? ` from ${logAddressTag(address)}` : '';
     try {
         logger.security('AUTH', `Key sign-in: wrong 2FA code for ${who}${from} (${k.failures} for this key in the last day)`);

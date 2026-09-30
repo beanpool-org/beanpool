@@ -17,8 +17,11 @@
  *
  * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): the vault signs its
  * releases and deposit receipts (what a server at its address can still do before then: review finding 4); global's
- * door accepts vault tickets, V5 (finding 5); and a member whose only copy is still at a community can get back in,
- * since such a build restores only through the vault and the move card shows only in Settings (finding 3).
+ * door accepts vault tickets, V5 (finding 5); a member whose only copy is still at a community can get back in, since
+ * such a build restores only through the vault and the move card shows only in Settings (finding 3); a phone told
+ * "none" ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone, which becomes common at
+ * rollout, when every phone starts at "none" (confirmation N1); and a 2xx status answer that isn't a status is not
+ * recorded as "none" ({@link vaultStatus}; confirmation N2). The parked guide pages: GitHub issue #1349.
  *
  * ## One sign-in, bound three ways
  *

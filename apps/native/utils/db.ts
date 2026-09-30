@@ -1548,12 +1548,17 @@ export async function getMemberProfile(pubkey: string) {
  * recovery pulls it down rather than asking the user to type it. Best-effort —
  * returns null when the node is unreachable or doesn't know the key (the full
  * profile, incl. avatar, then lands with the normal members-directory sync).
- * Uses the allowlisted pre-membership probe so it works before we're synced in.
+ * Uses the allowlisted pre-membership probe so it works before we're synced in, signed with
+ * the key being restored (`privateKey`): a community names a key only to that key's own
+ * signer (apps/server routes/community.ts), and the key is not saved on the phone yet, so
+ * the phone's signing wrapper (node-request-signing.ts) cannot sign it.
  */
-export async function fetchNodeCallsign(anchorUrl: string, pubkey: string): Promise<string | null> {
+export async function fetchNodeCallsign(anchorUrl: string, pubkey: string, privateKey?: string): Promise<string | null> {
     try {
-        const res = await fetch(`${anchorUrl}/api/community/membership/${pubkey}`, {
-            headers: { Accept: 'application/json' },
+        const url = `${anchorUrl}/api/community/membership/${pubkey}`;
+        const signed = privateKey ? await buildSignedHeaders('GET', url, '', privateKey, pubkey) : {};
+        const res = await fetch(url, {
+            headers: { ...signed, Accept: 'application/json' },
         });
         if (!res.ok) return null;
         const data = await res.json();

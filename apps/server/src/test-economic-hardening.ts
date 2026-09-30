@@ -97,6 +97,26 @@ async function main() {
             'A2-14: amount≤0 txn counted as conflictsSkipped, not inserted');
         const zero = db.prepare(`SELECT 1 FROM transactions WHERE id='zero-tx'`).get();
         assert(!zero, 'A2-14: the invalid txn did not land in the DB');
+
+        // F1 (review FABLE-sec-input, 2026-10-01): a copied account whose balance is NULL (a NaN, as JSON carries it) or
+        // text is refused, never imported: the row here keeps the balance it had, and no row is made for a new one.
+        const heldHere = db.prepare('SELECT public_key AS publicKey, balance, last_updated_at AS lastUpdatedAt, last_demurrage_epoch AS lastDemurrageEpoch FROM accounts').all() as any[];
+        const victim = 'giftee';
+        const before = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(victim) as any).balance;
+        const brokenCopy: SyncPayload = await signSyncPayload({
+            nodeId,
+            accounts: [
+                ...heldHere.map((a) => a.publicKey === victim ? { ...a, balance: null } : a),
+                { publicKey: 'texted-account', balance: 'abc', lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 },
+            ],
+        } as any);
+        let imported: any = null;
+        try { imported = await importRemoteState(brokenCopy); } catch (e: any) { imported = { error: e?.message || String(e) }; }
+        const after = db.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(victim) as any;
+        const texted = db.prepare(`SELECT 1 FROM accounts WHERE public_key = 'texted-account'`).get();
+        const nulls = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE balance IS NULL OR typeof(balance) NOT IN ('integer', 'real')`).get() as any).c;
+        assert(!imported?.error && imported.conflictsSkipped >= 2 && after.t === 'real' && after.balance === before && !texted && nulls === 0,
+            `F1: a copied NULL or text balance is refused, not imported: ${victim} keeps ${before}, no row for the text one, no NULL anywhere (${JSON.stringify({ imported: imported?.error ?? { conflictsSkipped: imported?.conflictsSkipped, accountChanges: imported?.accountChanges }, after, texted: !!texted, nulls })})`);
         // A standby only for that import: A2-18 is the main server's send route. A standby refuses every send before it
         // looks at the recipient (409 standby, config/node-role.ts; test-standby-ledger-copy step 17).
         setNodeRole('primary');

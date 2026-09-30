@@ -201,3 +201,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-27 - MemberGuide Keyboard Focus Ring Styling
 **Learning:** `MemberGuide.tsx` interactive row buttons, header back button, section navigation button, video link, and search input wrapper lacked visible keyboard focus indicators (`focus-visible:ring-2` / `focus-within:ring-2`), making keyboard navigation focus states hard to discern for assistive technology users.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to buttons and video link, and `focus-within:ring-2 focus-within:ring-emerald-500` to the search input label wrapper.
+
+## 2026-09-28 - VisitorListing Detail Back and Join Button Focus Ring Styling
+**Learning:** `VisitorListing.tsx` visitor detail sheet buttons ("Back to Market" and "Join") lacked explicit `focus-visible` ring indicators, leaving keyboard focus highlights invisible during navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 rounded-lg px-2 -mx-2` to the back button and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2` to the join button in `VisitorListing.tsx`, and added component test coverage in `VisitorListing.test.tsx`.

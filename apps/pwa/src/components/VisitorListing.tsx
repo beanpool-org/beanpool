@@ -110,7 +110,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: D
             <button
                 type="button"
                 onClick={onBack}
-                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
+                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 rounded-lg px-2 -mx-2"
             >
                 <span className="text-xl leading-none" aria-hidden="true">←</span> Back to Market
             </button>
@@ -176,7 +176,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: D
                 type="button"
                 data-testid="visitor-join"
                 onClick={onJoin}
-                className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words"
+                className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
             >
                 {joinToSeeLabel(post)}
             </button>

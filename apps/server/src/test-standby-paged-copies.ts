@@ -71,6 +71,9 @@
  *     back, it runs on it. (Before: it ran as the main server on the older database, unaudited, and said nothing.)
  * 23. A standby whose state.db is moved away by hand: it puts state.previous.db back and the next delta brings it level
  *     with M.
+ * 24. Step 21's torn staging on a server started as a main server, killed again right after the discard deleted the
+ *     staging: the next start runs on its own copy. (Before: the discard deleted the staging first and put the copy back
+ *     after, so that kill left no staging and no state.db, which a main server now refuses to start on.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -1145,6 +1148,36 @@ async function main(): Promise<void> {
             const diff23 = await exactNow();
             assert(back && !fs.existsSync(f('state.previous.db')) && d23.ok === true && diff23.length === 0,
                 `S9 starts on its previous database, put back, and the next pull brings it level with M (${JSON.stringify({ back, pull: d23 })}; differences ${first(diff23)})`);
+        });
+
+        await step('24. a start killed inside the discard of a torn staging, right after it deleted the staging: the next runs on its own copy', async () => {
+            const name = await newStandby('standby10');
+            const d = dir(name);
+            const f = (n: string) => fs.existsSync(path.join(d, n));
+            const w24 = await wholeCopy();
+            const count = async () => (await standby.send('rows', { sql: 'SELECT COUNT(*) AS n FROM messages' }))[0].n as number;
+            const c0 = await count();
+            require_(w24.ok === true && c0 > 0, `S10 holds a whole copy of M (${JSON.stringify(w24)})`);
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 24', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            const arm = `${d}.kill-at`;
+            fs.writeFileSync(arm, JSON.stringify({ op: 'renameSync', suffix: '/staging/state.db' }));
+            const p24 = await standby.send('pull', { whole: true });
+            const stopped = await until('S10 killed between the swap\'s renames', () => !fs.existsSync(arm) && f('staging/state.db') && !f('state.db') && f('state.previous.db'), 60_000);
+            await sleep(1000);
+            require_(p24.ok === true && p24.staged === true && stopped, 'S10 is killed between the swap\'s two renames');
+            const staged = path.join(d, 'staging/state.db');
+            fs.truncateSync(staged, Math.floor(fs.statSync(staged).size / 2));
+            for (const x of ['-wal', '-shm']) fs.rmSync(staged + x, { force: true });
+            // The next start, as a main server, is killed right after the discard deletes the staging.
+            fs.writeFileSync(arm, JSON.stringify({ op: 'rmSync', suffix: '/staging', when: 'after' }));
+            let died = false;
+            try { nodes.push(standby = await spawnNode(SCRIPT, d, { ...envS, NODE_ROLE: 'primary' })); } catch { died = true; }
+            require_(died && !fs.existsSync(arm) && !f('staging'), `that start is killed with the staging gone (${JSON.stringify({ died, staging: f('staging'), db: f('state.db'), previous: f('state.previous.db') })})`);
+            let runs = true;
+            try { nodes.push(standby = await spawnNode(SCRIPT, d, { ...envS, NODE_ROLE: 'primary' })); } catch { runs = false; }
+            const c1 = runs ? await count() : null;
+            assert(runs && c1 === c0 && !f('state.previous.db'),
+                `the next start runs as the main server on its own copy, all ${c1} messages (${JSON.stringify({ runs, before: c0, after: c1, previous: f('state.previous.db') })}; before: no staging and no state.db, and it refused to start)`);
         });
 
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];

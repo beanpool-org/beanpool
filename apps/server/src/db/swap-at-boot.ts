@@ -156,9 +156,11 @@ function swap(dataDir: string): SwapOutcome {
     const staging = path.join(dataDir, STAGING);
     if (!fs.existsSync(staging)) return 'none';
     const discard = (why: string): SwapOutcome => {
-        try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* the next boot tries again */ }
-        // A swap stopped between its renames: this server's copy is state.previous.db until it is put back.
+        // A swap stopped between its renames: this server's copy is state.previous.db until it is put back. Before the
+        // staging goes: a start stopped between the two finds the staging again and does this again, and a state.db missing
+        // with no staging always means one taken away from outside (swapStagedCopyAtBoot; #1334 review round 4).
         const back = putPreviousBack(dataDir, false); // said below
+        try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* the next boot tries again */ }
         console.warn(`[Swap] The whole copy in ${STAGING}/ was not swapped in, and is deleted: ${why}. `
             + (back ? `The swap had been stopped between its renames: ${PREVIOUS_DB}, this server's copy, is state.db again.`
                 : fs.existsSync(path.join(dataDir, 'state.db')) ? "This server's copy is as it was." : 'This server has no copy of its own.'));

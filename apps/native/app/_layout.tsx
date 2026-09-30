@@ -20,6 +20,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
+import { memberRedirect } from '../utils/member-landing';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
@@ -574,10 +575,10 @@ function RootLayoutNav() {
             return;
         }
 
-        // Stuck on the welcome screen or root with a valid identity → into the secure area
-        if ((segments as string[]).length === 0 || root === 'welcome') {
-            router.replace('/(tabs)');
-        }
+        // Stuck on the welcome screen or root with a valid identity → into the secure area: the tabs' index, or the one
+        // landing a screen asked for before it set the identity (utils/member-landing.ts).
+        const landing = memberRedirect(segments as string[], identity.publicKey);
+        if (landing) router.replace(landing);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
     // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes

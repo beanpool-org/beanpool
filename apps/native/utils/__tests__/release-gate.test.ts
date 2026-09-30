@@ -71,7 +71,7 @@ vi.mock('../sso-signin', async (importOriginal) => {
     };
 });
 
-import { sealSeedToSso, toEd25519Seed, type SealedShare } from '@beanpool/core';
+import { sealSeedToSso, toEd25519Seed } from '@beanpool/core';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { hexToBytes } from '../crypto';
 import { connectAndDeposit } from '../sso-sheet-connect';
@@ -80,8 +80,8 @@ import { recoverAccountWithSso } from '../sso-recovery';
 import { signInCopiesAt, vaultConfig } from '../vault-config';
 import { protectionFrom } from '../protection-state';
 import {
-    COMMUNITY, DEPOSIT_KEY, TICKET_KEY, VAULT,
-    installNetwork, keysIn, noVault, useVault, type Network, type SentRequest,
+    COMMUNITY, CommunityKeepingCopies, DEPOSIT_KEY, TICKET_KEY, VAULT,
+    installNetwork, keysIn, noVault, useVault, type Network,
 } from './fake-vault';
 
 const ANCHOR = 'beanpool_anchor_url';
@@ -91,61 +91,6 @@ const ANCHOR = 'beanpool_anchor_url';
  */
 const SLOW_TEST_MS = 60_000;
 const SUB = 'google-sub-42';
-
-/**
- * A community as every live one is today: it keeps each member's sign-in copy, hands out its own nonce, and gives the
- * copy back to a restore that names the callsign and proves the sign-in.
- */
-class CommunityKeepingCopies {
-    /** provider → the copy (the phone's single-blob share), for the one member here. */
-    readonly copies = new Map<string, SealedShare>();
-    readonly nonces = new Set<string>();
-    private seq = 0;
-    constructor(readonly callsign: string) {}
-
-    handle(req: SentRequest): { status: number; body: unknown } {
-        const b = req.body ?? {};
-        const ok = (body: unknown) => ({ status: 200, body });
-        if (req.method === 'POST' && req.path === '/api/recovery/sso-nonce') {
-            const nonce = `community-nonce-${++this.seq}`;
-            this.nonces.add(nonce);
-            return ok({ nonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'] });
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/shares/sso') {
-            if (!this.nonces.delete(b.nonce)) return { status: 401, body: { error: 'nonce' } };
-            this.copies.set(b.provider, b.shares[0]);
-            return ok({ generation: 1, enrolledSso: [...this.copies.keys()], threshold: 1 });
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/shares/status') {
-            return ok({ enrolledSso: [...this.copies.keys()], keepers: [{ holderType: 'sso', count: this.copies.size }], total: this.copies.size, threshold: 1 });
-        }
-        const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(req.path);
-        if (req.method === 'DELETE' && del) {
-            if (!this.copies.delete(del[1])) return { status: 404, body: { error: 'not connected' } };
-            return ok({ removed: del[1], enrolledSso: [...this.copies.keys()] });
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect') {
-            return b.callsign === this.callsign ? ok({ collectionId: 'c-1' }) : { status: 404, body: { error: 'No such account.' } };
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso-nonce') {
-            const nonce = `collect-nonce-${++this.seq}`;
-            this.nonces.add(nonce);
-            return ok({ nonce });
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso') {
-            return this.nonces.delete(b.nonce) ? ok({ released: true }) : { status: 401, body: { error: 'nonce' } };
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect/fragments') {
-            const copy = this.copies.get('google')!;
-            return ok({
-                fragments: [{
-                    holderType: 'sso', payload: copy.encryptedShare, payloadIv: copy.shareIv, payloadTag: copy.shareTag, kdfParams: copy.kdfParams,
-                }],
-            });
-        }
-        return { status: 404, body: { error: 'Not Found' } };
-    }
-}
 
 let net: Network;
 let community: CommunityKeepingCopies;

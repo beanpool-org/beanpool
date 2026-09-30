@@ -176,7 +176,9 @@ describe('SSO Recovery Service', () => {
         const vault = fs.readFileSync(path.resolve(__dirname, '../vault.ts'), 'utf-8');
         expect(vault).not.toMatch(/combineHubAndWhole|readHubShare|\/api\/recovery\/collect/);
         // In sso-recovery.ts the old two-layer path is only the community restore, `recoverAccountWithSso`, which the
-        // welcome screen offers only in a build without a vault (the release gate). Everything after it is the vault's.
+        // welcome screen offers in a build without a vault (the release gate) and, in a build with one, only for a sign-in
+        // the vault said, signed, that it keeps no copy for (PR #1336 review finding 3; vault-phone-gates.test.ts).
+        // Everything after it is the vault's.
         const src = fs.readFileSync(path.resolve(__dirname, '../sso-recovery.ts'), 'utf-8');
         const vaultHalf = src.slice(src.indexOf('export async function startSsoRestore('));
         expect(vaultHalf.length).toBeGreaterThan(0);
@@ -184,6 +186,6 @@ describe('SSO Recovery Service', () => {
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
         expect(welcome.match(/recoverAccountWithSso\(/g)).toHaveLength(1);
         expect(welcome.match(/handleSsoRecoverAtCommunity\(/g)?.length).toBe(4);
-        expect(welcome).toMatch(/if \(mode === 'ssoRecover' && !hasVault\(\)\) \{/);
+        expect(welcome).toMatch(/if \(mode === 'ssoRecover' && \(!hasVault\(\) \|\| ssoAtCommunity\)\) \{/);
     });
 });

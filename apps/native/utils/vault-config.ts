@@ -55,6 +55,9 @@ export function hasVault(): boolean {
  *   all well formed). Everything in this file.
  * - `'community'`: otherwise, the member's own community, exactly as the app did before the vault (utils/sso-signin.ts
  *   `startSsoSignIn`, keeper-enrolment.ts, sso-recovery.ts `recoverAccountWithSso`, global-join.ts's copy in the join).
+ *   The restore from a community's copy, `recoverAccountWithSso`, is not only a community build's: a vault build runs it
+ *   too, with a provider the vault said, signed, that it keeps no copy for (sso-recovery.ts `vaultKeepsNoCopyFor`, PR
+ *   #1336 review finding 3).
  *
  * Nothing in between: a build with a missing or malformed vault value is a community build, so no build ends up with
  * neither (the release gate, PR #1336 review finding 6). app.config.js refuses a build that sets only some of the three.

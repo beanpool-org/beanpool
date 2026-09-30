@@ -64,7 +64,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { sealSeedToSso } from '@beanpool/core';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
-import { approveVaultHold, vaultHoldsAtOpen, vaultStatus, vaultCopyKnown, disconnectFromVault } from '../vault';
+import { approveVaultHold, noteVaultCopy, vaultHoldsAtOpen, vaultStatus, vaultCopyKnown, disconnectFromVault } from '../vault';
 import { installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
 import { PUSH_TOKEN_STORE_KEY } from '../storage-keys';
 
@@ -134,7 +134,7 @@ describe('the Settings banner asks the vault on no timer', () => {
     }, TEN_MINUTES_OF_FAKE_TIME_MS);
 
     it('a member the phone knows has no copy at the vault: never asked, not when the banner shows, not on a timer, not on return', async () => {
-        mem.async.set(COPY_KNOWN(who.identity.publicKey), '0');
+        await noteVaultCopy(who.identity.publicKey, false);
         await mountAndWait(TEN_MINUTES);
         await backToFront();
         expect(statusCalls()).toBe(0);
@@ -145,7 +145,7 @@ describe('the Settings banner asks the vault on no timer', () => {
 describe('the app-open check asks only for a member the phone knows a copy for', () => {
     it('known to have no copy: no request at all', async () => {
         vi.useRealTimers();
-        mem.async.set(COPY_KNOWN(who.identity.publicKey), '0');
+        await noteVaultCopy(who.identity.publicKey, false);
         expect(await vaultHoldsAtOpen(who.identity)).toEqual([]);
         expect(net.sent).toEqual([]);
     });

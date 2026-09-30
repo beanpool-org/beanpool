@@ -68,7 +68,7 @@
  * keeps the file and the recorded id, so coming back to this version later finds the file equal to the row and finishes
  * the move again. It changes nothing, and exits 1, when the file is missing or is not the key the records were made
  * with: an older version would then let those accounts join twice, so the rollback must wait until the right key is in
- * data/open-join.key. While the older version runs, the key is in the database, and so in every copy, as it was before.
+ * data/open-join.key. It refuses a key longer than an older version takes (192 bytes, 256 base64url characters) too. While the older version runs, the key is in the database, and so in every copy, as it was before.
  *
  * It is run on the main server only: a standby holds no key, and an older standby takes the key again from its main
  * server's copies once that server runs the older version too.
@@ -101,6 +101,12 @@ const NEW_KEY_BYTES = 32;
 /** The shortest key the door ever hashed with (the old row's rule). */
 const MIN_KEY_BYTES = 16;
 const MAX_KEY_BYTES = 1024;
+/**
+ * The longest key an older version takes as its row: its usableKey (engine/open-join.ts, #1130 to #1350) took at most 256
+ * base64url characters, which is 192 bytes, and a standby on it refused a longer row from its main server's copies. So
+ * the rollback command writes no longer key.
+ */
+const MAX_LEGACY_ROW_KEY_BYTES = 192;
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -436,8 +442,9 @@ export function installOpenJoinKeyAtBoot(opts: { standby: boolean }): void {
 /**
  * Write data/open-join.key back as the node_config row an older version reads (`openJoinSalt`, base64url), for a
  * rollback past this version (the header). Keeps the file and the recorded id. Throws, having changed nothing, when an
- * older version could not recognise the accounts that joined: the file is missing, is not a key, is not the key the
- * records were made with, or the row already holds another key. Never returns or logs a key's bytes.
+ * older version could not recognise the accounts that joined: the file is missing, is not a key, is longer than an older
+ * version takes (MAX_LEGACY_ROW_KEY_BYTES), is not the key the records were made with, or the row already holds another
+ * key. Never returns or logs a key's bytes.
  */
 export function writeLegacyKeyRow(): { records: number; outcome: 'written' | 'same' | 'no-key-needed' } {
     const records = liveOpenJoinRecords();
@@ -449,6 +456,10 @@ export function writeLegacyKeyRow(): { records: number; outcome: 'written' | 'sa
             + `(copy data/${OPEN_JOIN_KEY_FILE} from the server that made it, or restore a locked backup).`);
     }
     if (!isKeyBytes(file)) throw new Error(`data/${OPEN_JOIN_KEY_FILE} is not a key (${file.length} bytes).`);
+    if (file.length > MAX_LEGACY_ROW_KEY_BYTES) {
+        throw new Error(`data/${OPEN_JOIN_KEY_FILE} is ${file.length} bytes; an older version takes a key of at most ${MAX_LEGACY_ROW_KEY_BYTES} `
+            + `(${MAX_LEGACY_ROW_KEY_BYTES / 3 * 4} base64url characters), and its standby would refuse the row. This key cannot go back past this version.`);
+    }
     if (records > 0 && recordedOpenJoinKeyId() !== openJoinKeyId(file)) {
         throw new Error(`data/${OPEN_JOIN_KEY_FILE} is not the key the ${records} sign-in record${records === 1 ? ' here was' : 's here were'} made with. `
             + 'An older version using it would let each of those accounts join a second time. Put the right key in place first '

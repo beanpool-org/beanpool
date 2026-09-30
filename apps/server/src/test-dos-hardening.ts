@@ -12,7 +12,10 @@
  *   4. F2, a forged signature claim is charged before its body is read: at a limit of 5 the sixth forged claim with a
  *      64 KB body from one address is refused 429 by the gateway; a member's small signed write from that address still
  *      gets through, as does a small forged claim (refused by the signature check, its body held to 16 KiB); a chunked
- *      one is refused 429.
+ *      one is refused 429. Claims whose body the parser never reads past 16 KiB (bodiless signed reads, small forged
+ *      writes, /ws connect tokens) don't spend that allowance: after twice the limit of each from one address, a
+ *      member's 20 KB chat line from it is answered 200, and forged claims with 1 MB bodies are still refused 429 past
+ *      the limit (review 4150386879: a community event behind one NAT address).
  *   5. M-4: fresh keypairs signing a public read from one address are charged to its unsigned bucket (429 on the sixth);
  *      members behind one address each keep their own.
  *   6. F4: /api/community/info and /health have a per-address bucket (429 past five times the minute's limit); a burst of
@@ -41,6 +44,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import net from 'node:net';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -285,6 +289,36 @@ async function main() {
         const members = [];
         for (const m of crowd) members.push((await call('GET', '/api/version', '198.51.100.62', signedHeaders(m, 'GET', '/api/version'))).status);
         assert(members.every(s => s === 200), `${crowd.length} members behind one address each keep their own bucket (${members.join(',')})`);
+
+        // Claims the body parser never reads past 16 KiB don't spend the address's allowance for large ones (review
+        // 4150386879): a community event behind one NAT address, where one phone (or someone) sends junk signatures.
+        resetGatewayRateLimit();
+        const HALL = '198.51.100.63';
+        const junk: string[] = [];
+        for (let i = 0; i < LIMIT * 2; i++) {
+            junk.push(String((await call('GET', '/api/version', HALL, signedHeaders(ada, 'GET', '/api/version', '', keypair().privateKey))).status));
+        }
+        const tiny = JSON.stringify({ conversationId: 'none' });
+        for (let i = 0; i < LIMIT * 2; i++) {
+            junk.push(String((await call('POST', '/api/messages/mark-read', HALL, signedHeaders(ada, 'POST', '/api/messages/mark-read', tiny, keypair().privateKey), tiny)).status));
+        }
+        for (let i = 0; i < LIMIT * 2; i++) {
+            const k = keypair();
+            const o = await upgrade(`${WS}?pubkey=${k.pubKeyHex}&ts=${Date.now()}&nonce=${crypto.randomBytes(16).toString('hex')}&sig=bm90LWEtc2ln`, HALL);
+            junk.push(show(o));
+            await closeAll([o]);
+        }
+        assert(junk.every(s => s !== '429'), `${LIMIT * 2} bodiless forged reads, ${LIMIT * 2} small forged writes and ${LIMIT * 2} made-up /ws tokens from one address pass the gateway (${[...new Set(junk)].join(',')})`);
+        const conv = se.createConversation('dm', [ada.pubKeyHex, bea.pubKeyHex], ada.pubKeyHex);
+        const line = JSON.stringify({ conversationId: conv?.id, authorPubkey: ada.pubKeyHex, ...lockedDm(15_000) });
+        const adaLine = await call('POST', '/api/messages/send', HALL, signedHeaders(ada, 'POST', '/api/messages/send', line), line);
+        assert(line.length > 20_000 && adaLine.status === 200,
+            `then a member's ${Math.round(line.length / 1000)} KB chat line from that address is answered 200 (got ${adaLine.status} ${adaLine.text.slice(0, 80)})`);
+        const huge = JSON.stringify({ type: 'offer', title: 'Forged', authorPublicKey: ada.pubKeyHex, pad: 'x'.repeat(1024 * 1024) });
+        const bigForged: number[] = [];
+        for (let i = 0; i <= LIMIT; i++) bigForged.push((await call('POST', PATH, HALL, signedHeaders(ada, 'POST', PATH, huge, keypair().privateKey), huge)).status);
+        assert(bigForged.slice(0, LIMIT).every(s => s === 401 || s === 403) && bigForged[LIMIT] === 429,
+            `forged claims with 1 MB bodies from it still get the unsigned rate: 429 on the ${LIMIT + 1}th (${bigForged.join(',')})`);
         updateGatewayConfig(unlimited);
     }
 
@@ -387,6 +421,9 @@ async function main() {
             const far = await read('lat=-80&lng=0&sort=distance&limit=50');
             assert(far.status === 200 && far.ids?.length === 50 && far.calls <= BOUND + 100,
                 `from a point far from all ${N} posts, a nearest-first page measures at most ${BOUND} (${far.calls} measured, ${far.ids?.length} rows)`);
+            // With a radius or a filter the planner sorts every matching post before the bound applies (review
+            // 4150386976): these two check only that the distance is worked out for at most BOUND of them, not that
+            // the read's cost is bounded. F5 is still open for them.
             const earth = await read('lat=-28.55&lng=153.5&radiusKm=20000&sort=distance&limit=50&category=other');
             assert(earth.status === 200 && earth.ids?.length === 50 && earth.calls <= BOUND + 100,
                 `with a radius of the whole Earth and a filter circles don't take, too (${earth.calls} measured)`);

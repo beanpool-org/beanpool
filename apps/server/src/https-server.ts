@@ -808,7 +808,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // The node's room first, before a token is verified or anything is charged.
             if (!wsHasRoom()) { refuseUpgrade(socket, 503, 30); return; }
             const claims = claimsWsSignature(parsedUrl.searchParams);
-            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimWindow: 0 };
+            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false };
             if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
             const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
@@ -816,7 +816,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 // A verified key is charged as HTTP charges it: its own bucket if it acts here, else the address's.
                 const verified = connect.kind === 'member' ? { key: connect.pubkey, acts: true }
                     : connect.kind === 'non_member' ? { key: connect.pubkey, acts: false } : null;
-                const wait = gatewaySettleUpgrade(client, maxReqs, admitted.claimWindow, verified);
+                const wait = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
                 if (wait) { refuseUpgrade(socket, 429, wait); return; }
             }
             const refuse = WS_AUTH_MODE === 'strict'
@@ -1315,8 +1315,8 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                // A signature claim from an address whose unverified claims are spent carries a small body at most
-                // (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
+                // A signature claim the gateway didn't charge to its address's unverified claims carries a small body
+                // at most (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
                 const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
                 const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
@@ -1464,8 +1464,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
             return;
         }
-        // The signature is good: the address's unverified claim is given back (gateway-rate-limit.ts `claim:`). What the
-        // key may do, and which bucket it is charged to, is decided from here on.
+        // The signature is good: the address's unverified claim, if it was charged one, is given back (gateway-rate-limit.ts
+        // `claim:`). What the key may do, and which bucket it is charged to, is decided from here on.
         gatewayClaimVerified(ctx);
 
         // A closed account's key (isClosedAccountKey), which reaches a route only to delete its own account.

@@ -433,8 +433,8 @@ async function main(): Promise<void> {
                 `S's own log line, its other cursor, its node role, a setting of its own and its copy record's id came through the swap (${JSON.stringify({ before: own0, after: own1, id: [rec0.id, rec1.id] })})`);
             const s1 = await snapS();
             const m1 = await snapM();
-            assert(s1.format === '7' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
-                `S's copy is format 7, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
+            assert(s1.format === '8' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
+                `S's copy is format 8, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
             const d1 = await standby.send('pull', {});
             const st1b = await standby.send('staging');
             assert(d1.ok === true && d1.mode === 'delta' && !st1b.previous, `the next pull is a delta, and once it lands the old database is deleted (${JSON.stringify({ pull: d1, ...st1b })})`);
@@ -885,9 +885,11 @@ async function main(): Promise<void> {
                 + `S is M's, and the database the last swap replaced is gone (${JSON.stringify({ pulls: pulls.map((p) => p.mode), swaps: standby.swaps() - n0, bio, st16b })}; `
                 + `differences ${first(diff16)}; before: every delta too big, a whole copy and a restart every other pull, the old database kept)`);
 
-            // The delta's bytes bounded: every account is more than 64 KB of it.
+            // The delta's bytes bounded: 40 long chat lines are more than 64 KB of changes. (Not the accounts, which every delta
+            // carries whole and which no longer count toward it: review 4144658064, test-standby-photos-by-reference step 6.)
             await standby.send('set-env', { vars: { BACKUP_DELTA_BYTES: String(64 * 1024) } });
             await main.send('sql', { sql: `UPDATE members SET bio = 'edit 4', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            await main.send('flood', { kind: 'long-messages', n: 40, conversationId, author: ann.pk });
             const big = await standby.send('pull', {});
             const [bio4] = await standby.send('rows', { sql: 'SELECT bio FROM members WHERE public_key = ?', args: [ann.pk] });
             await standby.send('set-env', { vars: { BACKUP_DELTA_BYTES: null } });

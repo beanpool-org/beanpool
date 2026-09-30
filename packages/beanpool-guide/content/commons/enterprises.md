@@ -32,7 +32,7 @@ At the bottom, **Report Enterprise** if something is wrong.
 
 ## Backing an enterprise
 
-- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too.
+- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges: the app says so, and your beans stay with you.
 - **Trade with it:** its Offers and Needs are in the Market like anyone's.
 - **Become a keeper:** see "Keepers".
 

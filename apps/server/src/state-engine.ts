@@ -47,6 +47,7 @@ import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
+import { returnStrandedPledges } from './engine/stranded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -714,6 +715,13 @@ export function initStateEngine(): void {
     setInterval(() => {
         try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
     }, 5 * 60 * 1000);
+
+    // Pledges a project took after reaching its goal, stuck in its escrow for good until pledges stopped at the goal
+    // (db.ts pledgeToProject), go back to their backers: exactly what each pledged, through transfer() inside
+    // conservingTransaction, or left for the operator with a log line when that can't be worked out exactly
+    // (engine/stranded-pledges.ts). Once the ledger is loaded, and before the audit below, so the audit sees the result.
+    // A main server only; never throws.
+    returnStrandedPledges({ transfer, conservingTransaction });
 
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
     // appears in the boot log and cannot go unnoticed between releases.

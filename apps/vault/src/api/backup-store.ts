@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_NAME_RE, compareBackupNames } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupsPastBudget, compareBackupNames } from '../shared/backup-format.js';
 
 /**
  * Where backups go (key vault design §4): object storage at a second provider in another country. Every file is
@@ -15,6 +15,13 @@ export interface BackupStore {
     delete(name: string): Promise<void>;
 }
 
+/** A backup larger than the store's whole budget: not written, and nothing already there removed for it. */
+export class BackupTooLarge extends Error {
+    constructor(readonly bytes: number, readonly maxBytes: number) {
+        super(`too large: ${bytes} bytes > budget ${maxBytes}`);
+    }
+}
+
 function checkName(name: string): string {
     if (!BACKUP_NAME_RE.test(name)) throw new Error(`${JSON.stringify(name)} is not a backup name.`);
     return name;
@@ -23,8 +30,9 @@ function checkName(name: string): string {
 /**
  * A directory as a backup store: for tests, for a rehearsal with a disk as the "other provider", and on the image until
  * the store's client exists (the state partition, `/var/lib/beanpool-vault/backups`). There it shares the partition
- * with a new image waiting for the monthly restart, so `maxBytes` bounds it: after each backup the oldest go until the
- * rest fit, and the newest always stays.
+ * with a new image waiting for the monthly restart, so `maxBytes` bounds it (backupsPastBudget, the rule root's monthly
+ * step applies too): a backup larger than the whole budget is refused (BackupTooLarge) and nothing is removed for it,
+ * so the last good one stays; after each backup written, the oldest go until the rest fit, and never the one written.
  */
 export class LocalDirectoryStore implements BackupStore {
     private readonly maxBytes: number | null;
@@ -36,6 +44,7 @@ export class LocalDirectoryStore implements BackupStore {
 
     async put(name: string, bytes: Uint8Array): Promise<void> {
         const file = path.join(this.dir, checkName(name));
+        if (this.maxBytes !== null && bytes.length > this.maxBytes) throw new BackupTooLarge(bytes.length, this.maxBytes);
         try {
             writeFileSync(`${file}.part`, bytes, { mode: 0o600 });
             renameSync(`${file}.part`, file);
@@ -44,18 +53,15 @@ export class LocalDirectoryStore implements BackupStore {
             rmSync(`${file}.part`, { force: true });
             throw e;
         }
-        if (this.maxBytes !== null) this.keepWithin(this.maxBytes);
+        if (this.maxBytes !== null) this.keepWithin(this.maxBytes, name);
     }
 
-    /** The oldest backups go until the rest take no more than `maxBytes`; the newest always stays. */
-    private keepWithin(maxBytes: number): void {
-        const backups = readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n)).sort(compareBackupNames)
+    /** What the budget lets go (backupsPastBudget), but never `written`, the backup just made. */
+    private keepWithin(maxBytes: number, written: string): void {
+        const backups = readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n))
             .map(name => ({ name, size: statSync(path.join(this.dir, name)).size }));
-        let total = backups.reduce((sum, b) => sum + b.size, 0);
-        for (const b of backups.slice(0, -1)) {
-            if (total <= maxBytes) break;
-            rmSync(path.join(this.dir, b.name), { force: true });
-            total -= b.size;
+        for (const name of backupsPastBudget(backups, maxBytes)) {
+            if (name !== written) rmSync(path.join(this.dir, name), { force: true });
         }
     }
 

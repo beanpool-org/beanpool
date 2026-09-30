@@ -54,6 +54,27 @@ export const RESTORE_PENDING_NAME = 'restore-pending.bin';
  */
 export const RESTORE_MARKER_NAME = 'restore-pending.json';
 
+/**
+ * The local backups a byte budget lets go, by name: the one rule for the API's rotation after each backup
+ * (backup-store.ts) and root's monthly step (install.ts). None larger than the budget on its own stays, the newest
+ * included: a sealed backup of small copies near the budget is a sign of abuse, not of a big vault. Of the rest, the
+ * newest stays, then older ones while they all fit together; the first that doesn't fit goes, with every older one.
+ */
+export function backupsPastBudget(backups: readonly { name: string; size: number }[], maxBytes: number): string[] {
+    const past: string[] = [];
+    let total = 0;
+    let full = false;
+    for (const b of [...backups].sort((x, y) => compareBackupNames(y.name, x.name))) {
+        if (b.size > maxBytes) past.push(b.name);
+        else if (!full && total + b.size <= maxBytes) total += b.size;
+        else {
+            full = true;
+            past.push(b.name);
+        }
+    }
+    return past;
+}
+
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */
 export function backupNameFor(ms: number): string {
     return `bv-${new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}.bin`;

@@ -330,6 +330,8 @@ async function main(): Promise<void> {
     const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
     asApi(`const fs = require('fs'), [b, s, r] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
+        fs.writeFileSync(b + '/bv-20990101T000000Z.bin', '');
+        fs.truncateSync(b + '/bv-20990101T000000Z.bin', 1073741825);
         fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
         fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');
         fs.mkdirSync(r, { recursive: true });
@@ -347,6 +349,10 @@ async function main(): Promise<void> {
     check('the monthly restart\'s root step removes what the API\'s user left: its releases, the junk in its backups and inbox',
         readdirSync(RELEASES).length === 0 && !readdirSync(BACKUPS).includes('junk') && readdirSync(IMAGE_INBOX).length === 0 && /in releases/.test(cleanup),
         `${tidy.out.split('\n').filter(l => /removed|nothing/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
+    // A newest "backup" past api.json's backupMaxBytes (1 GiB; sparse here, its size is what counts): the API never
+    // writes one, and root removes it (verify 4, the director's hard cap).
+    check('root removes a newest backup larger than the budget', !readdirSync(BACKUPS).includes('bv-20990101T000000Z.bin') && /1 backup past the budget/.test(cleanup),
+        `backups ${readdirSync(BACKUPS).join(' ')}; ${cleanup}`);
     const restoreKept = readdirSync(RESTORE).sort().join(' ');
     check('while the keyholder marks a restore from backup pending, root keeps its file and partial file, and nothing else in restore/',
         restoreKept === 'restore-pending.bin restore-pending.bin.part', restoreKept);

@@ -2,7 +2,7 @@
 # The monthly restart (beanpool-vault-monthly-restart.timer). Root's install step (vault-install.mjs, built with the
 # genesis custodian keys, on the verified system partition) first stops the API (the machine restarts next anyway)
 # and, once no process of the API's user runs, removes what that user left on the state partition: the releases it
-# downloaded, anything in backups/ that isn't a backup (and, but for the newest, the backups past their budget),
+# downloaded, anything in backups/ that isn't a backup (and the backups past their budget, the newest included),
 # everything in restore/ unless the keyholder marks a restore from backup pending (then its file and partial file
 # stay), and anything in the inbox but a staged image's files. Then it checks what the API staged there
 # from those keys: two custodian signatures, newer than the running release, the file names, the UKI's SHA-256 and

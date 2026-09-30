@@ -147,16 +147,18 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   (the machine restarts next anyway) and, once no process of the API's user runs, removes what that user left on the
   state partition: the releases it downloaded (the image's own API starts after the restart and downloads a release's
   bundle again), anything in `backups/` that is not a backup, and anything in the inbox but a staged image's files.
-  Backups follow the API's own rotation: the newest always stays, whatever its size; older ones stay only while they
-  fit in `backupMaxBytes` (1 GiB) together with it, and the first that doesn't fit goes with every older one.
+  Backups follow the API's own rule (`backupsPastBudget`) against `backupMaxBytes` (1 GiB): none larger than the
+  budget stays, the newest included; of the rest, the newest stays, then older ones while they fit together, and the
+  first that doesn't fit goes with every older one. The API never writes a backup past the budget: it keeps the last
+  good one and `/v1/report` says why (`backups.error`, `too large: N bytes > budget M`). The vault holds small sealed
+  copies, so a backup that size is a sign of abuse, not of a big vault.
   `restore/` is emptied unless the keyholder's marker (`/var/lib/beanpool-vault/keyholder/restore-pending.json`) says a
   restore from backup is pending: then `restore-pending.bin` and `restore-pending.bin.part` stay, whatever their size,
   because the unlock finishes the restore from either and the vault can't open without it. Only custodians restoring a
   backup into a fresh vault make that marker, and the API's user can't write there. `lastInstall.cleanup` in
   `/v1/report` says what went. So an API that fills the state partition denies updates only until the next monthly
-  restart (`/v1/report` says so meanwhile), with one exception: root can't tell a backup from a file named like one,
-  so a compromised API could keep the partition full with one large newest "backup". The data partition's mount
-  point is root's, so nothing is hidden under the mount. Between restarts the API itself clears everything in its
+  restart (`/v1/report` says so meanwhile). The data partition's mount point is root's, so nothing is hidden under
+  the mount. Between restarts the API itself clears everything in its
   inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at); what
   it can't remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included).
   Then two custodians unlock. The test image
@@ -183,7 +185,7 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   moment, measured on a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and
   is there twice while root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most
   200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go
-  first, the newest always stays, and at the monthly restart root keeps only the newest that fit in it together) and a
+  first, a backup past it is never written, and at the monthly restart root applies the same rule) and a
   few MiB of releases, certificates and state: about 3.7 GiB. On the booted test image the file system is 5.82 GiB,
   5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks the room for its copies before it
   makes them, and a staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`,

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -226,7 +226,7 @@ describe('backups', () => {
         expect(readdirSync(a.storeDir)).toHaveLength(2);
     });
 
-    it('local backups kept to a byte budget (they share the state partition with a waiting image): the oldest go, the newest always stays', async () => {
+    it('local backups kept to a byte budget (they share the state partition with a waiting image): the oldest go; one larger than the budget is refused, and the last good one stays', async () => {
         // The store alone, with backups of known sizes (same-second ones in their order).
         const dir = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
         try {
@@ -237,10 +237,11 @@ describe('backups', () => {
             expect(await store.list()).toEqual(names.slice(1, 3));
             await store.put(names[3], crypto.randomBytes(1000));
             expect(await store.list()).toEqual(names.slice(2, 4));
-            // One backup larger than the whole budget: it stays, alone.
-            await store.put('bv-20261001T130000Z.bin', crypto.randomBytes(3000));
-            expect(await store.list()).toEqual(['bv-20261001T130000Z.bin']);
-            expect(readdirSync(dir)).toEqual(['bv-20261001T130000Z.bin']);
+            // One backup larger than the whole budget: refused, never written (no partial file either), and nothing
+            // removed for it.
+            await expect(store.put('bv-20261001T130000Z.bin', crypto.randomBytes(3000))).rejects.toThrow('too large: 3000 bytes > budget 2500');
+            expect(await store.list()).toEqual(names.slice(2, 4));
+            expect(readdirSync(dir).sort()).toEqual(names.slice(2, 4).sort());
             // Without a budget nothing goes but by age (the API's 30 days).
             const unbounded = new LocalDirectoryStore(path.join(dir, 'all'));
             for (const name of names) await unbounded.put(name, crypto.randomBytes(1000));
@@ -248,18 +249,41 @@ describe('backups', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
 
-        // The API's hourly backups into such a store (a budget smaller than one backup here): after each, only it.
+    it('the API\'s backups past the budget: refused, the last good one kept, and /v1/report says why (verify 4, the director\'s hard cap)', async () => {
+        // The API's hourly backups into such a store. Its budget is changed between backups (the store the API holds
+        // passes each call to `target`).
         const bounded = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
         try {
-            const a = await vault({ store: () => new LocalDirectoryStore(bounded, { maxBytes: 1 }) });
+            let target: BackupStore = new LocalDirectoryStore(bounded);
+            const a = await vault({ store: () => ({ put: (n, b) => target.put(n, b), get: n => target.get(n), list: () => target.list(), delete: n => target.delete(n) }) });
             const g = await doGenesis(a);
             await deposit(a, g, newMember(), 'google', 'within-the-budget');
-            for (let i = 0; i < 3; i++) {
-                const name = await a.api.runBackup();
-                expect(readdirSync(bounded)).toEqual([name]);
+            const backups = async () => (JSON.parse((await get(a, '/v1/report')).body.report.text as string) as { backups: unknown }).backups;
+            const first = await a.api.runBackup();
+            const size = statSync(path.join(bounded, first)).size;
+            // Room for one and a half: after each, only it.
+            target = new LocalDirectoryStore(bounded, { maxBytes: Math.floor(size * 1.5) });
+            let last = first;
+            for (let i = 0; i < 2; i++) {
                 a.clock.advance(60 * 60 * 1000);
+                last = await a.api.runBackup();
+                expect(readdirSync(bounded)).toEqual([last]);
             }
+            // A budget smaller than one backup: refused, never written, the last good one kept, and the report says why.
+            const budget = Math.floor(size / 2);
+            target = new LocalDirectoryStore(bounded, { maxBytes: budget });
+            a.clock.advance(60 * 60 * 1000);
+            await expect(a.api.runBackup()).rejects.toThrow(/^too large: \d+ bytes > budget /);
+            expect(readdirSync(bounded)).toEqual([last]);
+            expect(await backups()).toMatchObject({ failuresInARow: 1, error: expect.stringMatching(new RegExp(`^too large: \\d+ bytes > budget ${budget}$`)) });
+            // Room again: the next backup is written, and the error is gone.
+            target = new LocalDirectoryStore(bounded, { maxBytes: Math.floor(size * 1.5) });
+            a.clock.advance(60 * 60 * 1000);
+            const next = await a.api.runBackup();
+            expect(readdirSync(bounded)).toEqual([next]);
+            expect(await backups()).toMatchObject({ failuresInARow: 0, error: null });
         } finally {
             rmSync(bounded, { recursive: true, force: true });
         }

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { LocalDirectoryStore } from '../api/backup-store.js';
 import { custodianKey } from '../custodian/lib.js';
-import { INSTALL_SPARE_BYTES, installStaged, processesOf, type ApiDirs, type InstallOptions } from '../install/install.js';
+import { clearApiDirs, INSTALL_SPARE_BYTES, installStaged, processesOf, type ApiDirs, type InstallOptions } from '../install/install.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
 import { stagedNames } from '../shared/staged-image.js';
 import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit.js';
@@ -315,26 +315,37 @@ describe('the monthly restart removes what the API left on the state partition, 
         expect(readdirSync(d.restore)).toEqual(['restore-pending.bin.part']);
     });
 
-    it('the newest backup stays whatever its size, as the API\'s rotation keeps it (backup-store.ts); the ones after it only while they fit (verify 4)', async () => {
+    it('a newest backup larger than the budget goes too (the API never writes one); older ones that fit stay (verify 4, the director\'s hard cap)', async () => {
         const t = setUp();
         const { d } = planted();
         writeFileSync(path.join(d.backups, 'bv-20260903T000000Z.bin'), Buffer.alloc(701));
-        await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
-        expect(readdirSync(d.backups)).toEqual(['bv-20260903T000000Z.bin']);
+        const resultFile = path.join(dir, `result-${n}.json`);
+        await installStaged(t.opts({ apiDirs: d, resultFile, stopApi: () => true }));
+        expect(readdirSync(d.backups).sort()).toEqual(['bv-20260901T000000Z.bin', 'bv-20260902T000000Z.bin']);
+        expect((JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup: string }).cleanup).toContain('1 backup past the budget');
+    });
 
-        // Within the budget first, then one that doesn't fit: it and every older one go, as the rotation drops the oldest.
-        const u = planted().d;
-        writeFileSync(path.join(u.backups, 'bv-20260902T000000Z.bin'), Buffer.alloc(500));
-        await installStaged(t.opts({ apiDirs: u, stopApi: () => true }));
-        expect(readdirSync(u.backups)).toEqual(['bv-20260903T000000Z.bin']);
-
-        // And the API's own rotation, on the same files, keeps the same.
+    it('root\'s step and the API\'s rotation keep the same backups from the same files (backupsPastBudget)', async () => {
+        const files: [string, number][] = [
+            ['bv-20260901T000000Z.bin', 300], ['bv-20260902T000000Z.bin', 300], ['bv-20260903T000000Z.bin', 701], ['bv-20260904T000000Z.bin', 300],
+        ];
+        // The API: 0904 is the backup it writes, into a store holding the rest.
         const store = path.join(dir, `store-${++n}`);
         mkdirSync(store);
-        writeFileSync(path.join(store, 'bv-20260901T000000Z.bin'), Buffer.alloc(300));
-        writeFileSync(path.join(store, 'bv-20260902T000000Z.bin'), Buffer.alloc(500));
-        await new LocalDirectoryStore(store, { maxBytes: 700 }).put('bv-20260903T000000Z.bin', Buffer.alloc(300));
-        expect(readdirSync(store)).toEqual(['bv-20260903T000000Z.bin']);
+        for (const [name, size] of files.slice(0, 3)) writeFileSync(path.join(store, name), Buffer.alloc(size));
+        await new LocalDirectoryStore(store, { maxBytes: 700 }).put(files[3][0], Buffer.alloc(files[3][1]));
+        // Root: the same four files.
+        const base = path.join(dir, `api-${++n}`);
+        const d: ApiDirs = {
+            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700,
+            restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
+        };
+        mkdirSync(d.backups, { recursive: true });
+        for (const [name, size] of files) writeFileSync(path.join(d.backups, name), Buffer.alloc(size));
+        clearApiDirs(d, () => undefined);
+        // The one past the budget on its own goes; of the rest, the newest two fit together, the oldest doesn't.
+        const kept = ['bv-20260902T000000Z.bin', 'bv-20260904T000000Z.bin'];
+        expect({ api: readdirSync(store).sort(), root: readdirSync(d.backups).sort() }).toEqual({ api: kept, root: kept });
     });
 
     it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {

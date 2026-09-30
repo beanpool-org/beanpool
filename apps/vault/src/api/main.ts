@@ -23,8 +23,9 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  * - `socketPath`: listen on a Unix socket behind that symlink (the image; Caddy connects through it), so a newer API
  *   can take over (updater.ts, launcher.ts). Without it, `port` and `host` (tests, a rehearsal).
  * - `backupDir` is a local directory standing in for the object store until its client and credentials exist (design
- *   §4: a second provider in another country). `backupMaxBytes` bounds it: after each backup the oldest go until the
- *   rest fit (the newest always stays). On the image it shares the state partition with a new image waiting.
+ *   §4: a second provider in another country). `backupMaxBytes` bounds it: a backup larger than it is refused (the
+ *   last good one stays, and /v1/report says why); after each backup the oldest go until the rest fit. On the image
+ *   it shares the state partition with a new image waiting, and root's monthly step applies the same rule.
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
  * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
  * - `installResultFile`: what root's install step did at the last monthly restart (the image:

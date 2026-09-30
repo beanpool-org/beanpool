@@ -27,7 +27,7 @@ import {
 import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import { NonceStore, verifySignedRequest } from './auth.js';
-import type { BackupStore } from './backup-store.js';
+import { BackupTooLarge, type BackupStore } from './backup-store.js';
 import { DB_FILE, VaultDb, type CopyRow, type DeletionRow, type HoldRow } from './db.js';
 import { KeyholderCallError, KeyholderClient, KeyholderUnavailable } from './keyholder-client.js';
 import { PushSender, type PushKind } from './push.js';
@@ -239,6 +239,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let previousReport: { text: string; signature: string } | null = null;
     let lastBackupOkAt: number | null = null;
     let backupFailuresInARow = 0;
+    /** Why the last backup failed, for the report: a backup past the store's budget says so; anything else, 'failed'. */
+    let backupError: string | null = null;
 
     const limits = {
         tickets: new RateLimiter(LIMITS.ticketsPerAddressPerMinute, 60_000),
@@ -825,7 +827,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             v: 1, day, at: now, copies: database.countCopies(), counts,
             // After a reshare, envelopes still under the old K_wrap (which the old M opens) until the re-wrap is done.
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
-            backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow },
+            backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow, error: backupError },
             pushes: { sent: push.sent, failed: push.failed },
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
@@ -980,10 +982,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             });
             lastBackupOkAt = clock();
             backupFailuresInARow = 0;
+            backupError = null;
             counters.counts.backupsOk++;
             return name;
         } catch (e) {
             backupFailuresInARow++;
+            backupError = e instanceof BackupTooLarge ? e.message : 'failed';
             counters.counts.backupsFailed++;
             throw e;
         }

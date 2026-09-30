@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_NAME_RE, compareBackupNames, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupsPastBudget, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
 import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
@@ -31,10 +31,9 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * race what root does in that user's directories. Then everything that user may have left on the state partition goes
  * (a compromised API could otherwise fill it, and deny every later update, until a reinstall): `releasesDir` is
  * emptied (the launcher starts the image's own API after the restart, and the API downloads a release's bundle
- * again), `backups/` keeps only backups (regular files under a backup name): the newest always, whatever its size,
- * and the ones after it while they fit in the budget together (the API's own rotation, backup-store.ts; root can't
- * tell a backup from a file named like one, so a newest one past the budget stays even if a compromised API made it
- * to fill the partition). `restore/` is
+ * again), `backups/` keeps only backups (regular files under a backup name) within the budget, by the API's own rule
+ * (backupsPastBudget): none larger than the budget, the newest included (the API never writes one), then the newest
+ * and older ones while they fit together. `restore/` is
  * emptied unless the keyholder's marker says a restore from backup is pending (only custodians restoring a backup into
  * a fresh vault make one): then its file and its partial file stay, whatever their size (the API finishes the restore
  * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image
@@ -155,8 +154,8 @@ function emptyInbox(inbox: string, log: (line: string) => void, apiStopped: bool
 
 /**
  * The API's directories on the state partition, once the API is stopped: `releases` emptied; in `backups` only backups
- * (regular files under a backup name), the newest whatever its size and the next newest while they fit in
- * `backupMaxBytes` together (as the API's rotation keeps them); `restore` emptied, unless the keyholder's marker is
+ * (regular files under a backup name) that `backupMaxBytes` keeps (backupsPastBudget: none larger than it, then the
+ * newest while they fit together, as the API's rotation keeps them); `restore` emptied, unless the keyholder's marker is
  * there: then the pending restore's file and its partial file stay (regular files, any size). Returns what went, in a
  * few words, or null when nothing did.
  */
@@ -178,18 +177,8 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string
         if (st.isFile() && BACKUP_NAME_RE.test(name)) backups.push({ name, size: st.size });
         else if (removeWhole(p)) others++;
     }
-    // Newest first: the newest stays whatever its size; after it, the rest while they fit, and none past the first
-    // that doesn't (backup-store.ts drops the oldest until the rest fit, never the newest).
-    let total = 0;
     let dropped = 0;
-    let full = false;
-    for (const [i, b] of backups.sort((x, y) => compareBackupNames(y.name, x.name)).entries()) {
-        if (!full && (i === 0 || total + b.size <= dirs.backupMaxBytes)) total += b.size;
-        else {
-            full = true;
-            if (removeWhole(path.join(dirs.backups, b.name))) dropped++;
-        }
-    }
+    for (const name of backupsPastBudget(backups, dirs.backupMaxBytes)) if (removeWhole(path.join(dirs.backups, name))) dropped++;
     if (others) said.push(`${others} in backups that ${others === 1 ? 'is' : 'are'} not a backup`);
     if (dropped) said.push(`${dropped} ${dropped === 1 ? 'backup' : 'backups'} past the budget`);
 

@@ -74,3 +74,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 ## 2026-08-20 - [Monorepo Test Isolation & PWA Dependency Boundary]
 **Gotcha:** Do NOT open component test PRs in `apps/pwa` that independently bootstrap `setupTests.ts`, add `@testing-library` packages, modify `pnpm-lock.yaml`, or edit `resolve.alias` in `vite.config.ts`.
 **Reason:** `apps/pwa` has no test harness on `main`. Ad-hoc bootstrapping attempts in multiple PRs churned the lockfile, downgraded React from 19.2.0 to 19.1.0 across the repo, and pointed production bundle aliases at testing-library's nested React. Test suites must only be added after a dedicated, unified test harness PR is approved on `main`.
+
+## 2026-09-30 - [Viewer Route Helpers Coverage]
+**Gap found:** `viewerTier`, `seesGuestView`, `membersOnlyHere`, and `memberReadsOnlyHere` in `apps/server/src/routes/viewer.ts` lacked a dedicated integration unit test suite.
+**Learning:** Testing route-level viewer tier helpers with mock Koa contexts (`Pick<Context, 'state'>`) allows verifying member vs visitor vs suspended member authorization gates across different node profile configurations (`local` vs `global`).
+**Action:** Created `test-viewer-helpers.ts` and registered in `scripts/server-suites.mjs`.

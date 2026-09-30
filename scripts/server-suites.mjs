@@ -70,6 +70,7 @@ export const SUITES = [
     'test-distance-search',
     'test-distance-query-parsing',
     'test-guest-view',
+    'test-viewer-helpers',
     'test-distance-search-perf',
     'test-global-directory',
     'test-knock',

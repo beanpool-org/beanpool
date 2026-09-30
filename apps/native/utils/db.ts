@@ -829,6 +829,65 @@ export async function getMyPosts(pubkey: string) {
     });
 }
 
+/**
+ * Reads one listing from the node again and writes it through the sync's own row writer. Tells the screens
+ * (`sync_data_updated`) only when what they show changed: post screens reload on that event and call getPost, which
+ * calls this, so an unconditional emit fetch-loops. The photos are part of it: a node that now keys its listings'
+ * photos (or keys them with a new secret) hands out new URLs for a listing that did not otherwise change, and the
+ * screen must reload to show them (the old ones answer 404). Resolves whether it told them.
+ *
+ * Writes only into `database` while it is still the open one and belongs to `anchorUrl`'s community: a community switch
+ * between the caller reading the anchor and opening the database, or while the read is out, would otherwise put one
+ * community's listing in another's cache (as applyDelta's `expectedDbName` guard does for the sync).
+ */
+async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: string, id: string): Promise<boolean> {
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`);
+    // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
+    if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return false;
+    const posts = await res.json();
+    if (!Array.isArray(posts) || posts.length === 0) return false;
+    const p = posts[0];
+    const before = await database.getFirstAsync<any>(
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos FROM posts WHERE id = ?', [id]
+    );
+    await acquireSyncLock();
+    try {
+        // Checked under the lock: a switch closes the database under the same lock (closeDB, getDb), so none lands
+        // between this check and the write.
+        if (db !== database || currentDbName !== getDatabaseFilenameForNode(anchorUrl)) return false;
+        // The sync's own row writer: a second copy of it here had already drifted, and put a group
+        // listing back to 'public' every time someone opened it.
+        await writeSyncedPost(database, { ...p, id: p.id ?? id });
+    } finally {
+        releaseSyncLock();
+    }
+    const changed = !before ||
+        before.status !== (p.status || 'active') ||
+        (before.active ? 1 : 0) !== (p.active !== undefined ? (p.active ? 1 : 0) : 1) ||
+        (before.accepted_by || null) !== (p.accepted_by || p.acceptedBy || null) ||
+        (before.pending_transaction_id || null) !== (p.pending_transaction_id || p.pendingTransactionId || null) ||
+        (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
+        (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
+        (before.photos ?? null) !== syncedPhotosColumn(p);
+    if (changed) {
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('sync_data_updated');
+    }
+    return changed;
+}
+
+/**
+ * Reads one listing from the node again, as opening it does (refreshCachedPost), for a screen whose photo of it would
+ * not load (utils/photo-refresh.ts bounds how often). Only for a listing of the community this phone is on now: the
+ * photo's URL must be that node's. Resolves whether the screens were told to reload.
+ */
+export async function refreshPostForPhoto(id: string, photoUrl: string): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    if (!anchorUrl || !photoUrl.startsWith(`${anchorUrl}/`)) return false;
+    const database = await waitForInit();
+    return refreshCachedPost(database, anchorUrl, id);
+}
+
 export async function getPost(id: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -838,43 +897,7 @@ export async function getPost(id: string) {
     // before the next Pillar sync) appears after one round-trip. A slow or empty
     // server response never deletes local rows — deletion is applyDelta's job
     // (the server tombstones deleted posts with active=0).
-    if (anchorUrl) {
-        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`)
-            .then(async res => {
-                // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
-                if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return null;
-                return res.json();
-            })
-            .then(async posts => {
-                if (!Array.isArray(posts) || posts.length === 0) return;
-                const p = posts[0];
-                const before = await database.getFirstAsync<any>(
-                    'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at FROM posts WHERE id = ?', [id]
-                );
-                await acquireSyncLock();
-                try {
-                    // The sync's own row writer: a second copy of it here had already drifted, and put a group
-                    // listing back to 'public' every time someone opened it.
-                    await writeSyncedPost(database, { ...p, id: p.id ?? id });
-                } finally {
-                    releaseSyncLock();
-                }
-                // Only notify listeners on a real change — post screens reload on this
-                // event and re-call getPost, so an unconditional emit fetch-loops.
-                const changed = !before ||
-                    before.status !== (p.status || 'active') ||
-                    (before.active ? 1 : 0) !== (p.active !== undefined ? (p.active ? 1 : 0) : 1) ||
-                    (before.accepted_by || null) !== (p.accepted_by || p.acceptedBy || null) ||
-                    (before.pending_transaction_id || null) !== (p.pending_transaction_id || p.pendingTransactionId || null) ||
-                    (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
-                    (before.updated_at || null) !== (p.updated_at || p.updatedAt || null);
-                if (changed) {
-                    const { DeviceEventEmitter } = require('react-native');
-                    DeviceEventEmitter.emit('sync_data_updated');
-                }
-            })
-            .catch(() => null);
-    }
+    if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
@@ -2694,6 +2717,11 @@ function emitOwnProfileUpdated(pubkey: string): void {
     emitAppEvent('profile_updated', { pubkey });
 }
 
+/** The `photos` column writeSyncedPost stores for a listing from the node: its URLs, never a local file's. */
+function syncedPhotosColumn(p: any): string | null {
+    return p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null;
+}
+
 /**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
@@ -2715,7 +2743,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
             p.lat ?? null,
             p.lng ?? null,
-            p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
+            syncedPhotosColumn(p),
             p.price_type || p.priceType || 'fixed',
             p.repeatable ? 1 : 0,
             (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,

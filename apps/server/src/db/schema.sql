@@ -537,6 +537,18 @@ CREATE TABLE IF NOT EXISTS node_config (
     value TEXT NOT NULL
 );
 
+-- Where each key's heal of its listing-photo URLs is, on a node with more listings with a photo than one answer holds
+-- (engine/photo-keys.ts photoHealFor): this server's own, for the shape it began under (`since`, photoKeysSince). The
+-- last page went to `cursor`, from `from_key`; the next starts at `after_key` (NULL: none is left). One row per key.
+CREATE TABLE IF NOT EXISTS photo_url_heals (
+    viewer    TEXT PRIMARY KEY,
+    since     TEXT NOT NULL,
+    cursor    TEXT NOT NULL,
+    from_key  TEXT NOT NULL,
+    after_key TEXT,
+    served_at TEXT NOT NULL
+);
+
 -- 9. Community Crowdfunding Projects
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,

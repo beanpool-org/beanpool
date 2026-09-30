@@ -21,7 +21,6 @@
  */
 
 import Router from '@koa/router';
-import crypto from 'node:crypto';
 import { getMember, getActingMember, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import {
     getConnectorByAddress, getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
@@ -31,7 +30,7 @@ import { settleCrossNodePurchase } from '../federation-protocol.js';
 import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
-import { SettlementError } from '../federation-settlement-exchange.js';
+import { SettlementError, settlementKeyFor } from '../federation-settlement-exchange.js';
 import { settlementStartedBy } from '../engine/money-limits.js';
 import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
@@ -223,11 +222,23 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        // 6. THE KEY. Minted by the buyer's node (§2.5). A client may supply one to RETRY: the whole outbound
-        //    path is idempotent on it, and `runOutboundSettlement` resumes from the row's state — so a retry
-        //    after a dropped connection finishes the original purchase instead of starting a second one. Minting
-        //    a fresh key on every attempt is what would double-charge.
-        const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xn-${crypto.randomUUID()}`;
+        // 6. THE KEY. Minted by the buyer's node (§2.5). A client may send one back only to RETRY its own purchase:
+        //    the whole outbound path is idempotent on it, and `runOutboundSettlement` resumes from the row's state —
+        //    so a retry after a dropped connection finishes the original purchase instead of starting a second one.
+        //    Minting a fresh key on every attempt is what would double-charge.
+        //
+        //    It is never the caller's choice. The settlement holds the Beans in `escrow_<key>`, so a chosen key could
+        //    name a crowdfund project's or a deal's escrow, and abandoning it paid their Beans to the caller (#1329's
+        //    round-3 review). settlementKeyFor takes only a key this node minted, on this buyer's own purchase of the
+        //    same thing from the same community; anything else is refused here, before anything moves.
+        const postIdOrNull = typeof postId === 'string' ? postId : null;
+        const keyed = settlementKeyFor(body.key, 'xn-', { payer: buyerPublicKey, peerId, sellerPublicKey, postId: postIdOrNull, amount });
+        if (!keyed.ok) {
+            ctx.status = keyed.status;
+            ctx.body = { error: keyed.error, reason: keyed.reason };
+            return;
+        }
+        const key = keyed.key;
 
         try {
             const { peerIdFromString } = await import('@libp2p/peer-id');
@@ -253,7 +264,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 // refuse with `unknown_home_node`.
                 buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey,
-                postId: typeof postId === 'string' ? postId : null,
+                postId: postIdOrNull,
                 amount,
             });
             ctx.status = statusFor(outcome.status);

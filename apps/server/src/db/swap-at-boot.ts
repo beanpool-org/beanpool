@@ -14,8 +14,8 @@
  *   whenever it finds one, a swap being the only thing that makes one), or sooner when a whole copy needs its room
  *   (services/backup-puller.ts); on a server promoted by a take-over, whose puller never runs again, at the start whose
  *   take-over audit found its ledger adds up (services/takeover.ts). It holds rows members deleted since, so nothing keeps it
- *   longer. Never in a process whose swap failed part way (deletePreviousDatabase): that file may then be the only whole
- *   database here.
+ *   longer. Never in a process whose swap failed part way, or that started with no database of its own
+ *   (deletePreviousDatabase): that file may then be the only whole database here.
  * - Killed between the two renames: `state.previous.db`, no `state.db`, and the staging database still there: the swap
  *   finishes (a rename is atomic, and the older previous is never written over by nothing).
  * - Killed after the swap, before the staging directory went: READY and no staging database: the staging goes.
@@ -23,6 +23,9 @@
  *   fails its check: the staging goes, and the live copy is as it was.
  * - A take-over that is under way (its journal, services/takeover.ts, not complete): the staging goes. A copy made
  *   before a take-over must never replace what the take-over wrote.
+ * - Any of these after a swap stopped between its renames (the staged copy torn, or a take-over under way): the staging
+ *   goes and `state.previous.db`, which is this server's copy, becomes `state.db` again (putPreviousBack). So does a
+ *   `state.previous.db` found with no `state.db` at all, whatever the swap did.
  *
  * Never throws: a swap that fails leaves the live copy as it was and says why.
  */
@@ -54,10 +57,56 @@ function renameIfThere(from: string, to: string): void {
     else fs.rmSync(to, { force: true });
 }
 
+/**
+ * Whether this process started on a database of its own: a `state.db` there after the swap, before db/db.ts opened it (and
+ * made a new, empty one when there was none). Null before the swap has run.
+ */
+let startedOnDatabase: boolean | null = null;
+
+/** A database file worth keeping: there, not empty, and holding the members table. Never throws. */
+function isDatabase(file: string): boolean {
+    try {
+        if (!fs.existsSync(file) || fs.statSync(file).size === 0) return false;
+        const conn = new Database(file, { readonly: true, fileMustExist: true });
+        try { return !!conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'members'").get(); } finally { conn.close(); }
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * No `state.db`, and `state.previous.db` there: a swap stopped between its two renames whose staged copy was then not
+ * swapped in (discarded, or its rename failed), or a `state.db` removed by hand. The previous database is this server's
+ * copy: it becomes `state.db` again (its `-wal` and `-shm` with it; one left under the live name is its own, as the swap
+ * reads it), so the server never starts on an empty database while its copy sits beside it, and never deletes that copy as
+ * "the database the last swap replaced" (#1334 review round 3, finding 2). The database is renamed last: a start stopped
+ * part way finds it where it was and does this again. Returns whether it did. Never throws.
+ */
+function putPreviousBack(dataDir: string, say = true): boolean {
+    const live = path.join(dataDir, 'state.db');
+    const previous = path.join(dataDir, PREVIOUS_DB);
+    if (fs.existsSync(live) || !fs.existsSync(previous)) return false;
+    try {
+        for (const s of ['-wal', '-shm']) {
+            if (!fs.existsSync(previous + s)) continue;
+            fs.rmSync(live + s, { force: true });
+            fs.renameSync(previous + s, live + s);
+        }
+        fs.renameSync(previous, live);
+        if (say) console.warn(`[Swap] There was no state.db, and ${PREVIOUS_DB} was there: it is this server's copy, and is state.db again.`);
+        return true;
+    } catch (e) {
+        console.error(`[Swap] ${PREVIOUS_DB} could not be put back as state.db: ${(e as Error)?.message || e}. It is kept as it is.`);
+        return false;
+    }
+}
+
 /** The swap for `dataDir` (BEANPOOL_DATA_DIR, as db/db.ts reads it). Once a process. */
 export function swapStagedCopyAtBoot(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): SwapOutcome {
     if (done) return done;
     done = swap(dataDir);
+    putPreviousBack(dataDir); // after any outcome: a swap that failed part way, or none, with state.db gone
+    startedOnDatabase = isDatabase(path.join(dataDir, 'state.db'));
     return done;
 }
 
@@ -66,7 +115,11 @@ function swap(dataDir: string): SwapOutcome {
     if (!fs.existsSync(staging)) return 'none';
     const discard = (why: string): SwapOutcome => {
         try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* the next boot tries again */ }
-        console.warn(`[Swap] The whole copy in ${STAGING}/ was not swapped in, and is deleted: ${why}. This server's copy is as it was.`);
+        // A swap stopped between its renames: this server's copy is state.previous.db until it is put back.
+        const back = putPreviousBack(dataDir, false); // said below
+        console.warn(`[Swap] The whole copy in ${STAGING}/ was not swapped in, and is deleted: ${why}. `
+            + (back ? `The swap had been stopped between its renames: ${PREVIOUS_DB}, this server's copy, is state.db again.`
+                : fs.existsSync(path.join(dataDir, 'state.db')) ? "This server's copy is as it was." : 'This server has no copy of its own.'));
         return 'discarded';
     };
     try {
@@ -125,8 +178,8 @@ export function previousDatabaseThere(dataDir = process.env.BEANPOOL_DATA_DIR ||
 
 /**
  * Delete the database the last swap replaced (PREVIOUS_DB, with its `-wal` and `-shm`), unless this process's swap failed
- * part way or there is no `state.db` beside it: then it may be the only whole database here (the renames are not undone,
- * and the next start's swap finishes them), and it stays. The callers say when it is no longer needed. Never throws.
+ * part way or this process started with no database of its own (checked before db/db.ts opened, or made, `state.db`):
+ * then it may be the only whole database here, and it stays. The callers say when it is no longer needed. Never throws.
  *
  * The `-wal` and `-shm` go first, the database last: a delete stopped part way (a SIGKILL, a file that would not go)
  * leaves the database, which the callers see and delete again, never a WAL on its own holding rows members changed or
@@ -144,6 +197,8 @@ export function deletePreviousDatabase(dataDir = process.env.BEANPOOL_DATA_DIR |
     if (fs.existsSync(previous)) {
         if (done === null) kept = 'the swap at boot has not run in this process';
         else if (done === 'failed') kept = "this start's swap failed part way, so it may be the only whole database here";
+        // Decided before db/db.ts opened state.db, which makes a new, empty one when there is none (review round 3, finding 2).
+        else if (startedOnDatabase !== true) kept = 'this server started with no database of its own (its state.db was made new at this start), so it may be the only whole database here';
         else if (!fs.existsSync(path.join(dataDir, 'state.db'))) kept = 'there is no state.db beside it';
     }
     if (kept) return { had, deleted: false, kept, errors };

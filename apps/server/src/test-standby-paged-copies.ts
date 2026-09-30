@@ -62,6 +62,10 @@
  *     killed it): after a restart, the next delta leaves no file of it. And a `-wal` and `-shm` left on their own, as an older
  *     build's delete stopped part way left them, go at a main server's start. (Before: the WAL stayed for good, holding the
  *     rows it held.)
+ * 21. S killed at boot between the swap's two renames (the review's kill point), its staged copy then torn, and started as
+ *     a main server by hand: the staging is discarded and state.previous.db, S's own copy, is state.db again; the server runs
+ *     on every member and message it had. (Before: it started on a new, empty database and deleted that copy as "the
+ *     database the last swap replaced".)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -1027,6 +1031,39 @@ async function main(): Promise<void> {
                 `a main server's start deletes a -wal and -shm left on their own (${JSON.stringify({ role: standby.ready.role, left: prevFiles() })}; before: nothing looked for them without the database)`);
         });
 
+        await step('21. a swap stopped between its renames, its staged copy torn, then a start as a main server: it runs on its own copy', async () => {
+            const name = await newStandby('standby6');
+            const d = dir(name);
+            const w21 = await wholeCopy(); // S's copy is a whole copy of M
+            const count = async () => ({
+                members: (await standby.send('rows', { sql: 'SELECT COUNT(*) AS n FROM members' }))[0].n as number,
+                messages: (await standby.send('rows', { sql: 'SELECT COUNT(*) AS n FROM messages' }))[0].n as number,
+            });
+            const c0 = await count();
+            require_(w21.ok === true && w21.staged === true && c0.messages > 0, `S holds a whole copy of M (${JSON.stringify({ w21, c0 })})`);
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 21', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            // The next start SIGKILLs itself right before it renames the staged copy into place: after the first rename.
+            const arm = `${d}.kill-at`;
+            fs.writeFileSync(arm, JSON.stringify({ op: 'renameSync', suffix: '/staging/state.db' }));
+            const p21 = await standby.send('pull', { whole: true });
+            const f = (n: string) => fs.existsSync(path.join(d, n));
+            const stopped = await until('S killed between the swap\'s renames', () => !fs.existsSync(arm) && f('staging/state.db') && !f('state.db') && f('state.previous.db'), 60_000);
+            await sleep(1000);
+            require_(p21.ok === true && p21.staged === true && stopped, `S is killed between the swap's two renames (${JSON.stringify(p21)})`);
+            // The staged copy torn: its second half never reached the disk.
+            const staged = path.join(d, 'staging/state.db');
+            fs.truncateSync(staged, Math.floor(fs.statSync(staged).size / 2));
+            for (const x of ['-wal', '-shm']) fs.rmSync(staged + x, { force: true });
+            standby = await spawnNode(SCRIPT, d, { ...envS, NODE_ROLE: 'primary' }); // its main server gone: promoted by hand
+            nodes.push(standby);
+            const c1 = await count();
+            const out = standby.output();
+            assert(standby.ready.role === 'primary' && c1.members === c0.members && c1.messages === c0.messages && !f('state.previous.db') && !f('staging')
+                && /is state\.db again/.test(out),
+                `the torn copy is discarded and S's own copy is state.db again: the main server runs on its ${c1.members} members and ${c1.messages} messages `
+                + `(${JSON.stringify({ before: c0, after: c1, previous: f('state.previous.db') })}; before: a new, empty database, and S's copy deleted)`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -1109,6 +1146,18 @@ const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
 };
 
 if (process.argv.includes('--child')) {
+    // Step 21: armed by a file beside the data dir, read once at this start, this process SIGKILLs itself right before the
+    // named fs call on a path ending in `suffix`, as a power cut would (before the swap at boot, which runPagedCopyChild runs).
+    const arm = `${process.env.BEANPOOL_DATA_DIR}.kill-at`;
+    if (fs.existsSync(arm)) {
+        const { op, suffix } = JSON.parse(fs.readFileSync(arm, 'utf-8')) as { op: 'renameSync' | 'rmSync'; suffix: string };
+        fs.rmSync(arm);
+        const real = (fs as any)[op];
+        (fs as any)[op] = (p: fs.PathLike, ...rest: any[]) => {
+            if (String(p).endsWith(suffix)) process.kill(process.pid, 'SIGKILL');
+            return real(p, ...rest);
+        };
+    }
     runPagedCopyChild({ ...photoCommands, ...roomCommands }).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });

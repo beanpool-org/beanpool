@@ -89,7 +89,8 @@ export function spawnNode(
         return new Promise((resolve, reject) => {
             exited.then((code) => {
                 if (r.readyMsg === null) {
-                    reject(Object.assign(new Error(`node exited (${code}) before it was ready`), { output: out, code }));
+                    // Its own last lines in the message: a suite that prints only the message still says why.
+                    reject(Object.assign(new Error(`node exited (${code}) before it was ready\n${out.slice(-3000)}`), { output: out, code }));
                     return;
                 }
                 // Restarted by itself to swap in a whole copy: started again here, as Docker does.
@@ -261,7 +262,29 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     app.use(createOwnerUnlockRoutes(deps).routes());
     const server = http.createServer(app.callback());
     // The port it had before a swap's restart, so the orchestrator's address for it stays good (spawnNode).
-    await new Promise<void>((r) => server.listen(Number(process.env.BEANPOOL_TEST_HTTP_PORT) || 0, '127.0.0.1', () => r()));
+    // A port another socket on this machine took in the moment between the two starts: a moment's retries, then any port,
+    // said on stderr; the NodeProc follows the port each start reports.
+    let port = Number(process.env.BEANPOOL_TEST_HTTP_PORT) || 0;
+    for (let tries = 0; ; tries++) {
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const failed = (e: Error) => { server.off('listening', listening); reject(e); };
+                const listening = () => { server.off('error', failed); resolve(); };
+                server.once('error', failed);
+                server.once('listening', listening);
+                server.listen(port, '127.0.0.1');
+            });
+            break;
+        } catch (e: any) {
+            if (e?.code !== 'EADDRINUSE' || port === 0) throw e;
+            if (tries >= 20) {
+                console.error(`[harness] port ${port}, this node's before its restart, is taken: listening on another`);
+                port = 0;
+            } else {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+        }
+    }
 
     // A whole copy made ready (services/backup-puller.ts): the node restarts to swap it in, as it does in production, once the
     // command that made it has answered (or at once, when the pull loop made it). The orchestrator starts it again.

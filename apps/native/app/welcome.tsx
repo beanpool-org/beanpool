@@ -39,7 +39,7 @@ import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
-import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
@@ -1754,6 +1754,13 @@ export default function WelcomeScreen() {
                                 setShowSsoSheet(true);
                             } : undefined}
                         />
+                        {/* The sign-in the member joined with used to protect another account: said here too, as the
+                            protection sheet says it (PR #1336 review finding 9). */}
+                        {enrolment?.replaced && enrolment.enrolledSso?.[0] && (
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">
+                                {signInReplacedNote(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
+                            </Text>
+                        )}
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>

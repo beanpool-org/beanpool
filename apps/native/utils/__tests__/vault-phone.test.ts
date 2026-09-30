@@ -86,13 +86,14 @@ import {
 import { finishMove, moveLater, removeInstead, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
-    approveVaultHold, connectWanted, holdEndsText, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
+    approvedHolds, approveVaultHold, connectWanted, holdEndsText, vaultRefusal, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
     takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
 import { protectionFrom } from '../protection-state';
 import { releaseAccountFromPhone, UNREGISTER_TIMEOUT_MS } from '../account-leaves-phone';
+import { signInReplacedNote } from '../no-words-copy';
 import { boundSignatureValid } from './server-signature-check';
 import {
     COMMUNITY, DEPOSIT_KEY, GLOBAL, HOLD_MS, TICKET_KEY, VAULT,
@@ -831,6 +832,50 @@ describe('status, disconnect, push token, and the check at app open', () => {
         expect(holdEndsText(now + 20 * 60_000, now)).toBe('in a few minutes');
         expect(holdEndsText(now + HOLD_MS, now)).toMatch(/^in about 24 hours \(/);
         expect(holdEndsText(now + 60 * 60_000, now)).toMatch(/^in about 1 hour \(/);
+    });
+
+    it('a refusal is always in the app\'s own words, never the text an answer at the vault\'s address sent', () => {
+        const planted = 'Your account is at risk: call 555-0100 now.';
+        for (const [status, code] of [[404, 'no_copy'], [429, 'rate_limited'], [401, 'signin_refused'], [401, 'ticket_expired'], [400, 'bad_box'], [403, 'whatever']] as const) {
+            const e = vaultRefusal(status, { error: planted, code });
+            expect(e.message, `${status} ${code}`).not.toContain('555-0100');
+            expect(e.message, `${status} ${code}`).toMatch(/BeanPool|Too many tries/);
+        }
+        expect(vaultRefusal(404, { error: planted, code: 'no_copy' })).toMatchObject({ reason: 'no_copy', message: VAULT_MESSAGES.noCopy });
+    });
+
+    it('"Yes, it\'s me" is remembered: the app-open check never asks "Is this you?" about a hold this phone let through', async () => {
+        await memberOnCommunity();
+        await connect('google');
+        await startSsoRestore('google');
+        const [hold] = (await vaultStatus(member)).holds;
+        await approveVaultHold(member, hold.holdId);
+        expect(await approvedHolds(member.publicKey)).toEqual([hold.holdId]);
+        expect(await vaultHoldsAtOpen(member)).toEqual([]);
+        // Once the other device has collected, the vault lists it no more, and the phone forgets the approval.
+        vi.useFakeTimers({ now: Date.now() + 1000, toFake: ['Date'] });
+        expect(await checkSsoRestore()).toMatchObject({ status: 'released' });
+        vi.useRealTimers();
+        await vaultHoldsAtOpen(member);
+        expect(await approvedHolds(member.publicKey)).toEqual([]);
+    });
+
+    it('the global door\'s Safety Backup says so when the sign-in used to protect another account', async () => {
+        const other = await draftIdentity('Kim');
+        net.vault.keep('google', SUBS.google, other.publicKey, await sealSeedToSso(toEd25519Seed(hexToBytes(other.privateKey)), 'google', SUBS.google));
+        const result = await signInAtDoor('google', GLOBAL, member);
+        if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
+        const answer = await submitJoin(GLOBAL, { ...member, callsign: 'Sam' }, 'Sam', result.signin);
+        expect(answer).toMatchObject({ kind: 'joined', enrolment: { enrolledSso: ['google'], replaced: true } });
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        const backup = welcome.slice(welcome.indexOf("if (mode === 'seedBackup' && pendingIdentity)"));
+        expect(backup).toMatch(/\{enrolment\?\.replaced && [\s\S]{0,200}signInReplacedNote\(/);
+        expect(signInReplacedNote('Google')).toBe('This Google account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.');
+    });
+
+    it('Account Protection\'s spinner waits only in front of the sign-in part: the 12 words never wait behind the vault', () => {
+        const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
+        expect(settings).toMatch(/\{protectionLoading \? \([\s\S]*?<KeeperProtectionPanel[\s\S]*?\/>\s*<\/>\s*\)\}\s*<>\s*\{\/\* On every phone\./);
     });
 
     it('a VaultError carries the vault\'s reason', () => {

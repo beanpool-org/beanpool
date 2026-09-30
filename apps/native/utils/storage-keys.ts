@@ -119,3 +119,8 @@ export function vaultConnectWantedStoreKey(publicKey: string): string {
 export function vaultCopyKnownStoreKey(publicKey: string): string {
     return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;
 }
+
+/** The key vault holds one account said "Yes, it's me" to on this phone (utils/vault.ts `approvedHolds`). */
+export function vaultApprovedHoldsStoreKey(publicKey: string): string {
+    return `beanpool_vault_approved_holds:${publicKey.toLowerCase()}`;
+}

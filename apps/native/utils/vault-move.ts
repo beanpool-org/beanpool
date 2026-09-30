@@ -86,7 +86,8 @@ export async function removeCommunityCopy(identity: BeanPoolIdentity, url: strin
 
 /**
  * What the card offers now, or null. Never throws, and a vault that can't say shows no card: the card is never shown
- * on a guess. Copies the vault already has that the community still keeps are removed from the community here.
+ * on a guess. First, deletes this phone sent that didn't land are tried again: only copies this phone moved or was
+ * asked to remove. A copy the vault already has is not deleted from the community on that ground alone.
  */
 export async function vaultMoveOffer(
     identity: BeanPoolIdentity, communityUrl: string | null, now: number = Date.now(),

@@ -2001,8 +2001,10 @@ export default function SettingsScreen() {
                         This is how you get back into your account if you lose your phone.
                     </Text>
 
+                    {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
+                        12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
-                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
+                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
@@ -2021,95 +2023,97 @@ export default function SettingsScreen() {
                                 } : undefined}
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                             />
-
-                            {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
-                                sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
-                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                    🔑 12 Recovery Words
-                                </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                    {hasMnemonic(identity)
-                                        ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
-                                        : NO_WORDS_VIEW_LINE}
-                                </Text>
-
-                                {!(hasMnemonic(identity) && revealWords) ? (
-                                    <Pressable
-                                        style={{
-                                            backgroundColor: colors.surface.card,
-                                            borderColor: colors.border.default,
-                                            borderWidth: 1,
-                                            borderRadius: 12,
-                                            padding: 14,
-                                            alignItems: 'center',
-                                        }}
-                                        onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
-                                        disabled={revealLoading}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Show my 12 recovery words"
-                                        accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
-                                    >
-                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
-                                            👁️ Show My 12 Recovery Words
-                                        </Text>
-                                    </Pressable>
-                                ) : (
-                                    <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
-                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                                            <NoScreenCapture>
-                                            {mnemonicWords?.split(' ').map((word, idx) => (
-                                                <View
-                                                    key={`${word}-${idx}`}
-                                                    accessible={true}
-                                                    accessibilityLabel={`Word ${idx + 1}: ${word}`}
-                                                    style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
-                                                >
-                                                    <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
-                                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
-                                                </View>
-                                            ))}
-                                            </NoScreenCapture>
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                                            <Pressable
-                                                style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={handleCopyWords}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
-                                            >
-                                                <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
-                                                    {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
-                                                </Text>
-                                            </Pressable>
-                                            <Pressable
-                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={putProtectionWordsAway}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Hide 12 recovery words"
-                                            >
-                                                <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
-                                            </Pressable>
-                                        </View>
-                                        <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
-                                        <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
-                                    </View>
-                                )}
-                            </View>
-
-                            {Platform.OS === 'web' && (
-                                <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
-                                    <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                        The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
-                                    </Text>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                        For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
-                                    </Text>
-                                </View>
-                            )}
                         </>
                     )}
+
+                    <>
+                        {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
+                            sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
+                        <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                            <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                                🔑 12 Recovery Words
+                            </Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
+                                {hasMnemonic(identity)
+                                    ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
+                                    : NO_WORDS_VIEW_LINE}
+                            </Text>
+
+                            {!(hasMnemonic(identity) && revealWords) ? (
+                                <Pressable
+                                    style={{
+                                        backgroundColor: colors.surface.card,
+                                        borderColor: colors.border.default,
+                                        borderWidth: 1,
+                                        borderRadius: 12,
+                                        padding: 14,
+                                        alignItems: 'center',
+                                    }}
+                                    onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
+                                    disabled={revealLoading}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Show my 12 recovery words"
+                                    accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
+                                >
+                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
+                                        👁️ Show My 12 Recovery Words
+                                    </Text>
+                                </Pressable>
+                            ) : (
+                                <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                        <NoScreenCapture>
+                                        {mnemonicWords?.split(' ').map((word, idx) => (
+                                            <View
+                                                key={`${word}-${idx}`}
+                                                accessible={true}
+                                                accessibilityLabel={`Word ${idx + 1}: ${word}`}
+                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
+                                            >
+                                                <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
+                                                <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
+                                            </View>
+                                        ))}
+                                        </NoScreenCapture>
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                                        <Pressable
+                                            style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                                            onPress={handleCopyWords}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
+                                        >
+                                            <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
+                                                {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
+                                            </Text>
+                                        </Pressable>
+                                        <Pressable
+                                            style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
+                                            onPress={putProtectionWordsAway}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Hide 12 recovery words"
+                                        >
+                                            <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
+                                        </Pressable>
+                                    </View>
+                                    <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
+                                    <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
+                                </View>
+                            )}
+                        </View>
+
+                        {Platform.OS === 'web' && (
+                            <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
+                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
+                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                </Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
+                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
+                                </Text>
+                            </View>
+                        )}
+                    </>
 
                     <Pressable
                         style={[styles.backBtn, { marginTop: 16 }]}

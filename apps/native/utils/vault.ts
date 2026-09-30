@@ -63,6 +63,7 @@ import { hasVault, vaultConfig, type VaultConfig } from './vault-config';
 import {
     PUSH_TOKEN_STORE_KEY,
     VAULT_RESTORE_STORE_KEY,
+    vaultApprovedHoldsStoreKey,
     vaultConnectWantedStoreKey,
     vaultCopyKnownStoreKey,
     vaultPushTokenStoreKey,
@@ -93,6 +94,9 @@ export const VAULT_MESSAGES = {
     stopped: 'This restore was stopped from a phone or computer that has your account, so nothing came back. If that '
         + "wasn't you, use your 12 words.",
     gone: 'This restore is no longer waiting at the key vault. Start again, or use your 12 words.',
+    noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
+    tooMany: 'Too many tries just now. Please try again later.',
+    signInRefused: "BeanPool's key vault couldn't check that sign-in, so nothing happened. Try again. Your 12 words work any time.",
 } as const;
 
 export type VaultFailure =
@@ -138,31 +142,31 @@ export interface VaultSigner {
     privateKey: string;
 }
 
-function said(body: unknown): string | undefined {
-    const e = (body as { error?: unknown } | null)?.error;
-    return typeof e === 'string' && e ? e.slice(0, 300) : undefined;
-}
-
 function codeOf(body: unknown): string | undefined {
     const c = (body as { code?: unknown } | null)?.code;
     return typeof c === 'string' ? c : undefined;
 }
 
-/** A refusal from the vault, as the member meets it. */
+/**
+ * A refusal from the vault, as the member meets it: always in the app's own words, chosen by the answer's status and
+ * code, never the answer's own text. An answer at the vault's address isn't known to be the vault's until it is
+ * checked, and a refusal can't be: shown verbatim, a server that isn't the vault could put its own sentences on the
+ * restore screens and in Settings (PR #1336 review finding 9). The code goes to the log.
+ */
 export function vaultRefusal(status: number, body: unknown): VaultError {
     const code = codeOf(body);
     const locked = (body as { locked?: unknown } | null)?.locked === true;
+    if (code) console.log(`[VAULT] refused: ${status} ${code.slice(0, 40)}`);
     if (status === 503 && (locked || code === 'locked' || code === 'restoring')) return new VaultError('locked', VAULT_MESSAGES.paused, code);
     if (status === 503 || status >= 500) return new VaultError('unreachable', VAULT_MESSAGES.unreachable, code);
-    if (status === 404 && code === 'no_copy') {
-        return new VaultError('no_copy', said(body) ?? 'The key vault keeps no copy for this sign-in account. Your 12 words work any time.', code);
-    }
+    if (status === 404 && code === 'no_copy') return new VaultError('no_copy', VAULT_MESSAGES.noCopy, code);
     if (status === 409 && code === 'hold_open') {
         return new VaultError('hold_open', 'A restore of this account is already waiting on another phone. It goes through there, '
             + 'or you can use your 12 words here.', code);
     }
-    if (status === 429) return new VaultError('rate_limited', said(body) ?? 'Too many tries just now. Please try again later.', code);
-    return new VaultError('refused', said(body) ?? `The key vault could not do that (${status}).`, code);
+    if (status === 429) return new VaultError('rate_limited', VAULT_MESSAGES.tooMany, code);
+    if (status === 401 && (code === 'signin_refused' || code?.startsWith('ticket_'))) return new VaultError('refused', VAULT_MESSAGES.signInRefused, code);
+    return new VaultError('refused', `BeanPool's key vault couldn't do that (${status}). Try again later. Your 12 words work any time.`, code);
 }
 
 /**
@@ -402,7 +406,10 @@ export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold
     try {
         const status = await vaultStatus(identity, 15_000);
         if (status.providers.length) void keepVaultPushTokenCurrent(identity);
-        return status.holds.filter(h => !holdsAlerted.has(h.holdId));
+        await forgetEndedApprovals(identity.publicKey, status.holds);
+        // A hold this phone already let through is not asked about again.
+        const approved = await approvedHolds(identity.publicKey);
+        return status.holds.filter(h => !holdsAlerted.has(h.holdId) && !approved.includes(h.holdId));
     } catch {
         return [];
     }
@@ -426,10 +433,38 @@ export async function stopVaultHold(identity: VaultSigner, holdId: string): Prom
     if (body?.status !== 'stopped') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
 }
 
-/** "Yes, it's me": the restore goes through now instead of after the wait. */
+/** "Yes, it's me": the restore goes through now instead of after the wait. Remembered on this phone ({@link approvedHolds}). */
 export async function approveVaultHold(identity: VaultSigner, holdId: string): Promise<void> {
     const body = await vaultPost<{ status?: unknown }>('/v1/holds/approve', { holdId }, identity);
     if (body?.status !== 'approved') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    const approved = await approvedHolds(identity.publicKey);
+    if (!approved.includes(holdId)) {
+        await AsyncStorage.setItem(vaultApprovedHoldsStoreKey(identity.publicKey), JSON.stringify([...approved, holdId].slice(-20))).catch(() => {});
+    }
+}
+
+/**
+ * The holds this phone said "Yes, it's me" to. The vault's status lists a hold until the other device collects it and
+ * says nothing of an approval, so without this the banner offered Stop and "Yes, it's me" again for the member's own
+ * approved restore, and the app-open check asked "Is this you?" about it (PR #1336 review finding 9).
+ */
+export async function approvedHolds(publicKey: string): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(vaultApprovedHoldsStoreKey(publicKey));
+        const list = raw ? JSON.parse(raw) as unknown : [];
+        return Array.isArray(list) ? list.filter((h): h is string => typeof h === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Forget approvals for holds the vault no longer lists (collected, or pruned): the list stays short. */
+export async function forgetEndedApprovals(publicKey: string, listed: readonly VaultHold[]): Promise<void> {
+    const approved = await approvedHolds(publicKey);
+    const still = approved.filter(id => listed.some(h => h.holdId === id));
+    if (still.length === approved.length) return;
+    const key = vaultApprovedHoldsStoreKey(publicKey);
+    await (still.length ? AsyncStorage.setItem(key, JSON.stringify(still)) : AsyncStorage.removeItem(key)).catch(() => {});
 }
 
 /**

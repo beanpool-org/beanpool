@@ -234,8 +234,9 @@ export function resumePlan(
 /**
  * The join's enrolment as the record kept it, naming only sign-ins this app offers (utils/sso-providers.ts): the
  * record is read back from storage, like any input. Its keepers are its sign-ins (keeper-enrolment.ts
- * `enrolmentFromJoin`), so they are counted again from what is left. Null when none is: Safety Backup then offers the
- * ordinary connect rather than saying a sign-in protects the member.
+ * `enrolmentFromVault` for a copy the door's sign-in left at the key vault, or `enrolmentFromJoin` for one the join
+ * carried, in a build without a vault), so they are counted again from what is left. Null when none is: Safety Backup
+ * then offers the ordinary connect rather than saying a sign-in protects the member.
  */
 function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): KeeperEnrolmentResult | null {
     if (!saved || !Array.isArray(saved.enrolledSso)) return saved ?? null;

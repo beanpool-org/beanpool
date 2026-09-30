@@ -81,7 +81,7 @@ A copy your community kept before the key vault stays there until you move it (a
 
 If someone starts getting back into your account with your linked sign-in account, your phones are told, and **Settings** shows **Someone is getting back into your account**, with when it goes through.
 
-- If it was you, on another phone or computer, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now.
+- If it was you, on another phone or computer, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through** until your other device has your account.
 - If it wasn't, tap **Stop**. It never goes through, and whoever tried gets nothing. Then make sure that sign-in account has its own strong password.
 
 An older copy your community still keeps can be used from an older version of the app. Then **Settings** shows **Someone is recovering your account**: if it is not you, tap **Stop It Now**.

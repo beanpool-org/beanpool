@@ -6,6 +6,7 @@ import { hasVault } from '../utils/vault-config';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import { signInReplacedNote } from '../utils/no-words-copy';
 import { connectAndDeposit } from '../utils/sso-sheet-connect';
 import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
@@ -206,9 +207,7 @@ export function SsoEnrolSheet({
                                     : `Your ${PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in.`}
                             </Text>
                             {enrolResult?.replaced && (
-                                <Text style={styles.body}>
-                                    This {PROVIDER_NAME} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.
-                                </Text>
+                                <Text style={styles.body}>{signInReplacedNote(PROVIDER_NAME)}</Text>
                             )}
                             <TouchableOpacity
                                 style={styles.primaryButton}

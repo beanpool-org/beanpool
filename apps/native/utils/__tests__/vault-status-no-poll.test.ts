@@ -61,7 +61,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { sealSeedToSso } from '@beanpool/core';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
-import { vaultHoldsAtOpen, vaultStatus, vaultCopyKnown, disconnectFromVault } from '../vault';
+import { approveVaultHold, vaultHoldsAtOpen, vaultStatus, vaultCopyKnown, disconnectFromVault } from '../vault';
 import { installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
 
 const COPY_KNOWN = (pk: string) => `beanpool_vault_copy_known:${pk.toLowerCase()}`;
@@ -69,6 +69,7 @@ const TEN_MINUTES = 10 * 60;
 
 let net: Network;
 let root: Root;
+let host: HTMLElement;
 const originalFetch = globalThis.fetch;
 const statusCalls = () => net.sent.filter(s => s.origin === VAULT && s.path === '/v1/copies/status').length;
 
@@ -84,7 +85,8 @@ beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.useFakeTimers();
-    root = createRoot(document.createElement('div'));
+    host = document.createElement('div');
+    root = createRoot(host);
 });
 
 afterEach(() => {
@@ -156,5 +158,26 @@ describe('the app-open check asks only for a member the phone knows a copy for',
         await disconnectFromVault(who.identity, 'google');
         await vaultStatus(who.identity);
         expect(await vaultCopyKnown(who.identity.publicKey)).toBe(false);
+    });
+});
+
+describe('a hold this phone let through ("Yes, it\'s me")', () => {
+    it('shows as let through, with no Stop and no "Yes, it\'s me", until the other device collects it', async () => {
+        vi.useRealTimers();
+        await memberWithCopy();
+        // Another phone of the member's is getting back in with Google: a hold at the vault, waiting.
+        net.vault.holds.set('hold-x', {
+            holdId: 'hold-x', copy: 'google:google-sub-42', requester: 'ab'.repeat(32), provider: 'google',
+            openedAt: Date.now(), releaseAt: Date.now() + 86_400_000, cancelled: false, released: false,
+        });
+        await approveVaultHold(who.identity, 'hold-x');
+        vi.useFakeTimers();
+
+        await mountAndWait(1);
+        const text = host.textContent ?? '';
+        expect(text).toContain('Let through');
+        expect(text).toContain('You let the restore with Google through.');
+        expect(text).not.toContain('Stop');
+        expect(text).not.toContain("Yes, it's me");
     });
 });

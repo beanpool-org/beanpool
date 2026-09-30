@@ -512,13 +512,15 @@ describe('keeper-enrolment.ts', () => {
             expect(net.vault.copiesOf(IDENTITY.publicKey).map(c => c.provider)).toEqual(['google']);
         });
 
-        it('surfaces the vault refusing a disconnect, in its own words', async () => {
+        // Was "in its own words": an answer at the vault's address can't be told from the vault's until it is checked, and
+        // a refusal can't be, so the app says it in its own words (PR #1336 review finding 9).
+        it('surfaces the vault refusing a disconnect, in the app\'s own words, never the answer\'s text', async () => {
             net.vault.handle = () => ({ status: 400, body: { error: 'Say which sign-in to disconnect, or all.', code: 'bad_provider' } });
 
             const result = await disconnectSsoKeeper('google', IDENTITY);
 
             expect(result.success).toBe(false);
-            expect(result.error).toBe('Say which sign-in to disconnect, or all.');
+            expect(result.error).toBe("BeanPool's key vault couldn't do that (400). Try again later. Your 12 words work any time.");
         });
 
         it('a paused vault disconnects nothing, and says so', async () => {

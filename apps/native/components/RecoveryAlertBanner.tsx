@@ -25,8 +25,15 @@ import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import {
-    approveVaultHold, hasVault, holdEndsText, stopVaultHold, vaultCopyKnown, vaultStatus, type VaultHold,
+    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdEndsText, stopVaultHold, vaultCopyKnown, vaultStatus,
+    type VaultHold,
 } from '../utils/vault';
+
+export const RECOVERY_ALERT_COPY = {
+    approvedTitle: 'Let through',
+    approvedBody: (name: string) => `You let the restore with ${name} through. Your other phone or computer gets your account `
+        + 'the next time it checks.',
+} as const;
 
 interface RecoverySession {
     collectionId: string;
@@ -43,6 +50,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     const { identity } = useIdentity();
     const [sessions, setSessions] = useState<RecoverySession[]>([]);
     const [holds, setHolds] = useState<VaultHold[]>([]);
+    /** Holds this phone let through ("Yes, it's me"): shown as let through until the other device collects, no buttons. */
+    const [approved, setApproved] = useState<string[]>([]);
     const [stopping, setStopping] = useState(false);
     /** The hold an answer is on its way for, so its buttons can't be tapped twice. */
     const [busyHold, setBusyHold] = useState<string | null>(null);
@@ -73,7 +82,10 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         // Only a build with a vault, and only for an account this phone knows the vault keeps a copy for.
         if (!identity || !hasVault() || !(await vaultCopyKnown(identity.publicKey))) return;
         try {
-            setHolds((await vaultStatus(identity)).holds);
+            const listed = (await vaultStatus(identity)).holds;
+            await forgetEndedApprovals(identity.publicKey, listed);
+            setApproved(await approvedHolds(identity.publicKey));
+            setHolds(listed);
         } catch (e) {
             // Best effort, like the community's: a paused or unreachable vault shows nothing, and is asked again.
             console.log('[RecoveryAlert] The key vault could not say:', (e as Error).message);
@@ -217,7 +229,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         setBusyHold(hold.holdId);
                         try {
                             await approveVaultHold(identity, hold.holdId);
-                            setHolds(h => h.filter(x => x.holdId !== hold.holdId));
+                            setApproved(a => [...a, hold.holdId]);
                             Alert.alert('Let through', 'Your other phone or computer gets your account the next time it checks, in about a minute.');
                         } catch (e) {
                             Alert.alert('Not let through', `${(e as Error).message} Try again.`);
@@ -238,6 +250,15 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
             {holds.map((hold) => {
                 const name = SSO_PROVIDER_NAMES[hold.provider];
                 const busy = busyHold === hold.holdId;
+                if (approved.includes(hold.holdId)) {
+                    // Let through from here: nothing left to answer, so no Stop and no "Yes, it's me" again.
+                    return (
+                        <View key={hold.holdId} style={styles.approved} accessibilityLiveRegion="polite">
+                            <Text style={styles.approvedTitle} accessibilityRole="header">{RECOVERY_ALERT_COPY.approvedTitle}</Text>
+                            <Text style={styles.approvedBody}>{RECOVERY_ALERT_COPY.approvedBody(name)}</Text>
+                        </View>
+                    );
+                }
                 return (
                     <View key={hold.holdId} style={styles.container} accessibilityLiveRegion="assertive">
                         <View style={styles.header}>
@@ -318,6 +339,25 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
 }
 
 const styles = StyleSheet.create({
+    approved: {
+        backgroundColor: palette.white,
+        borderWidth: 1,
+        borderColor: palette.red300,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+    },
+    approvedTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: palette.red800,
+        marginBottom: 6,
+    },
+    approvedBody: {
+        fontSize: 13,
+        color: palette.red700,
+        lineHeight: 19,
+    },
     container: {
         backgroundColor: palette.red50,
         borderWidth: 1,

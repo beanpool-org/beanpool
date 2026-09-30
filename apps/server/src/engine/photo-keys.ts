@@ -28,9 +28,9 @@
  *   older than it), changes every listing's URLs and no listing's `updated_at`, so the URLs such a phone holds would
  *   answer 404 for good. So the boot that changes the URLs' shape records when (`node_config.photoKeysSince`, beside
  *   `photoKeysShape`, what they were), and a sync whose cursor is older is answered whole (routes/marketplace.ts,
- *   photoHealFor): the delta it asked for, every row main would send, first, then the node's other listings in heal
- *   order (engine getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished ones), up
- *   to the phone's own limit (PHOTO_HEAL_MAX_ROWS; the phone asks 1000). A standby's first boot as the main server
+ *   photoHealFor): the delta it asked for, every row main would send, first, then a page of the node's other listings
+ *   in heal order (engine getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished
+ *   ones), at most PHOTO_HEAL_PAGE_ROWS of them, so one answer is never much past main's largest. A standby's first boot as the main server
  *   counts as a change (photoUrlShape), and so does a standby promoted in this process by a take-over that finishes at
  *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both. To make every phone's next sync whole by
  *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
@@ -56,10 +56,12 @@ export const PHOTO_KEYS_SHAPE_ROW = 'photoKeysShape';
 /** When that last changed (ISO 8601): a sync from before it holds URLs that no longer open. */
 export const PHOTO_KEYS_SINCE_ROW = 'photoKeysSince';
 /**
- * The most listings one answer to a sync from before photoKeysSince holds: the phone's own ask (apps/native
- * services/pillar-sync.ts, `limit=1000`), past the 200 every other page stops at (https-server.ts clampLimit).
+ * The most listings a heal page adds to the delta it follows: the 200 every other page stops at (https-server.ts
+ * clampLimit). The node sends JSON uncompressed, and the phone's posts pull has 30 s for the whole answer
+ * (apps/native services/pillar-sync.ts); a page of 1000 was about 900 KB, which a phone below about 250 kbit/s never
+ * finished, retrying the same page for ever (review of a6b65b84, finding 2). The rest heals over the key's next syncs.
  */
-export const PHOTO_HEAL_MAX_ROWS = 1000;
+export const PHOTO_HEAL_PAGE_ROWS = 200;
 /** How long a heal under way is kept for a key that stops asking (photo_url_heals). */
 const HEAL_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
 

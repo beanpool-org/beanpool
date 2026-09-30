@@ -20,7 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeysRequired, photoHealFor, notePhotoHealServed, PHOTO_HEAL_MAX_ROWS } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeysRequired, photoHealFor, notePhotoHealServed, PHOTO_HEAL_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -340,12 +340,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // Answered whole: first the delta, exactly as asked (every row changed since the cursor, the author standing
         // changes and the listings sent again among them), then the node's other listings in heal order (engine
         // getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished ones), as a first
-        // sync reads them for this reader. Up to the phone's own limit, not the 200 of every other page: one answer
-        // then heals a node of up to PHOTO_HEAL_MAX_ROWS listings, and a bigger one over the key's next syncs.
-        const asked = Math.floor(Number(ctx.query.limit));
-        const rows = Number.isFinite(asked) && asked > 0 ? Math.min(asked, PHOTO_HEAL_MAX_ROWS) : limit;
-        const delta = getPosts({ ...listing, limit: rows, offset, updatedAfter, sync });
-        const read = { after: heal.after, limit: rows - delta.length, next: null as string | null };
+        // sync reads them for this reader. The delta is main's, uncut; the page after it holds at most
+        // PHOTO_HEAL_PAGE_ROWS more, so a phone on a slow link still gets the answer inside its 30 s, and a node with
+        // more listings heals over the key's next syncs.
+        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync });
+        const read = { after: heal.after, limit: Math.min(limit, PHOTO_HEAL_PAGE_ROWS), next: null as string | null };
         const inDelta = new Set(delta.map(p => p.id));
         const rest = getPostsForPhotoHeal(listing, read).filter(p => !inDelta.has(p.id));
         posts = [...delta, ...rest];

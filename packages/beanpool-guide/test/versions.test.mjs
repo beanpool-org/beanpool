@@ -49,12 +49,13 @@ function makeRepo() {
     for (const img of fs.readdirSync(images).filter(f => !f.startsWith('.'))) {
         fs.copyFileSync(path.join(repoRoot, 'apps/manager/public/images', img), path.join(work, 'apps/manager/public/images', img));
     }
-    // A published main, as on GitHub after the director's publish: a checkout of a PR that edits pages holds text that
-    // waits to be published, which the copy publishes first, or every test here would start from unpublished text.
-    if (build(work, '--pending').status !== 0) {
-        const published = build(work, '--publish');
-        if (published.status !== 0) throw new Error(`publishing the checkout's pending text in the throwaway copy failed: ${said(published)}`);
-    }
+    // Every test starts from a published main: nothing waits to be published. The working tree this copies may hold
+    // text that does (a PR's page edits, or main between a merge and the director's publish), so publish it here, in
+    // the copy, before the first commit. With nothing waiting this writes the same files and changes nothing.
+    const seeded = build(work, '--publish');
+    assert.equal(seeded.status, 0, `publishing the copy's pages: ${said(seeded)}`);
+    const waiting = build(work, '--pending');
+    assert.equal(waiting.status, 0, `the copy starts with nothing to publish: ${said(waiting)}`);
     git(root, 'init', '-q', '--bare', '-b', 'main', 'origin.git');
     git(work, 'init', '-q', '-b', 'main');
     git(work, 'config', 'user.email', 'guide-test@example.org');

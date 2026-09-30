@@ -101,6 +101,8 @@ import {
 } from './fake-vault';
 
 const ANCHOR = 'beanpool_anchor_url';
+/** Every vault request's fresh challenge, which the vault's signed answer must name (PR #1336 review finding 4). */
+const CHALLENGE = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/);
 /** What must never reach a community: what opens a key, or proves a sign-in. */
 const NEVER_TO_A_COMMUNITY = ['idToken', 'proof', 'shares', 'recovery'];
 
@@ -685,7 +687,7 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
         const restore = to(VAULT).find(s => s.path === '/v1/restore')!;
         expect(restore.headers['X-Public-Key']).toBe(held.publicKey);
         expect(restore.headers['X-Public-Key']).not.toBe(member.publicKey);
-        expect(Object.keys(restore.body).sort()).toEqual(['idToken', 'provider', 'ticket']);
+        expect(Object.keys(restore.body).sort()).toEqual(['challenge', 'idToken', 'provider', 'ticket']);
         await abandonSsoRestore();
         expect(mem.secure.has(VAULT_RESTORE_STORE_KEY)).toBe(false);
     });
@@ -782,7 +784,7 @@ describe('status, disconnect, push token, and the check at app open', () => {
         await connect('google');
         expect(await disconnectSsoKeeper('google', member)).toEqual({ success: true, enrolledSso: [] });
         expect(net.vault.copiesOf(member.publicKey)).toEqual([]);
-        expect(to(VAULT).find(s => s.path === '/v1/copies/delete')?.body).toEqual({ provider: 'google' });
+        expect(to(VAULT).find(s => s.path === '/v1/copies/delete')?.body).toEqual({ provider: 'google', challenge: CHALLENGE });
     });
 
     it('the deposit carries this phone\'s push token, and a changed one is given to the vault once', async () => {
@@ -795,7 +797,7 @@ describe('status, disconnect, push token, and the check at app open', () => {
         mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[second]');
         await keepVaultPushTokenCurrent(member);
         await keepVaultPushTokenCurrent(member);
-        expect(to(VAULT).filter(s => s.path === '/v1/push-token').map(s => s.body)).toEqual([{ token: 'ExponentPushToken[second]' }]);
+        expect(to(VAULT).filter(s => s.path === '/v1/push-token').map(s => s.body)).toEqual([{ token: 'ExponentPushToken[second]', challenge: CHALLENGE }]);
     });
 
     it('Sign Out or Replace: this phone\'s push token comes out of the account\'s copies at the vault, signed by the leaving key', async () => {
@@ -809,7 +811,7 @@ describe('status, disconnect, push token, and the check at app open', () => {
         await releaseAccountFromPhone(member);
 
         const out = to(VAULT).filter(s => s.path === '/v1/push-token/remove');
-        expect(out.map(s => s.body)).toEqual([{ token: 'ExponentPushToken[phone]' }]);
+        expect(out.map(s => s.body)).toEqual([{ token: 'ExponentPushToken[phone]', challenge: CHALLENGE }]);
         expect(out[0].headers['X-Public-Key']).toBe(member.publicKey);
         expect(net.vault.copiesOf(member.publicKey).map(c => c.pushTokens)).toEqual([[], []]);
     });

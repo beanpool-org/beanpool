@@ -66,6 +66,14 @@ keyholder's last start). Custodians keep their old shares until the vault has sw
 Requests are signed in BeanPool's request format 2 (`@beanpool/core` `request-signing.ts`) for the vault's own host
 name. The wire formats the phone shares (tickets, deposit boxes, releases) are `@beanpool/core` `vault-wire.ts`.
 
+**Signed answers** (PR #1336 review finding 4). A member's request that carries a `challenge` (32 random bytes; the
+phone's always do) gets its answer signed with the ticket key the app pins, as `signed` beside the answer's fields:
+under a domain tag per kind (`beanpool-vault-answer-<kind>/1`), about the request's signer, bound to that challenge.
+The keyholder signs a release inside `release` and a deposit receipt inside `depositWrap`, over what it sealed or
+opened itself; the API's other answers (status, delete, push token, restore, collect, Stop and "Yes, it's me", and
+every 4xx to a request whose signature checked out) through `signAnswer`, which never signs a release or a receipt.
+A 5xx is never signed. Without a challenge an answer is what it was before. The phone acts on no answer it can't check.
+
 The sign-ins it keeps copies for are one list, `src/shared/providers.ts`. A provider dropped from it (GitHub was, on
 2026-09-29: its `sub` is the account's public user id) is refused everywhere, and its copies go, each with its deletion
 record, whenever the database next opens.

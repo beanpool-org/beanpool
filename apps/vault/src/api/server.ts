@@ -5,10 +5,12 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import {
     checkVaultTicket,
+    isVaultChallenge,
     isVaultPushToken,
     vaultB64,
     vaultTicketNonce,
     vaultUnb64,
+    type VaultAnswerKind,
     type VaultTicket,
     type VaultTicketPurpose,
 } from '@beanpool/core';
@@ -40,6 +42,11 @@ import { addressBucket, RateLimiter } from './rate-limit.js';
  *
  * While the keyholder is locked (or unreachable, which to the outside is the same), every route but `/v1/health` and
  * `/v1/unlock/*` answers 503 `{locked: true}` (§2.3).
+ *
+ * A member's request that carries a `challenge` (the phone's always do) gets its answer signed as well: `signed`
+ * beside the answer's fields (core vault-wire.ts "Signed answers"). The keyholder signs a release and a deposit receipt
+ * as it makes them, and every other answer, refusals (4xx) included, through `signAnswer`. A 5xx is never signed: it
+ * leads the phone to do nothing. Without a challenge the answer is exactly what it was before.
  */
 
 export const HOLD_MS = 24 * 60 * 60 * 1000;
@@ -552,7 +559,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * audience (no override), and as the provider nonce the hash of the ticket this request carries. The ticket is
      * spent only when the sign-in checks out.
      */
-    async function checkSignIn(ctx: Ctx, purpose: VaultTicketPurpose, beforeVerify?: () => void): Promise<{ provider: SsoProvider; identity: SsoIdentity }> {
+    async function checkSignIn(ctx: Ctx, purpose: VaultTicketPurpose, beforeVerify?: () => void): Promise<{ provider: SsoProvider; identity: SsoIdentity; nonce: string }> {
         const provider = ctx.body.provider;
         if (!isVaultProvider(provider)) throw new HttpError(400, 'bad_provider', 'That is not a sign-in the key vault keeps copies for.');
         const { ticket, nonce } = acceptTicket(ctx, purpose);
@@ -560,10 +567,28 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         pendingTickets.set(nonce, ticket);
         try {
             const identity = await verifier.verifySignIn(provider, signInCredentialFrom(ctx.body), defaultAudiences(provider), nonce, ctx.key);
-            return { provider, identity };
+            return { provider, identity, nonce };
         } finally {
             pendingTickets.delete(nonce);
         }
+    }
+
+    // ─── Signed answers ─────────────────────────────────────────────────────────────────────
+
+    /** The challenge a member's request carried, or null: its answer is then unsigned, as before. */
+    function challengeOf(body: Record<string, unknown>): string | null {
+        return isVaultChallenge(body.challenge) ? body.challenge : null;
+    }
+
+    /**
+     * `says` as the answer; to a request that carried a challenge, signed by the keyholder as `kind` too, about the
+     * request's signer. A release and a receipt are signed where they are made, never here.
+     */
+    async function answer(ctx: Ctx, kind: VaultAnswerKind, says: Record<string, unknown>, status = 200): Promise<Answer> {
+        const challenge = challengeOf(ctx.body);
+        if (!challenge) return json(status, says);
+        const { signed } = await call<{ signed: string }>('signAnswer', { kind, key: ctx.key, challenge, says });
+        return json(status, { ...says, signed });
     }
 
     async function index(kind: 'sub', provider: string, sub: string): Promise<string>;
@@ -620,7 +645,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     route('POST', '/v1/copies', 'signed', false, async ctx => {
-        const { provider, identity } = await checkSignIn(ctx, 'deposit',
+        const { provider, identity, nonce } = await checkSignIn(ctx, 'deposit',
             () => limited(limits.deposits.take(ctx.key, ctx.now), 'deposits for this account today'));
         const database = await ensureDb();
         return withWriteLock(async () => {
@@ -628,11 +653,15 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const pkIndex = b64Bytes(await index('pk', ctx.key));
             const existing = database.copyBySub(subIndex);
             const sameMember = !!existing && sameBytes(existing.pk_index, pkIndex);
+            const replaced = !!existing && !sameMember;
             const id = sameMember ? (existing as CopyRow).id : newId();
-            let wrapped: { envelope: string };
+            // The receipt (for a request with a challenge) is signed by the keyholder over the copy it opens and wraps.
+            const challenge = challengeOf(ctx.body);
+            let wrapped: { envelope: string; receipt?: string };
             try {
-                wrapped = await call<{ envelope: string }>('depositWrap', {
+                wrapped = await call<{ envelope: string; receipt?: string }>('depositWrap', {
                     id, provider, sub: identity.sub, memberKey: ctx.key, box: ctx.body.box, carry: sameMember ? rowRef(existing as CopyRow) : null,
+                    ...(challenge ? { challenge, signIn: nonce, replaced } : {}),
                 });
             } catch (e) {
                 if (e instanceof KeyholderCallError && e.code === 'bad_box') {
@@ -640,7 +669,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 }
                 throw e;
             }
-            const oldTokens = existing && !sameMember ? (await metaOf(existing)).pushTokens : [];
+            const oldTokens = replaced ? (await metaOf(existing as CopyRow)).pushTokens : [];
             const day = dayOf(ctx.now);
             database.transaction(() => {
                 if (sameMember) {
@@ -651,11 +680,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 }
             });
             counters.counts.deposits++;
-            if (existing && !sameMember) {
+            if (replaced) {
                 counters.counts.replaced++;
                 notify(oldTokens, 'vault-replaced', provider);
             }
-            return json(200, { ok: true, provider, replaced: !!existing && !sameMember });
+            // Only once the envelope is stored: a receipt says the vault keeps the copy.
+            return json(200, { ok: true, provider, replaced, ...(wrapped.receipt ? { signed: wrapped.receipt } : {}) });
         });
     });
 
@@ -670,7 +700,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const hold = database.openHoldForCopy(row.id);
             if (hold) holds.push({ holdId: hold.id, provider: hold.provider, openedAt: hold.opened_at, releaseAt: hold.release_at });
         }
-        return json(200, { copies, holds });
+        return answer(ctx, 'status', { copies, holds });
     });
 
     route('POST', '/v1/copies/delete', 'signed', false, async ctx => {
@@ -689,7 +719,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 for (const row of doomed) database.deleteCopy(row, day);
             });
             counters.counts.deletes += doomed.length;
-            return json(200, { deleted: doomed.length });
+            return answer(ctx, 'deleted', { deleted: doomed.length });
         });
     });
 
@@ -706,7 +736,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 updated++;
             }
             counters.counts.pushTokens++;
-            return json(200, { updated });
+            return answer(ctx, 'push-token', { updated });
         });
     });
 
@@ -730,7 +760,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 updated++;
             }
             counters.counts.pushTokens++;
-            return json(200, { updated });
+            return answer(ctx, 'push-token', { updated });
         });
     });
 
@@ -754,7 +784,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             }
             const open = database.openHoldForCopy(row.id);
             if (open) {
-                if (open.requester_key === ctx.key) return json(200, { status: 'held', holdId: open.id, until: open.release_at });
+                if (open.requester_key === ctx.key) return answer(ctx, 'restore', { status: 'held', holdId: open.id, until: open.release_at });
                 if (ctx.now < open.release_at) {
                     throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
                 }
@@ -770,25 +800,28 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             counters.counts.restores[provider] = (counters.counts.restores[provider] ?? 0) + 1;
             counters.counts.holds++;
             notify(await memberTokens(database, row.pk_index), 'vault-hold', provider);
-            return json(200, { status: 'held', holdId: hold.id, until: hold.release_at });
+            return answer(ctx, 'restore', { status: 'held', holdId: hold.id, until: hold.release_at });
         });
     });
 
     /**
      * The release, sealed to the key that started the restore. That device may collect again (its answer may have been
      * lost) until the hold is pruned: a fresh seal to the same key gives nobody anything new. The release is recorded,
-     * and the member's devices told, once.
+     * and the member's devices told, once. To a request with a challenge, the keyholder signs the release as it seals it.
      */
     route('POST', '/v1/restore/collect', 'signed', false, async ctx => {
         const database = await ensureDb();
         return withWriteLock(async () => {
             const hold = typeof ctx.body.holdId === 'string' ? database.holdById(ctx.body.holdId) : undefined;
             if (!hold || hold.requester_key !== ctx.key) throw new HttpError(404, 'no_hold', 'There is no restore waiting for this device.');
-            if (hold.cancelled_at !== null) return json(200, { status: 'stopped' });
-            if (ctx.now < hold.release_at) return json(200, { status: 'held', until: hold.release_at });
+            if (hold.cancelled_at !== null) return answer(ctx, 'collect', { status: 'stopped' });
+            if (ctx.now < hold.release_at) return answer(ctx, 'collect', { status: 'held', until: hold.release_at });
             const row = database.copyById(hold.copy_id);
             if (!row) throw new HttpError(404, 'no_copy', 'The copy this restore was for is no longer kept.');
-            const { release } = await call<{ release: unknown }>('release', { row: rowRef(row), requesterKey: ctx.key });
+            const challenge = challengeOf(ctx.body);
+            const { release, signed } = await call<{ release: unknown; signed?: string }>('release', {
+                row: rowRef(row), requesterKey: ctx.key, ...(challenge ? { challenge } : {}),
+            });
             if (hold.released_at === null) {
                 const updated = await call<{ envelope: string }>('updateMeta', { row: rowRef(row), lastReleasedAt: ctx.now });
                 database.transaction(() => {
@@ -798,7 +831,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 counters.counts.releases++;
                 notify(await memberTokens(database, row.pk_index), 'vault-released', hold.provider);
             }
-            return json(200, { status: 'released', release });
+            return json(200, { status: 'released', release, ...(signed ? { signed } : {}) });
         });
     });
 
@@ -821,7 +854,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 database.cancelHold(hold.id, ctx.now);
                 counters.counts.cancels++;
             }
-            return json(200, { status: 'stopped' });
+            return answer(ctx, 'hold', { status: 'stopped' });
         });
     });
 
@@ -834,7 +867,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const releaseAt = Math.min(hold.release_at, ctx.now);
             database.setHoldReleaseAt(hold.id, releaseAt);
             counters.counts.approvals++;
-            return json(200, { status: 'approved', releaseAt });
+            return answer(ctx, 'hold', { status: 'approved', releaseAt });
         });
     });
 
@@ -1101,6 +1134,26 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return json(500, { error: 'The key vault could not do that.', code: 'internal' });
     }
 
+    /**
+     * A 4xx to a member's request whose signature checked out, signed as a refusal (`status`, `code`) when the request
+     * carried a challenge: the phone acts on some (no copy, no hold, already collected) and on none it can't check. A
+     * request whose signature didn't check out gets none: nobody may have a refusal signed about someone else's key.
+     * If the keyholder can't sign it now, it goes unsigned, and the phone does nothing with it.
+     */
+    async function signedRefusal(refused: Answer, key: string, body: Record<string, unknown>): Promise<Answer> {
+        const challenge = challengeOf(body);
+        const said = refused.body as { code?: unknown };
+        if (!challenge || refused.status < 400 || refused.status >= 500 || typeof said?.code !== 'string') return refused;
+        try {
+            const { signed } = await call<{ signed: string }>('signAnswer', {
+                kind: 'refusal', key, challenge, says: { status: refused.status, code: said.code },
+            });
+            return { ...refused, body: { ...(refused.body as Record<string, unknown>), signed } };
+        } catch {
+            return refused;
+        }
+    }
+
     async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         const origin = req.headers.origin;
         const cors: Record<string, string> = origin === GLOBAL_ORIGIN ? { 'Access-Control-Allow-Origin': GLOBAL_ORIGIN, Vary: 'Origin' } : {};
@@ -1119,12 +1172,14 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const method = String(req.method ?? 'GET').toUpperCase();
         const r = routes[`${method} ${url.pathname}`];
         let answer: Answer;
+        // Known once the request's signature checks out and its body is read: what a refusal is signed about.
+        let key = '';
+        let body: Record<string, unknown> = {};
         try {
             if (!r) throw new HttpError(404, 'not_found', 'No such route.');
             const raw = await readBody(req);
             const status = await keyholderStatus();
             if (!r.whenLocked && status.state !== 'open') throw new HttpError(503, 'locked', 'The key vault is locked.', { locked: true });
-            let key = '';
             if (r.auth !== 'none') {
                 const check = verifySignedRequest({ headers: req.headers, method, path: url.pathname, body: raw, hosts: opts.hosts, nonces, now });
                 if (!check.ok) throw new HttpError(check.status, check.code, check.error);
@@ -1136,7 +1191,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                     limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
                 }
             }
-            let body: Record<string, unknown> = {};
             if (raw) {
                 try {
                     const parsed = JSON.parse(raw) as unknown;
@@ -1149,6 +1203,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             answer = await r.handler({ req, body, key, status, address: clientAddress(req), now });
         } catch (e) {
             answer = errorAnswer(e);
+            if (r?.auth === 'signed' && key) answer = await signedRefusal(answer, key, body);
         }
         answer.headers = { ...cors, ...answer.headers };
         if ((req as http.IncomingMessage & { tooLarge?: boolean }).tooLarge) {

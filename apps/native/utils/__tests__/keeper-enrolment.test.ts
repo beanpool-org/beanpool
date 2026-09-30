@@ -483,10 +483,12 @@ describe('keeper-enrolment.ts', () => {
 
             // Was `{provider, idToken, nonce, shares}` to the community. The vault takes its own ticket (whose hash
             // is the token's nonce, so no nonce field), the token, and the copy sealed in a box to its deposit key.
+            // Every vault request also carries a fresh challenge, which the vault's signed answer must name (PR #1336
+            // review finding 4).
             const [deposit] = deposits();
-            expect(Object.keys(deposit.body).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
+            expect(Object.keys(deposit.body).sort()).toEqual(['box', 'challenge', 'idToken', 'provider', 'ticket']);
             const ticketRequest = net.sent.find(s => s.path === '/v1/ticket')!;
-            expect(ticketRequest.body).toEqual({ purpose: 'deposit', provider: 'google' });
+            expect(ticketRequest.body).toEqual({ purpose: 'deposit', provider: 'google', challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
             expect(JSON.parse(Buffer.from(deposit.body.idToken.split('.')[1], 'base64url').toString()).sub).toBe('google-sub-12345');
             // The copy never travels in the clear.
             expect(deposit.raw).not.toContain(depositedSsoShare().encryptedShare);

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import {
+    isVaultAnswerKind,
+    isVaultChallenge,
     isVaultClientCopy,
     isVaultKeyHex,
     isVaultPushToken,
@@ -11,10 +13,14 @@ import {
     openVaultDepositBox,
     openWithX25519,
     sealVaultRelease,
+    signVaultAnswer,
     signVaultTicket,
     vaultB64,
+    vaultCopyDigest,
     vaultUnb64,
+    VAULT_ANSWER_HEAD,
     type SealedShare,
+    type VaultAnswerKind,
     type VaultSealedBox,
     type VaultTicketPurpose,
 } from '@beanpool/core';
@@ -76,6 +82,8 @@ import { combineMnemonics, decodeShare, splitMasterSecret } from './slip39.js';
  *               push tokens or release time changed (`updateMeta`); the API reads everything but the copy (`readMeta`)
  *   release     unwrap a copy and seal it to the restoring device's key: the only way a copy leaves
  *   ticket      sign a ticket, and the daily report
+ *   answer      sign what the phone acts on (core vault-wire.ts "Signed answers"): a release and a deposit receipt only
+ *               here, over what this process sealed or opened itself; the API's other answers through `signAnswer`
  *   backup      seal and open backups
  *
  * and the ceremonies: genesis, unlock, reshare, taking a backup's state into a fresh vault.
@@ -141,6 +149,14 @@ interface EnvelopeContents {
 
 /** Push tokens kept per copy: a member's devices, newest first. */
 export const MAX_PUSH_TOKENS = 5;
+/**
+ * The answers the API may have signed with {@link Keyholder.signAnswer}: what it reads from its own database. Never a
+ * release or a receipt: those are signed only by {@link Keyholder.release} and {@link Keyholder.depositWrap}, over a
+ * copy this process sealed or a box it opened itself.
+ */
+export const API_ANSWER_KINDS: readonly VaultAnswerKind[] = ['status', 'deleted', 'push-token', 'restore', 'collect', 'hold', 'refusal'];
+/** Largest thing the API may have signed as an answer (a status lists at most a few copies and holds). */
+const MAX_ANSWER_JSON = 16 * 1024;
 const ENVELOPE_TAG = Buffer.from('beanpool-vault-envelope/1');
 const REPORT_TAG = 'beanpool-vault-report/1\n';
 const DELETIONS_INFO = Buffer.from('beanpool-vault-deletions/1');
@@ -733,11 +749,23 @@ export class Keyholder {
      * into the row's envelope. The indexes are recomputed here from the sub and the key, so an envelope always sits in
      * the row its own sub and key name. `carry` is the member's own earlier envelope for the same sign-in account:
      * its push tokens and last release time move to the new one.
+     *
+     * With the phone's `challenge`: a signed receipt too (kind `receipt`), over the member key, the provider, the
+     * digest of the copy this process just opened and wrapped, the sign-in's ticket nonce (`signIn`) and whether it
+     * replaced another account's copy (`replaced`), both as the API says. The API sends it only once the envelope is
+     * stored.
      */
-    depositWrap(args: { id?: unknown; provider?: unknown; sub?: unknown; memberKey?: unknown; box?: unknown; carry?: RowRef | null }) {
+    depositWrap(args: {
+        id?: unknown; provider?: unknown; sub?: unknown; memberKey?: unknown; box?: unknown; carry?: RowRef | null;
+        challenge?: unknown; signIn?: unknown; replaced?: unknown;
+    }) {
         const keys = this.requireOpen();
         if (!isVaultProvider(args.provider)) fail('bad_request', 'Not a provider this vault keeps copies for.');
         if (!isVaultKeyHex(args.memberKey)) fail('bad_request', 'Not a member key.');
+        if (args.challenge !== undefined && !isVaultChallenge(args.challenge)) fail('bad_request', 'Not a challenge.');
+        if (args.challenge !== undefined && (!isVaultChallenge(args.signIn) || typeof args.replaced !== 'boolean')) {
+            fail('bad_request', 'A receipt names the sign-in\'s ticket nonce and whether it replaced a copy.');
+        }
         const provider = args.provider;
         const memberKey = args.memberKey;
         const row: RowRef = {
@@ -764,7 +792,12 @@ export class Keyholder {
             }
         }
         const envelope = this.wrapEnvelope(keys, row, { provider, pubkey: memberKey, clientCopy: contents.clientCopy, pushTokens, lastReleasedAt });
-        return { ...row, envelope, pushTokens: pushTokens.length };
+        const receipt = args.challenge === undefined ? undefined : signVaultAnswer(
+            { kind: 'receipt', key: memberKey, challenge: args.challenge as string, at: this.clock() },
+            { provider, copy: vaultCopyDigest(contents.clientCopy), signIn: args.signIn, replaced: args.replaced },
+            keys.ticketSeeds[0],
+        );
+        return { ...row, envelope, pushTokens: pushTokens.length, ...(receipt ? { receipt } : {}) };
     }
 
     /** Everything in an envelope but the copy. */
@@ -806,17 +839,27 @@ export class Keyholder {
         return { envelope: this.wrapEnvelope(keys, row, contents), changed: true };
     }
 
-    /** The only way a copy leaves: sealed to the restoring device's key, which the ticket named. */
-    release(args: { row?: RowRef; requesterKey?: unknown }) {
+    /**
+     * The only way a copy leaves: sealed to the restoring device's key, which the ticket named. With the phone's
+     * `challenge`, signed too (kind `release`): the restoring key, the provider, the account's key and the sealed box,
+     * all from the envelope this process just opened, so a release the phone accepts is one this keyholder made.
+     */
+    release(args: { row?: RowRef; requesterKey?: unknown; challenge?: unknown }) {
         const keys = this.requireOpen();
         if (!isVaultKeyHex(args.requesterKey)) fail('bad_request', 'Not a restoring key.');
+        if (args.challenge !== undefined && !isVaultChallenge(args.challenge)) fail('bad_request', 'Not a challenge.');
         const { contents } = this.unwrapEnvelope(keys, args.row as RowRef);
         if (!isVaultClientCopy(contents.clientCopy)) fail('bad_envelope', 'The envelope holds no copy.');
         const release = sealVaultRelease({ provider: contents.provider, pubkey: contents.pubkey, clientCopy: contents.clientCopy }, args.requesterKey);
-        return { release, provider: contents.provider };
+        const signed = args.challenge === undefined ? undefined : signVaultAnswer(
+            { kind: 'release', key: args.requesterKey, challenge: args.challenge as string, at: this.clock() },
+            { provider: contents.provider, pubkey: contents.pubkey, box: release },
+            keys.ticketSeeds[0],
+        );
+        return { release, provider: contents.provider, ...(signed ? { signed } : {}) };
     }
 
-    // ─── Tickets and the report ────────────────────────────────────────────────────────────
+    // ─── Tickets, answers and the report ───────────────────────────────────────────────────
 
     signTicket(args: { key?: unknown; purpose?: unknown }) {
         const keys = this.requireOpen();
@@ -824,6 +867,27 @@ export class Keyholder {
         if (args.purpose !== 'deposit' && args.purpose !== 'restore') fail('bad_request', 'A ticket is for a deposit or a restore.');
         const t = newVaultTicket(args.key, args.purpose as VaultTicketPurpose, this.clock());
         return { ticket: signVaultTicket(t, keys.ticketSeeds[0]), expiresAt: t.exp };
+    }
+
+    /**
+     * An answer the API reads from its own database (a status, a delete, a hold's end, a refusal: {@link
+     * API_ANSWER_KINDS}), signed for the phone: about `key`, the request's signer, bound to the request's `challenge`,
+     * at this process's clock. Never a release or a receipt. What it says is the API's word: the API holds the
+     * database, so it could make any of these true or false by writing it.
+     */
+    signAnswer(args: { kind?: unknown; key?: unknown; challenge?: unknown; says?: unknown }) {
+        const keys = this.requireOpen();
+        if (!isVaultAnswerKind(args.kind) || !API_ANSWER_KINDS.includes(args.kind)) {
+            fail('bad_request', 'Releases and receipts are signed only as they are made; that is not an answer the API signs.');
+        }
+        if (!isVaultKeyHex(args.key)) fail('bad_request', 'An answer names a 64-character hex key.');
+        if (!isVaultChallenge(args.challenge)) fail('bad_request', 'Not a challenge.');
+        const says = args.says;
+        if (!says || typeof says !== 'object' || Array.isArray(says) || JSON.stringify(says).length > MAX_ANSWER_JSON) {
+            fail('bad_request', 'An answer says what it says as a small JSON object.');
+        }
+        if (VAULT_ANSWER_HEAD.some(k => Object.prototype.hasOwnProperty.call(says, k))) fail('bad_request', 'An answer\'s head is not the API\'s to set.');
+        return { signed: signVaultAnswer({ kind: args.kind, key: args.key, challenge: args.challenge, at: this.clock() }, says as Record<string, unknown>, keys.ticketSeeds[0]) };
     }
 
     signReport(args: { text?: unknown }) {

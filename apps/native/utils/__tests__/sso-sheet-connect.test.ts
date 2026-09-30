@@ -158,7 +158,7 @@ describe("the protection sheet's connect", () => {
         const deposit = seen.find((s) => s.path === DEPOSIT)?.body;
         // Was `{idToken, nonce, provider, shares}` at the community: the vault takes its ticket, the token carrying
         // the ticket's hash, and the copy in a box sealed to it.
-        expect(Object.keys(deposit).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
+        expect(Object.keys(deposit).sort()).toEqual(['box', 'challenge', 'idToken', 'provider', 'ticket']);
         expect(deposit).toMatchObject({ provider: 'facebook', idToken: fbIdToken(vaultTicketNonce(deposit.ticket)) });
         expect(seen.filter((s) => !s.url.startsWith(`${VAULT}/`))).toEqual([]);
     });

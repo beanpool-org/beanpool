@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import {
+    checkVaultAnswer,
     checkVaultTicket,
+    isVaultChallenge,
     isVaultClientCopy,
+    newVaultChallenge,
     newVaultTicket,
     openSeedFromSso,
     openVaultDepositBox,
@@ -12,11 +15,17 @@ import {
     sealSeedToSso,
     sealVaultDepositBox,
     sealVaultRelease,
+    signVaultAnswer,
     signVaultTicket,
+    vaultAnswerSigningBytes,
+    vaultAnswerTag,
     vaultB64,
+    vaultCopyDigest,
     vaultTicketNonce,
     vaultUnb64,
+    VAULT_ANSWER_KINDS,
     VAULT_TICKET_TTL_MS,
+    type VaultAnswerKind,
 } from '../index.js';
 
 /** The key vault's wire formats (vault-wire.ts): what the vault signs and seals, and what the phone checks and opens. */
@@ -99,5 +108,59 @@ describe('vault boxes', () => {
             shareTag: Buffer.alloc(16).toString('base64'), kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"AA==","N":16384}' };
         openVaultRelease(sealVaultRelease({ provider: 'google', pubkey: memberKey, clientCopy }, eKey), eSeed);
         expect(eSeed.equals(kept)).toBe(true);
+    });
+});
+
+describe('signed answers', () => {
+    const head = (kind: VaultAnswerKind, challenge = newVaultChallenge()) => ({ kind, key: memberKey, challenge, at: T0 });
+
+    it('an answer checks only under the pinned key, as its own kind, about its key, for its challenge', () => {
+        const challenge = newVaultChallenge();
+        const signed = signVaultAnswer(head('status', challenge), { copies: [], holds: [] }, ticketSeed);
+        const opts = { ticketKeys: [otherKey, ticketKey], kinds: ['status'] as VaultAnswerKind[], key: memberKey, challenge };
+        expect(checkVaultAnswer(signed, opts)).toEqual({
+            ok: true, answer: { v: 1, kind: 'status', key: memberKey, challenge, at: T0, copies: [], holds: [] },
+        });
+        expect(checkVaultAnswer(signed, { ...opts, ticketKeys: [otherKey] })).toEqual({ ok: false, reason: 'signature' });
+        expect(checkVaultAnswer(signed, { ...opts, kinds: ['receipt'] })).toEqual({ ok: false, reason: 'wrong_kind' });
+        expect(checkVaultAnswer(signed, { ...opts, key: otherKey })).toEqual({ ok: false, reason: 'wrong_key' });
+        expect(checkVaultAnswer(signed, { ...opts, challenge: newVaultChallenge() })).toEqual({ ok: false, reason: 'wrong_challenge' });
+        expect(checkVaultAnswer(undefined, opts)).toEqual({ ok: false, reason: 'missing' });
+        for (const bad of ['', 'x', `${signed}.x`, signed.replace('.', ''), 42, {}]) expect(checkVaultAnswer(bad, opts).ok).toBe(false);
+    });
+
+    it('a signature made under one kind\'s tag never checks as another\'s, nor as a ticket', () => {
+        for (const kind of VAULT_ANSWER_KINDS) {
+            const challenge = newVaultChallenge();
+            const signed = signVaultAnswer(head(kind, challenge), {}, ticketSeed);
+            const [payloadB64, sig] = signed.split('.');
+            for (const other of VAULT_ANSWER_KINDS.filter(k => k !== kind)) {
+                expect(vaultAnswerTag(other)).not.toBe(vaultAnswerTag(kind));
+                expect(ed25519.verify(vaultUnb64(sig) as Uint8Array, vaultAnswerSigningBytes(other, payloadB64), ed25519.getPublicKey(ticketSeed))).toBe(false);
+                const payload = JSON.parse(Buffer.from(vaultUnb64(payloadB64) as Uint8Array).toString('utf8'));
+                const relabelled = `${vaultB64(Buffer.from(JSON.stringify({ ...payload, kind: other })))}.${sig}`;
+                expect(checkVaultAnswer(relabelled, { ticketKeys: [ticketKey], kinds: [other], key: memberKey, challenge })).toEqual({ ok: false, reason: 'signature' });
+            }
+            expect(parseVaultTicket(signed)).toBeNull();
+        }
+        const ticket = signVaultTicket(newVaultTicket(memberKey, 'deposit', T0), ticketSeed);
+        expect(checkVaultAnswer(ticket, { ticketKeys: [ticketKey], kinds: [...VAULT_ANSWER_KINDS], key: memberKey, challenge: newVaultChallenge() }).ok).toBe(false);
+    });
+
+    it('what an answer says never replaces its head, and a challenge is 32 bytes', () => {
+        for (const k of ['v', 'kind', 'key', 'challenge', 'at']) {
+            expect(() => signVaultAnswer(head('status'), { [k]: 'x' }, ticketSeed), k).toThrow();
+        }
+        expect(() => signVaultAnswer({ ...head('status'), challenge: 'short' }, {}, ticketSeed)).toThrow();
+        expect(() => signVaultAnswer({ ...head('status'), kind: 'ticket' as VaultAnswerKind }, {}, ticketSeed)).toThrow();
+        expect(isVaultChallenge(newVaultChallenge())).toBe(true);
+        expect(isVaultChallenge(vaultB64(randomBytes(31)))).toBe(false);
+    });
+
+    it('a copy\'s digest is the same however its fields are ordered, and differs for another copy', async () => {
+        const copy = await sealSeedToSso(memberSeed, 'google', 'sub-1');
+        const reordered = { kdfParams: copy.kdfParams, shareTag: copy.shareTag, shareIv: copy.shareIv, encryptedShare: copy.encryptedShare };
+        expect(vaultCopyDigest(reordered as typeof copy)).toBe(vaultCopyDigest(copy));
+        expect(vaultCopyDigest(await sealSeedToSso(memberSeed, 'google', 'sub-1'))).not.toBe(vaultCopyDigest(copy));
     });
 });

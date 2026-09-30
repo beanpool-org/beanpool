@@ -47,8 +47,8 @@
  *     A phone whose own delta is full (200 listings finished since its last sync) gets it and 50 listings more: it
  *     still heals, in at most 1.3 times main's largest answer (review of fe4c27ce, finding 3). A sync whose answer never
  *     arrived (the same cursor again) gets that same page, not the one after it, and never the first page again. A
- *     restart that changes nothing keeps the heal going. All 1,450 healed over eight syncs; then only deltas, and the
- *     heal's record goes. Cara's phone, syncing every ten minutes (past the overlap from its second sync), heals all
+ *     restart that changes nothing keeps the heal going. All 1,450 healed over eight syncs; then only deltas, the
+ *     heal's record kept. Cara's phone, syncing every ten minutes (past the overlap from its second sync), heals all
  *     1,450 too, a retry again getting the same page.
  *
  * 10. A take-over that finishes at boot promotes a standby in the same process (services/takeover.ts
@@ -64,6 +64,9 @@
  * 12. An epoch-aware phone after a take-over: its first pull (old cursor) is answered and thrown away, then it pulls
  *     whole with no cursor (the 200 listings updated last), then syncs every 30 s. 600 live listings with a photo, 100
  *     newer finished ones with a photo and 50 without: all 700 with a photo heal.
+ * 13. 450 listings: a phone heals them over three syncs inside its overlap; another read from its key with a cursor past
+ *     photoKeysSince (another device, a filtered delta) doesn't start the finished heal again: the phone's next sync,
+ *     still inside the overlap, is a delta (review of fe4c27ce, finding 4).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-keys-resync.ts
  */
@@ -719,7 +722,7 @@ async function main(): Promise<void> {
                 `an answer that never arrived is sent again, byte for byte, to the same cursor: the page after the ones the phone holds, not the first (${lost.length}, ${retried.length})`);
             assert(pages[3].join() === lost.join(), `and the phone's own sync with that cursor gets that page too: no page skipped (${pages[3].length})`);
             const heals = await node.send('heals');
-            assert(heals?.n === 0, `the heal is done and its record gone once the phone's cursor is past photoKeysSince (${heals?.n})`);
+            assert(heals?.n === 1, `the heal is done, and its record kept (it answers the key's syncs with deltas) until a boot drops it (${heals?.n})`);
 
             // Cara's phone syncs every ten minutes: from its second sync on, its cursor is past photoKeysSince.
             const caraAnswers: Reply[] = [];
@@ -907,6 +910,24 @@ async function main(): Promise<void> {
             const stale = P.stale(current);
             assert(withPhoto === 700 && stale.length === 0,
                 `the phone's syncs after its whole pull heal every listing with a photo (${stale.length} stale of ${withPhoto})`);
+            await stop(node);
+        });
+
+        await section('13. a finished heal is not started again by another read from the key', async () => {
+            // 450 listings with a photo: Bob's phone heals them over three syncs inside its overlap (200, 200, the rest).
+            const { since, held } = await changedNode('done450', 450);
+            const P = new Phone(bob, since - 60_000, held);
+            const rows: number[] = [];
+            for (let k = 0; k < 4; k++) rows.push(rowsOf(await P.sync(since + 10_000 + k * 30_000)).length);
+            assert(rows[0] === 200 && rows[1] === 200 && rows[2] > 0 && rows[2] < 200 && rows[3] === 0,
+                `setup: the phone heals over three syncs inside its overlap, then a delta (${rows.join(', ')})`);
+            // Another read from Bob's key whose cursor is past photoKeysSince (another phone of his, or a filtered read).
+            const other = await signed(node, bob, 'GET', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(cursorAt(since + 7 * MIN))}`);
+            assert(other.status === 200 && rowsOf(other).length === 0, `setup: another read from the key, past photoKeysSince: a plain delta (${rowsOf(other).length})`);
+            // The phone, still inside its overlap, syncs again: its heal is done, so a delta, not the first page again.
+            const next = await P.sync(since + 10_000 + 4 * 30_000);
+            assert(next.status === 200 && rowsOf(next).length === 0,
+                `the phone's next sync inside its overlap is a delta, not the first page again (${rowsOf(next).length} rows)`);
             await stop(node);
         });
     } finally {

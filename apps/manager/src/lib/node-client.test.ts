@@ -33,6 +33,8 @@ import {
     fetchReports,
     dismissNodeReport,
     removeReportedPulseItem,
+    fetchEscrowDisputes,
+    resolveEscrowDisputeApi,
     getAppAddresses,
     confirmAppAddress,
     removeAppAddress,
@@ -963,6 +965,22 @@ describe('report normalisation keeps enterprise reports off the post line', () =
         expect(fetchMock.mock.calls[0][1].credentials).toBe('same-origin');
 
         await removeReportedPulseItem('https://node.example', 'rep_456');
+        expect(fetchMock.mock.calls[1][1].credentials).toBe('same-origin');
+
+        vi.unstubAllGlobals();
+    });
+
+    it('fetchEscrowDisputes and resolveEscrowDisputeApi include credentials same-origin for session cookies', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ disputes: [], total: 0, minDays: 7 }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await fetchEscrowDisputes('https://node.example');
+        expect(fetchMock.mock.calls[0][1].credentials).toBe('same-origin');
+
+        await resolveEscrowDisputeApi('https://node.example', 'disp_1', 'release_to_seller');
         expect(fetchMock.mock.calls[1][1].credentials).toBe('same-origin');
 
         vi.unstubAllGlobals();

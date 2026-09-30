@@ -146,13 +146,20 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   one if it fails to boot three times. Anything else is refused, logged and removed. Root's step first stops the API
   (the machine restarts next anyway) and, once no process of the API's user runs, removes what that user left on the
   state partition: the releases it downloaded (the image's own API starts after the restart and downloads a release's
-  bundle again), anything in `backups/` that is not a backup and the backups past their budget, anything in `restore/`
-  but a pending restore, and anything in the inbox but a staged image's files; `lastInstall.cleanup` in `/v1/report`
-  says what went. So an API that fills the state partition denies updates only until the next monthly restart
-  (`/v1/report` says so meanwhile), and the data partition's mount point is root's, so nothing is hidden under the
-  mount. Between restarts the API itself clears everything in its inbox but the image it stages, at every check (a
-  directory with all it holds; a link, never what it points at); what it can't remove, `/v1/report` says
-  (`imageWaiting.error`), and the check goes on (a handover included). Then two custodians unlock. The test image
+  bundle again), anything in `backups/` that is not a backup, and anything in the inbox but a staged image's files.
+  Backups follow the API's own rotation: the newest always stays, whatever its size; older ones stay only while they
+  fit in `backupMaxBytes` (1 GiB) together with it, and the first that doesn't fit goes with every older one.
+  `restore/` is emptied unless the keyholder's marker (`/var/lib/beanpool-vault/keyholder/restore-pending.json`) says a
+  restore from backup is pending: then `restore-pending.bin` and `restore-pending.bin.part` stay, whatever their size,
+  because the unlock finishes the restore from either and the vault can't open without it. Only custodians restoring a
+  backup into a fresh vault make that marker, and the API's user can't write there. `lastInstall.cleanup` in
+  `/v1/report` says what went. So an API that fills the state partition denies updates only until the next monthly
+  restart (`/v1/report` says so meanwhile), with one exception: root can't tell a backup from a file named like one,
+  so a compromised API could keep the partition full with one large newest "backup". The data partition's mount
+  point is root's, so nothing is hidden under the mount. Between restarts the API itself clears everything in its
+  inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at); what
+  it can't remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included).
+  Then two custodians unlock. The test image
   installs a signed next image this way (a small one that is never booted: the API stages it, root makes every check,
   and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals; `install.test.ts` checks
   the checks and the move. Booting into a real next image is not in the repo's tests (the review of round 1 did it

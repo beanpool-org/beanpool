@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { LocalDirectoryStore } from '../api/backup-store.js';
 import { custodianKey } from '../custodian/lib.js';
 import { INSTALL_SPARE_BYTES, installStaged, processesOf, type ApiDirs, type InstallOptions } from '../install/install.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
@@ -218,8 +219,11 @@ describe('the monthly restart removes what the API left on the state partition, 
     /** The API's directories as a compromised API might leave them (the reviewer filled releases/ with fallocate). */
     function planted() {
         const base = path.join(dir, `api-${++n}`);
-        const d: ApiDirs = { releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700 };
-        for (const p of [d.releases, d.backups, d.restore]) mkdirSync(p, { recursive: true });
+        const d: ApiDirs = {
+            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700,
+            restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
+        };
+        for (const p of [d.releases, d.backups, d.restore, path.dirname(d.restoreMarker)]) mkdirSync(p, { recursive: true });
         const outside = path.join(base, 'outside');
         mkdirSync(outside);
         writeFileSync(path.join(outside, 'precious'), 'not the API\'s');
@@ -238,16 +242,19 @@ describe('the monthly restart removes what the API left on the state partition, 
         writeFileSync(path.join(d.backups, 'bv-20260904T000000Z.bin', 'inside'), 'x');
         symlinkSync(path.join(outside, 'precious'), path.join(d.backups, 'bv-20260905T000000Z.bin'));
         writeFileSync(path.join(d.backups, 'bv-20260906T000000Z.bin.part'), 'x');
-        // restore/: a pending restore (kept), its partial, a directory.
+        // restore/: a pending restore's file, its partial, a directory. (Pending only while the keyholder's marker is.)
         writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(500));
         writeFileSync(path.join(d.restore, 'restore-pending.bin.part'), 'x');
         mkdirSync(path.join(d.restore, 'junk'));
         return { d, outside };
     }
+    /** The keyholder's marker: custodians restored a backup into a fresh vault, and the unlock hasn't finished it. */
+    const markPending = (d: ApiDirs) => writeFileSync(d.restoreMarker, '{"backup":"bv-20260903T000000Z.bin"}');
 
     it('its releases, whatever in backups is no backup or past the budget, strays in restore, and a directory named like a boot file in the inbox go; the staged image installs', async () => {
         const t = setUp();
         const { d, outside } = planted();
+        markPending(d);
         t.stage(t.r2, t.next, [t.r1, t.r2]);
         // A directory named like a second boot file: with the API running, root refuses "more than one boot file".
         mkdirSync(path.join(t.inbox, 'beanpool-vault_1.2.0.efi'));
@@ -264,13 +271,13 @@ describe('the monthly restart removes what the API left on the state partition, 
         expect(order).toEqual(['stop, inbox 5, releases 4', 'sysupdate']);
         expect(readdirSync(d.releases)).toEqual([]);
         expect(readdirSync(d.backups).sort()).toEqual(['bv-20260902T000000Z.bin', 'bv-20260903T000000Z.bin']);
-        expect(readdirSync(d.restore)).toEqual(['restore-pending.bin']);
+        expect(readdirSync(d.restore).sort()).toEqual(['restore-pending.bin', 'restore-pending.bin.part']);
         expect(readdirSync(t.inbox)).toEqual([]);
         expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the API\'s');
         const record = JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup?: string };
         expect(record).toEqual({
             at: 7, installed: true, version: '1.1.0',
-            cleanup: 'removed what the API left on the state partition: 4 in releases, 4 in backups that are not a backup, 1 backup past the budget, 2 in restore',
+            cleanup: 'removed what the API left on the state partition: 4 in releases, 4 in backups that are not a backup, 1 backup past the budget, 1 in restore',
         });
     });
 
@@ -282,15 +289,52 @@ describe('the monthly restart removes what the API left on the state partition, 
         t.nothingInstalled();
     });
 
-    it('a pending restore larger than the budget, and backups each larger than it: gone too', async () => {
+    it('no restore pending (no marker from the keyholder): restore/ is emptied, the pending file and its partial included (verify 4, NB-1)', async () => {
         const t = setUp();
         const { d } = planted();
+        const resultFile = path.join(dir, `result-${n}.json`);
+        await installStaged(t.opts({ apiDirs: d, resultFile, stopApi: () => true }));
+        expect(readdirSync(d.restore)).toEqual([]);
+        expect((JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup: string }).cleanup).toMatch(/, 3 in restore$/);
+    });
+
+    it('a restore pending (the keyholder\'s marker): its file and its partial stay whatever their size, and nothing else in restore/ (verify 4, NB-1)', async () => {
+        const t = setUp();
+        const { d } = planted();
+        markPending(d);
         writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(701));
+        writeFileSync(path.join(d.restore, 'restore-pending.bin.part'), Buffer.alloc(1400));
+        await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
+        expect(readdirSync(d.restore).sort()).toEqual(['restore-pending.bin', 'restore-pending.bin.part']);
+        expect(statSync(path.join(d.restore, 'restore-pending.bin')).size).toBe(701);
+        expect(statSync(path.join(d.restore, 'restore-pending.bin.part')).size).toBe(1400);
+        // Only regular files: a directory under the pending name goes, marker or not.
+        rmSync(path.join(d.restore, 'restore-pending.bin'));
+        mkdirSync(path.join(d.restore, 'restore-pending.bin'));
+        await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
+        expect(readdirSync(d.restore)).toEqual(['restore-pending.bin.part']);
+    });
+
+    it('the newest backup stays whatever its size, as the API\'s rotation keeps it (backup-store.ts); the ones after it only while they fit (verify 4)', async () => {
+        const t = setUp();
+        const { d } = planted();
         writeFileSync(path.join(d.backups, 'bv-20260903T000000Z.bin'), Buffer.alloc(701));
         await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
-        // The newest (0903) alone is past the budget; 0902 and 0901 fit together.
-        expect(readdirSync(d.backups).sort()).toEqual(['bv-20260901T000000Z.bin', 'bv-20260902T000000Z.bin']);
-        expect(readdirSync(d.restore)).toEqual([]);
+        expect(readdirSync(d.backups)).toEqual(['bv-20260903T000000Z.bin']);
+
+        // Within the budget first, then one that doesn't fit: it and every older one go, as the rotation drops the oldest.
+        const u = planted().d;
+        writeFileSync(path.join(u.backups, 'bv-20260902T000000Z.bin'), Buffer.alloc(500));
+        await installStaged(t.opts({ apiDirs: u, stopApi: () => true }));
+        expect(readdirSync(u.backups)).toEqual(['bv-20260903T000000Z.bin']);
+
+        // And the API's own rotation, on the same files, keeps the same.
+        const store = path.join(dir, `store-${++n}`);
+        mkdirSync(store);
+        writeFileSync(path.join(store, 'bv-20260901T000000Z.bin'), Buffer.alloc(300));
+        writeFileSync(path.join(store, 'bv-20260902T000000Z.bin'), Buffer.alloc(500));
+        await new LocalDirectoryStore(store, { maxBytes: 700 }).put('bv-20260903T000000Z.bin', Buffer.alloc(300));
+        expect(readdirSync(store)).toEqual(['bv-20260903T000000Z.bin']);
     });
 
     it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {

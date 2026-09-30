@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { RESTORE_MARKER_NAME } from '../shared/backup-format.js';
 import { identifyImage } from '../shared/image-identity.js';
 import { rootKeysFor } from '../shared/pinned.js';
 import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK, INSTALL_RESULT_FILE } from '../shared/staged-image.js';
@@ -22,6 +24,7 @@ const SYSUPDATE = '/usr/lib/systemd/systemd-sysupdate';
 const API_UNIT = 'beanpool-vault-api.service';
 const API_USER = 'vault-api';
 const API_CONFIG = '/etc/beanpool-vault/api.json';
+const KEYHOLDER_CONFIG = '/etc/beanpool-vault/keyholder.json';
 
 /** The API's unit stopped, and no process of its user left: true only then. */
 function stopApi(): boolean {
@@ -33,11 +36,16 @@ function stopApi(): boolean {
     return left.length === 0;
 }
 
+/** From the image's own api.json and keyholder.json; undefined (nothing of the API's is removed) if either is unusable. */
 function apiDirs(): ApiDirs | undefined {
     try {
         const c = JSON.parse(readFileSync(API_CONFIG, 'utf8')) as { releasesDir?: string; backupDir?: string; restoreDir?: string; backupMaxBytes?: number };
-        if (!c.releasesDir || !c.backupDir || !c.restoreDir || !Number.isFinite(c.backupMaxBytes)) return undefined;
-        return { releases: c.releasesDir, backups: c.backupDir, restore: c.restoreDir, backupMaxBytes: c.backupMaxBytes as number };
+        const k = JSON.parse(readFileSync(KEYHOLDER_CONFIG, 'utf8')) as { stateDir?: string };
+        if (!c.releasesDir || !c.backupDir || !c.restoreDir || !Number.isFinite(c.backupMaxBytes) || !k.stateDir) return undefined;
+        return {
+            releases: c.releasesDir, backups: c.backupDir, restore: c.restoreDir, backupMaxBytes: c.backupMaxBytes as number,
+            restoreMarker: path.join(k.stateDir, RESTORE_MARKER_NAME),
+        };
     } catch {
         return undefined;
     }

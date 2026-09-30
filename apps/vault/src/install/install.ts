@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import { BACKUP_NAME_RE, compareBackupNames, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
@@ -31,9 +31,14 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * race what root does in that user's directories. Then everything that user may have left on the state partition goes
  * (a compromised API could otherwise fill it, and deny every later update, until a reinstall): `releasesDir` is
  * emptied (the launcher starts the image's own API after the restart, and the API downloads a release's bundle
- * again), `backups/` keeps only backups (regular files under a backup name), the newest that fit in the budget
- * together, `restore/` only a pending restore (a regular file, within that budget), and the inbox anything but the
- * regular files a staged image is made of (a directory named like a boot file among them). The API's private /var/tmp
+ * again), `backups/` keeps only backups (regular files under a backup name): the newest always, whatever its size,
+ * and the ones after it while they fit in the budget together (the API's own rotation, backup-store.ts; root can't
+ * tell a backup from a file named like one, so a newest one past the budget stays even if a compromised API made it
+ * to fill the partition). `restore/` is
+ * emptied unless the keyholder's marker says a restore from backup is pending (only custodians restoring a backup into
+ * a fresh vault make one): then its file and its partial file stay, whatever their size (the API finishes the restore
+ * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image
+ * is made of (a directory named like a boot file among them). The API's private /var/tmp
  * goes with its unit's stop. If the API can't be stopped, its directories are left as they are, root only unlinks the
  * inbox's files (never walking into a directory there), and the journal and the record say so.
  */
@@ -72,6 +77,8 @@ export interface ApiDirs {
     backups: string;
     restore: string;
     backupMaxBytes: number;
+    /** The keyholder's marker of a pending restore from backup (RESTORE_MARKER_NAME in its stateDir): root reads it. */
+    restoreMarker: string;
 }
 
 /** What root's copies leave free at least, for the journal and the vault's own files. */
@@ -148,8 +155,10 @@ function emptyInbox(inbox: string, log: (line: string) => void, apiStopped: bool
 
 /**
  * The API's directories on the state partition, once the API is stopped: `releases` emptied; in `backups` only backups
- * (regular files under a backup name), the newest that fit in `backupMaxBytes` together; in `restore` only a pending
- * restore within that budget. Returns what went, in a few words, or null when nothing did.
+ * (regular files under a backup name), the newest whatever its size and the next newest while they fit in
+ * `backupMaxBytes` together (as the API's rotation keeps them); `restore` emptied, unless the keyholder's marker is
+ * there: then the pending restore's file and its partial file stay (regular files, any size). Returns what went, in a
+ * few words, or null when nothing did.
  */
 export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string | null {
     const said: string[] = [];
@@ -169,21 +178,30 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string
         if (st.isFile() && BACKUP_NAME_RE.test(name)) backups.push({ name, size: st.size });
         else if (removeWhole(p)) others++;
     }
+    // Newest first: the newest stays whatever its size; after it, the rest while they fit, and none past the first
+    // that doesn't (backup-store.ts drops the oldest until the rest fit, never the newest).
     let total = 0;
     let dropped = 0;
-    for (const b of backups.sort((x, y) => compareBackupNames(y.name, x.name))) {
-        if (total + b.size <= dirs.backupMaxBytes) total += b.size;
-        else if (removeWhole(path.join(dirs.backups, b.name))) dropped++;
+    let full = false;
+    for (const [i, b] of backups.sort((x, y) => compareBackupNames(y.name, x.name)).entries()) {
+        if (!full && (i === 0 || total + b.size <= dirs.backupMaxBytes)) total += b.size;
+        else {
+            full = true;
+            if (removeWhole(path.join(dirs.backups, b.name))) dropped++;
+        }
     }
     if (others) said.push(`${others} in backups that ${others === 1 ? 'is' : 'are'} not a backup`);
     if (dropped) said.push(`${dropped} ${dropped === 1 ? 'backup' : 'backups'} past the budget`);
 
+    // A restore from backup is pending only while the keyholder says so (its own directory: the API's user can't write
+    // there). The API then needs its file, or the partial one it names after a crash (server.ts, ensureDb), to finish.
+    const restorePending = existsSync(dirs.restoreMarker);
+    const keep = new Set(restorePending ? [RESTORE_PENDING_NAME, `${RESTORE_PENDING_NAME}.part`] : []);
     let restore = 0;
     for (const name of names(dirs.restore)) {
         const p = path.join(dirs.restore, name);
         try {
-            const st = lstatSync(p);
-            if (name === RESTORE_PENDING_NAME && st.isFile() && st.size <= dirs.backupMaxBytes) continue;
+            if (keep.has(name) && lstatSync(p).isFile()) continue;
         } catch {
             continue;
         }

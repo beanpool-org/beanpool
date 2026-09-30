@@ -44,6 +44,7 @@ import {
     BACKUP_NAME_RE,
     BACKUP_SIG_TAG,
     parseBackupFile,
+    RESTORE_MARKER_NAME,
     type BackupHeader,
 } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
@@ -144,7 +145,7 @@ const ENVELOPE_TAG = Buffer.from('beanpool-vault-envelope/1');
 const REPORT_TAG = 'beanpool-vault-report/1\n';
 const DELETIONS_INFO = Buffer.from('beanpool-vault-deletions/1');
 const BODY_INFO = Buffer.from('beanpool-vault-backup-body/1');
-const RESTORE_PENDING_FILE = 'restore-pending.json';
+const RESTORE_PENDING_FILE = RESTORE_MARKER_NAME;
 const ROW_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 function fail(code: string, message: string): never {

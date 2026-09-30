@@ -322,12 +322,19 @@ async function main(): Promise<void> {
     });
     const RELEASES = '/var/lib/beanpool-vault/releases';
     const BACKUPS = '/var/lib/beanpool-vault/backups';
+    const RESTORE = '/var/lib/beanpool-vault/restore';
+    // The keyholder's marker of a pending restore from backup (keyholder.json's stateDir): root plants it here, as a
+    // custodians' restore would, to see root's step keep the restore's files while it is there (verify 4, NB-1).
+    const MARKER = '/var/lib/beanpool-vault/keyholder/restore-pending.json';
     const fill = varSpace().avail - (12 << 20);
     const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
-    asApi(`const fs = require('fs'), [b, s] = process.argv.slice(1);
+    asApi(`const fs = require('fs'), [b, s, r] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
         fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
-        fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');`, BACKUPS, IMAGE_INBOX);
+        fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');
+        fs.mkdirSync(r, { recursive: true });
+        for (const f of ['restore-pending.bin', 'restore-pending.bin.part', 'junk']) fs.writeFileSync(r + '/' + f, 'x');`, BACKUPS, IMAGE_INBOX, RESTORE);
+    writeFileSync(MARKER, '{}', { mode: 0o600 });
     check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (16 << 20), `${filled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
     renameSync(path.join(pending, 'vault-v0.0.3'), path.join(FEED, 'vault-v0.0.3'));
     const noRoom = await until(async () => {
@@ -340,6 +347,13 @@ async function main(): Promise<void> {
     check('the monthly restart\'s root step removes what the API\'s user left: its releases, the junk in its backups and inbox',
         readdirSync(RELEASES).length === 0 && !readdirSync(BACKUPS).includes('junk') && readdirSync(IMAGE_INBOX).length === 0 && /in releases/.test(cleanup),
         `${tidy.out.split('\n').filter(l => /removed|nothing/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
+    const restoreKept = readdirSync(RESTORE).sort().join(' ');
+    check('while the keyholder marks a restore from backup pending, root keeps its file and partial file, and nothing else in restore/',
+        restoreKept === 'restore-pending.bin restore-pending.bin.part', restoreKept);
+    rmSync(MARKER);
+    const tidied = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
+    check('with no marker, root empties restore/', readdirSync(RESTORE).length === 0,
+        `${tidied.out.split('\n').filter(l => /removed/.test(l)).join(' | ')}; restore ${readdirSync(RESTORE).join(' ')}`);
     check('and the room is back', varSpace().avail > GIB, `${gib(varSpace().avail)} free for the vault's users`);
     const again = await restartApi();
     check('the API, started again, opens', again.open, `after ${again.after} s`);

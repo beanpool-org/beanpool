@@ -48,6 +48,12 @@ export const BACKUP_NAME_RE = /^bv-\d{8}T\d{6}Z(?:-\d+)?\.bin$/;
 /** A restore from backup waiting for the unlock, in the API's `restoreDir`: a copy of one backup file. */
 export const RESTORE_PENDING_NAME = 'restore-pending.bin';
 
+/**
+ * The keyholder's marker for that restore, in its `stateDir`: written only when custodians restore a backup into a fresh
+ * vault (adoptState), removed once the restore is finished. Root's monthly step keeps a pending restore by it.
+ */
+export const RESTORE_MARKER_NAME = 'restore-pending.json';
+
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */
 export function backupNameFor(ms: number): string {
     return `bv-${new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}.bin`;

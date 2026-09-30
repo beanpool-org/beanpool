@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { LocalDirectoryStore } from '../api/backup-store.js';
 import { createVaultApi } from '../api/server.js';
 import { restoreFromBackup } from '../custodian/lib.js';
+import { clearApiDirs } from '../install/install.js';
 import { listenDiskKey, type KeyholderServer } from '../keyholder/server.js';
+import { RESTORE_MARKER_NAME } from '../shared/backup-format.js';
 import { MONTHLY_RESTART_ON_CALENDAR, nextMonthlyRestart } from '../shared/schedule.js';
 import { deposit, doGenesis, get, newMember, startRestore, startVault, unlockWith, type VaultUnderTest } from './harness.js';
 
@@ -117,6 +119,47 @@ describe('a restore from backup on the image: the data partition is mounted over
         // The backup's copy is there: a restore by its sign-in is held (D2), not refused as unknown.
         const r = await startRestore(fresh, 'google', 'kept-across-the-restore');
         expect(r.reply).toMatchObject({ status: 200, body: { status: 'held' } });
+    });
+});
+
+describe('root\'s monthly step between a restore from backup and the unlock (#1314 verify 4, NB-1)', () => {
+    it('the API died between the keyholder taking the backup\'s state and the file\'s rename; root\'s step then keeps the partial file (the keyholder\'s marker is there), and the unlock finishes the restore', async () => {
+        const v = await startVault();
+        open.push(v);
+        const g = await doGenesis(v);
+        await deposit(v, g, newMember(), 'google', 'kept-across-the-restore');
+        const backup = await v.api.runBackup();
+
+        const fresh = await startVault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir, requireDataMount: true });
+        open.push(fresh);
+        expect((await restoreFromBackup(fresh.baseUrl, fresh.custodians[0], backup, fresh.call())).body.state).toBe('locked');
+        // As after a crash between adoptState and the rename (server.ts, /v1/unlock/restore).
+        const pending = path.join(fresh.restoreDir, 'restore-pending.bin');
+        renameSync(pending, `${pending}.part`);
+        const marker = path.join(fresh.stateDir, RESTORE_MARKER_NAME);
+        expect(existsSync(marker)).toBe(true);
+
+        // The monthly restart: root's step (the image's backupMaxBytes), then the machine comes back.
+        const said: string[] = [];
+        clearApiDirs({
+            releases: path.join(fresh.dir, 'releases'), backups: path.join(fresh.dir, 'backups'), restore: fresh.restoreDir,
+            backupMaxBytes: 1 << 30, restoreMarker: marker,
+        }, l => said.push(l));
+        const left = readdirSync(fresh.restoreDir);
+        await fresh.restartKeyholder();
+        await fresh.restartApi();
+
+        await unlockWith(fresh, g.shares, [0, 1]);
+        fresh.mountData();
+        const deadline = Date.now() + 10_000;
+        while ((await get(fresh, '/v1/health')).body.state !== 'open' && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
+        expect((await get(fresh, '/v1/health')).body.state).toBe('open');
+        expect(fresh.keyholder().status().restorePending).toBe(false);
+        expect(existsSync(path.join(fresh.dataDir, 'vault.db'))).toBe(true);
+        expect(readdirSync(fresh.restoreDir)).toEqual([]);
+        expect((await startRestore(fresh, 'google', 'kept-across-the-restore')).reply).toMatchObject({ status: 200, body: { status: 'held' } });
+        // Root's step had left the partial file, and said nothing went.
+        expect({ left, said }).toEqual({ left: ['restore-pending.bin.part'], said: [] });
     });
 });
 

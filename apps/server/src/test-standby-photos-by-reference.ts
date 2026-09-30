@@ -38,10 +38,13 @@
  *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.) The objects it fetched
  *     are kept through an orphan sweep past the sweep's hour of grace, and the copy that lands fetches only the rest (F5).
  *     (Before: swept, and every one fetched again.)
- *  9. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ *  9. A standby copying with M's admin password (an install from before token-only): M checks it with scrypt once for the
+ *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
+ *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
+ * 10. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
- * 10. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
+ * 11. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-photos-by-reference.ts
@@ -651,7 +654,50 @@ async function main(): Promise<void> {
                 + `and, landed, keeps them no longer (${refetched.length} fetched again; before: all ${firstFetched.size})`);
         });
 
-        await step('9. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
+        await step('9. a standby copying with the admin password: one scrypt for the whole copy; a wrong or changed password pays in full', async () => {
+            // An install from before token-only: M's flag reads as off, and a standby copies with M's admin password.
+            await main.send('token-only', { on: false });
+            fs.mkdirSync(dir('standby-b'), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby-b'), 'genesis.json'));
+            const b = await spawnNode(SCRIPT, dir('standby-b'), envS);
+            nodes.push(b);
+            await b.send('setup-standby-pw', { primaryUrl: px.url, password: PW_MAIN, primaryPeerId: main.ready.peerId });
+            const g0 = gets();
+            const o0 = px.opened.length;
+            const k0: number = await main.send('count-scrypts');
+            const b1 = await pullAndSwapOn(b, false);
+            const fetched = gets() - g0;
+            const pages = px.opened.length > o0 ? pagesOf(px).length : 0;
+            const k1: number = await main.send('count-scrypts');
+            assert(b1.ok === true && b1.staged === true && fetched > 20 && k1 - k0 >= 1 && k1 - k0 <= 2,
+                `its first copy lands, and M checked the admin password with scrypt ${k1 - k0} time(s) for ${pages} pages and ${fetched} objects `
+                + `(${JSON.stringify(b1)}; before: once per request, ${fetched + pages}+)`);
+            // Straight to M's copy routes: a wrong password pays its scrypt, 401, each time; the right one, remembered, none.
+            const at = (password: string) => fetch(`${main.base}/api/local/admin/sync-object/${made[0].sha256}`, { headers: { 'X-Admin-Password': password } })
+                .then(async (r) => { await r.arrayBuffer(); return r.status; });
+            const k2: number = await main.send('count-scrypts');
+            const wrong = [await at('Not-The-Main-Pw-1234!'), await at(`${PW_MAIN}x`)];
+            const k3: number = await main.send('count-scrypts');
+            const right = await at(PW_MAIN);
+            const k4: number = await main.send('count-scrypts');
+            assert(wrong.every((st) => st === 401) && k3 - k2 === 2 && right === 200 && k4 === k3,
+                `two wrong passwords are refused, 401, and pay a scrypt each (${JSON.stringify(wrong)}, ${k3 - k2}); the right one is taken with none (${right}, ${k4 - k3})`);
+            // The admin password changed on M: the old one, remembered, is refused at once; the new one pays its scrypt once.
+            const changed = 'Photos-By-Ref-Main-Pw-Changed-7731!';
+            await main.send('set-admin-password', { password: changed });
+            const old = await at(PW_MAIN);
+            const k5: number = await main.send('count-scrypts');
+            const fresh = [await at(changed), await at(changed)];
+            const k6: number = await main.send('count-scrypts');
+            await main.send('set-admin-password', { password: PW_MAIN });
+            assert(old === 401 && fresh.every((st) => st === 200) && k6 - k5 === 1,
+                `changed on M, the old password is refused at once (${old}); the new one is taken, one scrypt for two requests (${JSON.stringify(fresh)}, ${k6 - k5})`);
+            // From here on B copies with the token, and M is token-only again.
+            await b.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            await main.send('token-only', { on: true });
+        });
+
+        await step('10. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
             const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
@@ -697,7 +743,7 @@ async function main(): Promise<void> {
                 `S starts as the main server, and every one of its ${urls.length} listing photos opens with M's bytes (${JSON.stringify({ role, of: mine.size })}; failed ${first(failed)})`);
         });
 
-        await step('10. the object route is under M\'s administrative limiter', async () => {
+        await step('11. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
             const before429 = new Set<number>();
@@ -738,6 +784,27 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
             syncBuiltinESMExports();
         }
         return scrypts;
+    },
+    /** Whether copies of this main server take the replication token only (off: an install from before token-only). */
+    'token-only': async (a: { on: boolean }) => {
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        updateLocalConfig({ replicationTokenOnly: a.on ? true : undefined });
+        return true;
+    },
+    /** This server's admin password, changed as Settings changes it: a new hash and salt. */
+    'set-admin-password': async (a: { password: string }) => {
+        const { updateLocalConfig, hashPassword } = await import('./config/local-config.js');
+        const { hash, salt } = hashPassword(a.password);
+        updateLocalConfig({ adminHash: hash, salt });
+        return true;
+    },
+    /** A standby that copies with its main server's admin password, as one set up before the replication token. */
+    'setup-standby-pw': async (a: { primaryUrl: string; password: string; primaryPeerId: string }) => {
+        const { addConnector } = await import('./connector-manager.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+        updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupAdminPassword: a.password, backupReplicationToken: null });
+        return true;
     },
     /** The replication token this main server takes, set (as the operator rotates it) or, with null, revoked. */
     'set-token': async (a: { token: string | null }) => {

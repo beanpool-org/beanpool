@@ -33,10 +33,13 @@
  *     the photo named in photosOmitted, exact. S, which holds the photo, takes a whole copy keeping its own. Once M's object
  *     is its photo again, the new standby's next copy brings it (review 4148896755). (Before: every copy of the new standby
  *     refused, M silent.)
- *  8. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ *  8. A new standby's first copy whose pages all come and whose objects stop coming part way (M's store answering 503): the
+ *     next pull asks M for no copy until RESYNC_RETRY_MS has passed, and says when it will; the one after that lands (F4 of
+ *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.)
+ *  9. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
- *  9. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
+ * 10. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-photos-by-reference.ts
@@ -70,6 +73,10 @@ const PHOTO_BYTES = 3000;
 const MANY = 900;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const HASHED = ['members', 'accounts', 'posts', 'post_photos', 'messages'];
+/** S's BACKUP_RESYNC_RETRY_MS: how long a first copy that came and was not taken waits for the next (60 min in production). */
+const RESYNC_RETRY_MS = 3000;
+/** Step 8's objects M sends before its store stops answering. */
+const FETCHED_BEFORE_FAILING = 15;
 /** Step 7's photos M gains while S's copy is fetching when the take-over is confirmed. */
 const TAKEOVER_PHOTOS = 200;
 /**
@@ -158,6 +165,8 @@ interface Proxy {
     corrupt: number;
     gone: Set<string>;
     stripFormat: number;
+    /** Object requests passed on before every later one is answered 503, as a main server whose store stops answering; null: all passed on. */
+    failObjectsAfter: number | null;
     opened: string[];
     pages: Map<string, Map<number, string>>;
     statuses: { path: string; status: number }[];
@@ -165,7 +174,8 @@ interface Proxy {
 }
 async function startProxy(target: string): Promise<Proxy> {
     const px: Proxy = {
-        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, opened: [], pages: new Map(), statuses: [], close: () => {},
+        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, failObjectsAfter: null, opened: [], pages: new Map(), statuses: [],
+        close: () => {},
     };
     const server = http.createServer((req, res) => {
         void (async () => {
@@ -183,10 +193,14 @@ async function startProxy(target: string): Promise<Proxy> {
             let status = 502;
             let raw: Buffer = Buffer.alloc(0);
             const outHeaders: Record<string, string> = {};
-            if (object && px.gone.has(object)) {
+            if (object && px.failObjectsAfter !== null && px.failObjectsAfter <= 0) {
+                status = 503;
+                raw = Buffer.from(JSON.stringify({ error: 'the image store is not answering' }));
+            } else if (object && px.gone.has(object)) {
                 status = 404;
                 raw = Buffer.from(JSON.stringify({ error: 'no listing photo of this server has that address', why: 'not-named' }));
             } else {
+                if (object && px.failObjectsAfter !== null) px.failObjectsAfter--;
                 try {
                     const up = await fetch(target + req.url, { method: req.method, headers, body: chunks.length > 0 ? Buffer.concat(chunks) : undefined });
                     status = up.status;
@@ -261,7 +275,7 @@ async function main(): Promise<void> {
     };
     const envS = {
         ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
-        BACKUP_RESYNC_RETRY_MS: '3000', BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
+        BACKUP_RESYNC_RETRY_MS: String(RESYNC_RETRY_MS), BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
     };
     const gwen = newId('Gwen');
     const ann = newId('Ann');
@@ -304,12 +318,23 @@ async function main(): Promise<void> {
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
         const exactNow = async () => hashDiff(await standby.send('hashes'), await main.send('hashes'));
-        /** A pull (a whole one when `whole`); one that made a copy ready is waited for until S has started again on it. */
-        const pullAndSwap = async (whole: boolean) => {
-            const before = standby.swaps();
-            const p = await standby.send('pull', whole ? { whole: true } : {});
-            if (p.staged) await until('S to start again on the new copy', () => standby.swaps() > before, 60_000);
+        /** A pull by `node` (a whole one when `whole`); one that made a copy ready is waited for until it has started again on it. */
+        const pullAndSwapOn = async (node: NodeProc, whole: boolean) => {
+            const before = node.swaps();
+            const p = await node.send('pull', whole ? { whole: true } : {});
+            if (p.staged) await until('the standby to start again on the new copy', () => node.swaps() > before, 60_000);
             return p;
+        };
+        /** A pull by S; one that made a copy ready is waited for until S has started again on it. */
+        const pullAndSwap = (whole: boolean) => pullAndSwapOn(standby, whole);
+        /** Another standby of M, new, copying with the replication token, through the proxy. */
+        const newStandby = async (name: string): Promise<NodeProc> => {
+            fs.mkdirSync(dir(name), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir(name), 'genesis.json'));
+            const node = await spawnNode(SCRIPT, dir(name), envS);
+            nodes.push(node);
+            await node.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            return node;
         };
         const photosOf = async (node: NodeProc): Promise<PhotoRow[]> => node.send('photo-state');
         /** S's photos against M's: each slot's sha256, and S's object of it holding those bytes. */
@@ -580,7 +605,30 @@ async function main(): Promise<void> {
             await fresh.kill();
         });
 
-        await step('8. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
+        await step('8. a first copy whose objects stop coming once its pages came waits as a refused one does, not a tick', async () => {
+            const a = await newStandby('standby-a');
+            // F4 of the standby review: every page of the first copy comes; its objects' fetch fails part way, M's store
+            // answering 503. The next pull asks for no copy until RESYNC_RETRY_MS (3 s here) has passed.
+            const o0 = px.opened.length;
+            px.failObjectsAfter = FETCHED_BEFORE_FAILING;
+            const a1 = await a.send('pull', {});
+            const opened1 = px.opened.length - o0;
+            require_(a1.ok === false && /HTTP 503/.test(a1.error ?? '') && opened1 === 1,
+                `the new standby's first copy comes, every page, and fails at its objects, M's store answering 503 (${JSON.stringify({ pull: a1, opened: opened1 })})`);
+            const failedAt = Date.now();
+            const a2 = await a.send('pull', {});
+            const opened2 = px.opened.length - o0 - opened1;
+            px.failObjectsAfter = null;
+            assert(a2.ok === false && opened2 === 0 && /asked for at/.test(a2.error ?? ''),
+                `the next pull asks M for no copy, and says when it will (${JSON.stringify({ pull: a2, opened: opened2 })}; before: a whole copy built and sent again at once, every tick)`);
+            await sleep(Math.max(0, failedAt + RESYNC_RETRY_MS + 200 - Date.now()));
+            const a3 = await pullAndSwapOn(a, false);
+            const opened3 = px.opened.length - o0 - opened1 - opened2;
+            assert(a3.ok === true && a3.staged === true && opened3 === 1,
+                `once RESYNC_RETRY_MS has passed, the next pull asks for one copy, which lands (${JSON.stringify({ pull: a3, opened: opened3 })})`);
+        });
+
+        await step('9. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
             const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
@@ -626,7 +674,7 @@ async function main(): Promise<void> {
                 `S starts as the main server, and every one of its ${urls.length} listing photos opens with M's bytes (${JSON.stringify({ role, of: mine.size })}; failed ${first(failed)})`);
         });
 
-        await step('9. the object route is under M\'s administrative limiter', async () => {
+        await step('10. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
             const before429 = new Set<number>();

@@ -168,7 +168,7 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         expect(await vaultMoveOffer(result.identity, COMMUNITY)).toEqual({ kind: 'move', provider: 'google', communityUrl: COMMUNITY });
     });
 
-    it('the welcome screen: the community form only on that signed answer, only for that sign-in; then Account Protection, where the card is', () => {
+    it('the welcome screen: the community form only on that signed answer, only for that sign-in; then Settings, whose first card is the move', () => {
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
         // The form a build without a vault shows, and in a vault build only for a sign-in the vault has no copy for.
         expect(welcome).toMatch(/if \(mode === 'ssoRecover' && \(!hasVault\(\) \|\| ssoAtCommunity\)\) \{/);
@@ -178,16 +178,16 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         for (const p of ['apple', 'google', 'facebook']) {
             expect(welcome, p).toMatch(new RegExp(`offeredHere\\('${p}'\\) && \\(\\s*<\\w+Button\\s+title="Recover with \\w+"\\s+onPress=\\{\\(\\) => handleSsoRecoverAtCommunity\\('${p}'\\)\\}`));
         }
-        // Back in from the community's copy in a vault build: Account Protection, whose first card is the move.
+        // Back in from the community's copy in a vault build: Settings, whose first card (under the hold banner) is the move.
         const at = welcome.indexOf('async function handleSsoRecoverAtCommunity(');
         const handler = welcome.slice(at, welcome.indexOf('\n    }\n', at));
-        expect(handler).toMatch(
-            /if \(hasVault\(\)\) \{[\s\S]*?router\.replace\(\{ pathname: '\/\(tabs\)\/settings', params: \{ section: 'protection' \} \}\);\n\s*\} else \{\n\s*router\.replace\('\/'\);\n\s*\}/,
-        );
+        expect(handler).toMatch(/if \(hasVault\(\)\) \{[\s\S]*?router\.replace\('\/\(tabs\)\/settings'\);\n\s*\} else \{\n\s*router\.replace\('\/'\);\n\s*\}/);
         const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
-        expect(settings).toMatch(/\} else if \(params\.section === 'protection'\) \{/);
-        const protection = settings.slice(settings.indexOf("{mode === 'protection' && ("));
-        expect(protection.slice(0, protection.indexOf('<KeeperProtectionPanel'))).toMatch(/<VaultMoveCard /);
+        const menu = settings.slice(settings.indexOf("{mode === 'menu' && ("));
+        const top = menu.slice(0, menu.indexOf('<NodeAdminEntry'));
+        expect(top).toMatch(/<RecoveryAlertBanner /);
+        expect(top).toMatch(/<VaultMoveCard /);
+        expect(top.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').match(/<[A-Z]\w+ /g)).toEqual(['<RecoveryAlertBanner ', '<VaultMoveCard ']);
         // And the restore itself refuses in a vault build without the vault's signed "no copy" for that sign-in.
         const recovery = fs.readFileSync(path.resolve(__dirname, '../sso-recovery.ts'), 'utf8');
         const restore = recovery.slice(recovery.indexOf('export async function recoverAccountWithSso('));

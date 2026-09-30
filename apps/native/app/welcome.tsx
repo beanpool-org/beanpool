@@ -1135,12 +1135,13 @@ export default function WelcomeScreen() {
             setIdentity(result.identity);
             setMode('home');
             if (hasVault()) {
-                // Back in with a copy only the community keeps (the vault said it keeps none): the move card at once, on
-                // Account Protection, not only when the member happens to open Settings (PR #1336 review finding 3). A
-                // sign-in restore this phone left waiting is stopped with the account's own key, as after the 12 words.
+                // Back in with a copy only the community keeps (the vault said it keeps none): straight to Settings, whose
+                // first card is the move (components/VaultMoveCard.tsx), not only when the member happens to open it (PR
+                // #1336 review finding 3). A sign-in restore this phone left waiting is stopped with the account's own
+                // key, as after the 12 words.
                 setSsoAtCommunity(null);
                 void stopSsoRestoreAfterWords(result.identity);
-                router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } });
+                router.replace('/(tabs)/settings');
             } else {
                 router.replace('/');
             }

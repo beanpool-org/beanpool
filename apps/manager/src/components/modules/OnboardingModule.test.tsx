@@ -219,6 +219,7 @@ describe('OnboardingModule', () => {
                 { day: '2026-09-02', event: 'cohort_open_door', variant: 'apple', count: 1 },
                 { day: '2026-09-01', event: 'open_join_failed', variant: 'rate_limited', count: 2 },
                 { day: '2026-09-02', event: 'open_join_failed', variant: 'already_joined', count: 1 },
+                { day: '2026-09-02', event: 'open_join_failed', variant: 'door_key_missing', count: 3 },
             ],
         });
 
@@ -234,6 +235,8 @@ describe('OnboardingModule', () => {
         const reason = (label: string) => within(section).getByText(label).closest('li') as HTMLElement;
         expect(reason('Too many new accounts from one network')).toHaveTextContent('2');
         expect(reason('That sign-in already joined here')).toHaveTextContent('1');
+        expect(reason("This server can't check sign-ins: its open-door key is missing")).toHaveTextContent('3');
+        expect(within(section).queryByText('door_key_missing')).not.toBeInTheDocument();
         expect(within(section).queryByText(/Nobody used the open door/i)).not.toBeInTheDocument();
         expect(within(section).queryByText(/Nobody was turned away/i)).not.toBeInTheDocument();
     });

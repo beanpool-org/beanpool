@@ -719,14 +719,14 @@ const FUNNEL_ROWS = (() => {
     rows.push({ day: day(0), event: 'protection_choice', variant: 'C', count: 3 });
     rows.push({ day: day(0), event: 'guide_complete', variant: null, count: 2 });
     // The open door: tries per provider, the people who came in (a subset of member_created), and every refusal, so
-    // the longest reason ("…this community removed") has to fit.
+    // the longest reasons ("…this community removed", "…its open-door key is missing") have to fit.
     rows.push({ day: day(1), event: 'open_join_attempt', variant: 'google', count: 12 });
     rows.push({ day: day(2), event: 'open_join_attempt', variant: 'apple', count: 4 });
     rows.push({ day: day(2), event: 'open_join_attempt', variant: 'facebook', count: 3 });
     rows.push({ day: day(1), event: 'cohort_open_door', variant: 'google', count: 3 });
     rows.push({ day: day(2), event: 'cohort_open_door', variant: 'apple', count: 2 });
     rows.push({ day: day(2), event: 'cohort_open_door', variant: 'facebook', count: 1 });
-    for (const [reason, count] of [['rate_limited', 4], ['already_joined', 2], ['removed', 1], ['sign_in', 3], ['sign_in_unavailable', 1], ['join_failed', 1], ['already_member', 1], ['key_invalidated', 1]]) {
+    for (const [reason, count] of [['rate_limited', 4], ['already_joined', 2], ['removed', 1], ['sign_in', 3], ['sign_in_unavailable', 1], ['join_failed', 1], ['already_member', 1], ['key_invalidated', 1], ['door_key_missing', 1]]) {
         rows.push({ day: day(3), event: 'open_join_failed', variant: reason, count });
     }
     return rows;

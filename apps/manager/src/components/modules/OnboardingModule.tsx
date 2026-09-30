@@ -67,6 +67,7 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     sign_in: 'Sign-in not accepted',
     sign_in_unavailable: "Couldn't reach the sign-in provider",
     join_failed: "The join couldn't be saved",
+    door_key_missing: "This server can't check sign-ins: its open-door key is missing",
 };
 
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };

@@ -139,3 +139,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `apps/server/src/routes/commons.ts` used `ctx.throw(400/404, msg)` for error responses instead of setting explicit JSON error bodies (`ctx.status = status; ctx.body = { error: msg }`).
 **Learning:** Calling `ctx.throw` in Koa route handlers throws text `HttpError` exceptions that bypass the API's standard `{ error: '...' }` JSON response contract.
 **Pattern:** Ensure Koa route handlers assign `ctx.status` and `ctx.body = { error: ... }` explicitly instead of throwing Koa text exceptions.
+
+## 2026-09-30 - [Missing try/catch in POST /api/local/admin/posts/bulk-delete]
+**Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
+**Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
+**Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.

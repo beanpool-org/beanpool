@@ -276,6 +276,11 @@ async function main() {
     se.initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+    // The pricing guide's first cycle runs 5 s after the server starts and walks every listing. On a slow CI runner it ran
+    // inside the window where the plan check below records every statement, and failed it (main CI 36717592816). Stopped:
+    // this suite asks what the phone's delta read runs, and nothing here reads the pricing guide.
+    const { stopPricingAggregatorWorker } = await import('./pricing-aggregator.js');
+    stopPricingAggregatorWorker();
 
     // Time passing, for a member: their row last changed at `at`, whatever changed it. On a node from before
     // members.board_standing_changed_at there is only updated_at.

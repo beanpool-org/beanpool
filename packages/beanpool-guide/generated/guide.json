@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 89,
-  "hash": "73c011d5f5d290aafa4034a4d2a526e9e952578b0ba1f37e783b7ab581111b4f",
+  "version": 90,
+  "hash": "3e13046e92f111b839e3f88e0960b57c3c4287d468cbe60a67214c0b684ddc79",
   "sections": [
     {
       "id": "about",
@@ -973,6 +973,7 @@
             "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
             "**The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.",
             "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
+            "**This community can't check sign-ins right now:** the global community has moved to another server and can't yet tell a returning account from a new one, so for now it takes nobody new this way. Nothing was saved. Try again later.",
             "**Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.",
             "**Not taking new members right now:** join a community with an invite instead."
           ]

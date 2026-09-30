@@ -16,7 +16,7 @@
  *      recovery code and every file inside it checked); the plain identity bundle is gone (404).
  *   6. Auto-swap: a legacy standby whose main server has no token mints one with the password,
  *      stores only the token, and the password is nowhere in the data dir (grep, incl. state.db).
- *   7. Copying works end to end with the token, also with token-only switched on; the token's /backup is sealed.
+ *   7. Copying works end to end with the token, also with token-only switched on; the token gets no /backup, locked or not.
  *   8. A token already present: a stored password is wiped; an env password is warned about.
  *   9. Race: a token replaced by another standby's swap during the re-check keeps the password;
  *      two swaps at once leave exactly one working token.
@@ -77,7 +77,7 @@ const { migrateStandbyPassword, requestResync, getBackupStatus } = await import(
 const { db } = await import('./db/db.js');
 const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
-const { openEnvelope, readSealedHeader } = await import('@beanpool/core');
+const { openEnvelope } = await import('@beanpool/core');
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -318,11 +318,17 @@ async function main() {
         const idByTokenBody = Buffer.from(await idByToken.arrayBuffer());
         assert(idByToken.status === 404 && !idByToken.headers.get('x-identity-files'), `7. the token gets no identity bundle: the route is gone (got ${idByToken.status})`);
         assert(!(idByTokenBody[0] === 0x1f && idByTokenBody[1] === 0x8b), '7. …and nothing gzip comes back');
+        // Nor any backup. This step asserted the token downloaded the sealed one; on a server with no recovery code the
+        // same call sent the readable database, tunnel token, admin hash and 2FA secret with it (Fable's replication
+        // review HIGH-1, 2026-10-01). The token now copies and fetches the take-over envelope, and nothing else: /backup
+        // is an owner's, locked or not (test-backup-owner-gate sweeps every route).
         resetBrakes();
         const dbByToken = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': standbyToken }, body: '{}' });
         const dbByTokenBytes = Buffer.from(await dbByToken.arrayBuffer());
-        assert(dbByToken.status === 200 && dbByToken.headers.get('content-type') === 'application/octet-stream', `7. the token still downloads the database backup (got ${dbByToken.status})`);
-        assert(!(dbByTokenBytes[0] === 0x1f && dbByTokenBytes[1] === 0x8b) && readSealedHeader(new Uint8Array(dbByTokenBytes)).kind === 'backup', '7. …sealed, never a plain archive');
+        assert(dbByToken.status === 401 && dbByToken.headers.get('content-type') !== 'application/octet-stream',
+            `7. the token downloads no backup, locked or not (got ${dbByToken.status})`);
+        assert(!(dbByTokenBytes[0] === 0x1f && dbByTokenBytes[1] === 0x8b) && !dbByTokenBytes.includes(Buffer.from('SQLite format 3')),
+            '7. …and nothing of one comes back');
 
         // ---------- 8. Token already present ----------
         updateLocalConfig({ backupAdminPassword: ADMIN_PW });
@@ -441,13 +447,15 @@ async function main() {
                     if (holdsKey(bytes) || holdsKey(headerText)) leaks.push(`${method} ${layer.path} (${res.status})`);
                 }
             }
-            for (const expected of ['GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/sync-delta', 'POST /api/local/admin/backup', 'GET /api/local/admin/takeover-envelope']) {
+            for (const expected of ['GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/sync-delta', 'GET /api/local/admin/takeover-envelope']) {
                 assert(answered.includes(expected), `12. (control) the token reaches ${expected}`);
             }
+            // It reached /backup too until 2026-10-01 (step 7); a backup is an owner's now.
+            assert(!answered.includes('POST /api/local/admin/backup'), '12. the token no longer reaches /backup');
             assert(leaks.length === 0, `12. no route answers the token with the recovery-seal key or the open door's key, in any form (${answered.length} answered 200; leaks: ${leaks.join(', ') || 'none'})`);
-            // What the token downloads is the sealed backup; opened with the recovery code, its bundle carries the key.
+            // What an owner downloads is the sealed backup; opened with the recovery code, its bundle carries the key.
             resetBrakes();
-            const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': 'token-for-the-seal-key-check' }, body: '{}' });
+            const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: '{}' });
             const sealedBytes = Buffer.from(await dl.arrayBuffer());
             const tmp12 = fs.mkdtempSync(path.join(os.tmpdir(), 'standby-seal-key-'));
             try {
@@ -455,7 +463,7 @@ async function main() {
                 fs.writeFileSync(tarPath, (await openEnvelope(new Uint8Array(sealedBytes), { type: 'code', code: recovery.code }, { kind: 'backup' })).payload);
                 const bundle = JSON.parse(execFileSync('tar', ['-xzOf', tarPath, './takeover-bundle.json'], { encoding: 'utf-8' }));
                 assert(bundle.files['recovery-seal.key'] === sealKey.toString('base64') && bundle.files['open-join.key'] === doorKey.toString('base64') && !holdsKey(sealedBytes),
-                    '12. (control) the keys do travel, sealed: the backup the token downloads holds none of their bytes, and opened with the recovery code its bundle carries both');
+                    '12. (control) the keys do travel, sealed: the backup an owner downloads holds none of their bytes, and opened with the recovery code its bundle carries both');
             } finally {
                 fs.rmSync(tmp12, { recursive: true, force: true });
             }

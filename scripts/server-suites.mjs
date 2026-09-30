@@ -245,6 +245,7 @@ export const SUITES = [
     'test-avatar-keys',
     'test-etag-short-circuit',
     'test-photo-keys-resync',
+    'test-photo-keys-audience',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',
     'test-website-directory-map',

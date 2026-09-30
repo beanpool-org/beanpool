@@ -45,16 +45,16 @@
  *   row; test-photo-keys-resync section 9): main's first sync 282,760 bytes, the largest heal answer 278,045, and the
  *   worst case, a phone whose own delta is full (200 rows and 50 more), 351,655 (1.24 times main's largest; it was
  *   561,165 with a page of 200 after a full delta). A standby's first boot as the main server counts as a change (photoUrlShape), and so does a standby promoted in this process by a take-over that finishes at
- *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both.
+ *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both. To make every phone's next sync whole by
+ *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
+ *   restart (operator manual, Updates and health).
  * - A change that moves only the URLs of listings off the board (a node whose listings are a public read, first
  *   booted with this rule over the record of one that keyed nothing, `open`; or given a new secret) makes the next sync
  *   whole only where such a listing has a photo, and otherwise leaves the record as it was (noteUrlShape). Not a
  *   one-time bump of those listings' `updated_at`, which would send each phone only them: every feed sorts by
  *   `updated_at` (the engine's RECENT_ORDER), so a boot that restamped them would lift a group's old listings to the
  *   top of its members' boards, restamp rows nobody edited (and never on a standby, whose rows must stay main's), and
- *   need a record of its own for the next new secret. The shape already covers every such change. To make every phone's next sync whole by
- *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
- *   restart (operator manual, Updates and health).
+ *   need a record of its own for the next new secret. The shape already covers every such change.
  * - A node with more listings with a photo than one page heals a phone over its next syncs: the page's last place in
  *   heal order is kept for that key (`photo_url_heals`, this server's own), and each sync after it carries its delta
  *   and the next page, until no listing with a photo is left. The phone moves its cursor only when a whole sync

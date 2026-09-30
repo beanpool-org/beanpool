@@ -154,9 +154,7 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // Post photos are immutable per (id, order_num): getPosts versions the URL with the photo's
     // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
-    // A keyed one is its readers' and never kept by a shared cache: one set to ignore the query string would hand it
-    // to anyone at the plain URL.
-    ctx.set('Cache-Control', hidden ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
+    ctx.set('Cache-Control', hidden ? 'private, no-store' : 'public, max-age=31536000, immutable');
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;

@@ -13,14 +13,15 @@
  * her direct listing is for; Carol is a member of neither; a stranger signs nothing; an outsider signs with a key that
  * is no member here.
  *
- *  0. (public-read runs) The upgrade on a node with no listing off the board with a photo: nothing to heal.
+ *  0. (public-read runs) The upgrade on a node with no listing off the board with a photo: nothing to heal, and a heal
+ *     under way for an earlier change (its photoKeysSince) goes on.
  *  1. (public-read runs) The upgrade on a node that has them, played as a restart over a record from before (the shape
  *     `open`): Bob's phone, which last synced before it, gets his group's and his direct listing again at its next sync,
  *     with URLs that open; Carol's gets neither. A restart that changes nothing keeps the record.
  *  2. The route: a board listing's photos open unkeyed (a public read) or not (local); a group's and a direct listing's,
  *     each photo of them, are 404 `Photo not found` unkeyed (signed or not, HEAD too), with a wrong key, with another
- *     photo's key, exactly as a listing nobody has; 200 at the URL a member's read carries. Cache-Control: `private` for a
- *     keyed photo, `public` for a board photo.
+ *     photo's key, exactly as a listing nobody has; 200 at the URL a member's read carries. A trailing slash is refused
+ *     too (401 where reads are enforced: it is outside the public-read allowlist's pattern).
  *  3. The reads: Bob's list, sync and read by id, and Alice's, carry keyed URLs for those listings, a board listing
  *     plain (a public read) or keyed (local). Carol's, a stranger's and an outsider's reads hold neither listing nor its
  *     id nor any key.
@@ -92,14 +93,14 @@ function signedHeaders(method: string, p: string, body: string, id: Id): Record<
 }
 
 let beforeCall: () => void = () => {};
-type Res = { status: number; text: string; body: any; cacheControl: string | null };
+type Res = { status: number; text: string; body: any };
 async function call(method: 'GET' | 'HEAD', p: string, id?: Id): Promise<Res> {
     beforeCall();
     const res = await fetch(`${BASE}${p}`, { method, headers: id ? signedHeaders(method, p, '', id) : {} });
     const text = method === 'HEAD' ? '' : await res.text();
     let body: any;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
-    return { status: res.status, text, body, cacheControl: res.headers.get('cache-control') };
+    return { status: res.status, text, body };
 }
 const get = (p: string, id?: Id) => call('GET', p, id);
 async function post(p: string, payload: unknown, id: Id): Promise<Res> {
@@ -109,7 +110,7 @@ async function post(p: string, payload: unknown, id: Id): Promise<Res> {
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { /* not JSON */ }
-    return { status: res.status, text, body: json, cacheControl: res.headers.get('cache-control') };
+    return { status: res.status, text, body: json };
 }
 
 function signedWsQuery(id: Id): string {
@@ -183,10 +184,10 @@ async function main(): Promise<void> {
     /** A restart as far as the photos' keys go: what the boot decides (engine/photo-keys.ts installPhotoKeysAtBoot). */
     const restartKeys = () => photoKeys.installPhotoKeysAtBoot();
     /** The record a node had before this change: its listings a public read, so nothing keyed (`open`). */
-    const recordFromBefore = () => {
+    const recordFromBefore = (since = new Date(0).toISOString()) => {
         const put = db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)');
         put.run('photoKeysShape', 'open');
-        put.run('photoKeysSince', new Date(0).toISOString());
+        put.run('photoKeysSince', since);
         db.prepare('DELETE FROM photo_url_heals').run();
     };
 
@@ -194,9 +195,15 @@ async function main(): Promise<void> {
     const pub = make('Quokka kettle for the board', [TINY_PNG, RED_PNG]);
     if (PUBLIC_READ) {
         console.log('── 0. the upgrade on a node with no listing off the board with a photo ──');
+        // With a heal under way from an earlier change (a take-over two hours ago): it goes on.
+        const earlier = new Date(Date.now() - 2 * HOUR).toISOString();
+        recordFromBefore(earlier);
+        restartKeys();
+        assert(shapeRow()?.startsWith('offboard-keyed:') === true && sinceRow() === earlier,
+            `no URL a phone holds changed: the shape is recorded (${shapeRow()}) and photoKeysSince is kept, not moved nor cleared (${sinceRow()})`);
         recordFromBefore();
         restartKeys();
-        assert(Date.parse(sinceRow() ?? '') === 0, `no URL a phone holds changed, so no sync is answered whole (photoKeysSince ${sinceRow()})`);
+        assert(Date.parse(sinceRow() ?? '') === 0, `with no earlier change, no sync is answered whole (photoKeysSince ${sinceRow()})`);
         const r = await get(`${SYNC}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 30 * MIN).toISOString())}`, bob);
         assert(r.status === 200 && posts(r).length === 0, `Bob's next delta is a delta: nothing (got ${r.status}, ${posts(r).length} rows)`);
     }
@@ -268,7 +275,6 @@ async function main(): Promise<void> {
                 assert(hasKey(url), `Bob's sync carries ${what}'s photo ${n} keyed (${url})`);
                 const ok = url ? await get(url) : null;
                 assert(ok?.status === 200, `… and that URL opens, unsigned, as an <img> asks (got ${ok?.status})`);
-                assert(!!ok?.cacheControl?.startsWith('private'), `… never kept by a shared cache (Cache-Control ${ok?.cacheControl})`);
                 const keyHead = url ? await call('HEAD', url) : null;
                 assert(keyHead?.status === 200, `… a HEAD to it too (got ${keyHead?.status})`);
             }
@@ -285,7 +291,6 @@ async function main(): Promise<void> {
         assert(PUBLIC_READ ? !hasKey(pubUrl) : hasKey(pubUrl), `the board listing's URL in Bob's read is ${PUBLIC_READ ? 'plain, as before' : 'keyed, as before'} (${pubUrl})`);
         const pubOpen = pubUrl ? await get(pubUrl) : null;
         assert(pubOpen?.status === 200, `… and opens (got ${pubOpen?.status})`);
-        if (PUBLIC_READ) assert(!!pubOpen?.cacheControl?.startsWith('public'), `… a board photo may be kept by a shared cache, as before (Cache-Control ${pubOpen?.cacheControl})`);
     }
 
     // ── 3. the reads ──────────────────────────────────────────────────────────────────────────

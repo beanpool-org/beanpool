@@ -26,7 +26,7 @@ import {
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
-    passesReadGate,
+    passesReadGate, lastActiveForViewer,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
@@ -187,6 +187,42 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
         // community with an egg flock and no federation was paying for a feature it does not use.
         const linksByTreasury = new Map(listFederationLinks().map(l => [l.treasuryPubkey, l]));
+
+        // ⚡ Bolt: Batch pre-fetch and group keepers and pledges to eliminate 2N SQL queries per page load
+        const keepersByTreasury = new Map<string, any[]>();
+        for (const k of (db.prepare(`
+            SELECT o.treasury_pubkey, m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+                   m.can_operate, m.status, m.is_visitor
+            FROM treasury_operators o
+            JOIN members m ON m.public_key = o.member_pubkey
+            ORDER BY o.granted_at
+        `).all() as any[])) {
+            let list = keepersByTreasury.get(k.treasury_pubkey);
+            if (!list) { list = []; keepersByTreasury.set(k.treasury_pubkey, list); }
+            list.push({
+                publicKey: k.public_key, callsign: k.callsign, avatarUrl: avatarUrlFor(k.public_key, k.avatar_url),
+                grantedAt: k.granted_at ?? null, role: k.role || 'keeper', backing: Number(k.backing || 0),
+                lastActiveAt: lastActiveForViewer(k.last_active_at || k.joined_at, k.public_key),
+                suspended: k.can_operate !== 1 || k.status !== 'active' || !!k.is_visitor,
+            });
+        }
+
+        const pledgesByTreasury = new Map<string, any[]>();
+        for (const p of (db.prepare(`
+            SELECT p.enterprise, p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.released_at IS NULL
+            ORDER BY p.pledged_at ASC
+        `).all() as any[])) {
+            let list = pledgesByTreasury.get(p.enterprise);
+            if (!list) { list = []; pledgesByTreasury.set(p.enterprise, list); }
+            list.push({
+                id: p.id, keeper: p.keeper, callsign: p.callsign, avatarUrl: avatarUrlFor(p.keeper, p.avatar_url),
+                amount: Number(p.amount), pledgedAt: p.pledged_at,
+            });
+        }
+
         ctx.body = {
             treasuries: rows.map(r => {
                 const b = getBalance(r.public_key);
@@ -261,8 +297,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     locationUpdatedAt: r.location_updated_at ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
-                    keepers: treasuryKeepers(r.public_key),
-                    pledges: getEnterprisePledges(r.public_key),
+                    keepers: keepersByTreasury.get(r.public_key) || [],
+                    pledges: pledgesByTreasury.get(r.public_key) || [],
                     link: link && linkShape(link),
                 };
             }),

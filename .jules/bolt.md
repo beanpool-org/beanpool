@@ -234,3 +234,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-09 - Batch Sybil Funnel Puppet Isolation Check in State Engine
 **Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` evaluated puppet isolation for Sybil funnel detection by running two SQL queries per invitee (`marketPartners` and `directPartners`) inside a `for...of` loop. For farmers with $N$ invitees, this caused $2N$ separate SQLite queries per farmer during health checks.
 **Action:** Replaced the per-invitee loop with a single batch query using `json_each(?)` that checks for outside marketplace and direct transaction partners across all invitees at once, reducing query overhead from $O(N)$ to $O(1)$ per farmer.
+
+## 2026-10-10 - Batch Pre-fetch Keepers and Pledges in listTreasuriesHandler
+**Learning:** In `apps/server/src/routes/treasury.ts`, `listTreasuriesHandler` previously invoked `treasuryKeepers(r.public_key)` and `getEnterprisePledges(r.public_key)` inside a `.map()` loop for every treasury item, resulting in $2N$ individual SQLite database queries ($N+1$ query pattern) per page load.
+**Action:** Pre-fetched and grouped all active keepers (`treasury_operators`) and active pledges (`enterprise_pledges`) into `Map` structures indexed by enterprise public key before mapping `rows`, eliminating $2N$ database queries on GET `/api/treasuries` and GET `/api/enterprises` endpoints.

@@ -2,6 +2,14 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+/**
+ * One size for every provider's logo, in a box that never gives way. The label beside it shrinks and wraps
+ * instead: at 320dp with enlarged text a label that could not shrink pushed the row wider than the button, the
+ * row stayed centred, and the text spilled past the button's edges (utils/__tests__/sso-button-layout.test.ts).
+ */
+const SSO_LOGO_SIZE = 20;
+const SSO_ICON_BOX = 24;
+
 export function GoogleLogo({ size = 20 }: { size?: number }) {
     return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -63,7 +71,7 @@ export function GoogleButton({
             accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
-                <GoogleLogo size={20} />
+                <GoogleLogo size={SSO_LOGO_SIZE} />
             </View>
             <Text style={[styles.googleBtnText, textStyle]}>{title}</Text>
         </TouchableOpacity>
@@ -142,7 +150,7 @@ export function FacebookButton({
             accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
-                <FacebookLogo size={20} />
+                <FacebookLogo size={SSO_LOGO_SIZE} />
             </View>
             <Text style={[styles.facebookBtnText, textStyle]}>{title}</Text>
         </TouchableOpacity>
@@ -168,6 +176,7 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     googleBtnText: {
+        flexShrink: 1,
         color: '#1F1F1F',
         fontSize: 15,
         fontWeight: '600',
@@ -191,12 +200,16 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     appleBtnText: {
+        flexShrink: 1,
         color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '600',
         textAlign: 'center',
     },
     iconContainer: {
+        width: SSO_ICON_BOX,
+        height: SSO_ICON_BOX,
+        flexShrink: 0,
         marginRight: 10,
         alignItems: 'center',
         justifyContent: 'center',
@@ -219,6 +232,7 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     facebookBtnText: {
+        flexShrink: 1,
         color: '#1877F2',
         fontSize: 15,
         fontWeight: '600',

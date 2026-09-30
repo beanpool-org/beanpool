@@ -573,7 +573,12 @@ async function fetchPhotoObjects(refs: Iterable<PhotoReference> | AsyncIterable<
             try { await one(r.value); } catch (e) { failure ??= e; }
         }
     };
-    await Promise.all(Array.from({ length: OBJECT_CONCURRENCY }, worker));
+    try {
+        await Promise.all(Array.from({ length: OBJECT_CONCURRENCY }, worker));
+    } finally {
+        // The references not read, let go: a staged copy's file closed however the fetch ended (review 4148896385).
+        try { await it.return?.(); } catch { /* closed already */ }
+    }
     if (failure !== null) throw failure;
     if (out.named > 0) {
         logger.info('P2P', `[Backup] Listing photos by reference: ${out.named} named, ${out.held} already held here, ${out.fetched} object(s) fetched `

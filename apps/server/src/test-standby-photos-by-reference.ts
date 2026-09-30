@@ -14,9 +14,10 @@
  *     bytes inline in the pages, no object fetched.) M checks S's replication token with scrypt once for the whole copy,
  *     not once for each object (review 4148896207).
  *  2. A second whole copy fetches no object; one new photo on M is fetched alone, by the next delta.
- *  3. An object M can't read: the copy names it in photosOmitted and S keeps its own row and object, exact. An object M can
- *     no longer serve when S asks (a 404): a whole copy and a delta both land without that photo's row, S keeping its own
- *     (none), and the next whole copy brings it once M serves it.
+ *  3. An object M can't find: the copy names it in photosOmitted and S keeps its own row and object, exact. An object M no
+ *     longer serves when S asks (a 404): a delta and a whole copy are each not taken, saying so, nothing of them landing and
+ *     S unchanged; once M serves it again, the next delta brings it. Three staged copies that fail so, in their fetch, leave
+ *     no descriptor open on the references file each read from (review 4148896385).
  *  4. An object changed in transit: asked for again, and the right one lands. Changed every time: the delta and the whole
  *     copy are each refused, loudly, nothing of the object or its row written, and the next pull lands.
  *  5. The object route: no token or a wrong one is 401, an address not in lowercase hex 400, one no listing photo of M names
@@ -39,6 +40,7 @@ import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
 
@@ -61,6 +63,12 @@ const PHOTO_BYTES = 3000;
 const MANY = 900;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const HASHED = ['members', 'accounts', 'posts', 'post_photos', 'messages'];
+/**
+ * Step 3's more photos, on the last listings, from slot 10: a staged copy's references to them (about 250 bytes each) are
+ * more than its file's reader takes in before it waits for them to be read (readline: 1,024 lines queued).
+ */
+const EXTRA_LISTINGS = 8;
+const EXTRA_PER_LISTING = 250;
 
 // ── The orchestrator ───────────────────────────────────────────────────────────────────────
 
@@ -106,6 +114,20 @@ function built(what: string, a: { status: number; body: any }): any {
     return a.body;
 }
 const sha256 = (b: Buffer) => crypto.createHash('sha256').update(b).digest('hex');
+/** The files a process holds open whose path ends in `name` (deleted ones too): /proc on Linux, lsof elsewhere. */
+function openFilesNamed(pid: number, name: string): string[] {
+    const proc = `/proc/${pid}/fd`;
+    if (fs.existsSync(proc)) {
+        const out: string[] = [];
+        for (const fd of fs.readdirSync(proc)) {
+            try { const target = fs.readlinkSync(path.join(proc, fd)); if (target.includes(name)) out.push(`${fd} ${target}`); } catch { /* closed meanwhile */ }
+        }
+        return out;
+    }
+    const r = spawnSync('lsof', ['-n', '-P', '-p', String(pid), '-F', 'fn'], { encoding: 'utf-8' });
+    if (r.error || typeof r.stdout !== 'string' || !r.stdout.includes(`p${pid}`)) throw new Error(`could not list process ${pid}'s open files: ${r.error?.message ?? r.stderr}`);
+    return r.stdout.split('\n').filter((l) => l.startsWith('n') && l.includes(name)).map((l) => l.slice(1));
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 5).join(' | ')}`);
 /** Every copied table S and M both hash, where they differ (engine/replica-hashes.ts). */
@@ -353,6 +375,17 @@ async function main(): Promise<void> {
             const st3 = await standby.send('staging');
             const after = await standby.send('snapshot', { tables: HASHED });
             const rec3b = await standby.send('record');
+            // Review 4148896385: a staged copy that fails in its fetch closes the references file it read from. With many more
+            // photos S lacks, late in the copy's order (each listing's, then its slot's), the fetch fails at the gone one early,
+            // most of that file unread. Gone again after.
+            await main.send('add-photos', { posts: listings.slice(LISTINGS - EXTRA_LISTINGS), perPost: EXTRA_PER_LISTING, from: 10, bytes: 100 });
+            const w3more: { ok: boolean; error?: string }[] = [];
+            for (let i = 0; i < 3; i++) w3more.push(await standby.send('pull', { whole: true }));
+            const refsOpen = openFilesNamed(standby.proc.pid!, 'photo-references.jsonl');
+            assert(w3more.every((p) => p.ok === false && /no longer on the main server/.test(p.error ?? '')) && refsOpen.length === 0,
+                `three staged copies that failed in their fetch leave no descriptor open on the references file each read from `
+                + `(${refsOpen.length} open${refsOpen.length ? `: ${refsOpen.slice(0, 3).join(' | ')}` : ''}; before: one more for each)`);
+            await main.send('sql', { sql: 'DELETE FROM post_photos WHERE order_num >= 10' });
             assert(d3.ok === false && w3b.ok === false && /no longer on the main server/.test(d3.error ?? '') && /no longer on the main server/.test(w3b.error ?? '')
                 && !st3.staging && JSON.stringify(before.tables) === JSON.stringify(after.tables) && rec3b.lastWhy === 'http-404',
                 `a delta and a whole copy whose photo M no longer serves are each not taken, saying so: nothing of them lands, no staging left, S unchanged `

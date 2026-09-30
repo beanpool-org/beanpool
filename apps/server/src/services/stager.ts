@@ -318,12 +318,23 @@ export class StagedCopy {
         fs.appendFileSync(path.join(this.dir, PHOTO_REFERENCES_FILE), refs.map((r) => JSON.stringify(r)).join('\n') + '\n');
     }
 
-    /** Every listing photo by reference the copy's pages named, in page order (notePhotoReferences). */
+    /**
+     * Every listing photo by reference the copy's pages named, in page order (notePhotoReferences). The file is closed however
+     * the reading ends: read to its end, or returned early (a fetch that failed, services/backup-puller.ts fetchPhotoObjects),
+     * or a line that doesn't parse. Left open, each failed copy would hold a descriptor on its deleted file, and its blocks,
+     * until this process restarts (review 4148896385).
+     */
     async *photoReferences(): AsyncGenerator<PhotoReference> {
         const file = path.join(this.dir, PHOTO_REFERENCES_FILE);
         if (!fs.existsSync(file)) return;
-        const lines = readline.createInterface({ input: fs.createReadStream(file, 'utf-8'), crlfDelay: Infinity });
-        for await (const line of lines) if (line) yield JSON.parse(line) as PhotoReference;
+        const input = fs.createReadStream(file, 'utf-8');
+        const lines = readline.createInterface({ input, crlfDelay: Infinity });
+        try {
+            for await (const line of lines) if (line) yield JSON.parse(line) as PhotoReference;
+        } finally {
+            lines.close();
+            input.destroy();
+        }
     }
 
     /**

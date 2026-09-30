@@ -38,7 +38,9 @@ GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could 
 ## Who can read what over the internet
 
 - Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.
-- Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.
+- Some things are public on purpose: the Pulse, the community's health summary and profile pictures.
+- The market is for your members: its posts, and the photos in them. An app shows a photo without signing, so the server gives each photo an address with a key in it, and the photo opens only at that address. Someone who has only a post's id gets nothing, not even whether the post exists.
+- If you turn ENFORCE_READ_AUTH off, anyone can read the market and see its photos. A post for a group, or for one person, still reaches only the people it is for, and so do its photos.
 - The live-updates channel tells the apps about changes as they happen. Every version of the BeanPool app signs its connection, so the server knows which member is listening.
 - A member hears about changes to the whole community, such as new posts, new members and announcements. They also hear about the private things they are part of: their own messages, their own trades, and the groups and event chats they are in. They never hear another member's messages or trades. When someone else's trade changes the market, for example a listing is taken, other members are told only that something changed, so their app can check again.
 - Anyone who is not a member is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.

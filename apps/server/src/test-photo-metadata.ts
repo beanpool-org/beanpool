@@ -622,8 +622,9 @@ async function signed(method: string, path: string, body: unknown, signer: Ident
  * listings are its members' (engine/photo-keys.ts): the address of the photo as its row is now.
  */
 function photoPathOf(postId: string, orderNum: number): string {
-    const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
-    return postPhotoUrl(postId, orderNum, row?.updated_at);
+    const row = db.prepare(`SELECT pp.updated_at, p.audience_scope FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+                            WHERE pp.post_id = ? AND pp.order_num = ?`).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null } | undefined;
+    return postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope);
 }
 
 /** What an anonymous <img> gets. */

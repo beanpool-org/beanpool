@@ -43,7 +43,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 
 export function getMarketplaceTransaction(db: Db, transactionId: string): MarketplaceTransaction | null {
     const r = db.prepare(`
-        SELECT mt.*, p.title as postTitle, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
+        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt
@@ -55,8 +55,9 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
     if (!r) return null;
 
     const coverImageRow = db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any;
+    // Keyed as its listing's photos are, from the listing's audience (photo-url.ts).
     const coverImage = coverImageRow
-        ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at)
+        ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)
         : null;
 
     return {
@@ -82,7 +83,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
 
 export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): MarketplaceTransaction[] {
     let query = `
-        SELECT mt.*, p.title as postTitle, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
+        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt
@@ -112,7 +113,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
         const postPhotos = photosByPost.get(r.post_id) || [];
         const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
         const coverImage = coverImageRow
-            ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at)
+            ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)
             : null;
         return {
             id: r.id,

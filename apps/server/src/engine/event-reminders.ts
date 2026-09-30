@@ -177,8 +177,9 @@ export function setEventReminderOffsets(
  * "Your events" — the signer's own RSVPs, soonest first.
  *
  * Upcoming and not cancelled only: an event that has ended or been called off is not something to show
- * under "★ For you". The photo is the same versioned URL `getPosts` builds for the event card, so the
- * client resolves it exactly as it does there, and the first photo is the card's photo.
+ * under "★ For you". The photo is the same versioned URL `getPosts` builds for the event card (keyed as the event's
+ * photos are, from its audience), so the client resolves it exactly as it does there, and the first photo is the
+ * card's photo.
  */
 export interface MyEvent {
     postId: string;
@@ -194,7 +195,7 @@ export interface MyEvent {
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
-        SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name,
+        SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -224,7 +225,7 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
         rsvp: r.status as 'going' | 'interested',
         photo: r.photo_order == null
             ? null
-            : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at),
+            : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at, r.audience_scope),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
     }));
 }

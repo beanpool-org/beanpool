@@ -20,7 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeysRequired, photoHealFor, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -84,14 +84,19 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // never by asking the store whether a file happens to be lying around: the delete paths remove the row
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
+    // With its listing's audience as the row says now; `listed` is 0 for a photo whose listing is gone.
     const photo = db.prepare(
-        `SELECT photo_data, storage_key, sha256, bytes, mime, updated_at FROM post_photos WHERE post_id = ? AND order_num = ?`
-    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null }) | undefined;
+        `SELECT pp.photo_data, pp.storage_key, pp.sha256, pp.bytes, pp.mime, pp.updated_at, p.audience_scope, p.id IS NOT NULL AS listed
+           FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+          WHERE pp.post_id = ? AND pp.order_num = ?`
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null; audience_scope: string | null; listed: number }) | undefined;
 
-    // Where the listings are members' (a local community with reads enforced), a photo goes only to a URL carrying the
-    // key the node hands out with its listing (engine/photo-keys.ts): an <img> cannot sign. Anything else is answered as
-    // no photo, so neither says whether there is one.
-    if (!photo || (photoKeysRequired() && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
+    // A photo that isn't everyone's goes only to a URL carrying the key the node hands out with its listing
+    // (engine/photo-keys.ts): an <img> cannot sign. Every listing's where the listings are members' (a local community
+    // with reads enforced); where they are a public read, a listing's off the board (a group's, one for one person),
+    // and one whose listing is gone. Anything else is answered as no photo, so neither says whether there is one.
+    const keyed = !!photo && photoKeyRequiredFor(photo.listed ? photo.audience_scope : undefined);
+    if (!photo || (keyed && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;

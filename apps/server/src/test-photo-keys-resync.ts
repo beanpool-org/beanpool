@@ -13,8 +13,9 @@
  * the real signature middleware; the phone is played by the core request builder the apps use, and asks exactly what
  * the phone's sync asks (`limit=1000&sync=true&types=…`, its cursor the time of its last sync less five minutes).
  *
- *  1. Keys off (ENFORCE_READ_AUTH=false), a new node: it records the open shape and nothing to heal (no photo yet, so
- *     no sync is answered whole for it). Alice lists three offers with a photo (their times set back an hour, so a
+ *  1. Keys off (ENFORCE_READ_AUTH=false), a new node: it records a public-read node's shape (a board listing's photos
+ *     plain, the others' keyed: test-photo-keys-audience) and nothing to heal (no photo yet, so no sync is answered
+ *     whole for it). Alice lists three offers with a photo (their times set back an hour, so a
  *     cursor from now leaves them out). The phone syncs whole: keyless URLs that open. It also asks its next delta once,
  *     so it holds that URL's ETag.
  *  2. Restart with keys on (the default). photoKeysSince is recorded, later than the phone's last sync. The phone's
@@ -412,8 +413,11 @@ async function main(): Promise<void> {
         await section('1. keys off: the phone holds keyless URLs', async () => {
             node = await boot({ ENFORCE_READ_AUTH: 'false' });
             const fresh = await node.send('records');
-            assert(fresh.shape === 'open' && fresh.since === new Date(0).toISOString(),
-                `a new node, with no listing photo yet, records the open shape and nothing to heal (${fresh.shape} ${fresh.since})`);
+            // Its listings a public read: a board listing's photos plain, the others' keyed (engine/photo-keys.ts), so the
+            // shape names the secret, and says nothing of it.
+            assert(typeof fresh.shape === 'string' && fresh.shape.startsWith('offboard-keyed:') && !fresh.shape.includes(fresh.secret)
+                && fresh.since === new Date(0).toISOString(),
+                `a new node, with no listing photo yet, records its public-read shape and nothing to heal (${fresh.shape} ${fresh.since})`);
             await node.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [alice, bob, cara].map((m) => ({ pk: m.pk, callsign: m.callsign })) });
             for (const title of ['Resync lemons', 'Resync ladder', 'Resync seedlings']) {
                 await node.send('resetLimits');
@@ -521,7 +525,8 @@ async function main(): Promise<void> {
         await section('5. keys off again: every listing again, keyless', async () => {
             node = await boot({ ENFORCE_READ_AUTH: 'false' });
             const rec = await node.send('records');
-            assert(rec.shape === 'open' && !!rec.since && Date.parse(rec.since) > lastSync, `the shape is open, and photoKeysSince moves (${rec.since})`);
+            assert(typeof rec.shape === 'string' && rec.shape.startsWith('offboard-keyed:') && !!rec.since && Date.parse(rec.since) > lastSync,
+                `the shape is a public-read node's, and photoKeysSince moves (${rec.shape} ${rec.since})`);
             const next = await pull(node, bob, lastSync);
             const urls = listingIds.map((pid) => photoOf(next, pid));
             assert(next.status === 200 && idsOf(next).length === 3 && urls.every((u) => !!u && !u.includes('k=')),

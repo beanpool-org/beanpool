@@ -166,6 +166,7 @@ export const SUITES = [
     'test-sync-copy-pages',
     'test-standby-paged-copies',
     'test-standby-paged-copies-pacing',
+    'test-standby-photos-by-reference',
     'test-recovery-tombstones',
     'test-github-sign-in-removed',
     'test-unlock-cancel',

@@ -37,7 +37,7 @@ You can join in the phone app or in a web browser. In a browser, open global.bea
 - Sign in once with Google, Apple (on an iPhone) or Facebook. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.
 - Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others.
 
-The community keeps only a scrambled reference to your sign-in account, never your email. The same sign-in also locks a copy of your account at BeanPool's key vault, so it becomes a way back if you lose your phone and you are not asked to sign in again at **Safety Backup**. If the key vault can't be reached just then, you still join, and **Safety Backup** offers to link your sign-in. After joining you don't sign in to open the app: your account is the key on your phone, like any other.
+The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. After joining you don't sign in to open the app: your account is the key on your phone, like any other.
 
 ## The four steps
 

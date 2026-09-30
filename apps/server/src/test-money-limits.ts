@@ -39,7 +39,8 @@
  *     and one commission make its 1,000; the commission also counted against its keeper's enterprise work (step 10), so
  *     his own enterprise's first sweep is 429. Past the link's 1,000, Kit's sweep and commission for it are his own
  *     payments (round 3): his 100th is a commission that goes, recorded as his own for the link; past it a commission
- *     and a sweep are 429 money_payments_day in his words, with no new settlement and the same balance.
+ *     and a sweep are 429 money_payments_day in his words, with no new settlement and the same balance. Then one of his
+ *     sweeps for the link leaves the day, and his next goes as the link's 1,000th: his own commission is not the link's.
  * 10. One person's enterprise work, across every enterprise they keep (the review of 362efe26: starting enterprises
  *     multiplied one member's day). Mo starts 3. With his own day spent, his writes for all 3 together stop at 50,000
  *     (429 enterprise_work_day_budget), not 3 × 50,000, while each still has room and another keeper still writes for
@@ -74,6 +75,12 @@
  *     1,000 payments herself; her writes and sweeps for her other two, which have room, are 429 in her enterprise-work
  *     words; for Noor Acres they go on her own limits, up to them, then 429 in her own words; Oli, a keeper of one of the
  *     other two, still acts for it; the node's total is unchanged.
+ * 17. Past a spent shop's day, whose count each act lands on (the round-4 review of #1329). Kay paid 40 people herself 40
+ *     days ago, whom Kay Kitchenware never paid; Otto spent its 1,000 payments; Kay pays all 40 from it: 30 go as her own
+ *     new people (new to the SHOP) and the 31st on are 429 money_new_recipients_day. Uma's post as her own for Uma
+ *     Upholstery (spent) leaves its count: once one of its own leaves the day, her next for it is the shop's and goes,
+ *     though her own 100 are spent. Wes's 3 posts of his own for Yan Yarns (spent) are not his enterprise work: at 999
+ *     for his enterprises, his 1,000th for Wes Wares goes.
  *
  * Local only: the servers it starts on localhost. The peer a purchase asks is a made-up key at a closed local port.
  *
@@ -856,6 +863,17 @@ async function main(): Promise<void> {
             const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
             assert(sweepPast.status === 429 && sweepPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(sweepPast.body?.error ?? ''),
                 `so is the link's next sweep (${show(sweepPast)})`);
+            // The link's count leaves out the commission Kit made as his own (purchasesToday; the round-4 review of #1329).
+            // One of Kit's sweeps for the link leaves the day: the link is at 998 sweeps and 1 commission, 999, and so is Kit's
+            // enterprise work. Counting his own commission's settlement too would read 1,000: the link spent, and the sweep his
+            // own 101st payment, 429.
+            their.prepare(`UPDATE money_acts SET made_at = ? WHERE rowid = (SELECT rowid FROM money_acts
+                            WHERE account = ? AND keeper = ? AND kind = 'payment' AND settlement_key IS NULL ORDER BY made_at LIMIT 1)`).run(ago(DAY + HOUR), link, kit.pk);
+            const linkActs = () => (their.prepare(`SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = 'payment' AND made_at > ?`).get(link, ago(DAY)) as { n: number }).n;
+            const linkActsBefore = linkActs();
+            const roomAgain = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            assert(roomAgain.status === 200 && linkActs() === linkActsBefore + 1 && linkOutbound() === 2,
+                `a sweep of Kit's for the link leaves the day, so the link has room again: his next sweep is the link's 1,000th and goes, as his own commission is his and not the link's (${show(roomAgain)}, link rows ${linkActsBefore} → ${linkActs()})`);
         } finally {
             their.close();
             await node.stop();
@@ -1321,6 +1339,73 @@ async function main(): Promise<void> {
         const oliSweeps = await sweep(oli, b);
         assert(oliSweeps.status === 200, `Oli still sweeps from Noor Bakes (${show(oliSweeps)})`);
         assert(nodeTotal() === total, `the node's total is what it was (${total} → ${nodeTotal()})`);
+    }
+
+    // ── 17. Past a spent shop's day: whose count each act lands on (the round-4 review of #1329) ──────────────────
+    console.log('\n--- 17. past a spent shop\'s day: new means new to the shop, and a keeper\'s own posts leave the shop\'s count and their enterprise work ---');
+    {
+        const W = WRITER_LIMITS;
+        // New people (money-limits.ts judge): past the shop's day, a keeper's payment from it to someone the SHOP has never
+        // paid is one of the keeper's own new people, though the keeper paid them personally before.
+        const kay = member('Kay');
+        const otto = member('Otto');
+        completedTrade(kay.pk, tradie.pk);
+        const regulars = Array.from({ length: 40 }, (_v, i) => member(`Regular ${i}`, 0));
+        for (const p of regulars) completedTrade(kay.pk, p.pk);
+        sync();
+        const shop = await enterprise(kay, 'Kay Kitchenware');
+        setBalance(shop, 5_000);
+        adminAssignTreasuryOperator(shop, otto.pk, owner.pk);
+        const need = plantPost(shop, 'need', 1);
+        moneyActs(shop, otto.pk, M.enterprisePaymentsPerDay - actsAs(shop, 'payment'), 'payment');
+        const paid: Res[] = [];
+        for (const p of regulars) paid.push(await call('POST', kay, `/api/treasury/${shop}/approve`, { transactionId: plantRequest(need, shop, p.pk) }));
+        const statuses = paid.map((r) => (r.status === 200 ? '200' : `${r.status} ${r.body?.code}`));
+        assert(statuses.slice(0, M.newRecipientsPerDay).every((s) => s === '200')
+            && statuses.slice(M.newRecipientsPerDay).every((s) => s === '429 money_new_recipients_day')
+            && ownFor(kay.pk, shop, 'payment') === M.newRecipientsPerDay,
+            `Otto spent Kay Kitchenware's 1,000 payments; Kay pays 40 people she paid herself 40 days ago, whom the shop never paid: 30 go as her own new people and the 31st on is 429 money_new_recipients_day (${[...new Set(statuses)].join(', ')}; ${ownFor(kay.pk, shop, 'payment')} hers for it)`);
+
+        // The shop's posts (writer-bounds.ts postTimes): a keeper's own post for it leaves the shop's count, so when one of
+        // the shop's own leaves the day it has room again, whatever the keeper's own 100.
+        const uma = member('Uma');
+        const vin = member('Vin');
+        completedTrade(uma.pk, tradie.pk);
+        sync();
+        const studio = await enterprise(uma, 'Uma Upholstery');
+        adminAssignTreasuryOperator(studio, vin.pk, owner.pk);
+        entPosts(studio, vin.pk, W.enterprisePostsPerDay - postsAs(studio));
+        const umaForIt = await entOffer(uma, studio);
+        const umaOwn = () => count('SELECT COUNT(*) AS n FROM keeper_own_posts WHERE keeper = ?', uma.pk);
+        ownPosts(uma.pk, W.postsPerDay - 1 - count('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?', uma.pk));
+        const umaSpent = await ownPost(uma);
+        assert(umaForIt.status === 200 && umaOwn() === 1 && umaSpent.status === 429 && umaSpent.body?.code === 'posts_per_day',
+            `setup: Vin spent Uma Upholstery's 1,000 posts, Uma put one up for it as her own, and her own 100 are spent (${show(umaForIt)}, ${show(umaSpent)})`);
+        db.prepare(`UPDATE posts SET created_at = ? WHERE id = (SELECT id FROM posts WHERE author_pubkey = ? AND created_by = ? ORDER BY created_at LIMIT 1)`)
+            .run(ago(DAY + HOUR), studio, vin.pk);
+        const studioAgain = await entOffer(uma, studio);
+        assert(studioAgain.status === 200 && umaOwn() === 1,
+            `one of Vin's posts for it leaves the day: the shop is at 999, her own post not counted, so her next for it is the shop's and goes (${show(studioAgain)}, ${umaOwn()} of hers)`);
+
+        // A keeper's enterprise work (writer-bounds.ts assertEnterpriseMayPostToday): the posts they put up as their own for
+        // a spent shop are theirs, not their enterprise work.
+        const wes = member('Wes');
+        const yan = member('Yan');
+        completedTrade(wes.pk, tradie.pk);
+        completedTrade(yan.pk, tradie.pk);
+        sync();
+        const spentShop = await enterprise(yan, 'Yan Yarns');
+        adminAssignTreasuryOperator(spentShop, wes.pk, owner.pk);
+        const [roomy, spare] = [await enterprise(wes, 'Wes Wares'), await enterprise(wes, 'Wes Wool')];
+        entPosts(spentShop, yan.pk, W.enterprisePostsPerDay - postsAs(spentShop));
+        const wesOwn = await many(3, 1, () => entOffer(wes, spentShop));
+        const wesOwnRows = count('SELECT COUNT(*) AS n FROM keeper_own_posts WHERE keeper = ?', wes.pk);
+        entPosts(roomy, wes.pk, 500);
+        entPosts(spare, wes.pk, W.enterpriseWorkPostsPerDay - 1 - (postsForEnterprises(wes.pk) - wesOwnRows));
+        const work = postsForEnterprises(wes.pk) - wesOwnRows;
+        const wesForRoomy = await entOffer(wes, roomy);
+        assert(wesOwn.every((s) => s === 200) && wesOwnRows === 3 && work === W.enterpriseWorkPostsPerDay - 1 && wesForRoomy.status === 200,
+            `Wes put up 3 posts of his own for Yan Yarns (spent) and ${work} for his enterprises: his next for Wes Wares, which has room, is his 1,000th and goes (${distinct(wesOwn)}, ${show(wesForRoomy)})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -60,7 +60,10 @@ import {
     namesPhotoObject, photoReferenceOf, type CopyPage, type PhotoReference, type ValueLeftOut,
 } from '../engine/sync.js';
 import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
-import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
+import {
+    StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY, keepFetchedObjects, releaseFetchedObjects,
+} from './stager.js';
+import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -187,6 +190,9 @@ function resyncRetryMs(): number {
     const v = Number(process.env.BACKUP_RESYNC_RETRY_MS);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_RESYNC_RETRY_MS;
 }
+
+/** How long past the next whole copy's longest the objects a failed one fetched are kept for it (keepFetchedObjects). */
+const KEEP_FETCHED_MARGIN_MS = 60 * 60_000;
 
 let pullTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
@@ -523,7 +529,7 @@ interface PhotoObjectsFetched {
  * for good. So does one the main server can't send because its bytes there are not its photo (410: PhotoObjectNotItsPhoto),
  * which the main server's next copy leaves out and names in `photosOmitted`. Anything else the main server or the store
  * answers fails the pull. What was fetched before a failure stays in the store, content-addressed, so the next pull asks
- * only for the rest.
+ * only for the rest: a whole copy's until its next is due and has had its time (pullOnce, keepFetchedObjects).
  *
  * `stop`: a staged copy's (StagedCopy.stoppedBecause). Once it says the copy was stopped (a take-over confirmed, which
  * aborts it: services/takeover.ts, or its stager gone), no further object is asked for, not even one waiting its slot, and
@@ -739,6 +745,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     // Every page of the copy came, and its listing photos' objects were being fetched when it failed (F4 of the standby
     // review): the main server built, signed and sent the whole copy, so a whole copy failing here waits as one refused does.
     let pagesCame = false;
+    // When this copy's fetch of its listing photos' objects started: what it wrote from then on is kept for the next whole
+    // copy when this one fails (keepFetchedObjects).
+    let fetchStartedAt: number | null = null;
     const requests = new CopyRequests(primaryUrl.replace(/\/$/, ''), authHeader);
     // The copy open on the main server, closed there when this pull leaves it unfinished; the one being built here.
     let openCopy: string | null = null;
@@ -805,6 +814,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // its longest (engine/copy-pages.ts COPY_MAX_MS). The closing checks then refuse the copy if any is missing.
             stage = 'fetch';
             pagesCame = true;
+            fetchStartedAt = Date.now();
             const building = staged;
             await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause).catch((e) => {
                 // Objects that came but are not what their rows name: the copy came, and is refused. A copy stopped here
@@ -825,6 +835,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (previousToDelete) deletePreviousDatabase('the one that replaced it passed a whole copy\'s closing checks');
             staged.markReady({ pages: checked.pages, rows: checked.rows, generatedAt: checked.generatedAt, cursor: checked.cursor, why: why ?? mode });
             staged = null;
+            // What a whole copy that failed before it fetched is named by this one's rows now, or is the sweep's again.
+            releaseFetchedObjects();
             // Landed, as far as this process goes: the next start swaps it in, and the standby's record in it already says so.
             lastSuccessAt = Date.now();
             if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
@@ -875,6 +887,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             for (const page of pages) await verifyCopyPage(page);
             stage = 'fetch';
             pagesCame = true;
+            fetchStartedAt = Date.now();
             await fetchPhotoObjects(refs, requests).catch((e) => {
                 if (e instanceof PhotoObjectRefused) stage = 'import';
                 throw e;
@@ -963,6 +976,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // A whole copy landed: whatever held the last one back when it was refused is gone. One that landed with tables
             // left out holds the next back instead, as a refused one does (N2, nextMode).
             wholeRetryAt = 0;
+            releaseFetchedObjects();
             lastWholeLeftOut = leftOut.length > 0;
             lastWholePages = 1;
             recordQuietly(() => noteWholeCopyTaken({ at: lastFullReconcileAt, pages: 1, generatedAt: payload.generatedAt ?? null }));
@@ -1010,6 +1024,14 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile; the record
         // keeps it owed (nextMode).
         if (why === 'retention') resyncRetryAt = Date.now() + resyncRetryMs();
+        // F5 of the standby review: the objects a whole copy fetched before it failed, kept from the orphan sweep until the
+        // next is due and has had a copy's longest to bring its pages (COPY_MAX_MS), whose staging database then names them.
+        // The sweep's hour of grace alone ends as the hour's wait for a first copy or a force-resync does, and the next would
+        // fetch every photo again.
+        if (!isDelta && fetchStartedAt !== null) {
+            const nextAt = Math.max(Date.now(), fresh || !hadCursor || why === 'retention' ? resyncRetryAt : wholeRetryAt);
+            keepFetchedObjects(fetchStartedAt, nextAt + COPY_MAX_MS + KEEP_FETCHED_MARGIN_MS);
+        }
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {

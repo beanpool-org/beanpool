@@ -35,7 +35,9 @@
  *     refused, M silent.)
  *  8. A new standby's first copy whose pages all come and whose objects stop coming part way (M's store answering 503): the
  *     next pull asks M for no copy until RESYNC_RETRY_MS has passed, and says when it will; the one after that lands (F4 of
- *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.)
+ *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.) The objects it fetched
+ *     are kept through an orphan sweep past the sweep's hour of grace, and the copy that lands fetches only the rest (F5).
+ *     (Before: swept, and every one fetched again.)
  *  9. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
@@ -77,6 +79,8 @@ const HASHED = ['members', 'accounts', 'posts', 'post_photos', 'messages'];
 const RESYNC_RETRY_MS = 3000;
 /** Step 8's objects M sends before its store stops answering. */
 const FETCHED_BEFORE_FAILING = 15;
+/** The orphan sweep's grace (engine/storage-health.ts ORPHAN_OBJECT_GRACE_MS): an object no row names is kept this long. */
+const ORPHAN_GRACE_MS = 60 * 60_000;
 /** Step 7's photos M gains while S's copy is fetching when the take-over is confirmed. */
 const TAKEOVER_PHOTOS = 200;
 /**
@@ -605,14 +609,16 @@ async function main(): Promise<void> {
             await fresh.kill();
         });
 
-        await step('8. a first copy whose objects stop coming once its pages came waits as a refused one does, not a tick', async () => {
+        await step('8. a first copy whose objects stop coming once its pages came waits as a refused one does; its retry fetches only the rest', async () => {
             const a = await newStandby('standby-a');
             // F4 of the standby review: every page of the first copy comes; its objects' fetch fails part way, M's store
             // answering 503. The next pull asks for no copy until RESYNC_RETRY_MS (3 s here) has passed.
             const o0 = px.opened.length;
+            const g0 = gets();
             px.failObjectsAfter = FETCHED_BEFORE_FAILING;
             const a1 = await a.send('pull', {});
             const opened1 = px.opened.length - o0;
+            const firstFetched = new Set(px.objectGets.slice(g0));
             require_(a1.ok === false && /HTTP 503/.test(a1.error ?? '') && opened1 === 1,
                 `the new standby's first copy comes, every page, and fails at its objects, M's store answering 503 (${JSON.stringify({ pull: a1, opened: opened1 })})`);
             const failedAt = Date.now();
@@ -621,11 +627,28 @@ async function main(): Promise<void> {
             px.failObjectsAfter = null;
             assert(a2.ok === false && opened2 === 0 && /asked for at/.test(a2.error ?? ''),
                 `the next pull asks M for no copy, and says when it will (${JSON.stringify({ pull: a2, opened: opened2 })}; before: a whole copy built and sent again at once, every tick)`);
+            // F5: the objects it fetched outlive the orphan sweep's hour of grace, which passes as the hour's wait does in
+            // production: no row names them, and the failed copy's staging is gone.
+            const mPhotos = await photosOf(main);
+            // Each fetched object's keys (a photo on two listings has two): held under any of them.
+            const keysOf = (shas: Set<string>) => [...shas].map((sha) => mPhotos.filter((r) => r.sha256 === sha).map((r) => r.storage_key!));
+            const need = new Set(mPhotos.filter((r) => !r.inline && r.sha256).map((r) => r.sha256!));
+            const swept = await a.send('sweep-orphans', { aheadMs: ORPHAN_GRACE_MS + 60_000 });
+            const heldAfterSweep: number = await a.send('has-objects', { groups: keysOf(firstFetched) });
+            assert(firstFetched.size === FETCHED_BEFORE_FAILING && heldAfterSweep === firstFetched.size && (await a.send('kept')) === true,
+                `the ${firstFetched.size} objects the failed copy fetched are kept through an orphan sweep an hour and a minute on: `
+                + `${heldAfterSweep} still held (${JSON.stringify(swept)}; before: every one swept)`);
             await sleep(Math.max(0, failedAt + RESYNC_RETRY_MS + 200 - Date.now()));
+            const g3 = gets();
             const a3 = await pullAndSwapOn(a, false);
             const opened3 = px.opened.length - o0 - opened1 - opened2;
             assert(a3.ok === true && a3.staged === true && opened3 === 1,
                 `once RESYNC_RETRY_MS has passed, the next pull asks for one copy, which lands (${JSON.stringify({ pull: a3, opened: opened3 })})`);
+            const again = px.objectGets.slice(g3);
+            const refetched = again.filter((sha) => firstFetched.has(sha));
+            assert(refetched.length === 0 && again.length === need.size - firstFetched.size && (await a.send('kept')) === false,
+                `that copy fetches only what the new standby lacked: ${again.length} object(s), of M's ${need.size}, none of the ${firstFetched.size} it had; `
+                + `and, landed, keeps them no longer (${refetched.length} fetched again; before: all ${firstFetched.size})`);
         });
 
         await step('9. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
@@ -747,6 +770,19 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         }
         return out;
     },
+    /** One pass of the orphan sweep (engine/storage-health.ts), as its clock would run it `aheadMs` from now. */
+    'sweep-orphans': async (a: { aheadMs: number }) => {
+        const { sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
+        return sweepOrphanedImageObjects({ nowMs: Date.now() + a.aheadMs });
+    },
+    /** How many of these groups of keys this server's image store holds an object under one of. */
+    'has-objects': async (a: { groups: string[][] }) => {
+        const { getImageStore } = await import('./storage/image-store.js');
+        const store = getImageStore();
+        return a.groups.filter((keys) => keys.some((k) => !!store.head(k))).length;
+    },
+    /** Whether a failed whole copy's objects are kept for the next (services/stager.ts KEPT_OBJECTS_FILE). */
+    kept: async () => fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'copy-objects-kept.json')),
     /** Every listing photo row, and the sha256 of the object it names as this server's store holds it (null: none). */
     'photo-state': async () => {
         const { db } = await import('./db/db.js');

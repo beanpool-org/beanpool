@@ -29,14 +29,23 @@
  *  6. A standby (NODE_ROLE=backup) promoted by hand: its first boot as the main server is a new shape (a phone that
  *     synced from the server it replaced holds that server's URLs), so every listing again, keyed, each opening.
  *
- * Past 200 listings (review of b7b96309, finding 1), each on a data dir of its own, keys off then on:
+ * Past 200 listings (review of b7b96309, finding 1), each on a data dir of its own, keys off then on. A heal answer is
+ * the delta as main sends it, then at most PHOTO_HEAL_PAGE_ROWS (200) listings more (review of a6b65b84, finding 2: a
+ * phone on a slow link must fit one answer in its 30 s budget); the delta each answer should carry is read in the node
+ * with main's own read (`deltaIds`), so the heal part of an answer is what is left.
  *  7. 260 listings with a photo, the oldest of them Hank's, who goes on holiday after the phone's last sync: the phone's
- *     next sync heals all 260, keyed, and carries Hank's listing paused. The sync after it is a delta again.
- *  8. 150 live listings with a photo and 100 newer finished ones: the phone's next sync heals all 150 live ones. A listing
- *     for Cara alone reaches Cara's heal and not Bob's: each reader's own audience, as a first sync.
- *  9. 1,150 listings with a photo and 50 without, past the phone's own limit (1000): its next sync carries 1000, the
- *     ones with a photo first; the same sync again (the phone didn't finish it) the same page; after a restart that
- *     changes nothing, its next sync carries the rest; every one of the 1,150 healed; then a delta again.
+ *     next sync carries its delta (Hank's listing paused) and 200 more; the sync after it, 30 s later and still inside
+ *     the phone's five-minute overlap, the other 60: all 260 healed, keyed. The sync after that is a delta again.
+ *  8. 150 live listings with a photo and 100 newer finished ones: the phone's next sync heals all 150 live ones, and the
+ *     finished ones over the next. A listing for Cara alone reaches Cara's heal and not Bob's: each reader's own
+ *     audience, as a first sync.
+ *  9. 1,500 listings, 1,450 with a photo, three of them edited after the phone's last sync: a phone that syncs every
+ *     30 s through the five-minute overlap after the change (review of a6b65b84, finding 1) gets each heal page once,
+ *     never the same page again, and no answer is past the delta plus 200 rows or 250 KB. A sync whose answer never
+ *     arrived (the same cursor again) gets that same page, not the one after it, and never the first page again. A
+ *     restart that changes nothing keeps the heal going. All 1,450 healed over eight syncs; then only deltas, and the
+ *     heal's record goes. Cara's phone, syncing every ten minutes (past the overlap from its second sync), heals all
+ *     1,450 too, a retry again getting the same page.
  *
  * 10. A take-over that finishes at boot promotes a standby in the same process (services/takeover.ts
  *     resumeTakeoverAtBoot, after the state engine recorded the standby's shape): the phone's old cursor heals at once,
@@ -146,6 +155,12 @@ async function child(): Promise<void> {
         },
         holiday: (a: { pk: string; on: boolean }) => se.setHolidayMode(a.pk, a.on).ok,
         heals: () => db.prepare('SELECT COUNT(*) AS n FROM photo_url_heals').get(),
+        // The ids of the delta main sends the phone's pull (its types, sync, a member's read) for `updatedAfter`: what a
+        // heal answer carries first.
+        deltaIds: (a: { pk: string; updatedAfter: string }) => se.getPosts({
+            types: ['offer', 'need', 'poll', 'event'], excludeEvents: false, viewerPubkey: a.pk, includeHidden: !!se.nodeRoleOf(a.pk),
+            includeVoters: true, beansOnly: false, limit: 200, offset: 0, updatedAfter: a.updatedAfter, sync: true,
+        } as Parameters<typeof se.getPosts>[0]).map((p) => p.id),
         // Time passing, as the node's records see it: photoKeysSince moved back by `ms`, read at the next boot.
         ageSince: (a: { ms: number }) => {
             const since = row('photoKeysSince');
@@ -505,7 +520,15 @@ async function main(): Promise<void> {
             return ids.filter((pid) => keyed(byId.get(pid)?.photos?.[0])).length;
         };
 
-        await section('7. 260 listings: the next sync heals every one, and carries what the delta would', async () => {
+        /** The delta main sends `who`'s pull for the phone's last sync `lastSync`: what a heal answer carries first. */
+        const deltaOf = async (who: Id, lastSync: number): Promise<Set<string>> =>
+            new Set(await node.send('deltaIds', { pk: who.pk, updatedAfter: new Date(lastSync - 5 * MIN).toISOString() }));
+        /** The ids an answer carries past its delta: its heal page. */
+        const healPart = (r: Reply, delta: Set<string>) => rowsOf(r).map((p) => p.id as string).filter((pid) => !delta.has(pid));
+        const PAGE = 200;
+        const bytesOf = (r: Reply) => Buffer.byteLength(r.text);
+
+        await section('7. 260 listings: the next two syncs heal every one, and each carries what the delta would', async () => {
             const template = await freshNode('many');
             const more: string[] = await node.send('bulk', { template, author: alice.pk, count: 258, newestMinutesAgo: 61, prefix: 'many' });
             // Hank's one listing, the oldest on the node.
@@ -519,21 +542,32 @@ async function main(): Promise<void> {
             await stop(node);
 
             node = await boot({}, 'many');
+            const delta = await deltaOf(bob, synced);
             const next = await pull(node, bob, synced);
-            const healed = healedIn([next], all);
-            assert(next.status === 200 && healed === 260, `the phone's next sync heals all 260 listings, each keyed (${next.status}, ${healed} of 260)`);
+            const page1 = healPart(next, delta);
+            assert(next.status === 200 && delta.has(hanks[0]) && rowsOf(next).slice(0, delta.size).every((p) => delta.has(p.id)),
+                `the phone's next sync carries the delta first, as main sends it (${next.status}, ${delta.size} rows, Hank's among them)`);
+            assert(page1.length > 0 && page1.length <= PAGE, `and at most ${PAGE} listings past it (${page1.length}, ${rowsOf(next).length} rows in all)`);
             const hankRow = rowsOf(next).find((p) => p.id === hanks[0]);
             assert(hankRow?.status === 'paused', `Hank's listing, the oldest, arrives paused, as the delta carries it (${hankRow?.status})`);
-            const sample = [all[0], all[100], all[200], all[259]].map((pid) => rowsOf(next).find((p) => p.id === pid)?.photos?.[0]);
+            // The phone finished that sync; its next, 30 s on, is still inside its five-minute overlap.
+            const lastSync = Date.now();
+            const second = await pull(node, bob, lastSync);
+            const page2 = healPart(second, await deltaOf(bob, lastSync));
+            const healed = healedIn([next, second], all);
+            assert(second.status === 200 && healed === 260 && !page2.some((pid) => page1.includes(pid)),
+                `the sync after it carries the rest, none of the first page again: all 260 healed, each keyed (${healed} of 260, ${page2.length} more)`);
+            const byId = new Map<string, { photos?: string[] }>([...rowsOf(next), ...rowsOf(second)].map((p) => [p.id, p]));
+            const sample = [all[0], all[100], all[200], all[259]].map((pid) => byId.get(pid)?.photos?.[0]);
             const statuses = await opens(node, sample);
             assert(statuses.length === 4 && statuses.every((st) => st === 200), `a sample of them opens (${statuses.join(', ')})`);
             // Ten minutes on (the phone's cursor past photoKeysSince): a delta again.
             const later = await pull(node, bob, Date.now() + 10 * MIN);
-            assert(later.status === 200 && rowsOf(later).length === 0, `the sync after it is a delta again: nothing changed since (${rowsOf(later).length})`);
+            assert(later.status === 200 && rowsOf(later).length === 0, `the sync after that is a delta again: nothing changed since (${rowsOf(later).length})`);
             await stop(node);
         });
 
-        await section('8. 150 live listings and 100 newer finished ones: every live one heals', async () => {
+        await section('8. 150 live listings and 100 newer finished ones: every live one heals first', async () => {
             const template = await freshNode('mix');
             await node.send('setTime', { ids: [template], minutesAgo: 400 });
             const live: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 149, newestMinutesAgo: 200, prefix: 'live' })];
@@ -549,44 +583,109 @@ async function main(): Promise<void> {
             const next = await pull(node, bob, synced);
             assert(next.status === 200 && healedIn([next], live) === 150,
                 `the phone's next sync heals all 150 live listings (${next.status}, ${healedIn([next], live)} of 150)`);
-            assert(healedIn([next], [...done, ...gone]) === 100, `and the 100 finished ones after them (${healedIn([next], [...done, ...gone])})`);
-            assert(!rowsOf(next).some((p) => p.id === forCara[0]), "a listing for Cara alone is not in Bob's: his own audience, as his first sync");
+            const lastSync = Date.now();
+            const second = await pull(node, bob, lastSync);
+            assert(healedIn([next, second], [...done, ...gone]) === 100,
+                `and the 100 finished ones after them, over its next sync too (${healedIn([next, second], [...done, ...gone])})`);
+            assert(![...rowsOf(next), ...rowsOf(second)].some((p) => p.id === forCara[0]), "a listing for Cara alone is not in Bob's: his own audience, as his first sync");
             const caras = await pull(node, cara, synced);
             assert(healedIn([caras], forCara) === 1 && healedIn([caras], live) === 150, `and it is in Cara's, with every live one (${healedIn([caras], forCara)}, ${healedIn([caras], live)})`);
             await stop(node);
         });
 
-        await section("9. past the phone's limit: the rest heals over its next syncs", async () => {
+        await section('9. 1,500 listings: a phone syncing every 30 s gets each heal page once, a lost answer again', async () => {
             const template = await freshNode('big');
             await node.send('setTime', { ids: [template], minutesAgo: 3000 });
             // With no photo, and newer than every listing with one: a newest-first page would start with them.
             const bare: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 61, photo: false, prefix: 'bare' });
-            const photoIds: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 1149, newestMinutesAgo: 111, prefix: 'big' })];
-            assert(photoIds.length === 1150 && bare.length === 50, `setup: 1,150 listings with a photo and 50 without (${photoIds.length}, ${bare.length})`);
+            const photoIds: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 1449, newestMinutesAgo: 111, prefix: 'big' })];
+            assert(photoIds.length === 1450 && bare.length === 50, `setup: 1,500 listings, 1,450 with a photo and 50 without (${photoIds.length}, ${bare.length})`);
             await pull(node, bob, null);
+            await pull(node, cara, null);
             const synced = Date.now();
+            await pause();
+            // Three listings edited after the phones' last sync: the delta each heal answer carries first.
+            const edited = [photoIds[5], photoIds[700], photoIds[1400]];
+            await node.send('setTime', { ids: edited, minutesAgo: 0 });
             await stop(node);
 
             node = await boot({}, 'big');
-            const p1 = await pull(node, bob, synced);
-            const withPhoto = new Set(photoIds);
-            assert(p1.status === 200 && rowsOf(p1).length === 1000 && rowsOf(p1).every((p) => withPhoto.has(p.id) && keyed(p.photos?.[0])),
-                `the phone's next sync carries its limit, 1000, every one a listing with a photo, keyed (${p1.status}, ${rowsOf(p1).length})`);
-            await stop(node);
+            const sinceMs = Date.parse((await node.send('records')).since);
+            assert(sinceMs > synced, `setup: photoKeysSince is later than the phones' last sync (${new Date(sinceMs).toISOString()})`);
 
-            // A restart that changes nothing, and time passes: the phone's cursor is past photoKeysSince.
-            node = await boot({}, 'big');
-            const cursor2 = Date.now() + 10 * MIN;
-            const p2 = await pull(node, bob, cursor2);
-            assert(p2.status === 200 && healedIn([p1, p2], photoIds) === 1150,
-                `its next sync carries the rest: all 1,150 listings with a photo healed over the two (${p2.status}, ${healedIn([p1, p2], photoIds)} of 1150)`);
-            const again = await pull(node, bob, cursor2);
-            assert(again.status === 200 && rowsOf(again).map((p) => p.id).sort().join() === rowsOf(p2).map((p) => p.id).sort().join() && rowsOf(p2).length > 0,
-                `the same sync again (the phone didn't finish it) gets the same page (${rowsOf(again).length} of ${rowsOf(p2).length})`);
-            const p3 = await pull(node, bob, Date.now() + 20 * MIN);
-            assert(p3.status === 200 && rowsOf(p3).length === 0, `and the sync after that is a delta again (${rowsOf(p3).length})`);
+            // Bob's phone: its first sync after the change by its old cursor, then one every 30 s, each a success (its
+            // cursor, its last sync less five minutes, moves only then). The first ten are older than photoKeysSince.
+            const received: Reply[] = [];
+            const pages: string[][] = [];
+            const deltas: Set<string>[] = [];
+            let lastSync = synced;
+            let overlapBytes = 0, overlapSyncs = 0, lost: string[] = [], retried: string[] = [], retriedSame = false;
+            for (let k = 0; k < 14; k++) {
+                if (k === 5) {
+                    // A restart that changes nothing, between two of its syncs.
+                    await stop(node);
+                    node = await boot({}, 'big');
+                }
+                const delta = await deltaOf(bob, lastSync);
+                if (k === 3) {
+                    // This answer never reaches the phone (its 30 s ran out): the phone asks again with the same cursor.
+                    const dropped = await pull(node, bob, lastSync);
+                    lost = healPart(dropped, delta);
+                    const again = await pull(node, bob, lastSync);
+                    retried = healPart(again, delta);
+                    retriedSame = again.text === dropped.text;
+                }
+                const r = await pull(node, bob, lastSync);
+                if (lastSync - 5 * MIN < sinceMs) { overlapBytes += bytesOf(r); overlapSyncs++; }
+                received.push(r); deltas.push(delta); pages.push(healPart(r, delta));
+                assert(r.status === 200, `sync ${k + 1} answers (${r.status})`);
+                lastSync = sinceMs + k * 30_000 + 1000;
+            }
+            console.log(`   heal pages: ${pages.map((p) => p.length).join(', ')}; bytes: ${received.map(bytesOf).join(', ')}; the ${overlapSyncs} syncs inside the overlap carried ${overlapBytes} bytes`);
+            const maxRows = Math.max(...received.map((r, i) => rowsOf(r).length - deltas[i].size));
+            const maxBytes = Math.max(...received.map(bytesOf));
+            assert(received.every((r, i) => rowsOf(r).length <= deltas[i].size + PAGE && pages[i].length <= PAGE),
+                `no answer carries more than its delta and ${PAGE} listings (at most ${maxRows} past the delta)`);
+            assert(maxBytes < 250_000, `the largest answer is under 250 KB (${maxBytes} bytes)`);
+            assert(deltas[0].size >= 3 && edited.every((pid) => rowsOf(received[0]).slice(0, deltas[0].size).some((p) => p.id === pid)),
+                `the first answer starts with the delta, the three edited listings in it (${deltas[0].size})`);
+            const seen = new Map<string, number>();
+            for (const page of pages) for (const pid of page) seen.set(pid, (seen.get(pid) ?? 0) + 1);
+            const twice = [...seen.values()].filter((n) => n > 1).length;
+            assert(twice === 0, `no listing comes in two heal pages: each page once, through the five-minute overlap (${twice} came twice)`);
+            const withPages = pages.filter((p) => p.length > 0).length;
+            assert(withPages === 8 && pages.slice(8).every((p) => p.length === 0),
+                `the heal goes over eight syncs, and every sync after them is its delta alone (${pages.map((p) => p.length).join(', ')})`);
+            const healed = healedIn(received, photoIds);
+            assert(healed === 1450, `every one of the 1,450 listings with a photo healed, keyed (${healed} of 1450)`);
+            const before = new Set(pages.slice(0, 3).flat());
+            assert(lost.length > 0 && !lost.some((pid) => before.has(pid)) && lost.join() === retried.join() && retriedSame,
+                `an answer that never arrived is sent again, byte for byte, to the same cursor: the page after the ones the phone holds, not the first (${lost.length}, ${retried.length})`);
+            assert(pages[3].join() === lost.join(), `and the phone's own sync with that cursor gets that page too: no page skipped (${pages[3].length})`);
             const heals = await node.send('heals');
-            assert(heals?.n === 0, `the heal is done and its record gone (${heals?.n})`);
+            assert(heals?.n === 0, `the heal is done and its record gone once the phone's cursor is past photoKeysSince (${heals?.n})`);
+
+            // Cara's phone syncs every ten minutes: from its second sync on, its cursor is past photoKeysSince.
+            const caraAnswers: Reply[] = [];
+            const caraPages: string[][] = [];
+            let caraLast = synced;
+            let caraRetry = false;
+            for (let k = 0; k < 10; k++) {
+                const delta = await deltaOf(cara, caraLast);
+                const r = await pull(node, cara, caraLast);
+                if (k === 2) {
+                    const again = await pull(node, cara, caraLast);
+                    caraRetry = again.text === r.text && healPart(again, delta).length > 0;
+                }
+                caraAnswers.push(r); caraPages.push(healPart(r, delta));
+                caraLast = sinceMs + (k + 1) * 10 * MIN;
+            }
+            const caraSeen = new Set<string>();
+            let caraTwice = 0;
+            for (const page of caraPages) for (const pid of page) { if (caraSeen.has(pid)) caraTwice++; caraSeen.add(pid); }
+            assert(healedIn(caraAnswers, photoIds) === 1450 && caraTwice === 0 && caraPages.every((p) => p.length <= PAGE),
+                `Cara's phone, syncing every ten minutes, heals all 1,450 too, page by page (${healedIn(caraAnswers, photoIds)}, ${caraTwice} twice, ${caraPages.map((p) => p.length).join(', ')})`);
+            assert(caraRetry, 'and her sync sent again with the same cursor gets the same page, byte for byte');
             await stop(node);
         });
 

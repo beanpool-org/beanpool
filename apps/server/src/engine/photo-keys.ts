@@ -160,11 +160,12 @@ export function notePhotoUrlShapeNow(): void {
 /**
  * Whether a sync whose cursor is `updatedAfter` (an ISO 8601 time) was made before this server's listing-photo URLs
  * last changed shape (photoKeysSince): then every listing it holds may carry a URL that no longer opens, and it is
- * answered whole (photoHealFor). False without a cursor, or with one that isn't a time.
+ * healed (photoHealFor). False without a cursor, or with one that isn't a time.
  *
  * The phone's cursor is its clock at its last sync less five minutes (apps/native services/pillar-sync.ts), so a phone
- * that syncs in the five minutes after the change gets every listing again; that is what heals a phone whose clock is
- * up to five minutes fast, and it happens only after a boot that changed the URLs.
+ * that syncs in the five minutes after the change still sends a cursor older than photoKeysSince; that is what heals a
+ * phone whose clock is up to five minutes fast, and it happens only after a boot that changed the URLs. Its key's heal
+ * row tells photoHealFor which of those syncs already got a page, so each page goes once.
  */
 export function photoUrlsChangedAfter(updatedAfter: string | undefined): boolean {
     if (urlsChangedAtMs === null || !updatedAfter) return false;
@@ -174,7 +175,7 @@ export function photoUrlsChangedAfter(updatedAfter: string | undefined): boolean
 
 /** How a sync is answered for its photo URLs (photoHealFor). */
 export interface PhotoHealPlan {
-    /** `whole`: the cursor is older than photoKeysSince, from the first page. `heal:…`: a later page for this key. */
+    /** `whole`: from the first page. `heal:…`: a later page for this key. */
     tag: string;
     /** Where the page starts ('' for the first). */
     after: string;
@@ -184,39 +185,50 @@ interface HealRow { cursor: string; from_key: string; after_key: string | null }
 
 const sinceIso = () => new Date(urlsChangedAtMs!).toISOString();
 
+/** The plan for a page starting at `from` ('' the first). */
+function pageFrom(from: string): PhotoHealPlan {
+    return from === '' ? { tag: 'whole', after: '' }
+        : { tag: `heal:${crypto.createHash('sha256').update(from).digest('hex').slice(0, 16)}`, after: from };
+}
+
 /**
- * How the sync of `viewer` (the signer, if any) with cursor `updatedAfter` is answered: whole from the first page (a
- * cursor older than photoKeysSince), the next page of a heal this key has under way, or null for a plain delta.
- * The same cursor again (the phone didn't finish the sync that got the last page) gets that page again; a newer one gets
- * the page after it. A key whose heal is done gets null, and its row goes.
+ * How the sync of `viewer` (the signer, if any) with cursor `updatedAfter` is answered: a heal page (its delta, then the
+ * page), or null for a plain delta. By the key's row (photo_url_heals), when it has one for this shape:
+ * - the same cursor the row's last page went to: that page again. The phone moves its cursor only after a sync that
+ *   succeeded, so it may never have had it (a retry);
+ * - another cursor, past photoKeysSince, or older than it but newer than the row's (the phone that got the last page,
+ *   syncing again inside its five-minute overlap): the page after it, or, when the heal is done, null. The row goes once
+ *   the cursor is past photoKeysSince; inside the overlap it stays, so the whole answer isn't sent again;
+ * - otherwise (no row, or a cursor older than photoKeysSince and no newer than the row's): from the first page when the
+ *   cursor is older than photoKeysSince, else null.
  */
 export function photoHealFor(updatedAfter: string | undefined, viewer: string | undefined): PhotoHealPlan | null {
-    if (!photoUrlsChangedAfter(updatedAfter)) {
-        if (urlsChangedAtMs === null || !updatedAfter || !viewer || !Number.isFinite(Date.parse(updatedAfter))) return null;
-        const row = db.prepare('SELECT cursor, from_key, after_key FROM photo_url_heals WHERE viewer = ? AND since = ?')
-            .get(viewer, sinceIso()) as HealRow | undefined;
-        if (!row) return null;
-        const from = row.cursor === updatedAfter ? row.from_key : row.after_key;
-        if (from === null) {
-            db.prepare('DELETE FROM photo_url_heals WHERE viewer = ?').run(viewer);
+    if (urlsChangedAtMs === null || !updatedAfter) return null;
+    const cursor = Date.parse(updatedAfter);
+    if (!Number.isFinite(cursor)) return null;
+    const stale = photoUrlsChangedAfter(updatedAfter);
+    const row = viewer
+        ? db.prepare('SELECT cursor, from_key, after_key FROM photo_url_heals WHERE viewer = ? AND since = ?').get(viewer, sinceIso()) as HealRow | undefined
+        : undefined;
+    if (row) {
+        if (row.cursor === updatedAfter) return pageFrom(row.from_key);
+        const rowCursor = Date.parse(row.cursor);
+        if (!stale || (Number.isFinite(rowCursor) && cursor > rowCursor)) {
+            if (row.after_key !== null) return pageFrom(row.after_key);
+            if (!stale) db.prepare('DELETE FROM photo_url_heals WHERE viewer = ?').run(viewer);
             return null;
         }
-        return { tag: `heal:${crypto.createHash('sha256').update(from).digest('hex').slice(0, 16)}`, after: from };
     }
-    return { tag: 'whole', after: '' };
+    return stale ? pageFrom('') : null;
 }
 
 /**
  * After a page of `plan` went to `viewer` for cursor `updatedAfter`: where its next sync picks up (`next`, the read's; null
- * when no listing with a photo is left). Kept only for a key with a member row here, so a key that merely signs can't
- * fill what the node keeps; a read with no key keeps nothing.
+ * when no listing with a photo is left, kept so the key's next syncs inside the overlap are deltas). Kept only for a key
+ * with a member row here, so a key that merely signs can't fill what the node keeps; a read with no key keeps nothing.
  */
 export function notePhotoHealServed(viewer: string | undefined, updatedAfter: string, plan: PhotoHealPlan, next: string | null): void {
     if (!viewer || urlsChangedAtMs === null) return;
-    if (next === null && plan.tag === 'whole') {
-        db.prepare('DELETE FROM photo_url_heals WHERE viewer = ?').run(viewer);
-        return;
-    }
     if (!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) return;
     db.prepare(`INSERT OR REPLACE INTO photo_url_heals (viewer, since, cursor, from_key, after_key, served_at)
                 VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)

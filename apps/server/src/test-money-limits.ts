@@ -22,19 +22,24 @@
  *     application stored; applying with none still goes; another member is unaffected.
  *  5. An enterprise: its payments (sweeps to the Commons) count against it, 1,000 a day, and never against the keeper
  *     who signs, nor the keeper's against it; 1,000 approvals of requests on its listings; 300 new people paid (helpers
- *     on its need), and paying one again is not new. An approval's id that isn't text is 400 at both its doors.
+ *     on its need), and paying one again is not new. Past each, the keeper's next is his own (round 3): the 1,001st
+ *     sweep is his 100th payment, and his next send and sweep are refused in his own words; the 1,001st approval and
+ *     the 301st new helper go as his own. An approval's id that isn't text is 400 at both its doors.
  *  6. Posts (W-main): a keeper's own stop at 100; what they put up for an enterprise counts against the enterprise, up
- *     to 1,000, then 429 enterprise_posts_per_day; their own still stop at 100.
+ *     to 1,000; past that against their own 100, which are spent: 429 posts_per_day naming the enterprise.
  *  7. The day budget (W-main): writes whose path names an enterprise the signer keeps spend the enterprise's 50,000,
- *     not the signer's 5,000; a made-up, foreign or wound-up enterprise in the path counts against the signer; an
- *     enterprise past its budget is 429 enterprise_day_budget while another enterprise is unaffected.
+ *     not the signer's 5,000; a made-up, foreign or wound-up enterprise in the path counts against the signer; past its
+ *     50,000 a keeper's write for it counts on their own day (429 day_budget, naming the enterprise, when that is spent)
+ *     while another enterprise is unaffected.
  *  8. A restart keeps the count: a node killed (SIGKILL) after 60 payments and booted again on the same data takes
  *     40 more and refuses the 101st.
  *  9. Federation purchases count (settlement ON, in a child node with its own libp2p transport and a peer that isn't
  *     there): a purchase escrows the buyer's Beans before it asks, so it is a payment; the next send past 100 is 429,
  *     and a purchase past it is 429 before anything moves. A commission is the link enterprise's payment: 999 sweeps
- *     and one commission make its 1,000, and past them a sweep and a commission are both 429 with nothing moved; the
- *     commission also counted against its keeper's enterprise work (step 10), so his own enterprise's first sweep is 429.
+ *     and one commission make its 1,000; the commission also counted against its keeper's enterprise work (step 10), so
+ *     his own enterprise's first sweep is 429. Past the link's 1,000, Kit's sweep and commission for it are his own
+ *     payments (round 3): his 100th is a commission that goes, recorded as his own for the link; past it a commission
+ *     and a sweep are 429 money_payments_day in his words, with no new settlement and the same balance.
  * 10. One person's enterprise work, across every enterprise they keep (the review of 362efe26: starting enterprises
  *     multiplied one member's day). Mo starts 3. With his own day spent, his writes for all 3 together stop at 50,000
  *     (429 enterprise_work_day_budget), not 3 × 50,000, while each still has room and another keeper still writes for
@@ -42,24 +47,33 @@
  *     his payments for them (1,000) and his approvals for them (1,000), each 429 in its words with nothing moved, while
  *     the other keeper still acts and his own limits are apart.
  * 11. A shop with 2 keepers still gets its whole allowance: their writes, payments and posts together make its 50,000,
- *     1,000 and 1,000, then it is refused in its own words; each keeper's share counted to their own ceiling, so the one
- *     who did half still acts for their other enterprise.
+ *     1,000 and 1,000; past them each keeper's next counts on their own and goes (round 3); each keeper's share counted
+ *     to their own ceiling, so the one who did half still acts for their other enterprise.
  * 12. The enterprise thread is a chat: 30 lines a minute per person, the 31st is 429 chat_rate; another member still
  *     posts; a keeper's removals share the same 30.
  * 13. A restart keeps one person's enterprise work: in a child node, 600 sweeps from two enterprises, a SIGKILL, 400
  *     more, and the 1,001st is 429 money_enterprise_work_payments_day though that enterprise has made only 500.
- * 14. One keeper can't lock the others out of a shop (the review of 68ff4e4f). Rex, Leah Linens' second keeper, spends
- *     its 1,000 posts, 1,000 payments and 50,000 writes. Leah's new payments, posts and thread lines for it are still
- *     refused in the shop's words, but its governance and settling count on her own day: with the shop's day and her
- *     own payments spent, she completes the job the shop funded (Hugo is paid), turns a request down, removes Rex,
- *     pauses, resumes and starts winding it up, at both path prefixes and with a trailing slash; those 6 writes spend
- *     her own day (the next is 429 day_budget) and not her enterprise work.
+ * 14. One keeper can't lock the others out of a shop (the reviews of 68ff4e4f and 2e3caa2b; the director, 2026-09-30).
+ *     Rex, Leah Linens' second keeper, spends its 1,000 posts, 1,000 payments, 1,000 approvals and 50,000 writes. Leah
+ *     still sweeps, pays Ivo (new to it) for his help, posts and writes in its thread: each counts as her own, not the
+ *     shop's or her enterprise work. Up to her own limits, then each is refused in her own words naming the shop: her
+ *     31st new person, 101st payment, 101st deal, 101st post (and her own post after it), and her 5,001st change. Rex
+ *     has his own limits for it too and no more: his 100th post, payment and deal for it go, the next are refused in his
+ *     words, and his writes stop at his own 5,000 though all his enterprise work went on it. Its governance and settling
+ *     count on her own day: with the shop's day and her own payments spent, she completes the job the shop funded (Hugo
+ *     is paid), turns a request down, removes Rex, pauses, resumes and starts winding it up, at both path prefixes and
+ *     with a trailing slash; those 6 writes spend her own day (the next is 429 day_budget) and not her enterprise work.
+ *     The node's total is unchanged.
  * 15. A crowdfund project's id is the server's (the review of 68ff4e4f: Mallory made a "project" whose id was Victor's
  *     key, and her pledge reached his balance and made him `funded`). A project sent with Victor's key, an enterprise's
  *     treasury, the Commons, a deal's id (its escrow holds Beans) or a fresh id of the caller's own is refused, and so is
  *     a pledge to each; nothing moves and no status changes. A projects row made before, under a person's key, takes no
  *     pledge at either door and can't be edited or deleted (which renamed or pruned that person). A project sent with no
  *     id is made with a new one, as its own enterprise, and pledges fund it into its own account.
+ * 16. One person's ceiling still holds across three shops when one is spent: Noor spends Noor Acres' 50,000 writes and
+ *     1,000 payments herself; her writes and sweeps for her other two, which have room, are 429 in her enterprise-work
+ *     words; for Noor Acres they go on her own limits, up to them, then 429 in her own words; Oli, a keeper of one of the
+ *     other two, still acts for it; the node's total is unchanged.
  *
  * Local only: the servers it starts on localhost. The peer a purchase asks is a made-up key at a closed local port.
  *
@@ -280,6 +294,32 @@ function entPosts(ent: string, keeper: string, n: number): void {
 /** What `keeper` put up in the day for enterprises: the posts they made whose author isn't them. */
 const postsForEnterprises = (keeper: string) =>
     count(`SELECT COUNT(*) AS n FROM posts WHERE created_by = ? AND author_pubkey != ? AND created_at > ?`, keeper, keeper, ago(DAY));
+/** `n` posts of `member`'s own put up today, as the marketplace stores them. */
+function ownPosts(member: string, n: number): void {
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable, created_at)
+                               VALUES (?, 'offer', 'other', 'Mine', 'test', 1, ?, 'active', 1, ?)`);
+    db.transaction(() => { for (let i = 0; i < n; i++) insert.run(`ml-own-post-${++seq}`, member, new Date().toISOString()); })();
+}
+/** `n` of `member`'s own payments (each to someone new, when `newPeople`) or requests today, as the gate records them. */
+function ownActs(member: string, n: number, kind: 'payment' | 'request', newPeople = false): void {
+    for (let i = 0; i < n; i++) admitMoneyActs(member, [{ kind, recipient: newPeople ? crypto.randomBytes(32).toString('hex') : null }], Date.now());
+}
+/** Fill `member`'s own day budget as the gateway counts their own writes, until it refuses: how many more it took. */
+function fillOwnDay(member: string): number {
+    const ctx = { state: { actor: member }, method: 'POST', path: '/api/community/me/area', status: 200, body: undefined, set: () => {} } as any;
+    let n = 0;
+    while (gatewayAdmitDayBudget(ctx, Date.now())) n++;
+    return n;
+}
+/** The day's acts of `kind` counted against `account` itself (a keeper's own for an enterprise are theirs, not its). */
+const actsAs = (account: string, kind: 'payment' | 'request') => count('SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = ?', account, kind);
+/** `keeper`'s own acts of `kind` done for `ent` once its day was spent. */
+const ownFor = (keeper: string, ent: string, kind: 'payment' | 'request') =>
+    count('SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND for_enterprise = ? AND kind = ?', keeper, ent, kind);
+/** The posts that count against `ent` itself: its own, less those its keepers put up as their own. */
+const postsAs = (ent: string) => count('SELECT COUNT(*) AS n FROM posts p WHERE author_pubkey = ? AND NOT EXISTS (SELECT 1 FROM keeper_own_posts k WHERE k.post_id = p.id)', ent);
+/** The sentence a keeper's own refusal adds when the act was for `ent`, whose own day is spent. */
+const spentNote = (ent: string) => new RegExp(`${ent} has reached its own limit for today, so what you do for it counts against yours\\.`);
 const line = (who: Id, ent: string, text = `A line ${++seq}`) => call('POST', who, `/api/treasury/${ent}/thread/message`, { text });
 const sweep = (who: Id, ent: string, amount = 1) => call('POST', who, `/api/treasury/${ent}/sweep`, { amount });
 
@@ -602,12 +642,16 @@ async function main(): Promise<void> {
         assert(own.every(s => s === 200), `Gus, Gus Grocer's keeper, makes 99 payments of his own (${distinct(own)})`);
         const sweeps = await many(M.enterprisePaymentsPerDay, 8, () => call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 }));
         assert(sweeps.every(s => s === 200), `and 1,000 for Gus Grocer, sweeping to the Commons: his own 99 took none of its room (${distinct(sweeps)})`);
-        const before = books();
-        refused(await call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 }), 'money_payments_day', /Gus Grocer can make 1,000 payments/, before, 'Gus Grocer\'s 1,001st payment');
-        const hundredth = await send(gus, ben.pk);
-        assert(hundredth.status === 200, `its 1,000 took none of Gus's: his 100th payment goes (${show(hundredth)})`);
+        // Round 3 (the director, 2026-09-30): past its 1,000, a keeper's sweep is his own payment. Before, the 1,001st was
+        // refused in Gus Grocer's words, and one keeper who spent a shop's day stopped every other.
+        const past = await call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 });
+        assert(past.status === 200 && actsAs(y, 'payment') === M.enterprisePaymentsPerDay && ownFor(gus.pk, y, 'payment') === 1,
+            `Gus Grocer's 1,000 are spent, so its 1,001st sweep is Gus's own payment, his 100th: its 1,000 took none of his (${show(past)}, ${actsAs(y, 'payment')} its own, ${ownFor(gus.pk, y, 'payment')} his for it)`);
         const beforeOwn = books();
-        refused(await send(gus, ben.pk), 'money_payments_day', /You can make 100 payments/, beforeOwn, 'and his 101st is refused in his own words');
+        refused(await send(gus, ben.pk), 'money_payments_day', /You can make 100 payments/, beforeOwn, 'and his 101st, a send, is refused in his own words');
+        const beforeSweep = books();
+        refused(await call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 }), 'money_payments_day', new RegExp(`You can make 100 payments[^]*${spentNote('Gus Grocer').source}`), beforeSweep,
+            'and so is his next sweep, in his own words, naming Gus Grocer');
 
         // 1,000 approvals of requests on its offer (each buyer's Beans go into escrow: not the enterprise's payment).
         const offer = (await entOffer(gus, y)).body?.post?.id as string;
@@ -616,8 +660,9 @@ async function main(): Promise<void> {
         const asks = Array.from({ length: M.enterpriseMarketRequestsPerDay + 1 }, (_v, i) => plantRequest(offer, buyers[i % 11].pk, y));
         const approvals = await many(M.enterpriseMarketRequestsPerDay, 8, (i) => call('POST', gus, `/api/treasury/${y}/approve`, { transactionId: asks[i] }));
         assert(approvals.every(s => s === 200), `Gus approves 1,000 requests on Gus Grocer's offer, though it has made all its payments (${distinct(approvals)})`);
-        const beforeApproval = books();
-        refused(await call('POST', gus, `/api/treasury/${y}/approve`, { transactionId: asks[M.enterpriseMarketRequestsPerDay] }), 'money_requests_day', /Gus Grocer can approve 1,000 deals/, beforeApproval, 'the 1,001st approval');
+        const pastApproval = await call('POST', gus, `/api/treasury/${y}/approve`, { transactionId: asks[M.enterpriseMarketRequestsPerDay] });
+        assert(pastApproval.status === 200 && actsAs(y, 'request') === M.enterpriseMarketRequestsPerDay && ownFor(gus.pk, y, 'request') === 1,
+            `its 1,001st approval is Gus's own deal, and goes (round 3; before, 429 in Gus Grocer's words) (${show(pastApproval)})`);
         // At its 1,000 payments and its 1,000 approvals, a helper on its need: the approval's id must be text, at both doors.
         const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', credits: 1, repeatable: true })).body?.post?.id as string;
         assert(!!yNeed, 'setup: Gus Grocer needs help');
@@ -642,8 +687,9 @@ async function main(): Promise<void> {
         const offers = helpers.map((h) => plantRequest(need, z, h.pk));
         const paidHelpers = await many(M.enterpriseNewRecipientsPerDay, 8, (i) => call('POST', zed, `/api/treasury/${z}/approve`, { transactionId: offers[i] }));
         assert(paidHelpers.every(s => s === 200), `Zed Works pays 300 helpers it has never paid (${distinct(paidHelpers)})`);
-        const beforeHelper = books();
-        refused(await call('POST', zed, `/api/treasury/${z}/approve`, { transactionId: offers[M.enterpriseNewRecipientsPerDay] }), 'money_new_recipients_day', /Zed Works can pay 300 people/, beforeHelper, 'the 301st new helper');
+        const pastHelper = await call('POST', zed, `/api/treasury/${z}/approve`, { transactionId: offers[M.enterpriseNewRecipientsPerDay] });
+        assert(pastHelper.status === 200 && ownFor(zed.pk, z, 'payment') === 1 && actsAs(z, 'request') === M.enterpriseNewRecipientsPerDay + 1,
+            `the 301st new helper is Zed's own payment and his own new person, and goes; the approval itself is still Zed Works' (round 3; before, 429 in its words) (${show(pastHelper)})`);
         const againOffer = plantRequest(need, z, helpers[0].pk);
         const paidAgain = await call('POST', zed, `/api/treasury/${z}/approve`, { transactionId: againOffer });
         assert(paidAgain.status === 200, `paying a helper it paid today again is not a new person (${show(paidAgain)})`);
@@ -661,9 +707,12 @@ async function main(): Promise<void> {
             `Max's own 100 posts go and the 101st is 429 posts_per_day (${distinct(own)}, then ${show(overOwn)})`);
         const forP = await many(WRITER_LIMITS.enterprisePostsPerDay, 8, () => entOffer(max, p));
         assert(forP.every(s => s === 200), `and he still puts up 1,000 for Max Market: none count against him (${distinct(forP)})`);
+        // Round 3: past Max Market's 1,000, his posts for it count against his own 100, which are spent. Before, this was 429
+        // enterprise_posts_per_day in its words.
         const overP = await entOffer(max, p);
-        assert(overP.status === 429 && overP.body?.code === 'enterprise_posts_per_day' && /Max Market can put up 1,000 new posts/.test(overP.body?.error ?? '') && typeof overP.body?.resetsAt === 'string',
-            `the enterprise's 1,001st is 429 enterprise_posts_per_day, in its words (${show(overP)})`);
+        assert(overP.status === 429 && overP.body?.code === 'posts_per_day' && /You can put up 100 new posts/.test(overP.body?.error ?? '')
+            && spentNote('Max Market').test(overP.body?.error ?? '') && typeof overP.body?.resetsAt === 'string',
+            `the enterprise's 1,001st counts against his own 100, which are spent: 429 posts_per_day, in his words, naming Max Market (${show(overP)})`);
         assert(count('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?', p) === 1_000, 'and 1,000 are stored');
         const stillOwn = await ownPost(max);
         assert(stillOwn.status === 429 && stillOwn.body?.code === 'posts_per_day', `his own still stop at 100 (${show(stillOwn)})`);
@@ -705,9 +754,10 @@ async function main(): Promise<void> {
         }
         const last = await entOffer(quinn, r);
         assert(last.status === 200, `its 50,000th write goes (${show(last)})`);
+        // Round 3: past its 50,000, her writes for it count on her own day, which is spent. Before, 429 enterprise_day_budget.
         const past = await entOffer(quinn, r);
-        assert(past.status === 429 && past.body?.code === 'enterprise_day_budget' && /50,000 changes/.test(past.body?.error ?? '') && !!past.headers.get('retry-after'),
-            `its 50,001st is 429 enterprise_day_budget, in words (${show(past)})`);
+        assert(past.status === 429 && past.body?.code === 'day_budget' && /5,000 changes/.test(past.body?.error ?? '') && spentNote('This enterprise').test(past.body?.error ?? '') && !!past.headers.get('retry-after'),
+            `its 50,001st counts on Quinn's own day, which is spent: 429 day_budget, in her words, saying the enterprise's is spent (${show(past)})`);
         const raeWrites = await entOffer(rae, foreign);
         assert(raeWrites.status === 200, `another enterprise is unaffected (${show(raeWrites)})`);
         resetGatewayRateLimit();
@@ -780,19 +830,32 @@ async function main(): Promise<void> {
             assert(sweeps.every(s => s === 200), `Kit sweeps 999 from the link enterprise to the Commons (${distinct(sweeps)})`);
             const commissioned = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
             assert(linkOutbound() === 1 && commissioned.status !== 429, `and commissions a listing from the other community: its settlement is there, the enterprise's 1,000th payment (${show(commissioned)}, ${linkOutbound()} outbound)`);
-            const linkBalance = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
-            const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
-            assert(sweepPast.status === 429 && sweepPast.body?.code === 'money_payments_day' && /can make 1,000 payments/.test(sweepPast.body?.error ?? ''),
-                `the commission counted: the enterprise's next sweep is 429 money_payments_day (${show(sweepPast)})`);
-            const commissionPast = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
-            const linkAfter = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
-            assert(commissionPast.status === 429 && commissionPast.body?.code === 'money_payments_day' && linkOutbound() === 1 && linkAfter === linkBalance,
-                `and a commission past it is 429 before anything moves: no new settlement, the same balance (${show(commissionPast)}, ${linkOutbound()}, ${linkAfter})`);
             const kioskSweep = await callAt(node.base, 'POST', kit, `/api/treasury/${kiosk}/sweep`, { amount: 1 });
             assert(kioskSweep.status === 429 && kioskSweep.body?.code === 'money_enterprise_work_payments_day',
                 `and the commission was Kit's 1,000th payment for his enterprises: a sweep from Kit Kiosk, which has made none, is 429 money_enterprise_work_payments_day (${show(kioskSweep)})`);
             const kitOwn = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount: 1 });
             assert(kitOwn.status === 200, `the enterprise's 1,000 took none of Kit's: his own payment goes (${show(kitOwn)})`);
+            // Round 3: past the link's 1,000, what Kit pays for it is his own payment (before, the next sweep and commission were
+            // 429 in the link's words). His own: Kit Kiosk's 5 and the send above, then a sweep, 96 sends, and a commission.
+            const ownRows = (kind: string) => their.prepare(`SELECT account, for_enterprise AS forEnt, settlement_key AS key FROM money_acts WHERE account = ? AND kind = ?`).all(kit.pk, kind) as { account: string; forEnt: string | null; key: string | null }[];
+            const linkSweepOwn = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            assert(linkSweepOwn.status === 200 && ownRows('payment').filter((r) => r.forEnt === link).length === 1,
+                `the link's day is spent, so Kit's next sweep from it is his own payment, his 3rd, and goes (${show(linkSweepOwn)})`);
+            const kitSends = await many(M.paymentsPerDay - 4, 8, () => callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount: 0.01 }));
+            assert(kitSends.every(s => s === 200), `Kit makes 96 more of his own (${distinct(kitSends)})`);
+            const ownCommission = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
+            const commissionRow = ownRows('payment').find((r) => r.key !== null);
+            assert(ownCommission.status !== 429 && linkOutbound() === 2 && commissionRow?.forEnt === link,
+                `so a commission now is his own 100th payment: it goes, the link's second settlement, and its row is Kit's own for the link (${show(ownCommission)}, ${linkOutbound()} outbound, ${JSON.stringify(commissionRow)})`);
+            const linkBalance = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const commissionPast = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
+            const linkAfter = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            assert(commissionPast.status === 429 && commissionPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(commissionPast.body?.error ?? '')
+                && /has reached its own limit for today, so what you do for it counts against yours/.test(commissionPast.body?.error ?? '') && linkOutbound() === 2 && linkAfter === linkBalance,
+                `and a commission past it is 429 money_payments_day in his own words, before anything moves: no new settlement, the same balance (${show(commissionPast)}, ${linkOutbound()}, ${linkAfter})`);
+            const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            assert(sweepPast.status === 429 && sweepPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(sweepPast.body?.error ?? ''),
+                `so is the link's next sweep (${show(sweepPast)})`);
         } finally {
             their.close();
             await node.stop();
@@ -913,8 +976,9 @@ async function main(): Promise<void> {
         gatewayWrites(quin.pk, W.enterpriseSignedWritesPerDay / 2 - 1, shop);
         const quinLast = await line(quin, shop);
         assert(quinLast.status === 201, `Pia's 25,000 and Quin's 24,999 writes, then Quin's line: Pia Pantry's 50,000th goes (${show(quinLast)})`);
-        const shopFull = await line(pia, shop);
-        assert(shopFull.status === 429 && shopFull.body?.code === 'enterprise_day_budget', `then it is refused in the shop's own words, 429 enterprise_day_budget (${show(shopFull)})`);
+        // Round 3: past its 50,000, each keeper's writes for it count on their own day (before, 429 enterprise_day_budget).
+        const [piaPast, quinPast] = [await line(pia, shop), await line(quin, shop)];
+        assert(piaPast.status === 201 && quinPast.status === 201, `then Pia's line and Quin's count on their own days, and go (${show(piaPast)}, ${show(quinPast)})`);
         const piaElsewhere = await line(pia, other);
         assert(piaElsewhere.status === 201, `Pia's half counted to her own ceiling: she still writes for Pia Plants (${show(piaElsewhere)})`);
         resetGatewayRateLimit();
@@ -923,8 +987,9 @@ async function main(): Promise<void> {
         moneyActs(shop, quin.pk, M.enterprisePaymentsPerDay / 2 - 1, 'payment');
         const quinSweeps = await sweep(quin, shop);
         assert(quinSweeps.status === 200, `500 payments by Pia and 499 by Quin, then Quin's sweep: its 1,000th goes (${show(quinSweeps)})`);
-        const beforeShop = books();
-        refused(await sweep(pia, shop), 'money_payments_day', /Pia Pantry can make 1,000 payments/, beforeShop, 'the shop\'s 1,001st, in its own words');
+        const piaPastSweep = await sweep(pia, shop);
+        assert(piaPastSweep.status === 200 && actsAs(shop, 'payment') === M.enterprisePaymentsPerDay && ownFor(pia.pk, shop, 'payment') === 1,
+            `then Pia's sweep is her own payment, and goes; the shop still has its 1,000 (round 3; before, 429 in its words) (${show(piaPastSweep)})`);
         const piaSweepsOther = await sweep(pia, other);
         assert(piaSweepsOther.status === 200, `and Pia still sweeps from Pia Plants (${show(piaSweepsOther)})`);
 
@@ -932,8 +997,9 @@ async function main(): Promise<void> {
         entPosts(shop, quin.pk, W.enterprisePostsPerDay / 2 - 1);
         const quinPosts = await entOffer(quin, shop);
         assert(quinPosts.status === 200, `500 posts by Pia and 499 by Quin, then Quin's: its 1,000th goes (${show(quinPosts)})`);
-        const shopPostsFull = await entOffer(pia, shop);
-        assert(shopPostsFull.status === 429 && shopPostsFull.body?.code === 'enterprise_posts_per_day', `then 429 enterprise_posts_per_day, the shop's own (${show(shopPostsFull)})`);
+        const piaPastPost = await entOffer(pia, shop);
+        assert(piaPastPost.status === 200 && postsAs(shop) === W.enterprisePostsPerDay && count('SELECT COUNT(*) AS n FROM keeper_own_posts WHERE keeper = ?', pia.pk) === 1,
+            `then Pia's post counts against her own 100, and goes; the shop still has its 1,000 (round 3; before, 429 enterprise_posts_per_day) (${show(piaPastPost)})`);
         const piaPostsOther = await entOffer(pia, other);
         assert(piaPostsOther.status === 200, `and Pia still puts one up for Pia Plants (${show(piaPostsOther)})`);
     }
@@ -998,7 +1064,7 @@ async function main(): Promise<void> {
     }
 
     // ── 14. One keeper can't lock the others out of a shop ────────────────────────────────────────────────────
-    console.log('\n--- 14. a keeper who spends a shop\'s day leaves its lead able to run it: governance and settling count on the signer\'s own day ---');
+    console.log('\n--- 14. a keeper who spends a shop\'s day blocks only themselves: past it, each keeper\'s acts for it count on their own limits ---');
     {
         const W = WRITER_LIMITS;
         const lea = member('Leah');
@@ -1006,45 +1072,110 @@ async function main(): Promise<void> {
         const hugo = member('Hugo', 0);
         const hana = member('Hana', 0);
         const ivo = member('Ivo', 0);
+        const bea = member('Bea');
         completedTrade(lea.pk, tradie.pk);
         sync();
         const shop = await enterprise(lea, 'Leah Linens');
         const loft = await enterprise(lea, 'Leah Loft');
         setBalance(shop, 5_000);
         adminAssignTreasuryOperator(shop, rex.pk, owner.pk);
+        const total = nodeTotal();
         // A job the shop funded before Rex spent its day: Hugo helps on its need and Leah approves, its 5 Beans into escrow.
         const need = plantPost(shop, 'need', 5);
+        const offer = plantPost(shop, 'offer', 1);
         const job = plantRequest(need, shop, hugo.pk, 5);
         const funded = await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: job });
         assert(funded.status === 200, `setup: Leah approves Hugo's help on Leah Linens' need, and the shop pays 5 into escrow (${show(funded)})`);
         const hanaAsks = plantRequest(need, shop, hana.pk, 5);
         const ivoAsks = plantRequest(need, shop, ivo.pk, 5);
+        const leaForShop = count('SELECT COUNT(*) AS n FROM money_acts WHERE keeper = ?', lea.pk);
 
-        // Rex spends the shop's posts and payments (each last one his, over HTTPS).
-        entPosts(shop, rex.pk, W.enterprisePostsPerDay - count('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?', shop) - 1);
+        // Rex spends the shop's posts, payments, approvals and writes, each last one his over HTTPS.
+        entPosts(shop, rex.pk, W.enterprisePostsPerDay - postsAs(shop) - 1);
         const rexPosts = await entOffer(rex, shop);
-        moneyActs(shop, rex.pk, M.enterprisePaymentsPerDay - count(`SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = 'payment'`, shop) - 1, 'payment');
+        moneyActs(shop, rex.pk, M.enterprisePaymentsPerDay - actsAs(shop, 'payment') - 1, 'payment');
         const rexSweeps = await sweep(rex, shop, 0.0001);
-        assert(rexPosts.status === 200 && rexSweeps.status === 200, `Rex, its second keeper, puts up its 1,000th post and makes its 1,000th payment (${show(rexPosts)}, ${show(rexSweeps)})`);
-        // New payments, deals and posts still count against the shop, as before.
-        const beforeLea = books();
-        refused(await sweep(lea, shop), 'money_payments_day', /Leah Linens can make 1,000 payments/, beforeLea, 'then Leah\'s sweep');
-        refused(await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: ivoAsks }), 'money_payments_day', /Leah Linens can make 1,000 payments/, beforeLea, 'and her approval of Ivo\'s help, a new payment');
-        const leaPosts = await entOffer(lea, shop);
-        assert(leaPosts.status === 429 && leaPosts.body?.code === 'enterprise_posts_per_day', `and her post for it is 429 enterprise_posts_per_day (${show(leaPosts)})`);
-
-        // Rex spends the shop's writes, the last one his thread line over HTTPS. Leah's own day is 6 short, her enterprise
-        // work 1 short (writes for Leah Loft), and her own payments are spent too.
+        moneyActs(shop, rex.pk, M.enterpriseMarketRequestsPerDay - actsAs(shop, 'request') - 1, 'request');
+        const rexApproves = await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: plantRequest(offer, bea.pk, shop) });
         resetGatewayRateLimit();
         gatewayWrites(rex.pk, W.enterpriseSignedWritesPerDay - 1, shop);
         const rexLine = await line(rex, shop);
-        assert(rexLine.status === 201, `Rex makes Leah Linens' 50,000th write (${show(rexLine)})`);
+        assert(rexPosts.status === 200 && rexSweeps.status === 200 && rexApproves.status === 200 && rexLine.status === 201,
+            `Rex, its second keeper, puts up its 1,000th post and makes its 1,000th payment, approval and write (${show(rexPosts)}, ${show(rexSweeps)}, ${show(rexApproves)}, ${show(rexLine)})`);
+        const shopDay = () => JSON.stringify([postsAs(shop), actsAs(shop, 'payment'), actsAs(shop, 'request')]);
+        const spent = shopDay();
+
+        // Leah's acts for it now count on her own limits, and go: a sweep, paying Ivo (new to the shop) for his help, a
+        // post and a line in its thread.
+        const leaSweep = await sweep(lea, shop);
+        const leaPaysIvo = await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: ivoAsks });
+        const leaPost = await entOffer(lea, shop);
         const leaLine = await line(lea, shop);
-        assert(leaLine.status === 429 && leaLine.body?.code === 'enterprise_day_budget', `then Leah's line in its thread is 429 enterprise_day_budget, as before (${show(leaLine)})`);
+        assert(leaSweep.status === 200 && leaPaysIvo.status === 200 && leaPost.status === 200 && leaLine.status === 201,
+            `Leah still sweeps, pays Ivo for his help, posts and writes in the thread for it (${show(leaSweep)}, ${show(leaPaysIvo)}, ${show(leaPost)}, ${show(leaLine)})`);
+        assert(ownFor(lea.pk, shop, 'payment') === 2 && ownFor(lea.pk, shop, 'request') === 1 && count('SELECT COUNT(*) AS n FROM keeper_own_posts WHERE keeper = ?', lea.pk) === 1
+            && shopDay() === spent && count('SELECT COUNT(*) AS n FROM money_acts WHERE keeper = ?', lea.pk) === leaForShop,
+            `each counted as her own (2 payments, 1 approval, 1 post), not the shop's (${spent} → ${shopDay()}) and not her enterprise work`);
+
+        // Up to her own limits, then each is refused in her own words, naming the shop, and moves nothing.
+        ownActs(lea.pk, M.newRecipientsPerDay - 1, 'payment', true);
+        let before = books();
+        refused(await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: hanaAsks }), 'money_new_recipients_day',
+            new RegExp(`You can pay 30 people you have never paid before[^]*${spentNote('Leah Linens').source}`), before, 'with Ivo and 29 more, her 31st new person, paying Hana for the shop');
+        ownActs(lea.pk, M.paymentsPerDay - actsAs(lea.pk, 'payment'), 'payment');
+        before = books();
+        refused(await sweep(lea, shop), 'money_payments_day', new RegExp(`You can make 100 payments[^]*${spentNote('Leah Linens').source}`), before, 'her 101st payment, a sweep for the shop');
+        ownActs(lea.pk, M.marketRequestsPerDay - actsAs(lea.pk, 'request'), 'request');
+        const beaOrders = plantRequest(offer, bea.pk, shop);
+        before = books();
+        refused(await call('POST', lea, `/api/treasury/${shop}/approve`, { transactionId: beaOrders }), 'money_requests_day',
+            new RegExp(`You can ask for, accept or approve 100 deals[^]*${spentNote('Leah Linens').source}`), before, 'her 101st deal, approving Bea\'s order for the shop');
+        ownPosts(lea.pk, W.postsPerDay - 1);
+        before = books();
+        refused(await entOffer(lea, shop), 'posts_per_day', new RegExp(`You can put up 100 new posts[^]*${spentNote('Leah Linens').source}`), before, 'her 101st post, for the shop');
+        const leaOwnPost = await ownPost(lea);
+        assert(leaOwnPost.status === 429 && leaOwnPost.body?.code === 'posts_per_day' && !spentNote('Leah Linens').test(leaOwnPost.body?.error ?? ''),
+            `and her own post is refused too, in her words alone: the shop's took from her 100 (${show(leaOwnPost)})`);
+
+        // Rex, once the shop's day is spent, has his own limits for it too, and no more.
+        ownPosts(rex.pk, W.postsPerDay - 1);
+        ownActs(rex.pk, M.paymentsPerDay - 1, 'payment');
+        ownActs(rex.pk, M.marketRequestsPerDay - 1, 'request');
+        const [rexPost100, rexSweep100, rexDeal100] = [await entOffer(rex, shop), await sweep(rex, shop, 0.0001),
+            await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: plantRequest(offer, bea.pk, shop) })];
+        assert(rexPost100.status === 200 && rexSweep100.status === 200 && rexDeal100.status === 200,
+            `Rex, 1 short of his own 100 posts, payments and deals, makes each one more for the shop (${show(rexPost100)}, ${show(rexSweep100)}, ${show(rexDeal100)})`);
+        const beaAgain = plantRequest(offer, bea.pk, shop);
+        before = books();
+        const his = (words: string) => new RegExp(`${words}[^]*${spentNote('Leah Linens').source}`);
+        refused(await entOffer(rex, shop), 'posts_per_day', his('You can put up 100 new posts'), before, 'then his post for it is refused in his own words');
+        refused(await sweep(rex, shop, 0.0001), 'money_payments_day', his('You can make 100 payments'), before, 'his sweep');
+        refused(await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: beaAgain }), 'money_requests_day', his('You can ask for, accept or approve 100 deals'), before, 'and his approval');
+        assert(shopDay() === spent, `and the shop's own day took none of theirs (${spent} → ${shopDay()})`);
+
+        // Writes, afresh: Rex spends the shop's 50,000 (all his enterprise work too). Leah's and Rex's writes for it then
+        // count on their own days: each one line, then 4,999 more of their own, then day_budget naming the enterprise.
+        resetGatewayRateLimit();
+        gatewayWrites(rex.pk, W.enterpriseSignedWritesPerDay, shop);
+        for (const who of [lea, rex]) {
+            const first = await line(who, shop);
+            const more = fillOwnDay(who.pk);
+            before = books();
+            assert(first.status === 201 && more === W.signedWritesPerDay - 1,
+                `${who.name}'s line for the shop goes on their own day, and ${W.signedWritesPerDay - 1} more of their own fill it (${show(first)}, ${more})`);
+            refused(await line(who, shop), 'day_budget', new RegExp(`You have made 5,000 changes today[^]*${spentNote('This enterprise').source}`), before, `then ${who.name}'s next line for it`);
+        }
+        const leaLoft = await line(lea, loft);
+        assert(leaLoft.status === 201, `none of it was Leah's enterprise work: she still writes for Leah Loft (${show(leaLoft)})`);
+
+        // Governance and settling (fix round 2), on her own day still: afresh, the shop's day spent by Rex, Leah's own day
+        // 6 short, her enterprise work 1 short (writes for Leah Loft), and her own payments spent.
+        resetGatewayRateLimit();
+        gatewayWrites(rex.pk, W.enterpriseSignedWritesPerDay, shop);
         const governance = 6;
         gatewayWrites(lea.pk, W.signedWritesPerDay - governance);
         gatewayWrites(lea.pk, W.enterpriseWorkSignedWritesPerDay - 1, loft);
-        for (let i = 0; i < M.paymentsPerDay; i++) admitMoneyActs(lea.pk, [{ kind: 'payment', recipient: null }], Date.now());
+        assert(actsAs(lea.pk, 'payment') === M.paymentsPerDay, `setup: Leah's own 100 payments are spent (${actsAs(lea.pk, 'payment')})`);
 
         const hugoBefore = bal(hugo.pk);
         const completed = await call('POST', lea, `/api/treasury/${shop}/complete`, { transactionId: job });
@@ -1065,8 +1196,9 @@ async function main(): Promise<void> {
         const leaOwn = await call('POST', lea, '/api/community/me/area', {});
         assert(leaOwn.status === 429 && leaOwn.body?.code === 'day_budget',
             `those ${governance} writes counted on Leah's own day: her next own write is 429 day_budget (${show(leaOwn)})`);
-        const leaLoft = await line(lea, loft);
-        assert(leaLoft.status === 201, `and not on her enterprise work: she still writes for Leah Loft (${show(leaLoft)})`);
+        const leaLoftAgain = await line(lea, loft);
+        assert(leaLoftAgain.status === 201, `and not on her enterprise work: she still writes for Leah Loft (${show(leaLoftAgain)})`);
+        assert(nodeTotal() === total, `the node's total is what it was: nothing refused moved a bean (${total} → ${nodeTotal()})`);
         resetGatewayRateLimit();
     }
 
@@ -1144,6 +1276,51 @@ async function main(): Promise<void> {
         assert(first.status === 200 && second.status === 200 && bal(pid) === 3 && statusOf(pid) === 'funded' && bal(vic.pk) === r4(vicBefore - 1),
             `pledges of 1 and 2 fund it: its own account holds 3 and it is funded (${show(first)}, ${show(second)}, ${bal(pid)}, ${statusOf(pid)})`);
         assert(statusOf(vic.pk) === 'active' && statusOf(mal.pk) === 'active', `and its backers are still active (${statusOf(vic.pk)}, ${statusOf(mal.pk)})`);
+    }
+
+    // ── 16. One person's ceiling still holds across three shops, one of them spent ────────────────────────────
+    console.log('\n--- 16. one person\'s enterprise work across three shops, one spent: one enterprise\'s worth and their own, no more ---');
+    {
+        const W = WRITER_LIMITS;
+        const noor = member('Noor');
+        const oli = member('Oli');
+        completedTrade(noor.pk, tradie.pk);
+        sync();
+        const [a, b, c] = [await enterprise(noor, 'Noor Acres'), await enterprise(noor, 'Noor Bakes'), await enterprise(noor, 'Noor Cider')];
+        for (const e of [a, b, c]) setBalance(e, 5_000);
+        adminAssignTreasuryOperator(b, oli.pk, owner.pk);
+        const total = nodeTotal();
+
+        // Writes: Noor spends Noor Acres' whole day herself, which is also all her enterprise work.
+        resetGatewayRateLimit();
+        gatewayWrites(noor.pk, W.enterpriseSignedWritesPerDay, a);
+        for (const [name, e] of [['Noor Bakes', b], ['Noor Cider', c]] as const) {
+            const over = await line(noor, e);
+            assert(over.status === 429 && over.body?.code === 'enterprise_work_day_budget', `a write for ${name}, which has room, is 429 enterprise_work_day_budget: her ceiling holds (${show(over)})`);
+        }
+        const forA = await line(noor, a);
+        const more = fillOwnDay(noor.pk);
+        assert(forA.status === 201 && more === W.signedWritesPerDay - 1, `for Noor Acres, spent, her line goes on her own day, and ${W.signedWritesPerDay - 1} more of her own fill it (${show(forA)}, ${more})`);
+        let before = books();
+        refused(await line(noor, a), 'day_budget', spentNote('This enterprise'), before, 'then her next for Noor Acres');
+        const oliWrites = await line(oli, b);
+        assert(oliWrites.status === 201, `so she made 50,000 for her three and 5,000 of her own, no more; Oli still writes for Noor Bakes (${show(oliWrites)})`);
+        resetGatewayRateLimit();
+
+        // Payments: the same with sweeps.
+        moneyActs(a, noor.pk, M.enterprisePaymentsPerDay, 'payment');
+        for (const [name, e] of [['Noor Bakes', b], ['Noor Cider', c]] as const) {
+            before = books();
+            refused(await sweep(noor, e), 'money_enterprise_work_payments_day', /1,000 payments in any 24 hours for the enterprises you keep/, before, `a sweep from ${name}, which has room`);
+        }
+        const sweepA = await sweep(noor, a);
+        ownActs(noor.pk, M.paymentsPerDay - actsAs(noor.pk, 'payment'), 'payment');
+        before = books();
+        assert(sweepA.status === 200 && ownFor(noor.pk, a, 'payment') === 1, `from Noor Acres, spent, her sweep is her own payment and goes (${show(sweepA)})`);
+        refused(await sweep(noor, a), 'money_payments_day', new RegExp(`You can make 100 payments[^]*${spentNote('Noor Acres').source}`), before, 'and past her own 100, her next from Noor Acres');
+        const oliSweeps = await sweep(oli, b);
+        assert(oliSweeps.status === 200, `Oli still sweeps from Noor Bakes (${show(oliSweeps)})`);
+        assert(nodeTotal() === total, `the node's total is what it was (${total} → ${nodeTotal()})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

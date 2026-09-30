@@ -38,7 +38,7 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
-import { assertEnterpriseMayPostToday, assertMayStartEnterprise } from '../engine/writer-bounds.js';
+import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
@@ -753,10 +753,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             assertNotMuted(actor);
             assertNotMuted(treasury);
             // What a keeper puts up for the enterprise counts against the enterprise's own 1,000 new posts a day, never the
-            // keeper's 100 (W-main), and against the keeper's 1,000 for every enterprise they keep together; checked by the
+            // keeper's 100 (W-main), and against the keeper's 1,000 for every enterprise they keep together; once the
+            // enterprise's 1,000 are up, against the keeper's own 100 instead (engine/writer-bounds.ts). Checked by the
             // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury, actor) });
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
@@ -775,8 +778,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: () => assertEnterpriseMayPostToday(treasury, actor) });
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
@@ -806,8 +811,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createEventFromBody(b, treasury, actor, () => assertEnterpriseMayPostToday(treasury, actor));
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createEventFromBody(b, treasury, actor, limit.beforeWrite);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;

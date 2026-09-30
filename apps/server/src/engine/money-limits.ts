@@ -8,7 +8,8 @@
  *
  * WHOSE COUNT. The account whose Beans or deal it is: a member's own key, or the enterprise (its treasury) a keeper acts
  * for, which the route names in its path and which is counted only once the signer is known to keep it
- * (routes/money-limits-gate.ts). Never the keeper's own count, and never a key the body names. An
+ * (routes/money-limits-gate.ts). Never the keeper's own count while the enterprise's day has room (see ONCE AN
+ * ENTERPRISE'S DAY IS SPENT), and never a key the body names. An
  * enterprise or project is a treasury (members.is_treasury = 1): a crowdfund project a member starts is an enterprise with
  * a bounded life (state-engine createProject), and an older `projects` row that is not one acts through no route of its
  * own (its creator acts, as themselves), so there is no third kind of account to count.
@@ -20,6 +21,18 @@
  * one person does at most one enterprise's worth a day, however many they keep). A row names its keeper; a commission's
  * row is written for its keeper only once the Beans are funded (recordSettlementKeeper), as the enterprise's count is its
  * settlement.
+ *
+ * ONCE AN ENTERPRISE'S DAY IS SPENT (the director, 2026-09-30). A keeper's further payments, new people and approvals for
+ * it are their OWN, counted against their own limits (a member's numbers, as on main, where everything counted per key)
+ * and not against the enterprise's or their enterprise work: otherwise one keeper who used up a shop's day stopped every
+ * other keeper acting for it, and removing that keeper waits out a 3-day objection window. So a keeper who spends a
+ * shop's day blocks only themselves. Per kind: a payment is the keeper's own when the enterprise has no room for it (its
+ * payments are spent, or it pays someone new to the enterprise and its new people are spent), and then counts as one of
+ * the keeper's payments and, when new to the enterprise, one of their new people; an approval is the keeper's own when the
+ * enterprise's approvals are spent. Such a row names the keeper as its `account` and the enterprise as `for_enterprise`
+ * (a commission's too, with its settlement, which the enterprise's count then leaves out). A refusal is the keeper's own
+ * limit's, in its words, with a sentence naming the enterprise (writer-bounds.ts keeperOwnNote). One person's most in a
+ * day stays one enterprise's worth (their enterprise work) and their own limits beside it, however many they keep.
  *
  * WHERE THE COUNT LIVES: money_acts (schema.sql 11d), this server's own table, one row per act, deleted once a day old.
  *   - Not the ledger's rows: they say where Beans went, not whose act moved them. A ceiling sweep, a keeper's deferred wage,
@@ -42,6 +55,7 @@
 import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { MONEY_LIMITS } from '../config/writer-limits.js';
+import { keeperOwnNote } from './writer-bounds.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -108,16 +122,22 @@ const WORDS: Record<MoneyLimitCode, (a: Account, limit: number, when: string) =>
         `You can approve ${fmt(n)} deals in any 24 hours for the enterprises you keep, all of them together. You can again ${when}. The other keepers still can.`,
 };
 
-/** The keeper's own words and numbers, for their enterprise work (the account the refusals speak to is theirs). */
-const WORK: Account = { enterprise: false, name: 'You' };
+/** The keeper's own words, for their enterprise work and for their own limits (the account the refusals speak to is theirs). */
+const KEEPER: Account = { enterprise: false, name: 'You' };
 
 /** Is this a payment to someone (who can be new), rather than to the Commons, an escrow or oneself? */
 const isSomeone = (recipient: string | null | undefined, account: string): recipient is string =>
     typeof recipient === 'string' && recipient.length > 0 && recipient !== account && !isSyntheticAccount(recipient);
 
+/**
+ * A row that counts against its `account`: all but an enterprise's commission done within its day, whose count is its
+ * settlement (purchasesToday). A commission a keeper did as their own, once the enterprise's day was spent, is theirs.
+ */
+const COUNTS_ON_ACCOUNT = '(settlement_key IS NULL OR for_enterprise IS NOT NULL)';
+
 /** When each of `account`'s acts of `kind` in the day was made (a commission's is its settlement: purchasesToday). */
 function actTimes(account: string, kind: MoneyActKind, since: string): string[] {
-    return (db.prepare('SELECT made_at AS t FROM money_acts WHERE account = ? AND kind = ? AND made_at > ? AND settlement_key IS NULL').all(account, kind, since) as { t: string }[])
+    return (db.prepare(`SELECT made_at AS t FROM money_acts WHERE account = ? AND kind = ? AND made_at > ? AND ${COUNTS_ON_ACCOUNT}`).all(account, kind, since) as { t: string }[])
         .map((r) => r.t);
 }
 
@@ -135,10 +155,15 @@ function workNewPeople(keeper: string, since: string): Map<string, string> {
     return new Map(rows.map((r) => [`${r.account} ${r.recipient}`, r.t]));
 }
 
-/** The purchases from another community `account` started in the day: each escrowed its Beans before it asked. */
+/**
+ * The purchases from another community `account` started in the day: each escrowed its Beans before it asked. An
+ * enterprise's leaves out the commissions its keepers made as their own (their rows name it as `for_enterprise`).
+ */
 function purchasesToday(account: string, since: string): { t: string; seller: string | null }[] {
-    return db.prepare(`SELECT created_at AS t, seller_pubkey AS seller FROM settlements
-                        WHERE direction = 'outbound' AND buyer_pubkey = ? AND created_at > ?`).all(account, since) as { t: string; seller: string | null }[];
+    return db.prepare(`SELECT s.created_at AS t, s.seller_pubkey AS seller FROM settlements s
+                        WHERE s.direction = 'outbound' AND s.buyer_pubkey = ? AND s.created_at > ?
+                          AND NOT EXISTS (SELECT 1 FROM money_acts k WHERE k.settlement_key = s.key AND k.for_enterprise = s.buyer_pubkey)`)
+        .all(account, since) as { t: string; seller: string | null }[];
 }
 
 /**
@@ -159,13 +184,13 @@ export function hasPaid(account: string, recipient: string, before?: string): bo
 
 /**
  * The people `account` paid in the day who were new to it, each with the last time a payment to them counted: those its
- * money_acts rows marked new when they were made, and the sellers of the day's purchases it had paid nothing before the
- * day began.
+ * money_acts rows marked new when they were made (a keeper's own, for an enterprise whose day was spent: new to that
+ * enterprise), and the sellers of the day's purchases it had paid nothing before the day began.
  */
 function newPeopleToday(account: string, since: string): Map<string, string> {
     const people = new Map<string, string>();
     const rows = db.prepare(`SELECT recipient, MAX(made_at) AS t FROM money_acts
-                              WHERE account = ? AND kind = 'payment' AND new_recipient = 1 AND made_at > ? AND settlement_key IS NULL GROUP BY recipient`)
+                              WHERE account = ? AND kind = 'payment' AND new_recipient = 1 AND made_at > ? AND ${COUNTS_ON_ACCOUNT} GROUP BY recipient`)
         .all(account, since) as { recipient: string; t: string }[];
     for (const r of rows) people.set(r.recipient, r.t);
     for (const p of purchasesToday(account, since)) {
@@ -181,20 +206,35 @@ function newPeopleToday(account: string, since: string): Map<string, string> {
  * Throws `code` when `times` (the day's acts that count, ISO) leave no room for `adding` more under `limit`. It lets up
  * when enough of them leave the day: the one whose leaving makes room, 24 hours on.
  */
-function assertRoom(a: Account, times: readonly string[], adding: number, limit: number, now: number, code: MoneyLimitCode): void {
+function assertRoom(a: Account, times: readonly string[], adding: number, limit: number, now: number, code: MoneyLimitCode, note = ''): void {
     if (times.length + adding <= limit) return;
     const sorted = times.map((t) => Date.parse(t)).filter(Number.isFinite).sort((x, y) => x - y);
     const freeing = sorted[Math.min(sorted.length - 1, Math.max(0, sorted.length + adding - limit - 1))] ?? now;
     const resetsAtMs = Math.max(now + 1_000, freeing + DAY_MS);
-    throw new MoneyLimitError(code, WORDS[code](a, limit, inAbout(resetsAtMs, now)), iso(resetsAtMs));
+    throw new MoneyLimitError(code, WORDS[code](a, limit, inAbout(resetsAtMs, now)) + note, iso(resetsAtMs));
 }
 
-interface Verdict { account: string; keeper: string | null; rows: { kind: MoneyActKind; recipient: string | null; isNew: boolean }[] }
+interface Row { account: string; kind: MoneyActKind; recipient: string | null; isNew: boolean; keeper: string | null; forEnterprise: string | null }
+interface Verdict { rows: Row[]; keeperOwn: boolean }
+
+/**
+ * The day's payments that count against `payer`, the people new to it, and which of `payments` go to someone new to
+ * `newTo` (the account they come out of) that `payer` hasn't counted yet today.
+ */
+function paymentsDay(payer: string, newTo: string, payments: readonly MoneyAct[], since: string) {
+    const times = [...actTimes(payer, 'payment', since), ...purchasesToday(payer, since).map((p) => p.t)];
+    const people = newPeopleToday(payer, since);
+    // New to the account they come out of: it has never completed a payment to them, whether or not they were paid today.
+    const isNew = payments.map((p) => isSomeone(p.recipient, newTo) && !hasPaid(newTo, p.recipient));
+    const fresh = new Set(payments.filter((p, i) => isNew[i] && !people.has(p.recipient!)).map((p) => p.recipient!));
+    return { times, people, isNew, fresh };
+}
 
 /**
  * May `account` make `acts` now, done by `keeper` when the account is an enterprise they keep? Throws MoneyLimitError
  * when one of them is over its limit (payments first, then new people, marketplace requests and pledges; for each, the
- * enterprise's own and then the keeper's enterprise work); otherwise returns the rows that would record them.
+ * enterprise's own and then the keeper's enterprise work, or the keeper's own once the enterprise's is spent); otherwise
+ * returns the rows that would record them.
  */
 function judge(account: string, acts: readonly MoneyAct[], now: number, keeper: string | null = null): Verdict {
     const a = accountOf(account);
@@ -204,47 +244,71 @@ function judge(account: string, acts: readonly MoneyAct[], now: number, keeper: 
     const worker = a.enterprise && keeper && keeper !== account ? keeper : null;
     const since = iso(now - DAY_MS);
     const payments = acts.filter((x) => x.kind === 'payment');
-    const rows: Verdict['rows'] = [];
+    const rows: Row[] = [];
+    let keeperOwn = false;
+    const ownRow = (r: Omit<Row, 'account' | 'keeper' | 'forEnterprise'>): Row => ({ ...r, account: worker!, keeper: null, forEnterprise: account });
+    const itsRow = (r: Omit<Row, 'account' | 'keeper' | 'forEnterprise'>): Row => ({ ...r, account, keeper: worker, forEnterprise: null });
     if (payments.length > 0) {
-        const times = [...actTimes(account, 'payment', since), ...purchasesToday(account, since).map((p) => p.t)];
-        assertRoom(a, times, payments.length, limits.payments, now, 'money_payments_day');
-        if (worker) assertRoom(WORK, workTimes(worker, 'payment', since), payments.length, M.enterpriseWorkPaymentsPerDay, now, 'money_enterprise_work_payments_day');
-        const people = newPeopleToday(account, since);
-        const workPeople = worker ? workNewPeople(worker, since) : null;
-        const fresh = new Set<string>();
-        const freshWork = new Set<string>();
-        for (const p of payments) {
-            // New to this account: it has never completed a payment to them, whether or not they were paid earlier today.
-            const isNew = isSomeone(p.recipient, account) && !hasPaid(account, p.recipient);
-            if (isNew && !people.has(p.recipient!)) fresh.add(p.recipient!);
-            if (isNew && workPeople && !workPeople.has(`${account} ${p.recipient}`)) freshWork.add(p.recipient!);
-            rows.push({ kind: 'payment', recipient: isSomeone(p.recipient, account) ? p.recipient : null, isNew });
-        }
-        if (fresh.size > 0) assertRoom(a, [...people.values()], fresh.size, limits.newRecipients, now, 'money_new_recipients_day');
-        if (workPeople && freshWork.size > 0) {
-            assertRoom(WORK, [...workPeople.values()], freshWork.size, M.enterpriseWorkNewRecipientsPerDay, now, 'money_enterprise_work_new_recipients_day');
+        const day = paymentsDay(account, account, payments, since);
+        const recipientOf = (p: MoneyAct) => (isSomeone(p.recipient, account) ? p.recipient! : null);
+        const fits = day.times.length + payments.length <= limits.payments
+            && (day.fresh.size === 0 || day.people.size + day.fresh.size <= limits.newRecipients);
+        if (!worker || fits) {
+            assertRoom(a, day.times, payments.length, limits.payments, now, 'money_payments_day');
+            if (day.fresh.size > 0) assertRoom(a, [...day.people.values()], day.fresh.size, limits.newRecipients, now, 'money_new_recipients_day');
+            if (worker) {
+                assertRoom(KEEPER, workTimes(worker, 'payment', since), payments.length, M.enterpriseWorkPaymentsPerDay, now, 'money_enterprise_work_payments_day');
+                const workPeople = workNewPeople(worker, since);
+                const freshWork = new Set(payments.filter((p, i) => day.isNew[i] && !workPeople.has(`${account} ${p.recipient}`)).map((p) => p.recipient!));
+                if (freshWork.size > 0) {
+                    assertRoom(KEEPER, [...workPeople.values()], freshWork.size, M.enterpriseWorkNewRecipientsPerDay, now, 'money_enterprise_work_new_recipients_day');
+                }
+            }
+            payments.forEach((p, i) => rows.push(itsRow({ kind: 'payment', recipient: recipientOf(p), isNew: day.isNew[i] })));
+        } else {
+            // The enterprise's own day has no room for them: the keeper's own payments, and their own new people for the
+            // ones new to the enterprise, as a member's.
+            const own = paymentsDay(worker, account, payments, since);
+            const note = keeperOwnNote(a.name);
+            assertRoom(KEEPER, own.times, payments.length, M.paymentsPerDay, now, 'money_payments_day', note);
+            if (own.fresh.size > 0) assertRoom(KEEPER, [...own.people.values()], own.fresh.size, M.newRecipientsPerDay, now, 'money_new_recipients_day', note);
+            payments.forEach((p, i) => rows.push(ownRow({ kind: 'payment', recipient: recipientOf(p), isNew: own.isNew[i] })));
+            keeperOwn = true;
         }
     }
     const requests = acts.filter((x) => x.kind === 'request').length;
     if (requests > 0) {
-        assertRoom(a, actTimes(account, 'request', since), requests, limits.requests, now, 'money_requests_day');
-        if (worker) assertRoom(WORK, workTimes(worker, 'request', since), requests, M.enterpriseWorkMarketRequestsPerDay, now, 'money_enterprise_work_requests_day');
-        for (let i = 0; i < requests; i++) rows.push({ kind: 'request', recipient: null, isNew: false });
+        const times = actTimes(account, 'request', since);
+        if (!worker || times.length + requests <= limits.requests) {
+            assertRoom(a, times, requests, limits.requests, now, 'money_requests_day');
+            if (worker) assertRoom(KEEPER, workTimes(worker, 'request', since), requests, M.enterpriseWorkMarketRequestsPerDay, now, 'money_enterprise_work_requests_day');
+            for (let i = 0; i < requests; i++) rows.push(itsRow({ kind: 'request', recipient: null, isNew: false }));
+        } else {
+            // The enterprise's approvals are spent: the keeper's own.
+            assertRoom(KEEPER, actTimes(worker, 'request', since), requests, M.marketRequestsPerDay, now, 'money_requests_day', keeperOwnNote(a.name));
+            for (let i = 0; i < requests; i++) rows.push(ownRow({ kind: 'request', recipient: null, isNew: false }));
+            keeperOwn = true;
+        }
     }
     const pledges = acts.filter((x) => x.kind === 'pledge').length;
     if (pledges > 0) {
         if (limits.pledges !== null) assertRoom(a, actTimes(account, 'pledge', since), pledges, limits.pledges, now, 'money_pledges_day');
-        for (let i = 0; i < pledges; i++) rows.push({ kind: 'pledge', recipient: null, isNew: false });
+        for (let i = 0; i < pledges; i++) rows.push(itsRow({ kind: 'pledge', recipient: null, isNew: false }));
     }
-    return { account, keeper: worker, rows };
+    return { rows, keeperOwn };
+}
+
+export interface MoneyActsCheck {
+    /** They count against the keeper's own limits, as the enterprise's own day had no room (recordSettlementKeeper). */
+    keeperOwn: boolean;
 }
 
 /**
  * Throws MoneyLimitError when `account` may not make `acts` now (done by `keeper`, for an enterprise they keep); records
  * nothing (the federation routes, whose record is the settlement).
  */
-export function assertMoneyActsAllowed(account: string, acts: readonly MoneyAct[], now = Date.now(), keeper: string | null = null): void {
-    judge(account, acts, now, keeper);
+export function assertMoneyActsAllowed(account: string, acts: readonly MoneyAct[], now = Date.now(), keeper: string | null = null): MoneyActsCheck {
+    return { keeperOwn: judge(account, acts, now, keeper).keeperOwn };
 }
 
 export interface MoneyActHold {
@@ -265,7 +329,7 @@ function holdOn(ids: readonly number[]): MoneyActHold {
     };
 }
 
-const INSERT_ACT = 'INSERT INTO money_acts (account, kind, recipient, new_recipient, made_at, keeper, settlement_key) VALUES (?, ?, ?, ?, ?, ?, ?)';
+const INSERT_ACT = 'INSERT INTO money_acts (account, kind, recipient, new_recipient, made_at, keeper, settlement_key, for_enterprise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
 
 /**
  * Check `acts` for `account` (done by `keeper`, when it is an enterprise they keep) and record them in the same step,
@@ -276,19 +340,22 @@ export function admitMoneyActs(account: string, acts: readonly MoneyAct[], now =
     const verdict = judge(account, acts, now, keeper);
     const insert = db.prepare(INSERT_ACT);
     const at = iso(now);
-    return holdOn(db.transaction(() => verdict.rows.map((r) => Number(insert.run(account, r.kind, r.recipient, r.isNew ? 1 : 0, at, verdict.keeper, null).lastInsertRowid)))());
+    return holdOn(db.transaction(() => verdict.rows.map((r) =>
+        Number(insert.run(r.account, r.kind, r.recipient, r.isNew ? 1 : 0, at, r.keeper, null, r.forEnterprise).lastInsertRowid)))());
 }
 
 /**
  * A commission `keeper` makes for `enterprise` to `recipient`, once the Beans are funded and just before the settlement
- * `key` escrows them: recorded for the keeper's enterprise work only (the enterprise's count is the settlement). Checked
- * beforehand by assertMoneyActsAllowed with the same keeper, with nothing awaited between. The route releases the hold
- * when no settlement was written after all.
+ * `key` escrows them. Within the enterprise's day it is recorded for the keeper's enterprise work only (the enterprise's
+ * count is the settlement); once that day is spent (`keeperOwn`, from assertMoneyActsAllowed) it is the keeper's own
+ * payment, and the enterprise's count leaves the settlement out. Checked beforehand by assertMoneyActsAllowed with the
+ * same keeper, with nothing awaited between. The route releases the hold when no settlement was written after all.
  */
-export function recordSettlementKeeper(enterprise: string, keeper: string, recipient: string, key: string, now = Date.now()): MoneyActHold {
+export function recordSettlementKeeper(enterprise: string, keeper: string, recipient: string, key: string, keeperOwn = false, now = Date.now()): MoneyActHold {
     const someone = isSomeone(recipient, enterprise);
     const isNew = someone && !hasPaid(enterprise, recipient);
-    const id = Number(db.prepare(INSERT_ACT).run(enterprise, 'payment', someone ? recipient : null, isNew ? 1 : 0, iso(now), keeper, key).lastInsertRowid);
+    const [account, by, forEnterprise] = keeperOwn ? [keeper, null, enterprise] : [enterprise, keeper, null];
+    const id = Number(db.prepare(INSERT_ACT).run(account, 'payment', someone ? recipient : null, isNew ? 1 : 0, iso(now), by, key, forEnterprise).lastInsertRowid);
     return holdOn([id]);
 }
 

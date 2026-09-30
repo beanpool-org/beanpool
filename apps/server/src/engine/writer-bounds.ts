@@ -17,7 +17,12 @@
  *
  * An enterprise's posts count against the enterprise at its own, higher number (WRITER_LIMITS.enterprisePostsPerDay),
  * never against the keeper's own 100, and against the keeper's enterprise work across every enterprise they keep
- * (WRITER_LIMITS.enterpriseWorkPostsPerDay). The money routes have their own limits (engine/money-limits.ts).
+ * (WRITER_LIMITS.enterpriseWorkPostsPerDay). Once the enterprise has put up its day's, what a keeper puts up for it counts
+ * against the keeper's own 100 instead, as on a member's own (the director, 2026-09-30: otherwise one keeper who used up
+ * a shop's day stopped its other keepers posting for it, and removing that keeper waits out a 3-day objection window).
+ * Which posts those were is the one thing here not read from the rows the member wrote: keeper_own_posts (schema.sql
+ * 11e), this server's own and a day's, so a take-over forgets it (the enterprise's day then counts them, and the keepers'
+ * own don't). The money routes have their own limits (engine/money-limits.ts).
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
@@ -34,7 +39,6 @@ export type WriterLimitCode =
     | 'enterprises_per_day'
     | 'enterprises_live'
     | 'posts_per_day'
-    | 'enterprise_posts_per_day'
     | 'enterprise_work_posts_per_day'
     | 'groups_per_day'
     | 'invites_per_day'
@@ -82,36 +86,75 @@ const since = (now: number) => iso(now - DAY_MS);
 // ── Posts ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Posts of any kind put up in the day as `author`: a member's own, or an enterprise's, whichever keepers put them up.
- * What a keeper puts up for an enterprise is the enterprise's (its author), and never counts against the keeper.
+ * Posts of any kind put up in the day that count against `account`. A member's: their own, and those they put up for an
+ * enterprise once its own day's were up (keeper_own_posts). An enterprise's: the ones it is the author of, less those.
  */
-function postTimes(author: string, now: number): string[] {
-    return column(db.prepare(`SELECT created_at AS t FROM posts WHERE author_pubkey = ? AND origin_node IS NULL AND created_at > ?`)
-        .all(author, since(now)));
+function postTimes(account: string, now: number): string[] {
+    return column(db.prepare(`
+        SELECT p.created_at AS t FROM posts p
+         WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ?
+           AND NOT EXISTS (SELECT 1 FROM keeper_own_posts k WHERE k.post_id = p.id)
+        UNION ALL
+        SELECT p.created_at AS t FROM keeper_own_posts k JOIN posts p ON p.id = k.post_id
+         WHERE k.keeper = ? AND p.origin_node IS NULL AND p.created_at > ?`).all(account, since(now), account, since(now)));
+}
+
+/** A member's own posts limit, in their words, with `note` after when it is a post for an enterprise whose day is spent. */
+function assertOwnPostsToday(member: string, now: number, note = ''): void {
+    const limit = WRITER_LIMITS.postsPerDay;
+    assertUnderDaily(postTimes(member, now), limit, now, 'posts_per_day',
+        (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.${note}`);
 }
 
 /** Before a new post by `member` for themselves. */
 export function assertMayPostToday(member: string, now = Date.now()): void {
-    const limit = WRITER_LIMITS.postsPerDay;
-    assertUnderDaily(postTimes(member, now), limit, now, 'posts_per_day',
-        (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.`);
+    assertOwnPostsToday(member, now);
 }
 
 /**
- * Before a new post `keeper` puts up for `enterprise` (an offer, a need or an event): the enterprise's own day, and then
- * the keeper's enterprise work, what they put up in the day for every enterprise they keep (created_by, the posts routes
- * set it to the keeper whenever the author is an enterprise).
+ * What a refusal by a keeper's own limit adds when the act was for an enterprise whose own day was spent (the posts
+ * here, and engine/money-limits.ts; the gateway's day budget says the same with "This enterprise").
  */
-export function assertEnterpriseMayPostToday(enterprise: string, keeper: string, now = Date.now()): void {
-    const limit = WRITER_LIMITS.enterprisePostsPerDay;
-    const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(enterprise) as { callsign: string | null } | undefined)?.callsign?.trim() || 'This enterprise';
-    assertUnderDaily(postTimes(enterprise, now), limit, now, 'enterprise_posts_per_day',
-        (when) => `${name} can put up ${limit.toLocaleString('en')} new posts in any 24 hours. It can post again ${when}.`);
+export const keeperOwnNote = (enterprise: string) =>
+    ` ${enterprise} has reached its own limit for today, so what you do for it counts against yours.`;
+
+/**
+ * Before a new post `keeper` puts up for `enterprise` (an offer, a need or an event). While the enterprise has room in its
+ * own day: that day, and then the keeper's enterprise work, what they put up in the day for every enterprise they keep
+ * (created_by, which the posts routes set to the keeper whenever the author is an enterprise), less the posts that
+ * counted as their own. Once the enterprise's day is spent: the keeper's own 100 instead, and not their enterprise work.
+ * Returns whose the post is, for enterprisePostLimit to record.
+ */
+export function assertEnterpriseMayPostToday(enterprise: string, keeper: string, now = Date.now()): 'enterprise' | 'keeper' {
+    if (postTimes(enterprise, now).length >= WRITER_LIMITS.enterprisePostsPerDay) {
+        const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(enterprise) as { callsign: string | null } | undefined)?.callsign?.trim() || 'This enterprise';
+        assertOwnPostsToday(keeper, now, keeperOwnNote(name));
+        return 'keeper';
+    }
     const work = WRITER_LIMITS.enterpriseWorkPostsPerDay;
-    const forEnterprises = column(db.prepare(`SELECT created_at AS t FROM posts WHERE created_by = ? AND author_pubkey != ? AND origin_node IS NULL AND created_at > ?`)
+    const forEnterprises = column(db.prepare(`SELECT p.created_at AS t FROM posts p WHERE p.created_by = ? AND p.author_pubkey != ? AND p.origin_node IS NULL AND p.created_at > ?
+                                                AND NOT EXISTS (SELECT 1 FROM keeper_own_posts k WHERE k.post_id = p.id)`)
         .all(keeper, keeper, since(now)));
     assertUnderDaily(forEnterprises, work, now, 'enterprise_work_posts_per_day',
         (when) => `You can put up ${work.toLocaleString('en')} new posts in any 24 hours for the enterprises you keep, all of them together. You can post for them again ${when}. Your own posts are counted apart.`);
+    return 'enterprise';
+}
+
+/**
+ * The posts limit for what `keeper` puts up for `enterprise`, for the treasury routes: `beforeWrite` for createPost (it
+ * runs once every refusal of the post itself has passed, and nothing is awaited between it and the post's row), then
+ * `stored` with the new post's id straight after, which records it as the keeper's own when their own limit took it.
+ */
+export function enterprisePostLimit(enterprise: string, keeper: string): { beforeWrite: () => void; stored: (postId: string) => void } {
+    let whose: 'enterprise' | 'keeper' = 'enterprise';
+    return {
+        beforeWrite: () => { whose = assertEnterpriseMayPostToday(enterprise, keeper); },
+        stored: (postId) => {
+            if (whose !== 'keeper') return;
+            db.prepare('DELETE FROM keeper_own_posts WHERE made_at <= ?').run(since(Date.now()));
+            db.prepare('INSERT OR IGNORE INTO keeper_own_posts (post_id, keeper, made_at) SELECT id, ?, created_at FROM posts WHERE id = ?').run(keeper, postId);
+        },
+    };
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────────────────────────────────────────

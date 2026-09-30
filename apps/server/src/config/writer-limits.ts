@@ -26,6 +26,11 @@
  * busy shop with several keepers still gets its whole allowance (each keeper's share counts to their own ceiling), and
  * one person, through any number of enterprises, does at most one enterprise's worth a day, on top of their own limits.
  *
+ * Once an enterprise's own day of something is spent (its writes, posts, payments, new people or approvals), what a
+ * keeper does further of it for that enterprise counts against the keeper's OWN number beside it instead (the director,
+ * 2026-09-30), as everything did on main: so one keeper who spends a shop's day blocks only themselves, and every other
+ * keeper keeps their own allowance for it. The `enterprise…` numbers are the shop's 10x on top.
+ *
  * The money limits (W-money, design §7 row 5) are MONEY_LIMITS below, read by engine/money-limits.ts.
  */
 export const WRITER_LIMITS = {
@@ -36,7 +41,8 @@ export const WRITER_LIMITS = {
     signedWritesPerDay: 5_000,
     /** Signed writes per enterprise or project in any 24 hours, for the writes whose path names it
      *  (`/api/treasury/:id/…`, `/api/enterprise/:id/…`, `/api/enterprises/:id/…`) when the signer keeps that running
-     *  enterprise. They are counted here and not in the keeper's own signedWritesPerDay. Heavy real user: a large
+     *  enterprise. They are counted here and not in the keeper's own signedWritesPerDay, until this is spent: then a
+     *  keeper's writes for it count in their own signedWritesPerDay. Heavy real user: a large
      *  project's or a busy shop's keepers together, listing, approving, paying and talking in its thread all day: a few
      *  thousand. */
     enterpriseSignedWritesPerDay: 50_000,
@@ -61,8 +67,8 @@ export const WRITER_LIMITS = {
     /** Enterprises a member started that are still running (not wound up). Heavy real user: a person runs one to three. */
     enterprisesLive: 20,
     /** New posts (any kind) by one member in any 24 hours, their own. What they put up for an enterprise they keep
-     *  counts against the enterprise (enterprisePostsPerDay). Photos stay at 5 a post. Heavy real user: a member putting
-     *  a garage's worth of things up in one day. */
+     *  counts against the enterprise (enterprisePostsPerDay), and here once the enterprise's are up. Photos stay at 5 a
+     *  post. Heavy real user: a member putting a garage's worth of things up in one day. */
     postsPerDay: 100,
     /** New posts (offers, needs and events) an enterprise or project puts up in any 24 hours, whichever keepers put them
      *  up. Heavy real user: a large shop or market putting its whole stock up in one day. */
@@ -101,9 +107,11 @@ export const WRITER_LIMITS = {
  * engine/money-limits.ts (the routes: routes/money-limits-gate.ts, and the two federation routes themselves).
  *
  * Counted against the account whose Beans or deal it is: a member's own key, or the enterprise (its treasury) when a
- * keeper acts for it, never against the keeper's own. What a keeper does for an enterprise also counts against their
- * enterprise work, across every enterprise they keep (the `enterpriseWork…` numbers), so starting enterprises doesn't
- * multiply one person's day. Receiving is never limited.
+ * keeper acts for it, never against the keeper's own while the enterprise has room. What a keeper does for an enterprise
+ * also counts against their enterprise work, across every enterprise they keep (the `enterpriseWork…` numbers), so
+ * starting enterprises doesn't multiply one person's day. Once the enterprise's own number is spent, a keeper's further
+ * acts of that kind for it count against the keeper's own number (paymentsPerDay, newRecipientsPerDay,
+ * marketRequestsPerDay) instead. Receiving is never limited.
  */
 export const MONEY_LIMITS = {
     /** Payments a member's own account sends in any 24 hours: a send, a one-step buy, asking to buy an offer, approving

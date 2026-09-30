@@ -562,9 +562,12 @@ CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(ma
 -- counts. `recipient` is who a payment goes to when that is someone (a member, a visitor or an enterprise; NULL for the
 -- Commons or a crowdfund's escrow); `new_recipient` is 1 when this account had never completed a payment to them before.
 -- `keeper` is who did it when the account is an enterprise (the keeper who signed): one person's enterprise work is
--- counted across every enterprise they keep. A purchase from another community is counted from its own settlements row
--- instead; a commission's row (`settlement_key`, the settlement's key) is there only for its keeper's count, as the
--- enterprise's is its settlement. This server's own, never copied, and deleted once a day old.
+-- counted across every enterprise they keep. `for_enterprise` is set instead when a keeper acted for an enterprise whose own
+-- day was spent: the act is then the keeper's own (`account` is the keeper), counted against their own limits, and
+-- `new_recipient` says whether the enterprise had paid them. A purchase from another community is counted from its own
+-- settlements row instead; a commission's row (`settlement_key`, the settlement's key) is there only for its keeper's
+-- count, as the enterprise's is its settlement, unless it is the keeper's own (`for_enterprise`), when it is the count and
+-- the enterprise's leaves that settlement out. This server's own, never copied, and deleted once a day old.
 CREATE TABLE IF NOT EXISTS money_acts (
     account TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (kind IN ('payment', 'request', 'pledge')),
@@ -572,11 +575,25 @@ CREATE TABLE IF NOT EXISTS money_acts (
     new_recipient INTEGER NOT NULL DEFAULT 0,
     made_at TEXT NOT NULL,
     keeper TEXT,
-    settlement_key TEXT
+    settlement_key TEXT,
+    for_enterprise TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_money_acts_account ON money_acts(account, kind, made_at);
 CREATE INDEX IF NOT EXISTS idx_money_acts_made_at ON money_acts(made_at);
 CREATE INDEX IF NOT EXISTS idx_money_acts_keeper ON money_acts(keeper, kind, made_at) WHERE keeper IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_money_acts_settlement ON money_acts(settlement_key) WHERE settlement_key IS NOT NULL;
+
+-- 11e. The posts a keeper put up for an enterprise once its own day's posts (WRITER_LIMITS.enterprisePostsPerDay) were
+-- up (engine/writer-bounds.ts): each counts against the keeper's own posts instead, as on a member's own, so one keeper
+-- who uses up an enterprise's day can't stop its other keepers posting for it. One row per such post, its created_at as
+-- `made_at`. This server's own, never copied, and deleted once a day old.
+CREATE TABLE IF NOT EXISTS keeper_own_posts (
+    post_id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (

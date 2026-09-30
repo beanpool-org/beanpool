@@ -1456,8 +1456,8 @@ export async function startHttpsServer(port: number): Promise<number> {
 
     // The gateway limiter's member bucket: charged only once the signature above has been verified. Then the key's
     // day budget for writes (W-main), whether or not the minute throttle is on: an enterprise's own and the signer's
-    // enterprise work, when the write's path names one the signer keeps (routes/money-limits-gate.ts enterpriseActingFor),
-    // and the signer's own otherwise; a shop's governance and settling always the signer's own
+    // enterprise work, when the write's path names one the signer keeps (routes/money-limits-gate.ts enterpriseActingFor)
+    // and its own day has room, and the signer's own otherwise; a shop's governance and settling always the signer's own
     // (gateway-rate-limit.ts ENTERPRISE_GOVERNANCE_WRITE).
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();

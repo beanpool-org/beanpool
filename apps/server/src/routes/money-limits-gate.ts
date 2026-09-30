@@ -6,7 +6,8 @@
  *
  * The account is the signer's own, or the enterprise the PATH names when the signer keeps it (enterpriseActingFor): never a
  * key in the body. An enterprise's acts also count against the signing keeper's enterprise work, across every enterprise
- * they keep (engine/money-limits.ts, ENTERPRISE WORK), and both must have room. A request here is checked, and its acts recorded, before the handler runs, outside any ledger
+ * they keep (engine/money-limits.ts, ENTERPRISE WORK), and both must have room; once the enterprise's own day is spent,
+ * they count against the keeper's own limits instead (engine/money-limits.ts, ONCE AN ENTERPRISE'S DAY IS SPENT). A request here is checked, and its acts recorded, before the handler runs, outside any ledger
  * transaction; when the handler then answers 4xx or 5xx (it refused: not a keeper, a bad body, a deal already actioned) the
  * acts are taken back, so only what happened counts. A refused request moves nothing: the handler never runs.
  *
@@ -63,7 +64,7 @@ import type { Context, Next } from 'koa';
 import { canOperateTreasury } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
-import { admitMoneyActs, assertMoneyActsAllowed, MoneyLimitError, type MoneyAct, type MoneyActHold } from '../engine/money-limits.js';
+import { admitMoneyActs, assertMoneyActsAllowed, MoneyLimitError, type MoneyAct, type MoneyActHold, type MoneyActsCheck } from '../engine/money-limits.js';
 import { pledgeDispatchKind } from './treasury.js';
 
 /** The account whose acts they are, and `keeper` when that is an enterprise the signer keeps (their enterprise work). */
@@ -226,18 +227,22 @@ export function respondMoneyLimit(ctx: { status: number; body: unknown; set?: (f
 }
 
 /**
- * For the two federation routes: answers the refusal and returns true when `account` may not make `acts` now (done by
- * `keeper`, for a commission: their enterprise work too). Checks only: the settlement the route goes on to open is the
- * record.
+ * For the two federation routes: what the money limits make of `acts` for `account` now (done by `keeper`, for a
+ * commission: their enterprise work too, or their own limits once the enterprise's day is spent), or null once their
+ * refusal is answered. Checks only: the settlement the route goes on to open is the record.
  */
-export function refuseOverMoneyLimits(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, account: string, acts: readonly MoneyAct[], keeper: string | null = null): boolean {
+export function checkMoneyLimits(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, account: string, acts: readonly MoneyAct[], keeper: string | null = null): MoneyActsCheck | null {
     try {
-        assertMoneyActsAllowed(account, acts, Date.now(), keeper);
-        return false;
+        return assertMoneyActsAllowed(account, acts, Date.now(), keeper);
     } catch (e) {
-        if (respondMoneyLimit(ctx, e)) return true;
+        if (respondMoneyLimit(ctx, e)) return null;
         throw e;
     }
+}
+
+/** checkMoneyLimits, as true when it refused (and answered). */
+export function refuseOverMoneyLimits(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, account: string, acts: readonly MoneyAct[], keeper: string | null = null): boolean {
+    return checkMoneyLimits(ctx, account, acts, keeper) === null;
 }
 
 /** Koa middleware: the money limits for the routes above, on a main server. Mounted after requireSignature (the actor). */

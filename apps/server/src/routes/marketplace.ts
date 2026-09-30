@@ -20,7 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeysRequired, photoHealFor, notePhotoHealServed, PHOTO_HEAL_PAGE_ROWS } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeysRequired, photoHealFor, notePhotoHealServed, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -232,6 +232,13 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // since would never be sent again with the URL that now opens its photo. So is each later sync of a key whose heal
     // didn't fit one answer (photoHealFor). Not a read with a point: no phone's sync has one.
     const heal = point ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
+    // A whole sync read (a phone's first, its pull after a take-over or into an empty cache) starts the key's heal again
+    // from the first page: the phone keeps what the pull doesn't carry, and the pages the key's row counts may have gone
+    // to a pull it threw away or to another device (review of fe4c27ce, finding 1). Here, not in photoHealFor: the
+    // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
+    if (!point && sync && !updatedAfter && !id && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+        restartPhotoHealFor(ctx.state.actor as string | undefined);
+    }
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing

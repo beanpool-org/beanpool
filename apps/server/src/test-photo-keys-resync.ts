@@ -51,6 +51,16 @@
  *     resumeTakeoverAtBoot, after the state engine recorded the standby's shape): the phone's old cursor heals at once,
  *     with no restart after (finding 2).
  *
+ * A key's other device, and a pull the phone throws away (review of fe4c27ce, finding 1). Simulated phones, each holding
+ * the keyless URLs of every listing, on a node whose photoKeysSince is set two hours back:
+ * 11. Two phones on one key sync in turn, every 30 s each and 15 s apart, from just after the change; once with the
+ *     second phone the last to sync before the change, once with the first. 40 and 150 listings: neither keeps a stale
+ *     URL. 600: each gets the first page and one of the two after it. And when the first phone syncs once and stops,
+ *     the second heals all 600.
+ * 12. An epoch-aware phone after a take-over: its first pull (old cursor) is answered and thrown away, then it pulls
+ *     whole with no cursor (the 200 listings updated last), then syncs every 30 s. 600 live listings with a photo, 100
+ *     newer finished ones with a photo and 50 without: all 700 with a photo heal.
+ *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-keys-resync.ts
  */
 
@@ -112,9 +122,10 @@ async function child(): Promise<void> {
             }
             return true;
         },
-        // The listings, their photos and their authors' standing an hour older: a cursor from now leaves them out.
-        backdate: () => {
-            const ago = new Date(Date.now() - HOUR).toISOString();
+        // The listings, their photos and their authors' standing an hour older (or `minutesAgo`): a cursor from now leaves
+        // them out.
+        backdate: (a: { minutesAgo?: number }) => {
+            const ago = new Date(Date.now() - (a.minutesAgo ?? 60) * MIN).toISOString();
             db.prepare('UPDATE posts SET created_at = ?, updated_at = ?').run(ago, ago);
             db.prepare('UPDATE post_photos SET updated_at = ?').run(ago);
             db.prepare('UPDATE members SET board_standing_changed_at = ?').run(ago);
@@ -155,6 +166,11 @@ async function child(): Promise<void> {
         },
         holiday: (a: { pk: string; on: boolean }) => se.setHolidayMode(a.pk, a.on).ok,
         heals: () => db.prepare('SELECT COUNT(*) AS n FROM photo_url_heals').get(),
+        // Every listing's photo URLs as `pk`'s sync reads it now: what a healed phone holds.
+        photosFor: (a: { pk: string }) => Object.fromEntries(se.getPosts({
+            types: ['offer', 'need', 'poll', 'event'], excludeEvents: false, viewerPubkey: a.pk, includeHidden: !!se.nodeRoleOf(a.pk),
+            includeVoters: true, beansOnly: false, sync: true,
+        } as Parameters<typeof se.getPosts>[0]).map((p) => [p.id, p.photos ?? []])),
         // The ids of the delta main sends the phone's pull (its types, sync, a member's read) for `updatedAfter`: what a
         // heal answer carries first.
         deltaIds: (a: { pk: string; updatedAfter: string }) => se.getPosts({
@@ -314,6 +330,7 @@ async function main(): Promise<void> {
         return { pk: Buffer.from(ed25519.getPublicKey(seed)).toString('hex'), sign: core.ed25519Signer(seed), callsign };
     };
     const owner = id('Olive'), alice = id('Alice'), bob = id('Bob'), cara = id('Cara'), hank = id('Hank');
+    const dan = id('Dan'), eve = id('Eve');
 
     /** A request as a current app signs it (format 2, for the host it connects to), sent to the node. */
     async function signed(node: Node, who: Id, method: string, reqPath: string, payload?: unknown, extra: Record<string, string> = {}): Promise<Reply> {
@@ -713,6 +730,127 @@ async function main(): Promise<void> {
             const next = await pull(node, bob, synced);
             assert(next.status === 200 && healedIn([next], [template]) === 1,
                 `the phone's old cursor is answered whole at once, keyed, with no restart after (${next.status}, ${healedIn([next], [template])} of 1)`);
+            await stop(node);
+        });
+
+        // ── A key's other device, and a pull the phone throws away (review of fe4c27ce, finding 1) ──
+        // Simulated phones on a node whose photoKeysSince is set two hours back, so each phone's clock (its syncs, its
+        // cursor: its last successful sync less five minutes) runs from photoKeysSince without waiting.
+        const cursorAt = (at: number) => new Date(at - 5 * MIN).toISOString();
+        /** A phone: the photo URLs it holds per listing, and its last successful sync (the cursor it sends, less 5 min). */
+        class Phone {
+            held = new Map<string, string[]>();
+            constructor(public who: Id, public lastSync: number, held: Record<string, string[]>) {
+                for (const [pid, photos] of Object.entries(held)) this.held.set(pid, photos);
+            }
+            /** One sync that succeeds at phone time `at`: what it reads is written, and its cursor moves. */
+            async sync(at: number): Promise<Reply> {
+                const r = await signed(node, this.who, 'GET', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(cursorAt(this.lastSync))}`);
+                if (r.status === 200) {
+                    for (const p of rowsOf(r)) this.held.set(p.id, p.photos ?? []);
+                    this.lastSync = at;
+                }
+                return r;
+            }
+            /** The listings with a photo whose URLs here aren't the node's now: each a 404 on this phone. */
+            stale(current: Record<string, string[]>): string[] {
+                return Object.entries(current)
+                    .filter(([pid, photos]) => photos.length > 0 && JSON.stringify(this.held.get(pid) ?? []) !== JSON.stringify(photos))
+                    .map(([pid]) => pid);
+            }
+        }
+        /**
+         * A node on data dir `dir` with `n` listings with a photo (Alice's, five hours old and older), `finished` finished
+         * ones with a photo (three hours) and `bare` without (four hours); the phones' keyless URLs read with keys off;
+         * then keys on, and photoKeysSince set two hours back. Returns photoKeysSince and the URLs a phone holds.
+         */
+        const changedNode = async (dir: string, n: number, extra: { finished?: number; bare?: number } = {}) => {
+            node = await boot({ ENFORCE_READ_AUTH: 'false' }, dir);
+            await node.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [alice, bob, cara, hank, dan, eve].map((m) => ({ pk: m.pk, callsign: m.callsign })) });
+            await node.send('resetLimits');
+            const made = await signed(node, alice, 'POST', '/api/marketplace/posts', {
+                type: 'offer', category: 'other', title: 'Template', description: 'Template, a test offer', authorPublicKey: alice.pk,
+                lat: -28.5, lng: 153.5, photos: [TINY_PNG],
+            });
+            const template = made.body?.post?.id as string;
+            // Older than photoKeysSince will be, standing included: no sync's delta carries them again.
+            await node.send('backdate', { minutesAgo: 300 });
+            if (n > 1) await node.send('bulk', { template, author: alice.pk, count: n - 1, newestMinutesAgo: 301, prefix: `${dir}-live` });
+            if (extra.bare) await node.send('bulk', { template, author: alice.pk, count: extra.bare, newestMinutesAgo: 240, photo: false, prefix: `${dir}-bare` });
+            if (extra.finished) await node.send('bulk', { template, author: alice.pk, count: extra.finished, newestMinutesAgo: 180, status: 'completed', prefix: `${dir}-done` });
+            const held: Record<string, string[]> = await node.send('photosFor', { pk: bob.pk });
+            await stop(node);
+            node = await boot({}, dir);
+            await node.send('ageSince', { ms: 2 * HOUR });
+            await stop(node);
+            node = await boot({}, dir);
+            const since = Date.parse((await node.send('records')).since);
+            return { since, held };
+        };
+        /**
+         * Two phones on `who`'s key syncing in turn, every 30 s each, 15 s apart, from 10 s after photoKeysSince; the one
+         * that synced last before the change is `lastBefore`. With `aStops`, phone A syncs once and no more. Returns how
+         * many listings with a photo each phone holds a stale URL for.
+         */
+        const twoPhones = async (who: Id, since: number, held: Record<string, string[]>, lastBefore: 'A' | 'B', aStops = false) => {
+            const A = new Phone(who, lastBefore === 'B' ? since - 60_000 : since - 30_000, held);
+            const B = new Phone(who, lastBefore === 'B' ? since - 30_000 : since - 60_000, held);
+            let aSyncs = 0;
+            for (let step = 0; step < 48; step++) {
+                const phone = step % 2 === 0 ? A : B;
+                if (phone === A && aStops && aSyncs >= 1) continue;
+                if (phone === A) aSyncs++;
+                const r = await phone.sync(since + 10_000 + step * 15_000);
+                if (r.status !== 200) throw new Error(`a sync answered ${r.status}`);
+            }
+            const current: Record<string, string[]> = await node.send('photosFor', { pk: who.pk });
+            return { a: A.stale(current).length, b: B.stale(current).length };
+        };
+
+        for (const n of [40, 150, 600]) {
+            await section(`11. ${n} listings, two phones on one key syncing in turn: each phone's first sync after the change gets the first page`, async () => {
+                const { since, held } = await changedNode(`two${n}`, n);
+                // Bob's second phone synced last before the change; Cara's first phone did.
+                const bLast = await twoPhones(bob, since, held, 'B');
+                const aLast = await twoPhones(cara, since, held, 'A');
+                console.log(`   stale per phone (A / B): B synced last before the change ${bLast.a} / ${bLast.b}; A did ${aLast.a} / ${aLast.b}`);
+                if (n <= 200) {
+                    assert(bLast.a === 0 && bLast.b === 0 && aLast.a === 0 && aLast.b === 0,
+                        `a node of one page: neither phone keeps a stale photo URL, whichever synced last before the change (${bLast.a} / ${bLast.b}, ${aLast.a} / ${aLast.b})`);
+                } else {
+                    // Three pages: each phone gets the first; the two after it go to whichever phone syncs next, one each.
+                    assert([bLast.a, bLast.b, aLast.a, aLast.b].every((st) => st <= n - 400),
+                        `each phone gets the first page and one of the two after it, whichever synced last before the change (${bLast.a} / ${bLast.b}, ${aLast.a} / ${aLast.b} stale of ${n})`);
+                    // Phone A syncs once and stops: phone B heals every listing.
+                    const bStops = await twoPhones(dan, since, held, 'B', true);
+                    const aStops = await twoPhones(eve, since, held, 'A', true);
+                    assert(bStops.b === 0 && aStops.b === 0,
+                        `when phone A syncs once and stops, phone B heals every listing, whichever synced last before the change (${bStops.b}, ${aStops.b} stale of ${n})`);
+                }
+                await stop(node);
+            });
+        }
+
+        await section('12. a take-over: the pull the phone throws away, then its whole pull, heal every listing', async () => {
+            // 600 live listings with a photo, 100 finished ones with a photo and 50 without, both newer than the live ones.
+            const { since, held } = await changedNode('takeover', 600, { finished: 100, bare: 50 });
+            const P = new Phone(bob, since - 60_000, held);
+            // The epoch-aware phone's first pull after a take-over carries its old cursor. The node answers it (the first
+            // page, noted for Bob's key); the phone sees the new epoch, throws the answer away and pulls whole, no cursor.
+            const thrown = await signed(node, bob, 'GET', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(cursorAt(P.lastSync))}`);
+            const whole = await pull(node, bob, null);
+            for (const p of rowsOf(whole)) P.held.set(p.id, p.photos ?? []);
+            P.lastSync = since + 20_000;
+            const wholeIds = new Set(rowsOf(whole).map((p) => p.id));
+            const missed = rowsOf(thrown).filter((p) => !wholeIds.has(p.id)).length;
+            assert(thrown.status === 200 && whole.status === 200 && rowsOf(whole).length === 200 && missed > 0,
+                `setup: the whole pull reads the 200 listings updated last, not all of the page thrown away (${rowsOf(whole).length}; ${missed} of ${rowsOf(thrown).length} not in it)`);
+            for (let k = 0; k < 12; k++) await P.sync(since + 50_000 + k * 30_000);
+            const current: Record<string, string[]> = await node.send('photosFor', { pk: bob.pk });
+            const withPhoto = Object.values(current).filter((p) => p.length > 0).length;
+            const stale = P.stale(current);
+            assert(withPhoto === 700 && stale.length === 0,
+                `the phone's syncs after its whole pull heal every listing with a photo (${stale.length} stale of ${withPhoto})`);
             await stop(node);
         });
     } finally {

@@ -55,6 +55,8 @@ This is not a way to log in. Your account is still your own key. The linked acco
 
 Before the key vault, each community kept its own copy for the sign-in accounts linked there. If yours still keeps one, **Settings** shows **Move your Google recovery to BeanPool's key vault** (or Facebook, or Apple). Tap **Move it**, pass your phone's lock screen check and sign in once. The key vault gets a fresh copy, made on this phone, and your community's copy is then deleted. **Not now** puts the card away for a week.
 
+If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is made at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app warns you first: without them, and without a sign-in account, nothing brings your account back.
+
 This version of the app gets back in with a sign-in only through the key vault, so move your copy while you still have this phone.
 
 ## If you had linked GitHub

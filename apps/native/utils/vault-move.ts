@@ -10,6 +10,9 @@
  *   send a signed DELETE for that sign-in to the community. A delete that doesn't land is remembered on the phone and
  *   tried again each time the card looks, until it does. Only copies this phone moved are ever deleted.
  * - "Not now" is always there; the card comes back a week later, and never blocks anything.
+ * - "Remove it instead" (PR #1336 review finding 7): a member who wants no copy anywhere can have the community's copy
+ *   deleted without first depositing one at the vault. The same signed DELETE, remembered and tried again the same way
+ *   when it doesn't land ({@link removeInstead}).
  *
  * Nothing sent to the community here carries a token, a copy or a nonce request: its status, and the delete.
  */
@@ -132,7 +135,7 @@ async function keepUnfinishedMoves(identity: BeanPoolIdentity, moves: Unfinished
     await (moves.length ? AsyncStorage.setItem(key, JSON.stringify(moves)) : AsyncStorage.removeItem(key)).catch(() => {});
 }
 
-/** Deletes a move sent that didn't land: tried again, and kept until each lands. Only ones this phone moved. */
+/** Deletes that didn't land: tried again, and kept until each lands. Only ones this phone moved or was asked to remove. */
 async function retryUnfinishedMoves(identity: BeanPoolIdentity): Promise<void> {
     const moves = await unfinishedMoves(identity);
     if (!moves.length) return;
@@ -147,9 +150,24 @@ async function retryUnfinishedMoves(identity: BeanPoolIdentity): Promise<void> {
  */
 export async function finishMove(identity: BeanPoolIdentity, offer: VaultMoveOffer): Promise<void> {
     if (offer.kind !== 'move') return;
-    if (await removeCommunityCopy(identity, offer.communityUrl, offer.provider)) return;
+    await deleteOrRemember(identity, offer.communityUrl, offer.provider);
+}
+
+/**
+ * "Remove it instead": the community's copy for `provider` goes, with the signed DELETE, and nothing is deposited at the
+ * vault. The member's choice: afterwards that sign-in brings the account back nowhere until it is linked again. A
+ * delete that doesn't land now is remembered and tried again when the card next looks. True once it is gone.
+ */
+export async function removeInstead(identity: BeanPoolIdentity, offer: VaultMoveOffer): Promise<boolean> {
+    if (offer.kind !== 'move') return false;
+    return deleteOrRemember(identity, offer.communityUrl, offer.provider);
+}
+
+async function deleteOrRemember(identity: BeanPoolIdentity, url: string, provider: SsoProvider): Promise<boolean> {
+    if (await removeCommunityCopy(identity, url, provider)) return true;
     const moves = await unfinishedMoves(identity);
-    if (!moves.some(m => m.url === offer.communityUrl && m.provider === offer.provider)) {
-        await keepUnfinishedMoves(identity, [...moves, { url: offer.communityUrl, provider: offer.provider }]);
+    if (!moves.some(m => m.url === url && m.provider === provider)) {
+        await keepUnfinishedMoves(identity, [...moves, { url, provider }]);
     }
+    return false;
 }

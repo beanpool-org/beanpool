@@ -83,7 +83,7 @@ import { disconnectSsoKeeper, vaultProtection } from '../keeper-enrolment';
 import {
     abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, stopSsoRestoreAfterWords, waitingSsoRestore,
 } from '../sso-recovery';
-import { finishMove, moveLater, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
+import { finishMove, moveLater, removeInstead, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
     approveVaultHold, connectWanted, holdEndsText, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
@@ -384,6 +384,47 @@ describe('the move card', () => {
         expect(await vaultMoveOffer(member, COMMUNITY)).toBeNull();
         expect(net.community.copies.has('google')).toBe(false);
         expect(net.community.copies.has('facebook')).toBe(true);
+    });
+
+    it('"Remove it instead": the signed DELETE at a.test, and nothing deposited at the vault, no sign-in', async () => {
+        await memberOnCommunity();
+        net.community.copies.add('google');
+        const offer = (await vaultMoveOffer(member, COMMUNITY))!;
+        expect(offer).toEqual({ kind: 'move', provider: 'google', communityUrl: COMMUNITY });
+        const sentBefore = to(VAULT).length;
+
+        expect(await removeInstead(member, offer)).toBe(true);
+
+        const del = to(COMMUNITY).find(s => s.method === 'DELETE')!;
+        expect(del.path).toBe('/api/recovery/shares/sso/google');
+        expect(boundSignatureValid({ url: del.url, method: 'DELETE', headers: del.headers, body: del.raw }, member.publicKey)).toBe(true);
+        expect(to(VAULT).length).toBe(sentBefore);
+        expect(signInWithProvider).not.toHaveBeenCalled();
+        expect(net.community.copies.has('google')).toBe(false);
+        expect(net.vault.copiesOf(member.publicKey)).toEqual([]);
+        expect(await vaultMoveOffer(member, COMMUNITY)).toBeNull();
+    });
+
+    it('a removal that does not land is tried again the next time the card looks', async () => {
+        await memberOnCommunity();
+        net.community.copies.add('google');
+        const offer = (await vaultMoveOffer(member, COMMUNITY))!;
+        const realHandle = net.community.handle.bind(net.community);
+        net.community.handle = () => ({ status: 503, body: {} });
+        expect(await removeInstead(member, offer)).toBe(false);
+        expect(net.community.copies.has('google')).toBe(true);
+        net.community.handle = realHandle;
+        await vaultMoveOffer(member, COMMUNITY);
+        expect(net.community.copies.has('google')).toBe(false);
+        expect(to(VAULT).filter(s => s.path === '/v1/copies')).toEqual([]);
+    });
+
+    it('the card offers "Remove it instead" on a move, behind a confirm that warns a phone with no 12 words', () => {
+        const card = fs.readFileSync(path.resolve(__dirname, '../../components/VaultMoveCard.tsx'), 'utf8');
+        expect(card).toMatch(/removeButton: 'Remove it instead'/);
+        expect(card).toMatch(/\{move && \([\s\S]*?Alert\.alert\([\s\S]*?style: 'destructive'[\s\S]*?removeInstead\(identity, offer\)/);
+        expect(card).toMatch(/VAULT_MOVE_COPY\.removeBody\(name, hasMnemonic\(identity\)\)/);
+        expect(card).toMatch(/This phone has no 12 words: if you lose it after this, nothing brings your account back\./);
     });
 
     it('Apple is not offered on a phone that cannot sign in with Apple', async () => {

@@ -54,6 +54,25 @@
  * Snapshots and readable backups made before this version hold the row. Every copy made from now on (services/
  * address-retention.ts copyWithoutAddresses), and every such copy this server keeps on disk, at the next boot, loses it.
  *
+ * ## Rolling back past this version (the command below)
+ *
+ * An older version reads the key from the row only. Finding none, it makes a new key, so no record matches any more and
+ * every account that joined through the open door could join a second time, as a new member. So a rollback past this
+ * version needs the key written back as the row first, by the NEW code, with the server stopped:
+ *
+ *     node dist/services/open-join-key.js --write-key-row          # in the image (/app/apps/server)
+ *     pnpm exec tsx src/services/open-join-key.ts --write-key-row  # from a checkout
+ *
+ * with BEANPOOL_DATA_DIR pointing at the node's data folder (the image sets /data). It writes data/open-join.key into
+ * node_config as `openJoinSalt`, byte for byte (base64url, as the older version stored it), and prints counts only. It
+ * keeps the file and the recorded id, so coming back to this version later finds the file equal to the row and finishes
+ * the move again. It changes nothing, and exits 1, when the file is missing or is not the key the records were made
+ * with: an older version would then let those accounts join twice, so the rollback must wait until the right key is in
+ * data/open-join.key. While the older version runs, the key is in the database, and so in every copy, as it was before.
+ *
+ * It is run on the main server only: a standby holds no key, and an older standby takes the key again from its main
+ * server's copies once that server runs the older version too.
+ *
  * ## What this does not do
  *
  * Lock out the operator. The operator's process holds this key and receives the `sub` at every join; that is a stated
@@ -62,6 +81,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { createKeyFileOnce, fsyncDir, writeExclusive } from './key-files.js';
@@ -408,5 +428,59 @@ export function installOpenJoinKeyAtBoot(opts: { standby: boolean }): void {
     } catch (e) {
         installedAs = null;
         console.error(`🚨 Open door: ${(e as Error)?.message || e}. The server runs; the next boot tries again.`);
+    }
+}
+
+// ── the rollback command ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Write data/open-join.key back as the node_config row an older version reads (`openJoinSalt`, base64url), for a
+ * rollback past this version (the header). Keeps the file and the recorded id. Throws, having changed nothing, when an
+ * older version could not recognise the accounts that joined: the file is missing, is not a key, is not the key the
+ * records were made with, or the row already holds another key. Never returns or logs a key's bytes.
+ */
+export function writeLegacyKeyRow(): { records: number; outcome: 'written' | 'same' | 'no-key-needed' } {
+    const records = liveOpenJoinRecords();
+    const file = readKeyFile();
+    if (!file) {
+        if (records === 0) return { records, outcome: 'no-key-needed' };
+        throw new Error(`data/${OPEN_JOIN_KEY_FILE} is missing, and ${records} sign-in record${records === 1 ? ' needs' : 's need'} it. `
+            + 'An older version would make a new key and let each of those accounts join a second time. Put the key back first '
+            + `(copy data/${OPEN_JOIN_KEY_FILE} from the server that made it, or restore a locked backup).`);
+    }
+    if (!isKeyBytes(file)) throw new Error(`data/${OPEN_JOIN_KEY_FILE} is not a key (${file.length} bytes).`);
+    if (records > 0 && recordedOpenJoinKeyId() !== openJoinKeyId(file)) {
+        throw new Error(`data/${OPEN_JOIN_KEY_FILE} is not the key the ${records} sign-in record${records === 1 ? ' here was' : 's here were'} made with. `
+            + 'An older version using it would let each of those accounts join a second time. Put the right key in place first '
+            + '(a data/open-join-retired-….key may be it).');
+    }
+    const value = file.toString('base64url');
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(LEGACY_OPEN_JOIN_KEY_ROW) as { value?: unknown } | undefined;
+    if (row) {
+        if (String(row.value ?? '') === value) return { records, outcome: 'same' };
+        throw new Error(`node_config ${LEGACY_OPEN_JOIN_KEY_ROW} already holds another key. Start this version once, which moves it out, then run this again.`);
+    }
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(LEGACY_OPEN_JOIN_KEY_ROW, value);
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* the older version's first checkpoint does it */ }
+    return { records, outcome: 'written' };
+}
+
+const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedDirectly) {
+    if (!process.argv.includes('--write-key-row')) {
+        console.error('Usage: open-join-key --write-key-row   (with the server stopped; BEANPOOL_DATA_DIR = its data folder)');
+        process.exit(2);
+    }
+    try {
+        const done = writeLegacyKeyRow();
+        const held = `${done.records} sign-in record${done.records === 1 ? '' : 's'} of members who joined through the open door`;
+        console.log(done.outcome === 'no-key-needed'
+            ? `There is no data/${OPEN_JOIN_KEY_FILE} and no sign-in record needs one, so nothing was written. An older version makes a key at its door's first use.`
+            : `${done.outcome === 'same' ? 'The database already held' : 'Wrote'} data/${OPEN_JOIN_KEY_FILE} as node_config ${LEGACY_OPEN_JOIN_KEY_ROW}, `
+                + `for the ${held}. An older version recognises them now; start it before this one, which would move the key out again at boot.`);
+        process.exit(0);
+    } catch (e) {
+        console.error(`Nothing was changed: ${(e as Error)?.message || e}`);
+        process.exit(1);
     }
 }

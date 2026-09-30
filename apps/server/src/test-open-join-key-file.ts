@@ -22,6 +22,11 @@
  *     sign-in) and a new account are both refused 503 door_key_missing, before the sign-in is checked, and no member or
  *     record is added. With the main server's key file put back by hand, and no restart, Ada is 409 already_joined and
  *     the new account joins.
+ *  4. Rolling back past this version (services/open-join-key.ts, the rollback command). With the main server stopped,
+ *     `open-join-key --write-key-row` refuses, changing nothing, when the file is missing or is not the records' key.
+ *     Otherwise it writes the file back as the `openJoinSalt` row, byte for byte, and prints no key; an older version's
+ *     key (the row, decoded as it decodes it) then matches every record, so Ada is not a new member there. Run again, it
+ *     changes nothing. Booted on this version again, the row moves out and Ada is still 409.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join-key-file.ts
@@ -33,6 +38,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { spawn } from 'node:child_process';
 import { spawnNode, runNodeChild, type NodeProc } from './takeover-test-harness.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -49,6 +55,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters
 }) as typeof fetch;
 
 const SCRIPT = fileURLToPath(import.meta.url);
+const KEY_CLI = path.join(path.dirname(SCRIPT), 'services', 'open-join-key.ts');
 const PW_MAIN = 'Door-Key-File-Main-Pw-4471!';
 const PW_STANDBY = 'Door-Key-File-Standby-Pw-93!';
 const PW_RESTORED = 'Door-Key-File-Restored-Pw-26!';
@@ -260,6 +267,33 @@ async function getBytes(url: string, headers: Record<string, string>, method = '
     return { status: res.status, bytes: Buffer.from(await res.arrayBuffer()) };
 }
 
+/** The rollback command, as an operator runs it: its own process, on a stopped server's data folder. */
+function runKeyCli(dataDir: string): Promise<{ code: number | null; out: string }> {
+    const cli = spawn(process.execPath, [...process.execArgv, KEY_CLI, '--write-key-row'], {
+        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    cli.stdout!.on('data', (d) => { out += d.toString(); });
+    cli.stderr!.on('data', (d) => { out += d.toString(); });
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => cli.kill('SIGKILL'), 60_000);
+        cli.on('exit', (code) => { clearTimeout(timer); resolve({ code, out }); });
+    });
+}
+
+/** The node_config rows the rollback is about, read straight from a stopped server's database. */
+function keyRows(dataDir: string): { legacy: string | null; keyId: string | null; hashes: Record<string, string>; members: number } {
+    const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
+    try {
+        const config = (key: string) => (handle.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value?: string } | undefined)?.value ?? null;
+        const hashes: Record<string, string> = {};
+        for (const r of handle.prepare('SELECT member_pubkey AS pk, join_hash AS hash FROM open_joins').all() as { pk: string; hash: string }[]) hashes[r.pk] = r.hash;
+        return { legacy: config('openJoinSalt'), keyId: config('openJoinKeyId'), hashes, members: (handle.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n };
+    } finally {
+        handle.close();
+    }
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -452,6 +486,66 @@ async function main(): Promise<void> {
         const cara = await join(restoredHttps, newId(), 'cara-google-sub', 'Cara');
         assert(cara.status === 200, `and the new account joins (${cara.status} ${cara.body?.code ?? ''})`);
         assert((await restored.send('door')).members === before.members + 1, 'one member added: Cara');
+        await restored.kill();
+
+        // ── 4. Rolling back past this version ──
+        console.log('\n— 4. rolling back past this version: the key written back as the row an older version reads —');
+        await main.kill();
+        const mainKey = fs.readFileSync(path.join(dirs.main, KEY_FILE));
+        const beforeCli = keyRows(dirs.main);
+        require_(beforeCli.legacy === null && beforeCli.keyId === keyIdOf(mainKey) && Object.keys(beforeCli.hashes).length === 2,
+            'setup: the stopped main server holds its two records, which key made them, and no key row');
+
+        // Refusals first, each on a copy of that data folder: an older version could not recognise the accounts.
+        const copyOfMain = (label: string) => {
+            const d = path.join(root, label);
+            fs.mkdirSync(d, { recursive: true });
+            for (const f of ['state.db', 'state.db-wal', 'state.db-shm', 'genesis.json']) {
+                if (fs.existsSync(path.join(dirs.main, f))) fs.copyFileSync(path.join(dirs.main, f), path.join(d, f));
+            }
+            return d;
+        };
+        const noKeyDir = copyOfMain('rollback-no-key');
+        const noKey = await runKeyCli(noKeyDir);
+        assert(noKey.code === 1 && /Nothing was changed: data\/open-join\.key is missing, and 2 sign-in records need it/.test(noKey.out)
+            && keyRows(noKeyDir).legacy === null,
+            `with no key file, the command refuses and writes no row (exit ${noKey.code}: ${noKey.out.trim().split('\n').pop()})`);
+        const otherKeyDir = copyOfMain('rollback-other-key');
+        fs.writeFileSync(path.join(otherKeyDir, KEY_FILE), crypto.randomBytes(32), { mode: 0o600 });
+        const otherKey = await runKeyCli(otherKeyDir);
+        assert(otherKey.code === 1 && /Nothing was changed: data\/open-join\.key is not the key the 2 sign-in records here were made with/.test(otherKey.out)
+            && keyRows(otherKeyDir).legacy === null,
+            `with a key file that is not the records' key, it refuses and writes no row (exit ${otherKey.code}: ${otherKey.out.trim().split('\n').pop()})`);
+
+        const cli = await runKeyCli(dirs.main);
+        assert(cli.code === 0 && /Wrote data\/open-join\.key as node_config openJoinSalt, for the 2 sign-in records/.test(cli.out),
+            `the command writes the key back as the row (exit ${cli.code}: ${cli.out.trim().split('\n').pop()})`);
+        assert(keyIn(Buffer.from(cli.out), mainKey).length === 0, `and prints none of the key (${keyIn(Buffer.from(cli.out), mainKey).join(', ') || 'none'})`);
+        const afterCli = keyRows(dirs.main);
+        assert(afterCli.legacy === mainKey.toString('base64url'), 'the row is the file\'s key, byte for byte, in base64url as an older version stored it');
+        assert(fs.readFileSync(path.join(dirs.main, KEY_FILE)).equals(mainKey) && afterCli.keyId === beforeCli.keyId,
+            'the file and the recorded id stay, for coming back to this version');
+        // What an older version does (engine/open-join.ts nodeKey on origin/main): the row, decoded from base64url, is the
+        // key; with it, every record matches its sign-in, so Ada's account is found, not joined again.
+        const olderKey = Buffer.from(afterCli.legacy ?? '', 'base64url');
+        assert(olderKey.length >= 16 && afterCli.hashes[ada.pk] === joinHashOf(olderKey, 'ada-google-sub')
+            && afterCli.hashes[ben.pk] === joinHashOf(olderKey, 'ben-google-sub'),
+            'the key an older version reads from the row matches Ada\'s and Ben\'s records');
+        const again = await runKeyCli(dirs.main);
+        assert(again.code === 0 && /The database already held/.test(again.out) && keyRows(dirs.main).legacy === afterCli.legacy,
+            `run again, it changes nothing (exit ${again.code})`);
+
+        main = await spawnNode(SCRIPT, dirs.main, mainEnv);
+        nodes.push(main);
+        assert(/moved the key for the door's hashes out of the database into data\/open-join\.key/.test(main.output()) && !/🚨 Open door/.test(main.output()),
+            'booted on this version again, the row moves out, with no mismatch');
+        const forward = await main.send('door');
+        assert(!forward.legacyRow && forward.keyId === beforeCli.keyId && Buffer.from(forward.keyB64 ?? '', 'base64').equals(mainKey),
+            'the row is gone, the file and the id are as they were');
+        mainHttps = (await main.send('serve', { jwk: googleJwk })).port as number;
+        const adaForward = await join(mainHttps, newId(), 'ada-google-sub', 'Ada five');
+        assert(adaForward.status === 409 && adaForward.body?.code === 'already_joined' && (await main.send('door')).members === forward.members,
+            `and Ada is still 409 already_joined, no member added (${adaForward.status} ${adaForward.body?.code})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

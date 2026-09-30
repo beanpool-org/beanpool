@@ -22,6 +22,7 @@ import {
 } from '@beanpool/engine';
 import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
+import { inviteLogTag } from '../sanitize-message.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -59,7 +60,8 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
       .run(code, inviterPubkey, createdAt, intendedFor || null);
 
     const invite: InviteCode = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
-    console.log(`🎟️  Invite generated: ${code} by ${inviter.callsign}`);
+    // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
+    console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
     return invite;
 }
 
@@ -89,7 +91,7 @@ export function adminGenerateInvite(
 
     const invite: InviteCode = { code, createdBy: adminPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     const tierLabel = genesisType === 'standard' ? '🥚' : genesisType === 'trusted' ? '🏠' : genesisType === 'ambassador' ? '🏛️' : '⛰️';
-    console.log(`🎟️  Admin Genesis Invite generated: ${code} [${genesisType} ${tierLabel}] by ${admin.callsign}`);
+    console.log(`🎟️  Admin Genesis Invite generated: ${inviteLogTag(code)} [${genesisType} ${tierLabel}] by ${admin.callsign}`);
     return invite;
 }
 

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -316,6 +316,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
+import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -735,6 +736,7 @@ export function initStateEngine(): void {
             console.error('╠════════════════════════════════════════════════════════╣');
             console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
             console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -2018,7 +2020,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
     }
-    if (amount < 0) return null;
+    // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
+    // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
+    // ledger.transfer refuses it again as a primitive.
+    if (!isBeanAmount(amount)) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
     // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
@@ -2443,7 +2448,8 @@ export function moveToCommons(
     if (!synthetic && !treasury && !opts?.allowMemberDebit) {
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through. Outside the transaction, as in transfer().
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     assertLedgerWritable();
 
@@ -2502,12 +2508,16 @@ export function payFromCommons(
     // does; the memo names them in words only (adminActorName).
     opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through, and `allowDeficit` below would then have set the pot to NaN.
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     // Before the pot is drawn down in memory. On a standby the flush below writes nothing (engine/audit.ts), so a payment
     // there wrote its recipient's credit and not the pot's debit: a member in debt deleting their own account left the
     // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
     assertLedgerWritable();
+    // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
+    const recipientNow = ledger.getAccount(to).balance;
+    if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
     if (!ledger.deductFromCommons(amount)) {
         if (!opts?.allowDeficit) return null;
         setCommonsBalance(getCommonsBalanceExact() - amount);
@@ -4482,6 +4492,9 @@ export function createPost(
         beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
+    // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
+    // number of Beans never reaches a listing, whichever route made it.
+    assertPostFields({ title, description, category, credits, priceType, lat, lng }, 'create');
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
@@ -4514,6 +4527,9 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
+    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
+    assertPostFields(updates as PostFieldsIn, 'edit');
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -7779,7 +7795,7 @@ export function persistDecayAndCommons(): void {
  * run stores a baseline in node_config and later runs alert on drift. Also flags
  * escrow wallets holding funds for settled transactions (always a bug).
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return runLedgerAuditEngine();
 }
 
@@ -7817,7 +7833,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * (boot path) can decide whether to proceed. Run once after a take-over, at the
  * next boot (services/takeover.ts, promotionAuditPending).
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return promotionSanityCheckEngine();
 }
 

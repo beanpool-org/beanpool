@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -407,6 +407,68 @@ function bringMembersToSchemaRules(schemaSql: string): void {
     } catch (e) {
         // Nothing is changed and the marker isn't written, so the next boot tries again. A standby leaves such a value out.
         console.error('[DB] ❌ Could not bring members rows into the schema\'s rules:', e);
+    }
+}
+
+/**
+ * Makes `accounts.balance` NOT NULL on a node whose table predates it (schema.sql), by rebuilding the table once.
+ *
+ * WHY (review FABLE-sec-input F1, 2026-10-01, measured). better-sqlite3 binds NaN as NULL, and the column was nullable, so
+ * a NaN balance — a listing priced "abc" poisoned every buyer approved for it — was written as NULL without a word. With
+ * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
+ * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
+ * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
+ * persistCommonsBalance); it relies on every primitive that moves the pot refusing a non-finite amount, not on this.
+ *
+ * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
+ * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its
+ * key, and the rebuild does not happen; the next boot looks again, and the conservation check fails until it is fixed
+ * (engine audit.ts BROKEN_BALANCE_SQL). Idempotent: once the column is NOT NULL this reads one pragma row and returns.
+ * The table is the schema's own (createTableText), so the rebuilt table is exactly a fresh install's.
+ *
+ * Returns what it did, for the upgrade test: 'already' (nothing to do), 'rebuilt', 'refused' (broken rows logged), or
+ * 'failed' (logged; the node keeps its old table).
+ */
+export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebuilt' | 'refused' | 'failed' {
+    try {
+        const col = db.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as { nn: number } | undefined;
+        if (!col || col.nn === 1) return 'already';
+        const broken = db.prepare(`SELECT public_key, balance, typeof(balance) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
+            .all() as { public_key: string; balance: unknown; t: string }[];
+        if (broken.length > 0) {
+            console.error('');
+            console.error('╔════════════════════════════════════════════════════════════════════════╗');
+            console.error('║ 🛑 LEDGER: ACCOUNTS WHOSE BALANCE IS NOT A NUMBER — MIGRATION STOPPED   ║');
+            console.error('╚════════════════════════════════════════════════════════════════════════╝');
+            console.error(`[DB] ${broken.length} account row(s) hold a balance that is not a finite number, so accounts.balance`);
+            console.error('[DB] was NOT made NOT NULL. Nothing was changed: no value is guessed for them. Work out what each');
+            console.error('[DB] should hold from its transactions, set it, and restart; this runs again at every boot.');
+            for (const r of broken.slice(0, 50)) console.error(`[DB]   ${r.public_key}  balance=${String(r.balance)} (${r.t})`);
+            if (broken.length > 50) console.error(`[DB]   … and ${broken.length - 50} more`);
+            return 'refused';
+        }
+        const fresh = createTableText(schemaSql, 'accounts');
+        if (!fresh || !/\bbalance\s+REAL\s+NOT\s+NULL\b/i.test(fresh)) throw new Error('schema.sql declares no accounts table with a NOT NULL balance');
+        const staged = 'accounts_balance_not_null';
+        const createStaged = fresh.replace(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?accounts["`\]]?/i, `CREATE TABLE ${staged}`);
+        const oldCols = new Set((db.prepare(`SELECT name FROM pragma_table_info('accounts')`).all() as { name: string }[]).map((c) => c.name));
+        let copied = 0;
+        db.transaction(() => {
+            db.exec(`DROP TABLE IF EXISTS ${staged}`);
+            db.exec(createStaged);
+            const cols = (db.prepare(`SELECT name FROM pragma_table_info(?)`).all(staged) as { name: string }[])
+                .map((c) => c.name).filter((c) => oldCols.has(c)).map((c) => `"${c}"`).join(', ');
+            copied = db.prepare(`INSERT INTO ${staged} (${cols}) SELECT ${cols} FROM accounts`).run().changes;
+            db.exec(`DROP TABLE accounts`);
+            db.exec(`ALTER TABLE ${staged} RENAME TO accounts`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_last_updated_at ON accounts(last_updated_at)`);
+        })();
+        console.log(`[DB] ✅ accounts.balance is now NOT NULL (${copied} account row(s) kept as they were)`);
+        return 'rebuilt';
+    } catch (e) {
+        // The old table stays, rows and all; the next boot tries again. Loud, because a NaN would still land as NULL.
+        console.error('[DB] ❌ Could not make accounts.balance NOT NULL; a balance that is not a number can still be stored as NULL:', e);
+        return 'failed';
     }
 }
 
@@ -1086,6 +1148,7 @@ export function initSchema() {
     markExistingVisitors();
     backfillBoardStanding();
     bringMembersToSchemaRules(schemaSql);
+    makeAccountBalanceNotNull(schemaSql);
     indexOldConversationIds();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded

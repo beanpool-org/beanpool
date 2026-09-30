@@ -245,6 +245,7 @@ export const SUITES = [
     'test-cancel-post-request',
     'test-non-members-cant-act',
     'test-marketplace-auth',
+    'test-listing-edit-numbers',
     'test-sync-author-off-board',
     'test-sync-board-standing-upgrade',
     'test-escrow-fail-closed',

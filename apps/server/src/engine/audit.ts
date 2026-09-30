@@ -111,7 +111,7 @@ export function persistDecayAndCommons(): void {
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     // ONE commit for the pair — the audit runs at boot and on a timer, and a flush that tore here would
     // destroy exactly what the audit exists to detect.
     persistDecayAndCommons();
@@ -153,7 +153,7 @@ const PLAIN_ROWS: Readonly<Record<string, string>> = Object.fromEntries(
 /**
  * Failover promotion sanity check run before taking live writes.
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     console.log('\n════════════════════════════════════════════════════════');
     console.log('🔁 FAILOVER PROMOTION — running ledger conservation sanity check');
     console.log('════════════════════════════════════════════════════════');
@@ -162,7 +162,7 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
         console.log('✅ PROMOTION OK — replicated ledger is conservation-consistent. Safe to take live writes.');
     } else {
         console.error('🛑 PROMOTION WARNING — ledger conservation check FAILED on the replica:');
-        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows}`);
+        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows} balances that are not a finite number=${result.badBalances}`);
         console.error('   Investigate before this node accepts transactions — the last snapshot may be incomplete/corrupt.');
     }
     return result;

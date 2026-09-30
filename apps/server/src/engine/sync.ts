@@ -1988,6 +1988,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     { public_key: string; balance: number | null; last_updated_at: string | null; last_demurrage_epoch: number | null }[])
                     .map((r) => [r.public_key, r]));
                 const named = new Set<string>();
+                const refusedBalances: string[] = [];
                 const writeAccount = db.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch)
                             VALUES (?, ?, ?, ?)
                             ON CONFLICT(public_key) DO UPDATE SET
@@ -2000,9 +2001,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         continue;
                     }
                     named.add(acc.publicKey);
-                    // No number to copy: the row here stays as it is, and the whole-copy check counts the entry.
+                    // No number to copy: the row here stays as it is, and the whole-copy check counts the entry. A NULL
+                    // (a NaN, as JSON and better-sqlite3 both carry it), text or infinite balance is REFUSED, never
+                    // imported (review F1, 2026-10-01): the main server's ledger holding one is broken, and this standby
+                    // keeps the last balance it had for that account. accounts.balance is NOT NULL besides.
                     if (typeof acc.balance !== 'number' || !Number.isFinite(acc.balance)) {
                         conflictsSkipped++;
+                        refusedBalances.push(`${acc.publicKey.slice(0, 16)}=${JSON.stringify(acc.balance) ?? String(acc.balance)}`);
                         continue;
                     }
                     const stamp = acc.lastUpdatedAt ?? null;
@@ -2014,6 +2019,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // What the row holds now: an account the copy names twice is written twice, and its second entry is
                     // compared with its first.
                     local.set(acc.publicKey, { public_key: acc.publicKey, balance: acc.balance, last_updated_at: stamp, last_demurrage_epoch: epoch });
+                }
+                if (refusedBalances.length > 0) {
+                    console.warn(`[Sync] SECURITY: ${refusedBalances.length} account(s) in this copy carry a balance that is not a finite number; `
+                        + `refused, each keeping the balance it had here: ${refusedBalances.slice(0, 10).join(', ')}${refusedBalances.length > 10 ? ', …' : ''}`);
                 }
                 // A page of a whole copy built in a staging database names only its own accounts, and the staging holds only
                 // the pages before it: nothing there is one the main server no longer holds (ImportOptions.part).

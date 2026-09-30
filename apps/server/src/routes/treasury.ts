@@ -159,7 +159,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         return actor;
     };
 
-    // ---- Public transparency reads ------------------------------------------------------
+    // ---- The enterprises' reads (members only on every node, https-server.ts MEMBERS_ONLY_READS_PATTERNS) ----------
     // A completed (wound-up) enterprise never serves coordinates, whatever the row still holds — a keeper may
     // have pinned it on their own house (PR #839 Blocker A).
     const servedCoordinates = (row: any): { lat: number | null; lng: number | null } =>
@@ -172,10 +172,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const whereClause = includeBounded
             ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
             : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
-        // A suspended or disabled enterprise is off the public Commons list (#839 review finding) — neither client
+        // A suspended or disabled enterprise is off the Commons list (#839 review finding) — neither client
         // badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
-        // see it when the read is signed: the list card is how a keeper reaches the enterprise's page, which
-        // explains the state. Detail and thread reads stay reachable by direct link for everyone.
+        // see it: the list card is how a keeper reaches the enterprise's page, which explains the state. Detail
+        // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
             `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
@@ -290,7 +290,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // Enterprise map endpoint (docs/the-commons.md §2.2, Slice 6)
     // Only includes enterprises with a set location; excludes completed, suspended, disabled, pruned and deleted
-    // enterprises. The map is public and unsigned, so there is no keeper exception here (#839 review finding).
+    // enterprises. The map is the same for every reader (members only, https-server.ts MEMBERS_ONLY_READS_PATTERNS), so
+    // there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
         const rows = db.prepare(
             `SELECT public_key, callsign, avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
@@ -350,9 +351,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         // Its listings are listings: a local community's are its members' (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT),
-        // so this public page lists them only to a reader who may read the board here, a member (passesReadGate), or to
-        // anyone where every read is open (ENFORCE_READ_AUTH=false). On a node with the visitors' view the whole page is
-        // members-only already (MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS).
+        // so this page lists them only to a reader who may read the board here, a member (passesReadGate), or to anyone
+        // where every read is open (ENFORCE_READ_AUTH=false). Under read auth the whole page is members-only already
+        // (MEMBERS_ONLY_READS_PATTERNS); this stays as the listings' own rule.
         const readerMayReadListings = !deps.enforceReadAuth || (!!ctx.state?.actor && passesReadGate(ctx.state.actor));
         const posts = readerMayReadListings ? db.prepare(
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
@@ -623,6 +624,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/enterprise', createEnterpriseHandler);
 
     // ---- Admin (password-gated) ---------------------------------------------------------
+    // The enterprises as a stranger's copy of /api/treasuries was: for the node's own Settings (apps/manager
+    // node-client.ts fetchNodeTreasuries), which asks with the admin password, as the list is members' now on every node
+    // (https-server.ts MEMBERS_ONLY_READS_PATTERNS). Off with the enterprises, as the rest under this path.
+    router.get('/api/local/admin/treasury', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        await listTreasuriesHandler(ctx);
+    });
+
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};

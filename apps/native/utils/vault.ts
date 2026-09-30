@@ -354,6 +354,36 @@ export async function keepVaultPushTokenCurrent(identity: VaultSigner): Promise<
     }
 }
 
+/**
+ * An account is leaving this phone (Sign Out, "Replace this phone's account", the self-delete purge;
+ * account-leaves-phone.ts): the push token this phone gave the vault for it comes out of every copy of the key, so the
+ * account's notices (a restore waiting, a release, a replaced copy) stop reaching a phone that may now be someone
+ * else's (PR #1336 review finding 8). Signed by the account's key while the phone still holds it. Only a token this
+ * phone gave the vault (the deposit or {@link keepVaultPushTokenCurrent} recorded it). Within `timeoutMs`, and never
+ * throws: a vault that doesn't answer never holds up or fails the leave, and the token then stays at the vault (the
+ * key is gone from the phone afterwards, so nothing can take it out later). True once the vault took it out.
+ */
+export async function withdrawVaultPushToken(identity: VaultSigner, timeoutMs: number): Promise<boolean> {
+    if (!hasVault() || !identity.publicKey || !identity.privateKey) return false;
+    const key = vaultPushTokenStoreKey(identity.publicKey);
+    let token: string | null = null;
+    try {
+        token = await AsyncStorage.getItem(key);
+    } catch {
+        return false;
+    }
+    if (!isVaultPushToken(token)) return false;
+    try {
+        const body = await vaultPost<{ updated?: unknown }>('/v1/push-token/remove', { token }, identity, timeoutMs);
+        if (typeof body?.updated !== 'number') return false;
+        await AsyncStorage.removeItem(key).catch(() => {});
+        return true;
+    } catch (e) {
+        console.log(`[VAULT] this phone's push token was not taken out: ${(e as Error).message}`);
+        return false;
+    }
+}
+
 /** Holds already brought to the member's attention in this run of the app (one alert each). */
 const holdsAlerted = new Set<string>();
 

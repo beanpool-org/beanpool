@@ -726,14 +726,21 @@ export class Keyholder {
         return { provider: c.provider, pubkey: c.pubkey, pushTokens: [...c.pushTokens], lastReleasedAt: c.lastReleasedAt, wrapVersion: version };
     }
 
-    /** The envelope with a push token added (newest first) and/or the last release time set, under the current K_wrap. */
-    updateMeta(args: { row?: RowRef; addPushToken?: unknown; lastReleasedAt?: unknown }) {
+    /**
+     * The envelope with a push token added (newest first) or taken out (an account leaving a phone), and/or the last
+     * release time set, under the current K_wrap.
+     */
+    updateMeta(args: { row?: RowRef; addPushToken?: unknown; removePushToken?: unknown; lastReleasedAt?: unknown }) {
         const keys = this.requireOpen();
         const row = args.row as RowRef;
         const { contents } = this.unwrapEnvelope(keys, row);
         if (args.addPushToken !== undefined) {
             if (!isVaultPushToken(args.addPushToken)) fail('bad_request', 'That is not an Expo push token.');
             contents.pushTokens = [args.addPushToken, ...contents.pushTokens.filter(t => t !== args.addPushToken)].slice(0, MAX_PUSH_TOKENS);
+        }
+        if (args.removePushToken !== undefined) {
+            if (!isVaultPushToken(args.removePushToken)) fail('bad_request', 'That is not an Expo push token.');
+            contents.pushTokens = contents.pushTokens.filter(t => t !== args.removePushToken);
         }
         if (args.lastReleasedAt !== undefined) {
             if (!Number.isSafeInteger(args.lastReleasedAt)) fail('bad_request', 'Not a time.');

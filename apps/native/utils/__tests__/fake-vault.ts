@@ -202,6 +202,15 @@ export class FakeVault {
                 for (const c of mine) if (!c.pushTokens.includes(b.token)) c.pushTokens.push(b.token);
                 return reply(200, { updated: mine.length });
             }
+            case '/v1/push-token/remove': {
+                let updated = 0;
+                for (const c of this.copiesOf(signer)) {
+                    if (!c.pushTokens.includes(b.token)) continue;
+                    c.pushTokens = c.pushTokens.filter(t => t !== b.token);
+                    updated++;
+                }
+                return reply(200, { updated });
+            }
             case '/v1/restore': {
                 const s = this.signIn(b, signer, 'restore');
                 if ('status' in s) return s;

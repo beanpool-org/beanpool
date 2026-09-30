@@ -92,6 +92,7 @@ import {
 } from '../vault';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
 import { protectionFrom } from '../protection-state';
+import { releaseAccountFromPhone, UNREGISTER_TIMEOUT_MS } from '../account-leaves-phone';
 import { boundSignatureValid } from './server-signature-check';
 import {
     COMMUNITY, DEPOSIT_KEY, GLOBAL, HOLD_MS, TICKET_KEY, VAULT,
@@ -715,6 +716,48 @@ describe('status, disconnect, push token, and the check at app open', () => {
         await keepVaultPushTokenCurrent(member);
         await keepVaultPushTokenCurrent(member);
         expect(to(VAULT).filter(s => s.path === '/v1/push-token').map(s => s.body)).toEqual([{ token: 'ExponentPushToken[second]' }]);
+    });
+
+    it('Sign Out or Replace: this phone\'s push token comes out of the account\'s copies at the vault, signed by the leaving key', async () => {
+        await memberOnCommunity();
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[phone]');
+        await connect('google');
+        await connect('facebook');
+        await keepVaultPushTokenCurrent(member);
+        expect(net.vault.copiesOf(member.publicKey).map(c => c.pushTokens)).toEqual([['ExponentPushToken[phone]'], ['ExponentPushToken[phone]']]);
+
+        await releaseAccountFromPhone(member);
+
+        const out = to(VAULT).filter(s => s.path === '/v1/push-token/remove');
+        expect(out.map(s => s.body)).toEqual([{ token: 'ExponentPushToken[phone]' }]);
+        expect(out[0].headers['X-Public-Key']).toBe(member.publicKey);
+        expect(net.vault.copiesOf(member.publicKey).map(c => c.pushTokens)).toEqual([[], []]);
+    });
+
+    it('a vault that does not answer never holds up the leave, and a phone that gave the vault no token asks nothing', async () => {
+        await memberOnCommunity();
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[phone]');
+        await connect('google');
+        const network = globalThis.fetch;
+        // A vault that never answers: its request ends only when the phone gives up on it (as fetch does on abort).
+        globalThis.fetch = ((input: any, init?: any) => (String(input).startsWith(VAULT)
+            ? new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new TypeError('aborted'))))
+            : network(input, init))) as typeof fetch;
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        let left = false;
+        const leaving = releaseAccountFromPhone(member).then(() => { left = true; });
+        // A little at a time: the vault's timer starts only once the request is signed.
+        for (let waited = 0; !left && waited < UNREGISTER_TIMEOUT_MS + 2_000; waited += 100) await vi.advanceTimersByTimeAsync(100);
+        expect(left).toBe(true);
+        await leaving;
+        vi.useRealTimers();
+        globalThis.fetch = network;
+
+        // Another account that never linked a sign-in here: nothing is sent to the vault as it leaves.
+        const kim = await draftIdentity('Kim');
+        const before = to(VAULT).length;
+        await releaseAccountFromPhone(kim);
+        expect(to(VAULT).length).toBe(before);
     });
 
     it('at app open, a waiting restore is brought up once per run: marked only when its alert is shown', async () => {

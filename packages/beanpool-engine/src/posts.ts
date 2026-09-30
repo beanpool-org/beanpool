@@ -758,15 +758,16 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     };
 
     // The one pass with a bound (PostFilter.measureAtMost): the matching posts (in the radius's box, if it has one) are
-    // taken newest first, at most `cap` of them, before any is measured, and only those are measured, kept to the radius
-    // and ordered. The inner query measures nothing, so the planner can walk idx_posts_updated_at and stop at `cap`.
+    // taken newest first, at most `cap` of them, before any is measured, and only those are measured, once each (the
+    // MATERIALIZED set, so the radius test reads the distance already worked out), kept to the radius and ordered. The
+    // inner query measures nothing, so the planner can walk idx_posts_updated_at and stop at `cap`.
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [near.lat, near.lng];
         let inner = `
-            SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
-            FROM posts p
-            LEFT JOIN members m ON p.author_pubkey = m.public_key
-            WHERE 1=1`;
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                FROM posts p
+                LEFT JOIN members m ON p.author_pubkey = m.public_key
+                WHERE 1=1`;
         if (withinKm !== undefined) {
             const exact = boundingBox(near.lat, near.lng, withinKm);
             const box = filter.coarse ? areaBox(exact) : exact;
@@ -776,11 +777,14 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         inner += where + ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
         params.push(...whereParams, cap);
         let sql = `
-        SELECT p.id, ${km('p')} AS distance_km FROM (${inner}
-        ) p`;
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, ${km('q')} AS distance_km FROM (${inner}
+            ) q
+        )
+        SELECT p.id, p.distance_km FROM measured p`;
         if (withinKm !== undefined) {
-            sql += ` WHERE ${km('p')} <= ?`;
-            params.push(near.lat, near.lng, withinKm);
+            sql += ' WHERE p.distance_km <= ?';
+            params.push(withinKm);
         }
         sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {

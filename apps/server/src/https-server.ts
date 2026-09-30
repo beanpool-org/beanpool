@@ -1283,7 +1283,10 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                const routeLimit = routeBodyLimit(ctx.path.toLowerCase());
+                // A signature claim from an address whose unverified claims are spent carries a small body at most
+                // (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
+                const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
+                const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;

@@ -85,6 +85,7 @@ export const SUITES = [
     'test-cors-policy',
     'test-gateway-config',
     'test-gateway-real-client',
+    'test-dos-hardening',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',
     'test-password-brake-fairness',

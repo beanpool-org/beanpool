@@ -19,7 +19,10 @@
  *     never verified (forged, stale, replayed, for another community), so an address gets no more unverified claims a
  *     minute than unsigned requests, and the body parser reads and parses no more 2 MB bodies for them (DoS review F2).
  *     It is its own bucket, not `ip:`, because a member's signed request must never be refused for the address's
- *     unsigned traffic (a hall's members loading photos fill `ip:`): only claims that fail count against claims.
+ *     unsigned traffic (a hall's members loading photos fill `ip:`): only claims that fail count against claims. Once it
+ *     is full, a claim with no body or a small one (CLAIM_SMALL_BODY_BYTES) still passes, held to that size, so a forger
+ *     sharing members' address (a carrier NAT) can't shut their writes off for 120 requests: nothing but the `sig:`
+ *     ceiling does that, as before, and a forger's claims past the allowance cost the body parser 16 KiB each at most.
  *   - `peer:<client>` — the peer protocol's own reads (https-server.ts GATEWAY_EXEMPT_PEER_READS), which the other
  *     buckets leave alone: `maxPerMinute × PEER_READ_FACTOR` per address, whoever signs (DoS review F4).
  *
@@ -201,15 +204,35 @@ function logTrip(key: string, now: number): void {
 }
 
 /**
- * A request that claims a signature, before anything is verified: the address's signed ceiling (`sig:`) and its
- * unverified claims (`claim:`) must both have room, and both are charged. The window `claim:` was charged in, to give it
- * back in when the signature verifies; 0 (nothing charged) when refused, with the seconds to wait in `wait`.
+ * The most a claimed signature's body may weigh once its address has spent its unverified claims for the minute. Nearly
+ * every signed write is far smaller (a chat line, a trade, a vote); a listing's photos are not. So a member behind an
+ * address someone floods with forged claims (a carrier NAT) keeps writing, and a forger's further claims cost the body
+ * parser 16 KiB each at most, not 2 MB.
  */
-function admitClaim(client: string, maxPerMinute: number, now: number): { wait: number; claimWindow: number } {
-    const wait = waitFor(`sig:${client}`, maxPerMinute * SIGNED_CEILING_FACTOR, now) || waitFor(`claim:${client}`, maxPerMinute, now);
-    if (wait) return { wait, claimWindow: 0 };
+export const CLAIM_SMALL_BODY_BYTES = 16 * 1024;
+
+/**
+ * A request that claims a signature, before anything is verified: the address's signed ceiling (`sig:`) must have room,
+ * and its unverified claims (`claim:`) too unless the request is `small` (no body, or one of CLAIM_SMALL_BODY_BYTES at
+ * most, which the caller then holds it to: `bodyCapped`). Both are counted. The window `claim:` was counted in, to give
+ * it back in when the signature verifies; with the seconds to wait in `wait` (and nothing counted) when refused.
+ */
+function admitClaim(client: string, maxPerMinute: number, small: boolean, now: number): { wait: number; claimWindow: number; bodyCapped: boolean } {
+    const sigWait = waitFor(`sig:${client}`, maxPerMinute * SIGNED_CEILING_FACTOR, now);
+    if (sigWait) return { wait: sigWait, claimWindow: 0, bodyCapped: false };
+    const claimWait = waitFor(`claim:${client}`, maxPerMinute, now);
+    if (claimWait && !small) return { wait: claimWait, claimWindow: 0, bodyCapped: false };
     count(`sig:${client}`, now);
-    return { wait: 0, claimWindow: count(`claim:${client}`, now) };
+    return { wait: 0, claimWindow: count(`claim:${client}`, now), bodyCapped: claimWait > 0 };
+}
+
+/** Whether a request carries no body or declares one of CLAIM_SMALL_BODY_BYTES at most (a chunked one declares none). */
+function declaresSmallBody(ctx: Koa.Context): boolean {
+    if (ctx.get('Transfer-Encoding')) return false;
+    const declared = ctx.get('Content-Length');
+    if (!declared) return true;
+    const n = Number(declared);
+    return Number.isFinite(n) && n >= 0 && n <= CLAIM_SMALL_BODY_BYTES;
 }
 
 /**
@@ -219,14 +242,17 @@ function admitClaim(client: string, maxPerMinute: number, now: number): { wait: 
  * A claim is charged here, before the body parser reads a byte, rather than after a cheaper check of the headers: the
  * signature covers the body, so nothing short of reading it tells a forger from a member. A fresh timestamp, an unused
  * nonce and a real member's key (keys are public: every listing names its author's) pass any check of the headers alone.
+ * Once the address's unverified claims are spent, a claim is let through only with a small body, and
+ * `ctx.state.gatewayBodyLimit` holds the body parser to CLAIM_SMALL_BODY_BYTES.
  */
 export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): boolean {
     const ip = clientLimiterKey(ctx);
     if (claimsSignature) {
         ctx.state.gatewaySignedClaim = true;
-        const { wait, claimWindow } = admitClaim(ip, maxPerMinute, now);
+        const { wait, claimWindow, bodyCapped } = admitClaim(ip, maxPerMinute, declaresSmallBody(ctx), now);
         if (wait) return refuse(ctx, wait);
         ctx.state.gatewayClaimWindow = claimWindow;
+        if (bodyCapped) ctx.state.gatewayBodyLimit = CLAIM_SMALL_BODY_BYTES;
         return true;
     }
     return take(ctx, `ip:${ip}`, maxPerMinute, now);
@@ -268,11 +294,14 @@ export function gatewayAdmitPeerRead(ctx: Koa.Context, maxPerMinute: number, now
 /**
  * A WebSocket upgrade from `client` (limiterKeyForIp of the real client), before its connect token is verified: charged
  * as an HTTP request is at gatewayAdmit, a claimed token (`claimsSignature`: any of its signature parameters present)
- * to `sig:` and `claim:`, anything else to `ip:`. The seconds to wait when refused, else 0; `claimWindow` is for
- * gatewaySettleUpgrade.
+ * to `sig:` and `claim:` (an upgrade has no body, so only the signed ceiling can refuse it), anything else to `ip:`. The
+ * seconds to wait when refused, else 0; `claimWindow` is for gatewaySettleUpgrade.
  */
 export function gatewayAdmitUpgrade(client: string, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): { wait: number; claimWindow: number } {
-    if (claimsSignature) return admitClaim(client, maxPerMinute, now);
+    if (claimsSignature) {
+        const { wait, claimWindow } = admitClaim(client, maxPerMinute, true, now);
+        return { wait, claimWindow };
+    }
     return { wait: takeKey(`ip:${client}`, maxPerMinute, now), claimWindow: 0 };
 }
 

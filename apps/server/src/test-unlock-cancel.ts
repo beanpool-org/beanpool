@@ -22,8 +22,8 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { startRestoreUnlock, followUnlock, describeUnlock } from './services/owner-unlock.js';
 
-const PORT = 8692;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const CANCEL_PATH = '/api/local/admin/unlock/cancel';
 const ADMIN_PW = 'TestAdminPassword123!';
 
@@ -50,7 +50,8 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
 

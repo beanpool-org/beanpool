@@ -49,8 +49,8 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8623;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -504,7 +504,8 @@ async function main() {
     // 6. HTTP ROUTE LEVEL VERIFICATION
     // ─────────────────────────────────────────────────────────────────────────
     console.log('── Step 6: HTTP routes for pause, wind-up, and accountability ledger ──');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const httpLead = makeIdentity('HTTPLead');
     const httpKeeper = makeIdentity('HTTPKeeper');

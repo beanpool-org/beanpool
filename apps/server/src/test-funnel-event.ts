@@ -19,8 +19,8 @@ import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8567;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0;
 let passed = 0;
@@ -76,7 +76,8 @@ async function main(): Promise<void> {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`)
       .run(pubKeyHex, CALLSIGN);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. Unsigned Request Guard Verification ──────────────────────────────────
     const unsignedRes = await fetch(`${BASE}/api/funnel-event`, {

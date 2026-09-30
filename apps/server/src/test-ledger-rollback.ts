@@ -56,8 +56,6 @@ import {
     reconcileLedgerFromDb,
 } from './state-engine.js';
 
-const HTTPS_PORT = 8558;
-
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -825,8 +823,8 @@ async function main() {
         // (d) The real route, over HTTPS, through the real signing middleware.
         {
             await initTls();
-            await startHttpsServer(HTTPS_PORT);
-            const base = `https://localhost:${HTTPS_PORT}`;
+            const httpsPort = await startHttpsServer(0);
+            const base = `https://localhost:${httpsPort}`;
             const path = '/api/ledger/transfer';
 
             const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');

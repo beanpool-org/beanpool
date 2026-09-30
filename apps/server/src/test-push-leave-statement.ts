@@ -39,8 +39,8 @@ import { travellingRows } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8781;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const HOST = 'mullum.test';
 const OTHER_HOST = 'bellingen.test';
 
@@ -135,7 +135,8 @@ async function main(): Promise<void> {
     initStateEngine();
     const kim = member('kim');
     const ben = member('ben');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const PHONE = 'ExponentPushToken[kims-phone]';
     const TABLET = 'ExponentPushToken[kims-tablet]';

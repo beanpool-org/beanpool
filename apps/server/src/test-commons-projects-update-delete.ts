@@ -20,8 +20,8 @@ import { initStateEngine, createProject, getAllProjects } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 
-const PORT = 8559;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -63,7 +63,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const proposer = makeMember('proposer');
     const attacker = makeMember('attacker');

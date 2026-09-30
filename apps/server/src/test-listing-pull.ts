@@ -35,8 +35,8 @@ import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
 
-const PORT = 8554;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 
 const BYRON = '12D3KooWByronPullTestPeer00000000000';
@@ -165,7 +165,8 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     for (const [addr, callsign, url] of [[BYRON_ADDR, 'byron', BYRON_URL], [BRISBANE_ADDR, 'brisbane', BRISBANE_URL]] as const) {
         await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });

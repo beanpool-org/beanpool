@@ -363,7 +363,7 @@ export async function depositWithVault(input: {
         throw unverified('/v1/copies', 'a receipt for another copy');
     }
     await noteVaultCopy(input.identity.publicKey, true);
-    if (pushToken) await AsyncStorage.setItem(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
+    if (pushToken) await SecureStore.setItemAsync(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
     await forgetConnectWanted(input.identity.publicKey, input.provider);
     return { provider: input.provider, replaced: receipt.replaced, wordsSealed: input.wordsSealed };
 }
@@ -464,9 +464,9 @@ export async function keepVaultPushTokenCurrent(identity: VaultSigner): Promise<
         const token = await storedPushToken();
         if (!token) return;
         const key = vaultPushTokenStoreKey(identity.publicKey);
-        if ((await AsyncStorage.getItem(key)) === token) return;
+        if ((await SecureStore.getItemAsync(key)) === token) return;
         await vaultPost('/v1/push-token', { token }, identity, ['push-token']);
-        await AsyncStorage.setItem(key, token);
+        await SecureStore.setItemAsync(key, token);
     } catch (e) {
         console.log(`[VAULT] push token not updated: ${(e as Error).message}`);
     }
@@ -486,7 +486,7 @@ export async function withdrawVaultPushToken(identity: VaultSigner, timeoutMs: n
     const key = vaultPushTokenStoreKey(identity.publicKey);
     let token: string | null = null;
     try {
-        token = await AsyncStorage.getItem(key);
+        token = await SecureStore.getItemAsync(key);
     } catch {
         return false;
     }
@@ -494,7 +494,7 @@ export async function withdrawVaultPushToken(identity: VaultSigner, timeoutMs: n
     try {
         const body = await vaultPost('/v1/push-token/remove', { token }, identity, ['push-token'], timeoutMs);
         if (typeof body.updated !== 'number') return false;
-        await AsyncStorage.removeItem(key).catch(() => {});
+        await SecureStore.deleteItemAsync(key).catch(() => {});
         return true;
     } catch (e) {
         console.log(`[VAULT] this phone's push token was not taken out: ${(e as Error).message}`);

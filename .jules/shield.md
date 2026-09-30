@@ -67,3 +67,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** Expo push token logged in plaintext to the console and stored insecurely in `AsyncStorage` within `push-notifications.ts`.
 **Learning:** Sensitive tokens like push tokens shouldn't be printed in logs, as they can be extracted from device logs by other apps or physically. They must also be stored encrypted using `SecureStore` rather than plaintext `AsyncStorage` to prevent extraction from backup tools or rooted devices.
 **Prevention:** Avoid logging tokens during registration, and enforce `SecureStore` for any session or authentication-related tokens in the native app.
+
+## 2026-03-30 - [Use SecureStore for vault push token]
+**Vulnerability:** Vault push token stored in unencrypted `AsyncStorage` in `vault.ts`.
+**Learning:** Push tokens sent to the key vault are sensitive device identifiers used for notification routing and account security alerts; storing them in unencrypted `AsyncStorage` allows extraction from unencrypted backups or local storage inspection.
+**Prevention:** Use `SecureStore` for device push tokens and credential tokens across all vault interaction helpers.

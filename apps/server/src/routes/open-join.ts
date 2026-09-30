@@ -146,8 +146,7 @@ function doorKeyMissing(ctx: any, provider?: SsoProvider): void {
     if (provider) recordFunnelEvent('open_join_failed', 'door_key_missing');
     ctx.status = 503;
     ctx.body = {
-        error: 'This community can\'t check sign-ins right now, so it isn\'t taking new members through its sign-in. Please try again later, '
-            + 'or ask a member for an invite.',
+        error: 'This community can\'t check sign-ins right now, so it isn\'t taking new members this way. Nothing was saved. Please try again later.',
         code: 'door_key_missing',
     };
 }

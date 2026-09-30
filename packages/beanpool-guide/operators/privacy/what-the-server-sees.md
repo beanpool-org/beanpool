@@ -33,6 +33,8 @@ A member who connects Google, Apple or Facebook in the app, and everyone who joi
 
 Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
 
+On the global community, the server also keeps a scrambled reference to each Google or Apple account someone joined with, so that one account makes one member. It is scrambled with data/open-join.key, which is never in the database either. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk can't be used to find out which member signed in with a given account. Whoever holds the database and that key can: whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup.
+
 GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas).
 
 ## Who can read what over the internet

@@ -53,7 +53,7 @@ export const STAGING_DIR_NAME = 'staging';
 export const READY_FILE = 'READY';
 /** Written when the staging directory is made: when the copy started (`at`, ms), which the orphan sweep reads (stagedObjects). */
 const STARTED_FILE = 'STARTED';
-/** Where the database the last swap replaced is kept until the standby's next copy lands on the new one (db/swap-at-boot.ts). */
+/** Where the database the last swap replaced is kept until the new one passes its first check (services/backup-puller.ts deletePreviousDatabase). */
 export const PREVIOUS_DB = 'state.previous.db';
 /** The files the stager's boot reads from its data directory, copied in; never written back. */
 const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.json'];
@@ -186,13 +186,18 @@ function prepareStagingDir(): string {
 }
 
 /**
- * Room for a second copy of the database: the live file and its WAL, and a margin. A copy that would fill the disk is not
- * started, and says so; one that fills it anyway (another writer) fails in the stager and leaves the live file as it was.
+ * Room for a second copy of the database: the live file and its WAL, and a margin. The database the last swap replaced
+ * (PREVIOUS_DB, `previous`) counts as room: the puller deletes it first when the copy needs it. A copy that would fill the
+ * disk is not started, and says so. One that fills it anyway fails in the stager, which says the disk refused it, and
+ * leaves the live file as it was: another writer, or a first copy, whose size nothing here knows before it comes (the live
+ * database is then a new standby's own, nearly empty).
  */
-export function roomForStaging(): { ok: boolean; need: number; free: number } {
-    const live = ['state.db', 'state.db-wal'].reduce((n, f) => {
+export function roomForStaging(): { ok: boolean; need: number; free: number; previous: number } {
+    const size = (files: string[]) => files.reduce((n, f) => {
         try { return n + fs.statSync(path.join(DATA_DIR, f)).size; } catch { return n; }
     }, 0);
+    const live = size(['state.db', 'state.db-wal']);
+    const previous = size([PREVIOUS_DB, `${PREVIOUS_DB}-wal`, `${PREVIOUS_DB}-shm`]);
     const need = Math.ceil(live * 1.1) + 64 * 1024 * 1024;
     const free = freeBytesForTests ?? (() => {
         try {
@@ -200,7 +205,7 @@ export function roomForStaging(): { ok: boolean; need: number; free: number } {
             return s.bavail * s.bsize;
         } catch { return Number.MAX_SAFE_INTEGER; }
     })();
-    return { ok: free >= need, need, free };
+    return { ok: free + previous >= need, need, free, previous };
 }
 let freeBytesForTests: number | null = null;
 export function _setFreeBytesForTests(n: number | null): void { freeBytesForTests = n; }
@@ -687,7 +692,15 @@ async function stagerChild(): Promise<void> {
             }
         } catch (e: any) {
             console.error(`[Stager] ${e?.message || e}`);
-            reply({ reply: id, error: e?.message || String(e), why: e?.why ?? (/conservation/i.test(String(e?.message)) ? 'conservation' : 'import-error') });
+            const message = e?.message || String(e);
+            // A write the disk refused (full, or this process's files capped), SQLite's or the image store's: said as what it
+            // is, since a first copy's size is known to nothing before it comes (roomForStaging), with the error after.
+            const refusedByDisk = /^SQLITE_(FULL|IOERR)|^(ENOSPC|EFBIG|EDQUOT)$/.test(String(e?.code ?? ''));
+            reply({
+                reply: id,
+                error: refusedByDisk ? `This server's disk refused the whole copy being built: no room on it for a second copy of its database, or a failing disk (${message})` : message,
+                why: e?.why ?? (/conservation/i.test(String(e?.message)) ? 'conservation' : 'import-error'),
+            });
         }
     });
     // The puller gone, the copy is gone: nothing here outlives it.

@@ -71,7 +71,7 @@ import {
     notePastRetention, noteUncomparedCheck, noteWholeCopyCheck, noteWholeCopyTaken, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
 } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
-import { STATE_HASH_TABLES } from '@beanpool/engine';
+import { EXPORT_CATEGORIES, STATE_HASH_TABLES } from '@beanpool/engine';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
 
 // Said once per value, not on every 60 s pull.
@@ -129,10 +129,24 @@ const DEFAULT_RECONCILE_EVERY_MS = 15 * 60_000;
  */
 const DEFAULT_BIG_COPY_EVERY_MS = 24 * 60 * 60_000;
 /**
- * A delta is taken whole in memory and imported in one transaction, as one payload (design §5): at most this many pages of
- * it (32 MB of JSON at the main server's 8 MB a page). One bigger is not taken: a whole copy is, instead. BACKUP_DELTA_PAGES.
+ * A delta is taken whole in memory and imported in one transaction, as one payload (design §5): at most this many pages'
+ * rows of changes (the rows the main server's pages hold, SYNC_PAGE_ROWS each), and at most DEFAULT_DELTA_BYTES of it. One
+ * bigger is not taken: a whole copy is, instead. BACKUP_DELTA_PAGES.
  */
 const DEFAULT_DELTA_PAGES = 4;
+/**
+ * The most a delta's pages may add up to (their JSON), whatever it holds: design §5's 32 MB, four pages of 8 MB, which a
+ * 1 GB node parses to about 170 MB. It bounds the accounts too, which every delta carries whole (below): 100,000 of them
+ * are about 15 MB. BACKUP_DELTA_BYTES.
+ */
+const DEFAULT_DELTA_BYTES = 32 * 1024 * 1024;
+/**
+ * The categories every delta carries whole, not only as changed (engine sync.ts EXPORT_CATEGORIES `delta: 'whole'`: the
+ * accounts). They are no measure of how much changed, so they never count toward a delta's pages of changes: a community
+ * with more accounts than that would take no delta at all, only a whole copy and a restart every other pull (review
+ * 4139589449). The bytes bound them.
+ */
+const WHOLE_IN_EVERY_DELTA: ReadonlySet<string> = new Set(EXPORT_CATEGORIES.filter((c) => c.delta === 'whole').map((c) => c.key));
 /**
  * The least time between two requests of one copy, so a copy of any size never trips the main server's limit on
  * administrative requests (300 a minute from one address, https-server.ts): at most 240 a minute, with room for the
@@ -146,6 +160,7 @@ function envMs(name: string, fallback: number, min = 1): number {
     return Number.isFinite(v) && v >= min ? v : fallback;
 }
 const deltaPages = () => Math.max(1, Math.floor(envMs('BACKUP_DELTA_PAGES', DEFAULT_DELTA_PAGES)));
+const deltaBytes = () => envMs('BACKUP_DELTA_BYTES', DEFAULT_DELTA_BYTES);
 const pageGapMs = () => envMs('BACKUP_PAGE_GAP_MS', DEFAULT_PAGE_GAP_MS, 0);
 const bigCopyEveryMs = () => envMs('BACKUP_BIG_COPY_EVERY_MS', DEFAULT_BIG_COPY_EVERY_MS);
 const pageMaxBytes = () => envMs('BACKUP_PAGE_MAX_BYTES', DEFAULT_PAGE_MAX_BYTES);
@@ -189,11 +204,13 @@ let lastWholePages = 0;
 // pages instead (nextMode). Kept, false, for the status the fleet manager reads.
 const reconcileDisabledForSize = false;
 let pendingReconcile = false; // set when a delta's stateHash canary detects drift
-// A delta would have taken more than BACKUP_DELTA_PAGES pages: the next pull is a whole copy (design §5).
+// A delta held more changes than one takes (BACKUP_DELTA_PAGES pages' rows, or BACKUP_DELTA_BYTES): the next pull is a whole
+// copy (design §5).
 let deltaTooBig = false;
 // The first pull of this process reads what the database says of the copies before it (restoreFromDatabase).
 let restored = false;
-// The database the last swap replaced (db/swap-at-boot.ts), deleted once a copy lands on the new one.
+// The database the last swap replaced (db/swap-at-boot.ts), deleted once the new one passes its first check
+// (deletePreviousDatabase).
 let previousToDelete = false;
 // A whole copy is ready to be swapped in: this process restarts (registerSwapRestart), and pulls nothing more. Never set in a
 // process that registered no restart: it carries on, and the copy waits in data/staging for the next start.
@@ -382,11 +399,11 @@ async function readUpTo(res: Response, max: number): Promise<string> {
     return Buffer.concat(chunks).toString('utf-8');
 }
 
-/** Rows in a copy, as its opening page counts them. */
-function rowsOfCopy(counts: unknown): number {
+/** Rows in a copy, as its opening page counts them; those of the categories in `leaveOut` not counted. */
+function rowsOfCopy(counts: unknown, leaveOut: ReadonlySet<string> = new Set()): number {
     const c = counts as Record<string, unknown> & { plainTables?: Record<string, unknown> };
     let n = 0;
-    for (const [k, v] of Object.entries(c ?? {})) if (k !== 'plainTables' && typeof v === 'number') n += v;
+    for (const [k, v] of Object.entries(c ?? {})) if (k !== 'plainTables' && !leaveOut.has(k) && typeof v === 'number') n += v;
     for (const v of Object.values(c?.plainTables ?? {})) if (typeof v === 'number') n += v;
     return n;
 }
@@ -415,7 +432,8 @@ export function keepMainServerRecords(payload: SyncPayload, whole: boolean): voi
 }
 
 /** Pull once from the primary and import it. Never throws.
- *  - 'delta'  : incremental — a copy of the rows changed since the cursor, at most BACKUP_DELTA_PAGES pages of it, imported
+ *  - 'delta'  : incremental — a copy of the rows changed since the cursor, at most BACKUP_DELTA_PAGES pages' rows of changes
+ *               and BACKUP_DELTA_BYTES of it, imported
  *               as one payload over this standby's rows. Falls back to a whole copy automatically if we have no cursor
  *               yet; one bigger than that is not taken, and the next pull is a whole copy.
  *  - 'full'   : a whole copy (initial seed or periodic reconcile). One page, over a copy this standby holds, is imported
@@ -507,8 +525,12 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             const room = roomForStaging();
             if (!room.ok) {
                 throw new StagedCopyRefused(`There is no room on this server's disk for a second copy of its database while a whole copy is built: `
-                    + `${Math.round(room.free / 1048576)} MB free, ${Math.round(room.need / 1048576)} MB needed`, 'import-error');
+                    + `${Math.round(room.free / 1048576)} MB free${room.previous > 0 ? ` (and ${Math.round(room.previous / 1048576)} MB in ${PREVIOUS_DB})` : ''}, `
+                    + `${Math.round(room.need / 1048576)} MB needed`, 'import-error');
             }
+            // The database the last swap replaced goes first when this copy needs its room: this server runs on the one that
+            // replaced it, and the copy's swap replaces it anyway.
+            if (room.free < room.need && room.previous > 0) deletePreviousDatabase('this whole copy needs its room');
             await verifyCopyPage(opening);
             staged = await StagedCopy.start(opening.copyId);
             logger.info('P2P', `[Backup] ${fresh ? 'Force-resync' : 'Whole copy'}: building copy ${opening.copyId.slice(0, 8)} of the main server `
@@ -535,6 +557,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             const stagedNow = staged;
             noteCopyOpen(reading, (whyClosed) => stagedNow.abort(whyClosed));
             const checked = await staged.finish({ seed, resync: fresh }).finally(() => noteCopyClosed(reading));
+            // The database this server runs on passed the closing checks' look at it (its ledger, its own tables): the one
+            // the last swap replaced is not needed, as after a delta that lands on it.
+            if (previousToDelete) deletePreviousDatabase('the one that replaced it passed a whole copy\'s closing checks');
             staged.markReady({ pages: checked.pages, rows: checked.rows, generatedAt: checked.generatedAt, cursor: checked.cursor, why: why ?? mode });
             staged = null;
             // Landed, as far as this process goes: the next start swaps it in, and the standby's record in it already says so.
@@ -555,19 +580,23 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         const pages: CopyPage[] = [opening];
         if (isDelta && opening.last !== true) {
             const most = deltaPages();
+            const maxBytes = deltaBytes();
             const pageRows = typeof opening.pageRows === 'number' && opening.pageRows > 0 ? opening.pageRows : Infinity;
-            // More rows than that many pages hold: not fetched at all.
-            let tooBig = rowsOfCopy(opening.rowCounts) > most * pageRows;
+            // More changed rows than that many pages hold: not fetched at all. The accounts every delta carries are no change.
+            const changed = rowsOfCopy(opening.rowCounts, WHOLE_IN_EVERY_DELTA);
+            let tooBig: string | null = changed > most * pageRows ? `more than ${most} page(s) of changes (${changed} rows)` : null;
+            let bytes = Buffer.byteLength(opened.text);
             while (!tooBig && pages[pages.length - 1].last !== true) {
-                if (pages.length >= most) { tooBig = true; break; }
-                pages.push((await requests.page(opening.copyId, pages.length)).page);
+                const next = await requests.page(opening.copyId, pages.length);
+                bytes += Buffer.byteLength(next.text);
+                if (bytes > maxBytes) { tooBig = `more than ${Math.round(maxBytes / 1048576)} MB`; break; }
+                pages.push(next.page);
             }
             if (tooBig) {
                 await requests.close(opening.copyId);
                 openCopy = null;
                 deltaTooBig = true;
-                logger.warn('P2P', `[Backup] The changes since this standby's last copy are more than ${most} page(s) of a copy `
-                    + `(${rowsOfCopy(opening.rowCounts)} rows): not taken. The next pull is a whole copy.`);
+                logger.warn('P2P', `[Backup] The changes since this standby's last copy are ${tooBig}: not taken. The next pull is a whole copy.`);
                 return { ok: true };
             }
         }
@@ -619,7 +648,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 + (keepCursor ? ' The next delta starts where the last one ended, so it brings the rows written since.' : ''));
         }
         // The database the last swap replaced is not needed once a copy has landed on the new one.
-        if (previousToDelete) deletePreviousDatabase();
+        if (previousToDelete) deletePreviousDatabase('a copy landed on the one that replaced it');
 
         if (isDelta) {
             // Deltas carry only changed rows, so a row-count compare is meaningless.
@@ -716,15 +745,21 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     }
 }
 
-/** The database the last swap replaced (db/swap-at-boot.ts), gone once a copy lands on the new one. Never throws. */
-function deletePreviousDatabase(): void {
+/**
+ * The database the last swap replaced (db/swap-at-boot.ts), gone once the one that replaced it has started and passed its
+ * first check: a copy that lands on it (a delta, or a whole copy of one page), or a whole copy's closing checks, which read
+ * it; or sooner, when a whole copy needs its room (roomForStaging). Never throws.
+ */
+function deletePreviousDatabase(why: string): void {
     previousToDelete = false;
     const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+    const had = fs.existsSync(path.join(dir, PREVIOUS_DB));
     for (const s of ['', '-wal', '-shm']) {
         try { fs.rmSync(path.join(dir, PREVIOUS_DB + s), { force: true }); } catch (e) {
             logger.warn('P2P', `[Backup] ${PREVIOUS_DB}${s} could not be deleted: ${errorMessage(e)}`);
         }
     }
+    if (had) logger.info('P2P', `[Backup] ${PREVIOUS_DB}, the database the last swap replaced, deleted: ${why}.`);
 }
 
 /**
@@ -1065,7 +1100,8 @@ function nextMode(): PullMode | ResyncKind | Wait {
     }
     // No copy landed yet: a whole one, the seed, unless the last was refused (N2).
     if (!lastImportedCursor) return resyncWaits ? 'wait' : 'full';
-    // The changes since the cursor were more than a delta takes (BACKUP_DELTA_PAGES pages): a whole copy, at once, unless
+    // The changes since the cursor were more than a delta takes (BACKUP_DELTA_PAGES pages' rows, or BACKUP_DELTA_BYTES): a
+    // whole copy, at once, unless
     // the last one was refused or never came (N2); then nothing until it may be asked again, since the delta would be too
     // big again.
     if (deltaTooBig) return now < wholeRetryAt ? 'wait' : 'full';

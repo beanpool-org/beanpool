@@ -9,7 +9,8 @@
  *
  * - `staging/READY` and `staging/state.db`, and the staging database passes `PRAGMA quick_check`: `state.db` (with its
  *   `-wal` and `-shm`) becomes `state.previous.db`, the staging database becomes `state.db`, and the staging directory
- *   goes. The standby's puller deletes `state.previous.db` once its first copy lands on the new one.
+ *   goes. The standby's puller deletes `state.previous.db` once the new one passes its first check (a copy that lands on it,
+ *   or a whole copy's closing checks), or when a whole copy needs its room (services/backup-puller.ts deletePreviousDatabase).
  * - Killed between the two renames: `state.previous.db`, no `state.db`, and the staging database still there: the swap
  *   finishes (a rename is atomic, and the older previous is never written over by nothing).
  * - Killed after the swap, before the staging directory went: READY and no staging database: the staging goes.

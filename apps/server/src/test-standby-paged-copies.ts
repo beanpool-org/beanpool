@@ -43,6 +43,12 @@
  *     names written since the copy began; after the swap every photo's object is there, and the next sweep removes that
  *     object. A copy one of whose photo objects is removed while it stages is refused at the closing check, S unchanged,
  *     and the next lands. (Before: the sweep removed every one, and the copy landed "exact" without them.)
+ * 16. M with more accounts than a delta's pages of rows (DELTA_PAGES x PAGE_ROWS), which every delta carries whole: four
+ *     pulls in a row, a member edited before each, are four deltas that land, with no whole copy and no restart, and the
+ *     database the last swap replaced goes at the first. A delta of more bytes than BACKUP_DELTA_BYTES (scaled) is not
+ *     taken, and the next pull is a whole copy, which lands. After it, with too little room for a second copy but for that
+ *     database's, a whole copy is refused saying so; with room once it goes, it goes first and the copy lands. (Before:
+ *     no delta was ever taken, only a whole copy and a restart every other pull, and the database it replaced stayed.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -79,6 +85,8 @@ const CAPPED_BYTES = 6 * 1024 * 1024;
 const BULK_PHOTOS = 1200;
 /** Step 15's new listing photos, which a whole copy brings while S's orphan sweep runs. */
 const NEW_PHOTOS = 60;
+/** A delta's pages of changes at most (BACKUP_DELTA_PAGES, S's default). */
+const DELTA_PAGES = 4;
 /** How long M keeps a copy no page was asked of (SYNC_COPY_IDLE_MS), scaled down from two minutes. */
 const COPY_IDLE_MS = 3000;
 /** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
@@ -303,7 +311,9 @@ async function main(): Promise<void> {
     const step = async (title: string, fn: () => Promise<void>) => {
         if (Number.parseInt(title, 10) > until_) return;
         console.log(`\n— ${title} —`);
+        const t = Date.now();
         try { await fn(); } catch (e: any) { assert(false, `${title}: ${e?.message || e}`); }
+        console.log(`  (${((Date.now() - t) / 1000).toFixed(1)} s)`);
     };
 
     try {
@@ -807,6 +817,65 @@ async function main(): Promise<void> {
                 `the next whole copy puts the object back and lands (${JSON.stringify(p15c)})`);
         });
 
+        await step('16. more accounts than a delta\'s pages of rows: deltas land, with no whole copy every other pull; their bytes bounded; the old database goes', async () => {
+            const many = DELTA_PAGES * PAGE_ROWS + 50;
+            await main.send('sql', {
+                sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${many})
+                      INSERT INTO members (public_key, callsign, updated_at) SELECT lower(hex(randomblob(32))), 'Many ' || i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
+            });
+            await main.send('sql', { sql: `INSERT INTO accounts (public_key, balance) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'` });
+            const w16 = await wholeCopy();
+            const st16 = await standby.send('staging');
+            require_(w16.ok === true && w16.staged === true && st16.previous, `S takes a whole copy of M's ${many} more members, swapped in, the old database kept (${JSON.stringify({ w16, st16 })})`);
+            const n0 = standby.swaps();
+            const pulls: { ok: boolean; mode: string; staged: boolean }[] = [];
+            let fewest = Infinity;
+            for (let i = 0; i < 4; i++) {
+                await main.send('sql', { sql: `UPDATE members SET bio = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [`edit ${i}`, ann.pk] });
+                const opened = px.opened.length;
+                pulls.push(await standby.send('pull', {}));
+                const opening = JSON.parse(px.copies.get(px.opened[opened] ?? '')?.pages.get(0) ?? '{}');
+                fewest = Math.min(fewest, opening.rowCounts?.accounts ?? 0);
+            }
+            const [bio] = await standby.send('rows', { sql: 'SELECT bio FROM members WHERE public_key = ?', args: [ann.pk] });
+            const diff16 = await exactNow();
+            const st16b = await standby.send('staging');
+            assert(pulls.every((p) => p.ok && p.mode === 'delta' && !p.staged) && standby.swaps() === n0 && fewest > DELTA_PAGES * PAGE_ROWS
+                && bio?.bio === 'edit 3' && diff16.length === 0 && !st16b.previous,
+                `four pulls in a row are four deltas that land, each carrying all ${fewest}+ accounts (more than ${DELTA_PAGES} x ${PAGE_ROWS} rows), with no whole copy and no restart; `
+                + `S is M's, and the database the last swap replaced is gone (${JSON.stringify({ pulls: pulls.map((p) => p.mode), swaps: standby.swaps() - n0, bio, st16b })}; `
+                + `differences ${first(diff16)}; before: every delta too big, a whole copy and a restart every other pull, the old database kept)`);
+
+            // The delta's bytes bounded: every account is more than 64 KB of it.
+            await standby.send('set-env', { vars: { BACKUP_DELTA_BYTES: String(64 * 1024) } });
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 4', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            const big = await standby.send('pull', {});
+            const [bio4] = await standby.send('rows', { sql: 'SELECT bio FROM members WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('set-env', { vars: { BACKUP_DELTA_BYTES: null } });
+            const after = await pullAndSwap(false);
+            assert(big.ok === true && big.mode === 'delta' && bio4?.bio === 'edit 3' && after.ok === true && after.mode === 'full' && after.staged === true && (await exactNow()).length === 0,
+                `a delta of more than BACKUP_DELTA_BYTES (scaled to 64 KB) is not taken, and the next pull is a whole copy, which lands (${JSON.stringify({ big, after })})`);
+
+            // Room for a whole copy only once the database the last swap replaced is gone: refused while even that is short.
+            // Measured with the WAL checkpointed, as the copy will find it.
+            await standby.send('checkpoint');
+            const room = await standby.send('room');
+            require_(room.previous > 0, `the database the last swap replaced is there (${JSON.stringify(room)})`);
+            await standby.send('set-free-bytes', { n: room.need - room.previous - 1024 * 1024 });
+            const before = await snapS();
+            const short = await standby.send('pull', { whole: true });
+            const st16c = await standby.send('staging');
+            assert(short.ok === false && /no room on this server's disk for a second copy/.test(short.error ?? '') && /state\.previous\.db/.test(short.error ?? '')
+                && st16c.previous && !st16c.staging && snapDiff(before, await snapS()).length === 0,
+                `with too little room even without that database, the whole copy is refused saying so, the database kept, S unchanged (${JSON.stringify(short)})`);
+            await standby.send('set-free-bytes', { n: room.need - Math.floor(room.previous / 2) });
+            const log0 = standby.output().length;
+            const roomy = await pullAndSwap(true);
+            assert(roomy.ok === true && roomy.staged === true && /state\.previous\.db, the database the last swap replaced, deleted: this whole copy needs its room/.test(standby.output().slice(log0))
+                && (await exactNow()).length === 0,
+                `with room once it goes, that database is deleted first, and the copy lands (${JSON.stringify(roomy)})`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -864,8 +933,17 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
     },
 };
 
+/** Step 16's look at the room a whole copy needs (services/stager.ts roomForStaging), and the disk's free space as it sees it. */
+const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
+    room: async () => (await import('./services/stager.js')).roomForStaging(),
+    'set-free-bytes': async (a: { n: number | null }) => {
+        (await import('./services/stager.js'))._setFreeBytesForTests(a.n);
+        return true;
+    },
+};
+
 if (process.argv.includes('--child')) {
-    runPagedCopyChild(photoCommands).catch((e) => { console.error(e); process.exit(1); });
+    runPagedCopyChild({ ...photoCommands, ...roomCommands }).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });
 }

@@ -75,8 +75,28 @@ export const SIGNED_CEILING_FACTOR = 10;
 export const PEER_READ_FACTOR = 5;
 const WINDOW_MS = 60_000;
 
+/**
+ * Past this many buckets, a request's admission prunes the closed windows (pruneGatewayBuckets, a walk of every bucket
+ * and the day counts), at most once every PRUNE_INTERVAL_MS. It ran on every count past this mark, and a request counts
+ * up to three buckets (`sig:`, `claim:`, and `ip:` or `m:`): a flood of forged claims from rotating IPv6 /64s, whose
+ * buckets are all live so a prune frees nothing, walked the whole map three times a request, 42 s of CPU for 50,000
+ * requests where main spent 13 (the review of 06491de5).
+ */
+const PRUNE_ABOVE = 20_000;
+const PRUNE_INTERVAL_MS = 1_000;
+/**
+ * The most buckets the limiter holds. When every bucket is live (a flood from more addresses in a minute than this), the
+ * oldest windows are forgotten, down to 90%, before a new one is made: forgetting a bucket only forgives what it counted,
+ * and the oldest are the nearest to closing anyway. About 14 MB of heap when full (measured with IPv6 keys). A node's own
+ * traffic is far below it (a few buckets for each address and member that made a request this minute).
+ */
+export const GATEWAY_MAX_BUCKETS = 100_000;
+
+/** In the order their windows opened (count() moves a reopened window to the end), so the first are the oldest. */
 const buckets = new Map<string, { count: number; resetAt: number }>();
 const loggedTrips = new Map<string, number>();
+let lastPruneAt = 0;
+let pruneRuns = 0;
 
 // ── The day budget ───────────────────────────────────────────────────────────────────────────────────────────────
 const HOUR_MS = 60 * 60 * 1000;
@@ -143,13 +163,35 @@ function waitFor(key: string, max: number, now: number): number {
     return Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
 }
 
+/**
+ * Once per request, at its admission (gatewayAdmit, gatewayAdmitUpgrade, gatewayAdmitPeerRead) and never in count():
+ * past PRUNE_ABOVE buckets, prune the closed windows if the last prune was PRUNE_INTERVAL_MS ago or more (or the clock
+ * went back).
+ */
+function upkeep(now: number): void {
+    if (buckets.size <= PRUNE_ABOVE) return;
+    if (now >= lastPruneAt && now - lastPruneAt < PRUNE_INTERVAL_MS) return;
+    pruneGatewayBuckets(now);
+}
+
 /** Count one request against `key`, full or not. The window it was counted in (its resetAt). */
 function count(key: string, now: number): number {
-    if (buckets.size > 20_000) pruneGatewayBuckets(now);
     const entry = buckets.get(key);
     if (entry && now < entry.resetAt) { entry.count++; return entry.resetAt; }
+    // A new window goes to the end of the map, so the map stays in the order windows opened.
+    if (entry) buckets.delete(key);
+    else if (buckets.size >= GATEWAY_MAX_BUCKETS) forgetOldestBuckets();
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return now + WINDOW_MS;
+}
+
+/** At GATEWAY_MAX_BUCKETS: forget the oldest windows (the first in the map), down to 90% of it. */
+function forgetOldestBuckets(): void {
+    const target = Math.floor(GATEWAY_MAX_BUCKETS * 0.9);
+    for (const key of buckets.keys()) {
+        if (buckets.size <= target) break;
+        buckets.delete(key);
+    }
 }
 
 /** Count one request against `key`. The seconds to wait (and nothing counted) when the bucket is already full, else 0. */
@@ -246,6 +288,7 @@ function declaresSmallBody(ctx: Koa.Context): boolean {
  * `ctx.state.gatewayBodyLimit` holds the body parser to CLAIM_SMALL_BODY_BYTES.
  */
 export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): boolean {
+    upkeep(now);
     const ip = clientLimiterKey(ctx);
     if (claimsSignature) {
         ctx.state.gatewaySignedClaim = true;
@@ -288,6 +331,7 @@ export function gatewaySettle(ctx: Koa.Context, now = Date.now()): void {
 
 /** The peer protocol's own reads (GATEWAY_EXEMPT_PEER_READS): their own bucket per address, signed or not. */
 export function gatewayAdmitPeerRead(ctx: Koa.Context, maxPerMinute: number, now = Date.now()): boolean {
+    upkeep(now);
     return take(ctx, `peer:${clientLimiterKey(ctx)}`, maxPerMinute * PEER_READ_FACTOR, now);
 }
 
@@ -298,6 +342,7 @@ export function gatewayAdmitPeerRead(ctx: Koa.Context, maxPerMinute: number, now
  * seconds to wait when refused, else 0; `claimWindow` is for gatewaySettleUpgrade.
  */
 export function gatewayAdmitUpgrade(client: string, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): { wait: number; claimWindow: number } {
+    upkeep(now);
     if (claimsSignature) {
         const { wait, claimWindow } = admitClaim(client, maxPerMinute, true, now);
         return { wait, claimWindow };
@@ -435,9 +480,19 @@ export function dayBudgetKeyCount(): number {
 
 /** Drop windows that have closed (the server's periodic cleaner), and the day counts of keys quiet for a day. */
 export function pruneGatewayBuckets(now = Date.now()): void {
+    lastPruneAt = now;
+    pruneRuns++;
     for (const [k, v] of buckets) if (now >= v.resetAt) buckets.delete(k);
     for (const [k, t] of loggedTrips) if (now - t >= WINDOW_MS) loggedTrips.delete(k);
     pruneDayCounts(Math.floor(now / HOUR_MS));
+}
+
+/** How many times the buckets have been pruned, and how many there are (tests and diagnostics). */
+export function gatewayPruneRuns(): number {
+    return pruneRuns;
+}
+export function gatewayBucketCount(): number {
+    return buckets.size;
 }
 
 /** Tests only: forget every bucket, the day counts included. */
@@ -445,4 +500,5 @@ export function resetGatewayRateLimit(): void {
     buckets.clear();
     loggedTrips.clear();
     dayCounts.clear();
+    lastPruneAt = 0;
 }

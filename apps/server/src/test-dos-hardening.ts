@@ -24,6 +24,10 @@
  *   8. F3: a client that dribbles its headers is dropped at the header timeout; a body that takes longer than it (as the
  *      admin restore's 500 MB does) is not; the request timeout is still Node's 300 s; past the connection cap a new
  *      connection is closed at once.
+ *   9. The limiter's upkeep (review 4150386780): a flood of forged claims from rotating IPv6 /64s, past the 20,000 live
+ *      buckets that start its prune, prunes at most once a request and once a second, and costs a small fraction of the
+ *      CPU it did at 06491de5 (three full prunes a request); flooding on, the buckets stay under GATEWAY_MAX_BUCKETS; the
+ *      limiter still limits afterwards.
  *
  * On origin/main every numbered section fails (its modules are loaded here only if they exist, so the suite runs there).
  *
@@ -444,6 +448,62 @@ async function main() {
         })));
         assert(refused >= 15, `past the connection cap (300 in this suite) a new connection is closed at once (${refused} of 320 closed within 0.6 s)`);
         for (const s of sockets) s.destroy();
+    }
+
+    // ── 9. The limiter's upkeep under a flood ───────────────────────────────────────────────────────────
+    console.log('\n— 9. the limiter under a flood from rotating addresses —');
+    {
+        const gw: any = await import('./gateway-rate-limit.js');
+        const counted = typeof gw.gatewayPruneRuns === 'function' && typeof gw.gatewayBucketCount === 'function';
+        resetGatewayRateLimit();
+        // A forged claim with a 1 MB body from its own IPv6 /64, as the review's flood (each charges sig:, claim: and
+        // ip:), through the gateway's own admit and settle, as https-server.ts calls them. The clock is the one passed in.
+        const forged = (i: number) => ({
+            method: 'POST', path: '/api/marketplace/posts', ip: `2001:db8:${(i >>> 16) & 0xffff}:${i & 0xffff}::1`,
+            state: {} as Record<string, unknown>, status: 404, body: undefined as unknown,
+            get: (h: string) => h.toLowerCase() === 'content-length' ? String(1024 * 1024) : '', set: () => { /* headers */ },
+        });
+        const T0 = Date.now();
+        const N = 20_000;
+        let maxPerRequest = 0;
+        const cpu0 = process.cpuUsage();
+        for (let i = 0; i < N; i++) {
+            const now = T0 + i; // 1 ms apart: the flood spans 20 s of the limiter's clock
+            const before = counted ? gw.gatewayPruneRuns() : 0;
+            const ctx = forged(i) as any;
+            if (gw.gatewayAdmit(ctx, 120, true, now)) gw.gatewaySettle(ctx, now);
+            if (counted) maxPerRequest = Math.max(maxPerRequest, gw.gatewayPruneRuns() - before);
+        }
+        const cpu = process.cpuUsage(cpu0);
+        const cpuMs = (cpu.user + cpu.system) / 1000;
+        const runs = counted ? gw.gatewayPruneRuns() : NaN;
+        assert(counted && maxPerRequest <= 1, `no request of a ${N}-claim flood from rotating /64s prunes more than once (most in one request: ${counted ? maxPerRequest : 'not counted'})`);
+        // At 06491de5 each request past 20,000 live buckets pruned three times; on main once. Once a second is far below both.
+        assert(counted && runs <= Math.ceil(N / 1000) + 2, `the flood prunes at most once a second of its ${N / 1000} s (${runs} prunes)`);
+        assert(cpuMs < 1000, `and costs ${Math.round(cpuMs)} ms of CPU for ${N} claims (06491de5: about 5 s, three full prunes a request; main about 1 s, one)`);
+
+        // Flooding on inside one minute: every bucket is live, so a prune frees nothing. The buckets must still stop at
+        // GATEWAY_MAX_BUCKETS, not grow with the flood.
+        const cap: number = gw.GATEWAY_MAX_BUCKETS ?? 0;
+        if (counted && cap > 0) {
+            const more = Math.ceil(cap / 3) + 5_000;
+            let peak = 0;
+            for (let i = N; i < N + more; i++) {
+                const now = T0 + N + Math.floor((i - N) / 10); // about 4 s more: all within the first bucket's minute
+                const ctx = forged(i) as any;
+                if (gw.gatewayAdmit(ctx, 120, true, now)) gw.gatewaySettle(ctx, now);
+                peak = Math.max(peak, gw.gatewayBucketCount());
+            }
+            assert(peak <= cap, `${more} more claims inside the minute (${(N + more) * 3} buckets asked for, all live) hold the buckets at ${cap} or fewer (peak ${peak})`);
+        } else assert(false, `the limiter has a hard cap on its buckets (GATEWAY_MAX_BUCKETS: ${cap || 'none'})`);
+
+        // The limiter still limits after the flood: a fresh address's unsigned requests, at a limit of 5.
+        const later = T0 + 30_000;
+        const plain = { method: 'GET', path: '/api/version', ip: '198.51.100.99', state: {}, status: 404, body: undefined as unknown, get: () => '', set: () => { /* headers */ } };
+        const admitted: boolean[] = [];
+        for (let i = 0; i <= LIMIT; i++) admitted.push(gw.gatewayAdmit({ ...plain, state: {} } as any, LIMIT, false, later + i));
+        assert(admitted.slice(0, LIMIT).every(Boolean) && admitted[LIMIT] === false, `the limiter still limits afterwards: 429 on the ${LIMIT + 1}th (${admitted.join(',')})`);
+        resetGatewayRateLimit();
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -16,12 +16,15 @@
  * address that isn't the vault can't sign a ticket the phone accepts or open a deposit box (design §1.4).
  *
  * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): global's door accepts
- * vault tickets, V5 (finding 5); a member whose only copy is still at a community can get back in, since such a build
- * restores only through the vault and the move card shows only in Settings (finding 3); a phone told "none"
- * ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone, which becomes common at
- * rollout, when every phone starts at "none" (confirmation N1); and a 2xx status answer that isn't a status is not
- * recorded as "none" ({@link vaultStatus}; confirmation N2). The parked guide pages: GitHub issue #1349. CLOSED: the
- * vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below).
+ * vault tickets, V5 (finding 5); and the custodians' parts are reshared, with the parked guide pages (GitHub issue
+ * #1349). CLOSED:
+ * - the vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below);
+ * - a member whose only copy is still at a community gets back in there: on the vault's signed "no copy" for a sign-in,
+ *   the restore goes on at the community as a build without a vault does it, and the move card is offered at once
+ *   (finding 3; sso-recovery.ts `vaultKeepsNoCopyFor`);
+ * - a phone told "none" ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone: "none" is
+ *   believed for a week, then the app-open check asks again ({@link VAULT_NONE_KEPT_MS}; confirmation N1);
+ * - a 2xx status answer that isn't a status is not recorded as "none" ({@link vaultStatus}; confirmation N2).
  *
  * ## One sign-in, bound three ways
  *
@@ -148,7 +151,11 @@ export type VaultFailure =
     | 'unreachable'
     /** A ticket that isn't the vault's, or isn't this key's. No provider sheet opened. */
     | 'bad_ticket'
-    /** The vault keeps no copy for this sign-in account. */
+    /**
+     * The vault keeps no copy for this sign-in account. Only ever from the vault's own signed refusal ({@link
+     * vaultRequest}): a 5xx is never read as one, and an answer the phone can't check is `unreachable`. So a server at
+     * the vault's address can't make one, and a restore may go on at a community on it (sso-recovery.ts, review finding 3).
+     */
     | 'no_copy'
     /** A restore of this account is already waiting on another device. */
     | 'hold_open'
@@ -401,30 +408,49 @@ export function readVaultStatus(body: unknown): VaultStatus {
     return { providers: [...new Set(providers)], holds };
 }
 
-/** Which sign-ins the vault keeps a copy for, and any restore waiting. Never a copy. */
+/**
+ * Which sign-ins the vault keeps a copy for, and any restore waiting. Never a copy. Only a status counts: a signed
+ * answer without its `copies` and `holds` lists says nothing about a copy, and is taken as no answer, so it is never
+ * recorded as "none" (PR #1336 confirmation N2).
+ */
 export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEOUT_MS): Promise<VaultStatus> {
-    const status = readVaultStatus(await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs));
+    const answer = await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs);
+    if (!Array.isArray(answer.copies) || !Array.isArray(answer.holds)) throw unverified('/v1/copies/status', 'a status without its lists');
+    const status = readVaultStatus(answer);
     await noteVaultCopy(identity.publicKey, status.providers.length > 0);
     return status;
 }
 
 /**
+ * How long this phone goes on believing the vault keeps no copy for an account (PR #1336 confirmation N1): 7 days. A
+ * copy the member makes later on another phone is learnt of here within a week, by the app-open check, even if the
+ * member never opens Settings. At rollout every phone starts at "none", so this is at most one status read per account
+ * per phone per week, and only at app open or on the member's action, never on a timer.
+ */
+export const VAULT_NONE_KEPT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
  * What this phone knows about a copy at the vault for `publicKey` ({@link noteVaultCopy}), asked of the phone, never of
  * the vault: `'kept'` (it deposited one, restored the account from one, or a status read listed one), `'none'` (a
- * status read listed none), or `'unknown'` (nothing learnt yet: a phone that got the account back with the 12 words,
- * or a new account, or a phone updated from a build before this record).
+ * status read in the last {@link VAULT_NONE_KEPT_MS} listed none), or `'unknown'` (nothing learnt yet: a phone that got
+ * the account back with the 12 words, or a new account, or a phone updated from a build before this record; or a
+ * "none" that is a week old, or dated by a clock that has since gone back).
  *
  * The app-open check and the Settings banner skip only `'none'` (PR #1336 review finding 1: a member with no copy
- * there is never asked about, and nothing asks on a timer). `'unknown'` is asked, once, and the answer is kept: a phone
- * restored with the 12 words must see and stop a sign-in restore of its account (D2), and its push token must reach the
- * copy (confirmation review NEW-1).
+ * there is not asked about again within the week, and nothing asks on a timer). `'unknown'` is asked, once, and the
+ * answer is kept: a phone restored with the 12 words must see and stop a sign-in restore of its account (D2), and its
+ * push token must reach the copy (confirmation review NEW-1), as must a phone whose member made a copy on another phone
+ * (confirmation N1).
  */
 export type VaultCopyKnowledge = 'kept' | 'none' | 'unknown';
 
-export async function vaultCopyKnowledge(publicKey: string): Promise<VaultCopyKnowledge> {
+export async function vaultCopyKnowledge(publicKey: string, now: number = Date.now()): Promise<VaultCopyKnowledge> {
     try {
         const v = await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey));
-        return v === '1' ? 'kept' : v === '0' ? 'none' : 'unknown';
+        if (v === '1') return 'kept';
+        // "0:<when>". A bare "0" (a build before the week's bound) has no date, so it is asked again.
+        const at = v?.startsWith('0:') ? Number(v.slice(2)) : NaN;
+        return Number.isSafeInteger(at) && at <= now && now - at < VAULT_NONE_KEPT_MS ? 'none' : 'unknown';
     } catch {
         return 'unknown';
     }
@@ -437,10 +463,11 @@ export async function vaultCopyKnown(publicKey: string): Promise<boolean> {
 
 /**
  * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (the app-open
- * check, Account Protection), which is how a phone learns of a copy another of the member's devices made.
+ * check, Account Protection), which is how a phone learns of a copy another of the member's devices made. "None" is
+ * dated, and believed for {@link VAULT_NONE_KEPT_MS}.
  */
-export async function noteVaultCopy(publicKey: string, kept: boolean): Promise<void> {
-    await AsyncStorage.setItem(vaultCopyKnownStoreKey(publicKey), kept ? '1' : '0').catch(() => {});
+export async function noteVaultCopy(publicKey: string, kept: boolean, now: number = Date.now()): Promise<void> {
+    await AsyncStorage.setItem(vaultCopyKnownStoreKey(publicKey), kept ? '1' : `0:${now}`).catch(() => {});
 }
 
 /** Forget what the phone knew (a restore with the 12 words): the next app open asks the vault again. */
@@ -509,9 +536,9 @@ const holdsAlerted = new Set<string>();
  * The app-open check (design §1.5, V4): in the background, the vault's status for the account on this phone. Resolves
  * with the restores of this account waiting that haven't been brought up yet in this run, and gives the vault this
  * phone's push token when it has changed. Short timeout, never throws, and nothing waits for it: a slow or unreachable
- * vault shows nothing. No vault in this build, or an account the phone knows has no copy there
- * ({@link vaultCopyKnowledge} `'none'`): nothing is asked. An account it knows nothing about yet is asked, and the
- * answer is kept.
+ * vault shows nothing. No vault in this build, or an account the phone learnt in the last week has no copy there
+ * ({@link vaultCopyKnowledge} `'none'`): nothing is asked. An account it knows nothing about yet, or whose "none" is a
+ * week old, is asked, and the answer is kept.
  *
  * Marks nothing: the caller marks the holds it actually shows ({@link takeHoldsToShow}), at the moment it shows them.
  * An answer that arrives after the screen asking for it has gone (a remount) must not use up the hold's one alert.

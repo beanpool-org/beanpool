@@ -349,6 +349,67 @@ export class FakeCommunity {
     }
 }
 
+/**
+ * A community as every live one is today: it keeps each member's sign-in copy, hands out its own nonce, and gives the
+ * copy back to a restore that names the callsign and proves the sign-in. Put in place of {@link FakeCommunity}'s
+ * `handle` (release-gate.test.ts, vault-phone-gates.test.ts).
+ */
+export class CommunityKeepingCopies {
+    /** provider → the copy (the phone's single-blob share), for the one member here. */
+    readonly copies = new Map<string, SealedShare>();
+    readonly nonces = new Set<string>();
+    private seq = 0;
+    /** The sign-in the restore under way proved, whose copy it collects. */
+    private collecting: string | null = null;
+    constructor(readonly callsign: string) {}
+
+    handle(req: SentRequest): { status: number; body: unknown } {
+        const b = req.body ?? {};
+        const ok = (body: unknown) => ({ status: 200, body });
+        if (req.method === 'POST' && req.path === '/api/recovery/sso-nonce') {
+            const nonce = `community-nonce-${++this.seq}`;
+            this.nonces.add(nonce);
+            return ok({ nonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'] });
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/shares/sso') {
+            if (!this.nonces.delete(b.nonce)) return { status: 401, body: { error: 'nonce' } };
+            this.copies.set(b.provider, b.shares[0]);
+            return ok({ generation: 1, enrolledSso: [...this.copies.keys()], threshold: 1 });
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/shares/status') {
+            return ok({ enrolledSso: [...this.copies.keys()], keepers: [{ holderType: 'sso', count: this.copies.size }], total: this.copies.size, threshold: 1 });
+        }
+        const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(req.path);
+        if (req.method === 'DELETE' && del) {
+            if (!this.copies.delete(del[1])) return { status: 404, body: { error: 'not connected' } };
+            return ok({ removed: del[1], enrolledSso: [...this.copies.keys()] });
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/collect') {
+            return b.callsign === this.callsign ? ok({ collectionId: 'c-1' }) : { status: 404, body: { error: 'No such account.' } };
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso-nonce') {
+            const nonce = `collect-nonce-${++this.seq}`;
+            this.nonces.add(nonce);
+            return ok({ nonce });
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso') {
+            if (!this.nonces.delete(b.nonce)) return { status: 401, body: { error: 'nonce' } };
+            this.collecting = b.provider;
+            return ok({ released: true });
+        }
+        if (req.method === 'POST' && req.path === '/api/recovery/collect/fragments') {
+            const copy = this.copies.get(this.collecting ?? 'google');
+            if (!copy) return ok({ fragments: [] });
+            return ok({
+                fragments: [{
+                    holderType: 'sso', payload: copy.encryptedShare, payloadIv: copy.shareIv, payloadTag: copy.shareTag, kdfParams: copy.kdfParams,
+                }],
+            });
+        }
+        return { status: 404, body: { error: 'Not Found' } };
+    }
+}
+
 /** The global community's door (apps/server routes/open-join.ts), as far as the phone meets it. */
 export class FakeGlobal {
     /** The door's own nonce, for a sign-in that has no vault ticket. */

@@ -20,6 +20,11 @@
  * The waiting restore lives on this phone (SecureStore, this device only) until the account is saved, so a restart, a
  * lost answer or a failed save comes back to the same hold.
  *
+ * When the vault answers, signed, that it keeps no copy for the sign-in ({@link vaultKeepsNoCopyFor}), the copy may
+ * still be at the member's community, made before the vault and never moved: the restore goes on there, as below, with
+ * the callsign, the community's address and a second sign-in for the community's own nonce. Then the move card is
+ * offered at once (PR #1336 review finding 3).
+ *
  * ## A build without one: at the member's community, exactly as before the vault ({@link recoverAccountWithSso})
  *
  * Implements §6 Step 5b recovery round-trip:
@@ -65,6 +70,7 @@ import {
     noteVaultCopy,
     startVaultRestore,
     stopVaultHold,
+    VaultError,
     type PendingVaultRestore,
     type RestoredFromVault,
     type VaultCollect,
@@ -103,6 +109,15 @@ function parseJwtSub(idToken: string): string {
     throw new Error('Sign-in token does not contain a valid subject claim (sub).');
 }
 
+/** Why {@link recoverAccountWithSso} refused in a build with a vault: never met by a member (the screen doesn't offer it). */
+export const COMMUNITY_RESTORE_NOT_OFFERED = "Getting back in with a sign-in goes through BeanPool's key vault in this version "
+    + 'of the app. Your 12 words work any time.';
+
+/**
+ * The restore at the member's community, with the callsign and the community's address: a build without a vault's only
+ * sign-in restore. In a build with a vault, only for a sign-in the vault has said, signed, that it keeps no copy for
+ * ({@link vaultKeepsNoCopyFor}); otherwise it refuses before anything is sent.
+ */
 export async function recoverAccountWithSso(options: {
     callsign: string;
     anchorUrl: string;
@@ -121,6 +136,7 @@ export async function recoverAccountWithSso(options: {
      */
     confirmReplace?: ConfirmReplace;
 }): Promise<SsoRecoveryResult> {
+    if (hasVault() && !vaultKeepsNoCopyFor(options.provider)) throw new Error(COMMUNITY_RESTORE_NOT_OFFERED);
     const rawCallsign = options.callsign.trim();
     if (!rawCallsign) {
         throw new Error('Enter your callsign to recover your account.');
@@ -373,16 +389,40 @@ export async function recoverAccountWithSso(options: {
 // ─── A build with a key vault ─────────────────────────────────────────────────────────────
 
 /**
+ * The sign-ins BeanPool's key vault said, in its own signed answer to this phone's last restore with each, that it keeps
+ * no copy for, in this run of the app (PR #1336 review finding 3). A member whose copy is still at their community
+ * (made before the vault, and never moved) gets back in there with such a sign-in, exactly as a build without a vault
+ * restores ({@link recoverAccountWithSso}), and the move card is offered at once.
+ *
+ * Only the vault's signed "no copy" counts (utils/vault.ts `VaultFailure` 'no_copy'). An answer the phone can't check,
+ * a 5xx, a timeout or no answer at all never does: otherwise a server at the vault's address could send members down
+ * the old path. Each restore with a sign-in starts by forgetting it, so it is always the vault's latest word.
+ */
+const noCopyAtVault = new Set<SsoProvider>();
+
+/** Whether the vault's signed answer to this phone's last restore with `provider` was "no copy" ({@link noCopyAtVault}). */
+export function vaultKeepsNoCopyFor(provider: SsoProvider): boolean {
+    return noCopyAtVault.has(provider);
+}
+
+/**
  * Sign in with `provider` and ask the vault for this account's copy. Resolves with the hold: when it goes through.
  * `onSignedIn` runs once the provider is done (the screen brings the app back to the front there). `signal`, aborted
  * before the restore is sent, sends nothing. A restore this phone already started keeps its key, so the same sign-in
- * comes back to the same hold ("Start again", a restart, a lost answer).
+ * comes back to the same hold ("Start again", a restart, a lost answer). The vault's signed "no copy" is kept for
+ * {@link vaultKeepsNoCopyFor}, and thrown as ever.
  */
 export async function startSsoRestore(
     provider: SsoProvider,
     options: { signal?: AbortSignal; onSignedIn?: () => void | Promise<void> } = {},
 ): Promise<PendingVaultRestore> {
-    return startVaultRestore(provider, (p, nonce) => signInWithProvider(p, nonce), options);
+    noCopyAtVault.delete(provider);
+    try {
+        return await startVaultRestore(provider, (p, nonce) => signInWithProvider(p, nonce), options);
+    } catch (e) {
+        if (e instanceof VaultError && e.reason === 'no_copy') noCopyAtVault.add(provider);
+        throw e;
+    }
 }
 
 /** The restore this phone is waiting on, or null. Nothing is asked of the vault. */

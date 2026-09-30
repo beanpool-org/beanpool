@@ -22,8 +22,9 @@
  *     file (services/sealed-backup.ts), and one a fleet harvester receives (services/harvester.ts), goes through
  *     `forgetAddressesInStoredCopy`. A snapshot kept for weeks holds none, and a server restored from one brings none
  *     back. A copy also loses the sign-up, knock and write limiters' address hashes (`open_joins.ip_hash`,
- *     `join_requests.ip_hash`, `writes_by_address.ip_hash`): their key, `openJoinSalt`, is in the same file, so a hash there gives back the address
- *     to anyone who tries all of IPv4. And it loses every address in its log lines. Nothing is left in the file's free
+ *     `join_requests.ip_hash`, `writes_by_address.ip_hash`): with their key, a hash gives back the address to anyone who
+ *     tries all of IPv4. The key is a file now (services/open-join-key.ts), but a database from before that holds it as
+ *     the node_config row `openJoinSalt`, and a copy loses that row too. And it loses every address in its log lines. Nothing is left in the file's free
  *     space or beside it: the copy is a VACUUM INTO (no free space comes along) made with secure_delete on (no page
  *     it builds keeps an old row in its gap), cleaned with its freed bytes zeroed and its journal in memory, and
  *     renamed into place only then;
@@ -45,6 +46,7 @@ import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { redactAddresses } from '../sanitize-message.js';
+import { LEGACY_OPEN_JOIN_KEY_ROW } from './open-join-key.js';
 
 export const ADDRESS_KEEP_DAYS = 7;
 export const ADDRESS_KEEP_MS = ADDRESS_KEEP_DAYS * 24 * 60 * 60_000;
@@ -150,8 +152,12 @@ function forgetAddressesInLogsOf(conn: Database.Database): number {
     return lines.length;
 }
 
-/** Whether `conn` holds anything a copy may not: a row's address, a limiter's address hash, an address in a log line. */
+/**
+ * Whether `conn` holds anything a copy may not: a row's address, a limiter's address hash, an address in a log line, or
+ * the open door's key as the row a database from before its file kept it in.
+ */
 function holdsAddresses(conn: Database.Database): boolean {
+    if (conn.prepare('SELECT 1 FROM node_config WHERE key = ?').get(LEGACY_OPEN_JOIN_KEY_ROW)) return true;
     for (const key of ADDRESS_ROWS) {
         const row = conn.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: unknown } | undefined;
         if (!row) continue;
@@ -167,7 +173,7 @@ function holdsAddresses(conn: Database.Database): boolean {
 
 /**
  * Every address out of a copy of the database, in place, whatever its age: the three rows', the limiters' address
- * hashes and any in a log line. What it frees is zeroed, but free space the file already had (free pages, a page's gap)
+ * hashes and any in a log line; and the open door's key, where an older database kept it (`openJoinSalt`). What it frees is zeroed, but free space the file already had (free pages, a page's gap)
  * is not touched: make the copy with `copyWithoutAddresses`, whose VACUUM INTO leaves none. True when it is done. Never
  * throws: a copy is a recovery point, and one that failed here still holds only what this server keeps anyway (7 days
  * at most, a day for a hash), which a server restored from it clears at its first boot. So it is kept, and the log
@@ -190,6 +196,8 @@ export function forgetAddressesInCopy(file: string): boolean {
                 if (hasAddressHash(copy, table)) copy.prepare(`UPDATE ${table} SET ip_hash = NULL WHERE ip_hash IS NOT NULL`).run();
             }
             forgetAddressesInLogsOf(copy);
+            // The open door's key, in a copy of a database from before it was a file (services/open-join-key.ts).
+            copy.prepare('DELETE FROM node_config WHERE key = ?').run(LEGACY_OPEN_JOIN_KEY_ROW);
         })();
         return true;
     } catch (e) {

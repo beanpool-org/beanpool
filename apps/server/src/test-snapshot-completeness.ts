@@ -34,9 +34,10 @@
  *      store DID hold.
  *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
  *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
- *  12. The open door's record travels too: `open_joins` and the node key its hashes are made with
- *      (node_config `openJoinSalt`). Without both, a restored global node would let every sign-in account
- *      join a second time.
+ *  12. The open door's record travels too: `open_joins`, and which key its hashes are made with (node_config
+ *      `openJoinKeyId`), so a restored global node never lets a sign-in account join a second time: with that key
+ *      it refuses it, without it it refuses every sign-in. Never the key itself, a file (data/open-join.key,
+ *      services/open-join-key.ts), whose bytes are nowhere in the archive's database.
  *  13. So does the global node's moderation (G3): a post hidden by reports stays hidden
  *      (`posts.hidden_by_reports_at`), a moderator's takedown still counts (`posts.removed_by_moderator_at`),
  *      and a muted member stays muted (`members.moderation_muted_until`).
@@ -215,7 +216,8 @@ async function main(): Promise<void> {
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
     const { restoreImages } = await import('./routes/backup.js');
     const { cleanStorageAndCompressLogs, getStorageCleanPreview } = await import('./engine/storage-health.js');
-    const { openJoinHash, OPEN_JOIN_KEY_ROW } = await import('./engine/open-join.js');
+    const { openJoinHash } = await import('./engine/open-join.js');
+    const { OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId } = await import('./services/open-join-key.js');
 
     await initTls();
     initStateEngine();
@@ -264,8 +266,8 @@ async function main(): Promise<void> {
     const openJoinHashAtT = openJoinHash('google', 'snapshot-completeness-sub');
     db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)')
         .run(openJoiner, 'google', openJoinHashAtT, new Date().toISOString(), null);
-    const openJoinKeyAtT = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value as string;
-    assert(!!openJoinKeyAtT, 'setup: an open join, and the node key its hash was made with');
+    const openJoinKeyAtT = fs.readFileSync(path.join(DATA_DIR, OPEN_JOIN_KEY_FILE));
+    assert(openJoinKeyAtT.length === 32, 'setup: an open join, and the node key its hash was made with, in its file');
 
     // The global node's moderation state (G3), as engine/auto-moderation.ts writes it. The mute is on a member of its
     // own, not the author: a muted author's post takes no edits (engine updatePost), and the author edits one at T+1.
@@ -384,9 +386,14 @@ async function main(): Promise<void> {
         const archived = new Database(path.join(plainDir, 'state.db'), { readonly: true });
         try {
             const row = archived.prepare('SELECT join_hash FROM open_joins WHERE member_pubkey = ?').get(openJoiner) as any;
-            const key = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value;
+            const keyId = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ID_ROW) as any)?.value;
+            const legacyKey = archived.prepare('SELECT 1 FROM node_config WHERE key = ?').get(LEGACY_OPEN_JOIN_KEY_ROW);
             assert(row?.join_hash === openJoinHashAtT, 'the archive carries open_joins, so a restored node still knows who joined');
-            assert(key === openJoinKeyAtT, 'and the node key those hashes were made with, so the same account still matches');
+            assert(keyId === openJoinKeyId(openJoinKeyAtT) && !legacyKey,
+                'and which key those hashes were made with, so a restored node checks a sign-in with that key or not at all');
+            const archivedBytes = fs.readFileSync(path.join(plainDir, 'state.db'));
+            const encodings = ['raw', 'base64url', 'base64', 'hex'].map((e) => e === 'raw' ? openJoinKeyAtT : Buffer.from(openJoinKeyAtT.toString(e as BufferEncoding)));
+            assert(encodings.every((b) => !archivedBytes.includes(b)), 'but never the key itself, in any encoding');
             const moderated = archived.prepare('SELECT hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(kept!.id) as any;
             const muted = archived.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(mutedMember) as any;
             assert(moderated?.hidden_by_reports_at === hiddenAtT && moderated?.removed_by_moderator_at === removedAtT,

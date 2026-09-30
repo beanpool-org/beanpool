@@ -572,7 +572,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     node_config: { kind: 'per-server', reason: 'a JSON object; each field is classified in NODE_CONFIG_BLOB_FIELDS' },
     nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
     'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
-    openJoinSalt: { kind: 'payload', reason: "the key the open door's hashes are made with (payload.openJoinSalt)" },
+    // The key itself is a file (data/open-join.key, services/open-join-key.ts), in the take-over bundle only.
+    openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
     migration_mark_visitors_v1: {
         kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)",
         differsByDesign: "a standby records 'copied': the marks in its copy are its main server's (db.ts noteVisitorsMarkedByMainServer)",

@@ -11,7 +11,8 @@ import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readCommunitySettings } from '../config/community-settings.js';
-import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
+import { writeOpenJoinRecord } from './open-join.js';
+import { noteMainServerOpenJoinKeyId, recordedOpenJoinKeyId } from '../services/open-join-key.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
@@ -582,7 +583,7 @@ export async function exportSyncState(
 }
 
 /** What a payload carries beside the tables (payloadRecords). */
-export type PayloadRecords = Pick<SyncPayload, 'nodeProfile' | 'openJoinSalt' | 'visitorsMarked' | 'sealEpoch' | 'communitySettings'>;
+export type PayloadRecords = Pick<SyncPayload, 'nodeProfile' | 'openJoinKeyId' | 'visitorsMarked' | 'sealEpoch' | 'communitySettings'>;
 
 /**
  * What every payload carries beside the tables, from this server's node_config and settings, in the payload's order; a
@@ -594,9 +595,9 @@ export function payloadRecords(): PayloadRecords {
     // What kind of node this is, so a standby keeps it and a take-over or a hand promotion from there can't run
     // the community as another kind (config/node-profile.ts). node_config itself is not replicated.
     out.nodeProfile = readProfileRecord();
-    // The key the `openJoins` rows are hashed with, or they match nothing on a promoted standby (engine/open-join.ts).
-    // A node_config row, so here rather than in the table export.
-    out.openJoinSalt = readOpenJoinSalt();
+    // Which key the `openJoins` rows are hashed with: a hash of it, never the key, which is a file and travels only in
+    // the take-over keys (services/open-join-key.ts). A node_config row, so here rather than in the table export.
+    out.openJoinKeyId = recordedOpenJoinKeyId();
     // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
     // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
     out.visitorsMarked = visitorsMarked();
@@ -2337,13 +2338,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 }
             }
 
-            // The open door's record (engine/open-join.ts): who joined with which sign-in account, and the key those
-            // hashes are made with, so a promoted standby refuses an account that already joined. After the members,
-            // because a row is kept only for a member this database has. A primary older than this sends neither and
-            // changes nothing here.
-            if (remote.openJoinSalt !== undefined || remote.openJoins) {
-                writeOpenJoinRecord(remote.openJoinSalt, remote.openJoins);
-            }
+            // The open door's record (engine/open-join.ts): who joined with which sign-in account, and which key those
+            // hashes are made with (never the key: services/open-join-key.ts), so a server that takes over refuses an
+            // account that already joined, and one without that key refuses every sign-in rather than guess. After the
+            // members, because a row is kept only for a member this database has. A key an older main server still
+            // sends (`openJoinSalt`) is not kept.
+            if (remote.openJoins) writeOpenJoinRecord(remote.openJoins);
+            noteMainServerOpenJoinKeyId(remote.openJoinKeyId);
 
             // The main server's word that its visitors' rows are marked: its marks are in this copy (each marked row is
             // stamped, so it travels), and this standby, which marks none itself, takes them as its own (db.ts

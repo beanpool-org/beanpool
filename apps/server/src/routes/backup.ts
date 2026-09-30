@@ -51,6 +51,10 @@ import {
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
+import {
+    isOpenJoinKeyId, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId, openJoinKeyOffLine, OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW,
+    readOpenJoinKeyForBundle,
+} from '../services/open-join-key.js';
 
 /** After a restore the node restarts to load what was written. Tests replace it. */
 let restartAfterRestore: () => void = () => process.exit(0);
@@ -303,6 +307,39 @@ function recoveryCopiesAfterRestore(dataDir: string, carried: boolean): { copies
 }
 
 /**
+ * Whether the open door can check a sign-in against the restored database's records with the key now in the data folder
+ * (services/open-join-key.ts), said in one line when it cannot: a plain backup never carries the key, so a server restored
+ * from one that is not the server that made the records refuses sign-ins at the door until the key is back. Null when
+ * there is nothing to say: no live record, the key here is theirs, or the database still holds the key itself (a backup
+ * made before the key was a file; the boot moves it out). Never throws.
+ */
+function openDoorAfterRestore(dataDir: string, carried: boolean): { records: number; message: string } | null {
+    let records = 0;
+    let recorded: string | null = null;
+    try {
+        const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
+        try {
+            if (!handle.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_joins'").get()) return null;
+            records = (handle.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%'").get() as { n: number }).n;
+            const config = (key: string) => (handle.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value?: unknown } | undefined)?.value;
+            if (records === 0 || config(LEGACY_OPEN_JOIN_KEY_ROW) != null) return null;
+            const id = config(OPEN_JOIN_KEY_ID_ROW);
+            recorded = isOpenJoinKeyId(id) ? id : null;
+        } finally {
+            try { handle.close(); } catch { /* the read is done */ }
+        }
+    } catch (e) {
+        console.error('[Restore] Could not read the restored database to check the open door\'s records:', e);
+        return null;
+    }
+    const here = readOpenJoinKeyForBundle();
+    if (here && recorded === openJoinKeyId(Buffer.from(here, 'base64'))) return null;
+    const message = openJoinKeyOffLine(records, here ? 'other-key' : 'missing', carried ? 'here' : 'backup');
+    console.warn(`[Restore] ⚠️ ${message}`);
+    return { records, message };
+}
+
+/**
  * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
  * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
  * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
@@ -387,6 +424,8 @@ async function restoreFromTar(
     // Members' sign-in recovery copies in the database now in place, against the keys now beside it: said here, at the
     // restore, never first at a member's recovery (recovery seal S2).
     const recoverySeal = recoveryCopiesAfterRestore(DATA_DIR, !!bundle?.files[RECOVERY_SEAL_KEY_FILE]);
+    // And whether the open door can still tell a returning sign-in from a new one here.
+    const openDoor = openDoorAfterRestore(DATA_DIR, !!bundle?.files[OPEN_JOIN_KEY_FILE]);
 
     // What this node is REALLY missing, counted off the restored database and the store now beside it —
     // not read off the archive's label. This is the number that decides `complete`.
@@ -479,6 +518,7 @@ async function restoreFromTar(
         sealed: !!sealedHeader,
         restoredKeys: restoredKeys.length > 0,
         ...(recoverySeal ? { recoverySeal } : {}),
+        ...(openDoor ? { openDoor } : {}),
         ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
         ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
     };

@@ -50,6 +50,7 @@ import { setTakeoverChangeHandler } from './takeover-signal.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { OPEN_JOIN_KEY_FILE, readOpenJoinKeyForBundle } from './open-join-key.js';
 import { withoutOldAddresses } from './address-retention.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
@@ -81,12 +82,17 @@ export const BUNDLED_LOCAL_CONFIG_FIELDS = [
  * envelope and a sealed backup, is the ONLY place it travels: never the database, a sync payload, a snapshot, a plain
  * backup, a log or an HTTP answer. A take-over and a restore install it with installCarriedRecoverySealKey, never as a
  * plain file write, so a different key already there is kept. A bundle sealed before it travelled has no such entry.
+ *
+ * `open-join.key` is the open door's key (services/open-join-key.ts), kept the same way: only here, installed by the
+ * take-over's `open-door` step and a sealed-backup restore with installCarriedOpenJoinKey. A bundle sealed before it was a
+ * file carries it as `openJoins.salt` instead.
  */
-export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE] as const;
 
 export interface TakeoverBundle {
     v: 1;
-    /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all. */
+    /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all, and one sealed before
+     *  the open door's key was a file no `open-join.key` entry. */
     files: Record<(typeof BUNDLED_FILES)[number], string | null>;
     localConfig: Record<(typeof BUNDLED_LOCAL_CONFIG_FIELDS)[number], unknown>;
     /** The raw table: a standby does not replicate roles (backups-and-replicas.md), so without these a promoted
@@ -114,11 +120,12 @@ export interface TakeoverBundle {
      *  match, and writes these into its database otherwise (the `profile` step). Absent in a bundle sealed before
      *  this field existed: the record the standby copied with the replication payload decides. */
     nodeProfile?: ProfileRecord;
-    /** The open door's record (engine/open-join.ts): the key its hashes are made with and the newest
-     *  OPEN_JOINS_IN_BUNDLE rows, never the address hashes. The take-over's `open-door` step merges them, so the
-     *  promoted server refuses a sign-in account that already joined, even one its last copy missed. Absent in a
-     *  bundle sealed before this field existed: what the standby copied with the replication payloads stands. */
-    openJoins?: OpenJoinRecord;
+    /** The open door's record (engine/open-join.ts): the newest OPEN_JOINS_IN_BUNDLE rows, never the address hashes,
+     *  nor the key (the `open-join.key` file above). The take-over's `open-door` step merges them, so the promoted server
+     *  refuses a sign-in account that already joined, even one its last copy missed. Absent in a bundle sealed before
+     *  this field existed: what the standby copied with the replication payloads stands. A bundle sealed before the key
+     *  was a file also carries it here, as `salt` (base64url). */
+    openJoins?: OpenJoinRecord & { salt?: string | null };
 }
 
 export interface NodeIdentity {
@@ -467,6 +474,8 @@ export function readSealingInputs(): SealingInputs {
 
     const files = {} as TakeoverBundle['files'];
     for (const f of BUNDLED_FILES) {
+        // The open door's key is carried only when it is one (services/open-join-key.ts), never made here.
+        if (f === OPEN_JOIN_KEY_FILE) { files[f] = readOpenJoinKeyForBundle(); continue; }
         const b = f === 'libp2p_key' ? keyBytes : f === 'genesis.json' ? genesisBytes : readFileOrNull(f);
         // A recovery-seal key file that is not a 32-byte key opens nothing: it is not carried (nor ever overwritten here).
         files[f] = b && !(f === RECOVERY_SEAL_KEY_FILE && b.length !== 32) ? b.toString('base64') : null;

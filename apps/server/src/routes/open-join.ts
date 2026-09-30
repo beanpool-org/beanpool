@@ -29,6 +29,10 @@
  * A key a re-key replaced is refused on both (403 `key_invalidated`): it is no member any more, but every write it
  * signs is refused, so it would join as a member nobody can use (engine/open-join.ts).
  *
+ * A server that holds sign-in records but not the key they were made with (restored from a plain backup, promoted by
+ * hand without the take-over keys) refuses both too, before the sign-in is checked (503 `door_key_missing`,
+ * services/open-join-key.ts): it cannot tell a returning account from a new one, so it lets neither in.
+ *
  * ## One key, one spelling
  *
  * The middleware verifies `X-Public-Key` by decoding its hex, which forgives case, so one keypair signs as `ab12…`
@@ -86,6 +90,7 @@ import {
     type OpenJoinOutcome,
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
+import { OpenJoinKeyMissing, openJoinKeyState } from '../services/open-join-key.js';
 import { checkSsoKeeperShares, storeVerifiedSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
 import { RecoveryShareError, type KeeperShareInput } from '../engine/recovery-shares.js';
 import { BadRequest, parseShares, ssoDepositBody } from './keepers.js';
@@ -130,6 +135,27 @@ function badRequest(ctx: any, error: string, code = 'bad_request'): void {
 }
 
 const KEY_INVALIDATED = 'This key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.';
+
+/**
+ * The door cannot check a sign-in against the accounts that already joined (services/open-join-key.ts): the key its
+ * records were made with is not here (a server restored from a plain backup, or promoted by hand without the take-over
+ * keys). It fails closed: every join with a sign-in is refused, a new account's too, since without the key it cannot
+ * be told from one already here, and nothing is written. Before the sign-in is checked, so the nonce survives.
+ */
+function doorKeyMissing(ctx: any, provider?: SsoProvider): void {
+    if (provider) recordFunnelEvent('open_join_failed', 'door_key_missing');
+    ctx.status = 503;
+    ctx.body = {
+        error: 'This community can\'t check sign-ins right now, so it isn\'t taking new members through its sign-in. Please try again later, '
+            + 'or ask a member for an invite.',
+        code: 'door_key_missing',
+    };
+}
+
+/** Whether the door can check a sign-in here now (see doorKeyMissing). Read per request: a key put back counts at once. */
+function doorKeyHere(): boolean {
+    return openJoinKeyState().on;
+}
 
 function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider, window?: 'hour' | 'day'): void {
     recordFunnelEvent('open_join_failed', reason);
@@ -196,6 +222,7 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             ctx.body = { error: KEY_INVALIDATED, code: 'key_invalidated' };
             return null;
         }
+        if (!doorKeyHere()) { doorKeyMissing(ctx); return null; }
         return actor;
     }
 
@@ -252,6 +279,7 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         // again with its writes, and those are the checks that decide.
         if (alreadyJoined(actor)) return refuse(ctx, 'already_member', provider);
         if (openJoinKeyInvalidated(actor)) return refuse(ctx, 'key_invalidated', provider);
+        if (!doorKeyHere()) return doorKeyMissing(ctx, provider);
         forgetOldJoinAddresses();
         const ipHash = openJoinAddressHash(clientLimiterKey(ctx));
         const window = openJoinLimitReached(ipHash);
@@ -293,6 +321,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
                 ipHash,
             });
         } catch (e) {
+            // The key went between the check above and the hash: refused as above, and nothing was written.
+            if (e instanceof OpenJoinKeyMissing) return doorKeyMissing(ctx, provider);
             // Nothing was kept: the member row and the open_joins row roll back together (engine/open-join.ts). The
             // exception's text names tables and constraints, so it goes to the log and never into the answer.
             console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);

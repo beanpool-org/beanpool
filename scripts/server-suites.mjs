@@ -141,6 +141,7 @@ export const SUITES = [
     'test-takeover-keeps-listing-times',
     'test-profile-takeover',
     'test-open-join-failover',
+    'test-open-join-key-file',
     'test-standby-visitor-marks',
     'test-standby-owner-deleted',
     'test-delete-scrubs-posts',

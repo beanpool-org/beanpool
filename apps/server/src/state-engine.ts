@@ -15,6 +15,7 @@ import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
@@ -607,6 +608,9 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // The open door's key is a file too (services/open-join-key.ts): an old node_config row holding it moves out of the
+    // database now, before any snapshot or copy is made, and a server that cannot check a sign-in says so. Never throws.
+    installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
     // Recovery copies whose deletion this database recorded without applying it (a standby on a version from before
     // recovery tombstones), deleted now (engine/recovery-shares.ts). Never throws.
     applyRecordedRecoveryTombstones();

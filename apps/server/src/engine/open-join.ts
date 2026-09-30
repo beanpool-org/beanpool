@@ -7,26 +7,30 @@
 // null) is untouched, and this path passes it only because it names the door, `invited_by = 'open:<provider>'`.
 //
 // What is kept about the sign-in account, and what is not:
-//   - `join_hash`: HMAC-SHA-256, keyed by a random secret held in this node's `node_config` (`openJoinSalt`),
-//     over a domain tag, the provider and the provider's `sub`. Never the raw `sub`, never the email. Keyed per
-//     node so two nodes' tables cannot be matched against each other. The key travels with snapshots and sealed
-//     backups (it is a node_config row), so a restored node still recognises every account that joined.
+//   - `join_hash`: HMAC-SHA-256, keyed by a random secret kept in a FILE beside this node's database,
+//     `data/open-join.key` (services/open-join-key.ts), over a domain tag, the provider and the provider's `sub`. Never
+//     the raw `sub`, never the email. Keyed per node so two nodes' tables cannot be matched against each other. The key
+//     is never in the database, so no copy of it (a standby's, a snapshot, a plain backup) can test a known `sub`
+//     against these rows (report C12). The database records only WHICH key made them (`openJoinKeyId`), so a server
+//     without that key refuses a join with a sign-in rather than let an account already here join twice.
 //   - `ip_hash`: the same key, its own domain tag, over the limiter's view of the address (an IPv6 client by its
 //     /64, client-ip.ts). Only the limiter reads it, and only for a day, so it is cleared once a day old: kept
 //     beside a member's key for longer it would be that member's address to anyone holding the database and the
 //     key, because the IPv4 space is small enough to try in full.
 //
 // What travels, so a server that takes over still knows who joined (`readOpenJoinRecord`, `writeOpenJoinRecord`):
-//   - A file or sealed backup is the whole database: the rows and the key.
 //   - Every replication payload to a standby carries the rows changed since its last copy (`SyncPayload.openJoins`,
-//     watermarked on `updated_at`, which a join, a release and a re-key all stamp) and the key
-//     (`SyncPayload.openJoinSalt`), signed with the rest; the standby merges them as they arrive (engine/sync.ts).
-//     A standby promoted by hand has them.
-//   - The take-over bundle carries the key and the newest OPEN_JOINS_IN_BUNDLE rows, sealed (services/takeover-
-//     envelope.ts), and the take-over's `open-door` step merges them (services/takeover.ts). Not every row: the
-//     bundle is re-sealed and re-pulled whenever it changes, and a standby refuses an envelope over 4 MB
-//     (services/standby-envelopes.ts), which every row of a busy open door would pass. A take-over only ever runs
-//     on a standby, which has every older row from its copies; the bundle covers what its last copy may have missed.
+//     watermarked on `updated_at`, which a join, a release and a re-key all stamp) and which key made them
+//     (`SyncPayload.openJoinKeyId`), signed with the rest; the standby merges them as they arrive (engine/sync.ts).
+//     Never the key: a standby holds none, and one promoted by hand keeps the door shut until the key is put back.
+//   - The take-over bundle carries the key (a file, services/takeover-envelope.ts BUNDLED_FILES) and the newest
+//     OPEN_JOINS_IN_BUNDLE rows, sealed, and the take-over's `open-door` step installs the key and merges the rows
+//     (services/takeover.ts). Not every row: the bundle is re-sealed and re-pulled whenever it changes, and a standby
+//     refuses an envelope over 4 MB (services/standby-envelopes.ts), which every row of a busy open door would pass. A
+//     take-over only ever runs on a standby, which has every older row from its copies; the bundle covers what its
+//     last copy may have missed. A sealed backup carries the same bundle, and its restore installs the key too.
+//   - A file or plain backup is the database: the rows, never the key. A server restored from one keeps the door shut
+//     until the key is back (services/open-join-key.ts).
 //   - Never `ip_hash`: it is the limiter's for a day and nobody else's, so after a failover the sign-up limits
 //     start again.
 // A merge keeps, per member, whichever row is newer, and writes only rows whose member is in this database: a row
@@ -38,6 +42,7 @@ import { db, afterTransactionCommit } from '../db/db.js';
 import { alreadyJoined, type Member, type SyncOpenJoin } from '@beanpool/engine';
 import { registerMemberInternal } from './members.js';
 import { isSsoProvider, type SsoProvider } from '../sso.js';
+import { openJoinAddressKey, openJoinKey } from '../services/open-join-key.js';
 
 /** Sign-ups through the open door per address (design §2.5). Sliding windows over `open_joins`. */
 export const OPEN_JOIN_LIMITS = { perHour: 5, perDay: 20 } as const;
@@ -45,47 +50,31 @@ export const OPEN_JOIN_LIMITS = { perHour: 5, perDay: 20 } as const;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-/** The node_config row holding this node's key for both hashes. Created on first use. */
-export const OPEN_JOIN_KEY_ROW = 'openJoinSalt';
-
 /** `invited_by` for a member who came in through the open door. The only writer of this prefix is this file. */
 export function openJoinInvitedBy(provider: SsoProvider): string {
     return `open:${provider}`;
 }
 
-/** A key this node could hash with: base64url, at least the 16 bytes `nodeKey` insists on. */
-function usableKey(value: unknown): value is string {
-    return typeof value === 'string' && value.length <= 256 && /^[A-Za-z0-9_-]+$/.test(value)
-        && Buffer.from(value, 'base64url').length >= 16;
-}
-
-function nodeKey(): Buffer {
-    let row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as { value: string } | undefined;
-    if (!row) {
-        // INSERT OR IGNORE then read back: whoever wrote first wins, and every caller uses what was written.
-        db.prepare('INSERT OR IGNORE INTO node_config (key, value) VALUES (?, ?)')
-            .run(OPEN_JOIN_KEY_ROW, crypto.randomBytes(32).toString('base64url'));
-        row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as { value: string };
-    }
-    const key = Buffer.from(String(row.value), 'base64url');
-    // A key edited down to nothing would make every hash guessable, so the door stays shut instead.
-    if (key.length < 16) throw new Error(`node_config ${OPEN_JOIN_KEY_ROW} is too short to key the open door`);
-    return key;
-}
-
-function keyedHash(domain: string, parts: string[]): string {
+function keyedHash(key: Buffer, domain: string, parts: string[]): string {
     // Only the last part can contain '|' (the provider is from a fixed table), so the joined string is unambiguous.
-    return crypto.createHmac('sha256', nodeKey()).update([domain, ...parts].join('|'), 'utf-8').digest('base64url');
+    return crypto.createHmac('sha256', key).update([domain, ...parts].join('|'), 'utf-8').digest('base64url');
 }
 
-/** What `open_joins.join_hash` holds for a sign-in account. Domain-separated from the recovery lookup hash. */
+/**
+ * What `open_joins.join_hash` holds for a sign-in account. Domain-separated from the recovery lookup hash. Throws
+ * OpenJoinKeyMissing when this server cannot check a sign-in (services/open-join-key.ts): no key, or not the key its
+ * records were made with.
+ */
 export function openJoinHash(provider: SsoProvider, sub: string): string {
-    return keyedHash('beanpool-open-join/v1', [provider, sub]);
+    return keyedHash(openJoinKey(), 'beanpool-open-join/v1', [provider, sub]);
 }
 
-/** What `open_joins.ip_hash` holds for an address, given as the limiter's key for it (client-ip.ts). */
+/**
+ * What `open_joins.ip_hash` holds for an address, given as the limiter's key for it (client-ip.ts). This and the two
+ * below never throw for want of the door's key (services/open-join-key.ts openJoinAddressKey).
+ */
 export function openJoinAddressHash(limiterKey: string): string {
-    return keyedHash('beanpool-open-join-ip/v1', [limiterKey]);
+    return keyedHash(openJoinAddressKey(), 'beanpool-open-join-ip/v1', [limiterKey]);
 }
 
 /**
@@ -93,7 +82,7 @@ export function openJoinAddressHash(limiterKey: string): string {
  * address and a sign-up's never compare equal.
  */
 export function knockAddressHash(limiterKey: string): string {
-    return keyedHash('beanpool-knock-ip/v1', [limiterKey]);
+    return keyedHash(openJoinAddressKey(), 'beanpool-knock-ip/v1', [limiterKey]);
 }
 
 /**
@@ -101,7 +90,7 @@ export function knockAddressHash(limiterKey: string): string {
  * price report without a member's key): the same key, its own domain again.
  */
 export function writeAddressHash(limiterKey: string): string {
-    return keyedHash('beanpool-write-ip/v1', [limiterKey]);
+    return keyedHash(openJoinAddressKey(), 'beanpool-write-ip/v1', [limiterKey]);
 }
 
 /**
@@ -244,23 +233,16 @@ export function releaseOpenJoin(publicKey: string): void {
 /** How many rows the take-over bundle carries, newest first: about 250 bytes each sealed, so about 500 KB. */
 export const OPEN_JOINS_IN_BUNDLE = 2_000;
 
-/** The door's record as it travels: this node's key and its rows, without the address hash. */
+/** The door's record as it travels in the take-over bundle: its rows, without the address hash. Never the key, which is a
+ *  bundled file (services/takeover-envelope.ts BUNDLED_FILES). */
 export interface OpenJoinRecord {
-    /** node_config `openJoinSalt`, or null when the door has never hashed anything here. */
-    salt: string | null;
     /** Newest change first. */
     joins: SyncOpenJoin[];
     /** How many rows this node holds, however many `joins` carries. */
     total: number;
 }
 
-/** This node's key for the door's hashes, or null when it has none. Never creates one. */
-export function readOpenJoinSalt(): string | null {
-    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as { value?: string } | undefined;
-    return row?.value == null ? null : String(row.value);
-}
-
-/** The key and the newest `limit` rows (all of them when unset), for the take-over bundle. */
+/** The newest `limit` rows (all of them when unset), for the take-over bundle. */
 export function readOpenJoinRecord(limit?: number): OpenJoinRecord {
     // On the index: the take-over envelope's consistency check reads this every 30 seconds.
     const rows = db.prepare(`SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins
@@ -268,7 +250,6 @@ export function readOpenJoinRecord(limit?: number): OpenJoinRecord {
         .all(...(limit === undefined ? [] : [limit])) as any[];
     const total = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
     return {
-        salt: readOpenJoinSalt(),
         joins: rows.map((r) => ({
             memberPubkey: r.member_pubkey, provider: r.provider, joinHash: r.join_hash,
             joinedAt: r.joined_at, updatedAt: r.updated_at || r.joined_at,
@@ -278,8 +259,6 @@ export function readOpenJoinRecord(limit?: number): OpenJoinRecord {
 }
 
 export interface OpenJoinMerge {
-    /** The key was written (it was absent or different here). */
-    saltWritten: boolean;
     /** Rows written: new here, or newer than the copy here. */
     written: number;
     /** Rows where the copy here was as new or newer. */
@@ -293,17 +272,16 @@ export interface OpenJoinMerge {
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 
 /**
- * Merge the door's record from the main server (a replication payload, a take-over bundle) into this database, in
- * one transaction. `salt` undefined leaves the key here alone (a payload from a server older than this), a string
- * replaces it, as the main server's is the one every hash was made with. Each row is kept only when newer than the
+ * Merge the door's rows from the main server (a replication payload, a take-over bundle) into this database, in one
+ * transaction. The key never comes this way (services/open-join-key.ts). Each row is kept only when newer than the
  * copy here, and only for a member this database has. `join_hash` is unique here as on the main server, whose rows
  * never share one: a row here with the same hash under another key is the one a re-key has since moved, so when
  * the incoming row is newer it goes, and when it is older the incoming row is the stale one. A row naming a provider
  * that is not a sign-in here (GitHub, which no longer is one: engine/github-sign-in-removal.ts) is not stored, so no
  * copy of an older server's record brings one back.
  */
-export function writeOpenJoinRecord(salt: unknown, joins: unknown): OpenJoinMerge {
-    const merge: OpenJoinMerge = { saltWritten: false, written: 0, kept: 0, skipped: 0, invalid: 0 };
+export function writeOpenJoinRecord(joins: unknown): OpenJoinMerge {
+    const merge: OpenJoinMerge = { written: 0, kept: 0, skipped: 0, invalid: 0 };
     const memberExists = db.prepare('SELECT 1 FROM members WHERE public_key = ?');
     const current = db.prepare('SELECT updated_at FROM open_joins WHERE member_pubkey = ?');
     const sameHash = db.prepare('SELECT member_pubkey, updated_at FROM open_joins WHERE join_hash = ? AND member_pubkey != ?');
@@ -314,11 +292,6 @@ export function writeOpenJoinRecord(salt: unknown, joins: unknown): OpenJoinMerg
                                    provider = excluded.provider, join_hash = excluded.join_hash,
                                    joined_at = excluded.joined_at, updated_at = excluded.updated_at`);
     db.transaction(() => {
-        if (usableKey(salt) && salt !== readOpenJoinSalt()) {
-            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
-                .run(OPEN_JOIN_KEY_ROW, salt);
-            merge.saltWritten = true;
-        }
         for (const raw of Array.isArray(joins) ? joins : []) {
             const r = raw as Partial<SyncOpenJoin> | null;
             if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !isSsoProvider(r.provider) || !isText(r.joinHash, 128)

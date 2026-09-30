@@ -319,10 +319,11 @@ export interface SyncGroupMember {
 
 /**
  * One sign-in account that joined through the open door (apps/server engine/open-join.ts): the row that makes one
- * provider account one identity on this node. Replicated so a promoted standby still refuses an account that already
- * joined. `joinHash` is keyed by the node's own secret (`openJoinSalt`, which travels beside the rows, in
- * `SyncPayload.openJoinSalt`); the raw provider subject and the email were never stored. The address hash the sign-up
- * limiter keeps for a day is NOT here: it is only the limiter's, and a standby has no use for it.
+ * provider account one identity on this node. Replicated so a server that takes over still refuses an account that
+ * already joined. `joinHash` is keyed by the node's own secret, which is a file beside its database and never travels
+ * here (only which key it is, `SyncPayload.openJoinKeyId`): without it the rows match nothing. The raw provider subject
+ * and the email were never stored. The address hash the sign-up limiter keeps for a day is NOT here: it is only the
+ * limiter's, and a standby has no use for it.
  */
 export interface SyncOpenJoin {
     memberPubkey: string;
@@ -585,11 +586,12 @@ export interface SyncPayload {
      */
     nodeProfile?: { profile: 'local' | 'global' | null; overrides: Record<string, string> };
     /**
-     * The main server's key for the open door's hashes (its node_config `openJoinSalt`), or null when it has none
-     * yet. Without it the `openJoins` rows match nothing: a promoted standby would hash a returning account with a
-     * key of its own and let it join again. Secret like the recovery shares beside it; signed with the rest.
+     * Which key the main server's open-door records (`openJoins`) were made with (its node_config `openJoinKeyId`: a
+     * hash of the key, never the key), or null when it records none. The key itself never travels in a payload
+     * (apps/server services/open-join-key.ts): a standby keeps this so that, promoted, it checks a sign-in only with
+     * that key and otherwise refuses one, rather than let an account already here join twice. Signed with the rest.
      */
-    openJoinSalt?: string | null;
+    openJoinKeyId?: string | null;
     /**
      * Whether the main server's visitors' rows are marked (its node_config `migration_mark_visitors_v1`; apps/server
      * db.ts markExistingVisitors). A standby marks none itself, so this tells it the marks in its copy are the main

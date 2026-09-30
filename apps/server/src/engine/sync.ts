@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
-import { getImageStore, headObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
+import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readCommunitySettings } from '../config/community-settings.js';
@@ -621,6 +621,43 @@ export function photoReferenceOf(row: unknown): PhotoReference | null {
 }
 
 /**
+ * The listing photos' objects this server holds whose bytes are not the ones their rows name (a same-size corruption at
+ * rest, which a head can't see), by storage key: found by the object route as it hashes what it would send
+ * (routes/backup.ts sync-object), which answers 410 for one instead. photoRowsByReference then leaves each out of a copy and
+ * names it in `photosOmitted`, as a photo whose object this server can't find, so a standby keeps its own copy and a new
+ * one seeds without it (review 4148896755). In memory: after a restart the next standby that asks finds it again.
+ */
+const unreadablePhotoObjects = new Set<string>();
+
+/**
+ * A listing photo's object whose bytes hash to `got`, not the `sha256` its row names: remembered (unreadablePhotoObjects),
+ * and said once in the log, for the operator, the first time it is found.
+ */
+export function notePhotoObjectUnreadable(key: string, sha256: string, got: string, bytes: number): void {
+    if (unreadablePhotoObjects.has(key)) return;
+    unreadablePhotoObjects.add(key);
+    console.error(`[Sync] A listing photo's object in this server's image store is not the photo its row names: ${key} holds ${bytes} bytes `
+        + `with sha256 ${got.slice(0, 12)}…, not ${sha256.slice(0, 12)}…. Copies leave that photo out (a standby keeps its own copy of it) `
+        + 'until the object is restored, from a standby\'s store or a backup, or the member posts the photo again.');
+}
+
+/**
+ * Whether a listing photo's object found unreadable (unreadablePhotoObjects) still is: read and hashed again, so an object
+ * restored under it is sent again and forgotten here. A read that fails keeps it so.
+ */
+async function stillUnreadable(key: string, sha256: string): Promise<boolean> {
+    try {
+        const bytes = await readObject(getImageStore(), key);
+        if (bytes && crypto.createHash('sha256').update(bytes).digest('hex') === sha256) {
+            unreadablePhotoObjects.delete(key);
+            console.log(`[Sync] A listing photo's object found not to be its photo reads right again (${key}): copies send it again.`);
+            return false;
+        }
+    } catch { /* still unreadable */ }
+    return true;
+}
+
+/**
  * Each photo row of a copy served in pages (`SELECT * FROM post_photos`, engine/copy-pages.ts), by index, as a standby that
  * takes photos by reference is sent it (design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): a row whose bytes
  * are in this server's image store goes without them, naming its object by `sha256`, `mime` and `bytes`, which the standby
@@ -628,7 +665,8 @@ export function photoReferenceOf(row: unknown): PhotoReference | null {
  * whole copy of a community with 30,000 photos no longer carries their 4 GB, every day.
  *
  * `photosOmitted` keeps its rule: a row whose object this server can't find in its store at its size (a lost or unmounted
- * images directory, a bucket that doesn't answer) is left out and named, so a standby keeps its own copy. A row that holds
+ * images directory, a bucket that doesn't answer), or whose object's bytes were found not to be its photo when a standby
+ * asked for them (notePhotoObjectUnreadable), is left out and named, so a standby keeps its own copy. A row that holds
  * its bytes inline (one its store couldn't reproduce exactly, or not yet evacuated), or whose store columns name no object
  * by reference (photoReferenceOf), goes with its bytes, exactly as every copy's did (restorePhotoRows).
  */
@@ -660,6 +698,11 @@ export async function photoRowsByReference(photos: any[]): Promise<({ row: any }
                 results[i] = { omitted: `${row.post_id}|${row.order_num}` };
                 console.error(`[Sync] ${held ? `The object of a photo is ${held.bytes} bytes, where its row says ${ref.bytes}` : 'A photo\'s object is missing from the image store'} `
                     + `(${row.storage_key}); omitting the row from this copy so a replica keeps its own copy.`);
+                continue;
+            }
+            // Its bytes found not to be its photo (notePhotoObjectUnreadable): left out and named, as one this server can't find.
+            if (unreadablePhotoObjects.has(row.storage_key) && await stillUnreadable(row.storage_key, ref.sha256)) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
                 continue;
             }
             const out: any = { post_id: row.post_id, order_num: row.order_num };

@@ -14,7 +14,7 @@ import {
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
 import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
-import { PHOTOS_BY_REFERENCE_FORMAT } from '../engine/sync.js';
+import { PHOTOS_BY_REFERENCE_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
@@ -34,7 +34,7 @@ import {
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import {
-    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, openObject, scanOurObjectsAsync, type ImageStore,
+    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, readObject, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
@@ -1299,7 +1299,11 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
 // same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace
 // (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too; either 404 fails the standby's
 // pull, and its next copy names what this server holds then (a photo whose object is lost here is left out of that copy
-// and named in `photosOmitted`). A store that doesn't answer is 503, and the pull fails the same way.
+// and named in `photosOmitted`). A store that doesn't answer is 503, and the pull fails the same way. The bytes are hashed
+// before they go (a listing photo is at most MAX_OBJECT_BYTES): an object whose bytes are not the photo its row names (a
+// same-size corruption at rest) is never sent, but answered 410, `why: 'not-its-photo'`, and logged here once; this server's
+// next copy leaves that photo out and names it in `photosOmitted` (engine/sync.ts notePhotoObjectUnreadable), so a standby
+// keeps its own copy and a new one seeds without it, rather than every copy that needs it being refused (review 4148896755).
 router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
     const ip = replicationClientIp(ctx);
     const authMode = await replicationAuth(ctx, ip);
@@ -1320,25 +1324,36 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
     }
     const store = getImageStore();
     let failure: unknown = null;
+    let unreadable = false;
     for (const row of rows) {
-        let opened: Awaited<ReturnType<typeof openObject>>;
+        let bytes: Buffer | null;
         try {
-            opened = await openObject(store, row.storage_key);
+            bytes = await readObject(store, row.storage_key);
         } catch (e) {
             failure = e;
             continue;
         }
-        if (!opened) continue;
+        if (!bytes) continue;
+        const got = crypto.createHash('sha256').update(bytes).digest('hex');
+        if (got !== sha256) {
+            notePhotoObjectUnreadable(row.storage_key, sha256, got, bytes.length);
+            unreadable = true;
+            continue;
+        }
         ctx.type = 'application/octet-stream';
         ctx.set('X-Content-Type-Options', 'nosniff');
-        if (opened.bytes !== null) ctx.length = opened.bytes;
-        ctx.body = opened.stream;
+        ctx.body = bytes;
         return;
     }
     if (failure) {
         console.error(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
         ctx.status = 503;
         ctx.body = { error: 'the image store did not answer' };
+        return;
+    }
+    if (unreadable) {
+        ctx.status = 410;
+        ctx.body = { error: 'this server\'s object of that listing photo is not the photo its row names: its next copy leaves it out', why: 'not-its-photo' };
         return;
     }
     console.warn(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);

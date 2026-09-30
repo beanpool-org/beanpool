@@ -384,14 +384,15 @@ class CopyRequests {
 
     /**
      * A listing photo's object, by its sha256 (routes/backup.ts sync-object): its bytes, or null when the main server says it
-     * can't serve it (404: no listing photo there names it now, or its store lacks it). Anything else throws: the main
-     * server or its store not answering, which fails the pull.
+     * can't serve it (404: no listing photo there names it now, or its store lacks it), or 'not-its-photo' (410: the object
+     * it holds is not the photo its row names). Anything else throws: the main server or its store not answering, which
+     * fails the pull.
      */
-    async object(sha256: string, stop?: CopyStopped): Promise<Buffer | null> {
+    async object(sha256: string, stop?: CopyStopped): Promise<Buffer | null | 'not-its-photo'> {
         const res = await this.request('GET', `${OBJECT_PATH}/${sha256}`, 'object', stop);
-        if (res.status === 404) {
+        if (res.status === 404 || res.status === 410) {
             try { await res.body?.cancel(); } catch { /* gone */ }
-            return null;
+            return res.status === 410 ? 'not-its-photo' : null;
         }
         if (res.status !== 200) throw new NoCopy(res.status);
         return (res as Response & { bytes_?: Buffer }).bytes_ ?? Buffer.alloc(0);
@@ -482,6 +483,19 @@ class PhotoObjectGone extends Error {
     }
 }
 
+/**
+ * An object the main server holds but can't send (410): its bytes there are not the photo its row names (a corruption at
+ * rest, found as it hashed them: routes/backup.ts sync-object). This copy is not taken; the main server's next one leaves
+ * that photo out and names it in `photosOmitted`, so this standby keeps its own copy of it, or, holding none, takes the
+ * copy without it (review 4148896755).
+ */
+class PhotoObjectNotItsPhoto extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'PhotoObjectNotItsPhoto';
+    }
+}
+
 /** What fetching a copy's listing photos found (fetchPhotoObjects). */
 interface PhotoObjectsFetched {
     /** Photos by reference the copy named. */
@@ -505,8 +519,10 @@ interface PhotoObjectsFetched {
  * to OBJECT_TRIES times in all, and then the pull fails (PhotoObjectRefused) with nothing of it written. The store checks
  * the sha256 again as it writes. An object the main server no longer serves (404) fails the pull too (PhotoObjectGone):
  * landed without it, the copy would hold a row the main server's own hash of it names, or leave that listing's photo out
- * for good. Anything else the main server or the store answers fails the pull. What was fetched before a failure stays in
- * the store, content-addressed, so the next pull asks only for the rest.
+ * for good. So does one the main server can't send because its bytes there are not its photo (410: PhotoObjectNotItsPhoto),
+ * which the main server's next copy leaves out and names in `photosOmitted`. Anything else the main server or the store
+ * answers fails the pull. What was fetched before a failure stays in the store, content-addressed, so the next pull asks
+ * only for the rest.
  *
  * `stop`: a staged copy's (StagedCopy.stoppedBecause). Once it says the copy was stopped (a take-over confirmed, which
  * aborts it: services/takeover.ts, or its stager gone), no further object is asked for, not even one waiting its slot, and
@@ -527,6 +543,10 @@ async function fetchPhotoObjects(
         for (let attempt = 1; ; attempt++) {
             stopIfStopped(stop);
             const bytes = await requests.object(ref.sha256, stop);
+            if (bytes === 'not-its-photo') {
+                throw new PhotoObjectNotItsPhoto(`listing photo ${ref.post_id}|${ref.order_num}'s object (sha256 ${ref.sha256.slice(0, 12)}…) is not that photo on the `
+                    + 'main server, which answered 410: this copy is not taken, and the next leaves that photo out (this standby keeps its own copy of it)');
+            }
             if (bytes === null) {
                 throw new PhotoObjectGone(`listing photo ${ref.post_id}|${ref.order_num}'s object (sha256 ${ref.sha256.slice(0, 12)}…) is no longer on the main `
                     + 'server, which answered 404: this copy is not taken, and the next names what the main server holds then');
@@ -958,7 +978,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         consecutiveFailures++;
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
         // An object the main server answered 404 for: that answer, as the report says a copy's own 404.
-        const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : whyOf(stage, e);
+        const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : e instanceof PhotoObjectNotItsPhoto ? 'http-410' : whyOf(stage, e);
         recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and

@@ -28,10 +28,15 @@
  *  6. More accounts than BACKUP_DELTA_BYTES (scaled) of them, which every delta carries whole: eight pulls in a row, a member
  *     edited before each, are eight deltas that land, with no whole copy and no restart. A delta of more changed bytes than
  *     that is still not taken. (Before: delta, whole copy, delta, whole copy: no delta ever landed.)
- *  7. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ *  7. An object whose bytes on M are not its photo (one byte changed at rest, same size): M never sends it, answers 410,
+ *     and says so in its log once. A new standby's first copy that needs it is not taken, saying so; the next lands, with
+ *     the photo named in photosOmitted, exact. S, which holds the photo, takes a whole copy keeping its own. Once M's object
+ *     is its photo again, the new standby's next copy brings it (review 4148896755). (Before: every copy of the new standby
+ *     refused, M silent.)
+ *  8. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
- *  8. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
+ *  9. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-photos-by-reference.ts
@@ -529,7 +534,53 @@ async function main(): Promise<void> {
                 `a delta of more changed bytes than BACKUP_DELTA_BYTES is not taken, and the next pull is a whole copy, which lands (${JSON.stringify({ big, lines: lines.n, after })})`);
         });
 
-        await step('7. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
+        await step('7. an object whose bytes on M are not its photo: 410, logged once, left out of M\'s next copy; a new standby seeds without it', async () => {
+            const bad = made[12];
+            const good: string = await main.send('object', { key: bad.key });
+            const flipped = Buffer.from(good, 'base64');
+            flipped[flipped.length >> 1] ^= 0x01;
+            await main.send('put-object', { key: bad.key, data: flipped.toString('base64'), mime: 'image/jpeg' });
+            const said = () => (main.output().match(/is not the photo its row names/g) ?? []).length;
+
+            fs.mkdirSync(dir('standby2'), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby2'), 'genesis.json'));
+            const fresh = await spawnNode(SCRIPT, dir('standby2'), envS);
+            nodes.push(fresh);
+            await fresh.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            const n1 = await fresh.send('pull', {});
+            const rec1 = await fresh.send('record');
+            const before = fresh.swaps();
+            const n2 = await fresh.send('pull', {});
+            if (n2.staged) await until('the new standby to start again on its copy', () => fresh.swaps() > before, 60_000);
+            const omitted = pagesOf(px).at(-1)?.photosOmitted;
+            const rowOnFresh = (await photosOf(fresh)).find((r) => slot(r) === slot(bad));
+            const rec2 = await fresh.send('record');
+            assert(n1.ok === false && /answered 410/.test(n1.error ?? '') && rec1.lastWhy === 'http-410',
+                `the new standby's first copy is not taken: M answers 410 for the object that is not its photo, and the pull says so `
+                + `(${JSON.stringify({ error: n1.error?.slice(0, 120), why: rec1.lastWhy })})`);
+            assert(n2.ok === true && n2.staged === true && Array.isArray(omitted) && omitted.includes(slot(bad)) && !rowOnFresh
+                && rec2.lastWhole?.exact === true && rec2.lastWhole?.photosLeftOut === 1,
+                `its next copy lands, M naming ${slot(bad)} in photosOmitted, with no row for it, exact `
+                + `(${JSON.stringify({ pull: n2, omitted, row: !!rowOnFresh, whole: rec2.lastWhole })}; before: refused every time)`);
+
+            const w7 = await pullAndSwap(true);
+            const onS = (await photosOf(standby)).find((r) => slot(r) === slot(bad));
+            const rec7 = await standby.send('record');
+            assert(w7.ok === true && onS?.sha256 === bad.sha256 && onS?.objectSha === bad.sha256 && rec7.lastWhole?.exact === true && rec7.lastWhole?.photosLeftOut === 1,
+                `S, which holds the photo, takes a whole copy keeping its own row and object, exact (${JSON.stringify({ pull: w7, onS: onS?.objectSha?.slice(0, 8), whole: rec7.lastWhole })})`);
+            assert(said() === 1, `M says so in its log once, however many copies left it out (${said()} times; before: never)`);
+
+            await main.send('put-object', { key: bad.key, data: good, mime: 'image/jpeg' });
+            const before3 = fresh.swaps();
+            const n3 = await fresh.send('pull', { whole: true });
+            if (n3.staged) await until('the new standby to start again on its copy', () => fresh.swaps() > before3, 60_000);
+            const back = (await photosOf(fresh)).find((r) => slot(r) === slot(bad));
+            assert(n3.ok === true && back?.objectSha === bad.sha256 && !(pagesOf(px).at(-1)?.photosOmitted ?? []).includes(slot(bad)),
+                `once M's object is its photo again, M's next copy sends it, and the new standby holds it (${JSON.stringify({ pull: n3, object: back?.objectSha?.slice(0, 8) })})`);
+            await fresh.kill();
+        });
+
+        await step('8. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
             const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
@@ -575,7 +626,7 @@ async function main(): Promise<void> {
                 `S starts as the main server, and every one of its ${urls.length} listing photos opens with M's bytes (${JSON.stringify({ role, of: mine.size })}; failed ${first(failed)})`);
         });
 
-        await step('8. the object route is under M\'s administrative limiter', async () => {
+        await step('9. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
             const before429 = new Set<number>();

@@ -75,7 +75,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -85,7 +85,8 @@ import {
     type SealedEnvelopeHeader, type SealedEnvelopeKey, type CodeStanza,
 } from '@beanpool/core';
 import Database from 'better-sqlite3';
-import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, redactLocalConfig, type LocalConfig } from '../config/local-config.js';
+import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
@@ -504,6 +505,24 @@ function writeMissingManifest(stage: string, staged: StagedImages): void {
     }, null, 2), { mode: 0o600 });
 }
 
+/**
+ * The backup's node_config.json, without this server's credentials (redactLocalConfig): a readable backup is a file
+ * anyone who holds it can read, and a locked one's credentials travel in its take-over bundle instead. From the legacy
+ * data/node_config.json when one is still there (an older node's, which may carry a standby's plain-text admin
+ * password), else from the local config. Nothing reads this file back: a restore puts it beside the database, inert.
+ */
+function writeBackupConfig(stage: string): void {
+    let config: LocalConfig = getLocalConfig();
+    const legacy = path.join(dataDir(), 'node_config.json');
+    if (fs.existsSync(legacy)) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(legacy, 'utf8'));
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed;
+        } catch { /* unreadable: the local config goes instead, never bytes nobody checked */ }
+    }
+    fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(config), null, 2), { mode: 0o600 });
+}
+
 /** What a backup was asked to carry, and where the database's objects are when it is not the live one. */
 export interface BackupSource {
     /** Seal this SQLite file as the database (a snapshot being downloaded) instead of a fresh copy of the live one. */
@@ -543,13 +562,7 @@ export async function createSealedBackup(opts: BackupSource = {}): Promise<Seale
             // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
             forgetAddressesInStoredCopy(dbPath);
         } else writeDbSnapshot(dbPath);
-        const configPath = path.join(dataDir(), 'node_config.json');
-        if (fs.existsSync(configPath)) {
-            fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
-        } else {
-            // Without a standby's legacy plain-text admin password.
-            fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
-        }
+        writeBackupConfig(stage);
         fs.writeFileSync(path.join(stage, BUNDLE_MEMBER), JSON.stringify(inputs.bundle), { mode: 0o600 });
         // From the staged database, not the live one: what the archive carries is what the archive needs.
         const images = await stageImagesForBackup(stage, dbPath, opts);
@@ -616,12 +629,7 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
             // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
             forgetAddressesInStoredCopy(dbPath);
         } else writeDbSnapshot(dbPath);
-        const configPath = path.join(dataDir(), 'node_config.json');
-        if (fs.existsSync(configPath)) {
-            fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
-        } else {
-            fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
-        }
+        writeBackupConfig(stage);
         const images = await stageImagesForBackup(stage, dbPath, opts);
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
@@ -637,29 +645,16 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
 }
 
 /**
- * The hostile-archive checks (SRV-9a) every backup tar goes through before a byte is extracted, whether it came
- * as a plain upload or out of a sealed file (opening only proves someone holding a key locked it). `tar -x` does
- * NOT sanitise member paths — GNU tar (the prod image) follows `../` and absolute names and materialises links —
- * so a crafted archive could write anywhere the process can reach. Refuses the whole archive on any member that
- * would escape, or that is a link. Also used by the harvester to check an old backup it sealed before it deletes
- * the plaintext. Returns the member list.
+ * The hostile-archive checks (SRV-9a) every backup tar goes through, whether it came as a plain upload or out of a
+ * sealed file (opening only proves someone holding a key locked it): services/restore-checks.ts reads it by its own
+ * headers, never through a `tar` listing (busybox's, in the server image, lists a hard link as a plain file), and
+ * refuses the whole archive on any member that would escape, is a link or anything but a plain file or folder, or is
+ * past the size and count limits. Unpacks nothing. Used by the harvester to check an old backup it sealed before it
+ * deletes the plaintext. Returns the member list, `./` dropped.
  */
-export function checkBackupArchive(tarPath: string, opts: { requireStateDb?: boolean } = {}): string[] {
-    const listing = execFileSync('tar', ['-tzf', tarPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-        .split('\n').map((s: string) => s.trim()).filter(Boolean);
-    for (const entry of listing) {
-        // POSIX/Windows-absolute paths and any `..` traversal segment.
-        if (path.isAbsolute(entry) || /^[A-Za-z]:/.test(entry) || entry.split('/').some(seg => seg === '..')) {
-            throw new Error('Invalid backup archive: unsafe member path');
-        }
-    }
-    // Symlink/hardlink members (type char 'l'/'h' in the verbose listing), so a link can't redirect a later write.
-    const verbose = execFileSync('tar', ['-tvzf', tarPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-        .split('\n').map((s: string) => s.trim()).filter(Boolean);
-    for (const line of verbose) {
-        if (line[0] === 'l' || line[0] === 'h') throw new Error('Invalid backup archive: links are not permitted');
-    }
-    if (opts.requireStateDb && !listing.some((e) => e === 'state.db' || e === './state.db')) {
+export async function checkBackupArchive(tarPath: string, opts: { requireStateDb?: boolean } = {}): Promise<string[]> {
+    const listing = await listBackupArchive(tarPath);
+    if (opts.requireStateDb && !listing.includes('state.db')) {
         throw new Error('Invalid backup archive: state.db missing');
     }
     return listing;
@@ -750,7 +745,7 @@ export async function sealFileVerified(
         const header = await openSealedFileTo(outFile, { type: 'dataKey', dataKey }, reopened);
         const got = crypto.createHash('sha256').update(fs.readFileSync(reopened)).digest('hex');
         if (got !== expected) throw new Error(`re-opened to different bytes (${got.slice(0, 12)} ≠ ${expected.slice(0, 12)})`);
-        checkBackupArchive(reopened, { requireStateDb });
+        await checkBackupArchive(reopened, { requireStateDb });
         return { header, sha256: expected };
     } catch (e) {
         try { fs.rmSync(tmp, { force: true }); } catch { /* ignore */ }

@@ -302,20 +302,34 @@ async function harvestLocalNode(): Promise<void> {
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     try {
-        const tokenOnly: FleetNodeConfig = { id: 'tok-node', name: 'Token Node', url, replicationToken: TOKEN };
-        const slug = nodeSlug(tokenOnly);
+        // The fleet manager's usual entry: the node's token and its password, both sent. A backup is an owner's to
+        // download (routes/backup.ts, 2026-10-01): the password is what lets this harvest in, and the token alone no
+        // longer does. Until then this entry held the token only, and every harvest below went in on it — the leak
+        // Fable's replication review found (HIGH-1): a standby's token took the whole readable database.
+        const localNode: FleetNodeConfig = { id: 'tok-node', name: 'Token Node', url, replicationToken: TOKEN, adminPassword: PW };
+        const slug = nodeSlug(localNode);
         const nodeDir = path.join(dataDir, 'backups', slug);
         const sealedDir = path.join(nodeDir, 'sealed');
         const today = new Date().toISOString().slice(0, 10);
 
+        // ── The token alone takes no backup, readable or locked ──
+        {
+            resetAdminAuthTarpit();
+            const tokenAlone = await harvestNode({ ...localNode, adminPassword: undefined }, true);
+            assert(tokenAlone.status === 'error' && /HTTP 401/.test(tokenAlone.error || '') && !fs.existsSync(path.join(nodeDir, 'state.db')),
+                `the replication token alone is refused a backup, and nothing is kept (got ${tokenAlone.status}: ${tokenAlone.error})`);
+            // The steps below start from a node never harvested, as they did.
+            fs.rmSync(path.join(dataDir, 'harvester-state.json'), { force: true });
+        }
+
         // ── No recovery code, no owner: readable, kept as before, flagged ──
         resetAdminAuthTarpit();
-        const none = await harvestNode(tokenOnly, true);
+        const none = await harvestNode(localNode, true);
         assert(none.status === 'ok' && none.error === null, `no code: the harvest succeeds (got ${none.status}: ${none.error})`);
         assert(fs.existsSync(path.join(nodeDir, 'state.db')) && fs.readFileSync(path.join(nodeDir, 'state.db')).subarray(0, 15).toString() === 'SQLite format 3',
             'no code: the readable state.db is kept, as before locked backups');
         assert(fs.existsSync(path.join(nodeDir, 'history', `beanpool-${today}.db`)), 'no code: …and today\'s daily copy in history/');
-        assert(listSealedBackups(tokenOnly).length === 0, 'no code: nothing locked is stored (nothing could open it)');
+        assert(listSealedBackups(localNode).length === 0, 'no code: nothing locked is stored (nothing could open it)');
         assert(none.backupLock?.locked === false && none.backupLock.message === NOT_LOCKED, `no code: the node's own words are kept (${none.backupLock?.message})`);
         assert(none.sealedBackup?.state === 'unlocked' && none.sealedBackup.message.includes(NOT_LOCKED),
             `no code: the status says the backup is readable and not locked yet ("${none.sealedBackup?.message}")`);
@@ -336,7 +350,7 @@ async function harvestLocalNode(): Promise<void> {
         // ── Still no code: the seal-old pass deletes NOTHING ──
         const before = snapshotTree(nodeDir);
         resetAdminAuthTarpit();
-        const n2 = await harvestNode(tokenOnly, false);
+        const n2 = await harvestNode(localNode, false);
         const after = snapshotTree(nodeDir);
         const gone = Object.keys(before).filter(f => !(f in after) || (f !== 'state.db' && !f.startsWith('history/beanpool-' + today) && before[f] !== after[f]));
         assert(gone.length === 0, `no code: seal-old deletes and changes nothing (${gone.join(', ') || 'all there'})`);
@@ -349,9 +363,9 @@ async function harvestLocalNode(): Promise<void> {
         seedGenesisMember(ownerPub, 'Olive');
         const b3 = snapshotTree(nodeDir);
         resetAdminAuthTarpit();
-        const n3 = await harvestNode(tokenOnly, true);
+        const n3 = await harvestNode(localNode, true);
         const a3 = snapshotTree(nodeDir);
-        assert(n3.status === 'ok' && n3.backupLock?.locked === false && listSealedBackups(tokenOnly).length === 0,
+        assert(n3.status === 'ok' && n3.backupLock?.locked === false && listSealedBackups(localNode).length === 0,
             `an owner, no code: still readable, nothing locked to the owner alone (${n3.status}, locked=${n3.backupLock?.locked})`);
         assert(Object.keys(b3).every(f => f in a3), 'an owner, no code: seal-old deletes nothing');
 
@@ -362,7 +376,7 @@ async function harvestLocalNode(): Promise<void> {
             signingKey: new Uint8Array((await import('@libp2p/crypto/keys')).privateKeyFromProtobuf(nodeKeyBytes).raw.subarray(0, 32)),
         }));
         const b4 = snapshotTree(nodeDir);
-        const r4 = await sealOldBackups(tokenOnly, ownerOnly);
+        const r4 = await sealOldBackups(localNode, ownerOnly);
         assert(r4.sealed.length === 0 && /no recovery code/.test(r4.error || '') && JSON.stringify(snapshotTree(nodeDir)) === JSON.stringify(b4),
             `seal-old to an owner-only header: refused, every file untouched ("${r4.error}")`);
 
@@ -389,12 +403,12 @@ async function harvestLocalNode(): Promise<void> {
         // ── A recovery code, but no key the harvester already knows: locked backups now, nothing deleted ──
         resetAdminAuthTarpit();
         const b5 = snapshotTree(nodeDir, sealedDir);
-        const n5 = await harvestNode(tokenOnly, true);
+        const n5 = await harvestNode(localNode, true);
         assert(n5.status === 'ok' && n5.backupLock?.locked === true && n5.sealedBackup?.state === 'sealed', `with a code: the node's backup is locked (${n5.sealedBackup?.state})`);
         assert(/no pinned key/.test(n5.sealOld?.error || '') && Object.keys(b5).every(f => f in snapshotTree(nodeDir, sealedDir)),
             `with a code, no pinned key: nothing deleted ("${n5.sealOld?.error}")`);
         // A pin that does not match the node (a spoofed endpoint, or a changed key): nothing deleted.
-        const wrongPin: FleetNodeConfig = { ...tokenOnly, peerId: peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString() };
+        const wrongPin: FleetNodeConfig = { ...localNode, peerId: peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString() };
         resetAdminAuthTarpit();
         const n6 = await harvestNode(wrongPin, false);
         assert(/pinned key/.test(n6.sealOld?.error || '') && n6.pinSource === 'manager-nodes.json' && Object.keys(b5).every(f => f in snapshotTree(nodeDir, sealedDir)),
@@ -405,7 +419,7 @@ async function harvestLocalNode(): Promise<void> {
         fs.chmodSync(sealedDir, 0o500);
         const b7 = snapshotTree(nodeDir, sealedDir);
         resetAdminAuthTarpit();
-        const n7 = await harvestNode(tokenOnly, false);
+        const n7 = await harvestNode(localNode, false);
         fs.chmodSync(sealedDir, 0o700);
         assert(!!n7.sealOld?.error && JSON.stringify(snapshotTree(nodeDir, sealedDir)) === JSON.stringify(b7),
             `a seal that fails keeps every readable file (${n7.sealOld?.error})`);
@@ -413,10 +427,10 @@ async function harvestLocalNode(): Promise<void> {
         // ── Now it works: every readable file locked, each deleted only after its copy re-opened ──
         const made = { code: code0, codeId: codeRec.codeId };
         resetAdminAuthTarpit();
-        const a = await harvestNode(tokenOnly, true);
+        const a = await harvestNode(localNode, true);
         assert(a.status === 'ok' && a.error === null, `token-only harvest completes without error (${a.status}: ${a.error})`);
         assert(a.pinnedPeerId === peerIdFromPrivateKey(seedOf).toString() && a.pinSource === 'collected key file', `the pin is the collected node key (${a.pinSource})`);
-        const held = listSealedBackups(tokenOnly);
+        const held = listSealedBackups(localNode);
         const pulled = held.find(f => !f.file.includes('-legacy'));
         assert(!!pulled && pulled.file.endsWith('.bpsealed'), `the node's backup is stored as a sealed file (${pulled?.file})`);
         const pulledBytes = fs.readFileSync(pulled!.path);
@@ -468,25 +482,25 @@ async function harvestLocalNode(): Promise<void> {
             'seal-old: a file written before this version has no images beside it, and gets an envelope with no images/ member — not an empty one');
         assert(Math.abs(fs.statSync(path.join(sealedDir, dailyFile)).mtimeMs - tenDaysAgo.getTime()) < 2000, 'seal-old: the file keeps its date, so the 30-day rule still applies');
         const idFile = legacy.find(f => f.startsWith('beanpool-identity-'))!;
-        assert(!!idFile && listSealedBackups(tokenOnly).some(f => f.file === idFile && f.identity), `the locked key file is named beanpool-identity-…, so it is listed (${idFile})`);
+        assert(!!idFile && listSealedBackups(localNode).some(f => f.file === idFile && f.identity), `the locked key file is named beanpool-identity-…, so it is listed (${idFile})`);
         const d3 = await openTar(idFile);
         assert(fs.readFileSync(path.join(d3, 'libp2p_key')).equals(Buffer.from(nodeKeyBytes))
             && fs.readFileSync(path.join(d3, 'genesis.json'), 'utf-8') === '{"communityId":"old"}', 'seal-old: the old key files re-open intact');
         for (const d of [d1, d2, d3]) fs.rmSync(d, { recursive: true, force: true });
-        assert(a.historyCount === listSealedBackups(tokenOnly).filter(f => !f.identity).length, 'historyCount counts the backups held');
+        assert(a.historyCount === listSealedBackups(localNode).filter(f => !f.identity).length, 'historyCount counts the backups held');
 
         // A second run has nothing to seal; the pin is remembered though the key file is now locked away.
         resetAdminAuthTarpit();
-        const b = await harvestNode(tokenOnly, true);
+        const b = await harvestNode(localNode, true);
         assert(b.status === 'ok' && b.sealOld?.left.length === 0 && b.pinSource === 'collected key file', 'a second run: nothing left to seal, the pin remembered');
         const afterSecond = fs.readdirSync(sealedDir);
         assert(afterSecond.includes(dailyFile) && afterSecond.includes(idFile),
             `a second run: the old daily and the locked key file are kept (${afterSecond.join(', ')})`);
-        const todays = listSealedBackups(tokenOnly).filter(f => !f.identity && new Date(f.mtimeMs).toISOString().slice(0, 10) === today);
+        const todays = listSealedBackups(localNode).filter(f => !f.identity && new Date(f.mtimeMs).toISOString().slice(0, 10) === today);
         assert(todays.length === 1, `a second run: one backup kept for today, the newest (${todays.map(f => f.file).join(', ')})`);
 
-        // Admin password works the same way.
-        const withPw: FleetNodeConfig = { ...tokenOnly, replicationToken: undefined, adminPassword: PW };
+        // The admin password alone works the same way.
+        const withPw: FleetNodeConfig = { ...localNode, replicationToken: undefined, adminPassword: PW };
         resetAdminAuthTarpit();
         const c = await harvestNode(withPw, true);
         assert(c.status === 'ok' && c.identityStatus === 'secured', `with the admin password: a sealed backup, identity secured (got ${c.status}/${c.identityStatus})`);
@@ -671,7 +685,7 @@ async function harvestLocalNode(): Promise<void> {
             `a readable backup that holds no address is kept byte for byte, as before (${h2.status}: ${h2.error})`);
 
         // A wrong admin password: the harvest reports it; nothing crashes.
-        const wrongPw: FleetNodeConfig = { ...tokenOnly, replicationToken: undefined, adminPassword: 'wrong-password-1!' };
+        const wrongPw: FleetNodeConfig = { ...localNode, replicationToken: undefined, adminPassword: 'wrong-password-1!' };
         resetAdminAuthTarpit();
         const e = await harvestNode(wrongPw, true);
         assert(e.status === 'error' && /HTTP 401/.test(e.error || ''), `a refused admin password: error with the reason (got ${e.status}: ${e.error})`);

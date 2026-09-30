@@ -3,7 +3,9 @@
  *
  * Sealed keys slice 3 (sealed-keys.md §6.1). Until slice 0 this suite asserted the replication token got the plain
  * identity bundle (that encoded the leak); slice 0 made it owner/admin only; slice 3 deletes the route: the node
- * keys now travel only inside the sealed backup. Over real HTTP, for every credential the node accepts —
+ * keys now travel only inside the sealed backup. Until 2026-10-01 it also asserted the replication token and an
+ * admin's key session got /backup (that encoded two more: Fable's backups and replication reviews); a backup is now
+ * an owner's. Over real HTTP, for every credential the node accepts —
  * none, a wrong token, the replication token, the admin password, password + 2FA code, an owner's key session and
  * an admin's key session:
  *
@@ -122,7 +124,13 @@ async function runSuite() {
         finally { fs.rmSync(f, { force: true }); }
     };
     const readableNoCode = async (stage: string) => {
-        for (const [who, headers] of [['token', { 'x-replication-token': repToken }], ['admin password', { 'x-admin-password': testPass }]] as const) {
+        // The replication token used to get this readable file too: the whole database, the tunnel token in it, and
+        // the admin hash and 2FA secret in node_config.json (Fable's replication review HIGH-1, 2026-10-01). This
+        // suite asserted it did. Now the token is refused here, and only an owner gets the backup.
+        const byToken = await hit('POST', '/api/local/admin/backup', { 'x-replication-token': repToken });
+        assert(byToken.status === 401 && !isGzip(byToken.body) && !byToken.body.includes(Buffer.from('SQLite format 3')),
+            `4. ${stage}: /backup under the replication token alone is refused, and carries nothing (got ${byToken.status})`);
+        for (const [who, headers] of [['admin password', { 'x-admin-password': testPass }]] as const) {
             const r = await hit('POST', '/api/local/admin/backup', headers);
             assert(r.status === 200 && isGzip(r.body) && r.type === 'application/gzip',
                 `4. ${stage}: /backup under the ${who} is the readable tar.gz, as before (got ${r.status}, ${r.type})`);
@@ -179,15 +187,17 @@ async function runSuite() {
         return ex.sessionId!;
     };
 
-    // Every credential. 2FA is switched on for the rows that need it and off again after.
+    // Every credential. 2FA is switched on for the rows that need it and off again after. `accepted`: a backup is an
+    // owner's (the password is owner level). The replication token and an admin's key session were accepted here until
+    // 2026-10-01 (Fable's backups review, HIGH; replication review HIGH-1), and this suite asserted they were.
     const credentials: { name: string; headers: () => Record<string, string>; tfa?: boolean; accepted: boolean }[] = [
         { name: 'no credential', headers: () => ({}), accepted: false },
         { name: 'a wrong token', headers: () => ({ 'x-replication-token': 'not-the-token' }), accepted: false },
-        { name: 'the replication token', headers: () => ({ 'x-replication-token': repToken }), accepted: true },
+        { name: 'the replication token', headers: () => ({ 'x-replication-token': repToken }), accepted: false },
         { name: 'the admin password', headers: () => ({ 'x-admin-password': testPass }), accepted: true },
         { name: 'password + 2FA code', headers: () => ({ 'x-admin-password': testPass, 'x-admin-totp': generateTotpCode(totpSecret) }), tfa: true, accepted: true },
         { name: "an owner's key session", headers: () => ({ 'x-admin-session': keySession(owner) }), tfa: true, accepted: true },
-        { name: "an admin's key session", headers: () => ({ 'x-admin-session': keySession(admin) }), tfa: true, accepted: true },
+        { name: "an admin's key session", headers: () => ({ 'x-admin-session': keySession(admin) }), tfa: true, accepted: false },
         { name: 'token + admin password', headers: () => ({ 'x-replication-token': repToken, 'x-admin-password': testPass }), accepted: true },
     ];
 
@@ -203,11 +213,11 @@ async function runSuite() {
         if (bk.status === 200) {
             assert(bk.type === 'application/octet-stream' && readSealedHeader(new Uint8Array(bk.body)).kind === 'backup', `2. /backup under ${cred.name}: a sealed backup`);
         }
-        const tokenCanBackup = cred.name.includes('token') && !cred.name.includes('wrong');
-        assert((bk.status === 200) === (cred.accepted || tokenCanBackup), `2. /backup under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${bk.status})`);
+        assert((bk.status === 200) === cred.accepted, `2. /backup under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${bk.status})`);
 
         const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, h());
         assert(!isGzip(sd.body), `2. snapshot download under ${cred.name}: no gzip magic (status ${sd.status})`);
+        assert((sd.status === 200) === cred.accepted, `2. snapshot download under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${sd.status})`);
         if (sd.status === 200) {
             assert(readSealedHeader(new Uint8Array(sd.body)).kind === 'backup' && !sd.body.includes(Buffer.from('SQLite format 3')),
                 `2. snapshot download under ${cred.name}: sealed, no SQLite file in the clear`);

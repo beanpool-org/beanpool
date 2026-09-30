@@ -37,7 +37,8 @@ import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
-import { sealFileVerified, checkBackupArchive, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
+import { sealFileVerified, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
+import { extractBackupArchive } from './restore-checks.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 
@@ -401,7 +402,7 @@ function keepInBucketLabel(from: string, destDb: string): boolean {
  * `to` is removed first, never merged into: `attachments/<messageId>.bin` is keyed by the message id alone,
  * so the same key in two pulls is two different ciphertexts and a merge would keep the older one for ever.
  *
- * Symlinks are skipped. `checkBackupArchive` has already refused the whole archive if any member was a link,
+ * Symlinks are skipped. `extractBackupArchive` has already refused the whole archive if any member was a link,
  * so for the pull path this is belt and braces; for the daily copy the source is a tree this file wrote.
  */
 function replaceTree(from: string, to: string, link: boolean): { files: number; bytes: number } {
@@ -469,14 +470,15 @@ interface KeptBackup {
 }
 
 /** Keep a readable backup WHOLE: state.db, its images and any manifest, and one copy a day in history/. */
-function keepPlainBackup(node: FleetNodeConfig, tarPath: string): KeptBackup {
+async function keepPlainBackup(node: FleetNodeConfig, tarPath: string): Promise<KeptBackup> {
     const nodeDir = nodeDirOf(node);
     const extract = path.join(nodeDir, '.tmp-extract');
     fs.rmSync(extract, { recursive: true, force: true });
     fs.mkdirSync(extract, { recursive: true });
     try {
-        checkBackupArchive(tarPath, { requireStateDb: true });
-        execFileSync('tar', ['-xzf', tarPath, '-C', extract, '--no-same-owner', '--no-same-permissions']);
+        // Checked and unpacked in one pass by the restore's own reader (services/restore-checks.ts), never by `tar`.
+        const members = await extractBackupArchive(tarPath, extract);
+        if (!members.includes('state.db')) throw new Error('Invalid backup archive: state.db missing');
         const extractedDb = path.join(extract, 'state.db');
         if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) throw new Error('Downloaded backup did not contain state.db');
         const destDb = path.join(nodeDir, 'state.db');
@@ -613,7 +615,7 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         }
         if (start[0] === 0x1f && start[1] === 0x8b) {
             const message = notLockedMessage(res);
-            const kept = keepPlainBackup(node, incoming);
+            const kept = await keepPlainBackup(node, incoming);
             // What was KEPT, not what the node said it sent: this log line used to read `database + N image
             // object(s)` off the response headers while the code beside it threw the images away.
             console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeKept(kept)}). ${message}`);

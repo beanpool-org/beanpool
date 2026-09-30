@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -2012,7 +2012,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
     }
-    if (amount < 0) return null;
+    // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
+    // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
+    // ledger.transfer refuses it again as a primitive.
+    if (!isBeanAmount(amount)) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
     // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
@@ -2437,7 +2440,8 @@ export function moveToCommons(
     if (!synthetic && !treasury && !opts?.allowMemberDebit) {
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through. Outside the transaction, as in transfer().
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     assertLedgerWritable();
 
@@ -2496,12 +2500,16 @@ export function payFromCommons(
     // does; the memo names them in words only (adminActorName).
     opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through, and `allowDeficit` below would then have set the pot to NaN.
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     // Before the pot is drawn down in memory. On a standby the flush below writes nothing (engine/audit.ts), so a payment
     // there wrote its recipient's credit and not the pot's debit: a member in debt deleting their own account left the
     // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
     assertLedgerWritable();
+    // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
+    const recipientNow = ledger.getAccount(to).balance;
+    if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
     if (!ledger.deductFromCommons(amount)) {
         if (!opts?.allowDeficit) return null;
         setCommonsBalance(getCommonsBalanceExact() - amount);

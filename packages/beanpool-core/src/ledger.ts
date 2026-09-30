@@ -62,6 +62,25 @@ function effectiveFloor(fromId: string, requestedFloor: number): number {
 }
 
 /**
+ * AN AMOUNT OF BEANS A MOVE MAY CARRY: a finite number, 0 or more. Nothing else — not a numeric string, not NaN, not
+ * Infinity, not a negative.
+ *
+ * WHY EVERY PRIMITIVE ASKS IT (review FABLE-sec-input F1, 2026-10-01, measured). A listing's price edited to "abc"
+ * reached `transfer` as a string. Every guard here tests `<`, and NaN compares false against everything, so
+ * `amount < 0` passed, `balance - amount < floor` passed, and `balance -= amount` set the buyer's balance to NaN — which
+ * the host then wrote as NULL. A `+=` with a string would have concatenated instead. The ledger is the one place every
+ * move passes, so it refuses what is not an amount, whatever a caller forgot to check.
+ */
+export function isBeanAmount(amount: unknown): amount is number {
+    return typeof amount === 'number' && Number.isFinite(amount) && amount >= 0;
+}
+
+/** A balance a ledger may hold: a finite number. An account holding anything else moves nothing until an operator looks. */
+function isFiniteBalance(balance: unknown): balance is number {
+    return typeof balance === 'number' && Number.isFinite(balance);
+}
+
+/**
  * A demurrage decay applied to an account. Collected so the host (server) can
  * persist each decay as a ledger transaction row — without this, decay silently
  * mutates balances and the transaction history can never reconcile to balances.
@@ -198,7 +217,9 @@ export class LedgerManager {
         // synthetic account could decay. Structural fix: the ledger knows on its own.
         const isExempt = this.decayExemptIds.has(account.id) || isSyntheticAccount(account.id);
 
-        if (epochsPassed <= 0 || account.balance <= 0 || isExempt) {
+        // A balance that is not a finite number (a NULL row loaded as null, a NaN) decays nothing: `NaN <= 0` is false,
+        // so it used to fall through and credit the Commons with NaN, spreading one broken account to the pot.
+        if (epochsPassed <= 0 || !isFiniteBalance(account.balance) || account.balance <= 0 || isExempt) {
             // Only positive, non-exempt balances decay
             account.lastDemurrageEpoch = currentEpoch;
             return account;
@@ -308,7 +329,8 @@ export class LedgerManager {
      * @param isFeeExempt - If true, bypasses the transaction fee (e.g., escrow holds, refunds, admin settlements).
      */
     transfer(fromId: string, toId: string, amount: number, floorOverride?: number, isFeeExempt = false): boolean {
-        if (amount < 0) return false;
+        // Not an amount (NaN, Infinity, a string, a negative): refused, before anything is read or moved (isBeanAmount).
+        if (!isBeanAmount(amount)) return false;
         if (amount === 0) return true; // 0-credit transfer is always a no-op success
         if (fromId === toId) return false;
 
@@ -317,6 +339,8 @@ export class LedgerManager {
         const toAccount = this.getAccount(toId);
 
         const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
+        // A NaN floor passes every `<` test below, as a NaN amount did.
+        if (Number.isNaN(floor)) return false;
 
         // Mutual Credit: ensure the fromAccount doesn't exceed the credit floor
         if (fromAccount.balance - amount < floor) {
@@ -327,6 +351,14 @@ export class LedgerManager {
         // Calculate transaction fee
         const fee = isFeeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
         const netAmount = amount - fee;
+
+        // Never a balance that is not a finite number, on either side or in the pot: refused before anything moves. An
+        // account already holding one (a NULL row, a NaN) moves nothing either, so the damage cannot spread.
+        if (!isFiniteBalance(fromAccount.balance) || !isFiniteBalance(toAccount.balance)
+            || !Number.isFinite(fromAccount.balance - amount) || !Number.isFinite(toAccount.balance + netAmount)
+            || !Number.isFinite(COMMONS_BALANCE + fee)) {
+            return false;
+        }
 
         // Execute transfer
         fromAccount.balance -= amount;
@@ -370,7 +402,7 @@ export class LedgerManager {
      *                      `ESCROW_FLOOR` whatever is passed here, so it can only pay out what it holds.
      */
     moveToCommons(fromId: string, amount: number, floorOverride?: number): boolean {
-        if (amount < 0) return false;
+        if (!isBeanAmount(amount)) return false;   // as in `transfer()`
         if (amount === 0) return true;
 
         const fromAccount = this.getAccount(fromId);      // applies any pending decay, and settles the epoch
@@ -378,8 +410,13 @@ export class LedgerManager {
         // escrow (#104 moves the cross-node fee to the Commons from the settlement's own escrow account),
         // and its caller passes `-Infinity` for every synthetic sender.
         const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
+        if (Number.isNaN(floor)) return false;
 
         if (fromAccount.balance - amount < floor) return false;
+        if (!isFiniteBalance(fromAccount.balance) || !Number.isFinite(fromAccount.balance - amount)
+            || !Number.isFinite(COMMONS_BALANCE + amount)) {
+            return false;
+        }
 
         fromAccount.balance -= amount;
         COMMONS_BALANCE += amount;
@@ -391,7 +428,8 @@ export class LedgerManager {
      * Deducts funds directly from the global Commons Balance (Demurrage pool).
      */
     deductFromCommons(amount: number): boolean {
-        if (amount <= 0 || COMMONS_BALANCE < amount) {
+        // `amount <= 0` alone let NaN through (and `COMMONS_BALANCE < NaN` is false), so the pot became NaN.
+        if (!isBeanAmount(amount) || amount === 0 || !isFiniteBalance(COMMONS_BALANCE) || COMMONS_BALANCE < amount) {
             return false;
         }
         COMMONS_BALANCE -= amount;

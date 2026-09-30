@@ -20,8 +20,10 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { LedgerManager, setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, createPost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
+    moveToCommons, payFromCommons, getCommonsBalanceExact,
 } from './state-engine.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 
@@ -152,6 +154,83 @@ async function main() {
         `a well-formed edit still lands (${good.status ?? 200}: ${JSON.stringify(landed)})`);
     const cleared = await edit(seller, target.id, { lat: null, lng: null });
     check(cleared.body?.success === true && row(target.id).lat === null, `and an edit may clear the pin (${cleared.status ?? 200})`);
+
+    // ── 3. The money primitives, whatever a caller hands them ───────────────────────────────────────
+    console.log('\n— 3. the ledger primitives refuse NaN, Infinity, negative and string amounts —');
+    const junk: [string, unknown][] = [['NaN', NaN], ['Infinity', Infinity], ['-Infinity', -Infinity], ['-5', -5], ['"5" (a string)', '5'], ['"abc"', 'abc']];
+    const commonsAtStart = getCommonsBalanceExact();
+
+    // core LedgerManager, on its own accounts.
+    for (const [label, amount] of junk) {
+        const lm = new LedgerManager([
+            { id: 'a', balance: 50, lastDemurrageEpoch: 0 },
+            { id: 'b', balance: 0, lastDemurrageEpoch: 0 },
+            { id: 'escrow_t', balance: 50, lastDemurrageEpoch: 0 },
+        ]);
+        const pot = getCommonsBalanceExact();
+        const t = lm.transfer('a', 'b', amount as number, -100, false);
+        const m = lm.moveToCommons('escrow_t', amount as number, -Infinity);
+        const d = lm.deductFromCommons(amount as number);
+        const bal = lm.getAllAccounts().map((x) => x.balance);
+        check(!t && !m && !d && JSON.stringify(bal) === '[50,0,50]' && getCommonsBalanceExact() === pot,
+            `core: transfer, moveToCommons and deductFromCommons refuse ${label}, and nothing moves (${JSON.stringify({ t, m, d, bal, pot: getCommonsBalanceExact() })})`);
+        setCommonsBalance(commonsAtStart);
+    }
+    {
+        // An account already holding a broken balance moves nothing, and its demurrage can't spread NaN to the pot.
+        const lm = new LedgerManager([
+            { id: 'a', balance: NaN, lastDemurrageEpoch: 0 },
+            { id: 'n', balance: null as unknown as number, lastDemurrageEpoch: 0 },
+            { id: 'b', balance: 10, lastDemurrageEpoch: 0 },
+        ]);
+        const pot = getCommonsBalanceExact();
+        const fromNaN = lm.transfer('a', 'b', 1, -100, true);
+        const toNaN = lm.transfer('b', 'a', 1, -100, true);
+        const fromNull = lm.transfer('n', 'b', 1, -100, true);
+        check(!fromNaN && !toNaN && !fromNull && lm.getAccount('b').balance === 10 && Number.isFinite(getCommonsBalanceExact()) && getCommonsBalanceExact() === pot,
+            `core: an account holding NaN or NULL sends and receives nothing, and reading it leaves the pot alone (${JSON.stringify({ fromNaN, toNaN, fromNull, b: lm.getAccount('b').balance, pot: getCommonsBalanceExact() })})`);
+        setCommonsBalance(commonsAtStart);
+    }
+
+    // The server's own primitives, on the live ledger.
+    for (const [label, amount] of junk) {
+        const start = ledgerState(everyone);
+        const pot = getCommonsBalanceExact();
+        const t = attempt(() => transfer('genesis', buyer, amount as number, 'junk', 'direct', true));
+        const m = attempt(() => moveToCommons(`escrow_nonesuch`, amount as number, 'junk'));
+        const p = attempt(() => payFromCommons(buyer, amount as number, 'junk', { allowDeficit: true }));
+        const end = ledgerState(everyone);
+        check(t.ok && t.value === null && m.ok && m.value === null && p.ok && p.value === null
+            && JSON.stringify(end) === JSON.stringify(start) && getCommonsBalanceExact() === pot,
+            `server: transfer, moveToCommons and payFromCommons refuse ${label}, and nothing moves (${JSON.stringify({ t, m, p, end, pot: getCommonsBalanceExact() })})`);
+        setCommonsBalance(commonsAtStart);
+    }
+
+    // The escrow doors: a quantity of Infinity (F6), and a listing row already holding text (poisoned before this fix).
+    const hourly = createPost('offer', 'services', 'Weeding', 'By the hour', 2, 'hourly', seller)!;
+    const zeroHourly = createPost('offer', 'services', 'Free help', 'By the hour', 0, 'hourly', seller)!;
+    const s3 = ledgerState(everyone);
+    const infReq = attempt(() => requestPost(zeroHourly.id, buyer, Infinity));
+    const infAcc = attempt(() => acceptPost(zeroHourly.id, third, Infinity));
+    check(!infReq.ok && /valid quantity/.test(infReq.error) && !infAcc.ok && /valid quantity/.test(infAcc.error),
+        `a request or one-step accept for Infinity hours is refused as a quantity (${JSON.stringify([infReq, infAcc])})`);
+    const hReq = attempt(() => requestPost(hourly.id, buyer, 2));
+    const hAppr = hReq.ok ? attempt(() => approvePostRequest(hReq.value.id, seller)) : hReq;
+    const hDone = hReq.ok ? attempt(() => completePostTransaction(hReq.value.id, buyer, Infinity)) : hReq;
+    check(hAppr.ok && !hDone.ok && /final quantity/.test(hDone.error),
+        `a completion for a final Infinity hours is refused, not ignored (${JSON.stringify([hAppr.ok ? 'ok' : hAppr.error, hDone.ok ? 'completed' : hDone.error])})`);
+    const hFinish = hReq.ok ? attempt(() => completePostTransaction(hReq.value.id, buyer, 2)) : hReq;
+    check(hFinish.ok, `and the same deal completes for a real 2 hours (${hFinish.ok ? 'ok' : hFinish.error})`);
+
+    const poisoned = createPost('offer', 'food', 'Leeks', 'Leeks', 6, 'fixed', seller, undefined, undefined, undefined, true)!;
+    db.prepare(`UPDATE posts SET credits = 'abc' WHERE id = ?`).run(poisoned.id);
+    const pReq = attempt(() => requestPost(poisoned.id, buyer));
+    const pAcc = attempt(() => acceptPost(poisoned.id, third));
+    check(!pReq.ok && /no valid price/.test(pReq.error) && !pAcc.ok && /no valid price/.test(pAcc.error),
+        `a listing row already holding "abc" as its price can't be requested or accepted (${JSON.stringify([pReq.ok ? 'requested' : pReq.error, pAcc.ok ? 'accepted' : pAcc.error])})`);
+    const s3end = ledgerState(everyone);
+    check(s3end.bad === 0 && s3end.memoryFinite && Math.abs(s3end.total - s3.total) < 1e-9,
+        `every balance is still a finite number and the total has not moved (${s3.total} → ${s3end.total}, ${s3end.bad} bad rows)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

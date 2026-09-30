@@ -15,13 +15,13 @@
  * and no build is left with neither. The keys are what make it the vault, not the address: a server at the vault's
  * address that isn't the vault can't sign a ticket the phone accepts or open a deposit box (design §1.4).
  *
- * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): the vault signs its
- * releases and deposit receipts (what a server at its address can still do before then: review finding 4); global's
- * door accepts vault tickets, V5 (finding 5); a member whose only copy is still at a community can get back in, since
- * such a build restores only through the vault and the move card shows only in Settings (finding 3); a phone told
- * "none" ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone, which becomes common at
+ * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): global's door accepts
+ * vault tickets, V5 (finding 5); a member whose only copy is still at a community can get back in, since such a build
+ * restores only through the vault and the move card shows only in Settings (finding 3); a phone told "none"
+ * ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone, which becomes common at
  * rollout, when every phone starts at "none" (confirmation N1); and a 2xx status answer that isn't a status is not
- * recorded as "none" ({@link vaultStatus}; confirmation N2). The parked guide pages: GitHub issue #1349.
+ * recorded as "none" ({@link vaultStatus}; confirmation N2). The parked guide pages: GitHub issue #1349. CLOSED: the
+ * vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below).
  *
  * ## One sign-in, bound three ways
  *
@@ -32,6 +32,20 @@
  * - A deposit is sealed to the pinned deposit key, for this member key and this provider ({@link depositWithVault}).
  *   A release is sealed to the restoring device's own throwaway key, and the phone saves the opened seed only if it
  *   makes the key the release names ({@link collectVaultRestore}).
+ *
+ * ## Every answer signed (review finding 4)
+ *
+ * A box proves only who can open it. A server at the vault's address with a valid certificate (a DNS or network
+ * attacker, or a fake vault) needs only the sub in the restore token and the throwaway key in the request to seal a
+ * seed of its own to the phone, and could answer a deposit `{ok: true}` it never kept, after which the move card
+ * deleted the community's copy. So every request carries a fresh challenge, and every answer the phone acts on must
+ * come back signed by one of the pinned ticket keys, as its own kind, about the key that asked, for that challenge
+ * (core vault-wire.ts "Signed answers"): the release, the deposit receipt (naming this copy and this sign-in), the
+ * status, a delete, a push token's update, a restore held, a collect held or stopped, Stop and "Yes, it's me", and
+ * every refusal the phone reads. What the phone saves, deletes or shows comes only from the signed payload. An answer
+ * it can't check is taken as no answer ({@link unverified}): nothing saved, nothing deleted, nothing shown as done, the
+ * community's copy left where it is. A ticket answers for itself; a 5xx (locked, unreachable) needs no signature,
+ * because the phone never acts on one.
  *
  * ## Restores wait a day (D2)
  *
@@ -53,15 +67,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import {
+    checkVaultAnswer,
     checkVaultTicket,
     isVaultKeyHex,
     isVaultPushToken,
+    newVaultChallenge,
     openSeedFromSso,
     openVaultRelease,
     recoveryWordsMatchPublicKey,
     sealVaultDepositBox,
+    vaultCopyDigest,
     vaultTicketNonce,
     type SealedShare,
+    type VaultAnswer,
+    type VaultAnswerKind,
     type VaultTicketPurpose,
 } from '@beanpool/core';
 import { buildVaultSignedHeaders, hexToBytes, randomSeed, seedToKeypair } from './crypto';
@@ -92,6 +111,9 @@ export const VAULT_MESSAGES = {
     pausedConnect: "BeanPool's key vault is paused for a little while, so your sign-in wasn't linked. Settings offers to "
         + 'link it again once the vault is back. Your 12 words work any time.',
     unreachable: "BeanPool's key vault didn't answer. Check your connection and try again. Your 12 words work any time.",
+    /** An answer at the vault's address the phone couldn't check (review finding 4): taken as no answer, nothing done. */
+    unverified: "BeanPool's key vault sent an answer that didn't check out, so nothing was changed. Check that your phone's "
+        + 'date and time are right, then try again. Your 12 words work any time.',
     badTicket: "BeanPool's key vault sent an answer that didn't check out, so no sign-in was started. Check that your "
         + "phone's date and time are right, then try again.",
     notConfirmed: "The key vault's answer didn't confirm it, so nothing is shown as done. Try again.",
@@ -122,7 +144,7 @@ export type VaultFailure =
     | 'not_configured'
     /** The vault is locked (§2.3): {@link VAULT_MESSAGES.paused}. */
     | 'locked'
-    /** No answer, a timeout, or the vault's provider check was down. */
+    /** No answer, a timeout, the vault's provider check was down, or an answer the phone couldn't check (code `unverified`). */
     | 'unreachable'
     /** A ticket that isn't the vault's, or isn't this key's. No provider sheet opened. */
     | 'bad_ticket'
@@ -192,14 +214,32 @@ export function vaultRefusal(status: number, body: unknown): VaultError {
 }
 
 /**
- * A POST to the vault, signed for the vault's own host (utils/crypto.ts `buildVaultSignedHeaders`), answered within
- * {@link VAULT_TIMEOUT_MS}. Resolves with the 2xx answer's JSON (null when it isn't JSON: callers check its shape);
- * throws {@link VaultError} for everything else.
+ * An answer at the vault's address that the phone can't check (review finding 4: no signature, one that isn't the
+ * pinned key's, or one for another request, key or kind): taken as no answer at all. Nothing is saved, deleted or
+ * shown as done; everything that meets `unreachable` keeps what it had and tries again later.
  */
-async function vaultPost<T>(path: string, body: Record<string, unknown>, signer: VaultSigner, timeoutMs = VAULT_TIMEOUT_MS): Promise<T | null> {
+function unverified(path: string, why: string): VaultError {
+    console.log(`[VAULT] an answer to ${path} didn't check out (${why}); treated as no answer`);
+    return new VaultError('unreachable', VAULT_MESSAGES.unverified, 'unverified');
+}
+
+/**
+ * A POST to the vault, signed for the vault's own host (utils/crypto.ts `buildVaultSignedHeaders`) and carrying a
+ * fresh challenge, answered within {@link VAULT_TIMEOUT_MS}. Resolves with the 2xx answer's JSON (null when it isn't
+ * JSON); throws {@link VaultError} for everything else:
+ * - a 4xx counts only when the vault signed it as a refusal of this request (core vault-wire.ts `checkVaultAnswer`),
+ *   since the phone acts on some (no copy, no hold, already collected); one it can't check is {@link unverified};
+ * - a 5xx is locked or unreachable, which the phone never acts on, so it needs no signature (a locked vault can't sign).
+ *
+ * The 2xx answer is the caller's to check: {@link vaultPost} for every signed answer, {@link vaultTicket} for a ticket.
+ */
+async function vaultRequest(
+    path: string, body: Record<string, unknown>, signer: VaultSigner, timeoutMs = VAULT_TIMEOUT_MS,
+): Promise<{ parsed: Record<string, unknown> | null; challenge: string }> {
     const cfg = requireVault();
     const url = `${cfg.url}${path}`;
-    const bodyString = JSON.stringify(body);
+    const challenge = newVaultChallenge();
+    const bodyString = JSON.stringify({ ...body, challenge });
     const headers = await buildVaultSignedHeaders('POST', url, bodyString, signer.privateKey, signer.publicKey);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -210,12 +250,34 @@ async function vaultPost<T>(path: string, body: Record<string, unknown>, signer:
         } catch {
             throw new VaultError('unreachable', VAULT_MESSAGES.unreachable);
         }
-        const parsed: unknown = await res.json().catch(() => null);
-        if (!res.ok) throw vaultRefusal(res.status, parsed);
-        return (parsed && typeof parsed === 'object' ? parsed : null) as T | null;
+        const answer: unknown = await res.json().catch(() => null);
+        const parsed = answer && typeof answer === 'object' && !Array.isArray(answer) ? answer as Record<string, unknown> : null;
+        if (res.status >= 500) throw vaultRefusal(res.status, parsed);
+        if (!res.ok) {
+            const check = checkVaultAnswer(parsed?.signed, { ticketKeys: cfg.ticketKeys, kinds: ['refusal'], key: signer.publicKey, challenge });
+            if (!check.ok) throw unverified(path, `refusal ${res.status}: ${check.reason}`);
+            if (check.answer.status !== res.status) throw unverified(path, `refusal signed as ${String(check.answer.status)}, sent as ${res.status}`);
+            throw vaultRefusal(res.status, check.answer);
+        }
+        return { parsed, challenge };
     } finally {
         clearTimeout(timer);
     }
+}
+
+/**
+ * A POST to the vault whose 2xx answer counts only as one the vault signed as one of `kinds`, about `signer`'s key,
+ * for this request (core vault-wire.ts "Signed answers"). Resolves with that signed payload, never the answer's
+ * unsigned fields: what the phone saves, deletes or shows comes only from what the vault signed. An answer that isn't
+ * so signed is {@link unverified}.
+ */
+async function vaultPost(
+    path: string, body: Record<string, unknown>, signer: VaultSigner, kinds: readonly VaultAnswerKind[], timeoutMs = VAULT_TIMEOUT_MS,
+): Promise<VaultAnswer> {
+    const { parsed, challenge } = await vaultRequest(path, body, signer, timeoutMs);
+    const check = checkVaultAnswer(parsed?.signed, { ticketKeys: requireVault().ticketKeys, kinds, key: signer.publicKey, challenge });
+    if (!check.ok) throw unverified(path, check.reason);
+    return check.answer;
 }
 
 // ─── Tickets ───────────────────────────────────────────────────────────────────────────────
@@ -233,8 +295,9 @@ export interface VaultTicketGrant {
  */
 export async function vaultTicket(signer: VaultSigner, purpose: VaultTicketPurpose, provider: SsoProvider): Promise<VaultTicketGrant> {
     const cfg = requireVault();
-    const body = await vaultPost<{ ticket?: unknown }>('/v1/ticket', { purpose, provider }, signer);
-    const ticket = body?.ticket;
+    // A ticket answers for itself: its own signature, checked here.
+    const { parsed } = await vaultRequest('/v1/ticket', { purpose, provider }, signer);
+    const ticket = parsed?.ticket;
     const check = checkVaultTicket(ticket, { ticketKeys: cfg.ticketKeys, now: Date.now(), key: signer.publicKey, purpose });
     if (!check.ok) {
         console.log(`[VAULT] refused a ${purpose} ticket: ${check.reason}`);
@@ -268,6 +331,10 @@ export interface VaultDeposit {
  * `sealSsoShares`) and this phone's push token, in a box sealed to the pinned deposit key for this member key and this
  * provider. Proven with the deposit ticket and the token that carries its nonce; signed by the member key the ticket
  * names. One copy per sign-in account: a deposit for the same account replaces the one before.
+ *
+ * It counts only on the vault's signed receipt for this request, naming this member key, this provider, this copy
+ * (`vaultCopyDigest`) and this sign-in (the ticket's nonce). Anything short of that is {@link unverified}: nothing is
+ * recorded as kept, and the move card, which deletes the community's copy only after a deposit, deletes nothing.
  */
 export async function depositWithVault(input: {
     identity: VaultSigner;
@@ -282,14 +349,17 @@ export async function depositWithVault(input: {
     const { encryptedShare, shareIv, shareTag, kdfParams } = input.clientCopy;
     const clientCopy = { encryptedShare, shareIv, shareTag, kdfParams };
     const box = sealVaultDepositBox(pushToken ? { clientCopy, pushToken } : { clientCopy }, cfg.depositKeys[0], input.identity.publicKey, input.provider);
-    const body = await vaultPost<{ ok?: unknown; replaced?: unknown }>(
-        '/v1/copies', { ticket: input.ticket, provider: input.provider, idToken: input.idToken, box }, input.identity,
+    const receipt = await vaultPost(
+        '/v1/copies', { ticket: input.ticket, provider: input.provider, idToken: input.idToken, box }, input.identity, ['receipt'],
     );
-    if (body?.ok !== true) throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    if (receipt.provider !== input.provider || receipt.copy !== vaultCopyDigest(clientCopy)
+        || receipt.signIn !== vaultTicketNonce(input.ticket) || typeof receipt.replaced !== 'boolean') {
+        throw unverified('/v1/copies', 'a receipt for another copy');
+    }
     await noteVaultCopy(input.identity.publicKey, true);
     if (pushToken) await AsyncStorage.setItem(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
     await forgetConnectWanted(input.identity.publicKey, input.provider);
-    return { provider: input.provider, replaced: body.replaced === true, wordsSealed: input.wordsSealed };
+    return { provider: input.provider, replaced: receipt.replaced, wordsSealed: input.wordsSealed };
 }
 
 // ─── Status, disconnect, push token ───────────────────────────────────────────────────────
@@ -327,7 +397,7 @@ export function readVaultStatus(body: unknown): VaultStatus {
 
 /** Which sign-ins the vault keeps a copy for, and any restore waiting. Never a copy. */
 export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEOUT_MS): Promise<VaultStatus> {
-    const status = readVaultStatus(await vaultPost('/v1/copies/status', {}, identity, timeoutMs));
+    const status = readVaultStatus(await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs));
     await noteVaultCopy(identity.publicKey, status.providers.length > 0);
     return status;
 }
@@ -374,10 +444,8 @@ export async function forgetVaultCopyKnowledge(publicKey: string): Promise<void>
 
 /** Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7). */
 export async function disconnectFromVault(identity: VaultSigner, provider: SsoProvider | 'all'): Promise<number> {
-    const body = await vaultPost<{ deleted?: unknown }>(
-        '/v1/copies/delete', provider === 'all' ? { all: true } : { provider }, identity,
-    );
-    if (typeof body?.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    const body = await vaultPost('/v1/copies/delete', provider === 'all' ? { all: true } : { provider }, identity, ['deleted']);
+    if (typeof body.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
     return body.deleted;
 }
 
@@ -391,7 +459,7 @@ export async function keepVaultPushTokenCurrent(identity: VaultSigner): Promise<
         if (!token) return;
         const key = vaultPushTokenStoreKey(identity.publicKey);
         if ((await AsyncStorage.getItem(key)) === token) return;
-        await vaultPost('/v1/push-token', { token }, identity);
+        await vaultPost('/v1/push-token', { token }, identity, ['push-token']);
         await AsyncStorage.setItem(key, token);
     } catch (e) {
         console.log(`[VAULT] push token not updated: ${(e as Error).message}`);
@@ -418,8 +486,8 @@ export async function withdrawVaultPushToken(identity: VaultSigner, timeoutMs: n
     }
     if (!isVaultPushToken(token)) return false;
     try {
-        const body = await vaultPost<{ updated?: unknown }>('/v1/push-token/remove', { token }, identity, timeoutMs);
-        if (typeof body?.updated !== 'number') return false;
+        const body = await vaultPost('/v1/push-token/remove', { token }, identity, ['push-token'], timeoutMs);
+        if (typeof body.updated !== 'number') return false;
         await AsyncStorage.removeItem(key).catch(() => {});
         return true;
     } catch (e) {
@@ -470,14 +538,14 @@ export function takeHoldsToShow(holds: readonly VaultHold[]): VaultHold[] {
 
 /** Stop a restore of this account: it is never released. */
 export async function stopVaultHold(identity: VaultSigner, holdId: string): Promise<void> {
-    const body = await vaultPost<{ status?: unknown }>('/v1/holds/cancel', { holdId }, identity);
-    if (body?.status !== 'stopped') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    const body = await vaultPost('/v1/holds/cancel', { holdId }, identity, ['hold']);
+    if (body.status !== 'stopped') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
 }
 
 /** "Yes, it's me": the restore goes through now instead of after the wait. Remembered on this phone ({@link approvedHolds}). */
 export async function approveVaultHold(identity: VaultSigner, holdId: string): Promise<void> {
-    const body = await vaultPost<{ status?: unknown }>('/v1/holds/approve', { holdId }, identity);
-    if (body?.status !== 'approved') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    const body = await vaultPost('/v1/holds/approve', { holdId }, identity, ['hold']);
+    if (body.status !== 'approved') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
     const approved = await approvedHolds(identity.publicKey);
     if (!approved.includes(holdId)) {
         await AsyncStorage.setItem(vaultApprovedHoldsStoreKey(identity.publicKey), JSON.stringify([...approved, holdId].slice(-20))).catch(() => {});
@@ -622,9 +690,9 @@ export async function startVaultRestore(
         v: 1, provider, publicKey: key.publicKey, privateKey: key.privateKey, sub, holdId: same?.holdId ?? null, until: same?.until ?? null,
     };
     await savePendingVaultRestore(pending);
-    let body: { status?: unknown; holdId?: unknown; until?: unknown } | null;
+    let body: VaultAnswer;
     try {
-        body = await vaultPost('/v1/restore', { ticket, provider, idToken }, key);
+        body = await vaultPost('/v1/restore', { ticket, provider, idToken }, key, ['restore']);
     } catch (e) {
         // A refusal the vault gave for good leaves nothing waiting for this sign-in; no answer at all may have opened a
         // hold. Whatever this phone had on record before this try goes back, key and all: a hold this key already has
@@ -636,7 +704,7 @@ export async function startVaultRestore(
         }
         throw e;
     }
-    if (body?.status !== 'held' || typeof body.holdId !== 'string' || !body.holdId || typeof body.until !== 'number') {
+    if (body.status !== 'held' || typeof body.holdId !== 'string' || !body.holdId || typeof body.until !== 'number') {
         throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
     }
     const held: PendingVaultRestore = { ...pending, holdId: body.holdId, until: body.until };
@@ -659,15 +727,23 @@ export type VaultCollect =
     | { status: 'released'; restored: RestoredFromVault };
 
 /**
- * Open a release: the box with the throwaway key, the copy with the sign-in's subject. The seed counts only if it makes
- * the key the release names; otherwise {@link VaultError} `wrong_account`, and nothing is saved.
+ * Open a release: the box with the throwaway key, the copy with the sign-in's subject. `signed` is the vault's signed
+ * release, already checked for this key and request ({@link collectVaultRestore}): the box opened is the one it
+ * covers, and what the box holds must be the provider and account key it names. A box proves only who can open it,
+ * and a server at the vault's address could seal one to the throwaway key holding a seed of its own under this
+ * sub (PR #1336 review finding 4); the signature is what says the vault made it. The seed counts only if it makes the
+ * key the release names; otherwise {@link VaultError} `wrong_account`, and nothing is saved.
  */
-export async function openRelease(release: unknown, pending: PendingVaultRestore): Promise<RestoredFromVault> {
+export async function openRelease(signed: VaultAnswer, pending: PendingVaultRestore): Promise<RestoredFromVault> {
+    if (signed.kind !== 'release' || signed.key !== pending.publicKey) throw unverified('/v1/restore/collect', 'not a release for this key');
     let contents: { provider: string; pubkey: string; clientCopy: SealedShare };
     try {
-        contents = openVaultRelease(release, hexToBytes(pending.privateKey));
+        contents = openVaultRelease(signed.box, hexToBytes(pending.privateKey));
     } catch {
         throw new VaultError('wrong_account', VAULT_MESSAGES.notOpened);
+    }
+    if (contents.provider !== signed.provider || contents.pubkey !== signed.pubkey) {
+        throw unverified('/v1/restore/collect', 'a release whose box says other than its signature');
     }
     if (contents.provider !== pending.provider) throw new VaultError('wrong_account', VAULT_MESSAGES.wrongAccount);
     let opened: { seed: Uint8Array; words: string[] | null; wordsStatus?: string };
@@ -704,13 +780,14 @@ export async function openRelease(release: unknown, pending: PendingVaultRestore
 /**
  * Ask the vault for the restore this phone is waiting on. Held: when it goes through. Stopped: a device that has the
  * account said no, and the pending restore is gone. Released: the account, checked ({@link openRelease}); the pending
- * restore stays until the account is saved, so a failed save can collect again.
+ * restore stays until the account is saved, so a failed save can collect again. Each only on the vault's signed answer
+ * to this request; anything else is {@link unverified}, and the restore keeps waiting.
  */
 export async function collectVaultRestore(pending: PendingVaultRestore): Promise<VaultCollect> {
     if (!pending.holdId) throw new VaultError('refused', VAULT_MESSAGES.gone);
-    let body: { status?: unknown; until?: unknown; release?: unknown } | null;
+    let body: VaultAnswer;
     try {
-        body = await vaultPost('/v1/restore/collect', { holdId: pending.holdId }, pending);
+        body = await vaultPost('/v1/restore/collect', { holdId: pending.holdId }, pending, ['collect', 'release']);
     } catch (e) {
         if (e instanceof VaultError && (e.code === 'no_hold' || e.code === 'no_copy')) {
             await clearPendingVaultRestore();
@@ -718,15 +795,15 @@ export async function collectVaultRestore(pending: PendingVaultRestore): Promise
         }
         throw e;
     }
-    if (body?.status === 'held' && typeof body.until === 'number') {
+    if (body.kind === 'release') return { status: 'released', restored: await openRelease(body, pending) };
+    if (body.status === 'held' && typeof body.until === 'number') {
         if (body.until !== pending.until) await savePendingVaultRestore({ ...pending, until: body.until }).catch(() => {});
         return { status: 'held', until: body.until };
     }
-    if (body?.status === 'stopped') {
+    if (body.status === 'stopped') {
         await clearPendingVaultRestore();
         return { status: 'stopped' };
     }
-    if (body?.status === 'released') return { status: 'released', restored: await openRelease(body.release, pending) };
     throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
 }
 

@@ -98,7 +98,7 @@ describe('SSO Recovery Service', () => {
 
         expect(net.sent.map((s) => `${s.origin}${s.path}`)).toEqual([`${VAULT}/v1/ticket`, `${VAULT}/v1/restore`]);
         const restore = net.sent[1].body;
-        expect(Object.keys(restore).sort()).toEqual(['idToken', 'provider', 'ticket']);
+        expect(Object.keys(restore).sort()).toEqual(['challenge', 'idToken', 'provider', 'ticket']);
         expect(JSON.stringify(net.sent)).not.toMatch(/callsign|anchor/);
     });
 
@@ -151,7 +151,7 @@ describe('SSO Recovery Service', () => {
         await startSsoRestore('apple');
         const restore = net.sent.find((s) => s.path === '/v1/restore')!.body;
         const ticket = net.sent.find((s) => s.path === '/v1/ticket')!;
-        expect(ticket.body).toEqual({ purpose: 'restore', provider: 'apple' });
+        expect(ticket.body).toEqual({ purpose: 'restore', provider: 'apple', challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
         expect(vi.mocked(signInWithProvider).mock.calls[0][0]).toBe('apple');
         expect(restore).toMatchObject({ provider: 'apple', idToken: expect.any(String), ticket: expect.any(String) });
 

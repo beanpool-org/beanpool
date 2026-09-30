@@ -9,6 +9,11 @@
  * each release to the key that asked. It checks each request's format-2 signature for its own host
  * (server-signature-check.ts), so a request signed for anywhere else is refused, as the vault refuses it.
  *
+ * It signs its answers as the vault does (core vault-wire.ts "Signed answers"): to a request carrying a challenge,
+ * every 2xx but a ticket and every 4xx whose request signature checked out, with its ticket key, about the signer.
+ * The signing is done on the way out ({@link FakeVault.answer}), so a test that swaps `handle` still gets answers
+ * signed as the vault would sign them. {@link FakeVault.answers} makes it a server at the vault's address that can't.
+ *
  * The providers' sheets are not here: a test stubs `signInWithProvider` and makes a token with {@link fakeJwt}.
  */
 
@@ -16,13 +21,18 @@ import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     checkVaultTicket,
+    isVaultChallenge,
+    newVaultChallenge,
     newVaultTicket,
     openVaultDepositBox,
     sealVaultRelease,
+    signVaultAnswer,
     signVaultTicket,
     vaultB64,
+    vaultCopyDigest,
     vaultTicketNonce,
     type SealedShare,
+    type VaultAnswerKind,
     type VaultTicketPurpose,
 } from '@beanpool/core';
 import { boundSignatureValid } from './server-signature-check';
@@ -105,8 +115,32 @@ export const HOLD_MS = 24 * 60 * 60 * 1000;
 /** Hold ids unique across every vault a run starts, as the real vault's random ones are (the app remembers ids it showed). */
 let holdSeq = 0;
 
-type Reply = { status: number; body: unknown };
+/**
+ * An answer. `says` is what a 2xx is signed as when its kind or fields aren't simply its path's and its body (a receipt,
+ * a release); `unsigned` marks a refusal the vault never signs (a request whose own signature failed).
+ */
+type Reply = { status: number; body: unknown; says?: { kind: VaultAnswerKind; fields: Record<string, unknown> }; unsigned?: true };
 const reply = (status: number, body: unknown): Reply => ({ status, body });
+
+/** What each route's 2xx is signed as. A ticket answers for itself. */
+const KIND_BY_PATH: Record<string, VaultAnswerKind> = {
+    '/v1/copies': 'receipt',
+    '/v1/copies/status': 'status',
+    '/v1/copies/delete': 'deleted',
+    '/v1/push-token': 'push-token',
+    '/v1/push-token/remove': 'push-token',
+    '/v1/restore': 'restore',
+    '/v1/restore/collect': 'collect',
+    '/v1/holds/cancel': 'hold',
+    '/v1/holds/approve': 'hold',
+};
+
+/**
+ * How a server at the vault's address signs its answers: as the vault does (`signed`); not at all (`unsigned`); with
+ * a key the phone doesn't pin (`forged`); correctly but for another request (`replayed`: another challenge), about
+ * another key (`other_key`), or as another kind (`other_kind`), as a server replaying the vault's real answers would.
+ */
+export type AnswerMode = 'signed' | 'unsigned' | 'forged' | 'replayed' | 'other_key' | 'other_kind';
 
 export class FakeVault {
     /** Every call but health answers 503 `{locked: true}` (design §2.3). */
@@ -117,6 +151,11 @@ export class FakeVault {
     tickets: 'ok' | 'forged' | 'other_key' = 'ok';
     /** A release that names a key other than the one its copy's seed makes. */
     releaseNamesOtherKey = false;
+    /** How it signs its answers ({@link AnswerMode}), on every route or only on `answersOn`'s. */
+    answers: AnswerMode = 'signed';
+    answersOn: string[] | null = null;
+    /** False: a deposit is answered as kept, and not kept (a server at the vault's address that isn't the vault). */
+    keepsDeposits = true;
     readonly copies = new Map<string, Copy>();
     readonly holds = new Map<string, Hold>();
     readonly spent = new Set<string>();
@@ -151,12 +190,37 @@ export class FakeVault {
         return { sub: claims.sub, provider: body.provider };
     }
 
+    /**
+     * The answer as it leaves the vault: {@link handle}'s, signed as the vault signs it (core vault-wire.ts "Signed
+     * answers"), or as {@link answers} says a server that isn't the vault would.
+     */
+    answer(req: SentRequest): Reply {
+        const r = this.handle(req);
+        const challenge = (req.body as { challenge?: unknown } | undefined)?.challenge;
+        const signer = req.headers['X-Public-Key'];
+        const kind: VaultAnswerKind | undefined = r.says?.kind ?? (r.status >= 400 ? 'refusal' : KIND_BY_PATH[req.path]);
+        if (!isVaultChallenge(challenge) || !signer || r.status >= 500 || r.unsigned || !kind) return r;
+        const says = r.says?.fields ?? (kind === 'refusal'
+            ? { status: r.status, code: (r.body as { code?: unknown } | null)?.code }
+            : { ...(r.body as Record<string, unknown>) });
+        const mode = this.answersOn && !this.answersOn.includes(req.path) ? 'signed' : this.answers;
+        if (mode === 'unsigned') return r;
+        const head = {
+            kind: mode === 'other_kind' ? (kind === 'status' ? 'deleted' : 'status') as VaultAnswerKind : kind,
+            key: mode === 'other_key' ? OTHER_KEY : signer,
+            challenge: mode === 'replayed' ? newVaultChallenge() : challenge,
+            at: Date.now(),
+        };
+        const signed = signVaultAnswer(head, says, mode === 'forged' ? FORGED_SEED : TICKET_SEED);
+        return { ...r, body: { ...(r.body as Record<string, unknown>), signed } };
+    }
+
     handle(req: SentRequest): Reply {
         if (req.method !== 'POST') return reply(404, { error: 'No such route.', code: 'not_found' });
         if (this.locked) return reply(503, { error: 'The key vault is locked.', code: 'locked', locked: true });
         const signer = req.headers['X-Public-Key'];
         if (!signer || !boundSignatureValid({ url: req.url, method: req.method, headers: req.headers, body: req.raw }, signer)) {
-            return reply(401, { error: 'The signature does not check out.', code: 'bad_signature' });
+            return { ...reply(401, { error: 'The signature does not check out.', code: 'bad_signature' }), unsigned: true };
         }
         const b = req.body ?? {};
         switch (req.path) {
@@ -176,11 +240,19 @@ export class FakeVault {
                 const id = `${s.provider}:${s.sub}`;
                 const existing = this.copies.get(id);
                 const replaced = !!existing && existing.pubkey !== signer;
-                this.copies.set(id, {
-                    provider: s.provider, sub: s.sub, pubkey: signer, clientCopy: contents.clientCopy,
-                    pushTokens: contents.pushToken ? [contents.pushToken] : [], lastReleasedAt: null,
-                });
-                return reply(200, { ok: true, provider: s.provider, replaced });
+                if (this.keepsDeposits) {
+                    this.copies.set(id, {
+                        provider: s.provider, sub: s.sub, pubkey: signer, clientCopy: contents.clientCopy,
+                        pushTokens: contents.pushToken ? [contents.pushToken] : [], lastReleasedAt: null,
+                    });
+                }
+                return {
+                    ...reply(200, { ok: true, provider: s.provider, replaced }),
+                    says: {
+                        kind: 'receipt',
+                        fields: { provider: s.provider, copy: vaultCopyDigest(contents.clientCopy), signIn: vaultTicketNonce(b.ticket), replaced },
+                    },
+                };
             }
             case '/v1/copies/status': {
                 const mine = this.copiesOf(signer);
@@ -239,7 +311,8 @@ export class FakeVault {
                 hold.released = true;
                 copy.lastReleasedAt = Date.now();
                 const pubkey = this.releaseNamesOtherKey ? OTHER_KEY : copy.pubkey;
-                return reply(200, { status: 'released', release: sealVaultRelease({ provider: copy.provider, pubkey, clientCopy: copy.clientCopy }, signer) });
+                const release = sealVaultRelease({ provider: copy.provider, pubkey, clientCopy: copy.clientCopy }, signer);
+                return { ...reply(200, { status: 'released', release }), says: { kind: 'release', fields: { provider: copy.provider, pubkey, box: release } } };
             }
             case '/v1/holds/cancel':
             case '/v1/holds/approve': {
@@ -320,7 +393,7 @@ export function installNetwork(): Network {
         let r: Reply;
         if (u.origin === VAULT) {
             if (net.vault.unreachable) throw new TypeError('Network request failed');
-            r = net.vault.handle(req);
+            r = net.vault.answer(req);
         } else if (u.origin === COMMUNITY) {
             r = net.community.handle(req);
         } else if (u.origin === GLOBAL) {

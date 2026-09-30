@@ -299,7 +299,7 @@ describe('protecting an account with Facebook sends the vault only the id_token'
         expect(value?.enrolledSso).toEqual(['facebook']);
 
         const deposit = net.sent.find((s) => s.path === DEPOSIT)?.body;
-        expect(Object.keys(deposit).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
+        expect(Object.keys(deposit).sort()).toEqual(['box', 'challenge', 'idToken', 'provider', 'ticket']);
         expect(deposit.provider).toBe('facebook');
         expect(deposit.idToken).toBe(idToken);
         expect(vaultTicketNonce(deposit.ticket)).toBe(JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()).nonce);
@@ -468,7 +468,7 @@ describe('recovering with Facebook sends the vault the id_token only', () => {
 
         expect(error).toBeUndefined();
         const restore = net.sent.find((s) => s.path === RESTORE)!;
-        expect(Object.keys(restore.body).sort()).toEqual(['idToken', 'provider', 'ticket']);
+        expect(Object.keys(restore.body).sort()).toEqual(['challenge', 'idToken', 'provider', 'ticket']);
         expect(restore.body).toMatchObject({ provider: 'facebook', idToken });
         expect(value).toMatchObject({ provider: 'facebook', sub: FB_SUB, holdId: expect.any(String) });
 

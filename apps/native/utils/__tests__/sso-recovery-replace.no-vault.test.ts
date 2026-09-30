@@ -9,9 +9,7 @@
  * cursors), as the screen said it would, and a replace this phone then can't save leaves neither account (#1179
  * review 4109902595).
  *
- * Nothing here contacts a node, a vault or a provider. Since V4 the copy comes back from BeanPool's key vault, played by
- * fake-vault.ts (core's real tickets and releases), and Google's sheet is stubbed. Each test's account is released
- * first (the sign-in, the day's wait, the release), and then saved, which is where every rule below applies.
+ * Nothing here contacts a node or a provider: the node's recovery routes and Google's sheet are stubbed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -37,8 +35,11 @@ vi.mock('expo-crypto', async () => {
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
 vi.mock('../sso-signin', () => ({
-    signInWithProvider: vi.fn(),
+    signInWithGoogle: vi.fn(),
+    signInWithApple: vi.fn(),
+    signInWithFacebook: vi.fn(),
 }));
+vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 // A replace takes the old account's cached community copies (community-cache.ts): recorded, never the database.
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 
@@ -46,14 +47,13 @@ import * as SecureStore from 'expo-secure-store';
 import { sealSeedToSso, type SealedShare } from '@beanpool/core';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
-import { signInWithProvider } from '../sso-signin';
-import { checkSsoRestore, finishSsoRestore, startSsoRestore, type RestoredFromVault } from '../sso-recovery';
-import { fakeJwt, HOLD_MS, installNetwork, noVault, useVault } from './fake-vault';
+import { signedPost } from '../node-post';
+import { signInWithGoogle } from '../sso-signin';
+import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { ReplaceNotSaved } from '../restore-account';
 import {
     KNOCKS_STORE_KEY, PUSH_LEAVE_STATEMENTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY,
-    vaultCopyKnownStoreKey,
 } from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
@@ -103,53 +103,39 @@ function accountStorage(publicKey: string): Record<string, string> {
     };
 }
 
-/**
- * What the phone writes for the account it has just restored from the key vault: that the vault keeps a copy for it,
- * so the app-open check may ask about holds (utils/vault.ts `vaultCopyKnown`). The new account's, never the old one's.
- */
-function copyKnown(): Record<string, string> {
-    return { [vaultCopyKnownStoreKey(released.publicKey)]: '1' };
-}
-
 function asyncStorage(): Record<string, string> {
     return Object.fromEntries(mem.async);
 }
 
-/** The account the key vault released for this test: checked, not yet saved. */
-let released: RestoredFromVault;
-
-/**
- * Google hands back a token whose `sub` is SUB; BeanPool's key vault keeps `sealed` for it and releases it after the
- * day's wait. Run first, on its own network (the test's own `fetch` stub is put back afterwards, untouched), so what
- * the test then watches is only the save: the replace, its unregisters, and its storage.
- */
-async function mockSignInAndNode(sealed: SealedShare) {
-    vi.mocked(signInWithProvider).mockImplementation(async (provider, nonce) => ({ provider, idToken: fakeJwt({ sub: SUB, nonce }), nonce }));
-    const stub = globalThis.fetch;
-    useVault();
-    const net = installNetwork();
-    try {
-        net.vault.keep('google', SUB, restoredPub, sealed);
-        await startSsoRestore('google');
-        vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
-        const collected = await checkSsoRestore();
-        if (collected?.status !== 'released') throw new Error(`expected a release, got ${JSON.stringify(collected)}`);
-        released = collected.restored;
-    } finally {
-        vi.useRealTimers();
-        globalThis.fetch = stub;
-        noVault();
-        vi.mocked(SecureStore.setItemAsync).mockClear();
-    }
+/** Google hands back a token whose `sub` is SUB; the node releases `sealed` as a single blob. */
+function mockSignInAndNode(sealed: SealedShare) {
+    const b64 = (s: string) => Buffer.from(s).toString('base64url');
+    const token = `${b64(JSON.stringify({ alg: 'RS256' }))}.${b64(JSON.stringify({ sub: SUB }))}.sig`;
+    vi.mocked(signInWithGoogle).mockResolvedValue({ idToken: token, nonce: 'n' });
+    vi.mocked(signedPost).mockImplementation(async (_url: string, path: string) => {
+        const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+        if (path === '/api/recovery/collect') return ok({ collectionId: 'c1', threshold: 1 });
+        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n' });
+        if (path === '/api/recovery/collect/sso') return ok({ collected: 1, threshold: 1, enough: true });
+        if (path === '/api/recovery/collect/fragments') {
+            return ok({
+                collected: 1, threshold: 1, enough: true,
+                fragments: [{
+                    holderType: 'sso', shareIndex: 1,
+                    payload: sealed.encryptedShare, payloadIv: sealed.shareIv, payloadTag: sealed.shareTag,
+                    kdfParams: sealed.kdfParams,
+                }],
+            });
+        }
+        throw new Error(`Unexpected path: ${path}`);
+    });
 }
 
-/** Save the released account onto NODE, as "Continue" does: through "Replace this phone's account?". */
-async function restore(confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>) {
-    const identity = await finishSsoRestore(released, NODE, {
-        nameOnNode: async () => 'Marty',
+function restore(confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>) {
+    return recoverAccountWithSso({
+        callsign: 'Marty', anchorUrl: NODE, provider: 'google',
         ...(confirmReplace ? { confirmReplace } : {}),
     });
-    return { identity };
 }
 
 let phone: BeanPoolIdentity;
@@ -160,7 +146,7 @@ beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
     vi.clearAllMocks();
-    // The vault's part runs first on its own network (mockSignInAndNode); this fetch is only the old account's unregister.
+    // The node's recovery routes are signedPost (stubbed above); fetch is only the old account's unregister.
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No node may be contacted from a test'); }));
     // identity.ts's legacy migration reaches AsyncStorage through `require`, which no vi.mock reaches: quietened.
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
@@ -193,7 +179,7 @@ async function expectPhoneKept() {
 
 describe('a sign-in restore onto a phone that holds another account', () => {
     it('asks first, with the account that would go (its 12 words one tap away), and Cancel keeps everything', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => false);
 
@@ -206,7 +192,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
     });
 
     it('asks before anything is written, and replaces only when the member says so', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => {
             // The screen is up: nothing has changed on the phone yet.
@@ -224,28 +210,32 @@ describe('a sign-in restore onto a phone that holds another account', () => {
     });
 
     it('Replace: nothing of the old account stays in app storage, only the new account\'s community and the phone\'s own', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
 
         await restore(async () => true);
 
         // Kim's guest markers, the communities Kim asked to join, Kim's sync cursors, Kim's wizard: all gone.
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
     });
 
     it('a replace this phone can\'t save: Kim\'s account is gone as promised, no success is claimed, and trying again works', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => true);
+        const progress: string[] = [];
         // The key write fails: by then the new community's address has been written.
         vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
 
-        const failed = restore(confirmReplace);
+        const failed = recoverAccountWithSso({
+            callsign: 'Marty', anchorUrl: NODE, provider: 'google', confirmReplace,
+            onProgress: (p) => progress.push(p.step),
+        });
 
-        // No success is claimed: the save rejects (the old flow's progress never reached 'done'; this one has none).
         await expect(failed).rejects.toBeInstanceOf(ReplaceNotSaved);
         await expect(failed).rejects.toThrow('Keystore unavailable');
+        expect(progress).not.toContain('done');
         expect(await loadIdentity()).toBeNull();
         expect(await getPendingOnboarding()).toBeNull();
         expect(asyncStorage()).toEqual(PHONE_KEPT);
@@ -256,11 +246,11 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         expect(confirmReplace).toHaveBeenCalledTimes(1);
         expect(result.identity.publicKey).toBe(restoredPub);
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
     });
 
     it('a caller that cannot ask is refused rather than allowed to replace', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
 
         await expect(restore()).rejects.toThrow(/different BeanPool account/);
@@ -269,7 +259,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
     });
 
     it('an account with no 12 words on the phone (restored by a sign-in before copies carried them) is asked about the same way', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB));
         const noWords: BeanPoolIdentity = { ...phone };
         delete noWords.mnemonic;
         phone = noWords;
@@ -285,7 +275,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
 
 describe('a sign-in restore with nothing to replace', () => {
     it('the same account: nothing to ask, and the phone keeps its 12 words when the copy has none', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB));
         const keys = await mnemonicToKeypair(WORDS);
         const same: BeanPoolIdentity = { publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z', mnemonic: WORDS };
         await importIdentity(same);
@@ -299,18 +289,18 @@ describe('a sign-in restore with nothing to replace', () => {
     });
 
     it('the same account keeps what is its own: its guest markers, the communities it asked, its sync cursors', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         const keys = await mnemonicToKeypair(WORDS);
         await importIdentity({ publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z', mnemonic: WORDS });
         for (const [k, v] of Object.entries({ [ANCHOR]: MULLUM, ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT })) mem.async.set(k, v);
 
         await restore();
 
-        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE, ...copyKnown() });
+        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE });
     });
 
     it('no account on the phone: restores as it always did, never asking', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => false);
 
         const result = await restore(confirmReplace);
@@ -326,7 +316,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
     const PHONE_TOKEN = 'ExponentPushToken[kims-phone]';
 
     it('Kim\'s push token is unregistered where the phone registered it, signed by Kim\'s key before the restored key is written; Kim\'s saved communities and cached copies go', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
         const sent: { url: string; init?: RequestInit; keyOnPhone?: string }[] = [];
@@ -357,7 +347,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
     });
 
     it('a community that can\'t be reached neither holds up nor fails the replace', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
         vi.mocked(fetch).mockRejectedValue(new TypeError('Network request failed'));
@@ -367,7 +357,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(result.identity.publicKey).toBe(restoredPub);
         const { [PUSH_LEAVE_STATEMENTS_STORE_KEY]: leaves, [PUSH_STAMP_STORE_KEY]: stamp, ...rest } = asyncStorage();
-        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
+        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
         // Kept on purpose: the old account's leave statements for the communities it couldn't reach, presented later
         // until each confirms (push-leave.ts), and the phone's push stamp.
         const asked = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url)).origin).sort();
@@ -376,7 +366,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
     });
 
     it('the same account: nothing is unregistered, and its saved communities stay', async () => {
-        await mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         const keys = await mnemonicToKeypair(WORDS);
         await importIdentity({ publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z', mnemonic: WORDS });
         for (const [k, v] of Object.entries({ [ANCHOR]: MULLUM, ...accountStorage(keys.publicKeyHex) })) mem.async.set(k, v);

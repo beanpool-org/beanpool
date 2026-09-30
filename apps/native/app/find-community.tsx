@@ -242,7 +242,10 @@ export default function FindCommunityScreen() {
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
-                { text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert("Couldn't join", e?.message || 'Please try again.');

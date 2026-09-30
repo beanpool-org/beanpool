@@ -133,6 +133,9 @@ describe('the member key signs only through core\'s builders and the listed old-
         const allowed = new Set([
             'utils/crypto.ts buildSignedHeaders',
             'utils/crypto.ts buildSignedWsParams',
+            // BeanPool's key vault (utils/vault.ts): core's format-2 builder, always, bound to the vault's own host. The
+            // vault refuses anything else (apps/vault api/auth.ts), and no community accepts a request signed for it.
+            'utils/crypto.ts buildVaultSignedHeaders',
             'utils/member-statements.ts signAdminChallenge',
             'utils/member-statements.ts signPairing',
             'utils/member-statements.ts makeOfflineTicket',

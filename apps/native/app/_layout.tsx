@@ -32,6 +32,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { getAppLockEnabled } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -596,6 +597,39 @@ function RootLayoutNav() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         requestSync().catch(() => {});
+    }, [identity?.publicKey]);
+
+    // BeanPool's key vault (utils/vault.ts `vaultHoldsAtOpen`): at app open and at each return, in the background, is a
+    // sign-in restore of this account waiting? Nothing waits for the answer, and a slow or unreachable vault shows
+    // nothing. Each waiting restore is brought up once per run; Settings shows it with Stop and "Yes, it's me".
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let current = true;
+        const look = () => {
+            vaultHoldsAtOpen(identity).then((holds) => {
+                // Marked only here, as the alert goes up: an answer for a layout that has gone keeps its hold's alert.
+                if (!current || takeHoldsToShow(holds).length === 0) return;
+                // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer one
+                // was cut mid-word (measured on the emulator). The body says what happened.
+                Alert.alert(
+                    'Is this you?',
+                    'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
+                    + 'you can let it through now. If not, stop it.',
+                    [
+                        { text: 'Not now', style: 'cancel' },
+                        { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
+                    ],
+                );
+            }).catch(() => {});
+        };
+        look();
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') look();
+        });
+        return () => {
+            current = false;
+            sub.remove();
+        };
     }, [identity?.publicKey]);
 
     // Set up notification deep-link handler

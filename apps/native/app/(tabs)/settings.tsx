@@ -50,7 +50,9 @@ import {
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
-import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
+import { enrolmentFromVault, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
+import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
+import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
@@ -340,6 +342,8 @@ export default function SettingsScreen() {
     // sits at 'Detecting...' in normal use.
     const [protectionNodeLabel, setProtectionNodeLabel] = useState<string | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
+    /** Why the key vault couldn't say what protects this account (paused, unreachable, none in this build), or null. */
+    const [protectionNote, setProtectionNote] = useState<string | null>(null);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     /** Set before an SSO flow leaves the app, so the return trip does not reset the section. */
     const skipNextFocusResetRef = React.useRef(false);
@@ -422,6 +426,26 @@ export default function SettingsScreen() {
     };
 
     const fetchProtectionStatus = async () => {
+        // A build without a key vault: the community keeps the sign-in copies, as before the vault.
+        if (!hasVault()) return fetchCommunityProtectionStatus();
+        setProtectionLoading(true);
+        try {
+            if (!identity) return;
+            resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
+            // BeanPool's key vault keeps the sign-in copies, for every community (utils/vault.ts). What it can't say
+            // (paused or unreachable) is said in its own words, never shown as protection.
+            setProtectionResult(await vaultProtection(identity));
+            setProtectionNote(null);
+        } catch (e) {
+            setProtectionNote(e instanceof VaultError ? e.message : VAULT_MESSAGES.unreachable);
+            console.warn('[Protection] the key vault could not say:', (e as Error).message);
+        } finally {
+            setProtectionLoading(false);
+        }
+    };
+
+    /** What protects this account at the community the phone is set to: a build without a key vault. */
+    const fetchCommunityProtectionStatus = async () => {
         setProtectionLoading(true);
         try {
             const url = await getAnchorUrl();
@@ -464,13 +488,20 @@ export default function SettingsScreen() {
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
         const provName = SSO_PROVIDER_NAMES[provider];
-        // Name the community: this only ever affects recovery on THIS node, and saying
-        // so plainly is the difference between a member knowing where they're covered
-        // and assuming they're covered everywhere.
-        const community = protectionNodeLabel || await resolveCommunityLabel();
-        const message = community
-            ? `On a new phone, this sign-in account will no longer be able to restore your account for ${community}. Your other communities are unaffected.`
-            : `This sign-in account will no longer be able to restore your account on a new phone.`;
+        let message: string;
+        if (hasVault()) {
+            // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly.
+            message = `On a new phone, this ${provName} account will no longer bring your account back, in any community. `
+                + "BeanPool's key vault deletes its copy at once, and from its backups within 30 days.";
+        } else {
+            // Name the community: without a vault this only ever affects recovery on THIS node, and saying
+            // so plainly is the difference between a member knowing where they're covered
+            // and assuming they're covered everywhere.
+            const community = protectionNodeLabel || await resolveCommunityLabel();
+            message = community
+                ? `On a new phone, this sign-in account will no longer be able to restore your account for ${community}. Your other communities are unaffected.`
+                : `This sign-in account will no longer be able to restore your account on a new phone.`;
+        }
         Alert.alert(
             `Disconnect ${provName}?`,
             message,
@@ -1578,6 +1609,8 @@ export default function SettingsScreen() {
                     screen. An active recovery against this account must be visible
                     without first navigating into a sub-screen. */}
                 <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
+                {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
+                <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
                 <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
@@ -1968,11 +2001,17 @@ export default function SettingsScreen() {
                         This is how you get back into your account if you lose your phone.
                     </Text>
 
+                    {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
+                        12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
-                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
+                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
+                            <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
+                            {protectionNote && (
+                                <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
+                            )}
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 communityName={protectionNodeLabel || undefined}
@@ -1984,95 +2023,97 @@ export default function SettingsScreen() {
                                 } : undefined}
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                             />
-
-                            {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
-                                sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
-                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                    🔑 12 Recovery Words
-                                </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                    {hasMnemonic(identity)
-                                        ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
-                                        : NO_WORDS_VIEW_LINE}
-                                </Text>
-
-                                {!(hasMnemonic(identity) && revealWords) ? (
-                                    <Pressable
-                                        style={{
-                                            backgroundColor: colors.surface.card,
-                                            borderColor: colors.border.default,
-                                            borderWidth: 1,
-                                            borderRadius: 12,
-                                            padding: 14,
-                                            alignItems: 'center',
-                                        }}
-                                        onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
-                                        disabled={revealLoading}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Show my 12 recovery words"
-                                        accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
-                                    >
-                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
-                                            👁️ Show My 12 Recovery Words
-                                        </Text>
-                                    </Pressable>
-                                ) : (
-                                    <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
-                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                                            <NoScreenCapture>
-                                            {mnemonicWords?.split(' ').map((word, idx) => (
-                                                <View
-                                                    key={`${word}-${idx}`}
-                                                    accessible={true}
-                                                    accessibilityLabel={`Word ${idx + 1}: ${word}`}
-                                                    style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
-                                                >
-                                                    <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
-                                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
-                                                </View>
-                                            ))}
-                                            </NoScreenCapture>
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                                            <Pressable
-                                                style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={handleCopyWords}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
-                                            >
-                                                <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
-                                                    {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
-                                                </Text>
-                                            </Pressable>
-                                            <Pressable
-                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={putProtectionWordsAway}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Hide 12 recovery words"
-                                            >
-                                                <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
-                                            </Pressable>
-                                        </View>
-                                        <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
-                                        <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
-                                    </View>
-                                )}
-                            </View>
-
-                            {Platform.OS === 'web' && (
-                                <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
-                                    <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                        The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
-                                    </Text>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                        For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
-                                    </Text>
-                                </View>
-                            )}
                         </>
                     )}
+
+                    <>
+                        {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
+                            sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
+                        <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                            <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                                🔑 12 Recovery Words
+                            </Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
+                                {hasMnemonic(identity)
+                                    ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
+                                    : NO_WORDS_VIEW_LINE}
+                            </Text>
+
+                            {!(hasMnemonic(identity) && revealWords) ? (
+                                <Pressable
+                                    style={{
+                                        backgroundColor: colors.surface.card,
+                                        borderColor: colors.border.default,
+                                        borderWidth: 1,
+                                        borderRadius: 12,
+                                        padding: 14,
+                                        alignItems: 'center',
+                                    }}
+                                    onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
+                                    disabled={revealLoading}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Show my 12 recovery words"
+                                    accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
+                                >
+                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
+                                        👁️ Show My 12 Recovery Words
+                                    </Text>
+                                </Pressable>
+                            ) : (
+                                <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                        <NoScreenCapture>
+                                        {mnemonicWords?.split(' ').map((word, idx) => (
+                                            <View
+                                                key={`${word}-${idx}`}
+                                                accessible={true}
+                                                accessibilityLabel={`Word ${idx + 1}: ${word}`}
+                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
+                                            >
+                                                <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
+                                                <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
+                                            </View>
+                                        ))}
+                                        </NoScreenCapture>
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                                        <Pressable
+                                            style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                                            onPress={handleCopyWords}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
+                                        >
+                                            <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
+                                                {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
+                                            </Text>
+                                        </Pressable>
+                                        <Pressable
+                                            style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
+                                            onPress={putProtectionWordsAway}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Hide 12 recovery words"
+                                        >
+                                            <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
+                                        </Pressable>
+                                    </View>
+                                    <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
+                                    <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
+                                </View>
+                            )}
+                        </View>
+
+                        {Platform.OS === 'web' && (
+                            <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
+                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
+                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                </Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
+                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
+                                </Text>
+                            </View>
+                        )}
+                    </>
 
                     <Pressable
                         style={[styles.backBtn, { marginTop: 16 }]}
@@ -2089,8 +2130,15 @@ export default function SettingsScreen() {
                 provider={ssoEnrolProvider}
                 onClose={() => setShowSsoSheet(false)}
                 onEnrolled={(result) => {
-                    setProtectionResult(result);
                     setShowSsoSheet(false);
+                    // Without a vault the community answers the deposit with every sign-in it keeps, as before.
+                    if (!hasVault()) {
+                        setProtectionResult(result);
+                        return;
+                    }
+                    // The sign-in just linked, beside what was linked already; then the vault's own word on all of them.
+                    setProtectionResult(prev => enrolmentFromVault([...(prev?.enrolledSso ?? []), ...(result.enrolledSso ?? [])]));
+                    void fetchProtectionStatus();
                 }}
             />
 

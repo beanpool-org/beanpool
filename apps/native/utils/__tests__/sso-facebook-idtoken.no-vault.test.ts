@@ -1,36 +1,33 @@
 /**
  * Facebook sign-in sends only Facebook's signed ID token (A2b).
  *
- * Since S1 (#1113) a sign-in check takes Facebook only as an OIDC id_token it can verify: RS256 against Facebook's
- * JWKS, the issuer, our app id as the audience, and the nonce it issued. An access token proves nothing without the app
- * secret, so it is refused. The app used to fall back to the access token when no id_token came back, and to ask Graph
- * `/me` for the member's id with it. Now it reads the id_token and nothing else, refuses before anything goes out a
- * return without one, with another attempt's state, or with a token that does not carry this attempt's nonce, and
- * never asks Graph.
- *
- * Since V4 the sign-in check is BeanPool's key vault's (utils/vault.ts): the nonce is the hash of the vault's ticket,
- * and the token goes to the vault, never to the member's community. The properties are the same.
+ * Since S1 (#1113) the node takes Facebook only as an OIDC id_token it can verify: RS256 against Facebook's JWKS,
+ * the issuer, our app id as the audience, and the nonce the node issued. An access token proves nothing a node can
+ * check without the app secret, so the node refuses one. The app used to fall back to the access token when no
+ * id_token came back, and to ask Graph `/me` for the member's id with it. Now it reads the id_token and nothing else,
+ * refuses before anything goes to the node a return without one, with another attempt's state, or with a token that
+ * does not carry this attempt's nonce, and never asks Graph.
  *
  * MEASURED 2026-09-25 (Marty, desktop Chrome, the exact request the phone sends): the return's fragment carries
  * access_token, data_access_expiration_time, expires_in, id_token (RS256, iss https://www.facebook.com, aud our app
  * id, nonce echoed verbatim), long_lived_token and state. The fixtures below have that shape.
  *
- * Nothing here contacts a node, a vault or Facebook. The request signing is real, so every request the app makes goes
- * through the `fetch` stub, which plays the vault (fake-vault.ts) and refuses (and records) anything addressed
- * elsewhere. That is what lets these tests say "no request to graph.facebook.com" rather than "the function we mocked
- * was not called".
+ * Nothing here contacts a node or Facebook. `node-post` and the request signing are real, so every request the app
+ * makes goes through the `fetch` stub, which plays the node and refuses (and records) anything addressed elsewhere.
+ * That is what lets these tests say "no request to graph.facebook.com" rather than "the function we mocked was not
+ * called".
  */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { openShareFromSso, sealSeedToSso, vaultTicketNonce } from '@beanpool/core';
+import { openShareFromSso, sealSeedToSso } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 
 const rn = vi.hoisted(() => ({
     linkingListeners: [] as Array<(e: { url: string }) => void>,
 }));
-const secure = vi.hoisted(() => new Map<string, string>());
 
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
@@ -59,7 +56,7 @@ vi.mock('expo-crypto', () => ({
 }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        // The member's community: nothing of the sign-in may go there.
+        // The member's node, which the deposit goes to.
         getItem: vi.fn(async (key: string) => (key === 'beanpool_anchor_url' ? 'https://test.example' : null)),
         setItem: vi.fn(async () => undefined),
         removeItem: vi.fn(async () => undefined),
@@ -67,42 +64,41 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
-    getItemAsync: vi.fn(async (key: string) => secure.get(key) ?? null),
-    setItemAsync: vi.fn(async (key: string, value: string) => { secure.set(key, value); }),
-    deleteItemAsync: vi.fn(async (key: string) => { secure.delete(key); }),
+    getItemAsync: vi.fn(async () => null),
+    setItemAsync: vi.fn(async () => undefined),
+    deleteItemAsync: vi.fn(async () => undefined),
 }));
 
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { ed25519 } from '@noble/curves/ed25519.js';
-import { FACEBOOK_APP_ID, SsoSignInError, signInWithProvider } from '../sso-signin';
+import { FACEBOOK_APP_ID, SsoSignInError, startSsoSignIn } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
-import { checkSsoRestore, finishSsoRestore, startSsoRestore } from '../sso-recovery';
+import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
-import { HOLD_MS, installNetwork, noVault, useVault, VAULT, type Network, type SentRequest } from './fake-vault';
 
+const NODE = 'https://test.example';
 const MEMBER_NONCE = 'bWVtYmVyLW5vbmNlLWZvci10aGlzLWZhY2Vib29rLWF0dGVtcHQ';
+const RECOVERY_NONCE = 'cmVjb3Zlcnktbm9uY2UtZm9yLXRoaXMtZmFjZWJvb2stYXR0ZW1wdA';
 const FB_SUB = '10229876543210987';
 const FB_EMAIL = 'member@example.com';
 const ACCESS_TOKEN = 'EAALoNLYaccessTOKENtheAppMustNeverKeep1';
 const LONG_LIVED_TOKEN = 'EAALoNLYlongLivedTOKENtheAppMustNeverKeep2';
 const PLAIN = "Facebook didn't finish the sign-in. Try again, or choose another way.";
 
-const TICKET = '/v1/ticket';
-const DEPOSIT = '/v1/copies';
-const RESTORE = '/v1/restore';
+const NONCE_PATH = '/api/recovery/sso-nonce';
+const DEPOSIT = '/api/recovery/shares/sso';
+const RELEASE = '/api/recovery/collect/sso';
 
-// A real key pair: the vault checks the signature on every request.
 const MEMBER = {
-    publicKey: Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(7))).toString('hex'),
+    publicKey: 'aa'.repeat(32),
     privateKey: '07'.repeat(32),
     callsign: 'member',
     createdAt: '2026-09-25T00:00:00Z',
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-/** A Facebook OIDC id_token's shape. Unsigned: nothing here verifies signatures, the vault does. */
+/** A Facebook OIDC id_token's shape. Unsigned: nothing here verifies signatures, the node does. */
 function fbIdToken(overrides: Record<string, unknown> = {}): string {
     const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
     const claims: Record<string, unknown> = {
@@ -143,12 +139,38 @@ function cancelReturn(nonce: string): string {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The vault, and everything the app sends, stores or logs.
+// The node, and everything the app sends, stores or logs.
 // ---------------------------------------------------------------------------------------------------
 
-let net: Network;
+type Answer = { status: number; body?: unknown };
+interface Seen { url: string; path: string; body: any; headers: unknown }
 
-function toFacebook(seen: SentRequest[]): string[] {
+function answer({ status, body = {} }: Answer): Response {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(),
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+    } as unknown as Response;
+}
+
+/** Play the node. A request to any other host is recorded and fails as a network error would. */
+function installNode(routes: Record<string, Answer>): Seen[] {
+    const seen: Seen[] = [];
+    globalThis.fetch = vi.fn(async (input: any, init?: any) => {
+        const url = String(input);
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        const p = url.startsWith(NODE) ? url.slice(NODE.length) : url;
+        seen.push({ url, path: p, body, headers: init?.headers });
+        if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
+        const route = routes[p];
+        return answer(route ?? { status: 404, body: { error: 'Not Found' } });
+    }) as any;
+    return seen;
+}
+
+function toFacebook(seen: Seen[]): string[] {
     return seen.map((s) => s.url).filter((u) => {
         try {
             const host = new URL(u).hostname;
@@ -159,9 +181,8 @@ function toFacebook(seen: SentRequest[]): string[] {
     });
 }
 
-/** Every request that went anywhere but the vault: none may. */
-function offVault(seen: SentRequest[]): string[] {
-    return seen.map((s) => s.url).filter((u) => !u.startsWith(`${VAULT}/`));
+function offNode(seen: Seen[]): string[] {
+    return seen.map((s) => s.url).filter((u) => !u.startsWith(`${NODE}/`));
 }
 
 function logged(): string[] {
@@ -172,7 +193,7 @@ function logged(): string[] {
 }
 
 /** Everything the app sent, stored or logged, as one string to search for the tokens it must not keep. */
-function everythingKeptOrSent(seen: SentRequest[], ...extra: unknown[]): string {
+function everythingKeptOrSent(seen: Seen[], ...extra: unknown[]): string {
     return JSON.stringify([
         seen.map((s) => [s.url, s.body, s.headers]),
         vi.mocked(AsyncStorage.setItem).mock.calls,
@@ -182,31 +203,24 @@ function everythingKeptOrSent(seen: SentRequest[], ...extra: unknown[]): string 
     ]);
 }
 
-function expectNoAccessOrLongLivedToken(seen: SentRequest[], ...extra: unknown[]): void {
+function expectNoAccessOrLongLivedToken(seen: Seen[], ...extra: unknown[]): void {
     const all = everythingKeptOrSent(seen, ...extra);
     expect(all).not.toContain(ACCESS_TOKEN);
     expect(all).not.toContain(LONG_LIVED_TOKEN);
 }
 
-/**
- * The Custom Tab closes on Facebook's return (iOS, or an Android tab that survived). `build` makes the return from the
- * nonce the dialog was asked with, which is the hash of the vault's ticket.
- */
-function facebookReturns(build: (nonce: string) => string | Promise<string>): void {
-    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementationOnce(async (authUrl: string) => {
-        const nonce = new URL(authUrl).searchParams.get('nonce') ?? '';
-        return { type: 'success', url: await build(nonce) } as any;
-    });
+/** The Custom Tab closes on Facebook's return (iOS, or an Android tab that survived). */
+function facebookReturns(url: string): void {
+    vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'success', url } as any);
 }
 
 /**
  * Android: the verified `beanpool.org/auth/facebook` App Link brings the app forward over the Custom Tab, which then
  * reports a cancel it did not mean. The links arrive as Linking events, in order.
  */
-function facebookReturnsByAppLink(...builds: Array<(nonce: string) => string>): void {
-    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementationOnce(async (authUrl: string) => {
-        const nonce = new URL(authUrl).searchParams.get('nonce') ?? '';
-        for (const build of builds) rn.linkingListeners.forEach((fn) => fn({ url: build(nonce) }));
+function facebookReturnsByAppLink(...urls: string[]): void {
+    vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementationOnce(async () => {
+        for (const url of urls) rn.linkingListeners.forEach((fn) => fn({ url }));
         return { type: 'cancel' } as any;
     });
 }
@@ -220,10 +234,7 @@ async function settle<T>(p: Promise<T>, ms = 10_000): Promise<{ value?: T; error
 let originalFetch: typeof fetch;
 beforeEach(() => {
     originalFetch = globalThis.fetch;
-    secure.clear();
     rn.linkingListeners.length = 0;
-    useVault();
-    net = installNetwork();
     vi.useFakeTimers();
     vi.mocked(WebBrowser.openAuthSessionAsync).mockReset();
     vi.mocked(AsyncStorage.setItem).mockClear();
@@ -237,7 +248,6 @@ afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
-    noVault();
 });
 
 // ---------------------------------------------------------------------------------------------------
@@ -245,20 +255,20 @@ afterEach(() => {
 // ---------------------------------------------------------------------------------------------------
 
 describe("Facebook's dialog is asked for an id_token bound to this attempt", () => {
-    it("carries our app id, the beanpool.org return, openid and email, and the vault ticket's nonce as both nonce and state", async () => {
-        facebookReturns((n) => measuredReturn(n));
+    it("carries our app id, the beanpool.org return, openid and email, and the node's nonce as both nonce and state", async () => {
+        installNode({ [NONCE_PATH]: { status: 200, body: { nonce: MEMBER_NONCE, providers: ['facebook'] } } });
+        facebookReturns(measuredReturn(MEMBER_NONCE));
 
-        await settle(protectWithFacebook());
+        await settle(startSsoSignIn('facebook', NODE, MEMBER));
 
         const [authUrl, completionUri] = vi.mocked(WebBrowser.openAuthSessionAsync).mock.calls[0];
         const u = new URL(authUrl);
-        const ticket = net.sent.find((s) => s.path === DEPOSIT)?.body.ticket;
         expect(`${u.origin}${u.pathname}`).toBe('https://www.facebook.com/v20.0/dialog/oauth');
         expect(u.searchParams.get('client_id')).toBe(FACEBOOK_APP_ID);
         expect(u.searchParams.get('redirect_uri')).toBe('https://beanpool.org/auth/facebook');
         expect(u.searchParams.get('scope')).toBe('openid,email');
-        expect(u.searchParams.get('nonce')).toBe(vaultTicketNonce(ticket));
-        expect(u.searchParams.get('state')).toBe(vaultTicketNonce(ticket));
+        expect(u.searchParams.get('nonce')).toBe(MEMBER_NONCE);
+        expect(u.searchParams.get('state')).toBe(MEMBER_NONCE);
         // `token,id_token` is the request Marty measured returning a nonce-bearing id_token (2026-09-25). Facebook's
         // manual-flow page documents only `code`, `token` and `code token`, and nothing documents `id_token` alone, so
         // the smaller grant stays unasked until someone measures it. The access token that comes back is never read.
@@ -271,9 +281,17 @@ describe("Facebook's dialog is asked for an id_token bound to this attempt", () 
 // Enrolment: the protection sheet's connect (sso-sheet-connect.ts, called by SsoEnrolSheet).
 // ---------------------------------------------------------------------------------------------------
 
+function enrolNode(): Seen[] {
+    return installNode({
+        [NONCE_PATH]: { status: 200, body: { nonce: MEMBER_NONCE, expiresInSeconds: 600, providers: ['google', 'facebook'] } },
+        [DEPOSIT]: { status: 200, body: { generation: 1, enrolledSso: ['facebook'], threshold: 1 } },
+    });
+}
+
 function protectWithFacebook() {
     return connectAndDeposit({
         provider: 'facebook',
+        url: NODE,
         identity: MEMBER,
         // The phone's lock is sign-in-link-behind-lock.test.ts's: this is about the Facebook token.
         phoneLock: null,
@@ -282,15 +300,16 @@ function protectWithFacebook() {
     });
 }
 
-/** Refused on the phone: the vault was asked for a ticket and for nothing after it. */
-function expectNothingSentAfterTheTicket(seen: SentRequest[]): void {
-    expect(seen.map((s) => s.path)).toEqual([TICKET]);
+/** Refused on the phone: the node was asked for a nonce and for nothing after it. */
+function expectNothingSentAfterTheNonce(seen: Seen[]): void {
+    expect(seen.map((s) => s.path)).toEqual([NONCE_PATH]);
 }
 
-describe('protecting an account with Facebook sends the vault only the id_token', () => {
-    it("deposits with the id_token and the ticket, sealed to the token's sub, and asks Graph nothing", async () => {
-        let idToken = '';
-        facebookReturns((n) => measuredReturn(n, (idToken = fbIdToken({ nonce: n }))));
+describe('protecting an account with Facebook sends the node only the id_token', () => {
+    it("deposits with the id_token and the nonce, sealed to the token's sub, and asks Graph nothing", async () => {
+        const seen = enrolNode();
+        const idToken = fbIdToken({ nonce: MEMBER_NONCE });
+        facebookReturns(measuredReturn(MEMBER_NONCE, idToken));
 
         const { value, error } = await settle(protectWithFacebook());
 
@@ -298,37 +317,43 @@ describe('protecting an account with Facebook sends the vault only the id_token'
         expect(value?.error).toBeUndefined();
         expect(value?.enrolledSso).toEqual(['facebook']);
 
-        const deposit = net.sent.find((s) => s.path === DEPOSIT)?.body;
-        expect(Object.keys(deposit).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
+        const deposit = seen.find((s) => s.path === DEPOSIT)?.body;
+        expect(Object.keys(deposit).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
         expect(deposit.provider).toBe('facebook');
         expect(deposit.idToken).toBe(idToken);
-        expect(vaultTicketNonce(deposit.ticket)).toBe(JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()).nonce);
-        // Sealed to the sub the id_token names, which is what the vault reads from it when it verifies.
-        const [copy] = net.vault.copiesOf(MEMBER.publicKey);
-        const seed = await openShareFromSso(copy.clientCopy, 'facebook', FB_SUB);
+        expect(deposit.nonce).toBe(MEMBER_NONCE);
+        // Sealed to the sub the id_token names, which is what the node reads from it when it verifies.
+        const [share] = deposit.shares;
+        const seed = await openShareFromSso(
+            { encryptedShare: share.encryptedShare, shareIv: share.shareIv, shareTag: share.shareTag, kdfParams: share.kdfParams },
+            'facebook',
+            FB_SUB,
+        );
         expect(Buffer.from(seed).toString('hex')).toBe(MEMBER.privateKey);
 
-        expect(toFacebook(net.sent)).toEqual([]);
-        expect(offVault(net.sent)).toEqual([]);
-        expectNoAccessOrLongLivedToken(net.sent, value);
+        expect(toFacebook(seen)).toEqual([]);
+        expect(offNode(seen)).toEqual([]);
+        expectNoAccessOrLongLivedToken(seen, value);
     });
 
     it('the sign-in hands back the id_token, the nonce and the email, and nothing else from the return', async () => {
+        enrolNode();
         const idToken = fbIdToken({ nonce: MEMBER_NONCE });
-        facebookReturns(() => measuredReturn(MEMBER_NONCE, idToken));
+        facebookReturns(measuredReturn(MEMBER_NONCE, idToken));
 
-        const { value, error } = await settle(signInWithProvider('facebook', MEMBER_NONCE));
+        const { value, error } = await settle(startSsoSignIn('facebook', NODE, MEMBER));
 
         expect(error).toBeUndefined();
         expect(value).toEqual({ provider: 'facebook', idToken, nonce: MEMBER_NONCE, email: FB_EMAIL });
     });
 
-    it('refuses a return with only an access token, with the plain message, and sends the vault nothing', async () => {
-        facebookReturns((n) => fbReturn({
+    it('refuses a return with only an access token, with the plain message, and sends the node nothing', async () => {
+        const seen = enrolNode();
+        facebookReturns(fbReturn({
             access_token: ACCESS_TOKEN,
             expires_in: '5184000',
             long_lived_token: LONG_LIVED_TOKEN,
-            state: n,
+            state: MEMBER_NONCE,
         }));
 
         const { value, error } = await settle(protectWithFacebook());
@@ -336,187 +361,201 @@ describe('protecting an account with Facebook sends the vault only the id_token'
         expect(value).toBeUndefined();
         expect(error).toBeInstanceOf(SsoSignInError);
         expect(error).toMatchObject({ reason: 'no-token', message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
-        expect(toFacebook(net.sent)).toEqual([]);
-        expectNoAccessOrLongLivedToken(net.sent);
+        expectNothingSentAfterTheNonce(seen);
+        expect(toFacebook(seen)).toEqual([]);
+        expectNoAccessOrLongLivedToken(seen);
     });
 
-    it("refuses a token carrying another attempt's nonce, before the vault sees it", async () => {
-        facebookReturns((n) => measuredReturn(n, fbIdToken({ nonce: 'another-attempts-nonce' })));
+    it("refuses a token carrying another attempt's nonce, before the node sees it", async () => {
+        const seen = enrolNode();
+        facebookReturns(measuredReturn(MEMBER_NONCE, fbIdToken({ nonce: 'another-attempts-nonce' })));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toBeInstanceOf(SsoSignInError);
         expect(error).toMatchObject({ reason: 'provider', message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
-        expectNoAccessOrLongLivedToken(net.sent);
+        expectNothingSentAfterTheNonce(seen);
+        expectNoAccessOrLongLivedToken(seen);
     });
 
-    it('refuses a token whose nonce is only a hash of ours: Facebook echoes it verbatim, and the vault wants it so', async () => {
-        facebookReturns(async (n) => {
-            const hashed = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(n))).toString('hex');
-            return measuredReturn(n, fbIdToken({ nonce: hashed }));
-        });
+    it('refuses a token whose nonce is only a hash of ours: Facebook echoes it verbatim, and the node wants it so', async () => {
+        const seen = enrolNode();
+        const hashed = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(MEMBER_NONCE))).toString('hex');
+        facebookReturns(measuredReturn(MEMBER_NONCE, fbIdToken({ nonce: hashed })));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toMatchObject({ reason: 'provider', message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
+        expectNothingSentAfterTheNonce(seen);
     });
 
     it('refuses a token with no nonce at all', async () => {
-        facebookReturns((n) => measuredReturn(n, fbIdToken({ nonce: undefined })));
+        const seen = enrolNode();
+        facebookReturns(measuredReturn(MEMBER_NONCE, fbIdToken({ nonce: undefined })));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toMatchObject({ reason: 'provider', message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
+        expectNothingSentAfterTheNonce(seen);
     });
 
     it('refuses an id_token that is not a JWT, and does not ask Graph who it belongs to', async () => {
-        facebookReturns((n) => fbReturn({ id_token: ACCESS_TOKEN, state: n }));
+        const seen = enrolNode();
+        facebookReturns(fbReturn({ id_token: ACCESS_TOKEN, state: MEMBER_NONCE }));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toBeInstanceOf(SsoSignInError);
         expect(error).toMatchObject({ message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
-        expect(toFacebook(net.sent)).toEqual([]);
-        expectNoAccessOrLongLivedToken(net.sent);
+        expectNothingSentAfterTheNonce(seen);
+        expect(toFacebook(seen)).toEqual([]);
+        expectNoAccessOrLongLivedToken(seen);
     });
 
     it("reads Facebook's cancel as a quiet cancel", async () => {
-        facebookReturns((n) => cancelReturn(n));
+        const seen = enrolNode();
+        facebookReturns(cancelReturn(MEMBER_NONCE));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toBeInstanceOf(SsoSignInError);
         expect(error).toMatchObject({ reason: 'cancelled', message: 'Sign-in was cancelled.' });
-        expectNothingSentAfterTheTicket(net.sent);
+        expectNothingSentAfterTheNonce(seen);
     });
 
     it('reads any other error from Facebook as the plain message', async () => {
-        facebookReturns((n) => `https://beanpool.org/auth/facebook?error=server_error&error_description=Something+went+wrong&state=${n}#_=_`);
+        const seen = enrolNode();
+        facebookReturns(`https://beanpool.org/auth/facebook?error=server_error&error_description=Something+went+wrong&state=${MEMBER_NONCE}#_=_`);
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toMatchObject({ reason: 'provider', message: PLAIN });
-        expectNothingSentAfterTheTicket(net.sent);
+        expectNothingSentAfterTheNonce(seen);
     });
 
     it("ignores a return carrying another attempt's state: the browser closing is then a cancel", async () => {
-        facebookReturns(() => measuredReturn('an-earlier-attempts-nonce'));
+        const seen = enrolNode();
+        facebookReturns(measuredReturn('an-earlier-attempts-nonce'));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toMatchObject({ reason: 'cancelled' });
-        expectNothingSentAfterTheTicket(net.sent);
-        expectNoAccessOrLongLivedToken(net.sent);
+        expectNothingSentAfterTheNonce(seen);
+        expectNoAccessOrLongLivedToken(seen);
     });
 
     it('ignores a return with no state, like a foreign one', async () => {
-        facebookReturns((n) => fbReturn({ access_token: ACCESS_TOKEN, id_token: fbIdToken({ nonce: n }) }));
+        const seen = enrolNode();
+        facebookReturns(fbReturn({ access_token: ACCESS_TOKEN, id_token: fbIdToken({ nonce: MEMBER_NONCE }) }));
 
         const { error } = await settle(protectWithFacebook());
 
         expect(error).toMatchObject({ reason: 'cancelled' });
-        expectNothingSentAfterTheTicket(net.sent);
+        expectNothingSentAfterTheNonce(seen);
     });
 
     it("Android: takes this attempt's id_token from the App Link, past a stale one, while the Custom Tab reports a cancel", async () => {
-        let idToken = '';
+        const seen = enrolNode();
+        const idToken = fbIdToken({ nonce: MEMBER_NONCE });
         facebookReturnsByAppLink(
-            () => measuredReturn('an-earlier-attempts-nonce'),
-            (n) => measuredReturn(n, (idToken = fbIdToken({ nonce: n }))),
+            measuredReturn('an-earlier-attempts-nonce'),
+            measuredReturn(MEMBER_NONCE, idToken),
         );
 
         const { value, error } = await settle(protectWithFacebook());
 
         expect(error).toBeUndefined();
         expect(value?.enrolledSso).toEqual(['facebook']);
-        const deposit = net.sent.find((s) => s.path === DEPOSIT)?.body;
+        const deposit = seen.find((s) => s.path === DEPOSIT)?.body;
         expect(deposit.idToken).toBe(idToken);
-        expect(offVault(net.sent)).toEqual([]);
-        expectNoAccessOrLongLivedToken(net.sent, value);
+        expect(deposit.nonce).toBe(MEMBER_NONCE);
+        expect(offNode(seen)).toEqual([]);
+        expectNoAccessOrLongLivedToken(seen, value);
     });
 });
 
 // ---------------------------------------------------------------------------------------------------
-// Recovery: a recovering device's throwaway key, and the copy the vault keeps for Facebook.
+// Recovery: a recovering device's ephemeral key, releasing the piece sealed to Facebook.
 // ---------------------------------------------------------------------------------------------------
 
-async function vaultKeepsACopy() {
+async function recoveryNode() {
     const seed = new Uint8Array(32).fill(42);
     const keypair = await seedToKeypair(seed);
-    net.vault.keep('facebook', FB_SUB, keypair.publicKeyHex, await sealSeedToSso(seed, 'facebook', FB_SUB));
-    return { keypair };
+    const sealed = await sealSeedToSso(seed, 'facebook', FB_SUB);
+    const seen = installNode({
+        '/api/recovery/collect': { status: 200, body: { collectionId: 'coll-fb-1', generation: 1, threshold: 1 } },
+        '/api/recovery/collect/sso-nonce': { status: 200, body: { nonce: RECOVERY_NONCE, expiresInSeconds: 600 } },
+        [RELEASE]: { status: 200, body: { collected: 1, threshold: 1, enough: true } },
+        '/api/recovery/collect/fragments': {
+            status: 200,
+            body: {
+                fragments: [{
+                    holderType: 'sso', shareIndex: 1,
+                    payload: sealed.encryptedShare, payloadIv: sealed.shareIv, payloadTag: sealed.shareTag,
+                    kdfParams: sealed.kdfParams,
+                }],
+            },
+        },
+    });
+    return { seen, keypair };
 }
 
 function recoverWithFacebook() {
-    return startSsoRestore('facebook');
+    return recoverAccountWithSso({ callsign: 'member', anchorUrl: NODE, provider: 'facebook' });
 }
 
-const BEFORE_THE_RESTORE = [TICKET];
+const BEFORE_THE_RELEASE = ['/api/recovery/collect', '/api/recovery/collect/sso-nonce'];
 
-describe('recovering with Facebook sends the vault the id_token only', () => {
-    it("asks with the id_token and the ticket, opens the copy with the token's sub, and asks Graph nothing", async () => {
-        const { keypair } = await vaultKeepsACopy();
-        let idToken = '';
-        facebookReturns((n) => measuredReturn(n, (idToken = fbIdToken({ nonce: n }))));
+describe('recovering with Facebook releases against the id_token only', () => {
+    it("releases with the id_token and the nonce, opens the piece with the token's sub, and asks Graph nothing", async () => {
+        const { seen, keypair } = await recoveryNode();
+        const idToken = fbIdToken({ nonce: RECOVERY_NONCE });
+        facebookReturns(measuredReturn(RECOVERY_NONCE, idToken));
 
         const { value, error } = await settle(recoverWithFacebook());
 
         expect(error).toBeUndefined();
-        const restore = net.sent.find((s) => s.path === RESTORE)!;
-        expect(Object.keys(restore.body).sort()).toEqual(['idToken', 'provider', 'ticket']);
-        expect(restore.body).toMatchObject({ provider: 'facebook', idToken });
-        expect(value).toMatchObject({ provider: 'facebook', sub: FB_SUB, holdId: expect.any(String) });
-
-        // The day's wait (D2), then the copy, opened with the sub the token named, and the account saved.
-        vi.setSystemTime(Date.now() + HOLD_MS + 1000);
-        const collected = await checkSsoRestore();
-        if (collected?.status !== 'released') throw new Error('expected a release');
-        const saved = await finishSsoRestore(collected.restored, 'https://test.example', { nameOnNode: async () => 'member' });
-        expect(saved.publicKey).toBe(keypair.publicKeyHex);
-
-        expect(toFacebook(net.sent)).toEqual([]);
-        expect(offVault(net.sent)).toEqual([]);
+        expect(value?.identity.publicKey).toBe(keypair.publicKeyHex);
+        expect(seen.find((s) => s.path === RELEASE)?.body)
+            .toEqual({ collectionId: 'coll-fb-1', provider: 'facebook', idToken, nonce: RECOVERY_NONCE });
+        expect(toFacebook(seen)).toEqual([]);
+        expect(offNode(seen)).toEqual([]);
         expect(SecureStore.setItemAsync).toHaveBeenCalled();
-        expectNoAccessOrLongLivedToken(net.sent, value, saved);
+        expectNoAccessOrLongLivedToken(seen, value);
     });
 
-    it('refuses a return with only an access token, with the plain message, and asks nothing', async () => {
-        await vaultKeepsACopy();
-        facebookReturns((n) => fbReturn({ access_token: ACCESS_TOKEN, long_lived_token: LONG_LIVED_TOKEN, state: n }));
+    it('refuses a return with only an access token, with the plain message, and releases nothing', async () => {
+        const { seen } = await recoveryNode();
+        facebookReturns(fbReturn({ access_token: ACCESS_TOKEN, long_lived_token: LONG_LIVED_TOKEN, state: RECOVERY_NONCE }));
 
         const { error } = await settle(recoverWithFacebook());
 
         expect(error).toMatchObject({ reason: 'no-token', message: PLAIN });
-        expect(net.sent.map((s) => s.path)).toEqual(BEFORE_THE_RESTORE);
-        expect(toFacebook(net.sent)).toEqual([]);
+        expect(seen.map((s) => s.path)).toEqual(BEFORE_THE_RELEASE);
+        expect(toFacebook(seen)).toEqual([]);
         expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
-        expectNoAccessOrLongLivedToken(net.sent);
+        expectNoAccessOrLongLivedToken(seen);
     });
 
-    it("refuses a token carrying another attempt's nonce, and asks nothing", async () => {
-        await vaultKeepsACopy();
-        facebookReturns((n) => measuredReturn(n, fbIdToken({ nonce: MEMBER_NONCE })));
+    it("refuses a token carrying another attempt's nonce, and releases nothing", async () => {
+        const { seen } = await recoveryNode();
+        facebookReturns(measuredReturn(RECOVERY_NONCE, fbIdToken({ nonce: MEMBER_NONCE })));
 
         const { error } = await settle(recoverWithFacebook());
 
         expect(error).toMatchObject({ reason: 'provider', message: PLAIN });
-        expect(net.sent.map((s) => s.path)).toEqual(BEFORE_THE_RESTORE);
+        expect(seen.map((s) => s.path)).toEqual(BEFORE_THE_RELEASE);
         expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
     });
 
-    it("reads Facebook's cancel as a quiet cancel, and asks nothing", async () => {
-        await vaultKeepsACopy();
-        facebookReturns((n) => cancelReturn(n));
+    it("reads Facebook's cancel as a quiet cancel, and releases nothing", async () => {
+        const { seen } = await recoveryNode();
+        facebookReturns(cancelReturn(RECOVERY_NONCE));
 
         const { error } = await settle(recoverWithFacebook());
 
         expect(error).toMatchObject({ reason: 'cancelled', message: 'Sign-in was cancelled.' });
-        expect(net.sent.map((s) => s.path)).toEqual(BEFORE_THE_RESTORE);
+        expect(seen.map((s) => s.path)).toEqual(BEFORE_THE_RELEASE);
     });
 });
 
@@ -527,7 +566,7 @@ describe('recovering with Facebook sends the vault the id_token only', () => {
 describe('no sign-in path reads an access token or asks Graph', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
-    it.each(['../sso-signin.ts', '../sso-recovery.ts', '../sso-sheet-connect.ts', '../keeper-enrolment.ts', '../vault.ts'])('%s', (rel) => {
+    it.each(['../sso-signin.ts', '../sso-recovery.ts', '../sso-sheet-connect.ts', '../keeper-enrolment.ts'])('%s', (rel) => {
         const src = read(rel);
         expect(src).not.toMatch(/graph\.facebook\.com/);
         expect(src).not.toMatch(/\.get\(\s*['"](?:access_token|long_lived_token)['"]\s*\)/);

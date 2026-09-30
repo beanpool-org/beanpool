@@ -1,5 +1,26 @@
 /**
- * SSO Account Recovery Service (Apple, Google & Facebook).
+ * Getting an account back with a sign-in ("Recover with Social"). Where the copy is depends on the build
+ * (utils/vault.ts `signInCopiesAt`):
+ *
+ * ## A build with BeanPool's key vault (key vault design §1.3, V4)
+ *
+ * No name and no community address: the sign-in itself finds the copy, and no community is asked for anything until
+ * the account is back.
+ *
+ * 1. {@link startSsoRestore}: a throwaway key, a restore ticket for it (checked against the vault's pinned keys before
+ *    any sheet opens), the provider's sheet with the ticket's nonce, then `/v1/restore`. Every restore is held (D2):
+ *    24 hours, or less once a phone or computer that has the account taps "Yes, it's me". That device is told at once
+ *    and can Stop it.
+ * 2. {@link checkSsoRestore}: asks the vault, while the member waits and whenever the app comes back. Released: the
+ *    copy opens with the throwaway key and the sign-in's subject, and counts only if its seed makes the key the
+ *    vault's release names. The 12 words come back when the copy carried them and they make that key.
+ * 3. {@link finishSsoRestore}: the member chooses the community to go to, global by default (as a 12-words restore
+ *    asks for one), and the account is saved through "Replace this phone's account?" when the phone holds another.
+ *
+ * The waiting restore lives on this phone (SecureStore, this device only) until the account is saved, so a restart, a
+ * lost answer or a failed save comes back to the same hold.
+ *
+ * ## A build without one: at the member's community, exactly as before the vault ({@link recoverAccountWithSso})
  *
  * Implements §6 Step 5b recovery round-trip:
  * 1. Generates a temporary ephemeral Ed25519 keypair for the recovering device.
@@ -31,10 +52,26 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
-import { clearToRestore, saveRestoredAccount, type ConfirmReplace } from './restore-account';
-import { signInWithGoogle, signInWithApple, signInWithFacebook, SsoSignInError } from './sso-signin';
+import { clearToRestore, restoreFromVault, saveRestoredAccount, type ConfirmReplace } from './restore-account';
+import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithProvider, SsoSignInError } from './sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
+import {
+    clearPendingVaultRestore,
+    collectVaultRestore,
+    forgetVaultCopyKnowledge,
+    hasVault,
+    loadPendingVaultRestore,
+    noteVaultCopy,
+    startVaultRestore,
+    stopVaultHold,
+    type PendingVaultRestore,
+    type RestoredFromVault,
+    type VaultCollect,
+    type VaultSigner,
+} from './vault';
+
+export type { PendingVaultRestore, RestoredFromVault, VaultCollect } from './vault';
 
 export interface SsoRecoveryProgress {
     step: 'opening' | 'nonce' | 'signing-in' | 'releasing-sso' | 'releasing-hub' | 'fetching-fragments' | 'reconstructing' | 'done';
@@ -331,4 +368,80 @@ export async function recoverAccountWithSso(options: {
         identity: cleared.identity,
         provider: options.provider,
     };
+}
+
+// ─── A build with a key vault ─────────────────────────────────────────────────────────────
+
+/**
+ * Sign in with `provider` and ask the vault for this account's copy. Resolves with the hold: when it goes through.
+ * `onSignedIn` runs once the provider is done (the screen brings the app back to the front there). `signal`, aborted
+ * before the restore is sent, sends nothing. A restore this phone already started keeps its key, so the same sign-in
+ * comes back to the same hold ("Start again", a restart, a lost answer).
+ */
+export async function startSsoRestore(
+    provider: SsoProvider,
+    options: { signal?: AbortSignal; onSignedIn?: () => void | Promise<void> } = {},
+): Promise<PendingVaultRestore> {
+    return startVaultRestore(provider, (p, nonce) => signInWithProvider(p, nonce), options);
+}
+
+/** The restore this phone is waiting on, or null. Nothing is asked of the vault. */
+export async function waitingSsoRestore(): Promise<PendingVaultRestore | null> {
+    return loadPendingVaultRestore();
+}
+
+/** Ask the vault for the restore this phone is waiting on. Null when there is none waiting. */
+export async function checkSsoRestore(): Promise<VaultCollect | null> {
+    const pending = await loadPendingVaultRestore();
+    if (!pending?.holdId) return null;
+    return collectVaultRestore(pending);
+}
+
+/**
+ * Forget the restore this phone is waiting on, key and all. Not what "Start again" or "Use my 12 words instead" do: the
+ * key is what lets the same sign-in come back to its hold ({@link startSsoRestore}), and a hold whose key is gone can't
+ * be collected or replaced for up to two days (PR #1336 review finding 2). See {@link stopSsoRestoreAfterWords}.
+ */
+export async function abandonSsoRestore(): Promise<void> {
+    await clearPendingVaultRestore();
+}
+
+/**
+ * After the 12 words brought an account back on this phone:
+ * - whatever the phone knew about a vault copy for the account is forgotten, so the next app open asks the vault and
+ *   this phone sees, and can stop, any sign-in restore of it (confirmation review NEW-1);
+ * - a sign-in restore this phone left waiting is stopped at the vault with the account's own key, so the member's
+ *   devices stop asking "Is this you?" about their own phone, and the phone forgets it. A hold the vault won't stop for
+ *   this key (another account's, or one already over) stays on record: its own sign-in may still collect it, and
+ *   collecting one that is over forgets it.
+ * Never throws.
+ */
+export async function stopSsoRestoreAfterWords(identity: VaultSigner): Promise<void> {
+    if (!hasVault()) return;
+    await forgetVaultCopyKnowledge(identity.publicKey);
+    const pending = await loadPendingVaultRestore();
+    if (!pending) return;
+    // No hold on record: the answer was lost, so there is nothing this phone can name to stop.
+    if (!pending.holdId) return clearPendingVaultRestore();
+    try {
+        await stopVaultHold(identity, pending.holdId);
+        await clearPendingVaultRestore();
+    } catch (e) {
+        console.log(`[VAULT] the restore left waiting was not stopped: ${(e as Error).message}`);
+    }
+}
+
+/**
+ * Save the account the vault released onto `anchorUrl`, the community the member chose. Never over another account
+ * without the member's yes (`confirmReplace`); the name comes from that community (`nameOnNode`).
+ */
+export async function finishSsoRestore(
+    restored: RestoredFromVault,
+    anchorUrl: string,
+    options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
+): Promise<BeanPoolIdentity> {
+    const identity = await restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
+    // The vault keeps a copy for this account (it just released one): its holds are worth asking about at app open.
+    await noteVaultCopy(identity.publicKey, true);
+    return identity;
 }

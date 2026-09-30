@@ -57,7 +57,7 @@ keyholder's last start). Custodians keep their old shares until the vault has sw
 | `GET /v1/health` | nobody | `{state, release, since}`: `release` is the image the vault booted |
 | `POST /v1/ticket` | the member key, or a throwaway key to restore | a ticket; the provider nonce is `base64url(SHA-256(ticket))` |
 | `POST /v1/copies` | the member key | a deposit: `{ticket, provider, idToken, box}` |
-| `POST /v1/copies/status`, `/delete`, `/v1/push-token` | the member key | connected sign-ins and open holds; disconnect; this device's push token |
+| `POST /v1/copies/status`, `/delete`, `/v1/push-token`, `/v1/push-token/remove` | the member key | connected sign-ins and open holds; disconnect; this device's push token, added or (an account leaving the phone) taken out |
 | `POST /v1/restore`, `/v1/restore/collect` | the throwaway key | every restore is held 24 hours (D2), then released sealed to that key |
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
 | `GET /v1/report` | nobody | signed daily totals, nothing per member (below) |

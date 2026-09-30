@@ -511,12 +511,16 @@ export default function PeopleScreen() {
             setRedeemCode('');
             setRedeemNodeUrl('');
             // Joined a new community → run the profile wizard for THIS node so the member picks a name that's
-            // unique here (callsigns are per-node) and confirms their photo, then home or, if they choose, to
-            // protect their account here too: sign-in recovery is kept by each community (design §3.6).
+            // unique here (callsigns are per-node) and confirms their photo, then home or, in a build without a key
+            // vault, if they choose, to protect their account here too: there sign-in recovery is kept by each
+            // community (design §3.6). With a vault, a linked sign-in already covers this community.
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
-                { text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert('Redemption Failed', e.message);

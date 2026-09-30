@@ -55,3 +55,12 @@ export const NO_WORDS_SIGN_OUT_ALERT =
  */
 export const SSO_WORDS_NOTE =
     'A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.';
+
+/**
+ * A sign-in that protected a different BeanPool account until this deposit (the key vault answers `replaced`, and told
+ * that account's devices): said wherever a sign-in is linked, the protection sheet and the global door's Safety Backup
+ * alike (PR #1336 review finding 9).
+ */
+export function signInReplacedNote(providerName: string): string {
+    return `This ${providerName} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.`;
+}

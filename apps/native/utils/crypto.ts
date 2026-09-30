@@ -178,6 +178,11 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     };
 }
 
+/** 32 fresh random bytes: a seed for a key used once (a key vault restore's throwaway key, utils/vault.ts). */
+export function randomSeed(): Uint8Array {
+    return Crypto.getRandomBytes(32);
+}
+
 export async function seedToKeypair(seed: Uint8Array): Promise<{
     publicKeyHex: string;
     privateKeyHex: string;
@@ -235,6 +240,25 @@ export async function buildSignedHeaders(
     const signed = await requestSigningFormatFor(url) === 2
         ? await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce() })
         : await unboundRequestHeaders(method, url, bodyString, publicKeyHex, sign);
+    return { 'Content-Type': 'application/json', ...signed };
+}
+
+/**
+ * Signed-request headers for BeanPool's key vault (utils/vault.ts): always format 2, bound to the vault's own host, so
+ * a request signed for the vault is refused by every community and one signed for a community is refused by the vault
+ * (apps/vault/src/api/auth.ts). Never the old format: the vault has no old apps. Signs with the member's key, or with
+ * the throwaway key a sign-in restore makes. Throws, having signed nothing, for a URL whose authority isn't plain.
+ */
+export async function buildVaultSignedHeaders(
+    method: string,
+    url: string,
+    bodyString: string,
+    privateKeyHex: string,
+    publicKeyHex: string,
+): Promise<Record<string, string>> {
+    assertPlainNodeAddress(url);
+    const sign = memberSigner(privateKeyHex);
+    const signed = await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce() });
     return { 'Content-Type': 'application/json', ...signed };
 }
 

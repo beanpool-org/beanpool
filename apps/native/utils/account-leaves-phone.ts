@@ -15,6 +15,9 @@
  *   starts or comes back, until it is confirmed. The node never drops a key's row because another key registered the
  *   same token: any community that holds the token could then silence a member's recovery alerts (server
  *   state-engine.ts `registerPushToken`, #1184 review 4110460184).
+ * - BeanPool's key vault, in a build that has one: the push token this phone gave it for the account comes out of the
+ *   account's copies there, so its recovery notices stop too (utils/vault.ts `withdrawVaultPushToken`), within the
+ *   same time and never holding up the leave.
  * - Communities. The list the community switcher shows (`beanpool_saved_nodes`) and each one's cached copy
  *   (community-cache.ts).
  *
@@ -37,6 +40,7 @@ import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
 import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
+import { withdrawVaultPushToken } from './vault';
 
 /** How long the whole unregister may take. The requests go out together, so this is also each one's limit. */
 export const UNREGISTER_TIMEOUT_MS = 4000;
@@ -169,7 +173,13 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
     if (account.publicKey) await stopRegistering(account.publicKey);
     // And after the account's sign-in has taken back its old statements, whose communities that puts back on it.
     await leaveStatementsSettled();
-    await unregisterPushToken(account, await pushRegisteredCommunities(storage));
+    const communities = await pushRegisteredCommunities(storage);
+    // BeanPool's key vault sends the account's recovery notices to the phones in its copies: this phone comes out too,
+    // alongside the communities and within the same time (utils/vault.ts `withdrawVaultPushToken`).
+    await Promise.all([
+        unregisterPushToken(account, communities),
+        withdrawVaultPushToken(account, UNREGISTER_TIMEOUT_MS),
+    ]);
     await forgetPushRegistrations(storage);
 }
 

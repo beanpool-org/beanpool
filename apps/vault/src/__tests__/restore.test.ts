@@ -178,3 +178,42 @@ describe('the member\'s answer to a hold', () => {
         expect(reply.body.error).toContain('12 words');
     });
 });
+
+describe('an account leaving a phone takes that phone\'s push token out (PR #1336 review finding 8)', () => {
+    const OTHER = 'ExponentPushToken[member-laptop]';
+
+    it('out of every copy of the key: the next hold is pushed to the member\'s other device only', async () => {
+        const member = newMember();
+        expect((await deposit(v, g, member, 'google', SUBS.google, { pushToken: PHONE })).status).toBe(200);
+        expect((await deposit(v, g, member, 'apple', SUBS.apple, { pushToken: PHONE })).status).toBe(200);
+        expect((await signed(v, '/v1/push-token', { token: OTHER }, member.seed)).body).toEqual({ updated: 2 });
+
+        const removed = await signed(v, '/v1/push-token/remove', { token: PHONE }, member.seed);
+        expect(removed.status).toBe(200);
+        expect(removed.body).toEqual({ updated: 2 });
+        // Again: nothing left to take out, and no error.
+        expect((await signed(v, '/v1/push-token/remove', { token: PHONE }, member.seed)).body).toEqual({ updated: 0 });
+
+        await startRestore(v, 'google', SUBS.google);
+        await v.api.idle();
+        expect(v.stub.pushes.flatMap(p => p.messages).map(m => [m.to, m.data.type])).toEqual([[OTHER, 'vault-hold']]);
+    });
+
+    it('only the key\'s own copies: another key can\'t take a member\'s token out', async () => {
+        const member = newMember();
+        await deposit(v, g, member, 'google', SUBS.google, { pushToken: PHONE });
+        const stranger = newMember();
+        expect((await signed(v, '/v1/push-token/remove', { token: PHONE }, stranger.seed)).body).toEqual({ updated: 0 });
+        await startRestore(v, 'google', SUBS.google);
+        await v.api.idle();
+        expect(v.stub.pushes.flatMap(p => p.messages).map(m => m.to)).toEqual([PHONE]);
+    });
+
+    it('refuses what is not a push token', async () => {
+        const member = newMember();
+        await deposit(v, g, member, 'google', SUBS.google, { pushToken: PHONE });
+        const bad = await signed(v, '/v1/push-token/remove', { token: 'not-a-token' }, member.seed);
+        expect(bad.status).toBe(400);
+        expect(bad.body.code).toBe('bad_token');
+    });
+});

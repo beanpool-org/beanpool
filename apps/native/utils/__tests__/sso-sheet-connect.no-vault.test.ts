@@ -1,15 +1,14 @@
 /**
- * The account-protection sheet's connect (components/SsoEnrolSheet.tsx): a ticket from BeanPool's key vault, sign in,
- * then deposit at the vault (V4; before it, the member's community issued the nonce and took the deposit).
+ * The account-protection sheet's connect (components/SsoEnrolSheet.tsx): sign in, then deposit.
  *
  * Its Cancel is honest only if it is offered while a cancel is still honoured: up to the moment the provider is
  * done, and not once the deposit is going ahead. A tap that closed the sheet while the deposit went on, followed a
  * second later by the sheet reporting the account covered, is the failure these guard against.
  *
- * Nothing here contacts a node, a vault or a provider: fake-vault.ts plays the vault (and refuses any other address),
- * and Facebook's return is handed to the sign-in as its browser would. The screen cannot be rendered here (see
- * vitest.config.ts), so the last tests check that the sheet calls `connectAndDeposit` and offers no Cancel once it is
- * saving.
+ * Nothing here contacts a node or a provider: the `fetch` stub below plays the node and refuses anything addressed
+ * elsewhere, and Facebook's return is handed to the sign-in as its browser would. The screen cannot be rendered here
+ * (see vitest.config.ts), so the last tests check that the sheet calls `connectAndDeposit` and offers no Cancel once
+ * it is saving.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -42,7 +41,7 @@ vi.mock('expo-crypto', () => ({
 }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        // The member's community: nothing of the connect may go there.
+        // The member's node, which the deposit goes to.
         getItem: vi.fn(async (key: string) => (key === 'beanpool_anchor_url' ? 'https://test.example' : null)),
         setItem: vi.fn(async () => undefined),
         removeItem: vi.fn(async () => undefined),
@@ -56,25 +55,36 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import * as WebBrowser from 'expo-web-browser';
-import { ed25519 } from '@noble/curves/ed25519.js';
-import { vaultTicketNonce } from '@beanpool/core';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
-import { installNetwork, noVault, useVault, VAULT, type SentRequest } from './fake-vault';
 
-const NONCE = '/v1/ticket';
-const DEPOSIT = '/v1/copies';
+const NODE = 'https://test.example';
+const NONCE = '/api/recovery/sso-nonce';
+const DEPOSIT = '/api/recovery/shares/sso';
+const NODE_NONCE = 'n-1';
 
-// A real key pair: the vault checks the signature on every request (the community stub before it didn't).
 const MEMBER = {
-    publicKey: Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(7))).toString('hex'),
+    publicKey: 'aa'.repeat(32),
     privateKey: '07'.repeat(32),
     callsign: 'member',
     createdAt: '2026-09-25T00:00:00Z',
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-/** A Facebook id_token carrying `nonce`. Unsigned: nothing here verifies signatures, the vault does. */
+type Answer = { status: number; body?: unknown };
+interface Seen { url: string; path: string; body: any }
+
+function answer({ status, body = {} }: Answer): Response {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(),
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+    } as unknown as Response;
+}
+
+/** A Facebook id_token carrying `nonce`. Unsigned: nothing here verifies signatures, the node does. */
 function fbIdToken(nonce: string): string {
     const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
     return `${b64({ alg: 'RS256', kid: 'fb-kid-1' })}.${b64({ iss: 'https://www.facebook.com', sub: '10229876543210987', nonce })}.c2ln`;
@@ -95,25 +105,34 @@ function facebookSaysYes(onReturn: () => void = () => {}): void {
     });
 }
 
-/** Play the key vault through a ticket and a deposit. `onDeposit` runs as the vault receives the deposit. */
-function installNode(onDeposit: () => void = () => {}): SentRequest[] {
-    const net = installNetwork();
-    const handle = net.vault.handle.bind(net.vault);
-    net.vault.handle = (req) => {
-        if (req.path === DEPOSIT) onDeposit();
-        return handle(req);
-    };
-    return net.sent;
+/** Play the member's node through a sign-in and a deposit. `onDeposit` runs as the node receives the deposit. */
+function installNode(onDeposit: () => void = () => {}): Seen[] {
+    const seen: Seen[] = [];
+    globalThis.fetch = vi.fn(async (input: any, init?: any) => {
+        const url = String(input);
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        const p = url.startsWith(NODE) ? url.slice(NODE.length) : url;
+        seen.push({ url, path: p, body });
+        if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
+        if (p === NONCE) {
+            return answer({ status: 200, body: { nonce: NODE_NONCE, expiresInSeconds: 600, providers: ['facebook'] } });
+        }
+        if (p === DEPOSIT) {
+            onDeposit();
+            return answer({ status: 200, body: { generation: 1, enrolledSso: ['facebook'], threshold: 1 } });
+        }
+        return answer({ status: 404, body: { error: 'Not Found' } });
+    }) as any;
+    return seen;
 }
 
-function paths(seen: SentRequest[]): string[] {
+function paths(seen: Seen[]): string[] {
     return seen.map((s) => s.path);
 }
 
 let originalFetch: typeof fetch;
 beforeEach(() => {
     originalFetch = globalThis.fetch;
-    useVault();
     vi.useFakeTimers();
     vi.mocked(WebBrowser.openAuthSessionAsync).mockReset();
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -123,13 +142,13 @@ afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
-    noVault();
 });
 
 /** Run the sheet's connect as the sheet does, and let the sign-in's waits pass. */
 async function connect(opts: { signal: AbortSignal; onSignedIn?: () => void | Promise<void> }) {
     const outcome = connectAndDeposit({
         provider: 'facebook',
+        url: NODE,
         identity: MEMBER,
         // The phone's lock is sign-in-link-behind-lock.test.ts's: these are about the sign-in and the deposit after it.
         phoneLock: null,
@@ -156,12 +175,11 @@ describe("the protection sheet's connect", () => {
         expect(value?.error).toBeUndefined();
         expect(value?.enrolledSso).toEqual(['facebook']);
         const deposit = seen.find((s) => s.path === DEPOSIT)?.body;
-        // Was `{idToken, nonce, provider, shares}` at the community: the vault takes its ticket, the token carrying
-        // the ticket's hash, and the copy in a box sealed to it.
-        expect(Object.keys(deposit).sort()).toEqual(['box', 'idToken', 'provider', 'ticket']);
-        expect(deposit).toMatchObject({ provider: 'facebook', idToken: fbIdToken(vaultTicketNonce(deposit.ticket)) });
-        expect(seen.filter((s) => !s.url.startsWith(`${VAULT}/`))).toEqual([]);
+        expect(Object.keys(deposit).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
+        expect(deposit).toMatchObject({ provider: 'facebook', idToken: fbIdToken(NODE_NONCE), nonce: NODE_NONCE });
+        expect(seen.filter((s) => !s.url.startsWith(`${NODE}/`))).toEqual([]);
     });
+
     it("honours a cancel that lands as the provider says yes, before the deposit: nothing deposited, and it reads as a cancel", async () => {
         const seen = installNode();
         const abort = new AbortController();

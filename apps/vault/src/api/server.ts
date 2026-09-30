@@ -711,6 +711,30 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     /**
+     * An account leaves a phone (Sign Out, "Replace this phone's account"): that phone's token comes out of every copy
+     * of the key, so the account's notices (a restore waiting, a release, a replaced copy) stop reaching a phone that
+     * may now be someone else's. Signed by the account's key, which the phone still holds as it leaves. A token the
+     * copies don't hold is no error: `updated` counts the copies it came out of.
+     */
+    route('POST', '/v1/push-token/remove', 'signed', false, async ctx => {
+        const token = ctx.body.token;
+        if (!isVaultPushToken(token)) throw new HttpError(400, 'bad_token', 'That is not an Expo push token.');
+        const database = await ensureDb();
+        return withWriteLock(async () => {
+            const pkIndex = b64Bytes(await index('pk', ctx.key));
+            let updated = 0;
+            for (const row of database.copiesByPk(pkIndex)) {
+                if (!(await metaOf(row)).pushTokens.includes(token)) continue;
+                const r = await call<{ envelope: string }>('updateMeta', { row: rowRef(row), removePushToken: token });
+                database.updateEnvelope(row.id, b64Bytes(r.envelope));
+                updated++;
+            }
+            counters.counts.pushTokens++;
+            return json(200, { updated });
+        });
+    });
+
+    /**
      * A restore (D2): every one is held 24 hours, whichever provider, unless a device holding the account says "Yes,
      * it's me". The member's devices are told at once. A hold already open is answered with, not doubled: to the
      * device that opened it, its hold; to any other, that one is waiting (it can be collected only by the device

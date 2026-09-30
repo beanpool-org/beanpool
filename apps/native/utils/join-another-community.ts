@@ -17,6 +17,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
+import { signInCopiesAt } from './vault-config';
 
 export interface JoinDeps {
     closeDB(): Promise<void>;
@@ -107,22 +108,42 @@ export async function joinAnotherCommunity(
     return { url: targetUrl, name, alreadyMember };
 }
 
-/** Where the profile step lands a member who chose to protect the new community now. */
+/** Where the profile step lands a member who chose to protect the new community now (a build without a vault). */
 export const PROTECT_REDIRECT = '/(tabs)/settings?section=protection';
-/** …and one who chose later. */
+/** …and one who chose later, or who is simply in (a build with a vault: nothing to protect here). */
 export const HOME_REDIRECT = '/(tabs)';
 
+export interface JoinedNudge {
+    title: string;
+    body: string;
+    /** The answer that goes on to the profile step and home. */
+    later: string;
+    /** The answer that goes on to protect this community too: only where each community keeps its own copy. */
+    protect?: string;
+}
+
 /**
- * What a member is told once they're in a second community: what came with them, what didn't, and that sign-in
- * recovery is kept by each community, so this one needs protecting too (design §3.6's "protect this community
- * too"). Both answers go through the profile step (name and photo for this community) first.
+ * What a member is told once they're in a second community: what came with them and what didn't, then on through the
+ * profile step (name and photo for this community). Where the sign-in copy is depends on the build
+ * (utils/vault.ts `signInCopiesAt`):
+ * - A build without a vault: sign-in recovery is kept by each community, so this one needs protecting too (design
+ *   §3.6's "protect this community too"), exactly as before the vault.
+ * - A build with one: a linked sign-in's copy is kept by BeanPool's key vault, one for every community (custody K1),
+ *   so there is nothing to add here, and no community is ever asked to keep one: one answer, Next.
  */
-export function joinedNudge(name: string): { title: string; body: string; later: string; protect: string } {
+export function joinedNudge(name: string): JoinedNudge {
+    const came = 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n';
+    if (signInCopiesAt() === 'community') {
+        return {
+            title: `You're in ${name}`,
+            body: came + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
+            later: 'Later',
+            protect: 'Protect it',
+        };
+    }
     return {
         title: `You're in ${name}`,
-        body: 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n'
-            + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
-        later: 'Later',
-        protect: 'Protect it',
+        body: came + 'A sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.',
+        later: 'Next',
     };
 }

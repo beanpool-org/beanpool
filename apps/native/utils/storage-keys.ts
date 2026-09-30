@@ -83,3 +83,44 @@ export const PUSH_LEAVE_STATEMENTS_STORE_KEY = 'beanpool_push_leave_statements';
  * this-device-only as it is written, and a key it doesn't name is simply moved once more.
  */
 export const IDENTITY_THIS_DEVICE_STORE_KEY = 'beanpool_identity_this_device_only';
+
+/**
+ * A sign-in restore waiting at the key vault (utils/vault.ts): the throwaway key it was started with, the sign-in's
+ * subject that opens the copy, and the hold. SecureStore, this device only. Written before the restore goes out, so a
+ * lost answer or a restart comes back to the same hold; removed once the account is saved or the restore ends.
+ */
+export const VAULT_RESTORE_STORE_KEY = 'beanpool_vault_restore';
+
+/** When one account last said "Not now" to moving its sign-in recovery to the key vault (utils/vault.ts). */
+export function vaultMoveLaterStoreKey(publicKey: string): string {
+    return `beanpool_vault_move_later:${publicKey.toLowerCase()}`;
+}
+
+/** Moves to the key vault whose delete at the old community hasn't landed yet (utils/vault-move.ts), tried again. */
+export function vaultMoveUnfinishedStoreKey(publicKey: string): string {
+    return `beanpool_vault_move_unfinished:${publicKey.toLowerCase()}`;
+}
+
+/** The push token one account last gave the key vault (utils/vault.ts `keepVaultPushTokenCurrent`). */
+export function vaultPushTokenStoreKey(publicKey: string): string {
+    return `beanpool_vault_push_token:${publicKey.toLowerCase()}`;
+}
+
+/** Sign-ins one account asked to connect while the key vault was paused, offered again at the next app open. */
+export function vaultConnectWantedStoreKey(publicKey: string): string {
+    return `beanpool_vault_connect_wanted:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * What this phone knows about a key vault copy for one account: '1' kept (it deposited one, restored the account from
+ * one, or a status read listed one), '0' none (a status read listed none), absent unknown (a restore with the 12 words
+ * clears it). The app-open check and the Settings banner skip only '0' (utils/vault.ts `vaultCopyKnowledge`).
+ */
+export function vaultCopyKnownStoreKey(publicKey: string): string {
+    return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;
+}
+
+/** The key vault holds one account said "Yes, it's me" to on this phone (utils/vault.ts `approvedHolds`). */
+export function vaultApprovedHoldsStoreKey(publicKey: string): string {
+    return `beanpool_vault_approved_holds:${publicKey.toLowerCase()}`;
+}

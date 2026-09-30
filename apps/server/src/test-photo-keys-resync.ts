@@ -29,6 +29,15 @@
  *  6. A standby (NODE_ROLE=backup) promoted by hand: its first boot as the main server is a new shape (a phone that
  *     synced from the server it replaced holds that server's URLs), so every listing again, keyed, each opening.
  *
+ * Past 200 listings (review of b7b96309, finding 1), each on a data dir of its own, keys off then on:
+ *  7. 260 listings with a photo, the oldest of them Hank's, who goes on holiday after the phone's last sync: the phone's
+ *     next sync heals all 260, keyed, and carries Hank's listing paused. The sync after it is a delta again.
+ *  8. 150 live listings with a photo and 100 newer finished ones: the phone's next sync heals all 150 live ones. A listing
+ *     for Cara alone reaches Cara's heal and not Bob's: each reader's own audience, as a first sync.
+ *  9. 1,150 listings with a photo and 50 without, past the phone's own limit (1000): its next sync carries 1000, the
+ *     ones with a photo first; the same sync again (the phone didn't finish it) the same page; after a restart that
+ *     changes nothing, its next sync carries the rest; every one of the 1,150 healed; then a delta again.
+ *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-keys-resync.ts
  */
 
@@ -91,6 +100,40 @@ async function child(): Promise<void> {
             return ago;
         },
         records: () => ({ shape: row('photoKeysShape'), since: row('photoKeysSince'), secret: row('photoKeySecret') }),
+        // `count` listings like `template` (its photo rows too, when `photo`), by `author`, each a minute older than the one
+        // before from `newestMinutesAgo`, with `status` (and `active` 1 while it is open), and audience `direct` to
+        // `target` when given. Their authors' standing is from the same hour. Returns their ids, newest first.
+        bulk: (a: { template: string; author: string; count: number; newestMinutesAgo: number; status?: string; photo?: boolean; prefix: string; target?: string }) => {
+            const cols = (db.prepare('PRAGMA table_info(posts)').all() as { name: string }[]).map((c) => c.name);
+            const set: Record<string, string> = {
+                id: '@id', title: '@title', author_pubkey: '@author', created_at: '@at', updated_at: '@at', status: '@status', active: '@active',
+                ...(a.target ? { audience_scope: "'direct'", target_pubkey: '@target' } : {}),
+            };
+            const copy = db.prepare(`INSERT INTO posts (${cols.join(', ')}) SELECT ${cols.map((c) => set[c] ?? c).join(', ')} FROM posts WHERE id = @template`);
+            const photos = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
+                                       SELECT ?, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ?`);
+            const ids: string[] = [];
+            const status = a.status ?? 'active';
+            db.transaction(() => {
+                for (let i = 0; i < a.count; i++) {
+                    const pid = `${a.prefix}-${String(i).padStart(5, '0')}`;
+                    const at = new Date(Date.now() - (a.newestMinutesAgo + i) * MIN).toISOString();
+                    copy.run({ id: pid, title: `${a.prefix} ${i}`, author: a.author, at, status, active: status === 'active' ? 1 : 0, template: a.template, ...(a.target ? { target: a.target } : {}) });
+                    if (a.photo !== false) photos.run(pid, a.template);
+                    ids.push(pid);
+                }
+            })();
+            return ids;
+        },
+        // These listings' times set to `minutesAgo`.
+        setTime: (a: { ids: string[]; minutesAgo: number }) => {
+            const at = new Date(Date.now() - a.minutesAgo * MIN).toISOString();
+            const put = db.prepare('UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?');
+            for (const pid of a.ids) put.run(at, at, pid);
+            return at;
+        },
+        holiday: (a: { pk: string; on: boolean }) => se.setHolidayMode(a.pk, a.on).ok,
+        heals: () => db.prepare('SELECT COUNT(*) AS n FROM photo_url_heals').get(),
         // Time passing, as the node's records see it: photoKeysSince moved back by `ms`, read at the next boot.
         ageSince: (a: { ms: number }) => {
             const since = row('photoKeysSince');
@@ -138,8 +181,8 @@ const started: Node[] = [];
 let seq = 0;
 
 /** One boot of the node, on the one data dir, in its own process group so teardown kills exactly what it started. */
-function boot(env: Record<string, string | undefined>): Promise<Node> {
-    const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'node');
+function boot(env: Record<string, string | undefined>, dir = 'node'): Promise<Node> {
+    const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, dir);
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
@@ -243,7 +286,7 @@ async function main(): Promise<void> {
         const seed = new Uint8Array(crypto.randomBytes(32));
         return { pk: Buffer.from(ed25519.getPublicKey(seed)).toString('hex'), sign: core.ed25519Signer(seed), callsign };
     };
-    const owner = id('Olive'), alice = id('Alice'), bob = id('Bob'), cara = id('Cara');
+    const owner = id('Olive'), alice = id('Alice'), bob = id('Bob'), cara = id('Cara'), hank = id('Hank');
 
     /** A request as a current app signs it (format 2, for the host it connects to), sent to the node. */
     async function signed(node: Node, who: Id, method: string, reqPath: string, payload?: unknown, extra: Record<string, string> = {}): Promise<Reply> {
@@ -424,6 +467,114 @@ async function main(): Promise<void> {
                 `a phone that synced from the server it replaced reads every listing, keyed (${idsOf(next).length} of 3)`);
             const statuses = await opens(node, urls);
             assert(statuses.length === 3 && statuses.every((s) => s === 200), `and each opens (${statuses.join(', ')})`);
+            await stop(node);
+        });
+
+        // ── Past 200 listings (finding 1 of the review of b7b96309) ──
+        const rowsOf = (r: Reply): any[] => (Array.isArray(r.body) ? r.body : []);
+        const pause = () => new Promise((r) => setTimeout(r, 5));
+        /** A node on data dir `dir`, keys off: Olive, Alice, Bob, Cara and Hank, and Alice's one listing with a photo. */
+        const freshNode = async (dir: string): Promise<string> => {
+            node = await boot({ ENFORCE_READ_AUTH: 'false' }, dir);
+            await node.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [alice, bob, cara, hank].map((m) => ({ pk: m.pk, callsign: m.callsign })) });
+            await node.send('resetLimits');
+            const made = await signed(node, alice, 'POST', '/api/marketplace/posts', {
+                type: 'offer', category: 'other', title: 'Template', description: 'Template, a test offer', authorPublicKey: alice.pk,
+                lat: -28.5, lng: 153.5, photos: [TINY_PNG],
+            });
+            assert(made.status === 200 && made.body?.post?.id, `setup: Alice lists one offer with a photo (${show(made)})`);
+            await node.send('backdate');
+            return made.body?.post?.id;
+        };
+        /** How many of `ids` the answers carry with a keyed photo URL. */
+        const healedIn = (answers: Reply[], ids: string[]) => {
+            const byId = new Map<string, any>();
+            for (const r of answers) for (const p of rowsOf(r)) byId.set(p.id, p);
+            return ids.filter((pid) => keyed(byId.get(pid)?.photos?.[0])).length;
+        };
+
+        await section('7. 260 listings: the next sync heals every one, and carries what the delta would', async () => {
+            const template = await freshNode('many');
+            const more: string[] = await node.send('bulk', { template, author: alice.pk, count: 258, newestMinutesAgo: 61, prefix: 'many' });
+            // Hank's one listing, the oldest on the node.
+            const hanks: string[] = await node.send('bulk', { template, author: hank.pk, count: 1, newestMinutesAgo: 2000, prefix: 'hank' });
+            const all = [template, ...more, ...hanks];
+            assert(all.length === 260, `setup: 260 listings with a photo (${all.length})`);
+            await pull(node, bob, null); // the phone's first sync (it holds what it holds: the node can't tell)
+            const synced = Date.now();
+            await pause();
+            assert(await node.send('holiday', { pk: hank.pk, on: true }) === true, "Hank goes on holiday after the phone's last sync");
+            await stop(node);
+
+            node = await boot({}, 'many');
+            const next = await pull(node, bob, synced);
+            const healed = healedIn([next], all);
+            assert(next.status === 200 && healed === 260, `the phone's next sync heals all 260 listings, each keyed (${next.status}, ${healed} of 260)`);
+            const hankRow = rowsOf(next).find((p) => p.id === hanks[0]);
+            assert(hankRow?.status === 'paused', `Hank's listing, the oldest, arrives paused, as the delta carries it (${hankRow?.status})`);
+            const sample = [all[0], all[100], all[200], all[259]].map((pid) => rowsOf(next).find((p) => p.id === pid)?.photos?.[0]);
+            const statuses = await opens(node, sample);
+            assert(statuses.length === 4 && statuses.every((st) => st === 200), `a sample of them opens (${statuses.join(', ')})`);
+            // Ten minutes on (the phone's cursor past photoKeysSince): a delta again.
+            const later = await pull(node, bob, Date.now() + 10 * MIN);
+            assert(later.status === 200 && rowsOf(later).length === 0, `the sync after it is a delta again: nothing changed since (${rowsOf(later).length})`);
+            await stop(node);
+        });
+
+        await section('8. 150 live listings and 100 newer finished ones: every live one heals', async () => {
+            const template = await freshNode('mix');
+            await node.send('setTime', { ids: [template], minutesAgo: 400 });
+            const live: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 149, newestMinutesAgo: 200, prefix: 'live' })];
+            const done: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 61, status: 'completed', prefix: 'done' });
+            const gone: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 111, status: 'cancelled', prefix: 'gone' });
+            const forCara: string[] = await node.send('bulk', { template, author: alice.pk, count: 1, newestMinutesAgo: 70, prefix: 'cara', target: cara.pk });
+            assert(live.length === 150 && done.length + gone.length === 100, `setup: 150 live listings with a photo, 100 newer finished ones (${live.length}, ${done.length + gone.length})`);
+            await pull(node, bob, null);
+            const synced = Date.now();
+            await stop(node);
+
+            node = await boot({}, 'mix');
+            const next = await pull(node, bob, synced);
+            assert(next.status === 200 && healedIn([next], live) === 150,
+                `the phone's next sync heals all 150 live listings (${next.status}, ${healedIn([next], live)} of 150)`);
+            assert(healedIn([next], [...done, ...gone]) === 100, `and the 100 finished ones after them (${healedIn([next], [...done, ...gone])})`);
+            assert(!rowsOf(next).some((p) => p.id === forCara[0]), "a listing for Cara alone is not in Bob's: his own audience, as his first sync");
+            const caras = await pull(node, cara, synced);
+            assert(healedIn([caras], forCara) === 1 && healedIn([caras], live) === 150, `and it is in Cara's, with every live one (${healedIn([caras], forCara)}, ${healedIn([caras], live)})`);
+            await stop(node);
+        });
+
+        await section("9. past the phone's limit: the rest heals over its next syncs", async () => {
+            const template = await freshNode('big');
+            await node.send('setTime', { ids: [template], minutesAgo: 3000 });
+            // With no photo, and newer than every listing with one: a newest-first page would start with them.
+            const bare: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 61, photo: false, prefix: 'bare' });
+            const photoIds: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 1149, newestMinutesAgo: 111, prefix: 'big' })];
+            assert(photoIds.length === 1150 && bare.length === 50, `setup: 1,150 listings with a photo and 50 without (${photoIds.length}, ${bare.length})`);
+            await pull(node, bob, null);
+            const synced = Date.now();
+            await stop(node);
+
+            node = await boot({}, 'big');
+            const p1 = await pull(node, bob, synced);
+            const withPhoto = new Set(photoIds);
+            assert(p1.status === 200 && rowsOf(p1).length === 1000 && rowsOf(p1).every((p) => withPhoto.has(p.id) && keyed(p.photos?.[0])),
+                `the phone's next sync carries its limit, 1000, every one a listing with a photo, keyed (${p1.status}, ${rowsOf(p1).length})`);
+            await stop(node);
+
+            // A restart that changes nothing, and time passes: the phone's cursor is past photoKeysSince.
+            node = await boot({}, 'big');
+            const cursor2 = Date.now() + 10 * MIN;
+            const p2 = await pull(node, bob, cursor2);
+            assert(p2.status === 200 && healedIn([p1, p2], photoIds) === 1150,
+                `its next sync carries the rest: all 1,150 listings with a photo healed over the two (${p2.status}, ${healedIn([p1, p2], photoIds)} of 1150)`);
+            const again = await pull(node, bob, cursor2);
+            assert(again.status === 200 && rowsOf(again).map((p) => p.id).sort().join() === rowsOf(p2).map((p) => p.id).sort().join() && rowsOf(p2).length > 0,
+                `the same sync again (the phone didn't finish it) gets the same page (${rowsOf(again).length} of ${rowsOf(p2).length})`);
+            const p3 = await pull(node, bob, Date.now() + 20 * MIN);
+            assert(p3.status === 200 && rowsOf(p3).length === 0, `and the sync after that is a delta again (${rowsOf(p3).length})`);
+            const heals = await node.send('heals');
+            assert(heals?.n === 0, `the heal is done and its record gone (${heals?.n})`);
             await stop(node);
         });
     } finally {

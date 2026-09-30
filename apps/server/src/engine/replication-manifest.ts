@@ -432,6 +432,7 @@ export const TABLES: Record<string, TableEntry> = {
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
 };
 
 /**

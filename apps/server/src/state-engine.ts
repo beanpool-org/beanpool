@@ -226,6 +226,8 @@ import {
     type Rating,
     type FriendEntry,
     getPosts as getPostsEngine,
+    getPostsForPhotoHeal as getPostsForPhotoHealEngine,
+    type PhotoHealRead,
     withoutPollVoters,
     withoutTradeParty,
     isTradeParty,
@@ -4523,6 +4525,11 @@ export function createPost(
 
 export function getPosts(filter?: PostFilter): MarketplacePost[] {
     return getPostsEngine(db, filter);
+}
+
+/** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
+export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
+    return getPostsForPhotoHealEngine(db, filter, heal);
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {

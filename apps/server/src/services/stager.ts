@@ -174,13 +174,22 @@ export class StagedCopy {
     private readonly waiting = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
     private seq = 0;
     private aborted: string | null = null;
+    /** Why the stager is gone, once it has stopped and everything it wrote has been read. */
+    private gone: string | null = null;
     private readonly exited: Promise<number | null>;
+    /** The stager has stopped, and its output is read to the end (its last answer included). */
+    private readonly closed: Promise<number | null>;
 
     private constructor(readonly copyId: string, readonly dir: string, private readonly proc: ChildProcess, private readonly ready: Promise<void>) {
         this.exited = new Promise((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
-        void this.exited.then((code) => {
-            const why = this.aborted ?? `the stager stopped (${code})`;
-            for (const w of this.waiting.values()) w.reject(new StagedCopyRefused(`The copy could not be built: ${why}`, 'import-error'));
+        this.closed = new Promise((resolve) => proc.on('close', (code, signal) => resolve(code ?? (signal ? -1 : null))));
+        // A page written to a stager that has stopped fails (EPIPE); what the copy reports is the stop itself, below.
+        proc.stdin?.on('error', () => { /* the stager stopped */ });
+        // Every page or check waiting fails, and so does any sent after: a stager that dies between two pages (while the
+        // next is fetched) fails the copy at that page, not PAGE_TIMEOUT_MS later (review 4139589571).
+        void this.closed.then((code) => {
+            this.gone = this.aborted ?? `the stager stopped (${code})`;
+            for (const w of this.waiting.values()) w.reject(new StagedCopyRefused(`The copy could not be built: ${this.gone}`, 'import-error'));
             this.waiting.clear();
         });
     }
@@ -215,7 +224,7 @@ export class StagedCopy {
             else w.resolve(msg.result);
         });
         readline.createInterface({ input: proc.stderr! }).on('line', (line) => console.warn(`[Stager] ${line}`));
-        void staged.exited.then((code) => readyReject(new StagedCopyRefused(`The stager stopped before it was ready (${code})`, 'import-error')));
+        void staged.closed.then((code) => readyReject(new StagedCopyRefused(`The stager stopped before it was ready (${code})`, 'import-error')));
         try {
             await ready;
         } catch (e) {
@@ -231,6 +240,7 @@ export class StagedCopy {
 
     private send<T>(cmd: string, args: Record<string, unknown>, timeoutMs = PAGE_TIMEOUT_MS): Promise<T> {
         if (this.aborted) return Promise.reject(new StagedCopyRefused(`The copy was stopped: ${this.aborted}`, 'import-error'));
+        if (this.gone) return Promise.reject(new StagedCopyRefused(`The copy could not be built: ${this.gone}`, 'import-error'));
         const id = ++this.seq;
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {

@@ -35,6 +35,9 @@
  *     names it; the key gone, the next lands.
  * 13. The routine whole copy's cadence: after a copy of more than one page, daily, not every reconcile interval; after a
  *     copy of one page, every interval, imported over S's rows with no restart.
+ * 14. S's stager SIGKILLed between two pages (page 1 imported, the puller waiting to ask page 2): the pull fails at the
+ *     next page, within seconds, its staging deleted and S unchanged; the next whole copy lands. (Before: the pull waited
+ *     PAGE_TIMEOUT_MS, 15 minutes, holding every delta back.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -694,6 +697,46 @@ async function main(): Promise<void> {
                 `after a whole copy of one page, the interval asks for another, imported over S's rows and checked exact, with no restart (${JSON.stringify({ small, whole: r13.lastWhole })})`);
             await standby.send('set-env', { vars: { BACKUP_RECONCILE_EVERY_MS: '86400000' } });
             await main.send('set-env', { vars: { SYNC_PAGE_ROWS: String(PAGE_ROWS), SYNC_PAGE_BYTES: String(PAGE_BYTES) } });
+        });
+
+        await step('14. S\'s stager killed between two pages: the pull fails at the next page, within seconds, and the next copy lands', async () => {
+            await main.send('flood', { kind: 'messages', n: 600, conversationId, author: ann.pk });
+            await standby.send('pull', {}); // a delta: S is M's
+            await main.send('flood', { kind: 'messages', n: 5, conversationId, author: ann.pk }); // M moves on: the copy would change S
+            await standby.send('checkpoint');
+            const before = await snapS();
+            await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '1500' } });
+            const opened = px.opened.length;
+            const pulling = standby.send('pull', { whole: true });
+            // Page 1 served, then imported (its file gone from data/staging/pages): the puller waits out its gap before page 2.
+            await until('page 1 of the copy', () => {
+                const id = px.opened[opened];
+                return !!id && (px.copies.get(id)?.pages.size ?? 0) >= 2;
+            });
+            await sleep(400);
+            const st14 = await standby.send('staging');
+            const pid = st14.building?.pid ?? null;
+            const served = px.copies.get(px.opened[opened] ?? '')?.pages.size ?? 0;
+            require_(st14.staging && st14.pages === 0 && served === 2 && alive(pid),
+                `between two pages: pages 0 and 1 in the staging, page 2 not asked yet, the stager waiting (${JSON.stringify({ ...st14, served })})`);
+            process.kill(pid!, 'SIGKILL');
+            const killedAt = Date.now();
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const p14 = await Promise.race([pulling, new Promise<null>((r) => { timer = setTimeout(() => r(null), 30_000); })]);
+            clearTimeout(timer);
+            const secs = (Date.now() - killedAt) / 1000;
+            const st14b = await standby.send('staging');
+            const after = await snapS();
+            const r14 = await standby.send('record');
+            assert(p14 !== null && p14.ok === false && /stager stopped/.test(p14.error ?? '') && secs < 10 && !st14b.staging && st14b.building === null
+                && snapDiff(before, after).length === 0 && r14.lastOutcome === 'refused',
+                `the pull fails ${secs.toFixed(1)} s after the kill, at page 2 (${JSON.stringify(p14)}): its staging deleted, S as it was, the record "refused" `
+                + `(differences ${first(snapDiff(before, after))}; ${JSON.stringify(st14b)}; before: it waited PAGE_TIMEOUT_MS, 15 minutes)`);
+            await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
+            // S's close of the copy it left waits out its page gap; M has closed it, or idled it out, by then.
+            await sleep(COPY_IDLE_MS + 500);
+            const p14b = await wholeCopy();
+            assert(p14b.ok === true && p14b.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p14b)})`);
         });
 
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];

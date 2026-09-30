@@ -483,6 +483,7 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
             baseline: result.baseline,
             drift: result.drift,
             strandedEscrows: result.strandedEscrows,
+            badBalances: result.badBalances,
             ok: result.ok,
         };
     } catch (e: any) {

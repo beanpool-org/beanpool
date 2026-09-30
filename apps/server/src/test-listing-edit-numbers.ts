@@ -11,7 +11,7 @@
  *   2. Each field an edit can name, sent with a type or value no listing may hold, is refused and nothing is written.
  *   3. The money primitives themselves (core LedgerManager, state-engine transfer / moveToCommons / payFromCommons, the
  *      escrow doors) refuse NaN, Infinity, negative and string amounts and quantities, whatever a caller hands them.
- *   4. The conservation check flags a NULL or non-finite balance.
+ *   4. The conservation check flags a NULL, text or non-finite balance.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-listing-edit-numbers.ts
  */
@@ -19,6 +19,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
+import { runConservationCheck } from '@beanpool/engine';
 import { db } from './db/db.js';
 import { LedgerManager, setCommonsBalance } from '@beanpool/core';
 import {
@@ -231,6 +233,25 @@ async function main() {
     const s3end = ledgerState(everyone);
     check(s3end.bad === 0 && s3end.memoryFinite && Math.abs(s3end.total - s3.total) < 1e-9,
         `every balance is still a finite number and the total has not moved (${s3.total} → ${s3end.total}, ${s3end.bad} bad rows)`);
+
+    // ── 4. The conservation check ───────────────────────────────────────────────────────────────────
+    // On a table as it stood before the column was NOT NULL (an in-memory one: the live table now refuses a NULL), a
+    // balance of 0 wiped to NULL or to text moved no SUM, so the check read "ok".
+    console.log('\n— 4. the conservation check flags a NULL, text or infinite balance —');
+    const mem = new Database(':memory:');
+    mem.exec(`CREATE TABLE accounts (public_key TEXT PRIMARY KEY, balance REAL DEFAULT 0.0);
+              CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT);
+              CREATE TABLE marketplace_transactions (id TEXT PRIMARY KEY, status TEXT);
+              INSERT INTO accounts VALUES ('a', 10), ('b', -10), ('c', 0);`);
+    const clean = runConservationCheck(mem as any);
+    check(clean.ok, `a ledger summing to its baseline with every balance a number is ok (${JSON.stringify(clean)})`);
+    for (const [label, value] of [['NULL (a NaN as better-sqlite3 binds it)', null], ['text', 'abc'], ['Infinity', Infinity]] as [string, unknown][]) {
+        mem.prepare(`UPDATE accounts SET balance = ? WHERE public_key = 'c'`).run(value);
+        const r = runConservationCheck(mem as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
+        check(!r.ok && r.badBalances === 1, `a balance of ${label} fails the check and is counted (${JSON.stringify(r)})`);
+        mem.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = 'c'`).run();
+    }
+    mem.close();
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

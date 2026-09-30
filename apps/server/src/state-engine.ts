@@ -728,6 +728,7 @@ export function initStateEngine(): void {
             console.error('╠════════════════════════════════════════════════════════╣');
             console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
             console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -7787,7 +7788,7 @@ export function persistDecayAndCommons(): void {
  * run stores a baseline in node_config and later runs alert on drift. Also flags
  * escrow wallets holding funds for settled transactions (always a bug).
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return runLedgerAuditEngine();
 }
 
@@ -7825,7 +7826,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * (boot path) can decide whether to proceed. Run once after a take-over, at the
  * next boot (services/takeover.ts, promotionAuditPending).
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return promotionSanityCheckEngine();
 }
 

@@ -132,19 +132,34 @@ export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unk
 }
 
 /**
+ * The accounts rows whose balance is not a finite number: NULL (better-sqlite3 binds NaN as NULL), text, or ±Infinity
+ * (SQLite stores 9e999 as Inf). SUM skips NULLs and a text row, so none of them moves the total the check below
+ * compares — a balance of 0 wiped to NULL reads as no drift at all. Shared by the conservation check and the boot
+ * migration that makes the column NOT NULL (apps/server db.ts).
+ */
+export const BROKEN_BALANCE_SQL = `balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`;
+
+/**
  * Runs the database-level ledger conservation check.
  * Checks system-wide sum of balances against the established baseline, and
  * flags stranded escrows (escrow accounts with balance > 0.01 for settled transactions).
+ *
+ * A balance that is not a finite number (BROKEN_BALANCE_SQL) is a failure on its own (review F1, 2026-10-01): a NaN
+ * written as NULL was invisible here, because SUM skips it and NaN compares false against any tolerance. `badBalances`
+ * counts them; the baseline is never established from a ledger holding one.
  */
-export function runConservationCheck(db: Db): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runConservationCheck(db: Db): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     const sumBalances = (db.prepare(`SELECT COALESCE(SUM(balance), 0) as s FROM accounts`).get() as any).s as number;
+    const badBalances = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE ${BROKEN_BALANCE_SQL}`).get() as any).c as number;
 
     const baselineRow = db.prepare(`SELECT value FROM node_config WHERE key='ledger_audit_baseline'`).get() as any;
     let baseline = baselineRow ? Number(baselineRow.value) : NaN;
     if (!Number.isFinite(baseline)) {
         baseline = sumBalances;
-        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
-        console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
+        if (badBalances === 0 && Number.isFinite(sumBalances)) {
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
+            console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
+        }
     }
     const drift = sumBalances - baseline;
 
@@ -154,13 +169,14 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
           AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
     `).get() as any).c as number;
 
-    const ok = Math.abs(drift) < 0.01 && strandedEscrows === 0;
+    // `Math.abs(drift) < 0.01` is false for a NaN drift, so a non-finite sum fails too.
+    const ok = badBalances === 0 && Number.isFinite(sumBalances) && Math.abs(drift) < 0.01 && strandedEscrows === 0;
     if (!ok) {
-        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}`);
+        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}, balances that are not a finite number=${badBalances}`);
     } else {
         console.log(`✅ [LedgerAudit] OK — sum(balances)=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)}`);
     }
-    return { sumBalances, baseline, drift, strandedEscrows, ok };
+    return { sumBalances, baseline, drift, strandedEscrows, badBalances, ok };
 }
 
 /**

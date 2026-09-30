@@ -1817,11 +1817,15 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         currentAmount = Number(legacyP.current_amount);
     }
     try {
+        // Pledges in, less any sent back out of the escrow to a backer (a pledge made after the goal, returned at boot by
+        // engine/stranded-pledges.ts): those never reached the project. The sweep to the enterprise is neither.
         const txSum = (db.prepare(`
-            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
-              AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%'
-        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
+            SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount ELSE amount END), 0) as s FROM transactions
+            WHERE project_id = ? AND (
+                ((to_pubkey = ? OR to_pubkey = 'escrow_' || ?) AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%')
+                OR (from_pubkey = 'escrow_' || ? AND to_pubkey != ?)
+            )
+        `).get(e.public_key, e.public_key, e.public_key, e.public_key, e.public_key, e.public_key) as any)?.s || 0;
         const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
         currentAmount = Math.max(currentAmount, txSum, accBal);
     } catch { }
@@ -1935,6 +1939,9 @@ export function raiseCreatorOperatorSwitch(creatorPubkey: string, newEnterpriseP
 }
 
 export const PROJECT_ID_TAKEN_ERROR = 'A new project needs an id nothing else has';
+
+/** A pledge to a project that has reached its goal: refused before anything moves (pledgeToProject). */
+export const PROJECT_FUNDED_NO_PLEDGES_ERROR = 'This project has already reached its goal, so it is not taking more pledges. Your Beans have not moved.';
 
 /**
  * Is `id` free for a new crowdfund project? A project's id is its enterprise's key, its account's and its escrow's
@@ -2125,12 +2132,23 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
         project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
     }
-    if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
+    // Only an ACTIVE project takes a pledge. A FUNDED one used to take it too: the Beans went into its escrow, but only
+    // the pledge that reached the goal sweeps the escrow to the enterprise, and nothing else ever drains it (delete
+    // refuses a project that isn't ACTIVE), so a later pledge sat there for good (FABLE-sec-money MEDIUM 1). Before
+    // anything moves, so a refused pledge leaves every balance as it was. The ones already stranded go back to their
+    // backers at boot (engine/stranded-pledges.ts).
+    if (project.status !== 'ACTIVE') {
+        throw new Error(project.status === 'FUNDED'
+            ? PROJECT_FUNDED_NO_PLEDGES_ERROR
+            : 'This project is no longer taking pledges. Your Beans have not moved.');
+    }
     const entPub = (project as any).enterprise_pubkey || project.id;
     const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
     if (ent?.is_treasury) {
         if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
         if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");
+        // The goal also marks the enterprise's own row (below): read that too, for a projects row made above from it.
+        if (ent.status === 'funded') throw new Error(PROJECT_FUNDED_NO_PLEDGES_ERROR);
     }
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow

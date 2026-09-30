@@ -286,7 +286,7 @@ export function approvePairing(params: {
     p.approvedBy = memberPubkey;
     p.role = signer.role;
     p.notice = undefined;
-    logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser}, code ${p.shortCode})`);
+    logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser})`);
     notify(p.id);
     return { ok: true, role: signer.role };
 }

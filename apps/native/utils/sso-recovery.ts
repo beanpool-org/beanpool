@@ -57,7 +57,7 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
-import { clearToRestore, restoreFromVault, saveRestoredAccount, type ConfirmReplace } from './restore-account';
+import { clearToRestore, restoreFromVault, saveRestoredAccount, type ConfirmReplace, type NameOnNode } from './restore-account';
 import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithProvider, SsoSignInError } from './sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
@@ -485,7 +485,7 @@ export async function stopSsoRestoreAfterWords(identity: VaultSigner): Promise<v
 export async function finishSsoRestore(
     restored: RestoredFromVault,
     anchorUrl: string,
-    options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
+    options: { confirmReplace?: ConfirmReplace; nameOnNode: NameOnNode },
 ): Promise<BeanPoolIdentity> {
     const identity = await restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
     // The vault keeps a copy for this account (it just released one): its holds are worth asking about at app open.

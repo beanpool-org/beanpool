@@ -324,6 +324,16 @@ export function ReplicationAccessPanel({
                 </div>
             )}
 
+            {loading && !accessData ? (
+                <div
+                    id="rep-access-loading"
+                    className="p-8 text-center text-nature-400 text-xs font-mono flex items-center justify-center gap-2 bg-nature-950/70 rounded-xl border border-nature-800"
+                >
+                    <span className="animate-spin">🔄</span>
+                    <span>Loading replication access settings...</span>
+                </div>
+            ) : (
+                <>
             {/* Token Management Card */}
             <div className="bg-nature-950/70 p-4 sm:p-5 rounded-xl border border-nature-800 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
@@ -512,6 +522,8 @@ export function ReplicationAccessPanel({
                     Rejected attempts are pulls with a bad/missing credential. A nonzero count from an unexpected source is worth investigating. Each address is kept for 7 days, then shown as &quot;address no longer kept&quot;.
                 </p>
             </div>
+                </>
+            )}
 
             {/* Confirmation Modal: Generate Token */}
             {showGenConfirm && (

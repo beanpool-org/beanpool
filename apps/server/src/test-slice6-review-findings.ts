@@ -275,7 +275,8 @@ async function main() {
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now','+7 days'),
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(decisionId, subject.pub);
         const dSpoof = await send('GET', `/api/commons/decisions/${decisionId}?voterPubkey=${subject.pub}`, undefined);
-        assert(dSpoof.status === 200 && dSpoof.json?.voiceCredits === undefined, `unsigned ?voterPubkey= gets no voice credits (got ${JSON.stringify(dSpoof.json?.voiceCredits)})`);
+        // A Decision is a members' read on every node (2026-10-01): unsigned, it is refused whole.
+        assert(dSpoof.status === 401 && dSpoof.json?.voiceCredits === undefined, `unsigned ?voterPubkey= is refused and gets no voice credits (got ${dSpoof.status} ${JSON.stringify(dSpoof.json?.voiceCredits)})`);
         const dSigned = await send('GET', `/api/commons/decisions/${decisionId}`, undefined, subject);
         assert(dSigned.status === 200 && dSigned.json?.voiceCredits !== undefined, 'the signed voter still gets their voice credits');
 

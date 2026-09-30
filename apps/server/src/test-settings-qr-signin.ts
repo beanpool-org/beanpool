@@ -182,6 +182,8 @@ async function main() {
         const lines = auditLines();
         assert(lines.some(l => l.includes('APPROVED by @qrOwner') && l.includes(b.pairingId.slice(0, 8))), 'the audit log names who approved, and which pairing');
         assert(lines.some(l => l.includes('browser signed in as @qrOwner') && l.includes(b.pairingId.slice(0, 8))), 'the audit log records the browser signing in');
+        const allLogText = (db.prepare(`SELECT group_concat(message || ' ' || COALESCE(metadata, ''), '\n') AS t FROM system_logs`).get() as { t: string | null }).t ?? '';
+        assert(!allLogText.includes(b.shortCode), 'the audit log never holds the pairing\'s short code (FABLE-sec-errors LOW-3)');
         const logged = (db.prepare(`SELECT level FROM system_logs WHERE message LIKE '%APPROVED by @qrOwner%'`).get() as any)?.level;
         assert(logged === 'SECURITY', 'the approval is logged at SECURITY level');
 

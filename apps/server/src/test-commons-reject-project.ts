@@ -3,7 +3,8 @@
  *
  * Verifies:
  * 1. Admin rejection updates project status to 'rejected' in state engine.
- * 2. Rejected project is excluded from active projects list in GET /api/commons/projects.
+ * 2. Rejected project is excluded from active projects list in GET /api/commons/projects (a member's read: the list is
+ *    members' on every node since 2026-10-01, and refused unsigned).
  * 3. Requesting rejection without authentication returns 401.
  * 4. Requesting rejection without projectId returns 400.
  *
@@ -17,6 +18,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createProject, getAllProjects } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import crypto from 'node:crypto';
 import { db } from './db/db.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -98,9 +100,19 @@ async function main() {
     const rejectedProj = allProjects.find(p => p.id === projectId);
     assert(rejectedProj?.status === 'rejected', 'Project status in state engine is updated to "rejected"');
 
-    // 5. Test public GET /api/commons/projects filters out rejected project
-    const getRes = await fetch(`${BASE}/api/commons/projects`);
-    assert(getRes.status === 200, `GET /api/commons/projects returns 200 (got ${getRes.status})`);
+    // 5. Test GET /api/commons/projects filters out rejected project, read by a member (members only)
+    const unsigned = await fetch(`${BASE}/api/commons/projects`);
+    assert(unsigned.status === 401, `GET /api/commons/projects is refused unsigned (got ${unsigned.status})`);
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const readerPk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    seedMember(readerPk);
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`GET\n/api/commons/projects\n${ts}\n${nonce}\n`), privateKey).toString('base64');
+    const getRes = await fetch(`${BASE}/api/commons/projects`, {
+        headers: { 'X-Public-Key': readerPk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
+    });
+    assert(getRes.status === 200, `GET /api/commons/projects returns 200 to a member (got ${getRes.status})`);
     const getBody = await getRes.json() as any;
     const foundInPublic = getBody.projects?.some((p: any) => p.id === projectId);
     assert(!foundInPublic, 'Rejected project is excluded from GET /api/commons/projects');

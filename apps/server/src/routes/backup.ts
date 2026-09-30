@@ -20,7 +20,7 @@ import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../ser
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
-    clearReplicationToken, hasReplicationToken,
+    clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
     updateBackupCadence,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
@@ -1072,8 +1072,17 @@ async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-p
         return null;
     }
     if (headerPassword && !cfg.replicationTokenOnly) {
+        // The admin password that verified for a copy in the last few minutes, the same string: taken without its scrypt,
+        // as the token is (config/local-config.ts rememberCopyPassword). Any other goes through checkAdminAuth in full.
+        const password = String(headerPassword).trim();
+        if (copyPasswordRemembered(password)) return 'admin-pw';
+        const { adminHash, salt } = cfg;
         (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) return 'admin-pw';
+        if (await checkAdminAuth(ctx as any)) {
+            // Only the admin password itself, checked against its hash (not a break-glass code, nor a session).
+            if (ctx.state?.verifiedAdminPassword === password && adminHash && salt) rememberCopyPassword(password, adminHash, salt);
+            return 'admin-pw';
+        }
         // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
         recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
         return null;

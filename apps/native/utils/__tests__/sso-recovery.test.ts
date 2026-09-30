@@ -136,7 +136,8 @@ describe('SSO Recovery Service', () => {
         expect(identity.publicKey).toEqual(originalKeypair.publicKeyHex);
         expect(identity.privateKey).toEqual(originalKeypair.privateKeyHex);
         expect(identity.callsign).toBe('test-google-pilot');
-        expect(nameOnNode).toHaveBeenCalledWith(originalKeypair.publicKeyHex);
+        // With the restored key's private half, to sign the question: a community names a key only to its own signer.
+        expect(nameOnNode).toHaveBeenCalledWith(originalKeypair.publicKeyHex, originalKeypair.privateKeyHex);
         expect(mem.async.get('beanpool_anchor_url')).toBe('https://global.beanpool.org');
         expect((await loadIdentity())?.publicKey).toBe(originalKeypair.publicKeyHex);
     });

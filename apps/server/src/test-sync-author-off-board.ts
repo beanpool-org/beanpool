@@ -366,7 +366,8 @@ async function main() {
     const shift = se.createPost('need', 'work', 'Bake shift', '', 20, 'fixed', bakery)!.id;
     const doraBid = se.requestPost(shift, dora.pubKeyHex);
     let refused = false;
-    try { se.approvePostRequest(doraBid.id, bakery); } catch { refused = true; }
+    // Approved by Pat, the other keeper, as the routes sign it: a wage claim is recorded only on a keeper's say-so.
+    try { se.approvePostRequest(doraBid.id, bakery, { authSigner: pat.pubKeyHex }); } catch { refused = true; }
     const claim = db.prepare('SELECT status FROM deferred_wage_claims WHERE post_id = ?').get(shift) as any;
     assert(refused && claim?.status === 'pending', 'the bakery can\'t pay Dora yet: a deferred wage claim on its Bake shift');
 

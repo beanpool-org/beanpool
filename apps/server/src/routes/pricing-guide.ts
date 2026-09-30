@@ -49,7 +49,7 @@ function withReadersThumbnail<T extends { thumbnailUrl?: string }>(item: T, read
     `).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null; hidden_by_reports_at: string | null } | undefined;
     const onBoard = !!row && (row.audience_scope === null || row.audience_scope === 'public') && !row.hidden_by_reports_at;
     if (!onBoard || !readerMayReadListings) return { ...item, thumbnailUrl: undefined };
-    return { ...item, thumbnailUrl: postPhotoUrl(postId, orderNum, row!.updated_at) };
+    return { ...item, thumbnailUrl: postPhotoUrl(postId, orderNum, row!.updated_at, row!.audience_scope) };
 }
 
 export function createPricingGuideRoutes(deps: RouteDeps): Router {

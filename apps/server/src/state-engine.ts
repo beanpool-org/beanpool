@@ -5463,7 +5463,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const isStalled = daysInEscrow >= 7;
 
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
-        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at));
+        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at, r.post_audience_scope));
 
     // Chat context between buyer and seller
     const convRow = db.prepare(`
@@ -5550,6 +5550,7 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
                p.price_type AS post_price_type,
                p.credits AS post_credits,
                p.author_pubkey AS post_author_pubkey,
+               p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
                buyer.avatar_url AS buyer_avatar_url,
                seller.callsign AS seller_callsign,
@@ -5596,6 +5597,7 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                p.price_type AS post_price_type,
                p.credits AS post_credits,
                p.author_pubkey AS post_author_pubkey,
+               p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
                buyer.avatar_url AS buyer_avatar_url,
                seller.callsign AS seller_callsign,

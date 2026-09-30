@@ -136,9 +136,9 @@ const DEFAULT_DELTA_PAGES = 4;
 /**
  * The least time between two requests of one copy, so a copy of any size never trips the main server's limit on
  * administrative requests (300 a minute from one address, https-server.ts): at most 240 a minute, with room for the
- * standby's other requests. BACKUP_PAGE_GAP_MS.
+ * standby's other requests. BACKUP_PAGE_GAP_MS. test-standby-paged-copies-pacing.ts scales it with the limiter's minute.
  */
-const DEFAULT_PAGE_GAP_MS = 250;
+export const DEFAULT_PAGE_GAP_MS = 250;
 /** A page whose text is bigger than this is refused unread (a page is 8 MB of rows, and never splits one). */
 const DEFAULT_PAGE_MAX_BYTES = 64 * 1024 * 1024;
 function envMs(name: string, fallback: number, min = 1): number {

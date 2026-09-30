@@ -394,6 +394,7 @@ run_federation_suites() {
       test-tombstone-retention
       test-sync-copy-pages
       test-standby-paged-copies
+      test-standby-paged-copies-pacing
       test-recovery-tombstones
       test-github-sign-in-removed
       test-unlock-cancel

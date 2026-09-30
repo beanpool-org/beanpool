@@ -192,6 +192,8 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                             disabled={!count || sending}
                             style={[styles.inviteBtn, (!count || sending) && styles.inviteBtnDisabled]}
                             accessibilityRole="button"
+                            accessibilityLabel={sending ? 'Sending invitations...' : count ? `Invite ${count} ${count === 1 ? 'person' : 'people'}` : 'Pick people to invite'}
+                            accessibilityHint={count && !sending ? `Sends group invitations to ${count} ${count === 1 ? 'selected person' : 'selected people'}` : undefined}
                             accessibilityState={{ disabled: !count || sending, busy: sending }}
                         >
                             {sending

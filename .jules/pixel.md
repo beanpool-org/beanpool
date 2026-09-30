@@ -154,3 +154,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-10-24 - Add dynamic accessibilityLabel to computer sign-in submit button
 **Learning:** Action buttons in modal flows whose text child is replaced by an `ActivityIndicator` during asynchronous actions leave screen readers without accessible text during loading states unless an explicit dynamic `accessibilityLabel` is assigned.
 **Action:** Always provide dynamic `accessibilityLabel` (`busy ? "Signing computer in..." : "Sign in"`) on action buttons that render `ActivityIndicator` in place of text when busy.
+
+## 2026-11-02 - Add dynamic accessibilityLabel and hint to InvitePeopleSheet submit button
+**Learning:** In invite sheets, action buttons whose text is replaced by an `ActivityIndicator` while sending leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided.
+**Action:** Provide dynamic `accessibilityLabel` and `accessibilityHint` on invite submit buttons rendering `ActivityIndicator` when busy.

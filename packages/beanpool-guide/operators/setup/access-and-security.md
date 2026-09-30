@@ -31,15 +31,20 @@ Know its limits:
 - Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.
 - Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.
 - Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.
+- Wrong codes at the app's Manage button, or when approving a computer's sign-in from the phone, are counted too, for that person's key and for the internet address they come from. After 5 wrong codes, each further try waits: 2 seconds, then 4, 8 and so on, up to an hour. A right code clears it. If this happens and it wasn't you, someone else has that person's key: remove their role, or sign them out everywhere, and add their new key.
 - There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.
 - The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.
 - If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first.
 
 ## Break-glass codes
 
-A break-glass code belongs to one owner. It starts with **bg-** and works in place of the admin password, recorded against that owner's name. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners.
+A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners, when their key is added.
 
-If you do hold one, keep it offline, like a spare key. Anyone who has it can do what the password can. If two-factor sign-in is on, it still asks for the code.
+- Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.
+- The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
+- If two-factor sign-in is on, it still asks for the code.
+
+Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.
 
 ## Factory reset
 

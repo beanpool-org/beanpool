@@ -55,7 +55,9 @@ This one slows down anyone guessing the admin password, without ever letting the
 - Someone on your own /24 or /48 can take the kept check away with 3 wrong passwords. Then, and after three or more mistypes of your own, nothing is kept for you. The way out is another network, or signing in from the app.
 - Many wrong passwords (20 in a day) from one neighbourhood of addresses take away the "straight away" promise for the rest of that neighbourhood.
 
-Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app.
+Signing in from the app's Manage button never goes through the brake. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app. A break-glass code is checked only when adding an admin key, even from an address that is waiting (at most once every 10 seconds from one address); anywhere else it counts as a wrong password.
+
+The two-factor code typed at the Manage button, or when approving a computer's sign-in from the phone, has a brake of its own. It counts wrong codes for each person's key and for each internet address: 5 are free, then each further try waits 2 seconds, then 4, 8 and so on, up to an hour. A right code clears both, and so does a day with no wrong code. Wrong passwords never slow this down, and wrong codes here never slow down the password.
 
 If it keeps happening, someone is guessing your password. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes the next day. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
 

@@ -11,6 +11,8 @@ Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It work
 
 Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.
 
+Joining with a code is signed by the new member's own key, from the app or the web app they join in. So someone holding a code can only join as themselves: they can't use it to add a key that belongs to somebody else.
+
 ## Invites from Settings
 
 Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.

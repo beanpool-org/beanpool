@@ -56,20 +56,26 @@
  *     filtered delta, may come with a cursor past photoKeysSince while that phone is still inside it, and deleting the
  *     row then sent the phone the whole heal again (review of fe4c27ce, finding 4);
  *   - an older cursor than the row's, still inside the overlap (another device of the key moved it): the first page.
- * - A whole sync read from a member's key (`sync=true` with no cursor and no filter: a phone's first, its pull after a
- *   take-over or into an empty cache) starts that key's heal again from the first page (restartPhotoHealFor, from the
- *   route: not in photoHealFor, since the phone's read of one listing by id has no cursor either). Such a pull carries
- *   the 200 listings updated last, and the phone keeps what else it held, with its old URLs.
- * - The place is kept per key, not per phone or per read. One key on two phones: each phone's first sync after the
- *   change gets the first page (above); the pages after it go to whichever phone syncs next, so each gets some of them.
- *   A listing a phone missed reaches it when it changes, when it is opened (apps/native utils/db.ts refreshCachedPost),
- *   or at the next shape change. And any read with a cursor counts, whatever its filters: a filtered delta (`author=`)
- *   from that key would take a page nobody shows. No client sends a cursor with a filter today, so that is latent. A read
- *   with no key, or a signer who is no member, keeps no place: each of its syncs from before photoKeysSince gets the
- *   first page, and each after it a delta, as before. Rows from an earlier shape, and rows with no page sent in 30 days
- *   (a finished heal's included), are dropped at the next boot (noteUrlShape), not as they age. Until then a whole sync
- *   read from the key (above) starts its heal again, finished or not: a new install on the key within those 30 days gets
- *   every listing over its next syncs. That is waste, and bounded; a heal never started again is a lost photo.
+ * - A whole sync read from a member's key (`sync=true` with no cursor and no filter) within HEAL_RESTART_WINDOW_MS
+ *   (10 minutes) of the key's last heal page starts that key's heal again from the first page (restartPhotoHealFor,
+ *   from the route: not in photoHealFor, since the phone's read of one listing by id has no cursor either). That is a
+ *   take-over's whole pull, right after the pull the phone threw away: it carries the 200 listings updated last, and
+ *   the phone keeps what else it held, with its old URLs. A later whole pull (a new install on the key, an emptied
+ *   cache) holds no old URL and leaves the row as it is.
+ * - The place is kept per key, not per phone or per read. One key on two phones: the pages go to whichever phone syncs
+ *   next, so each gets some of them. Each phone's first sync after the change gets the first page only when that
+ *   phone's clock is not ahead of the node's by more than the time since its last sync, and not after a take-over. At
+ *   those edges a phone can miss pages, the first one included: a phone whose clock is ahead counts as having synced
+ *   since the change (photoHealFor), and after a take-over the restart gives the first page to whichever phone syncs
+ *   next. The node can't tell two devices of one key apart. A listing a phone missed reaches it when its thumbnail
+ *   fails to load in a build with the Market's photo net (apps/native utils/photo-refresh.ts), when it is opened (every
+ *   build: utils/db.ts refreshCachedPost), when it changes, or at the next shape change. And any read with a cursor
+ *   counts, whatever its filters: a filtered delta (`author=`) from that key would take a page nobody shows. No client
+ *   sends a cursor with a filter today, so that is latent. A read with no key, or a signer who is no member, keeps no
+ *   place: each of its syncs from before photoKeysSince gets the first page, and each after it a delta, as before.
+ * - Rows from an earlier shape are dropped at the next boot, and so is a row whose last page is 30 days old or more
+ *   (noteUrlShape), a finished heal's included: not as they age, so a row lasts until a boot at least 30 days after its
+ *   last page.
  */
 import crypto from 'node:crypto';
 import { configurePhotoKeys, photoVersionOf } from '@beanpool/engine';

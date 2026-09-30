@@ -25,7 +25,7 @@ import Router from '@koa/router';
 // The purchase route still does it dynamically. Left alone here rather than swept up: it is a different file
 // with no coverage in this PR, and a one-line drive-by in the path that debits members is not free.
 import { peerIdFromString } from '@libp2p/peer-id';
-import { getMember, getActingMember, getNodeConfig, canOperateTreasury } from '../state-engine.js';
+import { getMember, getActingMember, canOperateTreasury, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import {
     getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -40,16 +40,6 @@ import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfC
 import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
 import { checkMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
-
-/** This node's own public address, or null. Same helper as the purchase route, same reasoning. */
-function ourPublicUrl(): string | null {
-    try {
-        const hostname = ((getNodeConfig() as any)?.publicAddress?.hostname ?? '').trim();
-        return hostname ? `https://${hostname}` : null;
-    } catch {
-        return null;
-    }
-}
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_COMMISSION_ERROR = 'Only a member of this community can commission across a boundary';
@@ -299,7 +289,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
                 // partner commissions their work.
                 buyerPublicKey: link.treasuryPubkey,
                 buyerCallsign: link.name,
-                buyerHomeNode: ourPublicUrl(),
+                // This node's own public address, or null: the same as the purchase route's.
+                buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey: seller,
                 postId,
                 amount: funding.amount,

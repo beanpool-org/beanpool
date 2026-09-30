@@ -57,6 +57,20 @@ const FAILURE_LABELS: Record<string, string> = {
     key_invalidated: 'Key replaced by a re-key',
 };
 
+/** Why the open door turned someone away (server: routes/open-join.ts, the `open_join_failed` variant). */
+const OPEN_DOOR_REFUSALS: Record<string, string> = {
+    already_member: 'Already a member here',
+    already_joined: 'That sign-in already joined here',
+    removed: 'That sign-in belongs to someone this community removed',
+    key_invalidated: 'Key replaced by a re-key',
+    rate_limited: 'Too many new accounts from one network',
+    sign_in: 'Sign-in not accepted',
+    sign_in_unavailable: "Couldn't reach the sign-in provider",
+    join_failed: "The join couldn't be saved",
+};
+
+const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };
+
 function sum(rows: FunnelRow[]): number {
     return rows.reduce((n, r) => n + r.count, 0);
 }
@@ -69,6 +83,8 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
     const active = activeNode ?? nodes.find(p => p.id === activeProfileId) ?? nodes[0];
     const [days, setDays] = useState<number>(30);
     const [rows, setRows] = useState<FunnelRow[] | null>(null);
+    /** Whether the open door takes joins now; undefined from a node too old to say. */
+    const [openDoor, setOpenDoor] = useState<boolean | undefined>(undefined);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -81,8 +97,13 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
         // leaves the previous node's numbers on screen under an error banner — and worse,
         // shows one community's figures under another community's name.
         setRows(null);
+        setOpenDoor(undefined);
         fetchOnboardingFunnel(active.url, active.adminPassword, days, active ? getTfaSessionToken(active.id) : undefined)
-            .then(res => { if (!cancelled) setRows(res.rows); })
+            .then(res => {
+                if (cancelled) return;
+                setRows(res.rows);
+                setOpenDoor(typeof res.openDoor === 'boolean' ? res.openDoor : undefined);
+            })
             .catch(e => { if (!cancelled) setError(e.message || 'Could not reach this node'); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
@@ -133,7 +154,25 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                 return acc;
             }, {});
 
-        return { cohort, joined, inApp, countedSince, staleReports, attempts, reentry, failures };
+        // ---- the open door ----
+        // Attempts are counted as they happen; the people who came in are a subset of "Joined"
+        // (the node works them out from the same members, by the day they joined).
+        const byVariant = (event: string) => rows
+            .filter(r => r.event === event)
+            .reduce<Record<string, number>>((acc, r) => {
+                const key = r.variant || 'unknown';
+                acc[key] = (acc[key] || 0) + r.count;
+                return acc;
+            }, {});
+        const doorJoinedBy = byVariant('cohort_open_door');
+        const door = {
+            attempts: tally('open_join_attempt'),
+            joined: tally('cohort_open_door'),
+            joinedBy: Object.entries(doorJoinedBy).sort((a, b) => b[1] - a[1]),
+            refusals: Object.entries(byVariant('open_join_failed')).sort((a, b) => b[1] - a[1]),
+        };
+
+        return { cohort, joined, inApp, countedSince, staleReports, attempts, reentry, failures, door };
     }, [rows]);
 
     if (!active) {
@@ -341,6 +380,60 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                                                     <span className="font-mono font-bold text-amber-300">{n}</span>
                                                 </li>
                                             ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section aria-labelledby="funnel-open-door-heading" className="space-y-2">
+                        <h4 id="funnel-open-door-heading" className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 m-0">
+                            Open door
+                        </h4>
+                        <p className="text-[11px] text-nature-500 m-0">
+                            The open door lets someone join by signing in with an account they already have, such as
+                            Google or Apple, instead of using an invite code.
+                            {openDoor === true && <> It is <strong className="text-nature-300">open</strong> here.</>}
+                            {openDoor === false && <> It is <strong className="text-nature-300">shut</strong> here, so people join only with an invite.</>}
+                        </p>
+                        {view.door.attempts === 0 && view.door.joined === 0 && view.door.refusals.length === 0 && (
+                            <p className="text-[11px] text-amber-400/90 m-0">Nobody used the open door in this window.</p>
+                        )}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700 space-y-3">
+                                <div className="flex justify-between items-baseline gap-3">
+                                    <span className="text-sm font-bold text-white min-w-0 break-words">Tried to join this way</span>
+                                    <span className="text-lg font-black text-white font-mono leading-none shrink-0">{view.door.attempts}</span>
+                                </div>
+                                <div className="flex justify-between items-baseline gap-3">
+                                    <span className="text-sm font-bold text-white min-w-0 break-words">Joined this way</span>
+                                    <span className="text-lg font-black text-white font-mono leading-none shrink-0">{view.door.joined}</span>
+                                </div>
+                                {view.door.joinedBy.length > 0 && (
+                                    <p className="text-[10px] text-nature-400 m-0">
+                                        {view.door.joinedBy.map(([provider, n]) => `${PROVIDER_NAMES[provider] || provider} ${n}`).join(' · ')}
+                                    </p>
+                                )}
+                                <p className="text-[10px] text-nature-500 m-0">
+                                    Each try is counted, so one person trying twice is two. Everyone who joined this
+                                    way is also counted in Joined, at the top.
+                                </p>
+                            </div>
+
+                            <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
+                                    Why people were turned away
+                                </span>
+                                {view.door.refusals.length === 0 ? (
+                                    <p className="text-xs text-nature-500 italic m-0">Nobody was turned away in this window.</p>
+                                ) : (
+                                    <ul className="m-0 p-0 list-none space-y-1.5">
+                                        {view.door.refusals.map(([reason, n]) => (
+                                            <li key={reason} className="flex justify-between gap-3 text-xs">
+                                                <span className="text-nature-300 min-w-0 break-words">{OPEN_DOOR_REFUSALS[reason] || reason}</span>
+                                                <span className="font-mono font-bold text-amber-300 shrink-0">{n}</span>
+                                            </li>
+                                        ))}
                                     </ul>
                                 )}
                             </div>

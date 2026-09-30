@@ -52,6 +52,8 @@ export type DerivedEvent =
     | 'member_created'      // step 1 done — a local member row exists. The cohort's base.
     | 'cohort_photo'        // ...and that same member has a servable photo TODAY
     | 'cohort_posted'       // ...and that same member has posted locally at least once, ever
+    | 'cohort_open_door'    // ...and that same member came in through the open door (engine/open-join.ts)
+                            // — variant is the sign-in provider they joined with
     | 'activated';          // first post authored on this node, whenever they joined
 
 export interface FunnelRow {
@@ -142,18 +144,27 @@ interface CohortMemberRow {
     day: string;
     avatarHead: string | null;
     posted: number;
+    /** `invited_by` when it names the open door (`open:<provider>`, engine/open-join.ts openJoinInvitedBy), else null. */
+    openDoor: string | null;
+}
+
+/** A provider name as the open door writes it, else 'unknown': the variant is shown on the operator's screen. */
+function openDoorProvider(invitedBy: string): string {
+    const provider = invitedBy.slice('open:'.length);
+    return /^[a-z][a-z0-9_-]{0,31}$/.test(provider) ? provider : 'unknown';
 }
 
 /**
  * THE COHORT: the people who joined here inside the window, and how far those same people
  * have since got.
  *
- * All three numbers come from ONE pass over one predicate, which is the whole point. The
+ * Every number comes from ONE pass over one predicate, which is the whole point. The
  * screen's percentages are shares of "Joined", so if the rows could disagree about who is
  * in the group the percentages would be meaningless — and disagreeing is exactly what the
  * old screen did, counting joins over one span and photos over another and putting them in
- * the same column. Here "has a photo" and "has posted" are literally filtered subsets of
- * the members counted as "joined", row by row, so they cannot exceed it.
+ * the same column. Here "has a photo", "has posted" and "came in through the open door" are
+ * literally filtered subsets of the members counted as "joined", row by row, so they cannot
+ * exceed it.
  *
  * Both follow-up questions are asked about NOW, not about the window: "does this person
  * have a photo today", "has this person ever posted". That is what an operator is actually
@@ -161,8 +172,9 @@ interface CohortMemberRow {
  * and it is why someone who joined before the window is absent even if they posted inside
  * it. A cohort is a group of people, not a span of activity.
  *
- * Aggregate out, per M2: the rows read here carry a join day, an avatar prefix and a
- * yes/no, and are reduced to counts inside this function. No public key is selected.
+ * Aggregate out, per M2: the rows read here carry a join day, an avatar prefix, a yes/no and
+ * the open door's provider, and are reduced to counts inside this function. No public key is
+ * selected.
  */
 function derivedCohort(since: string): FunnelRow[] {
     const rows = db.prepare(`
@@ -171,20 +183,25 @@ function derivedCohort(since: string): FunnelRow[] {
                EXISTS (
                    SELECT 1 FROM posts p
                    WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL
-               ) AS posted
+               ) AS posted,
+               CASE WHEN substr(COALESCE(m.invited_by, ''), 1, 5) = 'open:' THEN m.invited_by END AS openDoor
         FROM members m
         WHERE ${JOINED_HERE}
           AND m.joined_at >= ?
     `).all(since) as CohortMemberRow[];
 
-    const perDay = new Map<string, { joined: number; photo: number; posted: number }>();
+    const perDay = new Map<string, { joined: number; photo: number; posted: number; openDoor: Map<string, number> }>();
     for (const r of rows) {
         const day = r.day;
         if (!day) continue;
-        const bucket = perDay.get(day) ?? { joined: 0, photo: 0, posted: 0 };
+        const bucket = perDay.get(day) ?? { joined: 0, photo: 0, posted: 0, openDoor: new Map<string, number>() };
         bucket.joined++;
         if (isServableAvatarValue(r.avatarHead)) bucket.photo++;
         if (r.posted) bucket.posted++;
+        if (r.openDoor) {
+            const provider = openDoorProvider(r.openDoor);
+            bucket.openDoor.set(provider, (bucket.openDoor.get(provider) ?? 0) + 1);
+        }
         perDay.set(day, bucket);
     }
 
@@ -195,6 +212,7 @@ function derivedCohort(since: string): FunnelRow[] {
         // only what happened, and `getFunnel`'s callers already read a missing row as none.
         if (b.photo > 0) out.push({ day, event: 'cohort_photo', variant: '', count: b.photo });
         if (b.posted > 0) out.push({ day, event: 'cohort_posted', variant: '', count: b.posted });
+        for (const [provider, count] of b.openDoor) out.push({ day, event: 'cohort_open_door', variant: provider, count });
     }
     return out;
 }

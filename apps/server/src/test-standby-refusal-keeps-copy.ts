@@ -251,10 +251,25 @@ async function child(): Promise<void> {
             writeTombstone('messages', a.id);
             return true;
         },
-        /** The whole copies this main server served (a snapshot pull that wasn't a 304), since `since`. */
+        /**
+         * Every pull this main server records from now on, kept here uncapped. The access log it writes
+         * (state-engine.ts recordReplicationAccess) keeps its last 20 pulls, and a flood's pulls come faster on a
+         * fast machine: a whole copy served before 20 more pulls fell off it, and read as never served. A temp trigger
+         * on this process's own connection copies each new entry as the log's row is written: the same entries the log
+         * holds, none lost. Temp: in no table of the database, so in no copy M serves.
+         */
+        'watch-pulls': async () => {
+            const { db } = await import('./db/db.js');
+            db.exec(`CREATE TEMP TABLE IF NOT EXISTS pulls_seen (at INTEGER NOT NULL, auth TEXT, reason TEXT)`);
+            db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS pulls_seen_log AFTER INSERT ON main.node_config WHEN NEW.key = 'replication_access'
+                BEGIN INSERT INTO pulls_seen (at, auth, reason) VALUES (json_extract(NEW.value, '$.recent[0].at'),
+                    json_extract(NEW.value, '$.recent[0].auth'), json_extract(NEW.value, '$.recent[0].reason')); END`);
+            return true;
+        },
+        /** The whole copies this main server served (a snapshot pull that wasn't a 304), since `since`, as 'watch-pulls' saw them. */
         'whole-copies': async (a: { since: number }) => {
-            const { getReplicationAccessLog } = await import('./state-engine.js');
-            return (getReplicationAccessLog().recent || []).filter((e: any) => e.at >= a.since && e.auth !== 'rejected' && e.reason === undefined).length;
+            const { db } = await import('./db/db.js');
+            return (db.prepare(`SELECT COUNT(*) AS n FROM temp.pulls_seen WHERE at >= ? AND auth <> 'rejected' AND reason IS NULL`).get(a.since) as { n: number }).n;
         },
         /** The whole-copy check on M's current whole copy, fetched with the replication token and not imported. */
         'check-copy': async () => {
@@ -391,6 +406,7 @@ async function main(): Promise<void> {
         const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
+        await main.send('watch-pulls');
         const m = `https://localhost:${await main.send('serve')}`;
         const As = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         const join = async (who: Id) => {

@@ -41,6 +41,7 @@ import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
+import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
@@ -919,6 +920,18 @@ const getOnboardingFunnelHandler = async (ctx: any) => {
 
 router.get('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
+
+/**
+ * The web app's visits a day (engine/web-visits.ts), for the manager's Home: the last `days` days (30 unless asked, at
+ * most the 400 kept), oldest first and ending today (UTC), a day with none as zeros. Counts only: the table holds nothing
+ * else. Read-only, owners and admins (a moderator's session reaches reports only, admin-auth.ts).
+ */
+router.get('/api/local/admin/web-visits', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const days = clampVisitDays(ctx.query?.days ?? 30);
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { days, retentionDays: VISIT_RETENTION_DAYS, series: getWebVisits(days) };
+});
 
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {

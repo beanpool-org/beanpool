@@ -2,8 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, PUBLISH_OPERATORS_WEBSITE, expectedOutputs } from '../scripts/build.mjs';
+import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, PUBLISH_OPERATORS_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
 import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA } from '../src/guide.mjs';
+
+// Two copies of each collection are tested. What a page SAYS is pinned on the pages themselves (sourceGuides), so the
+// PR that changes the words changes the pin with them. The website and the bundles are tested on the PUBLISHED copy
+// (expectedOutputs), which the director publishes after merge; a pin on its words would break at publish instead.
 
 test('every generated file (app bundle and website) is exactly what the source produces', () => {
     assert.deepEqual(check(), []);
@@ -35,18 +39,19 @@ test('the website has a page for every guide, rendered from the same blocks the 
 });
 
 test('the app sheet finds the guides it links to', () => {
-    const { guide } = expectedOutputs();
+    const { guide } = sourceGuides();
     const about = guide.sections.find(s => s.id === 'about');
     assert.deepEqual(about.slugs, ['how-it-works', 'rules', 'faq', 'whats-new']);
 });
 
 test('the manual: every section has pages, every page has Related pages that exist, the website lists them all', () => {
+    const pages = sourceGuides().guide;
+    assert.ok(pages.sections.length >= 9, 'about + the eight manual sections');
+    for (const want of ['getting-started', 'market', 'map', 'talk', 'pulse', 'commons', 'ledger', 'settings']) {
+        assert.ok(pages.sections.some(s => s.id === want), `section ${want}`);
+    }
     const { guide } = expectedOutputs();
     const slugs = new Set(guide.guides.map(g => g.slug));
-    assert.ok(guide.sections.length >= 9, 'about + the eight manual sections');
-    for (const want of ['getting-started', 'market', 'map', 'talk', 'pulse', 'commons', 'ledger', 'settings']) {
-        assert.ok(guide.sections.some(s => s.id === want), `section ${want}`);
-    }
     const index = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
     for (const s of guide.sections) assert.ok(index.includes(`href="#${s.id}"`), `table of contents links ${s.id}`);
     for (const g of guide.guides) {
@@ -119,7 +124,7 @@ test('website rendering escapes text', () => {
     assert.ok(html.includes('<h1>A &amp; B</h1>'));
 });
 
-test('a text change changes the hash (which forces a version bump)', () => {
+test('a text change changes the hash (which publishing turns into a higher version)', () => {
     const a = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'x' }] }];
     const b = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'y' }] }];
     assert.notEqual(contentHash(a), contentHash(b));
@@ -152,21 +157,21 @@ test("the operator manual: Settings' bundled operators.json is well formed", () 
 });
 
 test("the operator manual is a separate collection: the members' guide carries none of its pages", () => {
-    const { guide, manual } = expectedOutputs();
+    const { guide, manual } = sourceGuides();
     const memberSlugs = new Set(guide.guides.map(g => g.slug));
     // Distinct slugs, so a page name never means two different pages in search results or links.
     for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
 });
 
 test('the operator manual covers what an operator needs, and the (unpublished) website renderer lists and renders every page', () => {
-    const { manual } = expectedOutputs();
-    const slugs = new Set(manual.guides.map(g => g.slug));
+    const slugs = new Set(sourceGuides().manual.guides.map(g => g.slug));
     for (const want of ['first-time-setup', 'signing-in', 'roles', 'members-and-invites', 'reports-and-takedowns', 'disputes',
         'decisions-and-emergencies', 'enterprises-and-keepers', 'pulse-and-announcements', 'backups-and-replicas',
         'updates-and-health', 'rate-limits', 'what-the-server-sees', 'feedback', 'troubleshooting']) {
         assert.ok(slugs.has(want), `operator page ${want}`);
     }
     // Rendered in memory: the renderer is kept working for the day the website copy is switched on.
+    const { manual } = expectedOutputs();
     const site = renderOperatorsWebsite(manual);
     assert.equal(site['operators.json'], fs.readFileSync(OPERATORS_JSON, 'utf8'), "the website's operators.json would be Settings' bytes");
     const index = site['index.html'];
@@ -211,7 +216,7 @@ test('operator words: beans not Ʀ, badges gate nothing', () => {
 });
 
 test('the operator manual has no concept-guide section; the members\' guide still must', () => {
-    const { manual } = expectedOutputs();
+    const { manual } = sourceGuides();
     assert.ok(!manual.sections.some(s => s.id === 'about'));
     assert.throws(() => loadGuide(OPERATORS_DIR), /needs the "about" section/);
 });
@@ -270,7 +275,6 @@ test('validation: referenced image must exist on disk and linked href must be a 
     const tmp = fs.mkdtempSync(path.join(path.dirname(OPERATORS_DIR), 'tmp-guide-test-'));
     try {
         fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify({
-            version: 1,
             sections: [{ id: 'sec', title: 'Sec', summary: 'Summary', pages: ['p1', 'p2'] }]
         }));
         fs.mkdirSync(path.join(tmp, 'sec'));
@@ -296,5 +300,38 @@ test('website has no operator images and no operator content', () => {
     const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true }).map(String);
     assert.ok(!webFiles.some(f => f.includes('operators')), 'no operators in website folder');
     assert.ok(!webFiles.some(f => f.endsWith('.webp')), 'no operator webp images in website folder');
+});
+
+// ─── Versions: set when the director publishes, never in a manifest ───────────
+
+test('a manifest that holds "version" is refused: a version is set when the collection is published', () => {
+    const tmp = fs.mkdtempSync(path.join(path.dirname(OPERATORS_DIR), 'tmp-guide-test-'));
+    try {
+        fs.cpSync(OPERATORS_DIR, tmp, { recursive: true });
+        const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
+        fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify({ version: 76, ...manifest }, null, 2));
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /remove "version"/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('publishing raises a version by one exactly where the text or its schema changed, and starts a new collection at 1', async () => {
+    const { nextPublished, publishedGuides } = await import('../scripts/build.mjs');
+    const published = publishedGuides();
+    const asPages = g => ({ ...structuredClone(g), version: null });
+    assert.deepEqual(nextPublished(published, { guide: asPages(published.guide), manual: asPages(published.manual) }), published);
+
+    const edited = asPages(published.guide);
+    edited.guides[0].blocks = [{ type: 'p', text: 'Changed.' }];
+    edited.hash = contentHash({ sections: edited.sections, guides: edited.guides });
+    const next = nextPublished(published, { guide: edited, manual: asPages(published.manual) });
+    assert.equal(next.guide.version, published.guide.version + 1);
+    assert.deepEqual(next.guide.guides[0].blocks, [{ type: 'p', text: 'Changed.' }]);
+    assert.deepEqual(next.manual, published.manual);
+
+    const reshaped = { ...asPages(published.manual), schema: published.manual.schema + 1 };
+    assert.equal(nextPublished(published, { guide: asPages(published.guide), manual: reshaped }).manual.version, published.manual.version + 1);
+    assert.equal(nextPublished({ guide: null, manual: published.manual }, { guide: edited, manual: asPages(published.manual) }).guide.version, 1);
 });
 

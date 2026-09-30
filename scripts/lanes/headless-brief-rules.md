@@ -22,6 +22,10 @@ RULES FOR THIS HEADLESS RUN
 - Stage named paths only; never `git add -A` or `git add .`. Push after each logical step.
 - Never merge, never deploy, never touch another branch or PR, never force-push.
 - Protected — never edit: apps/native/app/(tabs)/map.tsx, UnifiedMapPin, GlobalHeader*, logo assets, deploy.sh.
+- The members' guide and the operator manual: edit only their pages (packages/beanpool-guide/content, operators).
+  Never add or bump a "version" and never commit packages/beanpool-guide/generated or apps/website/guide: the
+  director publishes those after merge. Run `pnpm --filter @beanpool/guide generate` and its tests; a test that
+  pins a page's words reads the pages, not the bundled JSON (packages/beanpool-guide/README.md).
 - Never delete or weaken a test assertion to make a suite pass. If an assertion encodes behaviour that is actually a
   bug, say so explicitly instead of changing it.
 - FINAL REPORT: real `git status`, `git log --oneline origin/main..HEAD`, the PR as `gh pr list --head <branch>`

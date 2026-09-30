@@ -12,6 +12,8 @@ An **enterprise** is something people run together for the community: a tool lib
 - A **project** has a goal and usually a deadline, like raising 500 beans for a new roof.
 - An **ongoing** enterprise keeps going.
 
+An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, not against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits. Once an enterprise has used up one of its limits for the day, what you do of that for it counts against your own limits instead, as if you had done it for yourself. If you then reach one of yours, the app says so and names the enterprise. So one keeper who uses up its day can only stop themselves: every other keeper still has all of their own. Running the enterprise always counts against the keeper's own changes: taking on, removing or replacing keepers, stepping down, pausing, winding up, and completing or turning down its deals.
+
 ## Finding them
 
 Tap **Commons**, then **Enterprises**. The **Community Treasuries** come first, then every enterprise with its status, purpose and balance. Tap one to open it.
@@ -30,7 +32,7 @@ At the bottom, **Report Enterprise** if something is wrong.
 
 ## Backing an enterprise
 
-- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**.
+- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too.
 - **Trade with it:** its Offers and Needs are in the Market like anyone's.
 - **Become a keeper:** see "Keepers".
 

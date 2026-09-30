@@ -197,3 +197,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-26 - NewAccountCard Touch Target Sizing & Focus Ring Styling
 **Learning:** `NewAccountCard.tsx` close button `✕` had a size of `w-8 h-8` (32px x 32px), failing minimum touch target sizing guidelines (< 44px), and lacked explicit focus-visible ring styling for keyboard navigation.
 **Action:** Updated close button to `min-w-[44px] min-h-[44px] w-11 h-11` touch target sizing with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, dark mode hover styling, and updated test coverage in `NewAccountCard.test.tsx`.
+
+## 2026-09-27 - MemberGuide Keyboard Focus Ring Styling
+**Learning:** `MemberGuide.tsx` interactive row buttons, header back button, section navigation button, video link, and search input wrapper lacked visible keyboard focus indicators (`focus-visible:ring-2` / `focus-within:ring-2`), making keyboard navigation focus states hard to discern for assistive technology users.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to buttons and video link, and `focus-within:ring-2 focus-within:ring-emerald-500` to the search input label wrapper.

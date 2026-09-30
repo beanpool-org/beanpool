@@ -425,13 +425,17 @@ export const TABLES: Record<string, TableEntry> = {
     system_metrics: { kind: 'local', reason: "this server's metrics" },
     signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
     onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
+    web_visit_days: { kind: 'local', reason: 'the page loads this server served, a day at a time: a standby counts its own' },
     pulse_thumbnail_backoff: { kind: 'local', reason: "this server's thumbnail fetch backoff" },
     owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
+    money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },
 };
 
 /**

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 90,
-  "hash": "3e13046e92f111b839e3f88e0960b57c3c4287d468cbe60a67214c0b684ddc79",
+  "version": 91,
+  "hash": "127d8a7f6f13af1950d95fc14005abf65784cda29434dbdae8a00bb627ba1769",
   "sections": [
     {
       "id": "about",
@@ -2198,6 +2198,10 @@
         },
         {
           "type": "p",
+          "text": "While someone is asking for your post, or has beans held on it (a Repeatable post can have several), you can still change its words and photos, but not its price: the app says so. To change the price, decline or cancel that deal first."
+        },
+        {
+          "type": "p",
           "text": "Posts do not expire. Delete them when they are done."
         }
       ]
@@ -2315,13 +2319,17 @@
           "type": "ul",
           "items": [
             "Do the job, or hand over the thing.",
-            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them.",
+            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.",
             "The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons."
           ]
         },
         {
           "type": "p",
           "text": "Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder."
+        },
+        {
+          "type": "p",
+          "text": "The price on the post cannot change while someone is asking for it or their beans are held. The deal keeps the price it was made at. To change the price, the person who posted it declines or cancels the deal first."
         },
         {
           "type": "h2",
@@ -3934,7 +3942,7 @@
         {
           "type": "ul",
           "items": [
-            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too.",
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges: the app says so, and your beans stay with you.",
             "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
             "**Become a keeper:** see \"Keepers\"."
           ]

@@ -4,9 +4,7 @@
  * member's one key; a failure puts the phone back where it was. Nothing here contacts a node.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mem = vi.hoisted(() => new Map<string, string>());
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -17,9 +15,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-import { joinAnotherCommunity, joinedNudge, type JoinDeps } from '../join-another-community';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, type JoinDeps } from '../join-another-community';
 import type { BeanPoolIdentity } from '../identity';
-import { noVault, useVault } from './fake-vault';
 
 const GLOBAL = 'https://global.beanpool.org';
 const LOCAL = 'https://mullum.beanpool.org';
@@ -80,40 +77,14 @@ describe('joining another community with an invite', () => {
     });
 });
 
-// Was '"protect this community too"', which asked the member to connect a sign-in at each community they joined. Key
-// vault design (custody K1, V4): the copy is kept by BeanPool's key vault for every community, and no community is
-// ever asked for one, so the nudge is removed.
-describe('after joining another community: no "protect this community too"', () => {
-    // A build with BeanPool's key vault (V4).
-    beforeEach(() => useVault());
-    afterEach(() => noVault());
-
-    it('says what came along and what didn’t, and never asks to protect the new community', () => {
+describe('"protect this community too"', () => {
+    it('says what came along and what didn’t, and offers to protect the new community', () => {
         const n = joinedNudge('Mullumbimby');
         expect(n.title).toBe('You’re in Mullumbimby'.replace('’', "'"));
         expect(n.body).toContain('Your key and your 12 words came with you');
         expect(n.body).toContain('Your posts, chats and trades stay in each community.');
-        expect(n.body).toContain('A sign-in you linked to get back into your account works here too');
-        expect(n.body).not.toMatch(/protect your account in/i);
-        expect(Object.keys(n).sort()).toEqual(['body', 'later', 'title']);
-        expect(n.later).toBe('Next');
-        expect(n.protect).toBeUndefined();
-    });
-
-    it('neither screen that joins another community offers a way to protect it there unless the nudge does', () => {
-        for (const file of ['../../app/(tabs)/people.tsx', '../../app/find-community.tsx']) {
-            const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
-            // The Protect button only exists when the nudge offers it: a build without a vault, where each community
-            // keeps its own copy (join-another-community.no-vault.test.ts is main's suite for that, unchanged).
-            expect(src, file).toMatch(/\.\.\.\(nudge\.protect\s*\?/);
-            expect(src.match(/PROTECT_REDIRECT/g)?.length, file).toBe(2);
-        }
-    });
-
-    it('a build without a vault still asks to protect the new community, as before the vault', () => {
-        noVault();
-        const n = joinedNudge('Mullumbimby');
         expect(n.body).toContain('protect your account in Mullumbimby too');
         expect([n.later, n.protect]).toEqual(['Later', 'Protect it']);
+        expect(PROTECT_REDIRECT).toBe('/(tabs)/settings?section=protection');
     });
 });

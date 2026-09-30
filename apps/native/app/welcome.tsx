@@ -44,10 +44,11 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import {
-    abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, waitingSsoRestore,
+    abandonSsoRestore, checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, waitingSsoRestore,
     type PendingVaultRestore, type RestoredFromVault,
 } from '../utils/sso-recovery';
-import { holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -77,6 +78,19 @@ function inviteProblemMessage(reason?: string): string {
         default:
             return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
     }
+}
+
+/**
+ * "March 2026" from whatever the node stored, or '' if it is unusable.
+ *
+ * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
+ * date is more than a public lookup needs to hand out about somebody.
+ */
+function joinedLabel(joinedAt: string | null | undefined): string {
+    if (!joinedAt) return '';
+    const d = new Date(joinedAt);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 export default function WelcomeScreen() {
@@ -121,6 +135,51 @@ export default function WelcomeScreen() {
     }, [mode]);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
+    // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
+    // vault: a callsign and the community's address, looked up as they type.
+    const [ssoCallsign, setSsoCallsign] = useState('');
+    /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
+    const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
+    const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
+    /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
+    const skipNextSsoLookupRef = useRef(false);
+
+    // Look up as they type, on the prefix. A member given `paul12` because `paul` was taken has no
+    // reason to remember the digits months later, and being told "no account" reads as "it is gone".
+    // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
+    useEffect(() => {
+        // Tapping a candidate writes the full callsign here, which matches itself on the server and
+        // would put the list straight back up under the member's finger.
+        if (skipNextSsoLookupRef.current) {
+            skipNextSsoLookupRef.current = false;
+            return;
+        }
+        const typed = ssoCallsign.trim();
+        const anchor = normalizeNodeUrl(recoveryAnchorUrl.trim());
+        if (typed.length < 2 || !looksLikeNodeAddress(anchor)) {
+            setSsoCandidates([]);
+            return;
+        }
+        let cancelled = false;
+        const t = setTimeout(async () => {
+            setSsoLookupBusy(true);
+            try {
+                const res = await fetch(`${anchor}/api/recovery/lookup/${encodeURIComponent(typed)}`);
+                if (!res.ok) throw new Error(String(res.status));
+                const all = await res.json();
+                if (!cancelled) {
+                    setSsoCandidates(Array.isArray(all) ? all.filter((c: any) => c.canRecoverBySso) : []);
+                }
+            } catch {
+                // Offline or an old node without the field: fall back to whatever they typed, which
+                // is exactly the behaviour before this existed.
+                if (!cancelled) setSsoCandidates([]);
+            } finally {
+                if (!cancelled) setSsoLookupBusy(false);
+            }
+        }, 400);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [ssoCallsign, recoveryAnchorUrl]);
     /**
      * A sign-in restore waiting at BeanPool's key vault (utils/sso-recovery.ts), or null. No name and no address: the
      * sign-in finds the copy. Every restore waits (D2) until the vault releases it.
@@ -141,6 +200,7 @@ export default function WelcomeScreen() {
     // A restore that is waiting at the vault is picked up where it was left, even after a restart: the phone keeps it
     // until the account is saved. Read from the phone only; nothing waits on the vault here.
     useEffect(() => {
+        if (!hasVault()) return;
         let cancelled = false;
         waitingSsoRestore().then((waiting) => {
             if (cancelled || !waiting) return;
@@ -1016,6 +1076,72 @@ export default function WelcomeScreen() {
         setReplaceConfirmText('');
         setShowOutgoingSeed(false);
         setOutgoingSeedCopied(false);
+    }
+
+    /**
+     * "Recover with …" in a build without a key vault: at the community the member names, with their callsign, exactly
+     * as before the vault (utils/sso-recovery.ts `recoverAccountWithSso`).
+     */
+    async function handleSsoRecoverAtCommunity(provider: SsoProvider) {
+        const trimmedCallsign = ssoCallsign.trim();
+        if (!trimmedCallsign) {
+            setError('Please enter your callsign.');
+            return;
+        }
+        const rawAnchor = recoveryAnchorUrl.trim();
+        if (!rawAnchor) {
+            setError('Please enter your community node address.');
+            return;
+        }
+        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+        if (!looksLikeNodeAddress(finalAnchorUrl)) {
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            return;
+        }
+        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
+            setError('That node address is insecure (http on a public host). Use https:// instead.');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        setSsoProgressMessage('Connecting to recovery session...');
+        recoveryAbortRef.current?.abort();
+        const abort = new AbortController();
+        recoveryAbortRef.current = abort;
+        try {
+            const result = await recoverAccountWithSso({
+                callsign: trimmedCallsign,
+                anchorUrl: finalAnchorUrl,
+                provider,
+                onProgress: (p) => setSsoProgressMessage(p.message),
+                signal: abort.signal,
+                // Onto a phone that holds another account: "Replace this phone's account?" first, as the
+                // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
+                confirmReplace: askToReplace('ssoRecover'),
+            });
+            // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
+            await returnToApp();
+            await clearPendingOnboarding();
+            setOutgoingIdentity(null);
+            setIdentity(result.identity);
+            setMode('home');
+            router.replace('/');
+        } catch (e: any) {
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it.
+            if (e instanceof ReplaceNotSaved) setIdentity(null);
+            if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
+                setError(null);
+            } else {
+                setError(e.message || `Recovery failed: ${String(e)}`);
+                leaveReplace('ssoRecover');
+            }
+        } finally {
+            if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
+            setLoading(false);
+            setSsoProgressMessage(null);
+        }
     }
 
     /**
@@ -2550,6 +2676,167 @@ export default function WelcomeScreen() {
                         </Pressable>
                     </View>
                 </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
+    // A build without a key vault: the restore at the member's community, as before the vault.
+    if (mode === 'ssoRecover' && !hasVault()) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style="dark" />
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    style={{ flex: 1 }}
+                >
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                        <View style={styles.card}>
+                            <Text style={styles.title} accessibilityRole="header">
+                                🌐 Recover with Social Sign-In
+                            </Text>
+                            <Text style={styles.subtitle}>
+                                Enter your callsign and node address to restore your account with any linked sign-in.
+                            </Text>
+
+                            <TextInput
+                                accessibilityLabel="Callsign"
+                                style={styles.input}
+                                placeholder="Your Callsign (e.g. Monnunit)"
+                                placeholderTextColor={colors.text.muted}
+                                value={ssoCallsign}
+                                onChangeText={setSsoCallsign}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                editable={!loading}
+                            />
+
+                            {/* Recognise, do not recall. Tapping a face is a far easier thing to ask
+                                of someone who has lost their phone than reproducing a string they
+                                chose months ago — and the node only lists accounts that actually
+                                have a sign-in fragment, so none of these is a dead end. */}
+                            {!loading && ssoCandidates.length > 0 && (
+                                <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
+                                    <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
+                                        {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
+                                    </Text>
+                                    {ssoCandidates.map((c: any) => (
+                                        <Pressable
+                                            key={c.publicKey}
+                                            onPress={() => {
+                                                skipNextSsoLookupRef.current = true;
+                                                setSsoCallsign(c.callsign);
+                                                setSsoCandidates([]);
+                                            }}
+                                            accessible
+                                            accessibilityRole="button"
+                                            accessibilityLabel={joinedLabel(c.joinedAt)
+                                                ? `Select the account ${c.callsign}, joined ${joinedLabel(c.joinedAt)}`
+                                                : `Select the account ${c.callsign}`}
+                                            accessibilityHint="Uses this account for recovery"
+                                            style={{
+                                                flexDirection: 'row', alignItems: 'center', gap: 10,
+                                                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
+                                                borderWidth: 1, borderColor: colors.border.default, marginBottom: 6,
+                                            }}
+                                        >
+                                            <MemberAvatar avatarUrl={c.avatarUrl} pubkey={c.publicKey} callsign={c.callsign || '?'} size={32} />
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text.heading, fontWeight: '600' }}>{c.callsign}</Text>
+                                                {/* Breaks the tie the avatar cannot: two namesakes who both
+                                                    kept the default identicon are otherwise identical rows. */}
+                                                {!!joinedLabel(c.joinedAt) && (
+                                                    <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
+                                                        joined {joinedLabel(c.joinedAt)}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )}
+                            {!loading && ssoLookupBusy && ssoCandidates.length === 0 && (
+                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                    Looking for your account…
+                                </Text>
+                            )}
+
+                            <SavedNodePicker
+                                nodes={savedNodes}
+                                onPick={(url) => { setRecoveryAnchorUrl(url); setError(null); }}
+                                disabled={loading}
+                                selectedUrl={normalizeNodeUrl(recoveryAnchorUrl.trim())}
+                                label="Your communities on this phone"
+                                actionLabel="Recover on"
+                                hint="Or type your community's name or address below."
+                            />
+
+                            <TextInput
+                                accessibilityLabel="Community name or node address"
+                                accessibilityHint="Enter your community name, like mullum, or its full address"
+                                style={styles.input}
+                                placeholder="Community name or address (e.g. mullum)"
+                                placeholderTextColor={colors.text.muted}
+                                value={recoveryAnchorUrl}
+                                onChangeText={setRecoveryAnchorUrl}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="url"
+                                editable={!loading}
+                            />
+                            {/* Shown, not assumed — see isBareCommunityName. A community on its
+                                own domain has a name that expands to the wrong address. */}
+                            {isBareCommunityName(recoveryAnchorUrl) && (
+                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                    Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
+                                    community is hosted elsewhere, enter its full address instead.
+                                </Text>
+                            )}
+
+                            {loading && (
+                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        {ssoProgressMessage || 'Verifying sign-in...'}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {error && <Text style={styles.error}>{error}</Text>}
+
+                            {!loading && (
+                                <>
+                                    {Platform.OS === 'ios' && (
+                                        <AppleButton
+                                            title="Recover with Apple"
+                                            onPress={() => handleSsoRecoverAtCommunity('apple')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
+                                    <GoogleButton
+                                        title="Recover with Google"
+                                        onPress={() => handleSsoRecoverAtCommunity('google')}
+                                        style={{ marginBottom: 10, width: '100%' }}
+                                    />
+                                    <FacebookButton
+                                        title="Recover with Facebook"
+                                        onPress={() => handleSsoRecoverAtCommunity('facebook')}
+                                        style={{ marginBottom: 10, width: '100%' }}
+                                    />
+                                </>
+                            )}
+
+                            <Pressable
+                                style={styles.backBtn}
+                                onPress={() => { setMode('member'); setError(null); }}
+                                disabled={loading}
+                                accessibilityRole="button"
+                                accessibilityLabel="Back to Restore Options"
+                            >
+                                <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
                 </KeyboardAvoidingView>
             </SafeAreaView>
         );

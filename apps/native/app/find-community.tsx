@@ -18,7 +18,7 @@ import {
     sendKnock, readKnockStatus, rememberedKnocks, rememberKnock, forgetKnock, knockCardState, knockFormProblem,
     KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
-import { joinAnotherCommunity, joinedNudge, HOME_REDIRECT } from '../utils/join-another-community';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 
 export { ErrorBoundary };
 
@@ -241,7 +241,11 @@ export default function FindCommunityScreen() {
             await forgetKnock(identity.publicKey, url);
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
-                { text: nudge.next, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert("Couldn't join", e?.message || 'Please try again.');

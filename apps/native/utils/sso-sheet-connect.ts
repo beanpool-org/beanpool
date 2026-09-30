@@ -23,13 +23,16 @@
  *
  * A vault that is paused (locked, design §2.3) links nothing and says so; the sign-in is offered again at the next app
  * open (vault.ts `rememberConnectWanted`, the move card). Nothing is shown as linked that isn't.
+ *
+ * A build without a vault (vault.ts `signInCopiesAt`) connects exactly as the app did before the vault: the member's
+ * community's nonce (sso-signin.ts `startSsoSignIn`), the provider, and the deposit at that community (`url`).
  */
 
-import { signInWithProvider, SsoSignInError } from './sso-signin';
+import { signInWithProvider, startSsoSignIn, SsoSignInError } from './sso-signin';
 import type { SsoProvider } from './sso-signin';
 import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
-import { rememberConnectWanted, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
+import { rememberConnectWanted, signInCopiesAt, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
 
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification. The copy is sealed to it, and the vault
@@ -62,6 +65,11 @@ async function notLinked(identity: BeanPoolIdentity, provider: SsoProvider, erro
 
 export async function connectAndDeposit(options: {
     provider: SsoProvider;
+    /**
+     * The community the phone is set to: where the copy goes in a build without a vault, and nowhere in a build with
+     * one (the vault's address is the build's, never a community's).
+     */
+    url?: string | null;
     identity: BeanPoolIdentity;
     /**
      * The phone's lock, asked before anything starts. The sheet hands it Settings' check (LocalAuth.authenticateUser);
@@ -79,6 +87,7 @@ export async function connectAndDeposit(options: {
     }
     // Closed while the check was up: nothing starts.
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    if (signInCopiesAt() === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
 
     let grant: { ticket: string; nonce: string };
     try {
@@ -103,4 +112,27 @@ export async function connectAndDeposit(options: {
     }
     const result = await enrolSsoKeeper({ identity, provider, sub, idToken: signin.idToken, ticket: grant.ticket });
     return result.error ? notLinked(identity, provider, result.error, result.failure) : result;
+}
+
+/** A build without a vault: exactly the connect the app made before the vault, at the member's community. */
+async function connectAtCommunity(options: {
+    provider: SsoProvider;
+    url: string | null;
+    identity: BeanPoolIdentity;
+    onSignedIn: () => void | Promise<void>;
+    signal: AbortSignal;
+}): Promise<KeeperEnrolmentResult> {
+    const { provider, url, identity, signal } = options;
+    if (!url) return { enrolled: [], generation: null, skipped: [], available: 0, error: 'No node configured yet.' };
+    const signin = await startSsoSignIn(provider, url, identity);
+    await options.onSignedIn();
+    if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+
+    return enrolSsoKeeper({
+        identity,
+        provider: signin.provider,
+        sub: extractSub(signin.idToken),
+        idToken: signin.idToken,
+        nonce: signin.nonce,
+    });
 }

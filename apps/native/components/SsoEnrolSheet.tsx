@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, ScrollView } from 'react-native';
 import { colors } from '../constants/colors';
+import { anchorUrl } from '../utils/node-post';
+import { hasVault } from '../utils/vault-config';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -32,6 +34,8 @@ export function SsoEnrolSheet({
     askPhoneLock?: boolean;
 }): React.JSX.Element | null {
     const PROVIDER_NAME = SSO_PROVIDER_NAMES[provider];
+    /** Where this build keeps the copy (utils/vault.ts `signInCopiesAt`): fixed when the app is built. */
+    const atVault = hasVault();
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
     /** `saving`: the provider is done and the deposit is going ahead, so no Cancel (utils/sso-sheet-connect.ts). */
@@ -71,9 +75,17 @@ export function SsoEnrolSheet({
         const abort = new AbortController();
         abortRef.current = abort;
         try {
-            // To BeanPool's key vault, whatever community this phone is on (utils/sso-sheet-connect.ts).
+            // With a key vault in this build: to the vault, whatever community this phone is on. Without one: to the
+            // community this phone is set to, as before the vault (utils/sso-sheet-connect.ts).
+            const url = atVault ? null : await anchorUrl();
+            if (!atVault && !url) {
+                setErrorMessage('No node configured yet.');
+                setStep('error');
+                return;
+            }
             const result = await connectAndDeposit({
                 provider,
+                url,
                 identity,
                 phoneLock: askPhoneLock ? () => authenticateUser('Confirm authentication to link a sign-in to your account.') : null,
                 // The provider is done: Cancel comes down, and the deposit goes ahead.
@@ -189,7 +201,9 @@ export function SsoEnrolSheet({
                             </View>
                             <Text style={styles.title} accessibilityRole="header">You're covered</Text>
                             <Text style={styles.body}>
-                                Your {PROVIDER_NAME} sign-in is now linked, in every community. If you lose this phone, sign in with {PROVIDER_NAME} to get back in: it takes a day, or less if another phone or computer of yours says it's you.
+                                {atVault
+                                    ? `Your ${PROVIDER_NAME} sign-in is now linked, in every community. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in: it takes a day, or less if another phone or computer of yours says it's you.`
+                                    : `Your ${PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in.`}
                             </Text>
                             {enrolResult?.replaced && (
                                 <Text style={styles.body}>
@@ -208,7 +222,7 @@ export function SsoEnrolSheet({
 
                     {step === 'error' && (
                         <View style={styles.content} accessibilityLiveRegion="assertive">
-                            <Text style={styles.title} accessibilityRole="header">Not linked</Text>
+                            <Text style={styles.title} accessibilityRole="header">{atVault ? 'Not linked' : 'Something went wrong'}</Text>
                             <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}

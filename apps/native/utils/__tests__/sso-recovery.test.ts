@@ -172,10 +172,18 @@ describe('SSO Recovery Service', () => {
         expect(await loadIdentity()).toBeNull();
     });
 
-    it('no phone combines a hub fragment any more: the vault keeps only single-blob copies', () => {
-        for (const rel of ['../sso-recovery.ts', '../vault.ts']) {
-            const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
-            expect(src, rel).not.toMatch(/combineHubAndWhole|readHubShare|\/api\/recovery\/collect/);
-        }
+    it('a vault restore never combines a hub fragment: the vault keeps only single-blob copies', () => {
+        const vault = fs.readFileSync(path.resolve(__dirname, '../vault.ts'), 'utf-8');
+        expect(vault).not.toMatch(/combineHubAndWhole|readHubShare|\/api\/recovery\/collect/);
+        // In sso-recovery.ts the old two-layer path is only the community restore, `recoverAccountWithSso`, which the
+        // welcome screen offers only in a build without a vault (the release gate). Everything after it is the vault's.
+        const src = fs.readFileSync(path.resolve(__dirname, '../sso-recovery.ts'), 'utf-8');
+        const vaultHalf = src.slice(src.indexOf('export async function startSsoRestore('));
+        expect(vaultHalf.length).toBeGreaterThan(0);
+        expect(vaultHalf).not.toMatch(/combineHubAndWhole|readHubShare|\/api\/recovery\/collect|signedPost/);
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+        expect(welcome.match(/recoverAccountWithSso\(/g)).toHaveLength(1);
+        expect(welcome.match(/handleSsoRecoverAtCommunity\(/g)?.length).toBe(4);
+        expect(welcome).toMatch(/if \(mode === 'ssoRecover' && !hasVault\(\)\) \{/);
     });
 });

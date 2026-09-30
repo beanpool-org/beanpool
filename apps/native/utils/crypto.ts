@@ -178,6 +178,11 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     };
 }
 
+/** 32 fresh random bytes: a seed for a key used once (a key vault restore's throwaway key, utils/vault.ts). */
+export function randomSeed(): Uint8Array {
+    return Crypto.getRandomBytes(32);
+}
+
 export async function seedToKeypair(seed: Uint8Array): Promise<{
     publicKeyHex: string;
     privateKeyHex: string;

@@ -21,7 +21,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
-import { joinAnotherCommunity, joinedNudge, HOME_REDIRECT } from '../../utils/join-another-community';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 
@@ -511,11 +511,16 @@ export default function PeopleScreen() {
             setRedeemCode('');
             setRedeemNodeUrl('');
             // Joined a new community → run the profile wizard for THIS node so the member picks a name that's
-            // unique here (callsigns are per-node) and confirms their photo, then home. A linked sign-in already
-            // covers this community: its copy is at BeanPool's key vault, not at any community.
+            // unique here (callsigns are per-node) and confirms their photo, then home or, in a build without a key
+            // vault, if they choose, to protect their account here too: there sign-in recovery is kept by each
+            // community (design §3.6). With a vault, a linked sign-in already covers this community.
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
-                { text: nudge.next, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert('Redemption Failed', e.message);

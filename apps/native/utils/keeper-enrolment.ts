@@ -1,13 +1,17 @@
 /**
  * Sign-in recovery: what protects a member's account, as the screens read it.
  *
- * ## Where the copy lives (key vault design, V4)
+ * ## Where the copy lives: the build decides (utils/vault.ts `signInCopiesAt`)
  *
- * A linked sign-in account works because BeanPool's key vault keeps a locked copy of the account for it
- * (utils/vault.ts). No community keeps one, and none is asked for one: the deposit, the status, the disconnect and
- * the restore all go to the vault, whatever community the phone is on. The copy itself is what the apps have always
- * sealed ({@link sealSsoShares}: the seed, and the 12 words when this phone has them, under scrypt(provider:sub)); the
- * vault wraps it again under its own key and never holds the plain seed.
+ * - **A build with BeanPool's key vault** (key vault design, V4): the vault keeps each linked sign-in's locked copy
+ *   (utils/vault.ts). No community keeps one, and none is asked for one: the deposit, the status, the disconnect and the
+ *   restore all go to the vault, whatever community the phone is on.
+ * - **A build without one** (every build until the vault is live): the member's community keeps it, exactly as before
+ *   the vault. The deposit is `POST /api/recovery/shares/sso` at the community the phone is set to, proven with that
+ *   community's nonce; Disconnect is the signed DELETE there.
+ *
+ * The copy itself is the same either way ({@link sealSsoShares}: the seed, and the 12 words when this phone has them,
+ * under scrypt(provider:sub)).
  *
  * ## What happens at signup
  *
@@ -16,8 +20,9 @@
  * still runs at signup to keep the call site's contract, and returns nothing enrolled.
  *
  * The one exception is joining the global community (utils/global-join.ts): its door needs a sign-in anyway, so that
- * one sign-in also deposits the copy at the vault (the door's shared ticket, design §5.4), and Safety Backup shows it as
- * protecting the member without asking again.
+ * one sign-in also leaves a copy (at the vault through the door's shared ticket, design §5.4; without a vault, in the
+ * join itself, read back by {@link enrolmentFromJoin}), and Safety Backup shows it as protecting the member without
+ * asking again.
  */
 
 import {
@@ -26,11 +31,12 @@ import {
     toEd25519Seed,
     type SealedShare,
 } from '@beanpool/core';
+import { anchorUrl, signedPost, signedDelete } from './node-post';
 import { hexToBytes } from './crypto';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
 import { offeredProviders, type SsoProvider } from './sso-providers';
 import {
-    depositWithVault, disconnectFromVault, VaultError, vaultStatus, type VaultFailure,
+    depositWithVault, disconnectFromVault, signInCopiesAt, VaultError, vaultStatus, type VaultFailure,
 } from './vault';
 
 // ---------------------------------------------------------------------------
@@ -112,14 +118,14 @@ export function enrolmentFromVault(providers: readonly string[], extra: Partial<
 }
 
 // ---------------------------------------------------------------------------
-// Linking a sign-in — the deposit at the vault
+// Linking a sign-in — the deposit, at the vault or (without one) at the community
 // ---------------------------------------------------------------------------
 
 /**
- * What the deposit proves itself with: the vault's deposit ticket for this member's key, and the provider's
+ * What a deposit at the vault proves itself with: the vault's deposit ticket for this member's key, and the provider's
  * `id_token`, which carries the ticket's hash as its nonce (utils/vault.ts `vaultTicket`).
  */
-export interface SsoEnrolmentInput {
+export interface VaultEnrolmentInput {
     identity: BeanPoolIdentity;
     provider: SsoProvider;
     /** The provider's subject (user id): the copy is sealed to it. */
@@ -129,13 +135,34 @@ export interface SsoEnrolmentInput {
 }
 
 /**
- * Seal the member's seed (and the 12 words, when this phone has them) to the sign-in, and deposit it at the vault.
- * Resolves with the one sign-in it linked; the screens read the rest from the vault's status.
+ * What a deposit at the member's community proves the sign-in with, in a build without a vault: the provider's
+ * `id_token` and the community's nonce inside it (utils/sso-signin.ts `startSsoSignIn`).
+ */
+export interface CommunityEnrolmentInput {
+    identity: BeanPoolIdentity;
+    provider: SsoProvider;
+    /** The provider's subject (user id), used to derive the sealing key. */
+    sub: string;
+    idToken: string;
+    nonce: string;
+}
+
+export type SsoEnrolmentInput = VaultEnrolmentInput | CommunityEnrolmentInput;
+
+/**
+ * Seal the member's seed (and the 12 words, when this phone has them) to the sign-in, and deposit it: at the vault when
+ * the sign-in was bound to a vault ticket, otherwise at the community the phone is set to (a build without a vault,
+ * utils/vault.ts `signInCopiesAt`). Resolves with the one sign-in it linked at the vault; the community answers with
+ * all of them.
  *
- * Never throws: a failure comes back as `error`, in words for the member, and `failure` says why (a paused vault is
- * offered again at the next app open, utils/vault.ts `rememberConnectWanted`).
+ * Never throws: a failure comes back as `error`, and `failure` says why when the vault said (a paused vault is offered
+ * again at the next app open, utils/vault.ts `rememberConnectWanted`).
  */
 export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEnrolmentResult> {
+    return 'ticket' in input ? enrolAtVault(input) : enrolAtCommunity(input);
+}
+
+async function enrolAtVault(input: VaultEnrolmentInput): Promise<KeeperEnrolmentResult> {
     const { identity, provider, sub } = input;
     const nothing = (error: string, failure?: VaultFailure): KeeperEnrolmentResult => {
         // Logged, not just returned: every enrolment failure to date has been invisible in
@@ -171,6 +198,63 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
     }
 }
 
+/**
+ * Seal the member's entire seed (and the 12 words, when this phone has them) into a single
+ * device-encrypted AEAD blob under scrypt(provider:sub), then deposit through
+ * `POST /api/recovery/shares/sso` which verifies the token server-side. A build without a vault only: exactly what
+ * the app did before the vault.
+ */
+async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperEnrolmentResult> {
+    const { identity, provider, sub } = input;
+    const skipped: { keeper: string; reason: string }[] = [];
+    const nothing = (error: string): KeeperEnrolmentResult => {
+        // Logged, not just returned: every enrolment failure to date has been invisible in
+        // logcat, so the only evidence was the member reporting that nothing happened.
+        console.log(`[KEEPER] ${provider}: enrolment failed — ${error}`);
+        return { enrolled: [], generation: null, skipped, available: 0, error };
+    };
+
+    // The 12 words are never required (see enrolAtVault).
+    const url = await anchorUrl();
+    if (!url) return nothing('no node configured yet');
+
+    let sealed: SealedSsoShares;
+    try {
+        sealed = await sealSsoShares(identity, provider, sub);
+    } catch (e) {
+        return nothing((e as Error).message);
+    }
+    const { shares, wordsSealed } = sealed;
+
+    try {
+        const res = await signedPost(url, '/api/recovery/shares/sso', {
+            provider,
+            shares,
+            idToken: input.idToken,
+            nonce: input.nonce,
+        }, identity);
+        console.log(`[KEEPER] ${provider}: deposit responded ${res.status}`);
+        if (!res.ok) {
+            const detail = await res.text().catch(() => '');
+            return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
+        }
+        const body = await res.json() as { generation?: number; enrolledSso?: string[]; threshold?: number };
+        const enrolledSso = body.enrolledSso ?? [provider];
+        return {
+            enrolled: enrolledSso.map(() => 'sso' as const),
+            generation: body.generation ?? null,
+            skipped,
+            available: enrolledSso.length,
+            enrolledSso,
+            threshold: body.threshold ?? 1,
+            isSingleBlob: true,
+            wordsSealed,
+        };
+    } catch (e) {
+        return nothing(`could not reach the node: ${(e as Error).message}`);
+    }
+}
+
 /** The deposit's one piece: the whole seed (and the words, when they make it) sealed to a sign-in. */
 export interface SealedSsoShares {
     shares: Array<SealedShare & { holderType: 'sso'; holderRef: SsoProvider; shareIndex: 1 }>;
@@ -182,9 +266,9 @@ export interface SealedSsoShares {
  * Seal the member's entire seed (and the 12 words, when this phone has them) into a single
  * device-encrypted AEAD blob under scrypt(provider:sub): the copy a deposit carries.
  *
- * Shared by the two deposits, both at the vault: {@link enrolSsoKeeper} (the protection sheet, its own sign-in) and the
- * global community's door (utils/global-join.ts), whose one sign-in both joins and protects. Throws with a reason for a
- * log, never words or keys.
+ * Shared by the two deposits: {@link enrolSsoKeeper} (the protection sheet, its own sign-in) and the global community's
+ * door (utils/global-join.ts), whose one sign-in both joins and protects. Throws with a reason for a log, never words
+ * or keys.
  */
 export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoProvider, sub: string): Promise<SealedSsoShares> {
     // The identity's privateKey is either a raw 32-byte Ed25519 seed or a
@@ -220,12 +304,13 @@ export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoPro
 }
 
 // ---------------------------------------------------------------------------
-// Status and disconnect — at the vault
+// Status and disconnect
 // ---------------------------------------------------------------------------
 
 /**
  * What protects this account: the sign-ins the vault keeps a copy for. Throws {@link VaultError} when the vault
- * can't say (paused, unreachable, or no vault in this build): the screen then shows what it can say for certain.
+ * can't say (paused or unreachable): the screen then shows what it can say for certain. A build with a vault only; a
+ * build without one asks the community (settings.tsx `fetchProtectionStatus`).
  */
 export async function vaultProtection(identity: BeanPoolIdentity): Promise<KeeperEnrolmentResult> {
     const status = await vaultStatus(identity);
@@ -233,15 +318,48 @@ export async function vaultProtection(identity: BeanPoolIdentity): Promise<Keepe
 }
 
 /**
- * Disconnect one sign-in: the vault deletes its copy at once. Resolves with the sign-ins still linked, as the vault
- * says after the delete.
+ * The join's recovery answer (`POST /api/join` with `recovery: { shares }`, apps/server/src/routes/open-join.ts)
+ * as an enrolment result, so the Safety Backup step shows the sign-in the member joined with as already
+ * protecting them. Null when the node did not store it: the step then offers the ordinary connect, and the
+ * member signs in a second time only in that case. A build without a vault only (utils/global-join.ts).
+ */
+export function enrolmentFromJoin(
+    recovery: unknown, provider: SsoProvider, wordsSealed: boolean,
+): KeeperEnrolmentResult | null {
+    if (!recovery || typeof recovery !== 'object') return null;
+    const r = recovery as { enrolled?: unknown; generation?: unknown; enrolledSso?: unknown; threshold?: unknown; error?: unknown };
+    if (r.enrolled !== true) {
+        console.log(`[KEEPER] ${provider}: the join did not store the recovery copy — ${typeof r.error === 'string' ? r.error.slice(0, 200) : 'no reason given'}`);
+        return null;
+    }
+    // Kept on the phone (onboarding-state.ts `joinEnrolment`), so only the sign-ins this app offers.
+    const enrolledSso: string[] = Array.isArray(r.enrolledSso) && r.enrolledSso.every(p => typeof p === 'string')
+        ? offeredProviders(r.enrolledSso)
+        : [provider];
+    return {
+        enrolled: enrolledSso.map(() => 'sso' as const),
+        generation: typeof r.generation === 'number' ? r.generation : null,
+        skipped: [],
+        available: enrolledSso.length,
+        enrolledSso,
+        threshold: typeof r.threshold === 'number' ? r.threshold : 1,
+        isSingleBlob: true,
+        wordsSealed,
+    };
+}
+
+/**
+ * Disconnect one sign-in. With a vault: the vault deletes its copy at once, and this resolves with the sign-ins still
+ * linked, as the vault says after the delete. Without one: the signed DELETE at the community the phone is set to, as
+ * before the vault.
  */
 export async function disconnectSsoKeeper(
-    provider: SsoProvider,
+    provider: string,
     identity: BeanPoolIdentity,
 ): Promise<{ success: boolean; error?: string; enrolledSso?: string[] }> {
+    if (signInCopiesAt() === 'community') return disconnectAtCommunity(provider, identity);
     try {
-        await disconnectFromVault(identity, provider);
+        await disconnectFromVault(identity, provider as SsoProvider);
     } catch (e) {
         return { success: false, error: (e as Error).message };
     }
@@ -249,5 +367,26 @@ export async function disconnectSsoKeeper(
         return { success: true, enrolledSso: (await vaultStatus(identity)).providers };
     } catch {
         return { success: true };
+    }
+}
+
+/** Disconnect a single SSO provider from the community's recovery set: a build without a vault. */
+async function disconnectAtCommunity(
+    provider: string,
+    identity: BeanPoolIdentity,
+): Promise<{ success: boolean; error?: string; enrolledSso?: string[] }> {
+    const url = await anchorUrl();
+    if (!url) return { success: false, error: 'No node configured.' };
+
+    try {
+        const res = await signedDelete(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, identity);
+        if (!res.ok) {
+            const detail = await res.text().catch(() => '');
+            return { success: false, error: `Could not disconnect ${provider}: ${detail.slice(0, 150)}` };
+        }
+        const data = await res.json() as { enrolledSso?: string[] };
+        return { success: true, enrolledSso: data.enrolledSso ?? [] };
+    } catch (e) {
+        return { success: false, error: (e as Error).message };
     }
 }

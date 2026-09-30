@@ -122,9 +122,9 @@ const SYNC_RETRY_TIMEOUT_MS = 5000;
  * Signed, so the node knows who it is minting for — the binding is what stops a caller aiming
  * somebody else's sign-in at their own fragment.
  *
- * Only the dev builds' measurement probes (app/google-probe.tsx, app/apple-probe.tsx) call this now. A member's
- * sign-in never asks their community for a nonce: it takes the key vault's ticket (utils/vault.ts), or the global
- * door's own nonce (utils/global-join.ts). utils/__tests__/vault-phone.test.ts holds that, as a rule on the source.
+ * Only a build without a key vault asks a member's community for one ({@link startSsoSignIn}; utils/vault.ts
+ * `signInCopiesAt`), and the dev builds' measurement probes (app/google-probe.tsx, app/apple-probe.tsx). A build with a
+ * vault takes the vault's ticket (utils/vault.ts), or the global door's own nonce (utils/global-join.ts).
  */
 export async function fetchSsoNonce(
     url: string, identity: BeanPoolIdentity,
@@ -806,10 +806,26 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
 }
 
 /**
- * The provider's sheet, asked for a token carrying `nonce`: the hash of a key vault ticket (utils/vault.ts), or, at the
- * global community's door when the vault can't be reached, the door's own nonce (utils/global-join.ts). Never a nonce
- * from the member's community: sign-ins go only to the vault and to the global door (key vault design §1.2). The
- * sheet's own cancel throws `SsoSignInError('cancelled')`, as everywhere.
+ * Nonce, then sheet, then hand both back: the whole client half of a sign-in whose copy the member's community keeps.
+ * Only in a build without a key vault (utils/vault.ts `signInCopiesAt`), exactly as the app did before the vault.
+ *
+ * Deliberately stops here rather than depositing anything: enrolment does that (keeper-enrolment.ts).
+ */
+export async function startSsoSignIn(provider: SsoProvider, url: string, identity: BeanPoolIdentity): Promise<SsoSignIn> {
+    const { nonce, providers } = await fetchSsoNonce(url, identity);
+    // The node's list, not a local constant: nodes may be configured with different audiences, and
+    // offering a provider this one will refuse produces a sign-in that succeeds and is then thrown
+    // away — the worst possible order to discover it in.
+    if (providers.length > 0 && !providers.includes(provider)) {
+        throw new SsoSignInError('unsupported', `Your node does not accept ${provider} sign-in.`);
+    }
+    return signInWithProvider(provider, nonce);
+}
+
+/**
+ * The provider's sheet, asked for a token carrying `nonce`: the hash of a key vault ticket (utils/vault.ts), the global
+ * community's door's own nonce (utils/global-join.ts), or, in a build without a vault, the member's community's nonce
+ * ({@link startSsoSignIn}). The sheet's own cancel throws `SsoSignInError('cancelled')`, as everywhere.
  */
 export async function signInWithProvider(provider: SsoProvider, nonce: string): Promise<SsoSignIn> {
     if (provider === 'apple') {

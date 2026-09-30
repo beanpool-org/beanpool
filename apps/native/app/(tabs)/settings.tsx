@@ -51,10 +51,10 @@ import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import { enrolmentFromVault, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
-import { VAULT_MESSAGES, VaultError } from '../../utils/vault';
+import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
-import { anchorUrl as getAnchorUrl } from '../../utils/node-post';
+import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
@@ -426,12 +426,14 @@ export default function SettingsScreen() {
     };
 
     const fetchProtectionStatus = async () => {
+        // A build without a key vault: the community keeps the sign-in copies, as before the vault.
+        if (!hasVault()) return fetchCommunityProtectionStatus();
         setProtectionLoading(true);
         try {
             if (!identity) return;
             resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
             // BeanPool's key vault keeps the sign-in copies, for every community (utils/vault.ts). What it can't say
-            // (paused, unreachable, no vault in this build) is said in its own words, never shown as protection.
+            // (paused or unreachable) is said in its own words, never shown as protection.
             setProtectionResult(await vaultProtection(identity));
             setProtectionNote(null);
         } catch (e) {
@@ -442,12 +444,64 @@ export default function SettingsScreen() {
         }
     };
 
+    /** What protects this account at the community the phone is set to: a build without a key vault. */
+    const fetchCommunityProtectionStatus = async () => {
+        setProtectionLoading(true);
+        try {
+            const url = await getAnchorUrl();
+            if (!url || !identity) { setProtectionLoading(false); return; }
+            resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
+            const res = await signedPost(url, '/api/recovery/shares/status', {}, identity);
+            if (!res.ok) { setProtectionLoading(false); return; }
+            const body = await res.json() as {
+                keepers: { holderType: string; count: number }[];
+                enrolledSso?: string[];
+                threshold: number;
+                recoverable: boolean;
+                total: number;
+            };
+            // Convert server status to KeeperEnrolmentResult for protectionFrom()
+            const enrolled: ('hub' | 'member' | 'sso')[] = [];
+            if (Array.isArray(body?.keepers)) {
+                for (const k of body.keepers) {
+                    for (let i = 0; i < (k.count || 0); i++) {
+                        enrolled.push(k.holderType as 'hub' | 'member' | 'sso');
+                    }
+                }
+            }
+            setProtectionResult({
+                enrolled,
+                generation: 1,
+                skipped: [],
+                available: body.total,
+                enrolledSso: body.enrolledSso ?? [],
+                threshold: body.threshold,
+                isSingleBlob: body.threshold === 1,
+            });
+        } catch (e) {
+            console.warn('[Protection] fetch failed:', e);
+        } finally {
+            setProtectionLoading(false);
+        }
+    };
+
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
         const provName = SSO_PROVIDER_NAMES[provider];
-        // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly.
-        const message = `On a new phone, this ${provName} account will no longer bring your account back, in any community. `
-            + "BeanPool's key vault deletes its copy at once, and from its backups within 30 days.";
+        let message: string;
+        if (hasVault()) {
+            // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly.
+            message = `On a new phone, this ${provName} account will no longer bring your account back, in any community. `
+                + "BeanPool's key vault deletes its copy at once, and from its backups within 30 days.";
+        } else {
+            // Name the community: without a vault this only ever affects recovery on THIS node, and saying
+            // so plainly is the difference between a member knowing where they're covered
+            // and assuming they're covered everywhere.
+            const community = protectionNodeLabel || await resolveCommunityLabel();
+            message = community
+                ? `On a new phone, this sign-in account will no longer be able to restore your account for ${community}. Your other communities are unaffected.`
+                : `This sign-in account will no longer be able to restore your account on a new phone.`;
+        }
         Alert.alert(
             `Disconnect ${provName}?`,
             message,
@@ -1958,6 +2012,7 @@ export default function SettingsScreen() {
                             )}
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
+                                communityName={protectionNodeLabel || undefined}
                                 hasWords={hasMnemonic(identity)}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                     if (prov) setSsoEnrolProvider(prov);
@@ -2071,9 +2126,14 @@ export default function SettingsScreen() {
                 provider={ssoEnrolProvider}
                 onClose={() => setShowSsoSheet(false)}
                 onEnrolled={(result) => {
+                    setShowSsoSheet(false);
+                    // Without a vault the community answers the deposit with every sign-in it keeps, as before.
+                    if (!hasVault()) {
+                        setProtectionResult(result);
+                        return;
+                    }
                     // The sign-in just linked, beside what was linked already; then the vault's own word on all of them.
                     setProtectionResult(prev => enrolmentFromVault([...(prev?.enrolledSso ?? []), ...(result.enrolledSso ?? [])]));
-                    setShowSsoSheet(false);
                     void fetchProtectionStatus();
                 }}
             />

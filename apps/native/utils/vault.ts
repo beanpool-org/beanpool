@@ -10,9 +10,11 @@
  *
  * Per build ({@link vaultConfig}): the address and the vault's public keys, pinned, from three build variables that
  * Expo writes into the app when it is built (`EXPO_PUBLIC_BEANPOOL_VAULT_URL`, `…_TICKET_KEYS`, `…_DEPOSIT_KEYS`; see
- * apps/native/.env.example). A build without them has no sign-in recovery, and says so; it never falls back to a
- * community. The keys are what make it the vault, not the address: a server at the vault's address that isn't the vault
- * can't sign a ticket the phone accepts, open a deposit box, or send back a copy that opens (design §1.4).
+ * apps/native/.env.example). A build without all three, well formed, keeps sign-in copies where the app always kept
+ * them, at the member's community ({@link signInCopiesAt}): the vault paths switch on only in a build that has a vault,
+ * and no build is left with neither. The keys are what make it the vault, not the address: a server at the vault's
+ * address that isn't the vault can't sign a ticket the phone accepts or open a deposit box (design §1.4). What it can
+ * still do before the vault signs its releases and deposit receipts is why no vault-configured build ships yet (PR #1336).
  *
  * ## One sign-in, bound three ways
  *
@@ -43,7 +45,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
 import {
     checkVaultTicket,
     isVaultKeyHex,
@@ -53,13 +54,12 @@ import {
     recoveryWordsMatchPublicKey,
     sealVaultDepositBox,
     vaultTicketNonce,
-    vaultUnb64,
     type SealedShare,
     type VaultTicketPurpose,
 } from '@beanpool/core';
-import { buildVaultSignedHeaders, hexToBytes, seedToKeypair } from './crypto';
-import { isPlainNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
+import { buildVaultSignedHeaders, hexToBytes, randomSeed, seedToKeypair } from './crypto';
 import { isSsoProvider, offeredProviders, type SsoProvider } from './sso-providers';
+import { hasVault, vaultConfig, type VaultConfig } from './vault-config';
 import {
     PUSH_TOKEN_STORE_KEY,
     VAULT_RESTORE_STORE_KEY,
@@ -67,54 +67,16 @@ import {
     vaultPushTokenStoreKey,
 } from './storage-keys';
 
-// ─── Where the vault is ────────────────────────────────────────────────────────────────────
+// ─── Where the vault is (vault-config.ts: no native modules, so any screen can ask) ─────────
 
-export interface VaultConfig {
-    /** `https://vault.beanpool.org` in a release build; a test vault's address in a test build. No trailing slash. */
-    url: string;
-    /** The vault's Ed25519 ticket keys (hex), newest first. A ticket signed by none of them is refused. */
-    ticketKeys: string[];
-    /** The vault's X25519 deposit keys (base64url), newest first. A deposit is sealed to the first. */
-    depositKeys: string[];
-}
-
-/**
- * A vault from its three build values, or null when any is missing or malformed: an address that isn't a plain
- * `https://host[:port]` (plain http only on a private address, for a test vault on a laptop), or a key list
- * (comma-separated, newest first) that is empty or holds anything but keys.
- */
-export function readVaultConfig(url: string | undefined, ticketKeys: string | undefined, depositKeys: string | undefined): VaultConfig | null {
-    const list = (v: string | undefined) => (v ?? '').split(',').map(s => s.trim()).filter(Boolean);
-    const address = (url ?? '').trim().replace(/\/+$/, '');
-    if (!/^https?:\/\/[^/?#@\\]+$/i.test(address) || !isPlainNodeAddress(address) || shouldBlockCleartextNodeUrl(address)) return null;
-    const tickets = list(ticketKeys);
-    const deposits = list(depositKeys);
-    if (!tickets.length || !tickets.every(isVaultKeyHex)) return null;
-    if (!deposits.length || !deposits.every(k => vaultUnb64(k, 32)?.length === 32)) return null;
-    return { url: address, ticketKeys: tickets, depositKeys: deposits };
-}
-
-/**
- * This build's vault. Expo writes `process.env.EXPO_PUBLIC_*` into the app when it is built (babel-preset-expo), so
- * each is read by its full name, never through a variable. Public keys and an address: nothing secret. Until the
- * custodians' parts are reshared, only a test vault's values go in a build: never point a real build at a live vault.
- */
-export function vaultConfig(): VaultConfig | null {
-    return readVaultConfig(
-        process.env.EXPO_PUBLIC_BEANPOOL_VAULT_URL,
-        process.env.EXPO_PUBLIC_BEANPOOL_VAULT_TICKET_KEYS,
-        process.env.EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS,
-    );
-}
-
-/** Whether this build has a vault: without one, the app offers no sign-in recovery and says why. */
-export function hasVault(): boolean {
-    return vaultConfig() !== null;
-}
+export {
+    hasVault, readVaultConfig, signInCopiesAt, vaultConfig, type SignInCopies, type VaultConfig,
+} from './vault-config';
 
 // ─── What the member reads ─────────────────────────────────────────────────────────────────
 
 export const VAULT_MESSAGES = {
+    /** Never met by a member: every vault path runs only in a build that has one ({@link signInCopiesAt}). */
     notConfigured: "Sign-in recovery isn't set up in this version of the app. Your 12 words work any time.",
     /** Design §2.3: while the vault is locked. */
     paused: 'Getting back in with a sign-in is paused for a little while. Your 12 words work any time.',
@@ -476,7 +438,7 @@ export async function clearPendingVaultRestore(): Promise<void> {
 
 /** A fresh throwaway key for one restore: the ticket names it and the release is sealed to it. */
 async function throwawayKey(): Promise<VaultSigner> {
-    const k = await seedToKeypair(Crypto.getRandomBytes(32));
+    const k = await seedToKeypair(randomSeed());
     return { publicKey: k.publicKeyHex, privateKey: k.privateKeyHex };
 }
 

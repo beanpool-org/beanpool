@@ -59,11 +59,18 @@ const SUBS = { google: 'google-sub-42', apple: 'apple-sub-7', facebook: 'fb-sub-
 vi.mock('../sso-signin', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-signin')>();
     const { fakeJwt } = await import('./fake-vault');
+    const sheet = (provider: 'google' | 'apple' | 'facebook') => vi.fn(async (nonce: string) => ({
+        idToken: fakeJwt({ sub: { google: 'google-sub-42', apple: 'apple-sub-7', facebook: 'fb-sub-9' }[provider], nonce }), nonce,
+    }));
     return {
         ...real,
         signInWithProvider: vi.fn(async (provider: 'google' | 'apple' | 'facebook', nonce: string) => ({
             provider, idToken: fakeJwt({ sub: { google: 'google-sub-42', apple: 'apple-sub-7', facebook: 'fb-sub-9' }[provider], nonce }), nonce,
         })),
+        // A build without a vault reaches each provider's sheet directly at the global door, as before the vault.
+        signInWithGoogle: sheet('google'),
+        signInWithApple: sheet('apple'),
+        signInWithFacebook: sheet('facebook'),
     };
 });
 
@@ -152,15 +159,14 @@ describe("the build's vault", () => {
         expect(readVaultConfig('http://10.0.2.2:8787', TICKET_KEY, DEPOSIT_KEY)?.url).toBe('http://10.0.2.2:8787');
     });
 
-    it('a build with no vault offers no sign-in recovery, says why, and asks nobody', async () => {
+    it('a build with no vault asks no vault: its sign-in copies stay at the community (release-gate.test.ts)', async () => {
         noVault();
         await memberOnCommunity();
-        const result = await connect();
-        expect(result).toMatchObject({ enrolled: [], error: VAULT_MESSAGES.notConfigured, failure: 'not_configured' });
         await expect(startSsoRestore('google')).rejects.toMatchObject({ reason: 'not_configured' });
         expect(signInWithProvider).not.toHaveBeenCalled();
         expect(await vaultHoldsAtOpen(member)).toEqual([]);
-        expect(net.sent).toEqual([]);
+        expect(await vaultMoveOffer(member, COMMUNITY)).toBeNull();
+        expect(to(VAULT)).toEqual([]);
     });
 });
 
@@ -451,12 +457,15 @@ describe("the global door: one provider sheet for the join and the copy", () => 
         });
     }
 
-    it('a build with no vault joins with the door\'s nonce, and asks no vault', async () => {
+    it('a build with no vault joins with the door\'s nonce and the copy in the join, as before the vault, and asks no vault', async () => {
         noVault();
         const result = await signInAtDoor('google', GLOBAL, member);
         if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
-        expect(signInWithProvider).toHaveBeenCalledWith('google', net.global.nonce);
-        expect(await submitJoin(GLOBAL, { ...member, callsign: 'Sam' }, 'Sam', result.signin)).toMatchObject({ kind: 'joined', enrolment: null });
+        expect(result.signin).toMatchObject({ nonce: net.global.nonce });
+        expect(result.signin.vaultTicket).toBeUndefined();
+        expect(await submitJoin(GLOBAL, { ...member, callsign: 'Sam' }, 'Sam', result.signin)).toMatchObject({ kind: 'joined' });
+        const join = to(GLOBAL).find(s => s.path === '/api/join')!;
+        expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider', 'recovery']);
         expect(to(VAULT)).toEqual([]);
     });
 });
@@ -542,7 +551,7 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
     });
 });
 
-describe('the source: no member path asks a community for a nonce, sends it a sign-in copy, or restores from it', () => {
+describe('the source: only a build without a vault asks a community for a nonce, sends it a sign-in copy, or restores from it', () => {
     const ROOT = path.resolve(__dirname, '../..');
     /** Every .ts/.tsx the app runs (app, components, services, utils; not tests), as code without comments. */
     function sources(): { rel: string; src: string }[] {
@@ -561,23 +570,49 @@ describe('the source: no member path asks a community for a nonce, sends it a si
         for (const d of ['app', 'components', 'services', 'utils']) walk(path.join(ROOT, d));
         return out;
     }
+    const src = (rel: string) => sources().find(s => s.rel === rel)!.src;
+    /** The body of `name` in `text`: from its declaration to the next top-level declaration. */
+    const body = (text: string, name: string) => {
+        const at = text.indexOf(`function ${name}(`);
+        expect(at, name).toBeGreaterThan(-1);
+        const next = text.slice(at + 1).search(/\n(export )?(async )?function /);
+        return next < 0 ? text.slice(at) : text.slice(at, at + 1 + next);
+    };
     // The dev builds' measurement probes (inert outside __DEV__, app/google-probe.tsx) are the one exception, and say so.
     const PROBES = ['app/google-probe.tsx', 'app/apple-probe.tsx'];
 
-    it('nothing but the probes asks a community for a sign-in nonce, deposits a copy there, or restores from one', () => {
+    it('the community paths are the ones a build without a vault keeps (release gate), and nothing else has them', () => {
         // The alert banner's watch of this account's own old sessions at its community (`/collect/mine`) and its Stop
-        // (`/collect/cancel`) carry no sign-in and no copy: they stay until the date the old copies are removed.
+        // (`/collect/cancel`) carry no sign-in and no copy.
         const offenders = sources()
             .filter(({ rel }) => !PROBES.includes(rel))
             .filter(({ src }) => /\/api\/recovery\/sso-nonce|\/api\/recovery\/shares\/sso['"`]|\/api\/recovery\/collect(?!\/(?:mine|cancel)['"`])|fetchSsoNonce\(/.test(src))
-            .map(({ rel }) => rel);
-        expect(offenders).toEqual(['utils/sso-signin.ts']);
-        // …and that one is fetchSsoNonce's own definition, which only the probes call.
-        const signin = sources().find(({ rel }) => rel === 'utils/sso-signin.ts')!.src;
-        expect(signin.match(/fetchSsoNonce\(/g)).toHaveLength(1);
+            .map(({ rel }) => rel)
+            .sort();
+        expect(offenders).toEqual(['utils/keeper-enrolment.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts']);
     });
 
-    it('the sign-in sheets are reached with a nonce only from the vault flows and the global door', () => {
+    it('each is reached only when the build has no vault', () => {
+        // The community's nonce: only through startSsoSignIn, which only the community connect calls, after the switch.
+        const signin = src('utils/sso-signin.ts');
+        expect(signin.match(/fetchSsoNonce\(/g)).toHaveLength(2);
+        expect(body(signin, 'startSsoSignIn')).toMatch(/fetchSsoNonce\(/);
+        const callers = sources().filter(({ rel, src: s }) => !PROBES.includes(rel) && rel !== 'utils/sso-signin.ts' && /startSsoSignIn\(/.test(s));
+        expect(callers.map(c => c.rel)).toEqual(['utils/sso-sheet-connect.ts']);
+        const connect = src('utils/sso-sheet-connect.ts');
+        expect(body(connect, 'connectAtCommunity')).toMatch(/startSsoSignIn\(/);
+        expect(body(connect, 'connectAndDeposit')).toMatch(/if \(signInCopiesAt\(\) === 'community'\) return connectAtCommunity\(/);
+        // The deposit at the community: only for a sign-in bound to the community's nonce (no vault ticket).
+        const enrol = src('utils/keeper-enrolment.ts');
+        expect(body(enrol, 'enrolSsoKeeper')).toMatch(/'ticket' in input \? enrolAtVault\(input\) : enrolAtCommunity\(input\)/);
+        expect(body(enrol, 'disconnectSsoKeeper')).toMatch(/if \(signInCopiesAt\(\) === 'community'\) return disconnectAtCommunity\(/);
+        // The restore at a community: only the welcome screen's community branch.
+        const callersOfRestore = sources().filter(({ src: s }) => /recoverAccountWithSso\(/.test(s)).map(c => c.rel).sort();
+        expect(callersOfRestore).toEqual(['app/welcome.tsx', 'utils/sso-recovery.ts']);
+        expect(src('app/welcome.tsx')).toMatch(/if \(mode === 'ssoRecover' && !hasVault\(\)\) \{/);
+    });
+
+    it('the sign-in sheets are reached with a nonce only from the sign-in flows and the global door', () => {
         const callers = sources()
             .filter(({ rel }) => rel !== 'utils/sso-signin.ts' && !PROBES.includes(rel))
             .filter(({ src }) => /signInWith(Provider|Google|Apple|Facebook)\(/.test(src))

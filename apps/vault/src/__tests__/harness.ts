@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -18,17 +18,22 @@ import {
     type SsoProvider,
 } from '@beanpool/signin';
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
-import { createVaultApi, type VaultApi } from '../api/server.js';
+import { createVaultApi, type VaultApi, type VaultApiOptions } from '../api/server.js';
+import { LocalDirectoryFeed } from '../shared/release-feed.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { MemoryHygiene } from '../keyholder/hygiene.js';
 import { Keyholder } from '../keyholder/keyholder.js';
 import { listenKeyholder, type KeyholderServer } from '../keyholder/server.js';
 import type { CustodianShare } from '../shared/ceremony.js';
+import { makeRelease, publish, type MadeRelease } from './release-kit.js';
 
 /**
  * A whole vault for a test: the keyholder on a real Unix socket and the API on a real port, in a temp directory, with
  * a clock the test moves. No provider is contacted: `stub.fetch` answers the pinned JWKS URLs (with a key made here)
  * and Expo's push endpoint, records every call, and throws on anything else.
+ *
+ * Its release: a directory feed holds one release signed by two of its custodians, and the keyholder reports that
+ * release's image as the one it booted, so the custodian's tool (`v.call()`) checks it as it would on the image.
  */
 
 export const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
@@ -109,6 +114,8 @@ export interface VaultUnderTest {
     dir: string;
     stateDir: string;
     dataDir: string;
+    /** With requireDataMount: where a restore from backup waits (the image: the state partition). */
+    restoreDir: string;
     storeDir: string;
     socketPath: string;
     baseUrl: string;
@@ -116,11 +123,19 @@ export interface VaultUnderTest {
     stub: StubProviders;
     api: VaultApi;
     custodians: CustodianKey[];
+    /** The release this vault runs, and the feed directory it is published in. */
+    release: MadeRelease;
+    feedDir: string;
     keyholder(): Keyholder;
     /** A reboot of the keyholder: everything in its memory is gone; it comes back locked. */
     restartKeyholder(): Promise<void>;
     /** A restart of the API alone (a crash, or a new release): on a new port, so `baseUrl` changes. */
     restartApi(): Promise<void>;
+    /**
+     * With requireDataMount: root mounts the data partition at `dataDir`, as the image's vault-data helper does after
+     * the unlock. Whatever the directory held is hidden (moved aside here) and it is empty: a blank volume.
+     */
+    mountData(): void;
     close(): Promise<void>;
     call(opts?: Partial<CallOptions>): CallOptions;
 }
@@ -135,17 +150,27 @@ export async function startVault(opts: {
     store?: (inner: BackupStore) => BackupStore;
     /** What the keyholder reports of its memory hygiene, in place of checking this process. */
     hygiene?: MemoryHygiene;
+    /** The API waits for its data directory to be a mount point (the image's data partition). */
+    requireDataMount?: boolean;
+    /** What the API says of itself in `/v1/report` (its bundle, the release checks, the next restart). */
+    about?: VaultApiOptions['about'];
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
     const dataDir = path.join(dir, 'data');
+    const restoreDir = path.join(dir, 'restore');
+    let dataMounted = false;
     const storeDir = opts.storeDir ?? path.join(dir, 'store');
     const socketPath = path.join(dir, 'kh.sock');
     const clock = opts.clock ?? makeClock();
     const stub = opts.stub ?? new StubProviders();
     const custodians = opts.custodians ?? [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+    const feedDir = path.join(dir, 'feed');
+    const release = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2) });
+    publish(feedDir, release);
     const makeKeyholder = () => new Keyholder({
         stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0, hygiene: opts.hygiene,
+        releaseHash: release.manifest.imageHash,
     });
     let kh = makeKeyholder();
     let server: KeyholderServer = await listenKeyholder(kh, socketPath);
@@ -153,14 +178,15 @@ export async function startVault(opts: {
     const store = opts.store ? opts.store(inner) : inner;
     const makeApi = async () => {
         const api = createVaultApi({
-            dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy,
+            dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy, about: opts.about,
+            ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');
         return { api, baseUrl: `http://127.0.0.1:${port}` };
     };
     const first = await makeApi();
     const v: VaultUnderTest = {
-        dir, stateDir, dataDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians,
+        dir, stateDir, dataDir, restoreDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
         keyholder: () => kh,
         restartKeyholder: async () => {
             await server.close();
@@ -174,13 +200,20 @@ export async function startVault(opts: {
             v.api = next.api;
             v.baseUrl = next.baseUrl;
         },
+        mountData: () => {
+            if (existsSync(dataDir)) renameSync(dataDir, `${dataDir}.under-the-mount`);
+            mkdirSync(dataDir, { mode: 0o700 });
+            dataMounted = true;
+        },
         close: async () => {
             await v.api.close();
             await server.close();
             kh.lock();
             rmSync(dir, { recursive: true, force: true });
         },
-        call: (extra = {}) => ({ now: clock.now, acceptNoHardwareProof: true, ...extra }),
+        call: (extra = {}) => ({
+            now: clock.now, acceptNoHardwareProof: true, trust: { feed: new LocalDirectoryFeed(feedDir), rootKeys: custodians.map(c => c.publicKey) }, ...extra,
+        }),
     };
     return v;
 }

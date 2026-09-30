@@ -1,0 +1,14 @@
+# The state partition (made at the first boot, usr/lib/repart.d): /var, with the keyholder's sealed state file, the
+# journal, Caddy's certificates, downloaded releases and staged images. Nothing on it is readable as a key. The data
+# partition is mounted by beanpool-vault-data.service once the vault is unlocked.
+[Unit]
+Description=The vault's state partition
+After=systemd-repart.service
+Wants=systemd-repart.service
+Before=local-fs.target
+
+[Mount]
+What=/dev/disk/by-partlabel/vault-state
+Where=/var
+Type=ext4
+Options=nodev,nosuid,noexec

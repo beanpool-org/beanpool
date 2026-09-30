@@ -1,0 +1,20 @@
+# TLS in front of the vault's API (key vault design §3). No access logs (Caddy writes none unless told to), no admin
+# endpoint, HTTP/1.1 and HTTP/2 only (no UDP port open). A new connection per request to the API's socket, so a
+# release that hands the API over is picked up at once (src/launcher/launcher.ts).
+{
+    admin off
+    # Let's Encrypt only (the resolver answers no other CA's name).
+    acme_ca https://acme-v02.api.letsencrypt.org/directory
+    servers {
+        protocols h1 h2
+    }
+}
+
+vault.beanpool.org {
+    encode
+    reverse_proxy unix//run/beanpool-vault/api/api.sock {
+        transport http {
+            keepalive off
+        }
+    }
+}

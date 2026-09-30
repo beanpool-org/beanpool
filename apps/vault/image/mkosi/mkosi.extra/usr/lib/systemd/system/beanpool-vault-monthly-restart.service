@@ -1,0 +1,10 @@
+# The monthly restart: stops the API and removes what its user left on the state partition, installs a new image the
+# API staged, only if root's own check from the pinned custodian keys passes (usr/lib/beanpool-vault/monthly-restart,
+# src/install/install.ts), then reboots. The vault comes back locked; two custodians unlock it. Kernel and C library
+# fixes take effect here.
+[Unit]
+Description=BeanPool key vault: install a waiting image and restart
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/beanpool-vault/monthly-restart

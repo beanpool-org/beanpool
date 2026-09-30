@@ -1,0 +1,16 @@
+{
+  "dataDir": "/var/lib/beanpool-vault/data",
+  "requireDataMount": true,
+  "restoreDir": "/var/lib/beanpool-vault/restore",
+  "keyholderSocket": "/run/beanpool-vault/keyholder/keyholder.sock",
+  "hosts": ["vault.beanpool.org"],
+  "socketPath": "/run/beanpool-vault/api/api.sock",
+  "trustProxy": true,
+  "backupDir": "/var/lib/beanpool-vault/backups",
+  "backupMaxBytes": 1073741824,
+  "releasesDir": "/var/lib/beanpool-vault/releases",
+  "stagedDir": "/var/lib/beanpool-vault/staged",
+  "installResultFile": "/var/lib/beanpool-vault/install-result.json",
+  "imageIdentityFile": "/run/beanpool-vault-image.json",
+  "feed": { "github": "beanpool-org/beanpool" }
+}

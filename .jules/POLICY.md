@@ -524,3 +524,65 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Why not to re-file:** `deals` is capped at the member's last 50 deals (`HEALED_DEALS = 50`, ties included), and the rewrite is
   behaviour-identical (20,000 random inputs: 0 mismatches), so the saving is microseconds on at most 50 rows. Bolt: only file a
   loop rewrite for a list that grows with the community, and name the loop and the list size.
+
+### 2026-10-01 — Scout: test-viewer-helpers pins local nodes' member reads open (#1363) — CLOSED, CONTRADICTS #1376
+- **Category:** DELIBERATE DECISION
+- **Claim:** `apps/server/src/routes/viewer.ts` (`viewerTier`, `seesGuestView`, `membersOnlyHere`, `memberReadsOnlyHere`) has no
+  unit coverage.
+- **Why not to re-file as-is:** one of its 28 checks asserts `memberReadsOnlyHere` answers `true` to a stranger on a local node.
+  #1376 (merged 2026-10-01, 0644f910) made that deliberately false: a local community's people reads are members-only on every
+  node, since any key could walk the invite tree from one name. Measured: 28/28 on the old main, 27/28 on main with #1376
+  (`✗ memberReadsOnlyHere returns true when NODE_PROFILE=local`). **Coverage of viewer.ts is still welcome**, filed once against
+  current main, asserting #1376's rule: a stranger, a visitor and a suspended member are refused 403 `members_only` by
+  `memberReadsOnlyHere` on a local node too.
+
+### 2026-10-01 — Bolt: batch keepers and pledges in listTreasuriesHandler (#1364) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (no meaningful gain), RECURRING (the #745, #1018, #1034, #1320 shape)
+- **Claim:** `treasuryKeepers()` and `getEnterprisePledges()` per enterprise make `/api/treasuries` run 2N queries.
+- **Why not to re-file as-is:** both are indexed primary-key lookups. Measured on the handler, 20 calls each: 30 enterprises
+  8.8-9.4 ms on main vs 7.8 ms on the PR, 600 enterprises 171-174 ms vs 153-155 ms. So it saves about 1 ms on a real
+  community's Commons list. The price: a second hand-kept copy of the keeper and pledge shaping inside a treasury route,
+  which must now change in step with `treasuryKeepers()` (its suspended and visitor rule, `lastActiveForViewer`) and
+  `getEnterprisePledges()` forever. It also reorders keepers whose `granted_at` ties (34 of 40 enterprises in a tie-heavy
+  fixture), for example the rows `seedTreasuryOperatorsFromLegacyFlag` writes in one transaction. Bolt: a batched read has to
+  live in `state-engine.ts` beside the per-enterprise one and share its row shaping. Only file one when a timing at a realistic
+  enterprise count shows a gain a member would notice.
+
+### 2026-10-01 — Shield: vault push-token record into SecureStore (#1367) — CLOSED, BREAKS SIGN-OUT'S TOKEN WITHDRAWAL
+- **Category:** REJECTED BAD PR (NOT A SUPPRESSION: see "if re-filed" below)
+- **Claim:** `apps/native/utils/vault.ts` keeps the push token it gave the key vault in AsyncStorage, not SecureStore.
+- **Why not to re-file as-is:** the record's key is `vaultPushTokenStoreKey()` = `beanpool_vault_push_token:<hex>`, and
+  expo-secure-store refuses any key outside `/^[\w.-]+$/`. It throws "Invalid key provided to SecureStore" on get, set and
+  delete, and the colon is outside that set. So on a phone the deposit's record is silently dropped (`.catch`),
+  `keepVaultPushTokenCurrent` never sends a changed token, and
+  `withdrawVaultPushToken` returns false at Sign Out or Replace. The vault then keeps sending an account's recovery notices
+  to a phone that may be someone else's, which undoes PR #1336 review finding 8. CI passed only because the tests' SecureStore mock
+  accepts any key. With the real key rule in `vault-phone.test.ts`'s mock, main passes 15/15 of the push-token block and the PR
+  fails 2 of them. The value is also no secret the phone keeps from anyone: it is this phone's Expo push token, which every community
+  it joins and the vault already hold, and whose own copy (`bp_push_token`) is in SecureStore already.
+- **If re-filed:** use a SecureStore-legal key, read the old AsyncStorage record as a fallback (or a phone updated from an
+  earlier build can never withdraw its token), and run the vault-phone tests with a mock that enforces SecureStore's key rule.
+
+### 2026-10-01 — Vault: `credentials: 'same-origin'` on the escrow dispute helpers, again (#1368) — CLOSED, RE-FILE OF #1294
+- **Category:** CLAIM FALSE, RECURRING (third filing: `deleteNodePost`, #1294, #1368)
+- **Claim:** `fetchEscrowDisputes` and `resolveEscrowDisputeApi` omit `credentials: 'same-origin'`, so cookie sessions get 401.
+- **Why not to re-file:** the same two functions and the same claim as #1294, registered on 2026-09-29. `'same-origin'` is fetch's
+  default, and `resolveNodeApiUrl` only ever returns the manager's own origin or a relative `/proxy/...` path, so the cookie
+  and CSRF header already go out. The PR's test asserts the literal option, which says nothing about behaviour. Vault:
+  search this register for the function name before filing.
+
+### 2026-10-01 — Palette: focus rings on VisitorPostDetail's Back and Join buttons (#1369) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the Back to Market and Join buttons in `apps/pwa/src/components/VisitorListing.tsx` have no visible keyboard focus
+  indicator.
+- **Why not to re-file:** the PWA has styled every element's keyboard focus since the first release:
+  `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }` in `apps/pwa/src/index.css`. Measured in
+  Chromium with the PWA's compiled CSS, tabbing to each button on main shows `solid 2px rgb(100, 118, 100) offset 2px`. The
+  PR only swaps that outline for a Tailwind ring. Palette: a missing `focus-visible:` class is a defect only on an element
+  that suppresses the outline (`outline-none` or `focus:outline-none` with no replacement). Check the computed style before filing.
+
+### 2026-10-01 — Palette: NodeAdminLink focus ring (#1127) — FIX LANDED
+- **Category:** FIX LANDED
+- **Claim:** the 2026-09-25 entry for #1127 says the NodeAdminLink anchor's focus ring is still wanted.
+- **Why not to re-file:** it landed in #1263 (dc66f025, 2026-09-28). The anchor carries
+  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`.

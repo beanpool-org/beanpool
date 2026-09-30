@@ -182,6 +182,14 @@ const connect = (provider: 'google' | 'facebook' = 'google') =>
 /** A hold is over once a day has passed, for the phone and the vault alike. */
 const pastTheHold = () => vi.useFakeTimers({ now: Date.now() + DAY + 5_000, toFake: ['Date'] });
 
+/** What the vault signed in its last answer to `path`, checked as the phone checks it: that kind, that key, that request. */
+function lastSigned(path: string, kind: (typeof VAULT_ANSWER_KINDS)[number]) {
+    const x = exchanges.filter(e => e.path === path && !e.relayed).at(-1)!;
+    const check = checkVaultAnswer(x.answer?.signed, { ticketKeys: [ticketKey], kinds: [kind], key: x.key, challenge: x.challenge as string });
+    if (!check.ok) throw new Error(`${path}: the answer the phone acted on was not the vault's signed ${kind} (${check.reason})`);
+    return check.answer;
+}
+
 describe('the signed flow, end to end, against the real vault', () => {
     it('the move: connect deposits on the vault\'s signed receipt, then the community\'s copy is deleted; Account Protection reads a signed status', async () => {
         community.copies.add('google');
@@ -223,15 +231,20 @@ describe('the signed flow, end to end, against the real vault', () => {
         await startSsoRestore('google');
         const [hold] = (await vaultStatus(member)).holds;
         await stopVaultHold(member, hold.holdId);
+        expect(lastSigned('/v1/holds/cancel', 'hold')).toMatchObject({ status: 'stopped', key: member.publicKey });
         expect(await checkSsoRestore()).toEqual({ status: 'stopped' });
+        expect(lastSigned('/v1/restore/collect', 'collect')).toMatchObject({ status: 'stopped' });
         expect(await waitingSsoRestore()).toBeNull();
     });
 
     it('with no answer from any device, it goes through after a day', async () => {
-        await startSsoRestore('google');
+        const held = await startSsoRestore('google');
+        expect(lastSigned('/v1/restore', 'restore')).toMatchObject({ status: 'held', holdId: held.holdId, key: held.publicKey });
         expect(await checkSsoRestore()).toMatchObject({ status: 'held' });
+        expect(lastSigned('/v1/restore/collect', 'collect')).toMatchObject({ status: 'held', until: held.until });
         pastTheHold();
         expect(await checkSsoRestore()).toMatchObject({ status: 'released', restored: { publicKey: member.publicKey } });
+        expect(lastSigned('/v1/restore/collect', 'release')).toMatchObject({ pubkey: member.publicKey, key: held.publicKey });
         vi.useRealTimers();
         await abandonSsoRestore();
     });
@@ -242,12 +255,15 @@ describe('the signed flow, end to end, against the real vault', () => {
         await keepVaultPushTokenCurrent(member);
         await keepVaultPushTokenCurrent(member);
         expect(exchanges.filter(x => x.path === '/v1/push-token').length).toBe(before + 1);
+        expect(lastSigned('/v1/push-token', 'push-token')).toMatchObject({ updated: 1, key: member.publicKey });
     });
 
     it('Disconnect deletes the copy on the vault\'s signed answer; a restore then gets its signed "no copy"', async () => {
         await connect('facebook');
         expect(await disconnectSsoKeeper('facebook', member)).toEqual({ success: true, enrolledSso: ['google'] });
+        expect(lastSigned('/v1/copies/delete', 'deleted')).toMatchObject({ deleted: 1 });
         await expect(startSsoRestore('facebook')).rejects.toMatchObject({ reason: 'no_copy', message: VAULT_MESSAGES.noCopy });
+        expect(lastSigned('/v1/restore', 'refusal')).toMatchObject({ status: 404, code: 'no_copy' });
         expect(await waitingSsoRestore()).toBeNull();
     });
 });
@@ -304,6 +320,7 @@ describe('a relay at the vault\'s address, in front of the real vault', () => {
 });
 
 describe('a locked vault, and what the phone saw', () => {
+    // A guard, not a change: a locked vault can't sign, and a 503 is never acted on, so the paused path is main's.
     it('a restarted (locked) keyholder: the paused words, nothing linked or saved', async () => {
         await v.restartKeyholder();
         await expect(startSsoRestore('google')).rejects.toMatchObject({ reason: 'locked', message: VAULT_MESSAGES.paused });

@@ -221,6 +221,8 @@ describe('the monthly restart installs only what root checks from the pinned key
 
 describe('backupsPastBudget, the one rule for root and the API (confirm 5, NB-1)', () => {
     const MiB = 1 << 20;
+    /** The newest name there can be (all names here are older). */
+    const latest = 'bv-20261231T000000Z.bin';
 
     it('a backup costs its blocks when they are more than its length: one byte long with 400 MiB preallocated (fallocate --keep-size) is past a 64 MiB budget', () => {
         const backups = [
@@ -230,16 +232,16 @@ describe('backupsPastBudget, the one rule for root and the API (confirm 5, NB-1)
             { name: 'bv-20260901T000000Z.bin', size: 1, blocks: (30 * MiB) / 512 },
             { name: 'bv-20260831T000000Z.bin', size: 1, blocks: (30 * MiB) / 512 },
         ];
-        expect(backupsPastBudget(backups, 64 * MiB).sort()).toEqual(['bv-20260831T000000Z.bin', 'bv-20260903T000000Z.bin']);
+        expect(backupsPastBudget(backups, 64 * MiB, { latest }).sort()).toEqual(['bv-20260831T000000Z.bin', 'bv-20260903T000000Z.bin']);
         // A sparse file (length past its blocks) still costs its length.
-        expect(backupsPastBudget([{ name: 'bv-20260903T000000Z.bin', size: 65 * MiB, blocks: 0 }], 64 * MiB)).toEqual(['bv-20260903T000000Z.bin']);
+        expect(backupsPastBudget([{ name: 'bv-20260903T000000Z.bin', size: 65 * MiB, blocks: 0 }], 64 * MiB, { latest })).toEqual(['bv-20260903T000000Z.bin']);
     });
 
     it('no more than maxFiles stay, whatever they cost: the newest', () => {
         const empty = Array.from({ length: 1005 }, (_, i) => ({ name: `bv-20260801T000000Z-${i + 1}.bin`, size: 0, blocks: 0 }));
-        expect(backupsPastBudget(empty, 64 * MiB).sort()).toEqual([1, 2, 3, 4, 5].map(i => `bv-20260801T000000Z-${i}.bin`).sort());
+        expect(backupsPastBudget(empty, 64 * MiB, { latest }).sort()).toEqual([1, 2, 3, 4, 5].map(i => `bv-20260801T000000Z-${i}.bin`).sort());
         expect(MAX_BACKUP_FILES).toBe(1000);
-        expect(backupsPastBudget(empty.slice(0, 3), 64 * MiB, { maxFiles: 2 })).toEqual(['bv-20260801T000000Z-1.bin']);
+        expect(backupsPastBudget(empty.slice(0, 3), 64 * MiB, { latest, maxFiles: 2 })).toEqual(['bv-20260801T000000Z-1.bin']);
     });
 });
 
@@ -393,6 +395,26 @@ describe('the monthly restart removes what the API left on the state partition, 
         expect(left).toContain('bv-20260906T000000Z-3.bin');
         for (const gone of ['bv-20260906T000000Z-2.bin', 'bv-20260906T000000Z-1.bin', 'bv-20260903T000000Z.bin']) expect(left).not.toContain(gone);
         expect(MAX_BACKUP_FILES).toBe(cap);
+    });
+
+    it('a backup named later than the one the API writes (planted, or the clock set back): both sides drop it and keep the one written (confirm 5, NB-2)', async () => {
+        // 0910 is named later than 0904, which the API writes on 5 September; 0910 and 0904 don't fit together.
+        const files: [string, number][] = [['bv-20260901T000000Z.bin', 3 * K], ['bv-20260910T000000Z.bin', 5 * K], ['bv-20260904T000000Z.bin', 3 * K]];
+        const store = path.join(dir, `store-${++n}`);
+        mkdirSync(store);
+        for (const [name, size] of files.slice(0, 2)) writeFileSync(path.join(store, name), Buffer.alloc(size));
+        await new LocalDirectoryStore(store, { maxBytes: 7 * K }).put(files[2][0], Buffer.alloc(files[2][1]));
+        const base = path.join(dir, `api-${++n}`);
+        const d: ApiDirs = {
+            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 7 * K,
+            restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
+        };
+        mkdirSync(d.backups, { recursive: true });
+        for (const [name, size] of files) writeFileSync(path.join(d.backups, name), Buffer.alloc(size));
+        // Root's step on 5 September, on the same files.
+        clearApiDirs(d, () => undefined, Date.UTC(2026, 8, 5, 12));
+        const kept = ['bv-20260901T000000Z.bin', 'bv-20260904T000000Z.bin'];
+        expect({ api: readdirSync(store).sort(), root: readdirSync(d.backups).sort() }).toEqual({ api: kept, root: kept });
     });
 
     it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {

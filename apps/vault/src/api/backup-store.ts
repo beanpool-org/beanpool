@@ -1,6 +1,6 @@
 import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_NAME_RE, backupsPastBudget, compareBackupNames } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupBytes, backupsPastBudget, compareBackupNames } from '../shared/backup-format.js';
 
 /**
  * Where backups go (key vault design §4): object storage at a second provider in another country. Every file is
@@ -32,7 +32,8 @@ function checkName(name: string): string {
  * the store's client exists (the state partition, `/var/lib/beanpool-vault/backups`). There it shares the partition
  * with a new image waiting for the monthly restart, so `maxBytes` bounds it (backupsPastBudget, the rule root's monthly
  * step applies too): a backup larger than the whole budget is refused (BackupTooLarge) and nothing is removed for it,
- * so the last good one stays; after each backup written, the oldest go until the rest fit, and never the one written.
+ * so the last good one stays; after each backup written, anything named later goes, then the oldest until the rest
+ * fit, and never the one written.
  */
 export class LocalDirectoryStore implements BackupStore {
     private readonly maxBytes: number | null;
@@ -56,14 +57,21 @@ export class LocalDirectoryStore implements BackupStore {
         if (this.maxBytes !== null) this.keepWithin(this.maxBytes, name);
     }
 
-    /** What the budget lets go (backupsPastBudget), but never `written`, the backup just made. */
+    /**
+     * What the budget lets go (backupsPastBudget), with `written` as the newest name there can be: anything named after
+     * it (planted, or written while the clock was ahead) goes, as root's step would remove it too. What was just
+     * written goes only if its blocks alone are past the budget; that is then a refusal, and older backups stay.
+     */
     private keepWithin(maxBytes: number, written: string): void {
         const backups = readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n))
             .map(name => ({ name, st: lstatSync(path.join(this.dir, name)) }))
             .filter(b => b.st.isFile())
             .map(b => ({ name: b.name, size: b.st.size, blocks: b.st.blocks }));
-        for (const name of backupsPastBudget(backups, maxBytes)) {
-            if (name !== written) rmSync(path.join(this.dir, name), { force: true });
+        const past = backupsPastBudget(backups, maxBytes, { latest: written });
+        for (const name of past) rmSync(path.join(this.dir, name), { force: true });
+        if (past.includes(written)) {
+            const b = backups.find(x => x.name === written) as { size: number; blocks: number };
+            throw new BackupTooLarge(backupBytes(b), maxBytes);
         }
     }
 

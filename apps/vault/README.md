@@ -151,7 +151,9 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   length or the blocks it holds, whichever is more, so blocks preallocated past its end count. None costing more than
   the budget stays, the newest included. Of the rest, the newest stays, then older ones while they fit together and
   number no more than 1,000 (the API writes one an hour and keeps 30 days, about 720); the first that doesn't goes
-  with every older one. So empty files under backup names can't use up the partition's inodes either. The API never writes a backup past the budget: it keeps the last
+  with every older one. So empty files under backup names can't use up the partition's inodes either. A backup named
+  later than now (planted, or written while the clock was ahead) goes on both sides: the API keeps the one it has
+  just written, and root keeps the same. The API never writes a backup past the budget: it keeps the last
   good one and `/v1/report` says why (`backups.error`, `too large: N bytes > budget M`). The vault holds small sealed
   copies, so a backup that size is a sign of abuse, not of a big vault.
   `restore/` is emptied unless the keyholder's marker (`/var/lib/beanpool-vault/keyholder/restore-pending.json`) says a

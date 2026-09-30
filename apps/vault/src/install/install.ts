@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_NAME_RE, backupsPastBudget, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupsPastBudget, latestBackupName, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
 import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
@@ -34,7 +34,8 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * again), `backups/` keeps only backups (regular files under a backup name) within the budget, by the API's own rule
  * (backupsPastBudget): each costs its length or its blocks, whichever is more (so preallocated blocks count); none
  * costing more than the budget stays, the newest included (the API never writes one); then the newest and older ones
- * while they fit together, and no more than MAX_BACKUP_FILES of them (so empty files can't use up the inodes).
+ * while they fit together, and no more than MAX_BACKUP_FILES of them (so empty files can't use up the inodes). A backup
+ * named later than now goes too, as the API's rotation removes it.
  * `restore/` is emptied unless the keyholder's marker says a restore from backup is pending (only a restore a fresh keyholder accepts
  * makes one): then its file and its partial file stay, whatever their size (the API finishes the restore
  * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image
@@ -160,7 +161,7 @@ function emptyInbox(inbox: string, log: (line: string) => void, apiStopped: bool
  * there: then the pending restore's file and its partial file stay (regular files, any size). Returns what went, in a
  * few words, or null when nothing did.
  */
-export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string | null {
+export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void, now = Date.now()): string | null {
     const said: string[] = [];
     const releases = names(dirs.releases).filter(n => removeWhole(path.join(dirs.releases, n)));
     if (releases.length) said.push(`${releases.length} in releases`);
@@ -181,7 +182,7 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string
         else if (removeWhole(p)) others++;
     }
     let dropped = 0;
-    for (const name of backupsPastBudget(backups, dirs.backupMaxBytes)) if (removeWhole(path.join(dirs.backups, name))) dropped++;
+    for (const name of backupsPastBudget(backups, dirs.backupMaxBytes, { latest: latestBackupName(now) })) if (removeWhole(path.join(dirs.backups, name))) dropped++;
     if (others) said.push(`${others} in backups that ${others === 1 ? 'is' : 'are'} not a backup`);
     if (dropped) said.push(`${dropped} ${dropped === 1 ? 'backup' : 'backups'} past the budget`);
 

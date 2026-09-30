@@ -73,9 +73,14 @@ export function backupBytes(st: { size: number; blocks: number }): number {
  * newest included: a sealed backup of small copies near the budget is a sign of abuse, not of a big vault. Of the
  * rest, the newest stays, then older ones while they all fit together and number no more than `maxFiles`; the first
  * that doesn't goes, with every older one.
+ *
+ * `latest` is the newest name a backup can have now: for the API, the backup it has just written; for root, the name
+ * a backup made in the next second would get (latestBackupName). Anything named after it goes, whatever it costs. Only
+ * a planted file, or one written while the clock was ahead, can be named later than now, and the one just written
+ * holds newer data either way. So the API keeps what it just wrote, root keeps the same, and neither keeps both.
  */
 export function backupsPastBudget(backups: readonly { name: string; size: number; blocks: number }[], maxBytes: number,
-    opts: { maxFiles?: number } = {}): string[] {
+    opts: { latest: string; maxFiles?: number }): string[] {
     const maxFiles = opts.maxFiles ?? MAX_BACKUP_FILES;
     const past: string[] = [];
     let total = 0;
@@ -83,7 +88,7 @@ export function backupsPastBudget(backups: readonly { name: string; size: number
     let full = false;
     for (const b of [...backups].sort((x, y) => compareBackupNames(y.name, x.name))) {
         const bytes = backupBytes(b);
-        if (bytes > maxBytes) past.push(b.name);
+        if (compareBackupNames(b.name, opts.latest) > 0 || bytes > maxBytes) past.push(b.name);
         else if (!full && kept < maxFiles && total + bytes <= maxBytes) {
             total += bytes;
             kept++;
@@ -93,6 +98,11 @@ export function backupsPastBudget(backups: readonly { name: string; size: number
         }
     }
     return past;
+}
+
+/** For root: the name a backup made in the second after `now` would get; no backup made by `now` sorts after it. */
+export function latestBackupName(now: number): string {
+    return backupNameFor(now + 1000);
 }
 
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */

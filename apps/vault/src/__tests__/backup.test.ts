@@ -252,6 +252,19 @@ describe('backups', () => {
         }
     });
 
+    it('a backup whose length fits but whose blocks don\'t: written, then refused by the rule both sides use; the backups before it stay (confirm 5)', async () => {
+        const dir = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
+        try {
+            // 7068 bytes hold two 4 KiB blocks: 8192 > 7118.
+            const small = new LocalDirectoryStore(dir, { maxBytes: 7118 });
+            await small.put('bv-20261001T100000Z.bin', crypto.randomBytes(4096));
+            await expect(small.put('bv-20261001T110000Z.bin', crypto.randomBytes(7068))).rejects.toThrow(/^too large: \d+ bytes > budget 7118$/);
+            expect(readdirSync(dir)).toEqual(['bv-20261001T100000Z.bin']);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     it('the API\'s backups past the budget: refused, the last good one kept, and /v1/report says why (verify 4, the director\'s hard cap)', async () => {
         // The API's hourly backups into such a store. Its budget is changed between backups (the store the API holds
         // passes each call to `target`).

@@ -252,7 +252,13 @@ async function vaultRequest(
         }
         const answer: unknown = await res.json().catch(() => null);
         const parsed = answer && typeof answer === 'object' && !Array.isArray(answer) ? answer as Record<string, unknown> : null;
-        if (res.status >= 500) throw vaultRefusal(res.status, parsed);
+        if (res.status >= 500) {
+            // Unsigned: whatever `code` a 5xx carries is not the vault's word, so none is kept. Only its "try again
+            // later" meaning is (paused or unreachable); a code would make the restore forget itself or a hold
+            // answer read as final (holdAnswerIsFinal), on nobody's say-so (#1354 review 4146671923).
+            const refused = vaultRefusal(res.status, parsed);
+            throw new VaultError(refused.reason, refused.message);
+        }
         if (!res.ok) {
             const check = checkVaultAnswer(parsed?.signed, { ticketKeys: cfg.ticketKeys, kinds: ['refusal'], key: signer.publicKey, challenge });
             if (!check.ok) throw unverified(path, `refusal ${res.status}: ${check.reason}`);

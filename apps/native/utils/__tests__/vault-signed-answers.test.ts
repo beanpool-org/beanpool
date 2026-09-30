@@ -76,7 +76,7 @@ import { checkSsoRestore, startSsoRestore, waitingSsoRestore } from '../sso-reco
 import { finishMove, vaultMoveOffer } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
-    approvedHolds, approveVaultHold, stopVaultHold, vaultCopyKnowledge, vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES,
+    approvedHolds, approveVaultHold, holdAnswerIsFinal, stopVaultHold, vaultCopyKnowledge, vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES,
 } from '../vault';
 import { protectionFrom } from '../protection-state';
 import { COMMUNITY, GLOBAL, HOLD_MS, VAULT, installNetwork, noVault, useVault, type AnswerMode, type Network, type SentRequest } from './fake-vault';
@@ -228,6 +228,41 @@ describe('(a) a release a server at the vault\'s address sealed itself, naming a
             expect(await startSsoRestore('google')).toMatchObject({ holdId: held.holdId, publicKey: held.publicKey });
         });
     }
+});
+
+describe('an unsigned 5xx carries no code into what the phone does (#1354 review 4146671923)', () => {
+    it('a 503 saying "no_hold" or "no_copy" to a collect: the restore is kept, and the vault itself answers it later', async () => {
+        await memberCopyKept();
+        const held = await startSsoRestore('google');
+        const real = net.vault.handle.bind(net.vault);
+        for (const code of ['no_hold', 'no_copy']) {
+            net.vault.handle = (req: SentRequest) => (req.path === '/v1/restore/collect' ? { status: 503, body: { error: 'x', code } } : real(req));
+            const e = await checkSsoRestore().then(() => null, (err: unknown) => err);
+            expect(e).toMatchObject({ reason: 'unreachable' });
+            expect((e as { code?: unknown }).code).toBeUndefined();
+            expect(await waitingSsoRestore()).toMatchObject({ holdId: held.holdId, publicKey: held.publicKey });
+        }
+        net.vault.handle = real;
+        expect(await startSsoRestore('google')).toMatchObject({ holdId: held.holdId, publicKey: held.publicKey });
+    });
+
+    it('a 503 saying "stopped", "collected" or "no_hold" to Stop or "Yes, it\'s me": not a final answer, and the hold stays open', async () => {
+        await memberOnCommunity();
+        await memberCopyKept();
+        await startSsoRestore('google');
+        const [hold] = (await vaultStatus(member)).holds;
+        const real = net.vault.handle.bind(net.vault);
+        for (const code of ['stopped', 'collected', 'no_hold']) {
+            net.vault.handle = (req: SentRequest) => (req.path.startsWith('/v1/holds/') ? { status: 503, body: { error: 'x', code } } : real(req));
+            for (const act of [() => stopVaultHold(member, hold.holdId), () => approveVaultHold(member, hold.holdId)]) {
+                const e = await act().then(() => null, (err: unknown) => err);
+                expect(e).toMatchObject({ reason: 'unreachable' });
+                expect(holdAnswerIsFinal(e)).toBe(false);
+            }
+        }
+        net.vault.handle = real;
+        expect(net.vault.holds.get(hold.holdId)).toMatchObject({ cancelled: false });
+    });
 });
 
 describe('(b) a deposit a server at the vault\'s address answered {ok: true} and never kept: never counted', () => {

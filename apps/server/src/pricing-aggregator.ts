@@ -37,21 +37,24 @@ export function runPricingAggregationCycle(): {
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };
 
-    // Query active marketplace posts without loading heavy photo blobs into memory. An item's picture comes only from a
-    // listing on the board for everyone (routes/pricing-guide.ts shows no other, and the guide is a public read): a
-    // group's own listing, or one for one person, may price an item but never gives it its photo, so the node never
-    // stores a URL of one here.
-    const photoOnBoard = `CASE WHEN (p.audience_scope IS NULL OR p.audience_scope = 'public') AND p.hidden_by_reports_at IS NULL
+    // Query active marketplace posts without loading heavy photo blobs into memory. Only listings on the board for
+    // everyone count (#1348's deciding review): the guide is a public read, so a group's own listing, or one for one
+    // person, never prices an item, gives it a count or gives it its photo, even as part of an average. "On the board"
+    // is getPosts' rule for a reader with no key (@beanpool/engine posts.ts, onPublicBoard in photo-url.ts): `public`,
+    // or NULL for a row from before audiences. An item's picture also skips a listing hidden by reports
+    // (routes/pricing-guide.ts shows no other), so the node never stores a URL of one here.
+    const onBoard = `(p.audience_scope IS NULL OR p.audience_scope = 'public')`;
+    const photoOnBoard = `CASE WHEN p.hidden_by_reports_at IS NULL
                                 THEN (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) END AS has_photo`;
     const postsQuery = config.dataSource === 'local'
         ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
                   ${photoOnBoard}
            FROM posts p
-           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0`
+           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0 AND ${onBoard}`
         : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
                   ${photoOnBoard}
            FROM posts p
-           WHERE p.active = 1 AND p.credits > 0`;
+           WHERE p.active = 1 AND p.credits > 0 AND ${onBoard}`;
 
     const posts = db.prepare(postsQuery).all() as any[];
 

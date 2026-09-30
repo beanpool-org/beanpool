@@ -23,7 +23,8 @@
  *     record is added. With the main server's key file put back by hand, and no restart, Ada is 409 already_joined and
  *     the new account joins.
  *  4. Rolling back past this version (services/open-join-key.ts, the rollback command). With the main server stopped,
- *     `open-join-key --write-key-row` refuses, changing nothing, when the file is missing or is not the records' key.
+ *     `open-join-key --write-key-row` refuses, changing nothing, when the file is missing, is not the records' key, or
+ *     is longer than an older version takes (193 bytes; 192 is written, 256 base64url characters).
  *     Otherwise it writes the file back as the `openJoinSalt` row, byte for byte, and prints no key; an older version's
  *     key (the row, decoded as it decodes it) then matches every record, so Ada is not a new member there. Run again, it
  *     changes nothing. Booted on this version again, the row moves out and Ada is still 409.
@@ -516,6 +517,27 @@ async function main(): Promise<void> {
         assert(otherKey.code === 1 && /Nothing was changed: data\/open-join\.key is not the key the 2 sign-in records here were made with/.test(otherKey.out)
             && keyRows(otherKeyDir).legacy === null,
             `with a key file that is not the records' key, it refuses and writes no row (exit ${otherKey.code}: ${otherKey.out.trim().split('\n').pop()})`);
+        // A key an older version takes: its usableKey (engine/open-join.ts from #1130 to #1350) takes a row of at most 256
+        // base64url characters, 192 bytes, and nothing longer. The records are cleared in these copies, so the length is
+        // the only thing that can refuse: 193 bytes is refused, 192 written.
+        const withoutRecords = (label: string, keyBytes: number) => {
+            const d = copyOfMain(label);
+            const handle = new Database(path.join(d, 'state.db'));
+            try { handle.prepare('DELETE FROM open_joins').run(); } finally { handle.close(); }
+            fs.writeFileSync(path.join(d, KEY_FILE), crypto.randomBytes(keyBytes), { mode: 0o600 });
+            return d;
+        };
+        const longKeyDir = withoutRecords('rollback-long-key', 193);
+        const longKey = await runKeyCli(longKeyDir);
+        assert(longKey.code === 1 && /Nothing was changed: data\/open-join\.key is 193 bytes; an older version takes a key of at most 192/.test(longKey.out)
+            && keyRows(longKeyDir).legacy === null,
+            `with a key file longer than an older version takes (193 bytes), it refuses and writes no row (exit ${longKey.code}: ${longKey.out.trim().split('\n').pop()})`);
+        const longestKeyDir = withoutRecords('rollback-longest-key', 192);
+        const longestKey = await runKeyCli(longestKeyDir);
+        const longestRow = keyRows(longestKeyDir).legacy ?? '';
+        assert(longestKey.code === 0 && longestRow.length === 256 && /^[A-Za-z0-9_-]+$/.test(longestRow)
+            && longestRow === fs.readFileSync(path.join(longestKeyDir, KEY_FILE)).toString('base64url'),
+            `with a 192-byte key file, it writes the row: 256 base64url characters, the longest an older version takes (exit ${longestKey.code}, ${longestRow.length} characters)`);
 
         const cli = await runKeyCli(dirs.main);
         assert(cli.code === 0 && /Wrote data\/open-join\.key as node_config openJoinSalt, for the 2 sign-in records/.test(cli.out),

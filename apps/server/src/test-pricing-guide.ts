@@ -188,6 +188,26 @@ async function main() {
     assert(babyItem?.priceBeans === 22, 'Calculates trimmed average price (22 beans)');
     assert(babyItem?.trend === 'up', 'Flags trend as up from baseline 18');
 
+    // 6b. Only listings on the board price an item (#1348's deciding review): the guide is read by people who can't see a
+    // group's own listing or one for one person, so theirs must not reach it even as an average or a count.
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign) VALUES ('author-2', 'Bea')`).run();
+    db.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('group-sitters', 'Sitters', 'sitters', 'author-1')`).run();
+    const insertScoped = db.prepare(`
+        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, audience_scope, target_group_id, target_pubkey)
+        VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?, ?)
+    `);
+    insertScoped.run('post-group-1', 'Babysitting for the group', 'Group babysitting', 80, 'group', 'group-sitters', null);
+    insertScoped.run('post-direct-1', 'Babysitting for Bea', 'Direct babysitting', 90, 'direct', null, 'author-2');
+    runPricingAggregationCycle();
+    const afterOffBoard = getPricingGuideItem('ls-001');
+    assert(afterOffBoard?.confidenceCount === 3 && afterOffBoard?.priceBeans === 22,
+        `a group listing and a direct listing move neither the price nor the count (${afterOffBoard?.priceBeans} beans from ${afterOffBoard?.confidenceCount})`);
+    insertScoped.run('post-board-5', 'Babysitting on weekends', 'Board babysitting', 30, 'public', null, null);
+    runPricingAggregationCycle();
+    const afterBoard = getPricingGuideItem('ls-001');
+    assert(afterBoard?.confidenceCount === 4 && afterBoard?.priceBeans === 23,
+        `a listing on the board moves both (${afterBoard?.priceBeans} beans from ${afterBoard?.confidenceCount}, expected 23 from 4)`);
+
     // Clean up custom item & reset catalog
     deletePricingGuideItem(customItem.id);
     assert(getPricingGuideItem(customItem.id) === null, 'Deletes item from catalog');

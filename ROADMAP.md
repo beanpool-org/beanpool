@@ -137,7 +137,7 @@
 - [ ] 🔴 **View Recovery Phrase** — Show stored 12-word phrase in Settings for existing mnemonic-based identities. _Users currently have no way to see their seed words after initial creation. If they didn't write them down, identity loss is permanent on device failure._ **Note:** PWA now has a private key viewer as a partial mitigation.
 - [x] 🔴 **Identity Backup Reminder** — Prompt users to export their identity if they haven't yet. _Implemented in PWA Settings as an amber warning card._
 - [ ] 🔴 **Ban / Revoke Member (Enforcement)** — `adminSetUserStatus('disabled')` exists but doesn't actually block transactions or posting. Disabled members can still transact. _Need to enforce status checks in transfer/post/messaging pathways._
-- [ ] 🔴 **`/api/invite/redeem*` Proof-of-Possession** — Implement a cryptographic challenge-response check on the supplied `publicKey` during invite redemption to ensure the client actually holds the corresponding private key.
+- [x] 🔴 **`/api/invite/redeem*` Proof-of-Possession** — Implement a cryptographic challenge-response check on the supplied `publicKey` during invite redemption to ensure the client actually holds the corresponding private key. _Done 2026-10-01: a redeem must carry a fresh request signature by the key it registers (routes/community.ts requireRedeemSignature); both apps already signed theirs._
 - [ ] **Visitor Account Audit** — Investigate signup flow for ghost/unnamed accounts; consider enforcing mandatory profile info or redirecting to profile settings on first login.
 - [ ] 🟡 **PWA sendRemoteTransfer unsigned POST** — Fix long-standing bug where the PWA client posts to `/api/ledger/transfer` without signature headers.
 

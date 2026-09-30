@@ -38,6 +38,10 @@
  *     ones with a photo first; the same sync again (the phone didn't finish it) the same page; after a restart that
  *     changes nothing, its next sync carries the rest; every one of the 1,150 healed; then a delta again.
  *
+ * 10. A take-over that finishes at boot promotes a standby in the same process (services/takeover.ts
+ *     resumeTakeoverAtBoot, after the state engine recorded the standby's shape): the phone's old cursor heals at once,
+ *     with no restart after (finding 2).
+ *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-keys-resync.ts
  */
 
@@ -76,6 +80,14 @@ async function child(): Promise<void> {
     initAdminPassword();
     await initTls();
     se.initStateEngine();
+    if (process.env.PKR_PROMOTE_IN_PROCESS === '1') {
+        // A take-over's "role" step finished at this boot, after the state engine read the role as a standby's
+        // (index.ts: initStateEngine, then resumeTakeoverAtBoot), as test-schema-upgrade plays it.
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        const { resumeTakeoverAtBoot } = await import('./services/takeover.js');
+        updateLocalConfig({ nodeRole: 'primary' });
+        resumeTakeoverAtBoot();
+    }
     const port = await startHttpsServer(0);
     const row = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? null;
 
@@ -185,7 +197,7 @@ function boot(env: Record<string, string | undefined>, dir = 'node'): Promise<No
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, dir);
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
-    for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
+    for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE', 'PKR_PROMOTE_IN_PROCESS']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     let out = '';
@@ -575,6 +587,33 @@ async function main(): Promise<void> {
             assert(p3.status === 200 && rowsOf(p3).length === 0, `and the sync after that is a delta again (${rowsOf(p3).length})`);
             const heals = await node.send('heals');
             assert(heals?.n === 0, `the heal is done and its record gone (${heals?.n})`);
+            await stop(node);
+        });
+
+        await section('10. a take-over finished at boot, in process: the old cursor heals at once', async () => {
+            const template = await freshNode('resume');
+            await stop(node);
+            node = await boot({}, 'resume');
+            const synced1 = await pull(node, bob, null);
+            assert(synced1.status === 200 && keyed(rowsOf(synced1).find((p) => p.id === template)?.photos?.[0]),
+                'setup: the phone syncs from the main server, keyed');
+            const synced = Date.now();
+            await stop(node);
+            // This server as a standby (its own secret, its shape a standby's), then time passes: its photoKeysSince is
+            // older than the phone's last sync, as a standby that has run a while.
+            node = await boot({ NODE_ROLE: 'backup' }, 'resume');
+            const standby = await node.send('records');
+            assert(standby.shape?.endsWith('@standby'), `setup: a standby's shape (${standby.shape})`);
+            await node.send('ageSince', { ms: 60 * MIN });
+            await stop(node);
+            // The take-over's role step finishes at this boot, after the state engine recorded the standby's shape.
+            node = await boot({ NODE_ROLE: 'backup', PKR_PROMOTE_IN_PROCESS: '1' }, 'resume');
+            const rec = await node.send('records');
+            assert(rec.shape?.startsWith('keyed:') && !rec.shape.endsWith('@standby') && Date.parse(rec.since) > synced,
+                `promoted in process, it records a main server's shape and a new photoKeysSince at once (${rec.shape} ${rec.since})`);
+            const next = await pull(node, bob, synced);
+            assert(next.status === 200 && healedIn([next], [template]) === 1,
+                `the phone's old cursor is answered whole at once, keyed, with no restart after (${next.status}, ${healedIn([next], [template])} of 1)`);
             await stop(node);
         });
     } finally {

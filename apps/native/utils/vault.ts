@@ -13,8 +13,12 @@
  * apps/native/.env.example). A build without all three, well formed, keeps sign-in copies where the app always kept
  * them, at the member's community ({@link signInCopiesAt}): the vault paths switch on only in a build that has a vault,
  * and no build is left with neither. The keys are what make it the vault, not the address: a server at the vault's
- * address that isn't the vault can't sign a ticket the phone accepts or open a deposit box (design §1.4). What it can
- * still do before the vault signs its releases and deposit receipts is why no vault-configured build ships yet (PR #1336).
+ * address that isn't the vault can't sign a ticket the phone accepts or open a deposit box (design §1.4).
+ *
+ * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): the vault signs its
+ * releases and deposit receipts (what a server at its address can still do before then: review finding 4); global's
+ * door accepts vault tickets, V5 (finding 5); and a member whose only copy is still at a community can get back in,
+ * since such a build restores only through the vault and the move card shows only in Settings (finding 3).
  *
  * ## One sign-in, bound three ways
  *

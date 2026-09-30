@@ -163,22 +163,22 @@ export interface RecoveryCandidate {
 export function findRecoveryCandidates(callsign: string, options: { exact?: boolean } = {}): RecoveryCandidate[] {
     const norm = callsign.trim().toLowerCase();
     if (!norm) return [];
-    // PREFIX, not exact. Callsigns are unique per node, so the member who wanted `paul` and was
+    // PREFIX by default. Callsigns are unique per node, so the member who wanted `paul` and was
     // given `paul12` has no reason to remember the digits months later — and an exact match returns
-    // nothing, which reads as "your account is gone" rather than "try harder". Matching on the
-    // prefix and showing avatars lets them recognise themselves instead of recalling a string.
-    //
-    // Enumeration is no cheaper than before in any way that matters: callsigns are public by design
-    // (they are how members find each other) and this endpoint is already rate-limited for exactly
-    // this reason. LIKE 'x%' uses the index; a leading wildcard would not, and is not offered.
+    // nothing, which reads as "your account is gone" rather than "try harder". That was the case for
+    // a prefix and avatars, while callsigns were public; they are members' now on every community
+    // (2026-10-01), and a prefix listed every member with a sign-in copy, face and join date to
+    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
+    // leading wildcard would not, and is not offered.
     //
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
     // perfectly able to recover through.
     //
-    // EXACT (`options.exact`), on a node that shows visitors the listings and not the people (the
-    // global node, G9a-2): a stranger there must not list its members by typing a letter. Case is
-    // still forgiven; the same partial index answers it.
+    // EXACT (`options.exact`), which the public lookup asks on every node (the global node since
+    // G9a-2, a local community since 2026-10-01): a stranger must not list a community's members by
+    // typing a letter. Case is still forgiven; the same partial index answers it. The prefix is still
+    // this function's default (test-callsign-predicates pins its escaping), but no route asks it now.
     // `%` and `_` are LIKE wildcards. Bound straight in, a caller could send `%` and enumerate the
     // whole node from an unauthenticated endpoint — which is precisely what the rate limit on this
     // route exists to bound, so leaving it would have undone that.

@@ -168,6 +168,13 @@ async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> 
 }
 
 /**
+ * Asks the community for the name `publicKey` has there. It is given the key's private half to sign the question with:
+ * a community names a key only to that key's own signer, and the key is not saved on the phone yet
+ * (utils/db.ts fetchNodeCallsign).
+ */
+export type NameOnNode = (publicKey: string, privateKey: string) => Promise<string | null>;
+
+/**
  * Restore the account these 12 words make ("Recover with 12 Words"), through {@link clearToRestore}.
  *
  * The words ARE the identity. The name is profile data the node holds, so it is asked of the node (`nameOnNode`),
@@ -178,7 +185,7 @@ async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> 
 export async function restoreFromWords(
     words: string[],
     anchorUrl: string,
-    options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
+    options: { confirmReplace?: ConfirmReplace; nameOnNode: NameOnNode },
 ): Promise<BeanPoolIdentity> {
     assertPlainNodeAddress(anchorUrl);
     const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(words);
@@ -190,7 +197,7 @@ export async function restoreFromWords(
         mnemonic: words,
     };
     const cleared = await clearToRestore(incoming, options.confirmReplace);
-    const callsign = (await options.nameOnNode(publicKeyHex).catch(() => null)) || '';
+    const callsign = (await options.nameOnNode(publicKeyHex, privateKeyHex).catch(() => null)) || '';
     const identity: BeanPoolIdentity = { ...cleared.identity, callsign };
     await saveRestoredAccount({ ...cleared, identity }, anchorUrl);
     return identity;
@@ -207,7 +214,7 @@ export async function restoreFromVault(
     anchorUrl: string,
     options: {
         confirmReplace?: ConfirmReplace;
-        nameOnNode: (publicKey: string) => Promise<string | null>;
+        nameOnNode: NameOnNode;
         clearPending: () => Promise<void>;
     },
 ): Promise<BeanPoolIdentity> {
@@ -220,7 +227,7 @@ export async function restoreFromVault(
         ...(restored.mnemonic?.length ? { mnemonic: restored.mnemonic } : {}),
     };
     const cleared = await clearToRestore(incoming, options.confirmReplace);
-    const callsign = (await options.nameOnNode(incoming.publicKey).catch(() => null)) || '';
+    const callsign = (await options.nameOnNode(incoming.publicKey, incoming.privateKey).catch(() => null)) || '';
     const identity: BeanPoolIdentity = { ...cleared.identity, callsign };
     await saveRestoredAccount({ ...cleared, identity }, anchorUrl);
     await options.clearPending();

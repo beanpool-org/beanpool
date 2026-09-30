@@ -85,11 +85,17 @@ async function main() {
     assert(laborNeed !== null, 'Created labor need for CommunityEggs');
 
     // Test 2: A keeper payee CANNOT be paid into credit
+    // Approved as both routes approve it: signed by a keeper of the enterprise who is not the payee (the two-person
+    // rule refuses the payee's own signature). An unsigned approval is now refused before the funding checks, and
+    // records no wage claim (FABLE-sec-money LOW 3), so this needs a second keeper to sign it.
+    const eggsKeeper2 = 'eggs-keeper-000000000000000000000000000026';
+    seedMember(eggsKeeper2, 'EggsKeeper2');
+    assignKeeper(eggs, eggsKeeper2);
     const aliceBid = requestPost(laborNeed!.id, aliceKeeper);
     let keeperRefused = false;
     let refusalMessage = '';
     try {
-        approvePostRequest(aliceBid.id, eggs);
+        approvePostRequest(aliceBid.id, eggs, { authSigner: eggsKeeper2 });
     } catch (err: any) {
         keeperRefused = true;
         refusalMessage = err.message;
@@ -109,7 +115,12 @@ async function main() {
     createPost('offer', 'goods', 'Solo craft', 'Craft goods', 15, 'fixed', soloEnterprise, undefined, undefined, undefined, true);
     const soloNeed = createPost('need', 'work', 'Solo flock tending', 'Feed flock', 20, 'fixed', soloEnterprise);
     const soloBid = requestPost(soloNeed!.id, soloKeeper);
+    const soloClaims = () => (db.prepare('SELECT COUNT(*) AS n FROM deferred_wage_claims WHERE transaction_id = ?').get(soloBid.id) as { n: number }).n;
 
+    // What a sole keeper meets (FABLE-sec-money LOW 3). Nobody else keeps SoloFlock, so nobody can sign the approval
+    // but the payee, and the two-person rule refuses that; an approval nobody signed is refused before the funding
+    // checks. Either way no wage claim is recorded: before this change the unsigned call below recorded one, paid out
+    // later with no further step, on no keeper's say-so.
     let soloRefused = false;
     let soloMsg = '';
     try {
@@ -119,10 +130,34 @@ async function main() {
         soloMsg = err.message;
     }
     assert(soloRefused, 'Sole keeper in deficit is refused');
+    assert(soloMsg === 'Enterprise approval requires an authenticated keeper signature.',
+        `An approval no keeper signed is refused for that, before the funding checks: "${soloMsg}"`);
+    assert(soloClaims() === 0, 'An approval no keeper signed records no deferred wage claim');
+    let selfSignedCode = '';
+    try {
+        approvePostRequest(soloBid.id, soloEnterprise, { authSigner: soloKeeper });
+    } catch (err: any) {
+        selfSignedCode = err.code;
+    }
+    assert(selfSignedCode === 'TWO_PERSON_RULE', `The sole keeper can't approve their own pay: ${selfSignedCode}`);
+    assert(soloClaims() === 0, 'The payee approving their own pay records no deferred wage claim');
+
+    // The same refusal once another keeper approves it, as both routes call it: the wording, and the claim recorded
+    // on that keeper's say-so. Until LOW 3 this wording was reached only through the unsigned call above.
+    const soloKeeper2 = 'solo-keeper-000000000000000000000000000027';
+    seedMember(soloKeeper2, 'SoloKeeper2');
+    assignKeeper(soloEnterprise, soloKeeper2);
+    soloMsg = '';
+    try {
+        approvePostRequest(soloBid.id, soloEnterprise, { authSigner: soloKeeper2 });
+    } catch (err: any) {
+        soloMsg = err.message;
+    }
     assert(
         soloMsg === 'SoloFlock is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.',
-        `Sole keeper gets exact friendly refusal copy: "${soloMsg}"`
+        `A keeper in deficit gets the exact friendly refusal copy when another keeper approves: "${soloMsg}"`
     );
+    assert(soloClaims() === 1, 'The signed approval records the deferred wage claim');
 
     // ─────────────────────────────────────────────────────────────────────────────
     // RULE 6: Keeper pay capped by earned surplus & deferred wage claims
@@ -159,7 +194,8 @@ async function main() {
     let rule6Refused = false;
     let rule6Msg = '';
     try {
-        approvePostRequest(bakerBid.id, solventTreasury);
+        // Signed by the other keeper, as the routes sign it (see Test 2).
+        approvePostRequest(bakerBid.id, solventTreasury, { authSigner: bakerKeeper2 });
     } catch (err: any) {
         rule6Refused = true;
         rule6Msg = err.message;

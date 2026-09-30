@@ -7,6 +7,7 @@
  * unchanged and logger.ts still re-exports it, so every existing caller and its test are untouched.
  */
 
+import crypto from 'node:crypto';
 import net from 'node:net';
 
 /**
@@ -40,6 +41,70 @@ export function redactAddresses(text: string): string {
 }
 
 /**
+ * The keys whose value is a secret. Matched anywhere in a key name and in any case, so `newPassword`, `handshakeToken`,
+ * `inviteCode`, `shortCode`, `keyShare` and `wsTicket` are covered by `password`, `token`, `code`, `share` and `ticket`.
+ * `code` and the short keys after it (FABLE-sec-errors M1, M2, NOTE-3): a re-key code binds any new key to a member for a
+ * day, an invite lets anyone join, a pairing or one-time code signs someone in, and words or a share rebuild a key.
+ */
+const CREDENTIAL_KEYS = 'password|authToken|token|salt|adminHash|secret|privateKey|private_key|seed|keyBytes|apiKey|api_key|authorization'
+    + '|code|otp|invite|words|mnemonic|share|ticket|cookie';
+
+/**
+ * `key: value`, `key=value` or `"key": "value"`. A quoted value is taken whole, spaces and all (a password with a space in
+ * it, a handful of words); an unquoted one is a run of token characters. The minimum is 4 characters, not 12: a TOTP is
+ * 6 digits and a pairing code 6 letters. Below 4 are an HTTP status after `statusCode:` or `exit code=1`, which name no
+ * one. `authorization: Bearer x` keeps the scheme and loses the token.
+ */
+const CREDENTIAL_VALUE = new RegExp(
+    `(["']?(?:${CREDENTIAL_KEYS})["']?\\s*[:=]\\s*(?:(?:Bearer|Basic)\\s+)?)`
+    + `(?:"((?:[^"\\\\\\r\\n]|\\\\.)+)"|'((?:[^'\\\\\\r\\n]|\\\\.)+)'|[A-Za-z0-9_\\-.+=/]{4,})`,
+    'gi',
+);
+
+/** A cookie header's value runs to the end of the line: every `name=value;` pair in it. */
+const COOKIE_HEADER = /(["']?(?:set-)?cookie["']?\s*[:=]\s*)(?!["'\[])[^\r\n"']+/gi;
+
+function redactCredentialValues(text: string): string {
+    return text
+        .replace(COOKIE_HEADER, '$1[REDACTED_CREDENTIAL]')
+        .replace(CREDENTIAL_VALUE, (_m, key: string, dq?: string, sq?: string) => {
+            if (dq !== undefined) return `${key}"[REDACTED_CREDENTIAL]"`;
+            if (sq !== undefined) return `${key}'[REDACTED_CREDENTIAL]'`;
+            return `${key}[REDACTED_CREDENTIAL]`;
+        });
+}
+
+/**
+ * Re-key codes (engine/member-wizards.ts generateRekeyCode: `RK-` and two groups of 4 hex digits) and invite codes
+ * (@beanpool/engine generateShortCode: `INV-` and two groups of 4 from its 32-character alphabet, no 0, 1, I or O). Only
+ * that whole shape, standing alone as a word: `XRK-1A2B-3C4D`, `INV-ABCD-EFGHI` and `INV-2024-0001` are left alone.
+ * Case is ignored, for a code someone typed.
+ */
+export const REKEY_CODE_PATTERN = /(?<![A-Za-z0-9_])RK-[0-9A-F]{4}-[0-9A-F]{4}(?![A-Za-z0-9_])/gi;
+export const INVITE_CODE_PATTERN = /(?<![A-Za-z0-9_])INV-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}(?![A-Za-z0-9_])/gi;
+
+/**
+ * The short tag a log line carries for an invite code in its place: `inv#` and the first 4 hex characters of the code's
+ * SHA-256. The same code always gives the same tag, so an operator can still follow one invite from line to line, and
+ * 16 bits of a 40-bit code give nothing back: some 16 million codes share each tag. A re-key code gets no tag: it has only
+ * 32 bits, and 16 of them would leave a log reader 65,536 codes to try in its 24 hours.
+ */
+export function inviteLogTag(code: string): string {
+    return 'inv#' + crypto.createHash('sha256').update(String(code).toUpperCase()).digest('hex').slice(0, 4);
+}
+
+/**
+ * `text` with every re-key code replaced by `[REDACTED_REKEY_CODE]` and every invite code by its tag (`inviteLogTag`).
+ * Nothing else in it changes. Used on every line logged (`sanitizeMessage`) and on lines written before this version
+ * (services/address-retention.ts, the boot scrub of system_logs and of stored copies of the database).
+ */
+export function redactCodes(text: string): string {
+    return text
+        .replace(REKEY_CODE_PATTERN, '[REDACTED_REKEY_CODE]')
+        .replace(INVITE_CODE_PATTERN, (code) => inviteLogTag(code));
+}
+
+/**
  * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics, internet addresses).
  */
 export function sanitizeMessage(msg: string): string {
@@ -53,8 +118,8 @@ export function sanitizeMessage(msg: string): string {
     // 2. PEM Private Keys
     sanitized = sanitized.replace(/-----BEGIN\s*(?:RSA\s*|EC\s*|ED25519\s*)?PRIVATE\s*KEY-----[\s\S]+?-----END\s*(?:RSA\s*|EC\s*|ED25519\s*)?PRIVATE\s*KEY-----/gi, '[REDACTED_PRIVATE_KEY]');
 
-    // 3. Secrets, passwords, tokens, salt, hashes, api keys in JSON / form / query formats
-    sanitized = sanitized.replace(/(["']?(?:password|authToken|token|salt|adminHash|newPassword|currentPassword|secret|privateKey|private_key|seed|keyBytes|apiKey|api_key|authorization)["']?\s*[:=]\s*["']?)[a-zA-Z0-9_\-\.\+=\/]{12,}(["']?)/gi, '$1[REDACTED_CREDENTIAL]$2');
+    // 3. Secrets, passwords, tokens, salt, hashes, api keys, codes in JSON / form / query / header formats
+    sanitized = redactCredentialValues(sanitized);
 
     // 4. Standalone Hex seed strings / keys (64 or 128 hex chars)
     sanitized = sanitized.replace(/\b[0-9a-fA-F]{64}\b/gi, '[REDACTED_HEX_KEY_64]');
@@ -64,6 +129,9 @@ export function sanitizeMessage(msg: string): string {
     // them by a daily keyed hash (log-address.ts). This is the net for any text that reaches a log with an address in
     // it anyway, an error message included.
     sanitized = redactAddresses(sanitized);
+
+    // 6. Re-key and invite codes, wherever they sit in the text (`redactCodes`).
+    sanitized = redactCodes(sanitized);
 
     return sanitized;
 }

@@ -666,6 +666,26 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     return true;
 }
 
+export const PRICE_FROZEN_ERROR = 'This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.';
+
+/**
+ * A listing's price holds while any deal on it is open: asked for and waiting ('requested'), or with the Beans held
+ * ('pending'). The deal was struck at that price and its row keeps it (credits for its hours); a price edited under it
+ * told the other side something they never agreed to (FABLE-sec-money MEDIUM 2). Completion no longer reads the
+ * listing's price at all (engine/escrow.ts completePostTransaction); this keeps what the post shows true to the deal.
+ * Every kind of listing a deal can be made on, Offer or Need, the author's side either way. Only a real change is
+ * refused: an edit that sends the same price back (every edit form does) goes through. Before anything is written.
+ */
+function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates: Partial<MarketplacePost>): void {
+    const creditsChange = updates.credits !== undefined && Number(updates.credits) !== Number(existingPost.credits);
+    const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
+    if (!creditsChange && !unitChange) return;
+    const open = db.prepare(
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
+    ).get(id);
+    if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
+}
+
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
@@ -796,6 +816,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             eventTimeOrPlaceChanged = true;
         }
     }
+
+    assertPriceNotFrozen(id, existingPost, updates);
 
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
         // A client that is not changing a photo sends back the URL it was given, and this turns it into the

@@ -37,6 +37,12 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 
 ## ✅ Resolved — do NOT re-file
 
+### 2026-10-01 — "credentials same-origin on the escrow dispute helpers" (#1368) — CLOSED, RE-FILE OF #1294.
+Third filing of the same claim (`deleteNodePost`, then #1294 on these exact two functions, now #1368). `'same-origin'`
+is fetch's default and every manager call is same-origin (`resolveNodeApiUrl`: the manager's own origin or `/proxy/...`),
+so the session cookie and `X-CSRF-Token` (from `buildAdminHeaders`) already go out. A missing `credentials` option is a
+defect only on a CROSS-origin call that needs `'include'`. Grep POLICY.md for the function name first.
+
 ### 2026-09-22 — "fetchNodeTreasuries is missing admin auth headers" (#1014, re-filed as #1041) — CLOSED, INERT.
 `/api/treasuries` is a PUBLIC read: it is in `PUBLIC_READ_EXACT` (apps/server/src/https-server.ts), and its GET
 handler (apps/server/src/routes/treasury.ts, `listTreasuriesHandler`) never calls `checkAdminAuth`. So

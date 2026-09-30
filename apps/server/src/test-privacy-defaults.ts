@@ -3,21 +3,23 @@
  * members', and polls are anonymous unless their creator chose an open vote.
  *
  *   1. Balances and trades. A member reads their own balance, transactions and export; another member's is refused
- *      (403 own_only), and so is every transaction with no key. An enterprise's balance stays open, and its keepers
- *      read its history. The Commons pot and the community's info stay public. A visitor's row reads its own only.
+ *      (403 own_only), and so is every transaction with no key. An enterprise's balance stays open to members, and its
+ *      keepers read its history. The Commons pot and the community's info stay public. A visitor's row reads its own
+ *      only. The enterprises' list is its members' (section 9).
  *   2. A Decision about a member: its voters read that member's balance in it, and nobody else does, anywhere: not a
- *      member who joined after it opened, not the stranger, not the live feed, not the balance route.
+ *      member who joined after it opened, not the live feed, not the balance route. Anyone who is no member here is
+ *      refused the Decision itself (section 9).
  *   3. The activity feed: a completed trade reaches its two people only, and one reader's copy is never confirmed to
  *      another with a 304.
- *   4. An enterprise's book: every amount is open, but who paid it and what they wrote only to its keepers and to that
- *      member. Its public page's flow carries no memo to a stranger. A deferred wage it pays goes on the live feed to
- *      the keeper it paid and its keepers, and to no other socket.
+ *   4. An enterprise's book: every amount is open to members, but who paid it and what they wrote only to its keepers
+ *      and to that member. Its page's flow carries no memo to another member, and is refused to a stranger. A deferred
+ *      wage it pays goes on the live feed to the keeper it paid and its keepers, and to no other socket.
  *   5. Who took a listing: the author and the taker read it, on the board and on the live feed; nobody else does.
  *   6. A local community's listings: a stranger (unsigned), a key that is no member here and a visitor's row are refused
  *      the board, one listing, a sync and a delta, with code members_only and the global community's address; a member
  *      reads them, a suspended one included. No public read hands a stranger a listing's id, the pricing guide's
- *      thumbnails included, an enterprise's public page lists no listings to one, and a key-less socket hears no listing
- *      doorbell. A listing's photo opens only at the keyed URL a read of the listing hands out (an <img> cannot sign): not
+ *      thumbnails included, an enterprise's page (which lists its listings to a member) is refused to one, and a key-less
+ *      socket hears no listing doorbell. A listing's photo opens only at the keyed URL a read of the listing hands out (an <img> cannot sign): not
  *      without its key, signed or not, nor with a wrong key, another photo's, or its own after the photo changed. The
  *      pricing guide shows a listing's photo to a member, by its keyed URL, and to nobody else.
  *   7. Polls: one made without the choice (every app before this one) is anonymous, and nobody gets its voters, the
@@ -27,6 +29,15 @@
  *   8. The landing card (/api/global/home), where an operator keeps the directory on a local node: a member's count of
  *      the listings near a point is from their places, anyone else's from their areas (as the visitors' view is), a
  *      suspended member's and a visitor's included.
+ *   9. The rest of a local community is its members' too (Marty's rule of 2026-09-28; the Fable privacy review's F1, F2,
+ *      F3, F5): the enterprises and treasuries (their keepers, backers with amounts, map pins), the Commons Decisions,
+ *      projects and crowdfunds, and the Pulse feed are refused to a stranger (401), a key that is no member here and a
+ *      visitor's row (403), with code members_only and the global community's address, trailing slash and HEAD too; a
+ *      member reads each in full, naming its people, and so does a suspended one. The totals stay public (the Commons
+ *      pot, the community's info). The recovery lookup matches the whole name only, with no photo or join date; the
+ *      membership probe names a key only to its own signer; the name check is rate-limited per address; the trust
+ *      profile answers only a member, and a redeem gives an existing member's card only to that member's own key.
+ *      Settings lists the enterprises with the admin password. A key-less socket hears no doorbell for any of them.
  *
  * The real server, every request over TLS through the signature middleware, with every ENFORCE_* variable removed
  * (the fresh-download default) on a local node (NODE_PROFILE unset). The global node's guest view is the business of
@@ -41,6 +52,8 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.NODE_PROFILE;
+const ADMIN_PW = 'PrivAdminPass123!';
+process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -224,7 +237,10 @@ async function main() {
         const memberTx = await get(`/api/ledger/transactions?publicKey=${enterprise}`, carol);
         assert(memberTx.status === 403 && !memberTx.text.includes('Sentinel memo'), `a member who keeps nothing there is refused it (got ${memberTx.status})`);
         const list = await get('/api/treasuries');
-        assert(list.status === 200 && list.text.includes(enterprise), `the treasuries list stays public (got ${list.status})`);
+        assert(list.status === 401 && list.body?.code === 'members_only' && !list.text.includes(enterprise),
+            `the treasuries list is its members': a stranger is refused it, 401 members_only (got ${list.status} ${list.text.slice(0, 80)})`);
+        const memberList = await get('/api/treasuries', carol);
+        assert(memberList.status === 200 && memberList.text.includes(enterprise), `a member reads it (got ${memberList.status})`);
     }
 
     // ── 2. a Decision about a member ───────────────────────────────────────────────────────────
@@ -252,7 +268,7 @@ async function main() {
         assert(voterOne.body?.decision?.params?.balance === -12, 'and in the Decision itself');
         const subject = await get(`/api/commons/decisions/${decisionId}`, bob);
         assert(subject.body?.decision?.params?.balance === -12, 'Bob reads his own');
-        for (const [who, id] of [['Dora, who joined after it opened', dora], ['a suspended member', sam], ["a visitor's row", vera], ['a key that is no member here', outsider], ['a stranger (unsigned)', undefined]] as const) {
+        for (const [who, id] of [['Dora, who joined after it opened', dora], ['a suspended member', sam]] as const) {
             const l = await get('/api/commons/decisions', id);
             const one = await get(`/api/commons/decisions/${decisionId}`, id);
             const p1 = card(l)?.params ?? {};
@@ -260,6 +276,14 @@ async function main() {
             assert(l.status === 200 && !!card(l) && !('balance' in p1) && !('debt' in p1) && p1.memberName === 'PrivBob',
                 `${who} sees the card, and not Bob's balance or debt, in the list (got ${l.status} ${JSON.stringify(p1)})`);
             assert(one.status === 200 && !('balance' in p2) && !('debt' in p2), `${who} does not see them in the Decision either (got ${one.status})`);
+        }
+        // Anyone who is no member here is refused the Decision itself, and so learns nothing of whom it is about (section 9).
+        for (const [who, id, status] of [["a visitor's row", vera, 403], ['a key that is no member here', outsider, 403], ['a stranger (unsigned)', undefined, 401]] as const) {
+            const l = await get('/api/commons/decisions', id);
+            const one = await get(`/api/commons/decisions/${decisionId}`, id);
+            assert(l.status === status && one.status === status && l.body?.code === 'members_only' && one.body?.code === 'members_only'
+                && ![l.text, one.text].some(t => t.includes('PrivBob') || t.includes(bob.pk) || t.includes('"debt"')),
+                `${who} is refused the list and the Decision, ${status} members_only, naming nobody (got ${l.status}/${one.status})`);
         }
         const created = carolSock.events.find(e => e.type === 'decision_created');
         assert(!!created && !('balance' in (created.decision?.params ?? {})) && !('debt' in (created.decision?.params ?? {})),
@@ -304,9 +328,12 @@ async function main() {
         assert(other.status === 200 && line(other)?.amount === 4 && line(other)?.counterpartyName === 'A member'
             && line(other)?.memo === '' && line(other)?.counterparty === '' && !other.text.includes(bob.pk) && !other.text.includes('rye loaf'),
             `Carol reads the amount, not who paid or what they wrote (got ${JSON.stringify(line(other))})`);
+        const flowOther = await get(`/api/treasury/${enterprise}`, carol);
+        assert(flowOther.status === 200 && Array.isArray(flowOther.body?.flow) && flowOther.body.flow.some((f: any) => f.amount === 4)
+            && !flowOther.text.includes('rye loaf'), `its page shows Carol, a member who keeps nothing there, the flow's amounts and no memo (got ${flowOther.status})`);
         const flowUnsigned = await get(`/api/treasury/${enterprise}`);
-        assert(flowUnsigned.status === 200 && Array.isArray(flowUnsigned.body?.flow) && flowUnsigned.body.flow.some((f: any) => f.amount === 4)
-            && !flowUnsigned.text.includes('rye loaf'), `its public page shows the flow's amounts and no memo to a stranger (got ${flowUnsigned.status})`);
+        assert(flowUnsigned.status === 401 && flowUnsigned.body?.code === 'members_only' && !flowUnsigned.text.includes('rye loaf') && !flowUnsigned.text.includes(alice.pk),
+            `and is refused to a stranger (got ${flowUnsigned.status})`);
         const flowKeeper = await get(`/api/treasury/${enterprise}`, alice);
         assert(flowKeeper.text.includes('rye loaf'), 'and the memo to its keeper');
 
@@ -485,9 +512,9 @@ async function main() {
         assert(!!entPost?.id, 'setup: the enterprise lists a loaf');
         const pageStranger = await get(`/api/treasury/${enterprise}`);
         const pageMember = await get(`/api/treasury/${enterprise}`, carol);
-        assert(pageStranger.status === 200 && Array.isArray(pageStranger.body?.posts) && pageStranger.body.posts.length === 0 && !pageStranger.text.includes('Sentinel bakery loaf'),
-            `the enterprise's public page lists no listing to a stranger (got ${pageStranger.body?.posts?.length})`);
-        assert(pageMember.body?.posts?.some((p: any) => p.id === entPost!.id), 'and lists it to a member');
+        assert(pageStranger.status === 401 && pageStranger.body?.code === 'members_only' && !pageStranger.text.includes('Sentinel bakery loaf') && !pageStranger.text.includes(entPost!.id),
+            `the enterprise's page, with its listings, is refused to a stranger (got ${pageStranger.status})`);
+        assert(pageMember.body?.posts?.some((p: any) => p.id === entPost!.id), 'and lists them to a member');
 
         const unsignedSock = await openSocket(wsBase);
         const outsiderSock = await openSocket(`${wsBase}?${signedWsQuery(outsider)}`);
@@ -601,6 +628,154 @@ async function main() {
             assert(n === 0, `${who}: the count is from each listing's area, whose centre is 54 km away, so the lone listing is not counted (got ${n})`);
         }
         setSwitchOverride('directoryMirror', false);
+    }
+
+    // ── 9. the rest of a local community ───────────────────────────────────────────────────────
+    console.log("\n── 9. the rest of a local community is its members' too ──");
+    {
+        const { createCrowdfundProject } = await import('./db/db.js');
+        const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+        const { initAdminPassword } = await import('./config/local-config.js');
+        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
+        // Bob backs the bakery, which is placed on the map; Bob runs a crowdfund; Alice proposes a Commons project; Alice's
+        // Pulse channel lists a video on her own page elsewhere.
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-priv', ?, ?, 5)").run(bob.pk, enterprise);
+        db.prepare('UPDATE members SET lat = ?, lng = ? WHERE public_key = ?').run(-28.5123457, 153.5123457, enterprise);
+        const crowdfund = newId().pk;
+        createCrowdfundProject(crowdfund, bob.pk, 'Sentinel priv roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
+        const project = se.createProject(alice.pk, 'Sentinel priv garden', 'Sentinel beds by the hall', 50);
+        assert(!!project?.id, 'setup: Alice proposes a Commons project');
+        db.prepare(`INSERT INTO creator_channels (id, owner_pubkey, platform, url, handle, category) VALUES ('chan-priv', ?, 'youtube', 'https://youtube.example/@privalice', 'privalice', 'food')`)
+            .run(alice.pk);
+        db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, title, published_at, category, source)
+                    VALUES ('item_priv', 'chan-priv', ?, 'youtube', 'https://youtube.example/watch?v=priv', 'Sentinel priv video', ?, 'food', 'manual')`)
+            .run(alice.pk, new Date().toISOString());
+
+        // Each read, and what a member reads in it: its people.
+        const reads: Array<[string, (r: Res) => boolean]> = [
+            ['/api/enterprises', r => r.text.includes(enterprise) && r.body?.treasuries?.some((t: any) => t.keepers?.some((k: any) => k.publicKey === alice.pk)
+                && t.pledges?.some((p: any) => p.keeper === bob.pk && p.amount === 5))],
+            ['/api/treasuries', r => r.text.includes(enterprise) && r.text.includes(alice.pk)],
+            ['/api/enterprises/map', r => r.body?.enterprises?.some((e: any) => e.publicKey === enterprise && e.lat === -28.5123457)],
+            ['/api/map/enterprises', r => r.text.includes(enterprise)],
+            ['/api/treasuries/map', r => r.text.includes(enterprise)],
+            [`/api/enterprise/${enterprise}`, r => r.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && r.body?.pledges?.some((p: any) => p.keeper === bob.pk && p.amount === 5)],
+            [`/api/treasury/${enterprise}`, r => r.text.includes(alice.pk) && r.text.includes('PrivBob')],
+            ['/api/commons/decisions', r => r.body?.decisions?.some((d: any) => d.id === decisionId && d.params?.memberName === 'PrivBob' && d.authorPubkey === alice.pk)],
+            [`/api/commons/decisions/${decisionId}`, r => r.body?.decision?.params?.memberName === 'PrivBob'],
+            ['/api/commons/projects', r => r.body?.projects?.some((p: any) => p.id === project!.id && p.proposerPubkey === alice.pk && p.proposerCallsign === 'PrivAlice')],
+            ['/api/crowdfund/projects', r => r.text.includes(crowdfund) && r.text.includes(bob.pk)],
+            [`/api/crowdfund/projects/${crowdfund}`, r => r.text.includes(crowdfund) && r.text.includes(bob.pk)],
+            ['/api/pulse/feed', r => r.body?.items?.some((i: any) => i.id === 'item_priv' && i.ownerPubkey === alice.pk && i.callsign === 'PrivAlice' && i.url === 'https://youtube.example/watch?v=priv')],
+        ];
+        // What a refusal must never carry.
+        const people = [alice.pk, bob.pk, 'PrivAlice', 'PrivBob', 'Priv Bakery', 'Sentinel priv', 'youtube.example', '-28.5123457'];
+        const head = async (path: string, id?: Id): Promise<number> => {
+            beforeCall();
+            return (await fetch(`${BASE}${path}`, { method: 'HEAD', headers: id ? signedHeaders('HEAD', path, '', id) : {} })).status;
+        };
+        for (const [path, full] of reads) {
+            for (const variant of [path, `${path}/`]) {
+                for (const [who, id, status] of [['a stranger (unsigned)', undefined, 401], ['a key that is no member here', outsider, 403], ["a visitor's row", vera, 403]] as const) {
+                    const r = await get(variant, id);
+                    const named = people.filter(p => r.text.includes(p));
+                    assert(r.status === status && r.body?.code === 'members_only' && r.body?.global === GLOBAL_COMMUNITY && named.length === 0,
+                        `${who} is refused ${variant}, ${status} members_only with the global community's address (got ${r.status} ${r.text.slice(0, 90)}${named.length ? `; names ${named.join(', ')}` : ''})`);
+                    const h = await head(variant, id);
+                    assert(h === status, `${who}: a HEAD to ${variant} is ${status}, as its GET (got ${h})`);
+                }
+            }
+            const member = await get(path, carol);
+            assert(member.status === 200 && full(member), `Carol, a member, reads ${path} in full, naming its people (got ${member.status} ${member.text.slice(0, 90)})`);
+            const suspended = await get(path, sam);
+            assert(suspended.status === 200, `a suspended member reads ${path}, as the listings (got ${suspended.status})`);
+        }
+
+        // The totals stay public: the Commons pot and the community's counts, which name nobody.
+        const pot = await get('/api/commons/balance');
+        const info = await get('/api/community/info');
+        assert(pot.status === 200 && typeof pot.body?.balance === 'number' && info.status === 200 && typeof info.body?.memberCount === 'number'
+            && typeof info.body?.commonsBalance === 'number' && !people.some(p => pot.text.includes(p) || info.text.includes(p)),
+            `the Commons pot and the community's counts stay public, naming nobody (${pot.status}, ${info.status})`);
+
+        // F2: the recovery lookup finds the whole name only (case forgiven), with no photo or join date.
+        db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag)
+                    VALUES (?, 'sso', 'google', 1, 'c2hhcmU=', 'aXY=', 'dGFn')`).run(alice.pk);
+        const prefix = await get('/api/recovery/lookup/priv');
+        assert(prefix.status === 200 && Array.isArray(prefix.body) && prefix.body.length === 0, `a prefix finds nobody (got ${prefix.status} ${prefix.text.slice(0, 90)})`);
+        const exact = await get('/api/recovery/lookup/privalice');
+        const hit = Array.isArray(exact.body) ? exact.body : [];
+        assert(hit.length === 1 && hit[0].publicKey === alice.pk && hit[0].callsign === 'PrivAlice' && hit[0].canRecoverBySso === true
+            && hit[0].avatarUrl === null && hit[0].joinedAt === null && !exact.text.includes('data:image'),
+            `the whole name finds Alice, with her key and no photo or join date (got ${exact.text.slice(0, 160)})`);
+
+        // F3: whether a key is a member stays public; its name goes only to that key's own signer.
+        for (const [who, id] of [['a stranger (unsigned)', undefined], ['a key that is no member here', outsider], ["a visitor's row", vera], ['Carol, another member', carol]] as const) {
+            const r = await get(`/api/community/membership/${alice.pk}`, id);
+            assert(r.status === 200 && r.body?.isMember === true && r.body?.callsign === null && !r.text.includes('PrivAlice'),
+                `${who}: the membership probe says Alice's key is a member, and not her name (got ${r.text.slice(0, 90)})`);
+        }
+        const own = await get(`/api/community/membership/${alice.pk}`, alice);
+        assert(own.body?.isMember === true && own.body?.callsign === 'PrivAlice', `signed by Alice's own key, it names her (got ${own.text.slice(0, 90)})`);
+
+        // F5: the name check stays public (the join wizard asks it before there is a member), rate-limited per address: 15
+        // a minute, shared with the recovery lookup. What it tells anyone: whether a name is taken here.
+        pruneAuthAttempts(Date.now() + 120_000);
+        resetGatewayRateLimit();
+        const statuses: number[] = [];
+        for (let i = 0; i < 16; i++) statuses.push((await fetch(`${BASE}/api/members/callsign-available/PrivAlice`)).status);
+        const taken = await (await fetch(`${BASE}/api/recovery/lookup/privalice`)).json().catch(() => null);
+        assert(statuses.slice(0, 15).every(st => st === 200) && statuses[15] === 429 && taken?.error?.startsWith('Too many attempts'),
+            `the name check answers 15 times a minute from one address, then 429, and the recovery lookup shares the limit (got ${statuses.join(',')})`);
+        pruneAuthAttempts(Date.now() + 120_000);
+        const check = await get('/api/members/callsign-available/PrivAlice');
+        assert(check.body?.available === false && !check.text.includes(alice.pk), `and says only that the name is taken (got ${check.text.slice(0, 90)})`);
+
+        // Beside the allowlist: the trust profile, a read of a member's standing and who brought them in, answers only a
+        // member; a redeem gives an existing member's card only to that member's own key.
+        // A visitor's row is refused it one step earlier, as every POST it may not make (visitor-allowlist.ts): not_a_member.
+        for (const [who, id, code] of [['a key that is no member here', outsider, 'members_only'], ["a visitor's row", vera, 'not_a_member'], ['a suspended member', sam, 'members_only']] as const) {
+            const r = await post('/api/trust/profile', { targetPubkey: alice.pk }, id);
+            assert(r.status === 403 && r.body?.code === code && !r.text.includes('PrivAlice'),
+                `${who} is refused Alice's trust profile, 403 ${code} (got ${r.status} ${r.text.slice(0, 90)})`);
+        }
+        const tp = await post('/api/trust/profile', { targetPubkey: alice.pk }, carol);
+        assert(tp.status === 200 && tp.body?.callsign === 'PrivAlice', `Carol, a member, reads it (got ${tp.status})`);
+        const code = se.generateInvite(bob.pk)!.code;
+        const redeemBody = { code, publicKey: alice.pk, callsign: 'Sentinel joiner' };
+        beforeCall();
+        const unsignedRedeem = await fetch(`${BASE}/api/invite/redeem`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(redeemBody) });
+        const unsignedCard = await unsignedRedeem.text();
+        const outsiderCard = await post('/api/invite/redeem', redeemBody, outsider);
+        assert(!unsignedCard.includes('PrivAlice') && !outsiderCard.text.includes('PrivAlice'),
+            `a code's holder naming Alice's key, unsigned or signed by another key, gets no card of hers (got ${unsignedRedeem.status} ${unsignedCard.slice(0, 80)} / ${outsiderCard.status})`);
+        const ownCard = await post('/api/invite/redeem', redeemBody, alice);
+        assert(ownCard.body?.alreadyMember === true && ownCard.body?.member?.callsign === 'PrivAlice', `Alice, signing with her own key, gets her own card (got ${ownCard.status} ${ownCard.text.slice(0, 90)})`);
+
+        // Settings reads the enterprises with the admin password, and nobody reads them there without it.
+        resetAdminAuthTarpit();
+        const admin = await get('/api/local/admin/treasury', undefined, { 'X-Admin-Password': ADMIN_PW });
+        assert(admin.status === 200 && admin.body?.treasuries?.some((t: any) => t.publicKey === enterprise && t.keepers?.some((k: any) => k.publicKey === alice.pk)),
+            `Settings lists the enterprises with the admin password (got ${admin.status} ${admin.text.slice(0, 90)})`);
+        resetAdminAuthTarpit();
+        const noAdmin = await get('/api/local/admin/treasury');
+        assert((noAdmin.status === 401 || noAdmin.status === 403) && !noAdmin.text.includes(enterprise), `and nobody without it (got ${noAdmin.status})`);
+        resetAdminAuthTarpit();
+
+        // A key-less socket hears no doorbell for any of them: it may read none of them here.
+        const unsignedSock = await openSocket(wsBase);
+        const outsiderSock = await openSocket(`${wsBase}?${signedWsQuery(outsider)}`);
+        const memberSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
+        await sleep(200);
+        const COMMONS_EVENTS = ['project_created', 'project_updated', 'decision_created', 'decision_vote_cast', 'enterprise_location_updated', 'enterprise_wound_up'];
+        for (const type of COMMONS_EVENTS) se.broadcast({ type, id: 'priv-doorbell' });
+        await sleep(400);
+        assert(COMMONS_EVENTS.every(t => memberSock.events.some(e => e.type === t)), "a member's socket hears each");
+        for (const [who, s] of [['an unsigned', unsignedSock], ['a non-member-signed', outsiderSock]] as const) {
+            const heard = s.events.filter(e => COMMONS_EVENTS.includes(e.type)).map(e => e.type);
+            assert(heard.length === 0, `${who} socket hears none of them (heard ${JSON.stringify(heard)})`);
+        }
+        for (const s of [unsignedSock, outsiderSock, memberSock]) s.ws.close();
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

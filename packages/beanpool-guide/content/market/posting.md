@@ -59,4 +59,6 @@ Open your post. If no deal is under way on it:
 - **Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.
 - **Delete Post** removes it. Anyone still asking for it sees their request marked declined.
 
+While someone is asking for your post, or has beans held on it (a Repeatable post can have several), you can still change its words and photos, but not its price: the app says so. To change the price, decline or cancel that deal first.
+
 Posts do not expire. Delete them when they are done.

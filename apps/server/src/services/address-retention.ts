@@ -38,6 +38,13 @@
  * The boot run also takes addresses out of log lines written before this version (`forgetAddressesInLogs`): lines
  * written since never have one (logger.ts sanitizes every line). Node's diagnostic reports are cleaned by their own
  * scrub (process-handlers.ts, `stripAddressesFromReport`).
+ *
+ * Log lines lose their re-key and invite codes the same way, everywhere a line loses its addresses: in system_logs at
+ * boot, in every copy made, and in the copies already kept (FABLE-sec-errors M1, M2). Older versions logged each code
+ * in the clear. `redactCodes` (sanitize-message.ts) matches only a code's exact shape, standing alone: `RK-` and two
+ * groups of 4 hex digits, `INV-` and two groups of 4 from the invite alphabet. A re-key code becomes
+ * `[REDACTED_REKEY_CODE]`, an invite code the tag new lines carry for it (`inviteLogTag`); the rest of the line, and every
+ * line without a code, is left byte for byte. Lines written since never have a code (sanitizeMessage rule 6).
  */
 
 import fs from 'node:fs';
@@ -45,7 +52,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
-import { redactAddresses } from '../sanitize-message.js';
+import { redactAddresses, redactCodes } from '../sanitize-message.js';
 import { LEGACY_OPEN_JOIN_KEY_ROW } from './open-join-key.js';
 
 export const ADDRESS_KEEP_DAYS = 7;
@@ -133,13 +140,16 @@ const hasAddressHash = (conn: Database.Database, table: string) =>
 
 type LogLine = { id: number; message: string | null; metadata: string | null };
 
-/** The log lines of `conn` that hold an address, each with its addresses already redacted. */
+/** A log line's text with its addresses, and its re-key and invite codes, taken out; nothing else in it changes. */
+const cleanLogText = (text: string) => redactCodes(redactAddresses(text));
+
+/** The log lines of `conn` that hold an address or a code, each with them already redacted (`cleanLogText`). */
 function logLinesWithAddresses(conn: Database.Database): LogLine[] {
     if (!hasTable(conn, 'system_logs')) return [];
     const out: LogLine[] = [];
     for (const r of conn.prepare('SELECT id, message, metadata FROM system_logs').all() as LogLine[]) {
-        const message = r.message == null ? r.message : redactAddresses(r.message);
-        const metadata = r.metadata == null ? r.metadata : redactAddresses(r.metadata);
+        const message = r.message == null ? r.message : cleanLogText(r.message);
+        const metadata = r.metadata == null ? r.metadata : cleanLogText(r.metadata);
         if (message !== r.message || metadata !== r.metadata) out.push({ id: r.id, message, metadata });
     }
     return out;
@@ -208,7 +218,7 @@ export function forgetAddressesInCopy(file: string): boolean {
     }
 }
 
-/** Take addresses out of log lines already in system_logs (written before logs were sanitized for them). */
+/** Take addresses, re-key codes and invite codes out of log lines already in system_logs (written before logs were sanitized for them). */
 export function forgetAddressesInLogs(): number {
     return db.transaction(() => forgetAddressesInLogsOf(db))();
 }
@@ -365,7 +375,7 @@ export function startForgettingOldAddresses(everyMs = SWEEP_EVERY_MS): Promise<n
     try {
         const rows = forgetOldAddresses();
         const lines = forgetAddressesInLogs();
-        if (rows + lines > 0) logger.info('SYS', `[Addresses] Cleared internet addresses older than ${ADDRESS_KEEP_DAYS} days (${rows} record(s)) and every address in older log lines (${lines} line(s)).`);
+        if (rows + lines > 0) logger.info('SYS', `[Addresses] Cleared internet addresses older than ${ADDRESS_KEEP_DAYS} days (${rows} record(s)) and every address, re-key code and invite code in older log lines (${lines} line(s)).`);
     } catch (e) {
         console.warn('[Addresses] could not clear old internet addresses at boot:', (e as Error)?.message || e);
     }

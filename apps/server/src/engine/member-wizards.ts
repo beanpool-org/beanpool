@@ -40,7 +40,7 @@ import {
 } from '../state-engine.js';
 import { ledger } from './ledger.js';
 import { isMemberKeySpelling } from './member-key.js';
-import { logger } from '../logger.js';
+import { logger, sanitizeMessage } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
@@ -168,6 +168,11 @@ function assertNotMisspeltRow(key: string | null | undefined): void {
     if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(key)) throw new Error(MISSPELT_ROW_ERROR);
 }
 
+/** A key as a log line names it: its first 10 characters. Anything else (`owner:password`) as it is. */
+function shortKey(key: string): string {
+    return /^[0-9a-f]{64}$/i.test(key) ? `${key.slice(0, 10)}...` : key;
+}
+
 export function issueRekeyCode(
     oldPublicKey: string,
     operatorPubkey: string,
@@ -219,14 +224,18 @@ export function issueRekeyCode(
             VALUES (?, ?, ?, 'pending', ?, ?)
         `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso);
 
-        // Write system log
+        // Write system log: that a code was made, for whom and when, never the code (FABLE-sec-errors M1). It binds any
+        // new key to this member for a day; the operator who made it has it in the answer, and a log is read by other
+        // admins, a standby's replication token and whoever holds the host's Docker log or a copy of the database. In
+        // this transaction, so the record lands with the code; through the sanitizer, as every logger line is.
         db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)
             VALUES (?, 'INFO', 'AUTH', ?, ?)
         `).run(
             nowIso,
-            `Re-enrolment code issued for member ${member.callsign} (${cleanOld.slice(0, 10)}...) by operator ${cleanOperator}`,
-            JSON.stringify({ oldPubkey: cleanOld, operatorPubkey: cleanOperator, code, expiresAt: expiresAtIso })
+            sanitizeMessage(`Re-enrolment code issued for member ${member.callsign} (${shortKey(cleanOld)}) by operator ${shortKey(cleanOperator)}`),
+            // Short key prefixes: the sanitizer blanks a whole 64-hex key. rekey_requests keeps both keys whole.
+            sanitizeMessage(JSON.stringify({ member: shortKey(cleanOld), operator: shortKey(cleanOperator), issuedAt: nowIso, expiresAt: expiresAtIso }))
         );
     })();
 
@@ -242,7 +251,7 @@ export function issueRekeyCode(
     noteTakeoverInputsChanged('member re-key started');
 
     broadcast({ type: 'profile_updated', publicKey: cleanOld });
-    logger.info('AUTH', `[Rekey] Re-enrolment code ${code} issued for ${member.callsign} by ${cleanOperator}`);
+    logger.info('AUTH', `[Rekey] Re-enrolment code issued for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}, valid until ${expiresAtIso}`);
 
     return {
         code,
@@ -371,7 +380,8 @@ export function completeRekey(
         `).run(
             nowIso,
             `Member ${member.callsign} re-keyed: ${cleanOld.slice(0, 10)}... -> ${cleanNew.slice(0, 10)}... bound to new key by operator ${operatorPubkey}`,
-            JSON.stringify({ oldPubkey: cleanOld, newPubkey: cleanNew, operatorPubkey, code })
+            // No code: spent by now, but a log is not where codes go (M1).
+            JSON.stringify({ oldPubkey: cleanOld, newPubkey: cleanNew, operatorPubkey })
         );
     });
 

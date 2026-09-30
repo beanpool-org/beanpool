@@ -365,6 +365,27 @@ export function approvePostRequest(
     const originRow = db.prepare('SELECT origin_node FROM posts WHERE id = ?').get(row.post_id) as any;
     assertTradableHere({ originNode: originRow?.origin_node }, row.seller_pubkey);
 
+    // Enterprise needs require an authenticated keeper signature (docs/admin-surface.md §6). Before the funding checks
+    // below, not after: a keeper's pay the enterprise can't afford yet is RECORDED there as a deferred wage claim, and paid
+    // later with no further step (state-engine.ts processDeferredWageClaims), so it may only be recorded on a keeper's
+    // say-so. Both routes check the keeper before calling this; now the engine refuses any other caller the same way
+    // (FABLE-sec-money LOW 3).
+    if (isEnterpriseNeed) {
+        if (!opts?.authSigner) {
+            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
+            err.status = 401;
+            err.statusCode = 401;
+            throw err;
+        }
+        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
+        if (!isKeeper) {
+            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+    }
+
     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
     const isPayeeKeeper = isEnterprisePayer && Boolean(
         db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
@@ -407,23 +428,6 @@ export function approvePostRequest(
     } else {
         if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
         if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
-    }
-
-    // Enterprise needs require an authenticated keeper signature (docs/admin-surface.md §6).
-    if (isEnterpriseNeed) {
-        if (!opts?.authSigner) {
-            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
-            err.status = 401;
-            err.statusCode = 401;
-            throw err;
-        }
-        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
-        if (!isKeeper) {
-            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
-        }
     }
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
@@ -823,16 +827,22 @@ export function completePostTransaction(
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
-    const isHourly = post && post.price_type !== 'fixed';
-    
+    // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
+    // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
+    // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
+    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays
+    // what it holds, whatever hours are confirmed.
+    const bookedHours = Number(row.hours);
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0;
+
     // A final quantity that is a number but not a finite one in range (F6: Infinity) is refused, not ignored.
     if (typeof finalHours === 'number' && finalHours > 0 && !isDealQuantity(finalHours)) {
         throw new Error(`The final quantity must be a number above 0, at most ${POST_HOURS_MAX}`);
     }
     assertDealAmount(row.credits);
     let releaseCredits = row.credits;
-    if (isHourly && typeof finalHours === 'number' && finalHours > 0) {
-        releaseCredits = post.credits * finalHours;
+    if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
+        releaseCredits = (row.credits / bookedHours) * finalHours;
     }
     assertDealAmount(releaseCredits);
 

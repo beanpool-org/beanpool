@@ -8,8 +8,8 @@
  * give the same answer for every upgrade path:
  *
  *   /ws signed by a member → 101, and a broadcast reaches the socket
- *   /ws unsigned (default) → 101, and gets a public Commons change as a bare doorbell, but not a member event nor, on a
- *     local community (listings members-only, 2026-09-28), a listing's
+ *   /ws unsigned (default) → 101, and gets an import's state_synced as a bare doorbell, but not a member event nor, on a
+ *     local community, a listing's (members-only, 2026-09-28) or a Commons change's (members-only, 2026-10-01)
  *   /ws (ENFORCE_WS_AUTH=true) unsigned → 401, validly signed → 101
  *   /ws (ENFORCE_WS_AUTH=false) unsigned → 101, and gets a community-wide event in full (the open feed)
  *   /ws/logs      without admin auth → 401; with a valid ticket → 101
@@ -132,12 +132,15 @@ async function main() {
                 broadcast({ type: 'test_ping', marker: 'member-only' });
                 broadcast({ type: 'new_post', post: { id: 'p1', title: 'Spare lemons' } });
                 broadcast({ type: 'project_created', project: { id: 'pr1', title: 'Community garden' } });
+                broadcast({ type: 'state_synced', newMembers: 1, from: 'ws-port-test' });
                 await sleep(200);
                 assert(!anon.events.some(e => e.type === 'test_ping'), `${p.name}: unsigned /ws does not get a member event`);
                 assert(!anon.events.some(e => e.type === 'new_post'),
                     `${p.name}: unsigned /ws gets no listing doorbell on a local community (its listings are members-only)`);
-                assert(anon.events.some(e => e.type === 'project_created' && Object.keys(e).length === 1),
-                    `${p.name}: unsigned /ws gets a public Commons change as a bare doorbell`);
+                assert(!anon.events.some(e => e.type === 'project_created'),
+                    `${p.name}: nor a Commons change's (its Commons reads are members-only too)`);
+                assert(anon.events.some(e => e.type === 'state_synced' && Object.keys(e).length === 1),
+                    `${p.name}: unsigned /ws gets an import's state_synced as a bare doorbell`);
                 anon.ws.close();
             }
         }

@@ -19,6 +19,12 @@ lookups/counts → O(1)" fix). Before opening a PR:
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 
+### 2026-10-01 — "batch pre-fetch keepers and pledges in listTreasuriesHandler" (#1364) — CLOSED, NO MEANINGFUL GAIN.
+Measured on the handler: about 1 ms saved at 30 enterprises (8.8-9.4 → 7.8 ms) and 10% at 600. The cost was a second,
+hand-kept copy of `treasuryKeepers()` / `getEnterprisePledges()` row shaping inside a treasury route, plus keepers with
+tied `granted_at` coming back in a different order. A batched read belongs in `state-engine.ts` next to the per-row one,
+sharing its shaping, and needs a timing at a realistic enterprise count (a community has tens, not hundreds).
+
 ### 2026-09-30 — "single-pass status grouping in offBoardPostsToResend" (#1320) — CLOSED, NO BENEFIT.
 `deals` is capped at the last 50 deals (`HEALED_DEALS`); the rewrite is behaviour-identical, so it saves microseconds. Fourth time
 (#745, #1018, #1034, #1320): name the loop and a list that grows with the community before filing.

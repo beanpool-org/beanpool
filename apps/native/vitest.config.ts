@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -15,6 +16,14 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
     define: {
         __DEV__: 'false',
+    },
+    resolve: {
+        alias: {
+            // The app never imports it. utils/__tests__/vault-real.test.ts runs BeanPool's key vault itself
+            // (apps/vault's harness, from source), whose API imports the sign-in checks: from their source here, so the
+            // test never waits on a build of a package the app doesn't depend on.
+            '@beanpool/signin': fileURLToPath(new URL('../../packages/beanpool-signin/src/index.ts', import.meta.url).href),
+        },
     },
     test: {
         environment: 'node',

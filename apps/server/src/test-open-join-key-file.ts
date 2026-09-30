@@ -97,7 +97,7 @@ async function child(): Promise<void> {
             db.transaction(() => {
                 db.prepare("DELETE FROM node_config WHERE key = 'openJoinKeyId'").run();
                 for (const h of a.hashes) db.prepare('UPDATE open_joins SET join_hash = ? WHERE member_pubkey = ?').run(h.hash, h.pk);
-                db.prepare("INSERT INTO node_config (key, value) VALUES ('openJoinSalt', ?)").run(a.keyB64url);
+                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('openJoinSalt', ?)").run(a.keyB64url);
             })();
             fs.rmSync(path.join(process.env.BEANPOOL_DATA_DIR!, KEY_FILE), { force: true });
             db.pragma('wal_checkpoint(TRUNCATE)');
@@ -130,10 +130,6 @@ async function child(): Promise<void> {
                 rows: db.prepare('SELECT member_pubkey AS member, join_hash AS hash FROM open_joins ORDER BY member_pubkey').all(),
                 members: (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n,
             };
-        },
-        'key-id-of': async (a: { keyB64: string }) => {
-            const { openJoinKeyId } = await import('./services/open-join-key.js');
-            return openJoinKeyId(Buffer.from(a.keyB64, 'base64'));
         },
         // A key of the server's own, made as the door's first use makes one (a main server with no record).
         'make-own-key': async () => {
@@ -219,6 +215,10 @@ async function join(port: number, id: Id, sub: string, callsign: string): Promis
 /** The join hash as the door makes it (engine/open-join.ts), computed here from the key alone. */
 const joinHashOf = (key: Buffer, sub: string) =>
     crypto.createHmac('sha256', key).update(['beanpool-open-join/v1', 'google', sub].join('|'), 'utf-8').digest('base64url');
+
+/** Which key this is, as the database records it (services/open-join-key.ts openJoinKeyId), computed here. */
+const keyIdOf = (key: Buffer) =>
+    crypto.createHash('sha256').update('beanpool-open-join-key-id/v1\n').update(key).digest('hex').slice(0, 32);
 
 /** Which encodings of `key` appear in `bytes`: raw, base64url, base64 (with and without padding), hex (either case). */
 function keyIn(bytes: Buffer, key: Buffer): string[] {
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
         } catch (e: any) {
             crashed = { code: e?.code ?? null, output: String(e?.output ?? '') };
         }
-        require_(!!crashed && crashed.code === -1 && /test crash after the key file was written/.test(crashed.output),
+        assert(!!crashed && crashed.code === -1 && /test crash after the key file was written/.test(crashed.output),
             `the node process is killed (SIGKILL) between writing the key file and deleting the row (exit ${crashed?.code})`);
         const fileAfterCrash = fs.existsSync(path.join(dirs.main, KEY_FILE)) ? fs.readFileSync(path.join(dirs.main, KEY_FILE)) : null;
         {
@@ -330,9 +330,9 @@ async function main(): Promise<void> {
         const moved = await main.send('door');
         const keyNow = moved.keyB64 ? Buffer.from(moved.keyB64, 'base64') : null;
         assert(!!keyNow && keyNow.equals(oldKey) && moved.keyMode === '600', `data/open-join.key is the row's key, byte for byte, 0600 (${moved.keyMode})`);
-        assert(!moved.legacyRow && moved.keyId === await main.send('key-id-of', { keyB64: oldKey.toString('base64') }),
+        assert(!moved.legacyRow && moved.keyId === keyIdOf(oldKey),
             'the row is gone, and the database records which key it was (a hash of it)');
-        assert(moved.rows.length === 2 && moved.rows.every((r: any) => r.hash === joinHashOf(keyNow!, r.member === ada.pk ? 'ada-google-sub' : 'ben-google-sub')),
+        assert(!!keyNow && moved.rows.length === 2 && moved.rows.every((r: any) => r.hash === joinHashOf(keyNow, r.member === ada.pk ? 'ada-google-sub' : 'ben-google-sub')),
             'every old join_hash still matches its sign-in under the key in the file');
         mainHttps = (await main.send('serve', { jwk: googleJwk })).port as number;
         const adaAgain = await join(mainHttps, newId(), 'ada-google-sub', 'Ada two');
@@ -359,7 +359,7 @@ async function main(): Promise<void> {
 
         // ── 2. No copy holds the key ──
         console.log('\n— 2. no copy of the database holds the key, in any encoding —');
-        const key = keyNow!;
+        const key = keyNow ?? oldKey;
         const snap = await main.send('snapshot') as string;
         assert(keyIn(fs.readFileSync(snap), key).length === 0, `a snapshot made now holds none of it (${keyIn(fs.readFileSync(snap), key).join(', ') || 'none'})`);
 

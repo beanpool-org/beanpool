@@ -29,10 +29,21 @@ export interface Transaction {
 
 export interface PostPhoto {
     post_id: string;
-    photo_data: string;
+    /**
+     * The photo's bytes, as a data URL. Absent from a photo that travels by reference (a copy served in pages, to a standby
+     * that reads them: apps/server engine/sync.ts photoRowsByReference), which names its object by `sha256` instead.
+     */
+    photo_data?: string;
     order_num: number;
     /** As the main server holds it: a standby writes it, never its own clock (apps/server engine/sync.ts importRemoteState). */
     updated_at?: string | null;
+    /**
+     * A photo by reference: the sha256 (lowercase hex) of its object's bytes, their media type and their size. The standby
+     * fetches the object by it (routes/backup.ts sync-object) only when its own store lacks it.
+     */
+    sha256?: string;
+    mime?: string;
+    bytes?: number;
 }
 
 /** A crowdfund project's row as the main server holds it, every column: a standby's copy is the row verbatim. */
@@ -570,7 +581,8 @@ export interface SyncPayload {
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
-     * row names (storage design §7). Additive and optional: a peer that does not know the field ignores it,
+     * row names (storage design §7), or, sending photos by reference, could not find it in its store. Additive and
+     * optional: a peer that does not know the field ignores it,
      * and the payload it sees is the same one it saw before.
      *
      * The importer only upserts what it is given, so an omitted row is normally harmless — the replica keeps
@@ -1330,7 +1342,8 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
         },
     },
     { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: eachRow(postOfRow) },
-    // The photos' rows as the table holds them: the server puts each one's bytes back (apps/server engine/sync.ts).
+    // The photos' rows as the table holds them: the server puts each one's bytes back, or, in a copy served in pages, names
+    // each one's object by reference (apps/server engine/sync.ts).
     { key: 'photos', table: 'post_photos', delta: { watermark: 'updated_at' }, shape: asTheyAre },
     { key: 'projects', table: 'projects', delta: { watermark: 'updated_at' }, shape: asTheyAre },
     { key: 'ratings', table: 'ratings', delta: { watermark: 'created_at' }, shape: eachRow(ratingOfRow) },

@@ -13,7 +13,7 @@
  *   - SSH in, delete data/local-config.json, restart container
  */
 
-import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt } from 'node:crypto';
+import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
@@ -470,8 +470,28 @@ export function generateReplicationToken(): string {
     return randomBytes(32).toString('hex');
 }
 
+/**
+ * How long a replication token that verified is taken without its scrypt again (verifyReplicationToken). A standby's copy
+ * asks for every listing photo's object it lacks, one request each (routes/backup.ts sync-object): a first copy of a
+ * community with 30,000 photos would otherwise be 30,000 scrypts on the main server (review 4148896207).
+ */
+const REPLICATION_TOKEN_REMEMBERED_MS = 5 * 60_000;
+
+/**
+ * The replication token that last verified, remembered: the SHA-256 of what was presented, the stored hash it verified
+ * against, and until when. Only a token that verified: a wrong one pays its full scrypt every time, as the admin tarpit and
+ * limiter expect. Forgotten when the token is set or cleared, and never taken against a stored hash other than the one it
+ * verified against (a config file edited or restored under this process).
+ */
+let rememberedToken: { digest: Buffer; storedHash: string; until: number } | null = null;
+
+function forgetRememberedToken(): void {
+    rememberedToken = null;
+}
+
 /** Store the scrypt hash of a replication token (primary side). Plaintext is never persisted. */
 export function setReplicationToken(token: string): void {
+    forgetRememberedToken();
     const config = getLocalConfig();
     const { hash, salt } = hashPassword(token);
     config.replicationTokenHash = hash;
@@ -486,6 +506,7 @@ export function setReplicationToken(token: string): void {
  * letting the admin password back in.
  */
 export function clearReplicationToken(): void {
+    forgetRememberedToken();
     const config = getLocalConfig();
     config.replicationTokenHash = null;
     config.replicationTokenSalt = null;
@@ -508,11 +529,24 @@ export function hasReplicationToken(): boolean {
     return !!(config.replicationTokenHash && config.replicationTokenSalt);
 }
 
-/** Constant-time verify of a presented replication token (async — runs scrypt off the event loop). */
+/**
+ * Constant-time verify of a presented replication token (async — runs scrypt off the event loop). A token that verified is
+ * taken for REPLICATION_TOKEN_REMEMBERED_MS without its scrypt again (rememberedToken); any other pays it in full.
+ */
 export async function verifyReplicationToken(token: string): Promise<boolean> {
     const config = getLocalConfig();
     if (!token || !config.replicationTokenHash || !config.replicationTokenSalt) return false;
-    return verifyPasswordAsync(token, config.replicationTokenHash, config.replicationTokenSalt);
+    const storedHash = config.replicationTokenHash;
+    const digest = createHash('sha256').update(token).digest();
+    const r = rememberedToken;
+    if (r && r.storedHash === storedHash && Date.now() < r.until && timingSafeEqual(r.digest, digest)) return true;
+    const ok = await verifyPasswordAsync(token, storedHash, config.replicationTokenSalt);
+    // Remembered only if the token is still the one it verified against once the scrypt is done: set or cleared meanwhile,
+    // the new one is not taken for the old.
+    if (ok && getLocalConfig().replicationTokenHash === storedHash) {
+        rememberedToken = { digest, storedHash, until: Date.now() + REPLICATION_TOKEN_REMEMBERED_MS };
+    }
+    return ok;
 }
 
 // ===================== THRESHOLDS =====================

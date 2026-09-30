@@ -165,6 +165,7 @@ export const SUITES = [
     'test-tombstone-retention',
     'test-sync-copy-pages',
     'test-standby-paged-copies',
+    'test-standby-swap-at-boot',
     'test-standby-paged-copies-pacing',
     'test-recovery-tombstones',
     'test-github-sign-in-removed',
@@ -416,4 +417,7 @@ export const SERIAL = {
     // Its stager boots in ~8 s under load against M's copy idle time scaled to 3 s: M closes the copy (404) and the steps
     // after it cascade (48/77 in the pool, 93/93 alone, #1334).
     'test-standby-paged-copies': 'stager boot against a scaled 3 s copy idle time',
+    // Steps 17-25 of the suite above, split from it to keep each well inside the runner's 300 s (255 s on CI run
+    // 36747148280): the same pair, the same stager boot against the same 3 s copy idle time.
+    'test-standby-swap-at-boot': 'stager boot against a scaled 3 s copy idle time',
 };

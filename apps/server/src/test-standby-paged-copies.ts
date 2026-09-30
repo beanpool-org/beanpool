@@ -58,6 +58,10 @@
  * 19. A take-over whose audit finds trouble (a balance planted on the standby): the promoted server keeps the database its
  *     last swap replaced, saying the date it goes, 30 days from the audit; a start past that date deletes it. (Before: kept
  *     for good, a warning nobody on a stranger's install acts on.)
+ * 20. S killed in the middle of deleting the database its last swap replaced, right before its `-wal` (where the review
+ *     killed it): after a restart, the next delta leaves no file of it. And a `-wal` and `-shm` left on their own, as an older
+ *     build's delete stopped part way left them, go at a main server's start. (Before: the WAL stayed for good, holding the
+ *     rows it held.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -983,6 +987,46 @@ async function main(): Promise<void> {
                 `a start more than 30 days after the audit deletes it (${JSON.stringify({ previous: gone.previous })}; before: kept for good)`);
         });
 
+        await step('20. a delete of the old database stopped part way: no WAL of it stays; one left on its own goes', async () => {
+            const name = await newStandby('standby5');
+            const d = dir(name);
+            const prev = (s: string) => fs.existsSync(path.join(d, `state.previous.db${s}`));
+            const prevFiles = () => ['', '-wal', '-shm'].filter(prev);
+            const secret = `OLD-WORDS-${crypto.randomBytes(6).toString('hex')}`;
+            const bio = (text: string) => main.send('sql', { sql: `UPDATE members SET bio = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [text, ann.pk] });
+            await bio(secret);
+            await standby.send('pull', {}); // S holds Ann's words
+            const w20 = await wholeCopy(); // and the database holding them becomes state.previous.db
+            const inPrevious = () => ['', '-wal'].filter((s) => prev(s) && fs.readFileSync(path.join(d, `state.previous.db${s}`)).includes(secret));
+            require_(w20.ok === true && w20.staged === true && prev('') && prev('-wal') && inPrevious().length > 0,
+                `the database the swap replaced, with its WAL, holds Ann's words (${JSON.stringify({ w20, files: prevFiles(), inPrevious: inPrevious() })})`);
+            // Ann changes her words on M; the delta that brings it deletes the old database, and S is killed right before the WAL.
+            await bio('nothing here now');
+            await standby.send('kill-before-rm', { suffix: 'state.previous.db-wal' });
+            const dying = standby;
+            const killed = await Promise.race([dying.send('pull', {}).then(() => false), dying.exited.then(() => true)]);
+            require_(killed, 'S is killed in the middle of the delete');
+            standby = await spawnNode(SCRIPT, d, envS);
+            nodes.push(standby);
+            const atStart = prevFiles();
+            for (let i = 0; i < 2; i++) {
+                await main.send('sql', { sql: `UPDATE members SET bio = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [`edit 20.${i}`, bo.pk] });
+                await standby.send('pull', {});
+            }
+            assert(prevFiles().length === 0,
+                `after the restart, the next delta leaves no file of the old database (${JSON.stringify({ afterKill: atStart, now: prevFiles(), wordsIn: inPrevious() })}; before: its WAL stayed for good, Ann's old words in it)`);
+
+            // A -wal and -shm on their own, as an older build's delete left them (the database gone, the kill before the WAL).
+            const w20b = await wholeCopy();
+            require_(w20b.ok === true && prev('') && prev('-wal'), `another whole copy swapped in, the old database and its WAL beside it (${JSON.stringify(prevFiles())})`);
+            await standby.kill('SIGKILL');
+            fs.rmSync(path.join(d, 'state.previous.db'));
+            standby = await spawnNode(SCRIPT, d, { ...envS, NODE_ROLE: 'primary' }); // its main server gone: promoted by hand
+            nodes.push(standby);
+            assert(standby.ready.role === 'primary' && prevFiles().length === 0,
+                `a main server's start deletes a -wal and -shm left on their own (${JSON.stringify({ role: standby.ready.role, left: prevFiles() })}; before: nothing looked for them without the database)`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -1042,6 +1086,15 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
 
 /** Step 16's look at the room a whole copy needs (services/stager.ts roomForStaging), and the disk's free space as it sees it. */
 const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
+    /** Step 20: this process SIGKILLs itself right before it deletes a file whose path ends in `suffix`, as a power cut would. */
+    'kill-before-rm': async (a: { suffix: string }) => {
+        const real = fs.rmSync;
+        (fs as any).rmSync = (p: fs.PathLike, ...rest: any[]) => {
+            if (String(p).endsWith(a.suffix)) process.kill(process.pid, 'SIGKILL');
+            return (real as any)(p, ...rest);
+        };
+        return true;
+    },
     /** Step 10's promoted server: its take-over audit, as recorded (services/takeover.ts runPendingPromotionAudit). */
     audit: async () => {
         const { getLocalConfig } = await import('./config/local-config.js');

@@ -59,7 +59,7 @@ import {
     type CopyPage, type ValueLeftOut,
 } from '../engine/sync.js';
 import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
-import { deletePreviousDatabase as deletePreviousFile } from '../db/swap-at-boot.js';
+import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
@@ -1450,7 +1450,7 @@ function restoreFromDatabase(): void {
     // stopped, before a copy landed on the new one must not keep it for good. A swap is the only thing that makes one, so it
     // is the one this database replaced; it holds rows members deleted since (#1334 review 4144658979).
     const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    previousToDelete = fs.existsSync(path.join(dir, PREVIOUS_DB));
+    previousToDelete = previousDatabaseThere(dir); // its -wal or -shm alone too: a delete an older build left part done
     if (!swapped) return;
     const generatedAt = typeof swapped.generatedAt === 'string' ? swapped.generatedAt : null;
     if (generatedAt) {

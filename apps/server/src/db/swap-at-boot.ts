@@ -117,31 +117,40 @@ function swap(dataDir: string): SwapOutcome {
     }
 }
 
+/** Whether any file of the database the last swap replaced is here: PREVIOUS_DB, or a `-wal` or `-shm` of it left over. */
+export function previousDatabaseThere(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): boolean {
+    const previous = path.join(dataDir, PREVIOUS_DB);
+    return ['', '-wal', '-shm'].some((s) => fs.existsSync(previous + s));
+}
+
 /**
  * Delete the database the last swap replaced (PREVIOUS_DB, with its `-wal` and `-shm`), unless this process's swap failed
  * part way or there is no `state.db` beside it: then it may be the only whole database here (the renames are not undone,
  * and the next start's swap finishes them), and it stays. The callers say when it is no longer needed. Never throws.
+ *
+ * The `-wal` and `-shm` go first, the database last: a delete stopped part way (a SIGKILL, a file that would not go)
+ * leaves the database, which the callers see and delete again, never a WAL on its own holding rows members changed or
+ * deleted since (#1334 review round 3, finding 1). A WAL or index left on its own, by an older build, goes whatever else
+ * holds: it is no database.
  */
 export function deletePreviousDatabase(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): {
     had: boolean; deleted: boolean; kept: string | null; errors: string[];
 } {
     const previous = path.join(dataDir, PREVIOUS_DB);
-    const had = fs.existsSync(previous);
+    const had = previousDatabaseThere(dataDir);
     const errors: string[] = [];
-    if (!had) {
-        // No database, but a WAL or index of one left over: nothing to keep.
-        for (const s of ['-wal', '-shm']) fs.rmSync(previous + s, { force: true });
-        return { had, deleted: false, kept: null, errors };
-    }
+    if (!had) return { had, deleted: false, kept: null, errors };
     let kept: string | null = null;
-    if (done === null) kept = 'the swap at boot has not run in this process';
-    else if (done === 'failed') kept = "this start's swap failed part way, so it may be the only whole database here";
-    else if (!fs.existsSync(path.join(dataDir, 'state.db'))) kept = 'there is no state.db beside it';
+    if (fs.existsSync(previous)) {
+        if (done === null) kept = 'the swap at boot has not run in this process';
+        else if (done === 'failed') kept = "this start's swap failed part way, so it may be the only whole database here";
+        else if (!fs.existsSync(path.join(dataDir, 'state.db'))) kept = 'there is no state.db beside it';
+    }
     if (kept) return { had, deleted: false, kept, errors };
-    for (const s of ['', '-wal', '-shm']) {
+    for (const s of ['-wal', '-shm', '']) {
         try { fs.rmSync(previous + s, { force: true }); } catch (e) { errors.push(`${PREVIOUS_DB}${s} could not be deleted: ${(e as Error)?.message || e}`); }
     }
-    return { had, deleted: !fs.existsSync(previous), kept: null, errors };
+    return { had, deleted: !previousDatabaseThere(dataDir), kept: null, errors };
 }
 
 swapStagedCopyAtBoot();

@@ -69,7 +69,7 @@ import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus, forgetPullCursor } from './backup-puller.js';
 import { abortStagedCopy, PREVIOUS_DB } from './stager.js';
-import { deletePreviousDatabase } from '../db/swap-at-boot.js';
+import { deletePreviousDatabase, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
@@ -989,10 +989,13 @@ const PREVIOUS_KEPT_AFTER_TROUBLE_MS = 30 * 86_400_000;
  * A main server with no take-over (its role set by hand) has only that database to run on: the file goes.
  */
 function deletePreviousDatabaseOnMainServer(j: Journal | null): void {
-    if (getNodeRole() !== 'primary' || !fs.existsSync(dataPath(PREVIOUS_DB))) return;
-    if (j && !j.steps.audit) return; // this take-over's audit hasn't read the database yet: a later start deletes it
+    // Its -wal or -shm alone too: a delete an older build left part done.
+    if (getNodeRole() !== 'primary' || !previousDatabaseThere(dataDir())) return;
+    // A -wal or -shm with no database is nothing anyone can look at: it goes now.
+    const leftOver = !fs.existsSync(dataPath(PREVIOUS_DB));
+    if (j && !j.steps.audit && !leftOver) return; // this take-over's audit hasn't read the database yet: a later start deletes it
     let troubleExpired = false;
-    if (j && j.result.audit && !j.result.audit.ok) {
+    if (j && j.result.audit && !j.result.audit.ok && !leftOver) {
         const auditedMs = Date.parse(j.steps.audit!.at);
         const goesMs = (Number.isFinite(auditedMs) ? auditedMs : 0) + PREVIOUS_KEPT_AFTER_TROUBLE_MS;
         if (Date.now() < goesMs) {
@@ -1008,7 +1011,8 @@ function deletePreviousDatabaseOnMainServer(j: Journal | null): void {
     if (r.kept) logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: ${r.kept}.`);
     else if (r.deleted) {
         logger.info('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, deleted: `
-            + (troubleExpired ? `it was kept ${PREVIOUS_KEPT_AFTER_TROUBLE_MS / 86_400_000} days after the take-over's audit found trouble.`
+            + (leftOver ? 'its -wal or -shm was left on its own by a delete stopped part way.'
+                : troubleExpired ? `it was kept ${PREVIOUS_KEPT_AFTER_TROUBLE_MS / 86_400_000} days after the take-over's audit found trouble.`
                 : j ? "this server is the main server now, on the database the take-over's audit checked." : 'this server is a main server, which never swaps its database.'));
     }
 }

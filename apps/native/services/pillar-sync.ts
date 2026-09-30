@@ -473,12 +473,20 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const earlyApplied = new Set<string>();
         // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
         let postsReplaced = false;
+        // Whether the early write below wrote nothing (the member switched community while it waited for the sync lock,
+        // and maybe back): the cycle goes on for the other tables, but its cursor stays, so the next cycle reads those
+        // posts again, and their fingerprints go, so it writes them.
+        let postsUnwritten = false;
         if (!postsIsIncremental && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
             try {
                 const wrote = await applyDelta({ posts: postsData, ...(takenOver ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
                 // Not written (the member switched community while this batch waited for the sync lock): the epoch
                 // stays as held, so the next cycle replaces the cache again.
                 postsReplaced = takenOver && wrote;
+                if (wrote === false) {
+                    postsUnwritten = true;
+                    forgetCycleFingerprints(anchorUrl, ['posts']);
+                }
                 earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
@@ -674,9 +682,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // everything fetched belongs to `anchorUrl`, and applying it now would
         // contaminate the newly-active node's local DB. Bail BEFORE advancing the
         // per-table fingerprints so this node re-syncs cleanly on its next cycle.
+        // The raw fingerprints this cycle recorded as it read each body go too (parseIfChanged records one before the
+        // cycle is known to succeed): otherwise the next cycle, sent the same page for the same cursor, finds it
+        // "already applied", writes nothing, and moves the cursor past a page it never wrote (a photo heal's page,
+        // engine/photo-keys.ts on the server; review of fe4c27ce, finding 2). The member delta's is kept outside rawGated
+        // (see its read above), so it is named here and at the two forgets below.
         const activeAnchorNow = await AsyncStorage.getItem('beanpool_anchor_url');
         if (getDatabaseFilenameForNode(activeAnchorNow) !== expectedDbName) {
             console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl} → ${activeAnchorNow}); discarding fetched delta to avoid cross-node contamination.`);
+            forgetCycleFingerprints(anchorUrl, [...rawGated, 'membersDelta', ...earlyApplied]);
             result.aborted = true;
             result.errorMessage = 'Node switched during sync';
             result.durationMs = Date.now() - startTime;
@@ -715,10 +729,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
+        // False when the batch wrote nothing: the member switched community between the check above and its lock.
+        let landed = true;
         if (Object.keys(gatedDelta).length > 0) {
             try {
                 const wrote = await applyDelta(gatedDelta, expectedDbName);
                 if (gatedDelta.postsReplace && wrote) postsReplaced = true;
+                if (wrote === false) landed = false;
             } catch (applyErr) {
                 // parseIfChanged / the stringify gate already recorded these payloads'
                 // fingerprints as "applied". If the write actually failed (e.g. a DB
@@ -728,12 +745,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // server having posts. Invalidate the fingerprints for every table we
                 // tried to write this cycle — the batch AND the early fast-paint apply
                 // — so the next sync re-fetches and re-applies.
-                for (const table of new Set([...Object.keys(gatedDelta), ...earlyApplied])) {
-                    delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
-                    delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
-                }
+                forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), 'membersDelta', ...earlyApplied]);
                 throw applyErr;
             }
+        }
+        if (!landed) {
+            // As a switch found above: nothing counts as applied, and the cursor stays, so the next cycle on this
+            // community asks again and writes what it is sent.
+            console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl}); nothing written, the cursor stays.`);
+            forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), ...rawGated, 'membersDelta', ...earlyApplied]);
+            result.aborted = true;
+            result.errorMessage = 'Node switched during sync';
+            result.durationMs = Date.now() - startTime;
+            return result;
         }
 
         // Notify active screens to re-render only when something actually changed —
@@ -748,7 +772,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // Step 3: Success — save timestamp
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
-        await AsyncStorage.setItem(kLastSync, String(Date.now()));
+        if (!postsUnwritten) await AsyncStorage.setItem(kLastSync, String(Date.now()));
         await AsyncStorage.removeItem(kCheckpoint);
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
         // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.
@@ -824,6 +848,14 @@ const _lastAppliedFingerprints: Record<string, number> = {};
 export function resetSyncFingerprints() {
     for (const key of Object.keys(_lastAppliedFingerprints)) {
         delete _lastAppliedFingerprints[key];
+    }
+}
+
+/** Forget what this cycle recorded as applied for `tables` of one node: both gates, raw and stringified. */
+function forgetCycleFingerprints(anchorUrl: string, tables: Iterable<string>): void {
+    for (const table of new Set(tables)) {
+        delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
+        delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
     }
 }
 

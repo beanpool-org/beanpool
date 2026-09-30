@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
-import { db, writeTombstone, deletePlainRows, afterTransactionCommit } from '../db/db.js';
+import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -81,6 +81,7 @@ function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
 }
 
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
+export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
 /**
@@ -343,6 +344,11 @@ export function createPost(
     assertProfileComplete(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     assertEnterpriseCanPost(authorPublicKey);
+    // A post's id, when the caller sends one (the phone app makes its own, a UUID, so a post made offline keeps it), is
+    // text that names no money: no account, member, escrow, project, deal or settlement (db.ts idNamesMoney). Nothing turns
+    // a post's id into an account now; the boot migration that read `escrow_<post id>` moved Beans out of whichever
+    // escrow a chosen id named, and nothing should be able to again.
+    if (id && (typeof id !== 'string' || idNamesMoney(id))) throw new Error(POST_ID_TAKEN_ERROR);
 
     const audienceScope: AudienceScope = (options?.audienceScope as AudienceScope) || 'public';
     if (!['public', 'group', 'direct'].includes(audienceScope)) {

@@ -41,6 +41,7 @@ import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
@@ -902,7 +903,9 @@ router.post('/api/local/admin/storage/clean', async (ctx) => {
  * when an operator actually opens the panel.
  *
  * Aggregate rows only: (day, event, variant, count). There is no per-member data to
- * return because none is stored — see M2 in docs/ONBOARDING.md.
+ * return because none is stored — see M2 in docs/ONBOARDING.md. Beside them, `openDoor`:
+ * whether the open door takes joins now (config/node-profile.ts `openJoin`, as
+ * /api/community/info says it), so the screen can say why nobody came through it.
  */
 const getOnboardingFunnelHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -911,7 +914,7 @@ const getOnboardingFunnelHandler = async (ctx: any) => {
         // carrying {"days": 90} silently answers with 30 and looks like the window
         // control is broken. Clamped rather than trusted; see clampDays.
         const days = clampDays(ctx.query?.days ?? ctx.requestBody?.days ?? 30);
-        ctx.body = { days, rows: getFunnel(days) };
+        ctx.body = { days, rows: getFunnel(days), openDoor: getProfileSwitches().openJoin };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { error: e.message };

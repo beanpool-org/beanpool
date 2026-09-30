@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 78,
-  "hash": "108b6762b125944b27a3a529c3f3e2f12c074df4e64e303478699a19432b8024",
+  "version": 79,
+  "hash": "6e11959a9a4b64a3afaf2b218e8d10796447c9ef11cbce6368f1353ef5fb3ad8",
   "sections": [
     {
       "id": "setup",
@@ -2038,6 +2038,10 @@
         {
           "type": "p",
           "text": "The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one."
+        },
+        {
+          "type": "p",
+          "text": "**Blank listing photos after going back.** If you went back to an older version and then forward again, or restored an old backup, members' apps can keep listing photos that no longer open. To make every app read all the listings again over its next few syncs, run once: docker compose exec -u node beanpool-node node -e \"require('better-sqlite3')('/data/state.db').prepare(\\\"DELETE FROM node_config WHERE key = 'photoKeysShape'\\\").run()\" and then: docker compose restart beanpool-node"
         },
         {
           "type": "p",

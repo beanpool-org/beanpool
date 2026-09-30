@@ -1344,9 +1344,13 @@ export interface NodeTreasury {
     locationUpdatedAt?: string | null;
 }
 
-export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/treasuries');
-    const res = await fetch(endpoint);
+/**
+ * The node's enterprises, asked with the admin password (GET /api/local/admin/treasury): the public list is members'
+ * on every node now (the server's https-server.ts MEMBERS_ONLY_READS_PATTERNS), and Settings signs as no member.
+ */
+export async function fetchNodeTreasuries(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeTreasury[]> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/treasury');
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
     if (!res.ok) return [];
     const data = await res.json().catch(() => ({}));
     const rawList = Array.isArray(data.treasuries) ? data.treasuries : (Array.isArray(data) ? data : []);

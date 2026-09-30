@@ -1,0 +1,161 @@
+/**
+ * A listing edit can't poison a balance (review FABLE-sec-input F1/F2/F6, 2026-10-01, measured on the real engine).
+ *
+ * The finding: a seller edited their own offer to `{"credits": "abc"}` through POST /api/marketplace/posts/update. It was
+ * accepted, SQLite stored the text in the REAL column, and the first buyer approved (request → approve → complete) or
+ * one-step accepted had their balance set to NaN in memory and NULL on disk. Every `<` guard on the money path reads NaN
+ * as "fine", and the ledger total silently moved (0 → -120 with 5 NULL rows in the probe).
+ *
+ *   1. The reviewer's sequence through the real edit route: every bad edit is a 400, nothing is written, and the deals
+ *      that follow move real Beans — every balance stays finite and the ledger total does not move.
+ *   2. Each field an edit can name, sent with a type or value no listing may hold, is refused and nothing is written.
+ *   3. The money primitives themselves (core LedgerManager, state-engine transfer / moveToCommons / payFromCommons, the
+ *      escrow doors) refuse NaN, Infinity, negative and string amounts and quantities, whatever a caller hands them.
+ *   4. The conservation check flags a NULL or non-finite balance.
+ *
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-listing-edit-numbers.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+delete process.env.CF_RECORD_NAME;
+
+import crypto from 'node:crypto';
+import { db } from './db/db.js';
+import {
+    initStateEngine, createPost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
+} from './state-engine.js';
+import { createMarketplaceRoutes } from './routes/marketplace.js';
+
+let run = 0, passed = 0;
+function check(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+}
+
+function makeMember(callsign: string): string {
+    const pk = crypto.randomBytes(32).toString('hex');
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`).run(pk, callsign);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    return pk;
+}
+
+async function dispatch(router: any, method: string, path: string, ctx: any) {
+    const matched = router.match(path, method);
+    const layer = matched.pathAndMethod.find((l: any) => l.methods.includes(method));
+    if (!layer) throw new Error(`No route for ${method} ${path}`);
+    await layer.stack[layer.stack.length - 1](ctx);
+    return ctx;
+}
+
+/** Every balance row: the total SQLite sums, how many are NULL or not a finite number, and the in-memory balances. */
+function ledgerState(keys: string[]) {
+    const total = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as any).s as number;
+    const bad = (db.prepare(`SELECT COUNT(*) AS c FROM accounts
+        WHERE balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`).get() as any).c as number;
+    const memory = keys.map((k) => getBalance(k).balance);
+    return { total, bad, memory, memoryFinite: memory.every((b) => typeof b === 'number' && Number.isFinite(b)) };
+}
+
+function attempt<T>(fn: () => T): { ok: true; value: T } | { ok: false; error: string } {
+    try { return { ok: true, value: fn() }; } catch (e: any) { return { ok: false, error: e?.message || String(e) }; }
+}
+
+async function main() {
+    console.log('Running listing-edit number checks...\n');
+    initStateEngine();
+    const router = createMarketplaceRoutes({
+        clampLimit: (n: any) => Number(n) || 50,
+        clampOffset: (n: any) => Number(n) || 0,
+        enforceReadAuth: false,
+    } as any);
+
+    const seller = makeMember('seller');
+    const buyer = makeMember('buyer');
+    const third = makeMember('third');
+    const everyone = [seller, buyer, third];
+    for (const pk of everyone) transfer('genesis', pk, 100, 'seed', 'direct', true);
+    // A member must list an offer before they can ask for one (CONTRIBUTION_REQUIRED).
+    createPost('offer', 'services', 'Buyer mends', 'Mending', 5, 'fixed', buyer);
+    createPost('offer', 'services', 'Third digs', 'Digging', 5, 'fixed', third);
+
+    const edit = async (actor: string, id: string, updates: Record<string, unknown>) =>
+        dispatch(router, 'POST', '/api/marketplace/posts/update', { requestBody: { id, authorPublicKey: actor, ...updates }, state: { actor } });
+    const row = (id: string) => db.prepare('SELECT title, description, category, credits, typeof(credits) AS t, price_type, lat, lng FROM posts WHERE id = ?').get(id) as any;
+
+    // ── 1. The reviewer's sequence ──────────────────────────────────────────────────────────────────
+    console.log('— 1. the reviewer\'s sequence: edit credits to "abc", then request → approve → complete, and acceptPost —');
+    const before = ledgerState(everyone);
+    check(before.bad === 0 && before.memoryFinite, `the ledger starts with every balance a finite number (${JSON.stringify(before)})`);
+
+    const offer = createPost('offer', 'food', 'Carrots', 'Organic carrots', 10, 'fixed', seller)!;
+    const abc = await edit(seller, offer.id, { credits: 'abc' });
+    check(abc.status === 400, `an edit to credits "abc" is refused with 400 (got ${abc.status ?? 200}: ${JSON.stringify(abc.body)})`);
+    const afterAbc = row(offer.id);
+    check(afterAbc.credits === 10 && afterAbc.t === 'real', `and nothing is written: the listing still asks 10 Beans as a number (${JSON.stringify(afterAbc)})`);
+
+    const req = attempt(() => requestPost(offer.id, buyer));
+    const appr = req.ok ? attempt(() => approvePostRequest(req.value.id, seller)) : req;
+    const done = req.ok ? attempt(() => completePostTransaction(req.value.id, buyer)) : req;
+    check(req.ok && appr.ok && done.ok, `the buyer's request, the seller's approval and the completion go through at the real price (${JSON.stringify([req, appr, done].map((r) => r.ok ? 'ok' : r.error))})`);
+    const afterDeal = ledgerState(everyone);
+    check(afterDeal.bad === 0 && afterDeal.memoryFinite, `every balance is a finite number, in memory and on disk (${JSON.stringify(afterDeal)})`);
+    check(Math.abs(afterDeal.total - before.total) < 1e-9, `and the ledger total did not move (${before.total} → ${afterDeal.total})`);
+    check(Math.abs(getBalance(buyer).balance - 90) < 1e-9, `the buyer paid the real 10 Beans (${getBalance(buyer).balance})`);
+
+    // The one-step buy, on a second listing a seller also tried to poison.
+    const offer2 = createPost('offer', 'food', 'Beans', 'Broad beans', 4, 'fixed', seller)!;
+    const abc2 = await edit(seller, offer2.id, { credits: 'abc' });
+    check(abc2.status === 400, `an edit of a second listing to credits "abc" is refused with 400 (got ${abc2.status ?? 200})`);
+    const acc = attempt(() => acceptPost(offer2.id, third));
+    check(acc.ok, `a third member's one-step accept goes through at the real price (${acc.ok ? 'ok' : acc.error})`);
+    const afterAccept = ledgerState(everyone);
+    check(afterAccept.bad === 0 && afterAccept.memoryFinite, `every balance is still a finite number (${JSON.stringify(afterAccept)})`);
+    check(Math.abs(afterAccept.total - before.total) < 1e-9, `and the ledger total still did not move (${before.total} → ${afterAccept.total})`);
+
+    // ── 2. Every field an edit can name ─────────────────────────────────────────────────────────────
+    console.log('\n— 2. each field an edit names, with a value no listing may hold, is refused and nothing is written —');
+    const target = createPost('offer', 'food', 'Plums', 'Plums from the tree', 3, 'fixed', seller, -28.5, 153.5)!;
+    const pristine = row(target.id);
+    const bad: [string, Record<string, unknown>][] = [
+        ['credits "abc"', { credits: 'abc' }],
+        ['credits "5" (a string)', { credits: '5' }],
+        ['credits -5', { credits: -5 }],
+        ['credits Infinity', { credits: Infinity }],
+        ['credits NaN', { credits: NaN }],
+        ['credits null', { credits: null }],
+        ['credits 1e12', { credits: 1e12 }],
+        ['title 123 (a number)', { title: 123 }],
+        ['title "" (empty)', { title: '   ' }],
+        ['description 42 (a number)', { description: 42 }],
+        ['category 7 (a number)', { category: 7 }],
+        ['category "" (empty)', { category: '' }],
+        ['priceType "yearly"', { priceType: 'yearly' }],
+        ['priceType 1', { priceType: 1 }],
+        ['lat "x"', { lat: 'x' }],
+        ['lat 91', { lat: 91 }],
+        ['lat Infinity', { lat: Infinity }],
+        ['lng -181', { lng: -181 }],
+        ['lng "153"', { lng: '153' }],
+        ['hours Infinity', { hours: Infinity }],
+        ['hours "2"', { hours: '2' }],
+    ];
+    for (const [label, updates] of bad) {
+        const r = await edit(seller, target.id, updates);
+        const now = row(target.id);
+        check(r.status === 400 && JSON.stringify(now) === JSON.stringify(pristine),
+            `an edit with ${label} is refused with 400 and the listing is unchanged (got ${r.status ?? 200}: ${JSON.stringify(r.body)})`);
+    }
+    // And the edits a real app sends still land.
+    const good = await edit(seller, target.id, { title: 'Ripe plums', description: '', category: 'food', credits: 4.5, priceType: 'hourly', lat: -28.6, lng: 153.4 });
+    const landed = row(target.id);
+    check(good.status === undefined && good.body?.success === true && landed.title === 'Ripe plums' && landed.credits === 4.5 && landed.price_type === 'hourly',
+        `a well-formed edit still lands (${good.status ?? 200}: ${JSON.stringify(landed)})`);
+    const cleared = await edit(seller, target.id, { lat: null, lng: null });
+    check(cleared.body?.success === true && row(target.id).lat === null, `and an edit may clear the pin (${cleared.status ?? 200})`);
+
+    console.log(`\n${passed}/${run} checks passed.`);
+    if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+    console.log('⭐️ Listing-edit number checks PASSED.');
+}
+
+main().then(() => process.exit(0)).catch((e) => { console.error('❌ Test failed:', e); process.exit(1); });

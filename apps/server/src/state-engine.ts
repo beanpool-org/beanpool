@@ -315,6 +315,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
+import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -4475,6 +4476,9 @@ export function createPost(
         beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
+    // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
+    // number of Beans never reaches a listing, whichever route made it.
+    assertPostFields({ title, description, category, credits, priceType, lat, lng }, 'create');
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
@@ -4507,6 +4511,9 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
+    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
+    assertPostFields(updates as PostFieldsIn, 'edit');
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }

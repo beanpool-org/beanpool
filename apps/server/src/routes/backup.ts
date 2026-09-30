@@ -14,6 +14,7 @@ import {
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
 import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
+import { PHOTOS_BY_REFERENCE_FORMAT } from '../engine/sync.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
@@ -33,7 +34,7 @@ import {
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import {
-    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
+    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, openObject, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
@@ -1218,6 +1219,22 @@ router.post('/api/local/admin/sync-copy', async (ctx) => {
     if (!authMode) return;
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
+    // A copy's listing photos go by reference (engine/sync.ts photoRowsByReference, REPLICA_FORMAT 8): a standby older than
+    // that says no format, and its import drops every photo row that carries no bytes, so it would land a copy without its
+    // photos. Refused instead, loudly on both servers: here in the log and the Replication Access panel, there as a pull
+    // that failed with this status, every time, in its report and its owners' notice, until it is updated.
+    const format = Number(ctx.request.header['x-replica-format']);
+    if (!Number.isInteger(format) || format < PHOTOS_BY_REFERENCE_FORMAT) {
+        const why = `this standby is older than its main server: a copy's listing photos travel by reference, which a standby `
+            + `reads from replica format ${PHOTOS_BY_REFERENCE_FORMAT}; update it, and its next pull takes a copy`;
+        console.warn(`[Backup] A copy asked for by ${ip ?? 'a standby'} was refused: ${why}.`);
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: why });
+        ctx.status = 426;
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: PHOTOS_BY_REFERENCE_FORMAT };
+        return;
+    }
+
     const since = typeof ctx.query.since === 'string' ? ctx.query.since : '';
     if (since && (since.length > 64 || Number.isNaN(Date.parse(since)))) {
         ctx.status = 400;
@@ -1272,6 +1289,60 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
     if (!authMode) return;
     ctx.set('Cache-Control', 'no-store');
     ctx.body = { closed: closeCopy(String(ctx.params.copyId)) };
+});
+
+// One listing photo's object by its content address, for a standby taking a copy whose photos go by reference (engine/sync.ts
+// photoRowsByReference; design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): the bytes a `post_photos` row of this
+// server names by that sha256, and nothing else. An address no listing photo here names is 404, whatever the store holds
+// under it: a chat attachment's (they never leave this server: replication-manifest.ts message_attachments, G4), anything a
+// shared bucket holds, and an avatar's (no object: it sits in its members row). The same auth as a copy's pages, under the
+// same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace
+// (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too, and the standby keeps its own
+// row of it, as for one a copy names in `photosOmitted`; a store that doesn't answer is 503, and the standby's pull fails.
+router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    ctx.set('Cache-Control', 'no-store');
+    const sha256 = String(ctx.params.sha256);
+    if (!/^[0-9a-f]{64}$/.test(sha256)) {
+        ctx.status = 400;
+        ctx.body = { error: 'an object is asked for by its sha256, in lowercase hex' };
+        return;
+    }
+    // idx_post_photos_sha256 (db/schema.sql). The same photo on several listings is several rows and objects, the same bytes.
+    const rows = db.prepare(`SELECT storage_key FROM post_photos WHERE sha256 = ? AND storage_key IS NOT NULL LIMIT 8`).all(sha256) as { storage_key: string }[];
+    if (rows.length === 0) {
+        ctx.status = 404;
+        ctx.body = { error: 'no listing photo of this server has that address', why: 'not-named' };
+        return;
+    }
+    const store = getImageStore();
+    let failure: unknown = null;
+    for (const row of rows) {
+        let opened: Awaited<ReturnType<typeof openObject>>;
+        try {
+            opened = await openObject(store, row.storage_key);
+        } catch (e) {
+            failure = e;
+            continue;
+        }
+        if (!opened) continue;
+        ctx.type = 'application/octet-stream';
+        ctx.set('X-Content-Type-Options', 'nosniff');
+        if (opened.bytes !== null) ctx.length = opened.bytes;
+        ctx.body = opened.stream;
+        return;
+    }
+    if (failure) {
+        console.error(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
+        ctx.status = 503;
+        ctx.body = { error: 'the image store did not answer' };
+        return;
+    }
+    console.warn(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
+    ctx.status = 404;
+    ctx.body = { error: 'this server cannot find that listing photo\'s object', why: 'unreadable' };
 });
 
 // Restore (sealed-keys.md §6.2). Takes either:

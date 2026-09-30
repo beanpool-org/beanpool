@@ -46,6 +46,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
     importRemoteState, verifyCopyPage, getNodeRole, getReplicaConsistency, getStateHash, getSyncCursor, setSyncCursor,
     type ImportResult, type SyncPayload, type ReplicaConsistency,
@@ -56,8 +57,9 @@ import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engin
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
 import {
     REPLICA_FORMAT, replicaFormatOfCopy, noteLedgerMismatch, valueLeftOutName, OversizedCopyError, deleteSyncCursor, mergeCopyPages, isCopyPage,
-    type CopyPage, type ValueLeftOut,
+    namesPhotoObject, photoReferenceOf, type CopyPage, type PhotoReference, type ValueLeftOut,
 } from '../engine/sync.js';
+import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
 import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
@@ -113,6 +115,10 @@ function noteMainServerCommunitySettings(record: unknown, copiedAt: string | nul
 
 /** A copy in pages (routes/backup.ts, engine/copy-pages.ts): opened here, its pages asked for at `<copyId>/<n>`. */
 const COPY_PATH = '/api/local/admin/sync-copy';
+/** A listing photo's object, by its sha256, for a copy whose photos go by reference (routes/backup.ts sync-object). */
+const OBJECT_PATH = '/api/local/admin/sync-object';
+/** Objects fetched at once, as the export reads them (engine/sync.ts EXPORT_READ_CONCURRENCY): each still waits its pace. */
+const OBJECT_CONCURRENCY = 8;
 const DEFAULT_INTERVAL_MS = 60_000;
 /** Each request of a copy (its opening, each page) is abandoned after this long. */
 const FETCH_TIMEOUT_MS = 30_000;
@@ -136,16 +142,19 @@ const DEFAULT_BIG_COPY_EVERY_MS = 24 * 60 * 60_000;
  */
 const DEFAULT_DELTA_PAGES = 4;
 /**
- * The most a delta's pages may add up to (their JSON), whatever it holds: design §5's 32 MB, four pages of 8 MB, which a
- * 1 GB node parses to about 170 MB. It bounds the accounts too, which every delta carries whole (below): 100,000 of them
- * are about 15 MB. BACKUP_DELTA_BYTES.
+ * The most a delta's changes may add up to (their pages' JSON, changedBytes): design §5's 32 MB, four pages of 8 MB, which
+ * a 1 GB node parses to about 170 MB. Not the accounts every delta carries whole (below): they come on top, about 170 bytes
+ * of JSON each, 17 MB for 100,000 members. BACKUP_DELTA_BYTES.
  */
 const DEFAULT_DELTA_BYTES = 32 * 1024 * 1024;
 /**
  * The categories every delta carries whole, not only as changed (engine sync.ts EXPORT_CATEGORIES `delta: 'whole'`: the
- * accounts). They are no measure of how much changed, so they never count toward a delta's pages of changes: a community
- * with more accounts than that would take no delta at all, only a whole copy and a restart every other pull (review
- * 4139589449). The bytes bound them.
+ * accounts, so the conservation guard sees whole ledgers, never half a transfer: docs/delta-backup-plan.md). They are no
+ * measure of how much changed, so neither their rows nor their bytes count toward
+ * a delta's bounds: counted, a community with more accounts than a delta's pages of rows (review 4139589449), or than
+ * BACKUP_DELTA_BYTES of them, about 190,000 (review 4144658064), would take no delta at all, only a whole copy and a
+ * restart every other pull. What they cost a delta grows with the community, as the main server's own ledger in memory
+ * does (engine/audit.ts): about a megabyte of this standby's memory for every thousand accounts, while it imports.
  */
 const WHOLE_IN_EVERY_DELTA: ReadonlySet<string> = new Set(EXPORT_CATEGORIES.filter((c) => c.delta === 'whole').map((c) => c.key));
 /**
@@ -315,16 +324,19 @@ class CopyRequests {
 
     constructor(private readonly base: string, private readonly headers: Record<string, string>) {}
 
-    private async request(method: 'POST' | 'GET' | 'DELETE', route: string): Promise<Response> {
-        const wait = this.lastAt + pageGapMs() - Date.now();
-        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-        this.lastAt = Date.now();
+    private async request(method: 'POST' | 'GET' | 'DELETE', route: string, body: 'page' | 'object' = 'page'): Promise<Response> {
+        // One pace for every request of a pull, its objects' too: requests made at once each take the next slot.
+        const at = Math.max(Date.now(), this.lastAt + pageGapMs());
+        this.lastAt = at;
+        if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
             const res = await fetch(this.base + route, { method, headers: this.headers, signal: controller.signal });
             // The body is read under the same timer: a copy's page that stops arriving is abandoned like one that never came.
-            if (res.status === 200) (res as Response & { text_?: string }).text_ = await readUpTo(res, pageMaxBytes());
+            if (res.status === 200 && body === 'page') (res as Response & { text_?: string }).text_ = (await readUpTo(res, pageMaxBytes())).toString('utf-8');
+            // An object is no bigger than any store keeps (MAX_OBJECT_BYTES): one that is, is refused unread past that.
+            else if (res.status === 200) (res as Response & { bytes_?: Buffer }).bytes_ = await readUpTo(res, MAX_OBJECT_BYTES);
             return res;
         } finally {
             clearTimeout(timeout);
@@ -368,6 +380,21 @@ class CopyRequests {
         return read;
     }
 
+    /**
+     * A listing photo's object, by its sha256 (routes/backup.ts sync-object): its bytes, or null when the main server says it
+     * can't serve it (404: no listing photo there names it now, or its store lacks it). Anything else throws: the main
+     * server or its store not answering, which fails the pull.
+     */
+    async object(sha256: string): Promise<Buffer | null> {
+        const res = await this.request('GET', `${OBJECT_PATH}/${sha256}`, 'object');
+        if (res.status === 404) {
+            try { await res.body?.cancel(); } catch { /* gone */ }
+            return null;
+        }
+        if (res.status !== 200) throw new NoCopy(res.status);
+        return (res as Response & { bytes_?: Buffer }).bytes_ ?? Buffer.alloc(0);
+    }
+
     /** The main server may close a copy this standby won't finish (it serves one at a time). Never throws. */
     async close(copyId: string): Promise<void> {
         try { await this.request('DELETE', `${COPY_PATH}/${encodeURIComponent(copyId)}`); } catch { /* it closes by itself when idle */ }
@@ -382,22 +409,177 @@ class CopyPageRefused extends Error {
     }
 }
 
-/** A response's text, up to `max` bytes: one longer is refused unread past that. */
-async function readUpTo(res: Response, max: number): Promise<string> {
+/** A response's body, up to `max` bytes: one longer is refused unread past that. */
+async function readUpTo(res: Response, max: number): Promise<Buffer> {
     const length = Number(res.headers.get('content-length'));
     if (Number.isFinite(length) && length > max) {
         try { await res.body?.cancel(); } catch { /* gone */ }
-        throw new CopyPageRefused(`a page of ${length} bytes, more than the ${max} this standby reads`);
+        throw new CopyPageRefused(`an answer of ${length} bytes, more than the ${max} this standby reads`);
     }
-    if (!res.body) return '';
+    if (!res.body) return Buffer.alloc(0);
     const chunks: Buffer[] = [];
     let n = 0;
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
         n += chunk.length;
-        if (n > max) throw new CopyPageRefused(`a page of more than the ${max} bytes this standby reads`);
+        if (n > max) throw new CopyPageRefused(`an answer of more than the ${max} bytes this standby reads`);
         chunks.push(Buffer.from(chunk));
     }
-    return Buffer.concat(chunks).toString('utf-8');
+    return Buffer.concat(chunks);
+}
+
+/**
+ * The listing photos a copy's page names by reference (engine/sync.ts photoRowsByReference), each checked: a page that names
+ * an object by anything but an address a store keeps (photoReferenceOf) came, and is refused. A photo with its bytes inline
+ * is none of these: the import stores it as it always did.
+ */
+function photoReferencesOf(page: CopyPage): PhotoReference[] {
+    const out: PhotoReference[] = [];
+    for (const row of Array.isArray(page.photos) ? page.photos : []) {
+        if (!namesPhotoObject(row)) continue;
+        const ref = photoReferenceOf(row);
+        if (!ref) {
+            throw new CopyPageRefused(`page ${page.n} of copy ${String(page.copyId).slice(0, 8)} names a listing photo's object `
+                + `(${String(row?.post_id)}|${String(row?.order_num)}) by no address a store keeps`);
+        }
+        out.push(ref);
+    }
+    return out;
+}
+
+/** How often one object is asked for when what comes is not what its row names (a sha256 or a size), before the pull fails. */
+const OBJECT_TRIES = 3;
+
+/**
+ * An object came, every time it was asked for, as bytes its row doesn't name, or this server's own store failed to keep
+ * one: the copy came, and is refused, with nothing wrong written.
+ */
+class PhotoObjectRefused extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'PhotoObjectRefused';
+    }
+}
+
+/**
+ * An object the main server no longer serves (404) though the copy named it: its listing's photo replaced or deleted
+ * there since the copy's snapshot, or its object lost there since it was looked for. This copy is not taken (nothing of
+ * it lands); the next one names what the main server holds then, and fetches only what this server's store still lacks.
+ */
+class PhotoObjectGone extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'PhotoObjectGone';
+    }
+}
+
+/** What fetching a copy's listing photos found (fetchPhotoObjects). */
+interface PhotoObjectsFetched {
+    /** Photos by reference the copy named. */
+    named: number;
+    /** Of those, the ones whose object this server's store already held, at its size. */
+    held: number;
+    /** Objects asked of the main server that came (each sha256 once, but for one asked again), and their bytes. */
+    fetched: number;
+    fetchedBytes: number;
+}
+
+/**
+ * The objects of a copy's listing photos by reference that this server's store lacks, fetched from the main server by
+ * content address (routes/backup.ts sync-object), each sha256 once, at the copy's pace, OBJECT_CONCURRENCY (8) at a time,
+ * and put through the store's non-blocking write under the key this server keeps each by (PhotoReference.key): content-
+ * addressed on both servers, so a routine whole copy of a standby that holds them fetches nothing, and a new photo is
+ * fetched alone. A photo whose key the store holds at its size is not asked for; one whose sha256 this pull already has
+ * under another listing's key is copied from there.
+ *
+ * Every object is checked as it arrives: its sha256 and its size are the ones its row names, or it is asked for again, up
+ * to OBJECT_TRIES times in all, and then the pull fails (PhotoObjectRefused) with nothing of it written. The store checks
+ * the sha256 again as it writes. An object the main server no longer serves (404) fails the pull too (PhotoObjectGone):
+ * landed without it, the copy would hold a row the main server's own hash of it names, or leave that listing's photo out
+ * for good. Anything else the main server or the store answers fails the pull. What was fetched before a failure stays in
+ * the store, content-addressed, so the next pull asks only for the rest.
+ */
+async function fetchPhotoObjects(refs: Iterable<PhotoReference> | AsyncIterable<PhotoReference>, requests: CopyRequests): Promise<PhotoObjectsFetched> {
+    const store = getImageStore();
+    const out: PhotoObjectsFetched = { named: 0, held: 0, fetched: 0, fetchedBytes: 0 };
+    const seenKeys = new Set<string>();
+    // Each sha256 this pull has in the store, and under which key; and the fetch another photo of it started.
+    const storedAs = new Map<string, string>();
+    const fetching = new Map<string, Promise<Buffer>>();
+    const sha = (b: Buffer) => crypto.createHash('sha256').update(b).digest('hex');
+    const fetchChecked = async (ref: PhotoReference): Promise<Buffer> => {
+        for (let attempt = 1; ; attempt++) {
+            const bytes = await requests.object(ref.sha256);
+            if (bytes === null) {
+                throw new PhotoObjectGone(`listing photo ${ref.post_id}|${ref.order_num}'s object (sha256 ${ref.sha256.slice(0, 12)}…) is no longer on the main `
+                    + 'server, which answered 404: this copy is not taken, and the next names what the main server holds then');
+            }
+            out.fetched++;
+            out.fetchedBytes += bytes.length;
+            const got = sha(bytes);
+            if (bytes.length === ref.bytes && got === ref.sha256) return bytes;
+            logger.warn('P2P', `[Backup] Listing photo ${ref.post_id}|${ref.order_num}'s object came as ${bytes.length} bytes with sha256 ${got.slice(0, 12)}…, `
+                + `not the ${ref.bytes} bytes and ${ref.sha256.slice(0, 12)}… its row names: not written${attempt < OBJECT_TRIES ? ', asked for again' : ''}.`);
+            if (attempt >= OBJECT_TRIES) {
+                throw new PhotoObjectRefused(`listing photo ${ref.post_id}|${ref.order_num}'s object came ${OBJECT_TRIES} times as bytes its row doesn't name `
+                    + `(sha256 ${ref.sha256.slice(0, 12)}…, ${ref.bytes} bytes): refused, and nothing of it written`);
+            }
+        }
+    };
+    // This server's own store failing is no fetch that failed: the copy came, and this server couldn't keep it.
+    const inOwnStore = async <T>(what: string, op: () => Promise<T>): Promise<T> => {
+        try { return await op(); } catch (e) {
+            throw new PhotoObjectRefused(`this server's image store failed to ${what}: ${(e as Error)?.message || e}`);
+        }
+    };
+    const one = async (ref: PhotoReference): Promise<void> => {
+        out.named++;
+        if (seenKeys.has(ref.key)) return;
+        seenKeys.add(ref.key);
+        const held = await inOwnStore(`look for ${ref.key}`, () => headObject(store, ref.key));
+        if (held && held.bytes === ref.bytes) {
+            out.held++;
+            if (!storedAs.has(ref.sha256)) storedAs.set(ref.sha256, ref.key);
+            return;
+        }
+        let bytes: Buffer | null = null;
+        const here = storedAs.get(ref.sha256);
+        if (here) {
+            // The same photo on another listing, already here: copied, not fetched.
+            const b = await inOwnStore(`read ${here}`, () => readObject(store, here));
+            if (b && b.length === ref.bytes && sha(b) === ref.sha256) bytes = b;
+        }
+        if (!bytes) {
+            let pending = fetching.get(ref.sha256);
+            if (!pending) {
+                pending = fetchChecked(ref);
+                fetching.set(ref.sha256, pending);
+            }
+            bytes = await pending;
+        }
+        const put = bytes;
+        await inOwnStore(`write ${ref.key}`, () => writeObject(store, ref.key, put, { mime: ref.mime, sha256: ref.sha256 }));
+        storedAs.set(ref.sha256, ref.key);
+        fetching.delete(ref.sha256);
+    };
+    const source: AsyncIterable<PhotoReference> = Symbol.asyncIterator in refs
+        ? refs as AsyncIterable<PhotoReference>
+        : (async function* () { yield* refs as Iterable<PhotoReference>; })();
+    const it = source[Symbol.asyncIterator]();
+    let failure: unknown = null;
+    const worker = async (): Promise<void> => {
+        while (failure === null) {
+            const r = await it.next();
+            if (r.done) return;
+            try { await one(r.value); } catch (e) { failure ??= e; }
+        }
+    };
+    await Promise.all(Array.from({ length: OBJECT_CONCURRENCY }, worker));
+    if (failure !== null) throw failure;
+    if (out.named > 0) {
+        logger.info('P2P', `[Backup] Listing photos by reference: ${out.named} named, ${out.held} already held here, ${out.fetched} object(s) fetched `
+            + `(${(out.fetchedBytes / 1048576).toFixed(1)} MB).`);
+    }
+    return out;
 }
 
 /** Rows in a copy, as its opening page counts them; those of the categories in `leaveOut` not counted. */
@@ -406,6 +588,20 @@ function rowsOfCopy(counts: unknown, leaveOut: ReadonlySet<string> = new Set()):
     let n = 0;
     for (const [k, v] of Object.entries(c ?? {})) if (k !== 'plainTables' && !leaveOut.has(k) && typeof v === 'number') n += v;
     for (const v of Object.values(c?.plainTables ?? {})) if (typeof v === 'number') n += v;
+    return n;
+}
+
+/**
+ * A delta's page, in bytes of changes: its text, but for the rows of the categories every delta carries whole
+ * (WHOLE_IN_EVERY_DELTA, the accounts), which are what the main server holds, not what changed. As a page's text writes a
+ * category's rows (engine/copy-pages.ts: each row's JSON, joined by commas).
+ */
+function changedBytes(read: CopyPageRead): number {
+    let n = Buffer.byteLength(read.text);
+    for (const key of WHOLE_IN_EVERY_DELTA) {
+        const rows = (read.page as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(rows) && rows.length > 0) n -= Buffer.byteLength(JSON.stringify(rows));
+    }
     return n;
 }
 
@@ -466,6 +662,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     const authHeader: Record<string, string> = replicationToken
         ? { 'X-Replication-Token': replicationToken }
         : { 'X-Admin-Password': adminPassword as string };
+    // What this standby's import reads (engine/sync.ts REPLICA_FORMAT): its main server sends a copy's listing photos by
+    // reference only to one that says it reads them, and refuses any other (routes/backup.ts sync-copy).
+    authHeader['X-Replica-Format'] = String(REPLICA_FORMAT);
     // How this standby's copies have gone, for its main server to tell the community's owners when it needs them
     // (services/standby-health.ts). Only on the replication-token channel: the main server reads it nowhere else.
     if (replicationToken) {
@@ -536,6 +735,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             staged = await StagedCopy.start(opening.copyId);
             logger.info('P2P', `[Backup] ${fresh ? 'Force-resync' : 'Whole copy'}: building copy ${opening.copyId.slice(0, 8)} of the main server `
                 + `(${rowsOfCopy(opening.rowCounts)} rows) in a staging database; it replaces this standby's copy only if every check passes.`);
+            staged.notePhotoReferences(photoReferencesOf(opening));
             await staged.page(0, opened.text);
             let last = opening.last === true;
             for (let n = 1; !last; n++) {
@@ -547,10 +747,21 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 });
                 stage = 'import';
                 await verifyCopyPage(next.page);
+                staged.notePhotoReferences(photoReferencesOf(next.page));
                 await staged.page(n, next.text);
                 last = next.page.last === true;
             }
             openCopy = null;
+            // The listing photos' objects this server's store lacks, once every page is in, and the main server's snapshot of
+            // the copy closed: fetched a page at a time, a first copy of a community with many photos would hold it open past
+            // its longest (engine/copy-pages.ts COPY_MAX_MS). The closing checks then refuse the copy if any is missing.
+            stage = 'fetch';
+            await fetchPhotoObjects(staged.photoReferences(), requests).catch((e) => {
+                // Objects that came but are not what their rows name: the copy came, and is refused.
+                if (e instanceof PhotoObjectRefused) stage = 'import';
+                throw e;
+            });
+            stage = 'import';
             // The closing checks read this database, read-only, in one read transaction (services/stager.ts): a reader on
             // its WAL for that long. What needs the WAL to itself first closes the open copies (engine/open-copies.ts), and
             // this one then stops the copy, rather than waiting on it with the event loop held.
@@ -586,10 +797,12 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // More changed rows than that many pages hold: not fetched at all. The accounts every delta carries are no change.
             const changed = rowsOfCopy(opening.rowCounts, WHOLE_IN_EVERY_DELTA);
             let tooBig: string | null = changed > most * pageRows ? `more than ${most} page(s) of changes (${changed} rows)` : null;
-            let bytes = Buffer.byteLength(opened.text);
+            // Nor are their bytes (review 4144658064): past BACKUP_DELTA_BYTES of accounts alone, about 190,000 of them, no
+            // delta would land, only a whole copy and a restart every other pull.
+            let bytes = changedBytes(opened);
             while (!tooBig && pages[pages.length - 1].last !== true) {
                 const next = await requests.page(opening.copyId, pages.length);
-                bytes += Buffer.byteLength(next.text);
+                bytes += changedBytes(next);
                 if (bytes > maxBytes) { tooBig = `more than ${Math.round(maxBytes / 1048576)} MB`; break; }
                 pages.push(next.page);
             }
@@ -603,6 +816,19 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         }
         openCopy = null;
         stage = 'import';
+        // The listing photos' objects this server's store lacks, before the import, which writes a photo's row only when its
+        // object is here (engine/sync.ts storeImportedPhotos). Each page signed first: nothing a page no main server signed
+        // names is asked for.
+        const refs = pages.flatMap(photoReferencesOf);
+        if (refs.length > 0) {
+            for (const page of pages) await verifyCopyPage(page);
+            stage = 'fetch';
+            await fetchPhotoObjects(refs, requests).catch((e) => {
+                if (e instanceof PhotoObjectRefused) stage = 'import';
+                throw e;
+            });
+            stage = 'import';
+        }
         // The import path enforces: each page's valid signature → signer maps to a trusted `mirror` connector (the
         // primary) → the pages are one copy, every page in order → conservation guard (runs on a backup unconditionally,
         // A2-8). A forged/tampered page is rejected there. It applies a delta or a whole copy identically, LWW per row; only
@@ -705,7 +931,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         if (openCopy) void requests.close(openCopy);
         consecutiveFailures++;
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
-        const whyCode = e instanceof StagedCopyRefused ? e.why : whyOf(stage, e);
+        // An object the main server answered 404 for: that answer, as the report says a copy's own 404.
+        const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : whyOf(stage, e);
         recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and

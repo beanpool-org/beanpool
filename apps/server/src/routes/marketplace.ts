@@ -32,6 +32,7 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
+import { postOutOfSight } from '../engine/post-sight.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
@@ -459,7 +460,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             return;
         }
 
-        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
+        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
         if (!postRow) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found' };
@@ -480,6 +481,14 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             entitled = true;
         }
 
+        // Someone who may not take it down and can't see it either (a group's or a direct post, engine/post-sight.ts)
+        // hears what an id nobody has hears, not that it is someone else's. A keeper of the enterprise that wrote it is
+        // entitled above whether or not they can see it.
+        if (!entitled && postOutOfSight(postRow, actor)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Post not found' };
+            return;
+        }
         if (!entitled) {
             ctx.status = 403;
             ctx.body = { error: isTreasury(postRow.author_pubkey)

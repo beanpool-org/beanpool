@@ -92,7 +92,9 @@ printf '#!/bin/bash\ncase "$*" in */tmp/beanpool-deploy.tar.gz*) exit 0 ;; esac\
 chmod +x "$BIN"/*
 
 : > "$APP/.deploy-package.tar.gz"   # GNU tar: "file changed as we read it" when gzip creates it mid-read
-PATH="$BIN:$PATH" HEALTH_INTERVAL=0 HEALTH_STREAK=1 HEALTH_TIMEOUT=5 bash "$APP/deploy.sh" 1 > "$SB/deploy-output.log" 2>&1
+# A PUBLIC_IP in the Mac's own shell, which must reach no server: the server asks ifconfig.me for its own (#1135's review).
+DEPLOYER_IP='deployer-sentinel-ip-7e2a'
+PUBLIC_IP="$DEPLOYER_IP" PATH="$BIN:$PATH" HEALTH_INTERVAL=0 HEALTH_STREAK=1 HEALTH_TIMEOUT=5 bash "$APP/deploy.sh" 1 > "$SB/deploy-output.log" 2>&1
 rc=$?
 assert "the stubbed deploy ran to the end" "$rc" "0"
 MAIN="$CAP/remote-0.sh"
@@ -119,6 +121,12 @@ assert "the remote script is sent the fleet tunnel token's sha256, to remove onl
        "$(grep -cE "^[[:space:]]*remove_fleet_tunnel_token \"/root/BeanPool-Test/data/tunnel-token\" \"$FLEET_SHA\"$" "$MAIN")" "1"
 assert "the remote script says where a first start's password is" \
        "$(grep -cE '^[[:space:]]*first_password_notice "/root/BeanPool-Test/data" "root@deploy-guard.invalid"$' "$MAIN")" "1"
+# The log line printed the Mac's PUBLIC_IP, expanded into the script by the Mac's shell (usually empty, and whatever it held
+# became part of the script the server runs), not the address the server had just asked for.
+assert "the remote script logs the server's own PUBLIC_IP, expanded on the server" \
+       "$(grep -cF 'echo "Public IP: $PUBLIC_IP"' "$MAIN")" "1"
+hits=$(grep -l "$DEPLOYER_IP" "$CAP"/remote-*.sh 2>/dev/null | sed "s|$SB/||")
+assert "the Mac's own PUBLIC_IP reaches no server script" "${hits:-none}" "none"
 if [ "$passed" != "$run" ]; then
   echo "   deploy.sh output (last 15 lines):"; tail -15 "$SB/deploy-output.log" | sed 's/^/   | /'
 fi

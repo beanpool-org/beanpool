@@ -11,6 +11,7 @@ import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -136,16 +137,6 @@ function assertNotOnHoliday(publicKey: string): void {
 }
 
 /**
- * A group post this caller cannot see in any feed (getPosts: only its author and the group's active members), so the
- * trade routes must answer exactly as for an id nobody has. The old "Must be an active member of the group" told
- * a non-member holding the id that it was a group post, and of which group — an invite-only one included.
- */
-function cannotSeeGroupPost(scope: string | null | undefined, groupId: string | null | undefined, authorPubkey: string, caller: string): boolean {
-    if (scope !== 'group' || !groupId || authorPubkey === caller) return false;
-    return !db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(groupId, caller);
-}
-
-/**
  * A post hidden by reports (G3) is not there for anyone but its author, here as when read by id (getPosts): a
  * request or an accept would start a deal, and put Beans in escrow, on a post waiting for a moderator (most likely
  * one reported as a scam), and its answer would name the post. So the trade routes answer as for an id nobody has.
@@ -181,7 +172,10 @@ export function requestPost(
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
-    if (!post || cannotSeeGroupPost(post.audience_scope, post.target_group_id, post.author_pubkey, requesterPublicKey)
+    // A group or direct post this caller can't see in any feed is an id nobody has (engine/post-sight.ts): "Must be an
+    // active member of the group" told a non-member holding the id that it was a group's, an invite-only one included,
+    // and "This direct post is not addressed to you" that it was someone's direct post.
+    if (!post || postOutOfSight(post, requesterPublicKey)
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
         throw new Error('Post not found');
     }
@@ -554,7 +548,8 @@ export function acceptPost(
     assertNodeMember(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
-    if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)
+    // As requestPost: a group or direct post this caller can't see is an id nobody has.
+    if (!post || marketplacePostOutOfSight(post, buyerPublicKey)
         || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
         throw new Error('Post not found or not active');
     }

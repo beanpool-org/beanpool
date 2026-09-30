@@ -25,6 +25,7 @@ import {
     assertCanWriteInGroupChat, groupChatEditedCiphertext, groupChatRefusal, broadcastGroupChatUpdate,
 } from './group-thread.js';
 import { writeMessageTombstone } from './message-tombstone.js';
+import { eventChatUnknownTo } from './event-thread.js';
 import { unmutedRecipients } from './chat-mutes.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
 
@@ -98,14 +99,39 @@ export function isVisitorsDirectConversation(conversationId: unknown, publicKey:
 }
 
 /**
- * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an id that names no
- * conversation, which sendMessage follows to the one it became (chat consolidation) and refuses a visitor anywhere but a
- * direct conversation it is in.
+ * The conversation an old conversation id was folded into (chat consolidation): a line stored there names the old id in
+ * its metadata, `originalConversationId` or an item of `originalConversationIds`. Undefined when no line does. The
+ * earliest such line decides, as when this scanned the table in order.
+ *
+ * Looked up in message_old_conversation_ids (schema.sql), which the messages triggers keep from each line's metadata:
+ * one index probe, whether or not a line names the id. Scanning every line's metadata instead made an id nobody has
+ * cost ~35 ms at 100k lines, where a hidden group's chat id is answered at once, so the time told the two apart
+ * (#1333 review). A list's items match exactly now; the scan matched any part of the list's text.
+ */
+function consolidatedConversationOf(conversationId: string): string | undefined {
+    const row = db.prepare(`
+        SELECT m.conversation_id FROM message_old_conversation_ids o
+        JOIN messages m ON m.id = o.message_id
+        WHERE o.old_conversation_id = ?
+        ORDER BY m.rowid
+        LIMIT 1
+    `).get(conversationId) as { conversation_id?: string } | undefined;
+    return row?.conversation_id || undefined;
+}
+
+/**
+ * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an old id of one, which
+ * sendMessage follows to the one it became (chat consolidation). Anything else, an id nobody has included, is refused at
+ * the gate in the same words: letting every id that names no conversation through told a visitor, by the engine's
+ * different answer, which ids do name one (a hidden group's chat is its group's id).
  */
 export function visitorMaySendTo(conversationId: unknown, publicKey: string | undefined): boolean {
     if (isVisitorsDirectConversation(conversationId, publicKey)) return true;
-    return typeof conversationId === 'string' && !!conversationId && !!publicKey && isLiveVisitor(db, publicKey)
-        && !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId);
+    if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    if (db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId)) return false;
+    let folded: string | undefined;
+    try { folded = consolidatedConversationOf(conversationId); } catch { return false; }
+    return !!folded && isVisitorsDirectConversation(folded, publicKey);
 }
 
 /**
@@ -298,20 +324,9 @@ export function sendMessage(
     // If not found directly, check if conversationId was consolidated into an active DM
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
         try {
-            // json_valid() guards json_extract via CASE so a single row with malformed
-            // metadata cannot abort the whole SELECT (which the surrounding catch would
-            // then swallow, silently disabling consolidation resolution node-wide).
-            const consolidatedMsg = db.prepare(`
-                SELECT conversation_id FROM messages
-                WHERE metadata IS NOT NULL
-                  AND CASE WHEN json_valid(metadata) THEN (
-                        json_extract(metadata, '$.originalConversationId') = ?
-                        OR json_extract(metadata, '$.originalConversationIds') LIKE ?
-                      ) ELSE 0 END
-                LIMIT 1
-            `).get(conversationId, `%${conversationId}%`) as any;
-            if (consolidatedMsg?.conversation_id) {
-                effectiveConvId = consolidatedMsg.conversation_id;
+            const consolidatedId = consolidatedConversationOf(conversationId);
+            if (consolidatedId) {
+                effectiveConvId = consolidatedId;
                 participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
 
                 // Preserve the ORIGINAL conversation id the sender encrypted against.
@@ -429,6 +444,10 @@ export function toggleMessageReaction(
     // Refused before the participant check: the thread is readable by members, so this hides nothing.
     const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (convType?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_REACT_ERROR, 403);
+    // A line of an event chat whose event isn't there for this caller (a hidden group's event, one they were removed
+    // from or left while Going) answers as an id nobody has, before the participants mirror, where a removed member
+    // keeps their seat: "Reactions are not part of an event chat" would confirm the line is real (the #828 rule).
+    if (convType?.type === 'event_thread' && eventChatUnknownTo(row.conversation_id, authorPubkey)) return null;
 
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
 
@@ -558,8 +577,12 @@ export function editMessage(
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
-    // neither, so it refuses (docs/events-on-the-map.md §2.2).
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
+    // event, or one they were removed from or left) is answered first, as an id nobody has (the #828 rule).
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+        throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Whether this caller may SEE the chat at all is settled BEFORE the author match and before anything else
@@ -661,7 +684,11 @@ export function deleteOwnMessage(
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    // An event chat's line: first answered as an id nobody has for someone the event isn't there for, as the edit is.
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Who may SEE this chat comes FIRST — before the author match, and before the system-line refusal, both of

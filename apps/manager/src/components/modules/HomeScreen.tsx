@@ -3,6 +3,8 @@ import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
+import { WebVisitsCard } from './WebVisitsCard';
+import type { NodeProfile } from '../../lib/profiles';
 
 interface HomeScreenProps {
     communityName: string;
@@ -20,6 +22,8 @@ interface HomeScreenProps {
     onAcknowledgeShutdown?: () => Promise<void>;
     /** An owner's "this standby is gone for good": the node stops watching it (its next report watches it again). */
     onForgetStandby?: (id: string) => Promise<void>;
+    /** The node this Home is for: its web app visits card reads it. Without one the card is not shown. */
+    activeNode?: NodeProfile;
 }
 
 export function HomeScreen({
@@ -37,6 +41,7 @@ export function HomeScreen({
     onStartColdStartWizard,
     onAcknowledgeShutdown,
     onForgetStandby,
+    activeNode,
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
 
@@ -412,6 +417,9 @@ export function HomeScreen({
                     </p>
                 </button>
             </div>
+
+            {/* Web app visits a day, counted by the node itself */}
+            {activeNode && <WebVisitsCard node={activeNode} />}
 
             {/* 4. Quick actions — Invite a member · Create an enterprise · Run ledger audit · Download backup */}
             <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-6 shadow-lg">

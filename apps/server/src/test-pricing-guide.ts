@@ -11,6 +11,8 @@
  *     a member's travel to a standby
  * 5. Multiplier configuration and clamped math
  * 6. Marketplace auto-pricing feedback loop with outlier filtering & photo matching
+ * 6b-6c. Only listings on the board price an item: not a group's or a direct one, not one hidden by reports, paused or
+ *     cancelled; a completed one counts
  * 7. Admin reset to defaults: a tombstone for each member's report, none for the rest
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pricing-guide.ts
@@ -207,6 +209,35 @@ async function main() {
     const afterBoard = getPricingGuideItem('ls-001');
     assert(afterBoard?.confidenceCount === 4 && afterBoard?.priceBeans === 23,
         `a listing on the board moves both (${afterBoard?.priceBeans} beans from ${afterBoard?.confidenceCount}, expected 23 from 4)`);
+
+    // 6c. A listing the board leaves out prices nothing, in either data source: one hidden by reports (with a photo, which
+    // must not become the item's picture either), one its author paused, and a cancelled one. A completed listing is a
+    // deal someone paid, and counts on purpose.
+    const insertWithStatus = db.prepare(`
+        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, hidden_by_reports_at)
+        VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?)
+    `);
+    insertWithStatus.run('post-hidden-1', 'Babysitting overnight', 'Flagged babysitting', 60, 'active', new Date().toISOString());
+    db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES ('post-hidden-1', 'data:image/jpeg;base64,AA==', 0)`).run();
+    insertWithStatus.run('post-paused-1', 'Babysitting paused', 'Paused babysitting', 70, 'paused', null);
+    insertWithStatus.run('post-cancelled-1', 'Babysitting cancelled', 'Cancelled babysitting', 75, 'cancelled', null);
+    for (const dataSource of ['federation', 'local'] as const) {
+        updatePricingConfig({ dataSource });
+        runPricingAggregationCycle();
+        const afterOff = getPricingGuideItem('ls-001');
+        assert(afterOff?.confidenceCount === 4 && afterOff?.priceBeans === 23,
+            `${dataSource}: a listing hidden by reports, a paused one and a cancelled one move neither the price nor the count (${afterOff?.priceBeans} beans from ${afterOff?.confidenceCount}, expected 23 from 4)`);
+        assert(!afterOff?.thumbnailUrl, `${dataSource}: the hidden listing's photo is not the item's picture (${afterOff?.thumbnailUrl})`);
+    }
+    insertWithStatus.run('post-completed-1', 'Babysitting done', 'Completed babysitting', 26, 'completed', null);
+    for (const dataSource of ['federation', 'local'] as const) {
+        updatePricingConfig({ dataSource });
+        runPricingAggregationCycle();
+        const afterCompleted = getPricingGuideItem('ls-001');
+        assert(afterCompleted?.confidenceCount === 5 && afterCompleted?.priceBeans === 24,
+            `${dataSource}: a completed listing counts as a price paid (${afterCompleted?.priceBeans} beans from ${afterCompleted?.confidenceCount}, expected 24 from 5)`);
+    }
+    updatePricingConfig({ dataSource: 'federation' });
 
     // Clean up custom item & reset catalog
     deletePricingGuideItem(customItem.id);

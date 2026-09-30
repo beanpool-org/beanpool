@@ -41,18 +41,24 @@ export function runPricingAggregationCycle(): {
     // everyone count (#1348's deciding review): the guide is a public read, so a group's own listing, or one for one
     // person, never prices an item, gives it a count or gives it its photo, even as part of an average. "On the board"
     // is getPosts' rule for a reader with no key (@beanpool/engine posts.ts, onPublicBoard in photo-url.ts): `public`,
-    // or NULL for a row from before audiences. An item's picture also skips a listing hidden by reports
-    // (routes/pricing-guide.ts shows no other), so the node never stores a URL of one here.
-    const onBoard = `(p.audience_scope IS NULL OR p.audience_scope = 'public')`;
-    const photoOnBoard = `CASE WHEN p.hidden_by_reports_at IS NULL
-                                THEN (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) END AS has_photo`;
+    // or NULL for a row from before audiences. A listing hidden by reports prices nothing either: the board leaves it out,
+    // so one the community flagged never moves a price or a count, nor gives an item its picture (routes/pricing-guide.ts
+    // shows no other), and the node never stores a URL of one here.
+    //
+    // Statuses: a listing that is up ('active', or 'pending' with a deal under way) counts, and so does a 'completed'
+    // one, on purpose: a finished deal is a price someone actually paid, the best evidence the guide has (#206: "active
+    // and recent" listings). A listing its author paused, or a cancelled one, is off the board and was never traded at
+    // its price, so it moves nothing.
+    const onBoard = `(p.audience_scope IS NULL OR p.audience_scope = 'public') AND p.hidden_by_reports_at IS NULL
+                     AND p.status IN ('active', 'pending', 'completed')`;
+    const hasPhoto = `(SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo`;
     const postsQuery = config.dataSource === 'local'
         ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
-                  ${photoOnBoard}
+                  ${hasPhoto}
            FROM posts p
            WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0 AND ${onBoard}`
         : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
-                  ${photoOnBoard}
+                  ${hasPhoto}
            FROM posts p
            WHERE p.active = 1 AND p.credits > 0 AND ${onBoard}`;
 

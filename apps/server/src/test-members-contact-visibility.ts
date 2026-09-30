@@ -278,7 +278,6 @@ async function main() {
         const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
         const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
         const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
-        const CARD = ['avatarUrl', 'callsign', 'joinedAt', 'publicKey'].join(',');
         for (const [k, o] of Object.entries(owners)) {
             for (const [route, body] of [
                 ['/api/invite/redeem', { code: 'INV-PROBE-0001', publicKey: o.pubKeyHex, callsign: 'probe' }],
@@ -288,8 +287,10 @@ async function main() {
                 assert(r.status === 200 && r.body?.alreadyMember === true, `unsigned ${route} for the ${k} owner's key answers alreadyMember (got ${r.status})`);
                 assert(secretsIn(r.text).size === 0, `…and carries no contact (saw ${fmt(secretsIn(r.text))})`);
                 assert(!anyInviteCode(r.text), '…and no invite code');
-                assert(Object.keys(r.body?.member || {}).sort().join(',') === CARD,
-                    `…and only the public card (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
+                // An existing member's card goes only to a redeem signed by that member's own key, on every node
+                // (2026-10-01; routes/community.ts redeemedCard): an unsigned one gets none.
+                assert(r.body?.member === undefined,
+                    `…and no card of theirs (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
             }
         }
     }

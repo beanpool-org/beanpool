@@ -1,8 +1,12 @@
 /**
  * Test coverage for lightweight membership probe GET /api/community/membership/:publicKey
+ *
+ * Whether a key is a member is public (the apps ask it unsigned of every community they know); its name goes only to
+ * that key's own signer, on every node (the global node since G9a, a local community since 2026-10-01).
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
+import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -31,7 +35,7 @@ async function main() {
     assert(res1.status === 200, 'GET /api/community/membership/:publicKey returns 200 for member');
     const body1 = await res1.json() as any;
     assert(body1.isMember === true, 'isMember is true for registered member');
-    assert(body1.callsign === 'alice', 'returns correct callsign for member');
+    assert(body1.callsign === null, 'names no member to an unsigned caller');
 
     // Case 2: Non-existent member / unknown public key
     const unknownPubkey = 'pubkey_unknown_456';
@@ -50,7 +54,29 @@ async function main() {
     assert(res3.status === 200, 'GET /api/community/membership/:publicKey returns 200 for bob');
     const body3 = await res3.json() as any;
     assert(body3.isMember === true, 'isMember is true for bob');
-    assert(body3.callsign === 'bob', 'callsign is bob');
+    assert(body3.callsign === null, "bob's name goes to nobody unsigned either");
+
+    // Case 4: a member signing their own probe gets their name; another member signing gets none.
+    const signedProbe = async (key: string, signer: { pk: string; privateKey: crypto.KeyObject }) => {
+        const path = `/api/community/membership/${key}`;
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const sig = crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), signer.privateKey).toString('base64');
+        const res = await fetch(`${BASE}${path}`, { headers: { 'X-Public-Key': signer.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce } });
+        return await res.json() as any;
+    };
+    const keyed = (callsign: string) => {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+        seedGenesisMember(pk, callsign);
+        return { pk, privateKey };
+    };
+    const carol = keyed('carol');
+    const dave = keyed('dave');
+    const own = await signedProbe(carol.pk, carol);
+    assert(own.isMember === true && own.callsign === 'carol', `carol, signing her own probe, gets her name (got ${JSON.stringify(own)})`);
+    const other = await signedProbe(carol.pk, dave);
+    assert(other.isMember === true && other.callsign === null, `dave, another member, signing a probe of carol's key, gets no name (got ${JSON.stringify(other)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

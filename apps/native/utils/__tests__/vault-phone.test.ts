@@ -214,7 +214,7 @@ describe('with the community at https://a.test, nothing that opens a key goes th
         for (const s of to(VAULT)) expect(s.headers['X-Signed-For']).toBe('vault.test');
         // The account is back on the phone.
         expect((await loadIdentity())?.publicKey).toBe(member.publicKey);
-    });
+    }, 30_000);
 
     it('a request signed for a community is refused by the vault: the phone signs vault requests for the vault', async () => {
         await memberOnCommunity();

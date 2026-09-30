@@ -85,6 +85,11 @@ import {
 } from './fake-vault';
 
 const ANCHOR = 'beanpool_anchor_url';
+/**
+ * 27 real connects (a scrypt seal and a signed request each): 0.7 s alone here, about 4 s beside the other suites, and CI
+ * runs about 3.4 times slower than that (run 36714344338 timed out at vitest's 5 s default). Room to spare.
+ */
+const SLOW_TEST_MS = 60_000;
 const SUB = 'google-sub-42';
 
 /**
@@ -284,7 +289,7 @@ describe('no build ends up with neither', () => {
             }
         }
         expect(atVault).toBe(1);
-    });
+    }, SLOW_TEST_MS);
 
     it('app.config.js stops a build that sets some of the three but not all', () => {
         const load = () => {

@@ -66,6 +66,8 @@ import { installNetwork, noVault, useVault, VAULT, type Network } from './fake-v
 
 const COPY_KNOWN = (pk: string) => `beanpool_vault_copy_known:${pk.toLowerCase()}`;
 const TEN_MINUTES = 10 * 60;
+/** Ten minutes of fake time, a second at a time, each inside act(): about 1 s here beside other suites; CI is slower. */
+const TEN_MINUTES_OF_FAKE_TIME_MS = 30_000;
 
 let net: Network;
 let root: Root;
@@ -125,14 +127,14 @@ describe('the Settings banner asks the vault on no timer', () => {
         expect(statusCalls()).toBe(2);
         // The community's own watch is unchanged: it still runs while the app is in front.
         expect(community.calls).toBeGreaterThan(1);
-    });
+    }, TEN_MINUTES_OF_FAKE_TIME_MS);
 
     it('a member with no copy at the vault: never asked, not when the banner shows, not on a timer, not on return', async () => {
         await mountAndWait(TEN_MINUTES);
         await backToFront();
         expect(statusCalls()).toBe(0);
         expect(net.sent.filter(s => s.origin === VAULT)).toEqual([]);
-    });
+    }, TEN_MINUTES_OF_FAKE_TIME_MS);
 });
 
 describe('the app-open check asks only for a member the phone knows a copy for', () => {

@@ -54,6 +54,17 @@ export const PREVIOUS_DB = 'state.previous.db';
 /** The files the stager's boot reads from its data directory, copied in; never written back. */
 const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.json'];
 /**
+ * What the stager's copy of local-config.json leaves out: this server's credentials (config/local-config.ts). The stager
+ * signs in to nothing and nothing signs in to it, so data/staging, which a copy made ready keeps until the next start,
+ * never holds a second copy of them: the admin password's hash and salt, the two-factor secrets and backup codes, the
+ * recovery code's record, the replication token's hash and a standby's own token, and a legacy standby's stored admin
+ * password (test-standby-token-only's step 6 greps the data directory for it).
+ */
+const CREDENTIALS_LEFT_OUT = [
+    'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes', 'recoveryCode',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword',
+];
+/**
  * node_config: the copy this database was swapped in from, written by the stager into the staging database. The puller's
  * first start on it reads it once and deletes it (services/backup-puller.ts).
  */
@@ -122,7 +133,16 @@ function prepareStagingDir(): string {
     fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
     for (const name of FILES_FOR_THE_STAGER) {
         const from = path.join(DATA_DIR, name);
-        if (fs.existsSync(from)) fs.copyFileSync(from, path.join(dir, name));
+        if (!fs.existsSync(from)) continue;
+        if (name !== 'local-config.json') {
+            fs.copyFileSync(from, path.join(dir, name));
+            continue;
+        }
+        // One this server can't read gives the stager none: it runs on the defaults, as a server with no local config does.
+        let config: Record<string, unknown>;
+        try { config = JSON.parse(fs.readFileSync(from, 'utf-8')); } catch { continue; }
+        for (const k of CREDENTIALS_LEFT_OUT) delete config[k];
+        fs.writeFileSync(path.join(dir, name), JSON.stringify(config, null, 2), { mode: 0o600 });
     }
     fs.mkdirSync(path.join(DATA_DIR, 'images'), { recursive: true });
     fs.symlinkSync(path.join('..', 'images'), path.join(dir, 'images'), 'dir');

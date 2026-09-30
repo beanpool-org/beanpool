@@ -71,7 +71,7 @@ import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initTunnelConnector } from './services/tunnel-connector.js';
-import { initBackupPuller } from './services/backup-puller.js';
+import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
@@ -262,7 +262,9 @@ async function main() {
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over
     // HTTPS and import it. No-op on a primary (which imports from nobody). Wired
     // after the connector manager so the primary's `mirror` connector — the
-    // trust anchor the import signature gate checks — is already loaded.
+    // trust anchor the import signature gate checks — is already loaded. A whole copy made ready restarts the server,
+    // and the swap at the next start puts it in place (db/swap-at-boot.ts): only a process that registers it does.
+    registerSwapRestart();
     initBackupPuller();
 
     // Step 8.6: Automated Fleet Harvester (drift-triggered backups + 30-day archiving)

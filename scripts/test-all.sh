@@ -560,12 +560,19 @@ run_federation_suites() {
     for t in "${SUITES[@]}"; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
-      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
+      # Into a file, then printed: a file takes every line a suite writes before it exits (a pipe on macOS need not).
+      OUT_FILE="$TMP_DIR.out"
+      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts" > "$OUT_FILE" 2>&1
       RC=$?
+      cat "$OUT_FILE"
       # 124 is timeout(1) reporting the wall clock expired. Named separately so a hang reads as a
       # hang in the summary rather than as an ordinary failure.
-      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t"; fi
-      rm -rf "$TMP_DIR"
+      # A suite that exits 0 without its closing count (N/N passed, or its PASSED line) stopped part-way: something it
+      # drove in its own process exited with 0, and every check after that ran nowhere. It fails, as NO-COUNT (#1334,
+      # review 4139589216: a standby suite stopped at 32 of its 82 checks, and this loop counted it green).
+      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t"
+      elif ! grep -qE "PASSED|[0-9]+ ?/ ?[0-9]+[^0-9].*passed|passed.*[0-9]+ ?/ ?[0-9]+|All [0-9]+ .*passed" "$OUT_FILE"; then FAILED="$FAILED $t(NO-COUNT)"; fi
+      rm -rf "$TMP_DIR" "$OUT_FILE"
     done
 
     # The two settlement ROUTES again with settlement ENABLED. FEDERATION_SETTLEMENT_ENABLED is a module const

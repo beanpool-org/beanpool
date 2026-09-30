@@ -195,7 +195,8 @@ let deltaTooBig = false;
 let restored = false;
 // The database the last swap replaced (db/swap-at-boot.ts), deleted once a copy lands on the new one.
 let previousToDelete = false;
-// A whole copy is ready to be swapped in: this process restarts (requestSwapRestart), and pulls nothing more.
+// A whole copy is ready to be swapped in: this process restarts (registerSwapRestart), and pulls nothing more. Never set in a
+// process that registered no restart: it carries on, and the copy waits in data/staging for the next start.
 let swapReady = false;
 // N2 (design §4.2): after a copy that came and was refused, when the next of its kind may be asked for. A whole copy waits
 // for the next routine one (a reconcile interval); a force-resync, and a first copy, RESYNC_RETRY_MS. An operator's
@@ -422,7 +423,7 @@ export function keepMainServerRecords(payload: SyncPayload, whole: boolean): voi
  *               database and swapped in at a restart (services/stager.ts).
  *  - 'resync' : a whole copy built from nothing in a staging database, whatever its size, bypassing the stale-skip: the
  *               replica is rebuilt 1:1 when the copy is swapped in, and left exactly as it was when it is refused. */
-async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null): Promise<{ ok: boolean; error?: string; staged?: boolean }> {
+async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null): Promise<{ ok: boolean; error?: string; staged?: boolean; restarting?: boolean }> {
     if (inFlight) return { ok: false, error: 'A pull is already in progress.' };
     if (swapReady) return { ok: false, error: 'A whole copy is ready to be swapped in: this standby is restarting.' };
 
@@ -541,12 +542,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
             consecutiveFailures = 0;
             lastFullReconcileAt = Date.now();
-            swapReady = true;
+            const restarting = swapRestart !== null;
+            swapReady = restarting;
             logger.sync('P2P', `[Backup] ⬇️ ${fresh ? 'Re-seeded' : 'Whole copy'} from primary in ${checked.pages} page(s), ${checked.rows} rows, `
                 + `${checked.exact ? 'exact' : checked.hashed ? `not exact (${checked.differs.join(', ')}: values this server's tables refuse)` : 'not compared'}: `
-                + 'restarting to swap it in.');
-            requestSwapRestart();
-            return { ok: true, staged: true };
+                + (restarting ? 'restarting to swap it in.' : 'ready in data/staging; this process registered no restart, so the next start swaps it in.'));
+            if (restarting) swapRestart!();
+            return { ok: true, staged: true, restarting };
         }
 
         // ── A delta, or a whole copy of one page over the copy this standby holds: imported as one payload ──
@@ -728,7 +730,7 @@ function deletePreviousDatabase(): void {
 /**
  * After a whole copy is made ready in the staging directory (services/stager.ts): the server restarts, as a take-over's
  * does (services/takeover.ts), and the swap at boot puts the copy in place (db/swap-at-boot.ts). Docker's restart policy
- * starts it again. Tests replace it (setSwapRestartForTests).
+ * starts it again. Only in a server that registered it at boot (index.ts: registerSwapRestart).
  */
 function restartToSwap(): void {
     stopBackupPuller();
@@ -743,13 +745,21 @@ function restartToSwap(): void {
         process.exit(0);
     }, 500).unref?.();
 }
-let swapRestart: () => void = restartToSwap;
-function requestSwapRestart(): void {
-    swapRestart();
+/**
+ * What a whole copy made ready does to this process: nothing until one registers a restart. The server does at boot
+ * (index.ts); a suite or a tool that drives this puller in its own process does not, and an exit there would end it with
+ * code 0 part-way, silently (review 4139589216: test-standby-token-only stopped at 32 of its 82 checks, counted green). In
+ * such a process a copy made ready stays in data/staging, and is swapped in at the next start on this data directory;
+ * the process carries on as it was, its live copy untouched, and a whole copy made ready after it replaces it.
+ */
+let swapRestart: (() => void) | null = null;
+/** index.ts, at boot: a whole copy made ready restarts this server, and the next start swaps it in. */
+export function registerSwapRestart(): void {
+    swapRestart = restartToSwap;
 }
-/** A test's own restart after a whole copy is made ready (takeover-test-harness.ts), or the real one again (null). */
+/** A test's own restart after a whole copy is made ready (takeover-test-harness.ts), or none (null), as in a process index.ts didn't start. */
 export function setSwapRestartForTests(fn: (() => void) | null): void {
-    swapRestart = fn ?? restartToSwap;
+    swapRestart = fn;
 }
 
 /**
@@ -965,14 +975,14 @@ function askMismatchResync(now: number): boolean {
  * Operator-triggered force resync: rebuild this backup from the primary's current
  * snapshot, discarding any drifted/orphan rows. Returns a result for the dashboard. Always taken, whatever the loop is
  * waiting for (N2); one refused leaves this backup as it was, and says why. One that lands is built in a staging database
- * and swapped in at a restart (services/stager.ts): `restarting`.
+ * and swapped in at a restart (services/stager.ts): `restarting`, unless this process registered none (registerSwapRestart).
  */
 export async function requestResync(): Promise<{ ok: boolean; error?: string; restarting?: boolean }> {
     if (getNodeRole() !== 'backup') return { ok: false, error: 'This node is not a backup.' };
     logger.info('P2P', '[Backup] 🔄 Force-resync requested by operator.');
     restoreFromDatabase();
     const r = await pullOnce('resync', 'operator');
-    return r.staged ? { ok: r.ok, restarting: true } : { ok: r.ok, ...(r.error ? { error: r.error } : {}) };
+    return r.staged ? { ok: r.ok, restarting: r.restarting === true } : { ok: r.ok, ...(r.error ? { error: r.error } : {}) };
 }
 
 /**
@@ -1344,7 +1354,7 @@ export async function pullTakeoverEnvelopeNow(): ReturnType<typeof pullTakeoverE
 }
 
 /** One pull, of the kind the loop makes next (nextMode): the loop's own step, which a test drives too. Never throws. */
-export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boolean }> {
+export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boolean; restarting?: boolean }> {
     // Before nextMode, which spends the once-a-process asks: a pull already running (an operator's resync) must not use one up.
     if (inFlight) return Promise.resolve({ ok: false, error: 'A pull is already in progress.' });
     if (swapReady) return Promise.resolve({ ok: false, error: 'A whole copy is ready to be swapped in: this standby is restarting.' });

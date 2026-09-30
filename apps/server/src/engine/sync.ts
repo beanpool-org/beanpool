@@ -2180,9 +2180,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             }
 
             if (remote.messages) {
-                for (const msg of remote.messages) {
-                    if (droppedChatGroups.has(msg.conversationId)) continue;
-                    const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
+                // Prepared once, above the loop, as the creator channels' below: better-sqlite3 compiles on every prepare(),
+                // and each statement's native memory goes only when the garbage collector finalizes its handle. A page of
+                // 15,000 chat lines with little else on the heap to prompt a collection held the stager at 1.3 GB (measured,
+                // P4: design scratch/global-node/DESIGN-paged-copies-fable.md §1 names this loop).
+                const writeMessage = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     conversation_id = excluded.conversation_id,
@@ -2195,7 +2197,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     edited_at = excluded.edited_at,
                                     updated_at = excluded.updated_at
                                 WHERE excluded.updated_at IS NOT NULL
-                                  AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`).run(
+                                  AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`);
+                for (const msg of remote.messages) {
+                    if (droppedChatGroups.has(msg.conversationId)) continue;
+                    const res = writeMessage.run(
                         msg.id,
                         msg.conversationId,
                         msg.authorPubkey,

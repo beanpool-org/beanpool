@@ -191,6 +191,22 @@ function resyncRetryMs(): number {
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_RESYNC_RETRY_MS;
 }
 
+/** The pull under way: why it was stopped (stopPullInFlight), or null while it goes on. */
+let pullUnderWay: { stoppedBecause: string | null } | null = null;
+
+/**
+ * Stop the pull under way, whatever it is asking the main server for: no request of it is sent from now on (a page, an
+ * object, even one waiting its slot, or the close of its copy), and it fails as a staged copy stopped at its closing checks
+ * does, importing nothing. A take-over confirmed (services/takeover.ts): this server asks the old main server for nothing
+ * more, on every path, a delta's and a one-page whole copy's as well as a staged copy's (review of #1370,
+ * backup-puller.ts:872). At most the requests already sent, OBJECT_CONCURRENCY, finish. Whether a pull was under way.
+ */
+export function stopPullInFlight(why: string): boolean {
+    if (!pullUnderWay) return false;
+    pullUnderWay.stoppedBecause ??= why;
+    return true;
+}
+
 /** How long past the next whole copy's longest the objects a failed one fetched are kept for it (keepFetchedObjects). */
 const KEEP_FETCHED_MARGIN_MS = 60 * 60_000;
 
@@ -329,14 +345,16 @@ class NoCopy extends Error {
 class CopyRequests {
     private lastAt = 0;
 
-    constructor(private readonly base: string, private readonly headers: Record<string, string>) {}
+    /** `pullStop`: the pull's own (stopPullInFlight). Once it says the pull was stopped, no request of it is sent. */
+    constructor(private readonly base: string, private readonly headers: Record<string, string>, private readonly pullStop?: CopyStopped) {}
 
     private async request(method: 'POST' | 'GET' | 'DELETE', route: string, body: 'page' | 'object' = 'page', stop?: CopyStopped): Promise<Response> {
         // One pace for every request of a pull, its objects' too: requests made at once each take the next slot.
         const at = Math.max(Date.now(), this.lastAt + pageGapMs());
         this.lastAt = at;
         if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
-        // A copy stopped while this request waited its slot: not sent (fetchPhotoObjects).
+        // A pull or a copy stopped while this request waited its slot: not sent (stopPullInFlight, fetchPhotoObjects).
+        stopIfStopped(this.pullStop);
         stopIfStopped(stop);
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -405,7 +423,7 @@ class CopyRequests {
         return (res as Response & { bytes_?: Buffer }).bytes_ ?? Buffer.alloc(0);
     }
 
-    /** The main server may close a copy this standby won't finish (it serves one at a time). Never throws. */
+    /** The main server may close a copy this standby won't finish (it serves one at a time); not once the pull was stopped. Never throws. */
     async close(copyId: string): Promise<void> {
         try { await this.request('DELETE', `${COPY_PATH}/${encodeURIComponent(copyId)}`); } catch { /* it closes by itself when idle */ }
     }
@@ -456,7 +474,7 @@ function photoReferencesOf(page: CopyPage): PhotoReference[] {
     return out;
 }
 
-/** Why the copy whose objects are being fetched was stopped (StagedCopy.stoppedBecause), or null while it goes on. */
+/** Why the pull or the copy whose objects are being fetched was stopped (stopPullInFlight, StagedCopy.stoppedBecause), or null while it goes on. */
 type CopyStopped = () => string | null;
 
 function stopIfStopped(stop: CopyStopped | undefined): void {
@@ -531,10 +549,11 @@ interface PhotoObjectsFetched {
  * answers fails the pull. What was fetched before a failure stays in the store, content-addressed, so the next pull asks
  * only for the rest: a whole copy's until its next is due and has had its time (pullOnce, keepFetchedObjects).
  *
- * `stop`: a staged copy's (StagedCopy.stoppedBecause). Once it says the copy was stopped (a take-over confirmed, which
- * aborts it: services/takeover.ts, or its stager gone), no further object is asked for, not even one waiting its slot, and
- * the fetch fails as the copy's next page would: the old main server is asked for nothing more once this server has taken
- * over from it (review 4148896584). At most the requests already sent, OBJECT_CONCURRENCY, finish.
+ * `stop`: the pull's (stopPullInFlight), and a staged copy's (StagedCopy.stoppedBecause). Once it says the pull or the copy
+ * was stopped (a take-over confirmed: services/takeover.ts; or the copy's stager gone), no further object is asked for,
+ * not even one waiting its slot, and the fetch fails as the copy's next page would: the old main server is asked for
+ * nothing more once this server has taken over from it (review 4148896584, and the review of #1370 for a delta and a
+ * one-page whole copy). At most the requests already sent, OBJECT_CONCURRENCY, finish.
  */
 async function fetchPhotoObjects(
     refs: Iterable<PhotoReference> | AsyncIterable<PhotoReference>, requests: CopyRequests, stop?: CopyStopped,
@@ -739,6 +758,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     const seed = (fresh && (why === 'format' || why === 'operator')) || (replicaFormatOfCopy() === 0 && !hadCursor);
 
     inFlight = true;
+    const thisPull: { stoppedBecause: string | null } = { stoppedBecause: null };
+    pullUnderWay = thisPull;
+    const pullStopped: CopyStopped = () => thisPull.stoppedBecause;
     // Where a failure happened: no copy came ('fetch'), or it came and was not imported ('import'). Only the second counts
     // toward "refused in a row" in the report.
     let stage: 'fetch' | 'import' = 'fetch';
@@ -748,7 +770,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     // When this copy's fetch of its listing photos' objects started: what it wrote from then on is kept for the next whole
     // copy when this one fails (keepFetchedObjects).
     let fetchStartedAt: number | null = null;
-    const requests = new CopyRequests(primaryUrl.replace(/\/$/, ''), authHeader);
+    const requests = new CopyRequests(primaryUrl.replace(/\/$/, ''), authHeader, pullStopped);
     // The copy open on the main server, closed there when this pull leaves it unfinished; the one being built here.
     let openCopy: string | null = null;
     let staged: StagedCopy | null = null;
@@ -816,7 +838,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             pagesCame = true;
             fetchStartedAt = Date.now();
             const building = staged;
-            await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause).catch((e) => {
+            await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause ?? pullStopped()).catch((e) => {
                 // Objects that came but are not what their rows name: the copy came, and is refused. A copy stopped here
                 // (a take-over confirmed) is reported as one stopped at its closing checks always was.
                 if (e instanceof PhotoObjectRefused || e instanceof StagedCopyRefused) stage = 'import';
@@ -888,12 +910,15 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             stage = 'fetch';
             pagesCame = true;
             fetchStartedAt = Date.now();
-            await fetchPhotoObjects(refs, requests).catch((e) => {
-                if (e instanceof PhotoObjectRefused) stage = 'import';
+            await fetchPhotoObjects(refs, requests, pullStopped).catch((e) => {
+                // A pull stopped here (a take-over confirmed) is reported as a staged copy stopped in its fetch is.
+                if (e instanceof PhotoObjectRefused || e instanceof StagedCopyRefused) stage = 'import';
                 throw e;
             });
             stage = 'import';
         }
+        // Stopped once everything had come (a take-over confirmed): nothing of it imported.
+        stopIfStopped(pullStopped);
         // The import path enforces: each page's valid signature → signer maps to a trusted `mirror` connector (the
         // primary) → the pages are one copy, every page in order → conservation guard (runs on a backup unconditionally,
         // A2-8). A forged/tampered page is rejected there. It applies a delta or a whole copy identically, LWW per row; only
@@ -1049,6 +1074,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         return { ok: false, error: msg };
     } finally {
         inFlight = false;
+        if (pullUnderWay === thisPull) pullUnderWay = null;
     }
 }
 

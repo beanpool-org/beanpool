@@ -41,10 +41,14 @@
  *  9. A standby copying with M's admin password (an install from before token-only): M checks it with scrypt once for the
  *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
  *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
- * 10. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ * 10. A take-over confirmed while a delta fetches its objects, or a whole copy of one page does (M at its real page bounds),
+ *     stops the fetch: no object request reaches the old main server after the confirm, with the restart switched off,
+ *     and nothing of the pull is imported (review of #1370, backup-puller.ts:872). (Before: every remaining object asked
+ *     for; only a staged copy stopped.)
+ * 11. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
- * 11. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
+ * 12. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-photos-by-reference.ts
@@ -84,7 +88,9 @@ const RESYNC_RETRY_MS = 3000;
 const FETCHED_BEFORE_FAILING = 15;
 /** The orphan sweep's grace (engine/storage-health.ts ORPHAN_OBJECT_GRACE_MS): an object no row names is kept this long. */
 const ORPHAN_GRACE_MS = 60 * 60_000;
-/** Step 7's photos M gains while S's copy is fetching when the take-over is confirmed. */
+/** Step 10's photos M gains while each standby's pull is fetching when its take-over is confirmed. */
+const TAKEOVER_EACH = 60;
+/** Step 11's photos M gains while S's copy is fetching when the take-over is confirmed. */
 const TAKEOVER_PHOTOS = 200;
 /**
  * Step 3's more photos, on the last listings, from slot 10: a staged copy's references to them (about 250 bytes each) are
@@ -612,8 +618,15 @@ async function main(): Promise<void> {
             await fresh.kill();
         });
 
+        // Two more standbys of M: step 8's copies with the token, step 9's with the admin password; step 10 takes over on each.
+        let standbyA: NodeProc | null = null;
+        let standbyB: NodeProc | null = null;
+        /** M's recovery code, made once (a second would replace it): steps 10 and 11 take over with it. */
+        let recoveryCode: string | null = null;
+        const takeoverCode = async (): Promise<string> => (recoveryCode ??= (await main.send('make-envelope')).code as string);
         await step('8. a first copy whose objects stop coming once its pages came waits as a refused one does; its retry fetches only the rest', async () => {
             const a = await newStandby('standby-a');
+            standbyA = a;
             // F4 of the standby review: every page of the first copy comes; its objects' fetch fails part way, M's store
             // answering 503. The next pull asks for no copy until RESYNC_RETRY_MS (3 s here) has passed.
             const o0 = px.opened.length;
@@ -661,6 +674,7 @@ async function main(): Promise<void> {
             fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby-b'), 'genesis.json'));
             const b = await spawnNode(SCRIPT, dir('standby-b'), envS);
             nodes.push(b);
+            standbyB = b;
             await b.send('setup-standby-pw', { primaryUrl: px.url, password: PW_MAIN, primaryPeerId: main.ready.peerId });
             const g0 = gets();
             const o0 = px.opened.length;
@@ -697,11 +711,54 @@ async function main(): Promise<void> {
             await main.send('token-only', { on: true });
         });
 
-        await step('10. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
+        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: nothing more reaches the old main server', async () => {
+            const pw = { 'X-Admin-Password': PW_STANDBY };
+            /**
+             * M gains photos `node` lacks; `node` pulls at a pace (`whole`: the routine whole copy); once it has fetched 10 of
+             * their objects, its take-over is confirmed, with the restart switched off. The object requests that reach M
+             * after the confirm, and how the pull ended.
+             */
+            const takeOverDuring = async (node: NodeProc, whole: boolean, from: number) => {
+                const code = await takeoverCode();
+                require_((await node.send('envelope')) === 'stored', 'the standby holds M\'s take-over envelope');
+                await node.send('takeover-restart-off');
+                await main.send('add-photos', { posts: listings.slice(8, 12), perPost: TAKEOVER_EACH / 4, from, bytes: 200 });
+                await node.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '100' } });
+                const g0 = gets();
+                const pulling = node.send('pull', whole ? { whole: true } : {});
+                const fetchedSome = await until('the standby to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
+                const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, pw);
+                const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+                const asksAtConfirm = px.objectAsks;
+                require_(fetchedSome && confirmT.status === 200, `the take-over is confirmed mid-fetch (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
+                const pull = await pulling;
+                await sleep(1500); // at the pull's pace, 15 more requests' time
+                const after = px.objectAsks - asksAtConfirm;
+                const rows = (await node.send('rows', { sql: `SELECT COUNT(*) AS n FROM post_photos WHERE order_num >= ${from}` }))[0].n as number;
+                await node.kill();
+                return { pull, after, rows, fetched: gets() - g0 };
+            };
+            require_(!!standbyA && !!standbyB, 'steps 8 and 9 left two standbys holding copies of M');
+            const d = await takeOverDuring(standbyA!, false, 100);
+            assert(d.pull.ok === false && d.pull.mode === 'delta' && /take-over was confirmed/.test(d.pull.error ?? '') && d.after === 0 && d.rows === 0,
+                `a delta's fetch stops at the confirm: ${d.after} object request(s) reached the old main server after it, and none of its rows landed `
+                + `(${JSON.stringify({ ...d.pull, fetched: d.fetched, rows: d.rows })}; before: every remaining object the pull named, and the pull said nothing of the take-over)`);
+            // M at its real page bounds: its whole copy is one page, imported over the copy the standby holds.
+            await main.send('set-env', { vars: { SYNC_PAGE_BYTES: null, SYNC_PAGE_ROWS: null } });
+            const w = await takeOverDuring(standbyB!, true, 120);
+            await main.send('set-env', { vars: { SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS) } });
+            // Gone again, as step 3's are: step 11 opens each of M's listing photos on the promoted S, under its limiter.
+            await main.send('sql', { sql: 'DELETE FROM post_photos WHERE order_num >= 100' });
+            assert(w.pull.ok === false && w.pull.mode === 'full' && !w.pull.staged && /take-over was confirmed/.test(w.pull.error ?? '') && w.after === 0 && w.rows === 0,
+                `so does a one-page whole copy's: ${w.after} object request(s) after the confirm, none of its rows landed `
+                + `(${JSON.stringify({ ...w.pull, fetched: w.fetched, rows: w.rows })}; before: every remaining object the copy named)`);
+        });
+
+        await step('11. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
             const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
-            const env = await main.send('make-envelope');
+            const code = await takeoverCode();
             const held = await standby.send('envelope');
             require_(held === 'stored', `S holds M's take-over envelope (${held})`);
             await standby.send('takeover-restart-off');
@@ -714,7 +771,7 @@ async function main(): Promise<void> {
             const pulling = standby.send('pull', { whole: true });
             const fetchedSome = await until('S to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
             const pw = { 'X-Admin-Password': PW_STANDBY };
-            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: env.code }, pw);
+            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             const asksAtConfirm = px.objectAsks;
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
@@ -743,7 +800,7 @@ async function main(): Promise<void> {
                 `S starts as the main server, and every one of its ${urls.length} listing photos opens with M's bytes (${JSON.stringify({ role, of: mine.size })}; failed ${first(failed)})`);
         });
 
-        await step('11. the object route is under M\'s administrative limiter', async () => {
+        await step('12. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
             const before429 = new Set<number>();

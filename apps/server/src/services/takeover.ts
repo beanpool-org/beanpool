@@ -67,7 +67,7 @@ import {
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
-import { stopBackupPuller, getBackupStatus, forgetPullCursor } from './backup-puller.js';
+import { stopBackupPuller, getBackupStatus, forgetPullCursor, stopPullInFlight } from './backup-puller.js';
 import { abortStagedCopy, PREVIOUS_DB } from './stager.js';
 import { deletePreviousDatabase, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
@@ -936,6 +936,11 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
     // the take-over writes (services/stager.ts, db/swap-at-boot.ts).
     if (abortStagedCopy('a take-over was confirmed')) {
         logger.warn('SYS', '[Takeover] A whole copy of the old main server being built here was stopped and deleted: this server takes over on the copy it had.');
+    }
+    // And any pull under way, a delta's or a one-page whole copy's too: nothing more is asked of the old main server, and
+    // nothing of it is imported (services/backup-puller.ts stopPullInFlight).
+    if (stopPullInFlight('a take-over was confirmed')) {
+        logger.warn('SYS', '[Takeover] A copy of the old main server under way here was stopped: nothing more is asked of it.');
     }
 
     const now = new Date();

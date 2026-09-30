@@ -31,8 +31,8 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
 
-const PORT = 8553;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 
 const BYRON = '12D3KooWByronReachTestPeer0000000000';
@@ -104,7 +104,8 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // Two capped peers we settle with, and one configured-but-capless peer.
     for (const [addr, callsign] of [[BYRON_ADDR, 'byron'], [BRISBANE_ADDR, 'brisbane'], [UNCAPPED_ADDR, 'sleepy']] as const) {

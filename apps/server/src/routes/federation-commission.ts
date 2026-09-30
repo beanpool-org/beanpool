@@ -38,6 +38,8 @@ import {
 import { SettlementError } from '../federation-settlement-exchange.js';
 import { getFederationLink } from '../federation-link.js';
 import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfCachedPost } from '../federation-commission.js';
+import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
+import { checkMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
 
 /** This node's own public address, or null. Same helper as the purchase route, same reasoning. */
@@ -247,6 +249,16 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         //    them is stuck at 3am that distinction is the first thing worth knowing.
         const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xc-${crypto.randomUUID()}`;
 
+        // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
+        // against the enterprise (never the keeper's own) from the settlement row settleCrossNodePurchase writes as it
+        // escrows the Beans, and against the keeper's enterprise work from the row recorded just before that; once the
+        // enterprise's day is spent, against the keeper's own payments instead, from that row. Checked before the Commons
+        // tops the link up, with nothing awaited between here and those rows. A retry of a commission already started is
+        // no new payment.
+        const retry = settlementStartedBy(key, link.treasuryPubkey);
+        const allowed = retry ? null : checkMoneyLimits(ctx, link.treasuryPubkey, [{ kind: 'payment', recipient: seller }], keeper);
+        if (!retry && !allowed) return;
+
         // 10. FUND IT. The first ledger movement in the whole flow, hence last. Re-checks the allowance,
         //     spends the enterprise's own balance before the pot, and refuses without moving anything if
         //     either is short.
@@ -262,6 +274,9 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        // Funded: the keeper's enterprise work (or their own payments) counts it from here, given back below if no settlement
+        // was written after all.
+        const counted: MoneyActHold | null = allowed ? recordSettlementKeeper(link.treasuryPubkey, keeper, seller, key, allowed.keeperOwn) : null;
         try {
             const outcome = await settleCrossNodePurchase(node, peerIdFromString(peerId), node.peerId.toString(), privateKey, {
                 key,
@@ -293,6 +308,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             // them before touching the pot. Said plainly in the error because a keeper watching the Commons
             // drop by 5 deserves to know where the 5 went.
             const parked = 'The beans stay with the link and will be spent by the next commission.';
+            // No settlement, no payment: neither the enterprise's count (its settlements) nor the keeper's has it.
+            if (counted && !settlementStartedBy(key, link.treasuryPubkey)) counted.release();
             if (e instanceof SettlementError) {
                 ctx.status = 400;
                 ctx.body = { error: `${e.message} ${parked}`, reason: e.reason, key };

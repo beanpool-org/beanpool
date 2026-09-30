@@ -40,8 +40,8 @@ import {
     PAIRING_MAX_REFUSALS,
 } from './settings-signin-pairing.js';
 
-const PORT = 8692;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -140,7 +140,8 @@ async function main() {
     grantNodeRole(moderator.pub, 'moderator', owner.pub);
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'QR Test' } as any);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. Happy path ──
     console.log('\n1. Happy path');

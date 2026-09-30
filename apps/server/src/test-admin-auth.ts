@@ -18,8 +18,8 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword, getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
 
-const PORT = 8547;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -52,7 +52,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // A2-4 — gating still correct after the async conversion.
     const okResp = await adminPost('/api/local/admin/data', PW);

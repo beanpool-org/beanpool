@@ -40,8 +40,8 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters
     return realFetch(input, init);
 }) as typeof fetch;
 
-const PORT = 8751;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -139,7 +139,8 @@ async function main(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     sso._resetJwksCacheForTests();
     sso._resetJwksCacheForTests('google', {
         keys: [{ ...google.publicKey.export({ format: 'jwk' }), kid: GOOGLE_KID, alg: 'RS256', use: 'sig' } as any],

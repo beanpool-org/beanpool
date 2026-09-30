@@ -499,7 +499,7 @@ async function main(): Promise<void> {
     console.log('\n── 11. a standby keeps the area, and nothing else carries it ──');
     await setArea(ann, { lat: preciseLat, lng: preciseLng });
     const annAt = areaOf(ann)?.area_updated_at;
-    const p2p = await startP2P(4292, 4293);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4293/p2p/${nodeId}`, 'mirror', 'self-test-peer');
     const payload: any = await exportSyncState(nodeId);

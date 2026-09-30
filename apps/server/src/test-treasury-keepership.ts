@@ -30,8 +30,8 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
 
-const PORT = 8549;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -67,7 +67,8 @@ async function main() {
     console.log('Running per-enterprise keepership tests (#106)...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // Two enterprises and two members.
     const eggs = createTreasury('CommunityEggs', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;

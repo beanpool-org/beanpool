@@ -28,8 +28,8 @@ import { ledger } from './engine/ledger.js';
 import { db, createCrowdfundProject } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 
-const PORT = 8641;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -142,7 +142,8 @@ async function main() {
     createCrowdfundProject(crowdfundId, third.pub, `Fixture project ${crowdfundId.slice(0, 6)}`, 'fixture', [], 500, null);
     reconcileLedgerFromDb();
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     {
         const a = snapshot();

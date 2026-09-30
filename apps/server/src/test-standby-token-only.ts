@@ -25,7 +25,7 @@
  *      route) says nothing can copy when token-only is on with no token.
  *  12. Recovery seal S2: the replication token gets data/recovery-seal.key on no route (every backup and take-over
  *      route, called with the token, answers without its bytes in any form), while the sealed backup, opened with the
- *      recovery code, carries it; and no log line holds it.
+ *      recovery code, carries it; and no log line holds it. The same for the open door's key, data/open-join.key (C12).
  *
  * Main server and standby share one process and one data dir, as in test-backup-topology: the
  * node signs its own snapshot and trusts itself as the `mirror`. The puller talks to the main
@@ -34,6 +34,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-token-only.ts
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -397,10 +398,14 @@ async function main() {
         assert(els['rep-token-state'].textContent === 'not set · standbys copy with the admin password', '11. Settings, token-only off with no token: standbys copy with the admin password');
         assert(els['rep-token-only-notice'].style.display === 'block', '11. …with the token-only-off notice shown');
 
-        // ---------- 12. The recovery-seal key never reaches the token ----------
+        // ---------- 12. The recovery-seal key never reaches the token, nor the open door's key ----------
         {
             const sealKey = fs.readFileSync(path.join(DATA_DIR!, 'recovery-seal.key'));
-            const forms = [sealKey, Buffer.from(sealKey.toString('base64')), Buffer.from(sealKey.toString('hex')), Buffer.from(sealKey.toString('base64url'))];
+            // The open door's key (services/open-join-key.ts), which travels the same way: only in the take-over bundle.
+            const doorKeyFile = path.join(DATA_DIR!, 'open-join.key');
+            if (!fs.existsSync(doorKeyFile)) fs.writeFileSync(doorKeyFile, crypto.randomBytes(32), { mode: 0o600 });
+            const doorKey = fs.readFileSync(doorKeyFile);
+            const forms = [sealKey, doorKey].flatMap((k) => [k, Buffer.from(k.toString('base64')), Buffer.from(k.toString('hex')), Buffer.from(k.toString('base64url'))]);
             const holdsKey = (b: Buffer) => forms.some((f) => b.includes(f));
             clearReplicationToken();
             setReplicationToken('token-for-the-seal-key-check');
@@ -425,7 +430,7 @@ async function main() {
             for (const expected of ['GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/sync-delta', 'POST /api/local/admin/backup', 'GET /api/local/admin/takeover-envelope']) {
                 assert(answered.includes(expected), `12. (control) the token reaches ${expected}`);
             }
-            assert(leaks.length === 0, `12. no route answers the token with the recovery-seal key, in any form (${answered.length} answered 200; leaks: ${leaks.join(', ') || 'none'})`);
+            assert(leaks.length === 0, `12. no route answers the token with the recovery-seal key or the open door's key, in any form (${answered.length} answered 200; leaks: ${leaks.join(', ') || 'none'})`);
             // What the token downloads is the sealed backup; opened with the recovery code, its bundle carries the key.
             resetBrakes();
             const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': 'token-for-the-seal-key-check' }, body: '{}' });
@@ -435,13 +440,13 @@ async function main() {
                 const tarPath = path.join(tmp12, 'db.tar.gz');
                 fs.writeFileSync(tarPath, (await openEnvelope(new Uint8Array(sealedBytes), { type: 'code', code: recovery.code }, { kind: 'backup' })).payload);
                 const bundle = JSON.parse(execFileSync('tar', ['-xzOf', tarPath, './takeover-bundle.json'], { encoding: 'utf-8' }));
-                assert(bundle.files['recovery-seal.key'] === sealKey.toString('base64') && !holdsKey(sealedBytes),
-                    '12. (control) the key does travel, sealed: the backup the token downloads holds none of its bytes, and opened with the recovery code its bundle carries it');
+                assert(bundle.files['recovery-seal.key'] === sealKey.toString('base64') && bundle.files['open-join.key'] === doorKey.toString('base64') && !holdsKey(sealedBytes),
+                    '12. (control) the keys do travel, sealed: the backup the token downloads holds none of their bytes, and opened with the recovery code its bundle carries both');
             } finally {
                 fs.rmSync(tmp12, { recursive: true, force: true });
             }
             const keyInLogs = printed.filter((l) => forms.slice(1).some((f) => l.includes(f.toString())));
-            assert(keyInLogs.length === 0, `12. no log line holds the recovery-seal key (${keyInLogs.length})`);
+            assert(keyInLogs.length === 0, `12. no log line holds the recovery-seal key or the open door's key (${keyInLogs.length})`);
             updateLocalConfig({ replicationTokenOnly: false });
         }
 

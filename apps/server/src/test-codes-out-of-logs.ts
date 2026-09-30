@@ -60,8 +60,20 @@ async function postJson(path: string, body: any, headers: Record<string, string>
 }
 
 function newKey(): string {
-    const { publicKey } = crypto.generateKeyPairSync('ed25519');
-    return publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    return newKeyPair().pubKeyHex;
+}
+
+function newKeyPair() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
+}
+
+/** A redeem as the apps send one: signed by the key it registers (the node registers no key a redeem isn't signed by). */
+async function redeemAs(kp: ReturnType<typeof newKeyPair>, body: { code: string; publicKey: string; callsign: string }): Promise<{ status: number; body: any }> {
+    const ts = String(Date.now());
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`POST\n/api/invite/redeem\n${ts}\n${nonce}\n${JSON.stringify(body)}`), kp.privateKey).toString('base64');
+    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
 }
 
 type Row = { id: number; message: string | null; metadata: string | null };
@@ -136,8 +148,9 @@ async function main() {
     const fresh = await postJson('/api/admin/seed-invite', { password: PW, type: 'ambassador' });
     assert(fresh.status === 200 && /^INV-/.test(fresh.body.code ?? ''), 'the admin gets the fresh node\'s seed invite in the answer');
     codes.push(fresh.body.code);
-    const alice = newKey();
-    const redeem = await postJson('/api/invite/redeem', { code: fresh.body.code, publicKey: alice, callsign: 'AliceLogs' });
+    const aliceKp = newKeyPair();
+    const alice = aliceKp.pubKeyHex;
+    const redeem = await redeemAs(aliceKp, { code: fresh.body.code, publicKey: alice, callsign: 'AliceLogs' });
     assert(redeem.status === 200 && redeem.body.success === true, 'the seed invite redeems');
     const elder = await postJson('/api/admin/seed-invite', { password: PW, type: 'elder' });
     assert(elder.status === 200 && /^INV-/.test(elder.body.code ?? ''), 'the admin gets a seed invite on a node with members');

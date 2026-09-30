@@ -25,7 +25,7 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 
 Votes on Decisions are secret in the apps and in Settings: everyone sees only the totals, and each member sees their own vote. But the database records each member's vote, to count it and to stop anyone voting twice.
 
-So others can read how each member voted. Whoever runs the machine can copy the files. While the server has no recovery code, every owner and admin can download a backup from Settings that is not locked. With a recovery code, whoever holds the code can open a backup, and an admin can download one but cannot open it. Tell your members this plainly, make a recovery code (see Backups and replicas), and let only people the community trusts hold it.
+So others can read how each member voted. Whoever runs the machine can copy the files. Only an owner (or whoever has the admin password) can download a backup from Settings; an admin cannot. While the server has no recovery code, that backup is not locked. With a recovery code, it opens only with the code or an owner's phone. Tell your members this plainly, make a recovery code (see Backups and replicas), and let only people the community trusts hold it.
 
 ## Members' sign-in recovery copies
 

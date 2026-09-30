@@ -17,13 +17,15 @@ Owners can do everything in Settings. Only owners can:
 - lift a suspension, or give back a role that a suspension took away;
 - end the waiting time early when an owner or admin is being removed;
 - sign other people out of Settings;
-- switch break-glass mode on or off, and be issued a break-glass code.
+- switch break-glass mode on or off, and be issued a break-glass code;
+- restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
+- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from.
 
 The **admin password** counts as an owner. Anyone who knows it can do all of the above.
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner.
 
 ## Moderator
 

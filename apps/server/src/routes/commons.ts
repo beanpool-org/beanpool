@@ -288,6 +288,15 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A project's id is its enterprise's key, its account's and its escrow's (`escrow_<id>`), so the server makes it and
+    // never takes one: an id that named a member's key, an enterprise, the Commons or a deal's escrow had pledges paid
+    // into that account, its status changed to funded, and its edits and deletion rename or prune it (db.ts
+    // isFreshProjectId). No app sends one.
+    if (id !== undefined) {
+        ctx.status = 400;
+        ctx.body = { error: 'A project\'s id is made by the server. Send the project without one.' };
+        return;
+    }
     if (!title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
@@ -325,7 +334,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         }
     }
 
-    const projectId = id || crypto.randomUUID();
+    const projectId = crypto.randomUUID();
     if (!isMemberActive(actor)) {
         ctx.status = 403;
         ctx.body = { error: INACTIVE_MEMBER_CREATE_ERROR };

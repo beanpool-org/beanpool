@@ -403,6 +403,7 @@ run_federation_suites() {
       test-detached-pwa
       test-dos-caps
       test-writer-bounds
+      test-money-limits
       test-economic-hardening
       test-federation-api
       test-federation-receipt

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
-import { isSelfAvatarUrl } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -1919,6 +1919,39 @@ export function raiseCreatorOperatorSwitch(creatorPubkey: string, newEnterpriseP
     `).run(creatorPubkey, creatorPubkey, newEnterprisePubkey);
 }
 
+export const PROJECT_ID_TAKEN_ERROR = 'A new project needs an id nothing else has';
+
+/**
+ * Is `id` free for a new crowdfund project? A project's id is its enterprise's key, its account's and its escrow's
+ * (`escrow_<id>`), so it must name nothing already there: no member, visitor or enterprise row, no account, no project,
+ * none of the ledger's own accounts (the Commons, an escrow, a bridge), and no escrow named after it. Before
+ * POST /api/crowdfund/projects made ids itself, one naming a member's key had pledges paid into that member's balance
+ * and their status changed to funded; one naming a deal's escrow would have swept that deal's Beans into the project.
+ */
+export function isFreshProjectId(id: unknown): id is string {
+    if (typeof id !== 'string' || id.length === 0 || isSyntheticAccount(id)) return false;
+    return !db.prepare(`
+        SELECT 1 FROM members WHERE public_key = @id
+        UNION ALL SELECT 1 FROM accounts WHERE public_key = @id OR public_key = 'escrow_' || @id
+        UNION ALL SELECT 1 FROM projects WHERE id = @id
+        LIMIT 1
+    `).get({ id });
+}
+
+/**
+ * Does `id` name something that is never a crowdfund project: a person (a member's or visitor's row that isn't an
+ * enterprise), or one of the ledger's own accounts (the Commons, an escrow, a bridge)? Every project is its own
+ * enterprise row (createCrowdfundProject, a bounded POST /api/enterprise, the Slice 3 migration), or an older projects
+ * row with none. But the crowdfund route took ids from callers before it made them itself, and a projects row under a
+ * person's key paid pledges into their balance, set their status to funded, and let its "creator" rename or prune them:
+ * such a row is no project here.
+ */
+function namesNoProject(id: string): boolean {
+    if (isSyntheticAccount(id)) return true;
+    const row = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(id) as { is_treasury: number | null } | undefined;
+    return !!row && row.is_treasury !== 1;
+}
+
 export function createCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -1928,6 +1961,7 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
@@ -1947,29 +1981,27 @@ export function createCrowdfundProject(
     ).get(baseCallsign, id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
+    // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
     db.transaction(() => {
-        const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
-        if (!existing) {
+        db.prepare(`
+            INSERT INTO members (
+                public_key, callsign, joined_at, avatar_url, bio, status,
+                is_treasury, earned_credit, earned_surplus,
+                purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+        `).run(id, callsign, now, photoUrl, description || '', description || title.trim(), goal_amount, deadline_at, now);
+        db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
+        if (creator_pubkey) {
             db.prepare(`
-                INSERT INTO members (
-                    public_key, callsign, joined_at, avatar_url, bio, status,
-                    is_treasury, earned_credit, earned_surplus,
-                    purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
-            `).run(id, callsign, now, photoUrl, description || '', description || title.trim(), goal_amount, deadline_at, now);
-            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
-            if (creator_pubkey) {
-                db.prepare(`
-                    INSERT OR IGNORE INTO treasury_operators (
-                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
-                    ) VALUES (?, ?, 'lead', ?, 'creator')
-                `).run(id, creator_pubkey, now);
-                raiseCreatorOperatorSwitch(creator_pubkey, id);
-            }
+                INSERT OR IGNORE INTO treasury_operators (
+                    treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                ) VALUES (?, ?, 'lead', ?, 'creator')
+            `).run(id, creator_pubkey, now);
+            raiseCreatorOperatorSwitch(creator_pubkey, id);
         }
 
         db.prepare(`
-            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
         `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
@@ -1985,6 +2017,8 @@ export function updateCrowdfundProject(
     deadline_at?: string | null
 ) {
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
+    // Never a person's row (namesNoProject): a projects row under a member's key renamed that member.
+    if (namesNoProject(id)) throw new Error("Project not found");
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
@@ -2038,6 +2072,9 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
+    // Never into a person's account (namesNoProject): a projects row under a member's key paid the pledge into their
+    // balance and set their status to funded.
+    if (namesNoProject(projectId)) throw new Error("Project not found");
 
     let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) {
@@ -2140,7 +2177,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // It refunds the backers from the project's escrow (raw SQL below): never on a standby (config/node-role.ts).
     assertLedgerWritable();
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
-    if (!project) throw new Error("Project not found");
+    // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
+    if (!project || namesNoProject(projectId)) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects

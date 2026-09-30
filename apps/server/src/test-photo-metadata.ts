@@ -801,12 +801,13 @@ async function partTwo(): Promise<void> {
     assert(adminBundled.status === 200, `a bundled:// avatar still passes the operator's form (${adminBundled.status} ${adminBundled.json?.error ?? ''})`);
 
     console.log('\n── 2f. A crowdfund project: POST /api/crowdfund/projects (+ /update) → GET /api/crowdfund/projects/:id and /api/avatar ──');
-    const projectId = crypto.randomUUID();
+    // The server makes a project's id (routes/commons.ts): the rest of the step uses the one it answers with.
     const proj = await signed('POST', '/api/crowdfund/projects', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
         photos: [dataUrl('image/jpeg', CAMERA_JPEG), dataUrl('image/png', CAMERA_PNG)],
     }, member);
-    assert(proj.status === 200, `the project is created (${proj.status} ${proj.json?.error ?? ''})`);
+    const projectId = String(proj.json?.project?.id ?? '');
+    assert(proj.status === 200 && projectId.length > 0, `the project is created (${proj.status} ${proj.json?.error ?? ''})`);
     const projectPhotos = async (): Promise<unknown[]> => {
         const res = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
         const body = await res.json().catch(() => null) as any;
@@ -826,7 +827,7 @@ async function partTwo(): Promise<void> {
     await served('crowdfund photo after the edit', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund project avatar after the edit', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
     const heicProject = await signed('POST', '/api/crowdfund/projects', {
-        id: crypto.randomUUID(), title: 'Tool library', description: 'Shared tools', goalAmount: 200,
+        title: 'Tool library', description: 'Shared tools', goalAmount: 200,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/heic', CAMERA_HEIC)],
     }, member);
     assert(heicProject.status === 400, `a second photo the node cannot strip (a HEIC, GPS inside) is refused, not stored (${heicProject.status})`);
@@ -838,7 +839,7 @@ async function partTwo(): Promise<void> {
     listed = await projectPhotos();
     assert(listed.length === 1 && leak(Buffer.from(JSON.stringify(listed), 'latin1')) === null, 'the refused edit left the project as it was');
     const bareHeicProject = await signed('POST', '/api/crowdfund/projects', {
-        id: crypto.randomUUID(), title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
+        title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), CAMERA_HEIC.toString('base64')],
     }, member);
     assert(bareHeicProject.status === 400, `a HEIC sent as bare base64, no data: prefix, is refused too (${bareHeicProject.status})`);

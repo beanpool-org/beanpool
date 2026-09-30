@@ -32,6 +32,8 @@ import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
 import { SettlementError } from '../federation-settlement-exchange.js';
+import { settlementStartedBy } from '../engine/money-limits.js';
+import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
 
 /**
@@ -244,6 +246,12 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
 
         try {
             const { peerIdFromString } = await import('@libp2p/peer-id');
+            // 7. THE MONEY LIMITS (engine/money-limits.ts): a purchase is a payment to its seller, and counts against the
+            //    buyer's day from the settlement row settleCrossNodePurchase writes as its first act, when it escrows the
+            //    Beans. Checked here, after the last await, so nothing runs between this check and that row. A retry of a
+            //    purchase this member already started is no new payment.
+            if (!settlementStartedBy(key, buyerPublicKey)
+                && refuseOverMoneyLimits(ctx, buyerPublicKey, [{ kind: 'payment', recipient: sellerPublicKey }])) return;
             const outcome = await settleCrossNodePurchase(node, peerIdFromString(peerId), node.peerId.toString(), privateKey, {
                 key,
                 peerId,

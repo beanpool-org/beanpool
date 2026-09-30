@@ -56,8 +56,15 @@ fi
 BASE="${BASE:-main}"
 BASE_REF="origin/$BASE"
 
-if ! git fetch --quiet origin "$BASE" 2>/dev/null; then
+# Into the ref by name: a plain `git fetch origin <base>` succeeds without writing origin/<base> when the remote's fetch
+# refspec does not cover it (a --single-branch clone), and every check below would then read a missing ref as "main has
+# nothing G lacks".
+if ! git fetch --quiet origin "+refs/heads/$BASE:refs/remotes/$BASE_REF" 2>/dev/null; then
   echo "❌ test-all merge check: $LABEL: could not fetch $BASE_REF, so what main is now cannot be known. Not covered."
+  exit 1
+fi
+if ! git rev-parse --verify -q "$BASE_REF^{commit}" >/dev/null; then
+  echo "❌ test-all merge check: $LABEL: the fetch left no $BASE_REF, so what main is now cannot be known. Not covered."
   exit 1
 fi
 if ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null && [ -n "$PR" ]; then

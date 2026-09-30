@@ -205,6 +205,15 @@ git checkout -q main
 
 expect 1 "merge check: an unknown head is not covered" "is not in this repository" -- bash "$MERGE_CHECK" --head 0123456789abcdef0123456789abcdef01234567
 
+# A --single-branch clone's fetch refspec does not cover main: `git fetch origin main` succeeds and writes no
+# origin/main, and a missing ref must not read as "main has nothing the green run lacks". feature (F1) is behind main.
+git clone -q --single-branch --branch feature "$T/origin.git" "$T/single" 2>/dev/null
+cd "$T/single" || exit 1
+echo "$(date +%s) $F1 $(git rev-parse "$F1^{tree}") 1" >> "$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
+git rev-parse --verify -q origin/main >/dev/null && bad "single-branch: the clone already has origin/main, so this tests nothing" || ok "single-branch: the clone has no origin/main"
+expect 1 "merge check in a --single-branch clone: main moved past the green run, so not covered" "is missing" -- bash "$MERGE_CHECK" --head "$F1"
+cd "$W" || exit 1
+
 echo ""
 if [ $FAILS -eq 0 ]; then
   echo "✓ merge gate scripts: all checks passed"

@@ -28,7 +28,9 @@
  *  6. More accounts than BACKUP_DELTA_BYTES (scaled) of them, which every delta carries whole: eight pulls in a row, a member
  *     edited before each, are eight deltas that land, with no whole copy and no restart. A delta of more changed bytes than
  *     that is still not taken. (Before: delta, whole copy, delta, whole copy: no delta ever landed.)
- *  7. A take-over after copies by reference: every listing's photo opens on the promoted server, M's bytes.
+ *  7. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
+ *     listing's photo with M's bytes.
  *  8. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
@@ -63,6 +65,8 @@ const PHOTO_BYTES = 3000;
 const MANY = 900;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const HASHED = ['members', 'accounts', 'posts', 'post_photos', 'messages'];
+/** Step 7's photos M gains while S's copy is fetching when the take-over is confirmed. */
+const TAKEOVER_PHOTOS = 200;
 /**
  * Step 3's more photos, on the last listings, from slot 10: a staged copy's references to them (about 250 bytes each) are
  * more than its file's reader takes in before it waits for them to be read (readline: 1,024 lines queued).
@@ -144,6 +148,8 @@ function hashDiff(s: Record<string, { rows: number; hash: string }>, m: Record<s
 interface Proxy {
     url: string;
     objectGets: string[];
+    /** Object requests as each reaches the proxy, whatever M answers. */
+    objectAsks: number;
     corrupt: number;
     gone: Set<string>;
     stripFormat: number;
@@ -154,7 +160,7 @@ interface Proxy {
 }
 async function startProxy(target: string): Promise<Proxy> {
     const px: Proxy = {
-        url: '', objectGets: [], corrupt: 0, gone: new Set(), stripFormat: 0, opened: [], pages: new Map(), statuses: [], close: () => {},
+        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, opened: [], pages: new Map(), statuses: [], close: () => {},
     };
     const server = http.createServer((req, res) => {
         void (async () => {
@@ -164,6 +170,7 @@ async function startProxy(target: string): Promise<Proxy> {
             for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string' && k !== 'host' && k !== 'content-length') headers[k] = v;
             const url = new URL(req.url ?? '/', 'http://proxy');
             const object = /^\/api\/local\/admin\/sync-object\/([^/]+)$/.exec(url.pathname)?.[1] ?? null;
+            if (object) px.objectAsks++;
             if (req.method === 'POST' && url.pathname === '/api/local/admin/sync-copy' && px.stripFormat > 0) {
                 px.stripFormat--;
                 delete headers['x-replica-format'];
@@ -522,23 +529,39 @@ async function main(): Promise<void> {
                 `a delta of more changed bytes than BACKUP_DELTA_BYTES is not taken, and the next pull is a whole copy, which lands (${JSON.stringify({ big, lines: lines.n, after })})`);
         });
 
-        await step('7. a take-over after copies by reference: every listing\'s photo opens on the promoted server, M\'s bytes', async () => {
+        await step('7. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
+            const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
             const env = await main.send('make-envelope');
             const held = await standby.send('envelope');
             require_(held === 'stored', `S holds M's take-over envelope (${held})`);
             await standby.send('takeover-restart-off');
+
+            // Review 4148896584: M gains photos S lacks, and S takes a whole copy at a pace; the take-over is confirmed once
+            // it has fetched some of their objects. Nothing more is asked of the old main server than was already on its way.
+            await main.send('add-photos', { posts: listings.slice(0, 4), perPost: TAKEOVER_PHOTOS / 4, from: 20, bytes: 200 });
+            await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '100' } });
+            const g0 = gets();
+            const pulling = standby.send('pull', { whole: true });
+            const fetchedSome = await until('S to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
             const pw = { 'X-Admin-Password': PW_STANDBY };
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: env.code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+            const asksAtConfirm = px.objectAsks;
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
+            const stopped = await pulling;
+            await sleep(1500); // at the copy's pace, 15 more requests' time
+            const asksAfter = px.objectAsks - asksAtConfirm;
+            assert(fetchedSome && stopped.ok === false && /take-over was confirmed/.test(stopped.error ?? '') && asksAfter <= 8,
+                `a whole copy's fetch stops once the take-over is confirmed: ${asksAfter} object request(s) reached the old main server after the confirm, `
+                + `at most the 8 already on their way (before: every remaining one of the ${TAKEOVER_PHOTOS}), and the copy says why (${stopped.error?.slice(0, 120)})`);
+
             await standby.kill('SIGKILL');
             standby = await spawnNode(SCRIPT, dir('standby'), envS);
             nodes.push(standby);
             const role = await standby.send('role');
             const s = `https://localhost:${await standby.send('serve')}`;
-            const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
             const urls: { slot: string; url: string }[] = await standby.send('photo-urls');
             const failed: string[] = [];
             for (const u of urls) {

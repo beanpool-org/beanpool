@@ -324,11 +324,13 @@ class CopyRequests {
 
     constructor(private readonly base: string, private readonly headers: Record<string, string>) {}
 
-    private async request(method: 'POST' | 'GET' | 'DELETE', route: string, body: 'page' | 'object' = 'page'): Promise<Response> {
+    private async request(method: 'POST' | 'GET' | 'DELETE', route: string, body: 'page' | 'object' = 'page', stop?: CopyStopped): Promise<Response> {
         // One pace for every request of a pull, its objects' too: requests made at once each take the next slot.
         const at = Math.max(Date.now(), this.lastAt + pageGapMs());
         this.lastAt = at;
         if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
+        // A copy stopped while this request waited its slot: not sent (fetchPhotoObjects).
+        stopIfStopped(stop);
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
@@ -385,8 +387,8 @@ class CopyRequests {
      * can't serve it (404: no listing photo there names it now, or its store lacks it). Anything else throws: the main
      * server or its store not answering, which fails the pull.
      */
-    async object(sha256: string): Promise<Buffer | null> {
-        const res = await this.request('GET', `${OBJECT_PATH}/${sha256}`, 'object');
+    async object(sha256: string, stop?: CopyStopped): Promise<Buffer | null> {
+        const res = await this.request('GET', `${OBJECT_PATH}/${sha256}`, 'object', stop);
         if (res.status === 404) {
             try { await res.body?.cancel(); } catch { /* gone */ }
             return null;
@@ -446,6 +448,14 @@ function photoReferencesOf(page: CopyPage): PhotoReference[] {
     return out;
 }
 
+/** Why the copy whose objects are being fetched was stopped (StagedCopy.stoppedBecause), or null while it goes on. */
+type CopyStopped = () => string | null;
+
+function stopIfStopped(stop: CopyStopped | undefined): void {
+    const why = stop?.();
+    if (why) throw new StagedCopyRefused(`The copy was stopped: ${why}`, 'import-error');
+}
+
 /** How often one object is asked for when what comes is not what its row names (a sha256 or a size), before the pull fails. */
 const OBJECT_TRIES = 3;
 
@@ -497,8 +507,15 @@ interface PhotoObjectsFetched {
  * landed without it, the copy would hold a row the main server's own hash of it names, or leave that listing's photo out
  * for good. Anything else the main server or the store answers fails the pull. What was fetched before a failure stays in
  * the store, content-addressed, so the next pull asks only for the rest.
+ *
+ * `stop`: a staged copy's (StagedCopy.stoppedBecause). Once it says the copy was stopped (a take-over confirmed, which
+ * aborts it: services/takeover.ts, or its stager gone), no further object is asked for, not even one waiting its slot, and
+ * the fetch fails as the copy's next page would: the old main server is asked for nothing more once this server has taken
+ * over from it (review 4148896584). At most the requests already sent, OBJECT_CONCURRENCY, finish.
  */
-async function fetchPhotoObjects(refs: Iterable<PhotoReference> | AsyncIterable<PhotoReference>, requests: CopyRequests): Promise<PhotoObjectsFetched> {
+async function fetchPhotoObjects(
+    refs: Iterable<PhotoReference> | AsyncIterable<PhotoReference>, requests: CopyRequests, stop?: CopyStopped,
+): Promise<PhotoObjectsFetched> {
     const store = getImageStore();
     const out: PhotoObjectsFetched = { named: 0, held: 0, fetched: 0, fetchedBytes: 0 };
     const seenKeys = new Set<string>();
@@ -508,7 +525,8 @@ async function fetchPhotoObjects(refs: Iterable<PhotoReference> | AsyncIterable<
     const sha = (b: Buffer) => crypto.createHash('sha256').update(b).digest('hex');
     const fetchChecked = async (ref: PhotoReference): Promise<Buffer> => {
         for (let attempt = 1; ; attempt++) {
-            const bytes = await requests.object(ref.sha256);
+            stopIfStopped(stop);
+            const bytes = await requests.object(ref.sha256, stop);
             if (bytes === null) {
                 throw new PhotoObjectGone(`listing photo ${ref.post_id}|${ref.order_num}'s object (sha256 ${ref.sha256.slice(0, 12)}…) is no longer on the main `
                     + 'server, which answered 404: this copy is not taken, and the next names what the main server holds then');
@@ -568,6 +586,7 @@ async function fetchPhotoObjects(refs: Iterable<PhotoReference> | AsyncIterable<
     let failure: unknown = null;
     const worker = async (): Promise<void> => {
         while (failure === null) {
+            try { stopIfStopped(stop); } catch (e) { failure ??= e; return; }
             const r = await it.next();
             if (r.done) return;
             try { await one(r.value); } catch (e) { failure ??= e; }
@@ -761,9 +780,11 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // the copy closed: fetched a page at a time, a first copy of a community with many photos would hold it open past
             // its longest (engine/copy-pages.ts COPY_MAX_MS). The closing checks then refuse the copy if any is missing.
             stage = 'fetch';
-            await fetchPhotoObjects(staged.photoReferences(), requests).catch((e) => {
-                // Objects that came but are not what their rows name: the copy came, and is refused.
-                if (e instanceof PhotoObjectRefused) stage = 'import';
+            const building = staged;
+            await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause).catch((e) => {
+                // Objects that came but are not what their rows name: the copy came, and is refused. A copy stopped here
+                // (a take-over confirmed) is reported as one stopped at its closing checks always was.
+                if (e instanceof PhotoObjectRefused || e instanceof StagedCopyRefused) stage = 'import';
                 throw e;
             });
             stage = 'import';

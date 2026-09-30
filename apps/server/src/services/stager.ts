@@ -367,6 +367,11 @@ export class StagedCopy {
         console.warn(`[Stager] The whole copy being built was stopped and its staging deleted: ${why}`);
     }
 
+    /** Why this copy was stopped (abort: a take-over confirmed, or any failure) or can't be built (its stager gone); null while it goes on. */
+    get stoppedBecause(): string | null {
+        return this.aborted ?? this.gone;
+    }
+
     /** The stager has stopped. */
     stopped(): Promise<number | null> {
         return this.exited;

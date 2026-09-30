@@ -30,18 +30,22 @@
  *     synced from the server it replaced holds that server's URLs), so every listing again, keyed, each opening.
  *
  * Past 200 listings (review of b7b96309, finding 1), each on a data dir of its own, keys off then on. A heal answer is
- * the delta as main sends it, then at most PHOTO_HEAL_PAGE_ROWS (200) listings more (review of a6b65b84, finding 2: a
- * phone on a slow link must fit one answer in its 30 s budget); the delta each answer should carry is read in the node
+ * the delta as main sends it, then a page of PHOTO_HEAL_PAGE_ROWS (200) listings less the delta's rows, at least 50
+ * (reviews of a6b65b84, finding 2, and fe4c27ce, finding 3: a phone on a slow link must fit one answer in its 30 s
+ * budget); the delta each answer should carry is read in the node
  * with main's own read (`deltaIds`), so the heal part of an answer is what is left.
  *  7. 260 listings with a photo, the oldest of them Hank's, who goes on holiday after the phone's last sync: the phone's
- *     next sync carries its delta (Hank's listing paused) and 200 more; the sync after it, 30 s later and still inside
+ *     next sync carries its delta (Hank's listing paused) and a page; the sync after it, 30 s later and still inside
  *     the phone's five-minute overlap, the other 60: all 260 healed, keyed. The sync after that is a delta again.
  *  8. 150 live listings with a photo and 100 newer finished ones: the phone's next sync heals all 150 live ones, and the
  *     finished ones over the next. A listing for Cara alone reaches Cara's heal and not Bob's: each reader's own
  *     audience, as a first sync.
- *  9. 1,500 listings, 1,450 with a photo, three of them edited after the phone's last sync: a phone that syncs every
- *     30 s through the five-minute overlap after the change (review of a6b65b84, finding 1) gets each heal page once,
- *     never the same page again, and no answer is past the delta plus 200 rows or 250 KB. A sync whose answer never
+ *  9. 1,500 listings as members write them (1, 3 or 5 photos, descriptions of 80-600 characters), 1,450 with a photo,
+ *     three of them edited after the phone's last sync: a phone that syncs every 30 s through the five-minute overlap
+ *     after the change (review of a6b65b84, finding 1) gets each heal page once, never the same page again, and no
+ *     answer holds more than 200 rows, delta and page together, nor more bytes than main's first sync (within 10%).
+ *     A phone whose own delta is full (200 listings finished since its last sync) gets it and 50 listings more: it
+ *     still heals, in at most 1.3 times main's largest answer (review of fe4c27ce, finding 3). A sync whose answer never
  *     arrived (the same cursor again) gets that same page, not the one after it, and never the first page again. A
  *     restart that changes nothing keeps the heal going. All 1,450 healed over eight syncs; then only deltas, and the
  *     heal's record goes. Cara's phone, syncing every ten minutes (past the overlap from its second sync), heals all
@@ -77,6 +81,15 @@ const PW = 'Photo-Keys-Resync-Pw-6613!';
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const HOUR = 60 * 60 * 1000;
 const MIN = 60 * 1000;
+
+/** `len` characters of words, different for each `seed`: a listing's description as members write them. */
+const WORDS = 'fresh lemons from the tree bag of ten ladder for loan two days seedlings tomato basil kale help moving boxes Saturday morning bike repair tyre levers pump firewood trailer load split dry'.split(' ');
+function text(len: number, seed: number): string {
+    let s = '';
+    let i = seed;
+    while (s.length < len) { s += (s ? ' ' : '') + WORDS[i % WORDS.length]; i = (i * 7 + 3) % 9973; }
+    return s.slice(0, len);
+}
 
 // ── The node process ───────────────────────────────────────────────────────────────────────
 
@@ -135,11 +148,14 @@ async function child(): Promise<void> {
         // `count` listings like `template` (its photo rows too, when `photo`), by `author`, each a minute older than the one
         // before from `newestMinutesAgo`, with `status` (and `active` 1 while it is open), and audience `direct` to
         // `target` when given. Their authors' standing is from the same hour. Returns their ids, newest first.
-        bulk: (a: { template: string; author: string; count: number; newestMinutesAgo: number; status?: string; photo?: boolean; prefix: string; target?: string }) => {
+        // With `realistic`, each a title of 20-59 characters and a description of 80-600, as members write them.
+        // With `cycle`, listing i copies cycle[i % cycle.length] in place of `template`.
+        bulk: (a: { template: string; author: string; count: number; newestMinutesAgo: number; status?: string; photo?: boolean; prefix: string; target?: string; realistic?: boolean; cycle?: string[] }) => {
             const cols = (db.prepare('PRAGMA table_info(posts)').all() as { name: string }[]).map((c) => c.name);
             const set: Record<string, string> = {
                 id: '@id', title: '@title', author_pubkey: '@author', created_at: '@at', updated_at: '@at', status: '@status', active: '@active',
                 ...(a.target ? { audience_scope: "'direct'", target_pubkey: '@target' } : {}),
+                ...(a.realistic ? { description: '@desc' } : {}),
             };
             const copy = db.prepare(`INSERT INTO posts (${cols.join(', ')}) SELECT ${cols.map((c) => set[c] ?? c).join(', ')} FROM posts WHERE id = @template`);
             const photos = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
@@ -150,8 +166,13 @@ async function child(): Promise<void> {
                 for (let i = 0; i < a.count; i++) {
                     const pid = `${a.prefix}-${String(i).padStart(5, '0')}`;
                     const at = new Date(Date.now() - (a.newestMinutesAgo + i) * MIN).toISOString();
-                    copy.run({ id: pid, title: `${a.prefix} ${i}`, author: a.author, at, status, active: status === 'active' ? 1 : 0, template: a.template, ...(a.target ? { target: a.target } : {}) });
-                    if (a.photo !== false) photos.run(pid, a.template);
+                    const template = a.cycle ? a.cycle[i % a.cycle.length] : a.template;
+                    copy.run({
+                        id: pid, title: a.realistic ? `${a.prefix} ${text(20 + (i * 13) % 40, i)}` : `${a.prefix} ${i}`, author: a.author, at, status,
+                        active: status === 'active' ? 1 : 0, template, ...(a.target ? { target: a.target } : {}),
+                        ...(a.realistic ? { desc: text(80 + (i * 37) % 521, i + 7) } : {}),
+                    });
+                    if (a.photo !== false) photos.run(pid, template);
                     ids.push(pid);
                 }
             })();
@@ -165,6 +186,13 @@ async function child(): Promise<void> {
             return at;
         },
         holiday: (a: { pk: string; on: boolean }) => se.setHolidayMode(a.pk, a.on).ok,
+        // These listings finished now: off the board, so after every live one in heal order.
+        finishNow: (a: { ids: string[] }) => {
+            const at = new Date().toISOString();
+            const put = db.prepare("UPDATE posts SET status = 'completed', active = 0, completed_at = ?, updated_at = ? WHERE id = ?");
+            for (const pid of a.ids) put.run(at, at, pid);
+            return a.ids.length;
+        },
         heals: () => db.prepare('SELECT COUNT(*) AS n FROM photo_url_heals').get(),
         // Every listing's photo URLs as `pk`'s sync reads it now: what a healed phone holds.
         photosFor: (a: { pk: string }) => Object.fromEntries(se.getPosts({
@@ -612,10 +640,22 @@ async function main(): Promise<void> {
 
         await section('9. 1,500 listings: a phone syncing every 30 s gets each heal page once, a lost answer again', async () => {
             const template = await freshNode('big');
-            await node.send('setTime', { ids: [template], minutesAgo: 3000 });
+            // Listings as members write them (review of fe4c27ce, finding 3: rows of about 875 bytes made the answers look
+            // small): 1, 3 or 5 photos, and descriptions of 80-600 characters.
+            const templates = [template];
+            for (const photos of [3, 5]) {
+                await node.send('resetLimits');
+                const made = await signed(node, alice, 'POST', '/api/marketplace/posts', {
+                    type: 'offer', category: 'other', title: `Template ${photos}`, description: text(300, photos), authorPublicKey: alice.pk,
+                    lat: -28.5, lng: 153.5, photos: Array.from({ length: photos }, () => TINY_PNG),
+                });
+                assert(made.status === 200 && made.body?.post?.id, `setup: Alice lists one offer with ${photos} photos (${show(made)})`);
+                templates.push(made.body?.post?.id);
+            }
+            await node.send('setTime', { ids: templates, minutesAgo: 3000 });
             // With no photo, and newer than every listing with one: a newest-first page would start with them.
-            const bare: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 61, photo: false, prefix: 'bare' });
-            const photoIds: string[] = [template, ...await node.send('bulk', { template, author: alice.pk, count: 1449, newestMinutesAgo: 111, prefix: 'big' })];
+            const bare: string[] = await node.send('bulk', { template, author: alice.pk, count: 50, newestMinutesAgo: 61, photo: false, prefix: 'bare', realistic: true });
+            const photoIds: string[] = [...templates, ...await node.send('bulk', { template, cycle: templates, author: alice.pk, count: 1447, newestMinutesAgo: 111, prefix: 'big', realistic: true })];
             assert(photoIds.length === 1450 && bare.length === 50, `setup: 1,500 listings, 1,450 with a photo and 50 without (${photoIds.length}, ${bare.length})`);
             await pull(node, bob, null);
             await pull(node, cara, null);
@@ -661,9 +701,8 @@ async function main(): Promise<void> {
             console.log(`   heal pages: ${pages.map((p) => p.length).join(', ')}; bytes: ${received.map(bytesOf).join(', ')}; the ${overlapSyncs} syncs inside the overlap carried ${overlapBytes} bytes`);
             const maxRows = Math.max(...received.map((r, i) => rowsOf(r).length - deltas[i].size));
             const maxBytes = Math.max(...received.map(bytesOf));
-            assert(received.every((r, i) => rowsOf(r).length <= deltas[i].size + PAGE && pages[i].length <= PAGE),
-                `no answer carries more than its delta and ${PAGE} listings (at most ${maxRows} past the delta)`);
-            assert(maxBytes < 250_000, `the largest answer is under 250 KB (${maxBytes} bytes)`);
+            assert(received.every((r, i) => pages[i].length <= Math.max(50, PAGE - deltas[i].size) && rowsOf(r).length <= Math.max(PAGE, deltas[i].size + 50)),
+                `no answer carries more than ${PAGE} rows, its delta and its page together (at most ${maxRows} past the delta)`);
             assert(deltas[0].size >= 3 && edited.every((pid) => rowsOf(received[0]).slice(0, deltas[0].size).some((p) => p.id === pid)),
                 `the first answer starts with the delta, the three edited listings in it (${deltas[0].size})`);
             const seen = new Map<string, number>();
@@ -703,6 +742,23 @@ async function main(): Promise<void> {
             assert(healedIn(caraAnswers, photoIds) === 1450 && caraTwice === 0 && caraPages.every((p) => p.length <= PAGE),
                 `Cara's phone, syncing every ten minutes, heals all 1,450 too, page by page (${healedIn(caraAnswers, photoIds)}, ${caraTwice} twice, ${caraPages.map((p) => p.length).join(', ')})`);
             assert(caraRetry, 'and her sync sent again with the same cursor gets the same page, byte for byte');
+
+            // Sizes (finding 3). Main's largest answer is a first sync: the 200 listings updated last. 250 listings with a
+            // photo finish now, so those 200 each have one, and Hank's phone, which synced before the change, finds its own
+            // delta full (200 rows of them), none of them on the heal's first page (the live listings come first).
+            await node.send('finishNow', { ids: photoIds.slice(100, 350) });
+            const first = await pull(node, owner, null);
+            const mainLargest = bytesOf(first);
+            const hankDelta = await deltaOf(hank, synced);
+            const hanks = await pull(node, hank, synced);
+            const hankPage = healPart(hanks, hankDelta);
+            console.log(`   main's first sync: ${rowsOf(first).length} rows, ${mainLargest} bytes (${Math.round(mainLargest / rowsOf(first).length)} B a row); `
+                + `the largest heal answer above ${maxBytes} bytes; a full delta: ${hankDelta.size} + ${hankPage.length} rows, ${bytesOf(hanks)} bytes`);
+            assert(rowsOf(first).length === PAGE && mainLargest / PAGE > 1200,
+                `setup: main's first sync is ${PAGE} rows as members write them, over 1.2 KB a row (${Math.round(mainLargest / PAGE)} B)`);
+            assert(maxBytes <= mainLargest * 1.1, `a heal answer is no larger than main's first sync, within 10% (${maxBytes} of ${mainLargest} bytes)`);
+            assert(hankDelta.size === PAGE && hankPage.length === 50 && rowsOf(hanks).length === PAGE + 50 && bytesOf(hanks) <= mainLargest * 1.3,
+                `a phone whose own delta is full gets it and 50 listings more: it still heals, in 1.3 times main's largest at most (${rowsOf(hanks).length} rows, ${bytesOf(hanks)} bytes)`);
             await stop(node);
         });
 

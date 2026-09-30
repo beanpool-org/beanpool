@@ -30,8 +30,12 @@
  *   `photoKeysShape`, what they were), and a sync whose cursor is older is answered whole (routes/marketplace.ts,
  *   photoHealFor): the delta it asked for, every row main would send, first, then a page of the node's other listings
  *   in heal order (engine getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished
- *   ones), at most PHOTO_HEAL_PAGE_ROWS of them, so one answer is never much past main's largest. A standby's first boot as the main server
- *   counts as a change (photoUrlShape), and so does a standby promoted in this process by a take-over that finishes at
+ *   ones), PHOTO_HEAL_PAGE_ROWS of them less the delta's rows and never fewer than PHOTO_HEAL_MIN_PAGE_ROWS. So an answer
+ *   holds 200 rows, as main's largest (a first sync) does, or its delta and 50 more when the delta alone is 150 or more.
+ *   Measured with listings as members write them (1, 3 or 5 photos, descriptions of 80-600 characters, about 1.4 KB a
+ *   row; test-photo-keys-resync section 9): main's first sync 282,760 bytes, the largest heal answer 278,045, and the
+ *   worst case, a phone whose own delta is full (200 rows and 50 more), 351,655 (1.24 times main's largest; it was
+ *   561,165 with a page of 200 after a full delta). A standby's first boot as the main server counts as a change (photoUrlShape), and so does a standby promoted in this process by a take-over that finishes at
  *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both. To make every phone's next sync whole by
  *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
  *   restart (operator manual, Updates and health).
@@ -78,12 +82,18 @@ export const PHOTO_KEYS_SHAPE_ROW = 'photoKeysShape';
 /** When that last changed (ISO 8601): a sync from before it holds URLs that no longer open. */
 export const PHOTO_KEYS_SINCE_ROW = 'photoKeysSince';
 /**
- * The most listings a heal page adds to the delta it follows: the 200 every other page stops at (https-server.ts
+ * The rows of a heal answer, its delta and its page together: the 200 every other page stops at (https-server.ts
  * clampLimit). The node sends JSON uncompressed, and the phone's posts pull has 30 s for the whole answer
  * (apps/native services/pillar-sync.ts); a page of 1000 was about 900 KB, which a phone below about 250 kbit/s never
  * finished, retrying the same page for ever (review of a6b65b84, finding 2). The rest heals over the key's next syncs.
  */
 export const PHOTO_HEAL_PAGE_ROWS = 200;
+/**
+ * A heal page is PHOTO_HEAL_PAGE_ROWS less the rows of the delta it follows, and never fewer than this, so a phone whose
+ * own delta is full still heals (review of fe4c27ce, finding 3): an answer holds at most 250 rows, where main's largest
+ * holds 200.
+ */
+export const PHOTO_HEAL_MIN_PAGE_ROWS = 50;
 /**
  * How far a phone's cursor trails its last successful sync (apps/native services/pillar-sync.ts: its last sync less
  * 300,000 ms): a cursor this much older than photoKeysSince, or more, comes from a device with no sync since the change.

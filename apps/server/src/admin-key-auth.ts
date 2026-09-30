@@ -24,7 +24,8 @@
  *
  * (d) Per-owner break-glass code:
  *     - Distinct per-owner break-glass code generated on enrolment (not one shared password)
- *     - Stored as SHA-256 hash in node_roles.break_glass_hash
+ *     - Stored as a salted scrypt hash in node_roles.break_glass_hash (break-glass-code.ts)
+ *     - Accepted on the enrol routes only, whatever the mode (admin-auth.ts checkAdminAuth)
  */
 
 import crypto from 'node:crypto';
@@ -48,6 +49,8 @@ import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import { adminSigninText, verifyStatementSignature } from './engine/member-signature.js';
+import { breakGlassCodeMatches, generateBreakGlassCode, hashBreakGlassCode, isBreakGlassCodeShape } from './break-glass-code.js';
+import { CHALLENGE_MAX_WRONG_CODES, keySigninBraked, noteKeySigninFailure, noteKeySigninSuccess } from './key-signin-brake.js';
 
 // ===================== CONSTANTS & TTLs =====================
 export const CHALLENGE_TTL_MS = 60_000;          // 60 seconds challenge freshness
@@ -62,6 +65,8 @@ export interface AdminChallenge {
     createdAt: number;
     expiresAt: number;
     status: 'pending' | 'resolved' | 'expired';
+    /** Wrong 2FA codes sent against this challenge; at CHALLENGE_MAX_WRONG_CODES it is burned (key-signin-brake.ts). */
+    wrongCodes?: number;
     // Deliberately no token, signer or role here: the token goes back only to the signer, in the
     // verify-challenge response. Anything kept on the challenge is one id away from anyone who saw it.
 }
@@ -200,13 +205,20 @@ export function verifyAndSolveChallenge(params: {
     totpCode?: string;
     /** The host the app signed for (request binding): with it, only the format-2 sign-in text is accepted. */
     signedFor?: unknown;
+    /** The caller's address (client-ip.ts clientLimiterKey), which the 2FA brake counts beside the key. */
+    source?: string;
 }): {
     ok: boolean;
     error?: string;
-    /** 421 wrong_community or 426 app_too_old (engine/member-signature.ts), when that is why it was refused. */
+    /**
+     * 421 wrong_community or 426 app_too_old (engine/member-signature.ts), 429 while the 2FA brake holds this key or
+     * address, 410 for a challenge burned by wrong codes: when that is why it was refused.
+     */
     status?: number;
     code?: string;
     totpRequired?: boolean;
+    /** With 429: seconds until a code is checked again. */
+    retryAfter?: number;
     handshakeToken?: string;
     expiresAt?: number;
     memberPubkey?: string;
@@ -217,6 +229,9 @@ export function verifyAndSolveChallenge(params: {
 
     if (!challenge) {
         return { ok: false, error: 'Challenge not found' };
+    }
+    if ((challenge.wrongCodes ?? 0) >= CHALLENGE_MAX_WRONG_CODES) {
+        return { ok: false, error: BURNED_CHALLENGE_ERROR, status: 410 };
     }
     if (challenge.status === 'expired' || Date.now() > challenge.expiresAt) {
         challenge.status = 'expired';
@@ -235,6 +250,7 @@ export function verifyAndSolveChallenge(params: {
     const signer = authorizeKeySigner({
         memberPubkey,
         totpCode,
+        source: params.source,
         signatureValid: () => {
             statement = verifyStatementSignature({
                 signature,
@@ -250,6 +266,15 @@ export function verifyAndSolveChallenge(params: {
         const refused = statement as ReturnType<typeof verifyStatementSignature> | null;
         if (signer.badSignature && refused && !refused.ok && (refused.status === 421 || refused.status === 426)) {
             return { ok: false, error: refused.error, status: refused.status, code: refused.code };
+        }
+        if (signer.braked) return { ok: false, error: signer.error, status: 429, retryAfter: signer.retryAfter };
+        if (signer.wrongTotp) {
+            // A wrong code leaves the challenge pending, for a mistyped code, but only a few times: then it is burned.
+            challenge.wrongCodes = (challenge.wrongCodes ?? 0) + 1;
+            if (challenge.wrongCodes >= CHALLENGE_MAX_WRONG_CODES) {
+                challenge.status = 'expired';
+                logger.security('AUTH', `Key sign-in challenge ${challenge.challengeId.slice(0, 8)} burned after ${challenge.wrongCodes} wrong 2FA codes (key ${memberPubkey.slice(0, 12)}…)`);
+            }
         }
         return { ok: false, error: signer.error, ...(signer.totpRequired ? { totpRequired: true } : {}) };
     }
@@ -272,21 +297,28 @@ export function verifyAndSolveChallenge(params: {
 
 export type KeySignerCheck =
     | { ok: true; role: MemberNodeRole }
-    | { ok: false; error: string; totpRequired?: boolean; notAdmin?: boolean; badSignature?: boolean; wrongTotp?: boolean };
+    | { ok: false; error: string; totpRequired?: boolean; notAdmin?: boolean; badSignature?: boolean; wrongTotp?: boolean; braked?: boolean; retryAfter?: number };
+
+/** A key sign-in's challenge after CHALLENGE_MAX_WRONG_CODES wrong codes. */
+export const BURNED_CHALLENGE_ERROR = 'Too many wrong 2FA codes for this sign-in. Start again.';
 
 /**
  * Everything a key sign-in checks about the signer, shared by the app's one-time link (verifyAndSolveChallenge)
  * and the browser's sign-in by QR (settings-signin-pairing.ts) so the two cannot drift apart: an active member,
  * holding a role in node_roles (owner, admin or moderator; a moderator's session reaches only MODERATOR_ROUTES in
  * admin-auth.ts), whose signature over the flow's own message
- * verifies, and — when the owner turned it on — the node's 2FA code (a used backup code is spent).
+ * verifies, and — when the owner turned it on — the node's 2FA code (a used backup code is spent), under the 2FA
+ * brake (key-signin-brake.ts), per key and per `source` address: a held key or address is answered `braked` without
+ * the code being looked at.
  */
 export function authorizeKeySigner(params: {
     memberPubkey: string;
     signatureValid: () => boolean;
     totpCode?: string;
+    /** The caller's address (client-ip.ts clientLimiterKey), counted by the 2FA brake beside the key. */
+    source?: string;
 }): KeySignerCheck {
-    const { memberPubkey, signatureValid, totpCode } = params;
+    const { memberPubkey, signatureValid, totpCode, source } = params;
 
     // One key, one spelling (engine/member-key.ts): the signature check decodes the key's hex, which forgives case, so a
     // row a door stored under a member's key in capitals, before that rule, would open a session for that key's holder
@@ -313,9 +345,17 @@ export function authorizeKeySigner(params: {
         return { ok: false, error: 'Invalid cryptographic signature', badSignature: true };
     }
 
-    // TOTP verification if enabled
+    // TOTP verification if enabled, under the brake (key-signin-brake.ts). Everything above needs the key, so nothing a
+    // stranger sends reaches here to be counted.
     const config = getLocalConfig();
     if (config.totpEnabled && config.totpSecret) {
+        const brake = keySigninBraked(memberPubkey, source);
+        if (brake.braked) {
+            return {
+                ok: false, braked: true, retryAfter: brake.retryAfter,
+                error: `Too many wrong 2FA codes. Try again in ${brake.retryAfter}s.`,
+            };
+        }
         if (!totpCode) {
             return { ok: false, error: '2FA code required', totpRequired: true };
         }
@@ -333,8 +373,10 @@ export function authorizeKeySigner(params: {
             }
         }
         if (!totpOk) {
+            noteKeySigninFailure(memberPubkey, source, `${member.callsign ? `@${member.callsign} ` : ''}(key ${memberPubkey.slice(0, 12)}…)`);
             return { ok: false, error: 'Invalid 2FA code', totpRequired: true, wrongTotp: true };
         }
+        noteKeySigninSuccess(memberPubkey, source);
     }
 
     return { ok: true, role };
@@ -550,57 +592,36 @@ export function purgeMemberSessions(memberPubkey: string): void {
 
 // ===================== PER-OWNER BREAK-GLASS PROTOCOL =====================
 
-/**
- * Generates a per-owner break-glass code (e.g. bg-a1b2-c3d4-e5f6-7890).
- */
-export function generateBreakGlassCode(): string {
-    const raw = crypto.randomBytes(8).toString('hex');
-    const groups = raw.match(/.{1,4}/g)?.join('-') || raw;
-    return `bg-${groups}`;
-}
+export { generateBreakGlassCode, hashBreakGlassCode };
 
 /**
- * Hashes a break-glass code using SHA-256 for persistent storage in node_roles.
+ * Checks a break-glass code candidate against the stored owner hashes (break-glass-code.ts: salted scrypt, one per
+ * owner). If ownerPubkey is provided, checks that owner only; otherwise every owner whose role acts. A row still in the
+ * old unsalted form that matches is rewritten in the new form here (it can arrive after the boot upgrade, in a take-over
+ * bundle or a restore from an older server). Anything not shaped like a code is refused without an scrypt.
  */
-export function hashBreakGlassCode(code: string): string {
-    return crypto.createHash('sha256').update(code.trim().toLowerCase()).digest('hex');
-}
-
-/**
- * Verifies a break-glass code candidate against stored owner hashes using constant-time comparison.
- * If ownerPubkey is provided, checks that owner specifically. Otherwise checks all owners.
- */
-export function verifyBreakGlassCode(code: string, ownerPubkey?: string): { member_pubkey: string; role: string } | null {
-    if (!code) return null;
-    const candidateHash = Buffer.from(hashBreakGlassCode(code));
-
-    if (ownerPubkey) {
-        const row = db.prepare(
-            `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
+export async function verifyBreakGlassCode(code: string, ownerPubkey?: string): Promise<{ member_pubkey: string; role: string } | null> {
+    if (!isBreakGlassCodeShape(code)) return null;
+    const ownerSql = `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
              FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND ${NODE_ROLE_ACTS}`
-        ).get(ownerPubkey) as { member_pubkey: string; role: string; break_glass_hash: string } | undefined;
-        if (!row?.break_glass_hash) return null;
-        const storedBuf = Buffer.from(row.break_glass_hash);
-        if (candidateHash.length === storedBuf.length && crypto.timingSafeEqual(candidateHash, storedBuf)) {
-            return { member_pubkey: row.member_pubkey, role: row.role };
-        }
-        return null;
-    }
-
-    const rows = db.prepare(
-        `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
-         FROM node_roles nr
-         JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND ${NODE_ROLE_ACTS}`
-    ).all() as { member_pubkey: string; role: string; break_glass_hash: string }[];
+             WHERE nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND ${NODE_ROLE_ACTS}`;
+    const rows = (ownerPubkey
+        ? db.prepare(`${ownerSql} AND nr.member_pubkey = ?`).all(ownerPubkey)
+        : db.prepare(ownerSql).all()) as { member_pubkey: string; role: string; break_glass_hash: string }[];
 
     for (const r of rows) {
-        const storedBuf = Buffer.from(r.break_glass_hash);
-        if (candidateHash.length === storedBuf.length && crypto.timingSafeEqual(candidateHash, storedBuf)) {
-            return { member_pubkey: r.member_pubkey, role: r.role };
+        const verdict = await breakGlassCodeMatches(code, r.break_glass_hash);
+        if (verdict === 'no') continue;
+        // Read again after the wait: a demotion or a new enrolment meanwhile replaced or cleared this hash.
+        const still = db.prepare(`${ownerSql} AND nr.member_pubkey = ?`).get(r.member_pubkey) as { break_glass_hash: string } | undefined;
+        if (still?.break_glass_hash !== r.break_glass_hash) return null;
+        if (verdict === 'legacy') {
+            db.prepare('UPDATE node_roles SET break_glass_hash = ? WHERE member_pubkey = ? AND break_glass_hash = ?')
+                .run(hashBreakGlassCode(code), r.member_pubkey, r.break_glass_hash);
+            logger.info('AUTH', `Break-glass code of ${r.member_pubkey.slice(0, 12)}… rewritten from the old unsalted hash to scrypt on its use`);
         }
+        return { member_pubkey: r.member_pubkey, role: r.role };
     }
     return null;
 }

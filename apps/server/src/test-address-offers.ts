@@ -290,6 +290,17 @@ async function main(): Promise<void> {
         const headers = await core.buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: who.pk, sign: who.sign });
         return call(node, 'POST', core.signedPathOf(url), headers, text);
     }
+    /**
+     * A signed POST in the old format, naming no host, as an app before request binding sends one: it puts no address on
+     * the list. A redeem must be signed by the key it registers.
+     */
+    async function postUnbound(node: Node, who: Id, reqPath: string, body: unknown): Promise<Reply> {
+        const text = JSON.stringify(body);
+        const timestamp = String(Date.now());
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const sig = await who.sign(core.utf8Bytes(core.unboundRequestText({ method: 'POST', path: reqPath, timestamp, nonce, body: text })));
+        return call(node, 'POST', reqPath, { 'X-Public-Key': who.pk, 'X-Signature': Buffer.from(sig).toString('base64'), 'X-Timestamp': timestamp, 'X-Nonce': nonce }, text);
+    }
     let U: Node;
     /** The Settings report; `host` is the host Settings reached the node at, sent as it sends it. */
     const report = async (host?: string) => {
@@ -410,7 +421,7 @@ async function main(): Promise<void> {
                 const gen = await postAs(U, mallory, 'mallory.example', '/api/invite/generate', { publicKey: mallory.pk });
                 const code = gen.body?.invite?.code;
                 const fresh = id(`Mallory${i + 1}`);
-                const joined = await call(U, 'POST', '/api/invite/redeem', {}, j({ code, publicKey: fresh.pk, callsign: fresh.callsign }));
+                const joined = await postUnbound(U, fresh, '/api/invite/redeem', { code, publicKey: fresh.pk, callsign: fresh.callsign });
                 assert(gen.status === 200 && typeof code === 'string' && joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember,
                     `Mallory, an ordinary member, makes invite ${i} for herself and redeems it with a fresh key (${show(gen)}; ${show(joined)})`);
                 keys.push(fresh);

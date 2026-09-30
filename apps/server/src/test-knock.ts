@@ -358,14 +358,14 @@ async function main(): Promise<void> {
     const annAgain = await knock(ann);
     assert(annAgain.status === 409 && annAgain.body?.code === 'knock_approved', `Ann knocking again while invited → 409 knock_approved (${annAgain.status})`);
 
-    const byEve = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: eve.pk, callsign: 'Eve' });
+    const byEve = await call(eve, 'POST', '/api/invite/redeem', { code, publicKey: eve.pk, callsign: 'Eve' });
     assert(byEve.status === 400 && /someone else/.test(byEve.body?.error ?? ''), `redeeming Ann's invite with another key → refused (${byEve.text})`);
     const eveMember = db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(eve.pk);
     const stillUnused = (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as any)?.used_by;
     assert(!eveMember && !stillUnused, 'Eve is not a member and the invite is not used');
-    const byMemberKey = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: mia.pk, callsign: 'Mia' });
+    const byMemberKey = await call(mia, 'POST', '/api/invite/redeem', { code, publicKey: mia.pk, callsign: 'Mia' });
     assert(byMemberKey.status === 400, `nor with a member's key (${byMemberKey.status})`);
-    const byAnn = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: ann.pk, callsign: 'Ann' });
+    const byAnn = await call(ann, 'POST', '/api/invite/redeem', { code, publicKey: ann.pk, callsign: 'Ann' });
     assert(byAnn.status === 200 && byAnn.body?.success === true && !byAnn.body?.alreadyMember, `Ann redeems it with her key (${byAnn.status})`);
     const annMember = db.prepare('SELECT invited_by, invite_code FROM members WHERE public_key = ?').get(ann.pk) as any;
     assert(annMember?.invited_by === max.pk && annMember?.invite_code === code, 'she is a member, invited by Max with that code');
@@ -524,9 +524,9 @@ async function main(): Promise<void> {
         'from a main server that sends no invites, the standby has the approval and makes its invite: the same code, by the member who approved, for the applicant\'s key');
     const fayOnStandby = await status(fay);
     assert(fayOnStandby.body?.status === 'approved' && fayOnStandby.body?.invite === fayCode2, 'so after a take-over the applicant\'s status still has a working invite');
-    const eveOnStandby = await call(null, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: eve.pk, callsign: 'Eve' });
+    const eveOnStandby = await call(eve, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: eve.pk, callsign: 'Eve' });
     assert(eveOnStandby.status === 400, 'which still admits only her key');
-    const fayRedeems = await call(null, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: fay.pk, callsign: 'Fay' });
+    const fayRedeems = await call(fay, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: fay.pk, callsign: 'Fay' });
     assert(fayRedeems.status === 200 && fayRedeems.body?.success === true, `and admits her (${fayRedeems.status})`);
     // She joined on the "main". A standby copies her member row, the approval and the invite, used by her, as the main
     // server holds it. Once that invite is 30 days old, her status must still say approved there.
@@ -577,7 +577,7 @@ async function main(): Promise<void> {
     };
     const memberRow = (pk: string) => db.prepare('SELECT status, invited_by, invite_code FROM members WHERE public_key = ?').get(pk) as any;
     const knockById = (id: string) => db.prepare('SELECT * FROM join_requests WHERE id = ?').get(id) as any;
-    const redeem = (code: string, id: Id) => call(null, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
+    const redeem = (code: string, id: Id) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
     /** This database becomes a standby holding `copy`: the copied tables emptied, then imported. */
     async function becomeCopyOf(copy: any, dropCodes: string[] = []): Promise<void> {
         emptyCopiedTables(db);
@@ -983,7 +983,7 @@ async function main(): Promise<void> {
     // A paper invite: an offline ticket Mia signed.
     const ticketPayload = JSON.stringify({ i: mia.pk, t: Date.now() });
     const ticket = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), mia.priv).toString('base64') })).toString('base64');
-    const redeemTicket = (id: Id) => call(null, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
+    const redeemTicket = (id: Id) => call(id, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
     const k1Ticket = await redeemTicket(olga);
     assert(k1Ticket.status === 400 && /replaced/.test(k1Ticket.body?.error ?? ''), `her old key redeeming Mia's offline ticket → refused (${k1Ticket.status} ${k1Ticket.body?.error})`);
     assert(!memberRow(olga.pk), 'still no member row for the old key');

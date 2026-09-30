@@ -542,7 +542,7 @@ async function main() {
         removeWsClient(strangerWs);
 
         // Test that the distinct break-glass code works to authenticate
-        const verifyBgCodeDirect = verifyBreakGlassCode(replacementBreakGlassCode);
+        const verifyBgCodeDirect = await verifyBreakGlassCode(replacementBreakGlassCode);
         assert(verifyBgCodeDirect?.member_pubkey === replacementKeys.pub, 'verifyBreakGlassCode matches replacement owner');
 
         // Use break-glass code via x-break-glass-code header to enrol another owner
@@ -828,8 +828,11 @@ async function main() {
         assert(graceHashAfter === null, 'Demoting Grace to admin cleared break_glass_hash');
 
         // 12.9 verifyBreakGlassCode ownerPubkey branch requires owner role and active member (Comment 10)
-        const graceCodeCheck = verifyBreakGlassCode('any-code', graceKeys.pub);
+        const graceCodeCheck = await verifyBreakGlassCode('any-code', graceKeys.pub);
         assert(graceCodeCheck === null, 'verifyBreakGlassCode for non-owner Grace returns null');
+        // Grace's own code, from when she was an owner, is not an owner's code any more either.
+        const graceOwnCodeCheck = await verifyBreakGlassCode(routineBody.breakGlassCode, graceKeys.pub);
+        assert(typeof routineBody.breakGlassCode === 'string' && graceOwnCodeCheck === null, "verifyBreakGlassCode refuses Grace's own code once she is no longer an owner");
 
         // 12.10 Settings failed token exchange returns accessible HTML (Comment 13)
         const failTokenRes = await fetch(`${base}/settings?token=invalid_handshake_token`);

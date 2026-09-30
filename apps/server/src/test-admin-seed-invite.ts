@@ -45,6 +45,14 @@ async function postJson(path: string, body: any, headers: Record<string, string>
     return { status: res.status, body: resBody };
 }
 
+/** A redeem as the apps send one: signed by the key it registers (the node registers no key a redeem isn't signed by). */
+async function redeemAs(kp: ReturnType<typeof makeKeypair>, body: { code: string; publicKey: string; callsign: string }): Promise<{ status: number; body: any }> {
+    const ts = String(Date.now());
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`POST\n/api/invite/redeem\n${ts}\n${nonce}\n${JSON.stringify(body)}`), kp.privateKey).toString('base64');
+    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
+}
+
 function makeKeypair() {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
@@ -101,7 +109,7 @@ async function main() {
 
     // 3. Verify redeeming the seed invite code registers a new member
     const alice = makeKeypair();
-    const redeemRes = await postJson('/api/invite/redeem', {
+    const redeemRes = await redeemAs(alice, {
         code: seedCode,
         publicKey: alice.pubKeyHex,
         callsign: 'AliceSeedUser',
@@ -125,7 +133,7 @@ async function main() {
     const charlie = makeKeypair();  // member, no role
     for (const [kp, callsign] of [[bob, 'BobAdmin'], [mo, 'MoModerator'], [charlie, 'CharlieMember']] as const) {
         const inv = await postJson('/api/admin/seed-invite', { password: PW });
-        const red = await postJson('/api/invite/redeem', { code: inv.body.code, publicKey: kp.pubKeyHex, callsign });
+        const red = await redeemAs(kp, { code: inv.body.code, publicKey: kp.pubKeyHex, callsign });
         assert(red.status === 200 && red.body.success === true, `${callsign} joins the node`);
     }
     const grantBob = await postJson('/api/local/admin/node-roles', { pubkey: bob.pubKeyHex, role: 'admin' }, pwHeader);
@@ -140,7 +148,7 @@ async function main() {
     assert(keyRes.body.type === 'trusted', 'Admin key session invite has the requested tier');
     assert(issuedByOf(keyRes.body.code) === bob.pubKeyHex, "Key-issued invite records the admin's own key as issued_by");
     const dave = makeKeypair();
-    const daveRedeem = await postJson('/api/invite/redeem', { code: keyRes.body.code, publicKey: dave.pubKeyHex, callsign: 'DaveViaKey' });
+    const daveRedeem = await redeemAs(dave, { code: keyRes.body.code, publicKey: dave.pubKeyHex, callsign: 'DaveViaKey' });
     assert(daveRedeem.status === 200 && daveRedeem.body.success === true, 'The code from the key session redeems');
 
     const charlieSolve = await solveChallenge(charlie);

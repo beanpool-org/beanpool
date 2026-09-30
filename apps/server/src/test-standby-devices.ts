@@ -555,7 +555,7 @@ async function main(): Promise<void> {
         const joinedWith: Record<string, string> = {};
         for (const who of [ann, bo, cy, dee, kip]) {
             joinedWith[who.name] = await invite();
-            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { body: { code: joinedWith[who.name], publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: joinedWith[who.name], publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         const phone = (who: Id, t: string, registeredAt: number | null, platform = 'android') =>
@@ -752,7 +752,7 @@ async function main(): Promise<void> {
             `and it is exact, and S keeps its routine whole copies on (${JSON.stringify(r3c.lastWhole)}; reconcileDisabledForSize ${r3c.reconcileDisabledForSize})`);
         // A key's phones start travelling once it is a member: at its next write, or the next whole copy.
         const strangerJoins = await invite();
-        built('the first stranger joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: strangerJoins, publicKey: strangers[0].pk, callsign: 'Newcomer' } }));
+        built('the first stranger joins', await api(m, 'POST', '/api/invite/redeem', { as: strangers[0], body: { code: strangerJoins, publicKey: strangers[0].pk, callsign: 'Newcomer' } }));
         const mJoined = await main.send('rows');
         const joinedWhole = await standby.send('pull', { whole: true });
         s = await standby.send('rows');
@@ -850,7 +850,7 @@ async function main(): Promise<void> {
         // A member's own phones and leaves (review 4126900225).
         await forgetAuth();
         const lu = newId('Lu');
-        built('Lu joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: lu.pk, callsign: 'Lu' } }));
+        built('Lu joins', await api(m, 'POST', '/api/invite/redeem', { as: lu, body: { code: await invite(), publicKey: lu.pk, callsign: 'Lu' } }));
         const luToken = (i: number) => token(`lu-${String(i).padStart(2, '0')}`);
         const luPhones: number[] = [];
         for (let i = 0; i < 10; i++) {
@@ -961,7 +961,7 @@ async function main(): Promise<void> {
         require_(notTaken.length === 0 && mBefore.outside.pricing_reports >= beforeJoin.length,
             `M: Xavier, a key with no row here, sends ${beforeJoin.length} signed reports from eight addresses (each a day's 20; one pause for the gateway's minute), all taken and outside the rule (${mBefore.outside.pricing_reports}; ${notTaken.length} not taken${notTaken.length ? `, first ${brief(notTaken[0])} at ${beforeJoin.indexOf(notTaken[0])}` : ''})`);
         await forgetAuth();
-        built('Xavier joins', await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: xavier.pk, callsign: 'Xavier' } }));
+        built('Xavier joins', await api(m, 'POST', '/api/invite/redeem', { as: xavier, body: { code: await invite(), publicKey: xavier.pk, callsign: 'Xavier' } }));
         const xavierAsMember = await S_(xavier, '/api/pricing-guide/report', { itemId: edited.id, reportType: 'too_low', comment: 'Now a member' });
         const mXavier = await main.send('rows');
         const xavierHolds = (t: Tables) => t.pricing_reports.filter((r: any) => r.reporter_pubkey === xavier.pk).length;

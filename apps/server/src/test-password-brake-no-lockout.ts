@@ -308,11 +308,18 @@ async function part3Http() {
         assert(chal.status === 200 && solved.status === 200 && exchanged.status === 200 && session.status === 200,
             `key sign-in from the braked address works: challenge ${chal.status}, signed ${solved.status}, session ${exchanged.status}, admin route ${session.status}`);
 
+        // A break-glass code only enrols a key (docs/admin-surface.md §2.2). Until 2026-10-01 this checked it on
+        // /diagnostics, where it opened an owner's session; there it is now a wrong password, braked as one.
         const code = generateBreakGlassCode();
         setNodeRoleBreakGlassHash(owner.pub, hashBreakGlassCode(code));
-        const bg = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': code, ...viaTunnel(A) } });
-        assert(bg.status === 200, `a break-glass code from the braked address is still checked (got ${bg.status})`);
-        const bgWrong = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': 'not-the-code', ...viaTunnel(A) } });
+        const helper = keyPair();
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'BrakeHelper', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(helper.pub);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(helper.pub);
+        const bgElsewhere = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': code, ...viaTunnel(A) } });
+        assert(bgElsewhere.status === 429, `the code from the braked address on any other route gets the brake's 429, as a wrong password does (got ${bgElsewhere.status})`);
+        const bg = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(A) }, body: { memberPubkey: helper.pub, role: 'admin' } });
+        assert(bg.status === 200, `a break-glass code from the braked address is still checked on the enrol route (got ${bg.status})`);
+        const bgWrong = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': 'not-the-code', ...viaTunnel(A) }, body: { memberPubkey: helper.pub, role: 'admin' } });
         assert(bgWrong.status === 429, `a wrong code from it gets the brake's 429, not a password check (got ${bgWrong.status})`);
     }
 

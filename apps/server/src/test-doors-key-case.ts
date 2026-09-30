@@ -250,15 +250,15 @@ async function main(): Promise<void> {
     assert(rowsFor(bob.pk).length === 1 && rowsFor(vera.pk).length === 1 && rowsFor(nia.pk).length === 0,
         `still one row for Bob's key, one for Vera's, none for Nia's (${rowsFor(bob.pk).length}/${rowsFor(vera.pk).length}/${rowsFor(nia.pk).length})`);
 
-    const niaJoin = await call('POST', null, '/api/invite/redeem', { code, publicKey: nia.pk, callsign: 'Nia' });
+    const niaJoin = await call('POST', nia, '/api/invite/redeem', { code, publicKey: nia.pk, callsign: 'Nia' });
     assert(niaJoin.status === 200 && niaJoin.body?.member?.publicKey === nia.pk && codeRow()?.used_by === nia.pk,
         `the one spelling still joins: Nia is a member and the code is used by her key (${show(niaJoin)})`);
-    const bobAgain = await call('POST', null, '/api/invite/redeem', { code: generateInvite(alice.pk)!.code, publicKey: bob.pk, callsign: 'Bob' });
+    const bobAgain = await call('POST', bob, '/api/invite/redeem', { code: generateInvite(alice.pk)!.code, publicKey: bob.pk, callsign: 'Bob' });
     assert(bobAgain.status === 200 && bobAgain.body?.alreadyMember === true && rowsFor(bob.pk).length === 1,
         `Bob's key in the one spelling is answered "already a member", as before (${show(bobAgain)})`);
     const nora = keypair('Nora');
     const noraTicket = offlineTicket(alice);
-    const noraJoin = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pk, callsign: 'Nora' });
+    const noraJoin = await call('POST', nora, '/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pk, callsign: 'Nora' });
     assert(noraJoin.status === 200 && hasRow(nora.pk)
         && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(ticketCode(noraTicket)) as any)?.used_by === nora.pk,
         `the one spelling still joins with an offline ticket (${show(noraJoin)})`);
@@ -502,7 +502,7 @@ async function main(): Promise<void> {
         const before = snapshot(['onboarding_funnel']);
         const counted = refusals('invalid');
         const check = await inviteCheck(`BP-${t}`);
-        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        const r = await call('POST', tia, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
         const changed = changedTables(before, snapshot(['onboarding_funnel']));
         assert(r.status === 400 && check.status === 200 && check.body?.valid === false && changed.length === 0 && refusals('invalid') === counted + 1
             && !db.prepare('SELECT 1 FROM invite_codes WHERE code = ?').get(ticketCode(t)) && !hasRow(tia.pk),
@@ -511,7 +511,7 @@ async function main(): Promise<void> {
     {
         const t = offlineTicket(bob);
         const check = await inviteCheck(`BP-${t}`);
-        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        const r = await call('POST', tia, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
         assert(check.body?.valid === true && r.status === 200 && (db.prepare('SELECT invited_by FROM members WHERE public_key = ?').get(tia.pk) as any)?.invited_by === bob.pk,
             `a ticket Bob signs naming his own key in the one spelling still admits, invited by Bob (${show(check)}; ${show(r)})`);
     }
@@ -523,7 +523,7 @@ async function main(): Promise<void> {
         const before = snapshot(['onboarding_funnel']);
         const counted = refusals('inviter_gone');
         const check = await inviteCheck(strayCode);
-        const r = await call('POST', null, '/api/invite/redeem', { code: strayCode, publicKey: uma.pk, callsign: 'Uma' });
+        const r = await call('POST', uma, '/api/invite/redeem', { code: strayCode, publicKey: uma.pk, callsign: 'Uma' });
         const changed = changedTables(before, snapshot(['onboarding_funnel']));
         assert(r.status === 400 && check.body?.valid === false && check.body?.reason === 'unknown_inviter' && changed.length === 0 && refusals('inviter_gone') === counted + 1
             && !hasRow(uma.pk) && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(strayCode) as any)?.used_by == null,

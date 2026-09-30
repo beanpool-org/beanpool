@@ -193,8 +193,8 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         ctx.body = { error: 'Only an owner or admin of this node can issue invites' };
         return;
     }
-    // Who issued it, for the audit trail: the signed member under a key session (or a break-glass code),
-    // 'owner:password' under the node password — the same attribution the node-roles routes use.
+    // Who issued it, for the audit trail: the signed member under a key session, 'owner:password' under the node
+    // password — the same attribution the node-roles routes use. (A break-glass code reaches the enrol routes only.)
     const issuedBy: string = (ctx.state as any)?.actor || 'owner:password';
 
     // Validate invite type
@@ -358,7 +358,7 @@ router.post('/api/local/change-password', async (ctx) => {
     // with it sign in anywhere the password works.
     // When checkAdminAuth has just verified this very string as the node password (a password caller, or a body-only
     // client whose currentPassword was its sign-in), that is the proof: checking it again would only run scrypt and
-    // take the brake a second time. Anything else (a key session, a break-glass code, a different string) is checked.
+    // take the brake a second time. Anything else (a key session, a different string) is checked.
     const proven = typeof ctx.state?.verifiedAdminPassword === 'string' ? Buffer.from(ctx.state.verifiedAdminPassword) : null;
     const given = typeof currentPassword === 'string' ? Buffer.from(currentPassword) : null;
     const alreadyProven = !!proven && !!given && proven.length === given.length && crypto.timingSafeEqual(proven, given);
@@ -1000,26 +1000,54 @@ function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMembe
 
 /**
  * Whether this request carries a fresh signature by `publicKey` itself, in the replay-proof scheme the signature
- * middleware checks. The two redeem routes skip that middleware (the joiner may hold no member key yet), and both apps
- * sign them anyway. It decides what an answer holds, and whether a visitor's row may join (engine/invites.ts
- * unsignedVisitorRefusal). The nonce is not spent here: the signature covers the body, so a replay within the window can
- * only repeat what the key's holder asked for (this code, this key, this name), and once that has joined the row is a
- * member's and a replay is answered "already a member".
+ * middleware checks: the verifier's verdict, or null when it is not signed by that key at all. The two redeem routes
+ * skip that middleware (the joiner holds no member key yet) and check it here instead: a redeem must be signed by the key
+ * it registers (requireRedeemSignature). The nonce is not spent here: the signature covers the body, so a replay within
+ * the window can only repeat what the key's holder asked for (this code, this key, this name), and once that has joined
+ * the row is a member's and a replay is answered "already a member".
  */
-function signedByKey(ctx: any, publicKey: string): boolean {
+function redeemSignature(ctx: any, publicKey: string): ReturnType<typeof verifyMemberSignature> | null {
     const signer = ctx.get('X-Public-Key');
     const signature = ctx.get('X-Signature');
     const timestamp = ctx.get('X-Timestamp');
     const nonce = ctx.get('X-Nonce');
-    if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return false;
+    if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return null;
     // The one verifier (engine/member-signature.ts), in the middleware's window: signed for this community (a redeem
-    // signed at another counts as unsigned here), or in the old format until the switch.
+    // signed at another is refused 421 here), or in the old format until the switch (426 after it).
     const signedForHeader = ctx.headers?.[SIGNED_FOR_HEADER.toLowerCase()];
-    const verdict = verifyMemberSignature({
+    return verifyMemberSignature({
         pubKeyHex: signer, signature, timestamp, nonce, method: ctx.method, path: ctx.path, body: ctx.rawBody ?? '',
         signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
     }, { consumeNonce: false });
-    return verdict.ok;
+}
+
+function signedByKey(ctx: any, publicKey: string): boolean {
+    return redeemSignature(ctx, publicKey)?.ok === true;
+}
+
+/** What an unsigned redeem, or one signed by another key, is answered (401 `redeem_unsigned`). */
+const REDEEM_UNSIGNED_ERROR = 'This join must be signed by the key it registers. Update the BeanPool app and try again.';
+
+/**
+ * A redeem registers the key it names, so it must be signed by that key (Fable's security review 2026-10-01, LOW 4).
+ * Unsigned, anyone holding a code could register someone else's key (a member of another community, copied from its
+ * directory) under a name of their choosing: an account that key's holder never asked for and cannot see. Both apps
+ * have signed their redeems since the first public release (native utils/db.ts redeemInvite; the web join passes its new
+ * key), so no app in the stores sends one unsigned. Answered before the code or ticket is looked at, so it stays unused.
+ * A redeem signed for another community is 421 and an old-format one after the switch 426, as for any signed request.
+ * Returns false, with the answer set, when refused.
+ */
+function requireRedeemSignature(ctx: any, joiner: string): boolean {
+    const verdict = redeemSignature(ctx, joiner);
+    if (verdict?.ok) return true;
+    if (verdict && (verdict.status === 421 || verdict.status === 426)) {
+        ctx.status = verdict.status;
+        ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
+        return false;
+    }
+    ctx.status = 401;
+    ctx.body = { error: verdict ? verdict.error : REDEEM_UNSIGNED_ERROR, code: 'redeem_unsigned' };
+    return false;
 }
 
 /**
@@ -1052,17 +1080,17 @@ router.post('/api/invite/redeem', async (ctx) => {
     // One key, one spelling, before anything is looked up or written: the code stays unused.
     const joiner = redeemKey(ctx, publicKey);
     if (!joiner) return badRedeemKey(ctx);
+    // Signed by the key it registers, before the code is looked at.
+    if (!requireRedeemSignature(ctx, joiner)) return;
 
-    // A visitor's row joins only on a redeem its own key signed; a key with no row joins unsigned, as before.
-    const result = redeemInvite(code, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
+    const result = redeemInvite(code, joiner, callsign.slice(0, 20), true);
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;
     }
-    // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
-    // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
-    // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
+    // For a publicKey that is already a member this answers before the code is checked as used. The public card only:
+    // the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
     ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 
@@ -1073,16 +1101,18 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: 'ticketB64, publicKey, and callsign are required' };
         return;
     }
-    // One key, one spelling, as /api/invite/redeem above: before the ticket is read, so it stays unused.
+    // One key, one spelling, and signed by that key, as /api/invite/redeem above: before the ticket is read, so it
+    // stays unused.
     const joiner = redeemKey(ctx, publicKey);
     if (!joiner) return badRedeemKey(ctx);
-    const result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
+    if (!requireRedeemSignature(ctx, joiner)) return;
+    const result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true);
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;
     }
-    // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
+    // The public card only, as /api/invite/redeem above.
     ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 

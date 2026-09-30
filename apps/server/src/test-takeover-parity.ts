@@ -339,7 +339,7 @@ async function main(): Promise<void> {
         const join = async (who: Id) => {
             const inv = built(`Gwen makes an invite for ${who.name}`, await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
             const code = inv.invite?.code ?? inv.code;
-            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { body: { code, publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         };
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
@@ -602,7 +602,7 @@ async function main(): Promise<void> {
         await both('approve the pending request', postAs(dee, '/api/marketplace/transactions/approve', { transactionId: pending.id, authorPublicKey: dee.pk }));
         const joiner = newId('Ivy');
         await both('redeem the unused invite', (base) => api(base, 'POST', '/api/invite/redeem', {
-            body: { code: unusedInvite.invite?.code ?? unusedInvite.code, publicKey: joiner.pk, callsign: 'Ivy' },
+            as: joiner, body: { code: unusedInvite.invite?.code ?? unusedInvite.code, publicKey: joiner.pk, callsign: 'Ivy' },
         }));
         // As the minute tick would run it eight days on: the removal's grace period is over, the open Decision closed.
         const eightDaysOn = Date.now() + 8 * 86400_000;

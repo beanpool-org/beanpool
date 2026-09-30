@@ -599,8 +599,10 @@ async function main(): Promise<void> {
             assert(v1Before.status === 200, `and before it, accepted as before (${show(v1Before)})`);
 
             const joiner = (n: string) => id(n);
-            const redeem = (node: Node, ticket: string, j: Id) =>
-                call(node, 'POST', '/api/invite/redeem-offline', {}, JSON.stringify({ ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
+            // Signed by the joiner's key for the node it is sent to, as both apps sign a redeem (the node registers no key a
+            // redeem isn't signed by): what is tested here is the ticket's binding, not the redeem's.
+            const redeem = async (node: Node, ticket: string, j: Id) => sendTo(node, 'POST',
+                await bound(j, 'POST', `https://${node.name}.test/api/invite/redeem-offline`, { ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
             const check = (node: Node, ticket: string) => call(node, 'GET', `/api/invite/check?code=${encodeURIComponent(`BP-${ticket}`)}`);
             const ticketA = await core.buildInviteTicket('https://a.test', mia.pk, mia.sign);
             const jA = joiner('JoA'), jB = joiner('JoB');
@@ -797,8 +799,9 @@ async function main(): Promise<void> {
             await A.send('resetLimits');
             let n = 0;
             const joiner = () => id(`JoOnce${++n}`);
-            const redeem = (ticket: string, j: Id) =>
-                call(A, 'POST', '/api/invite/redeem-offline', {}, JSON.stringify({ ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
+            // Signed by the joiner's key, as section 9's.
+            const redeem = async (ticket: string, j: Id) => sendTo(A, 'POST',
+                await bound(j, 'POST', 'https://a.test/api/invite/redeem-offline', { ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
             const sigOf = (ticket: string) => JSON.parse(Buffer.from(ticket, 'base64').toString('utf8')).s as string;
             /** The ticket with its signature `s` written another way: the same 64 bytes. */
             const respell = (ticket: string, f: (s: string) => string) => {

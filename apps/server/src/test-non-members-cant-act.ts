@@ -464,27 +464,27 @@ async function main(): Promise<void> {
         const check = await unsigned('GET', `/api/invite/check?code=${encodeURIComponent(pruneyCode.body.invite.code)}`);
         assert(check.body?.valid === false && check.body?.reason === 'unknown_inviter',
             `the pre-flight check says a pruned member's code no longer works (got ${JSON.stringify(check.body)})`);
-        const redeem = await unsigned('POST', '/api/invite/redeem',
+        const redeem = await signedFetch('POST', '/api/invite/redeem', newcomer,
             { code: pruneyCode.body.invite.code, publicKey: newcomer.pubKeyHex, callsign: newcomer.callsign });
         assert(redeem.status === 400 && !isMemberRow(newcomer.pubKeyHex), `a code made before the prune no longer redeems (got ${redeem.status})`);
 
         const ticketCheck = await unsigned('GET', `/api/invite/check?code=${encodeURIComponent('BP-' + pruneyTicket)}`);
         assert(ticketCheck.body?.valid === false && ticketCheck.body?.reason === 'unknown_inviter',
             `nor does its offline ticket pass the check (got ${JSON.stringify(ticketCheck.body)})`);
-        const offline = await unsigned('POST', '/api/invite/redeem-offline',
+        const offline = await signedFetch('POST', '/api/invite/redeem-offline', newcomer,
             { ticketB64: pruneyTicket, publicKey: newcomer.pubKeyHex, callsign: newcomer.callsign });
         assert(offline.status === 400 && !isMemberRow(newcomer.pubKeyHex), `nor does an offline ticket it signed (got ${offline.status})`);
 
         // Controls: a live member's invite and an admin's still redeem.
         const aliceCode = await signedFetch('POST', '/api/invite/generate', alice, { publicKey: alice.pubKeyHex });
         const viaAlice = keypair('ViaAliceNM');
-        const aliceRedeem = await unsigned('POST', '/api/invite/redeem',
+        const aliceRedeem = await signedFetch('POST', '/api/invite/redeem', viaAlice,
             { code: aliceCode.body?.invite?.code, publicKey: viaAlice.pubKeyHex, callsign: viaAlice.callsign });
         assert(aliceRedeem.status === 200 && isMemberRow(viaAlice.pubKeyHex), `a live member's invite still redeems (got ${aliceRedeem.status})`);
 
         const seed = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
         const viaAdmin = keypair('ViaAdminNM');
-        const adminRedeem = await unsigned('POST', '/api/invite/redeem',
+        const adminRedeem = await signedFetch('POST', '/api/invite/redeem', viaAdmin,
             { code: seed.body?.code, publicKey: viaAdmin.pubKeyHex, callsign: viaAdmin.callsign });
         assert(seed.status === 200 && adminRedeem.status === 200 && isMemberRow(viaAdmin.pubKeyHex),
             `an admin's invite still redeems (got ${seed.status}, ${adminRedeem.status})`);
@@ -493,7 +493,7 @@ async function main(): Promise<void> {
         adminPruneUser(founder.pubKeyHex, 'owner:password');
         const seed2 = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
         const viaAdmin2 = keypair('ViaAdminTwoNM');
-        const adminRedeem2 = await unsigned('POST', '/api/invite/redeem',
+        const adminRedeem2 = await signedFetch('POST', '/api/invite/redeem', viaAdmin2,
             { code: seed2.body?.code, publicKey: viaAdmin2.pubKeyHex, callsign: viaAdmin2.callsign });
         assert(seed2.status === 200 && adminRedeem2.status === 200 && isMemberRow(viaAdmin2.pubKeyHex),
             `with the genesis member pruned, an admin's invite still redeems (got ${seed2.status}, ${adminRedeem2.status} ${JSON.stringify(adminRedeem2.body)})`);
@@ -928,7 +928,7 @@ async function main(): Promise<void> {
         const code = (await signedFetch('POST', '/api/invite/generate', alice, { publicKey: alice.pubKeyHex })).body?.invite?.code;
         for (const [how, s] of closed) {
             const account = JSON.stringify(accountOf(s.m.pubKeyHex));
-            const r = await unsigned('POST', '/api/invite/redeem', { code, publicKey: s.m.pubKeyHex, callsign: 'Back again NM' });
+            const r = await signedFetch('POST', '/api/invite/redeem', s.m, { code, publicKey: s.m.pubKeyHex, callsign: 'Back again NM' });
             assert(r.status === 400 && /account in this community was closed/.test(r.body?.error ?? '') && r.body?.member === undefined,
                 `${how}: redeeming an invite with the key is refused, not answered as a member (got ${r.status} ${JSON.stringify(r.body)})`);
             assert(JSON.stringify(accountOf(s.m.pubKeyHex)) === account, `${how}: and the account stays closed`);

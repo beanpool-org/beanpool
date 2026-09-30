@@ -414,9 +414,9 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
 }
 
 /**
- * The key a redeem names, when it isn't saved in this browser yet: the web invite join saves its new key only once the
- * node has taken the invite (WelcomePage handleCreate). The redeem is signed with it all the same, as both apps sign
- * theirs (apps/server/src/routes/community.ts signedByKey); `request` would sign with the saved identity, if any.
+ * The key a redeem names. The node registers no key a redeem isn't signed by (apps/server/src/routes/community.ts
+ * requireRedeemSignature), and the web invite join saves its new key only once the node has taken the invite
+ * (WelcomePage handleCreate), so every caller passes the key it names; `request` would sign with the saved identity, if any.
  */
 export type RedeemSigner = { publicKey: string; privateKey: string };
 

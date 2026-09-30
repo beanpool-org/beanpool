@@ -28,6 +28,18 @@ expect() {
   ok "$desc"
 }
 
+# ── suite-count-line.mjs: the NO-COUNT guard of run-server-suites.mjs ─────────────────────────────────────────────
+# counted <want 0=counted, 1=not> <description> <log, with \n for newlines>
+counted() {
+  expect "$1" "$2" "" -- node --input-type=module -e '
+    import { hasCountLine } from "'"$REPO_ROOT"'/scripts/suite-count-line.mjs";
+    process.exit(hasCountLine(process.argv[1].replace(/\\n/g, "\n")) ? 0 : 1);' "$3"
+}
+counted 0 "count line: \"3/3 passed\" is a closing count" '✓ one\n3/3 passed'
+counted 0 "count line: \"ALL TESTS PASSED\" and \"All 5 checks passed\" are closing counts" 'ALL TESTS PASSED\nAll 5 checks passed'
+counted 1 "count line: checks with no closing count are not counted (NO-COUNT)" '✓ one\n✓ two'
+counted 1 "count line: a line ending \"1/2\" and a later line with \"passed\" are not one count (#1334 confirmation 3)" '— step 1/2\n✓ the first check passed'
+
 # ── check-deps-installed.mjs ─────────────────────────────────────────────────────────────────────────────────────
 D="$T/deps"
 mkdir -p "$D/apps/a" "$D/packages/p" "$D/node_modules/left-pad" "$D/node_modules/@scope/kit" "$D/apps/a/node_modules/only-here"

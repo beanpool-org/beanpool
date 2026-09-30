@@ -38,6 +38,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_ENV, SUITES, VARIANTS, SERIAL } from './server-suites.mjs';
+import { hasCountLine } from './suite-count-line.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_DIR = path.join(ROOT, 'apps/server');
@@ -209,7 +210,7 @@ function runOne(run, workDir) {
             // A suite that exits 0 without its closing count (N/N passed, or its PASSED line) stopped part-way: something it
             // drove in its own process exited with 0, and every check after that ran nowhere. It fails, as NO-COUNT (#1334,
             // review 4139589216: a standby suite stopped at 32 of its 82 checks, and exit 0 alone counted it green).
-            const counted = () => COUNT_LINE.test(fs.readFileSync(run.log, 'utf8'));
+            const counted = () => hasCountLine(fs.readFileSync(run.log, 'utf8'));
             const status = timedOut ? 'timeout' : code !== 0 ? 'fail' : counted() ? 'pass' : 'nocount';
             resolve({ ...run, status, code, signal: sig, seconds });
         };
@@ -231,8 +232,6 @@ const fmt = (s) => {
 const header = (r) => `━━━ ${r.name}${r.label ? ` (${r.label})` : ''} ━━━`;
 const rollupName = (r) => (r.status === 'timeout' ? (r.tag ? `${r.name}(${r.tag},TIMEOUT)` : `${r.name}(TIMEOUT)`)
     : r.status === 'nocount' ? (r.tag ? `${r.name}(${r.tag},NO-COUNT)` : `${r.name}(NO-COUNT)`) : r.id);
-/** The closing count a suite prints when every check ran: `N/N passed`, `PASSED`, `All N … passed`. */
-const COUNT_LINE = /PASSED|[0-9]+ ?\/ ?[0-9]+[^0-9].*passed|passed.*[0-9]+ ?\/ ?[0-9]+|All [0-9]+ .*passed/;
 
 async function runAll(runs, jobs, root, results) {
     const queue = [...runs];

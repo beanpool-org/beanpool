@@ -86,7 +86,7 @@ import {
 import { finishMove, moveLater, removeInstead, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
-    approvedHolds, approveVaultHold, connectWanted, holdEndsText, vaultRefusal, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
+    approvedHolds, approveVaultHold, connectWanted, holdAnswerIsFinal, holdEndsText, vaultRefusal, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
     takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
@@ -914,6 +914,27 @@ describe('status, disconnect, push token, and the check at app open', () => {
     it('Account Protection\'s spinner waits only in front of the sign-in part: the 12 words never wait behind the vault', () => {
         const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
         expect(settings).toMatch(/\{protectionLoading \? \([\s\S]*?<KeeperProtectionPanel[\s\S]*?\/>\s*<\/>\s*\)\}\s*<>\s*\{\/\* On every phone\./);
+    });
+
+    it('a Stop or "Yes, it\'s me" that came too late gets a final answer in the app\'s words, never "try again later"', async () => {
+        await memberOnCommunity();
+        await connect('google');
+        await startSsoRestore('google');
+        const [hold] = (await vaultStatus(member)).holds;
+        const real = net.vault.handle.bind(net.vault);
+        net.vault.handle = (req: SentRequest) => req.path === '/v1/holds/cancel' || req.path === '/v1/holds/approve'
+            ? { status: 409, body: { error: 'That restore was already collected.', code: 'collected' } }
+            : real(req);
+        const stop = await stopVaultHold(member, hold.holdId).catch(e => e);
+        const yes = await approveVaultHold(member, hold.holdId).catch(e => e);
+        for (const e of [stop, yes]) {
+            expect(e).toMatchObject({ code: 'collected', message: VAULT_MESSAGES.holdCollected });
+            expect(holdAnswerIsFinal(e)).toBe(true);
+            expect(e.message).not.toMatch(/try again/i);
+        }
+        expect(vaultRefusal(409, { code: 'stopped' }).message).toBe(VAULT_MESSAGES.holdStopped);
+        expect(vaultRefusal(404, { code: 'no_hold' }).message).toBe(VAULT_MESSAGES.holdGone);
+        expect(holdAnswerIsFinal(vaultRefusal(400, { code: 'bad_box' }))).toBe(false);
     });
 
     it('a VaultError carries the vault\'s reason', () => {

@@ -97,7 +97,18 @@ export const VAULT_MESSAGES = {
     noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
     tooMany: 'Too many tries just now. Please try again later.',
     signInRefused: "BeanPool's key vault couldn't check that sign-in, so nothing happened. Try again. Your 12 words work any time.",
+    /** A Stop (or "Yes, it's me") after the other device already collected: it has the account now. */
+    holdCollected: 'That restore has already gone through: the other phone or computer has your account now. If it wasn\'t you, '
+        + "someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's "
+        + 'admins for help.',
+    holdStopped: "That restore was already stopped. It won't go through.",
+    holdGone: 'That restore is no longer waiting at the key vault.',
 } as const;
+
+/** Whether a refused Stop or "Yes, it's me" is a final answer (collected, already stopped, gone), not one to try again. */
+export function holdAnswerIsFinal(e: unknown): boolean {
+    return e instanceof VaultError && (e.code === 'collected' || e.code === 'stopped' || e.code === 'no_hold');
+}
 
 export type VaultFailure =
     /** This build has no vault. */
@@ -165,6 +176,10 @@ export function vaultRefusal(status: number, body: unknown): VaultError {
             + 'or you can use your 12 words here.', code);
     }
     if (status === 429) return new VaultError('rate_limited', VAULT_MESSAGES.tooMany, code);
+    // A Stop or "Yes, it's me" that came too late: final answers, not ones to try again (confirmation review NEW-3).
+    if (status === 409 && code === 'collected') return new VaultError('refused', VAULT_MESSAGES.holdCollected, code);
+    if (status === 409 && code === 'stopped') return new VaultError('refused', VAULT_MESSAGES.holdStopped, code);
+    if (status === 404 && code === 'no_hold') return new VaultError('refused', VAULT_MESSAGES.holdGone, code);
     if (status === 401 && (code === 'signin_refused' || code?.startsWith('ticket_'))) return new VaultError('refused', VAULT_MESSAGES.signInRefused, code);
     return new VaultError('refused', `BeanPool's key vault couldn't do that (${status}). Try again later. Your 12 words work any time.`, code);
 }

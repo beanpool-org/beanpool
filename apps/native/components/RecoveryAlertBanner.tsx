@@ -25,11 +25,17 @@ import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import {
-    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdEndsText, stopVaultHold, vaultCopyKnowledge, vaultStatus,
+    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdAnswerIsFinal, holdEndsText, stopVaultHold, vaultCopyKnowledge,
+    vaultStatus,
     type VaultHold,
 } from '../utils/vault';
 
 export const RECOVERY_ALERT_COPY = {
+    /** The title over a final answer to a Stop or "Yes, it's me" (utils/vault.ts `holdAnswerIsFinal`). */
+    finalTitle: (e: unknown) => {
+        const code = (e as { code?: string } | null)?.code;
+        return code === 'collected' ? 'Already gone through' : code === 'stopped' ? 'Already stopped' : 'No longer waiting';
+    },
     approvedTitle: 'Let through',
     approvedBody: (name: string) => `You let the restore with ${name} through. Your other phone or computer gets your account `
         + 'the next time it checks.',
@@ -202,7 +208,9 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             onStopSuccess?.();
                             Alert.alert('Stopped', `The restore with ${name} won't go through. To be safe, check that your ${name} account's password is one only you know.`);
                         } catch (e) {
-                            Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
+                            // Too late (collected), already stopped, or gone: a final answer, never "try again".
+                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), (e as Error).message);
+                            else Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);
@@ -232,7 +240,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             setApproved(a => [...a, hold.holdId]);
                             Alert.alert('Let through', 'Your other phone or computer gets your account the next time it checks, in about a minute.');
                         } catch (e) {
-                            Alert.alert('Not let through', `${(e as Error).message} Try again.`);
+                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), (e as Error).message);
+                            else Alert.alert('Not let through', `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);

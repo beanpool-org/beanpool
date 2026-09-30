@@ -9,6 +9,7 @@
  * the vault is fake-vault.ts's, and every request is counted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Alert } from 'react-native';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -17,7 +18,9 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const app = vi.hoisted(() => ({ listeners: [] as ((s: string) => void)[] }));
 vi.mock('react-native', () => {
-    const el = (tag: string) => ({ children }: { children?: ReactNode }) => createElement(tag, null, children);
+    // A button's onPress becomes a click, so a test can press it.
+    const el = (tag: string) => ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
+        createElement(tag, onPress ? { onClick: onPress } : null, children);
     return {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), TouchableOpacity: el('button'), ActivityIndicator: el('i'),
@@ -229,5 +232,32 @@ describe('a hold this phone let through ("Yes, it\'s me")', () => {
         expect(text).toContain('You let the restore with Google through.');
         expect(text).not.toContain('Stop');
         expect(text).not.toContain("Yes, it's me");
+    });
+});
+
+describe('a Stop that comes after the other device collected (confirmation review NEW-3)', () => {
+    it('says it has already gone through, and never "try again"', async () => {
+        vi.useRealTimers();
+        await memberWithCopy();
+        net.vault.holds.set('hold-y', {
+            holdId: 'hold-y', copy: 'google:google-sub-42', requester: 'ab'.repeat(32), provider: 'google',
+            openedAt: Date.now(), releaseAt: Date.now() + 86_400_000, cancelled: false, released: false,
+        });
+        // The other device collects between the banner showing and the member's Stop: the vault answers 409 collected.
+        const real = net.vault.handle.bind(net.vault);
+        net.vault.handle = (req) => req.path === '/v1/holds/cancel'
+            ? { status: 409, body: { error: 'That restore was already collected.', code: 'collected' } }
+            : real(req);
+        vi.useFakeTimers();
+        await mountAndWait(1);
+        const stop = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Stop'))!;
+        await act(async () => { stop.click(); });
+        const [, , buttons] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+        await act(async () => { await (buttons as { text: string; onPress?: () => Promise<void> }[]).find(b => b.text === 'Stop it')!.onPress!(); });
+        const [title, message] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+        expect(title).toBe('Already gone through');
+        expect(message).toContain('That restore has already gone through: the other phone or computer has your account now.');
+        expect(message).not.toMatch(/try again/i);
+        expect(message).not.toContain('already collected');
     });
 });

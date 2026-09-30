@@ -608,23 +608,24 @@ async function runTests() {
         }
         assert(observerAcceptFailed, '10s-observer-accept. Observer Dave CANNOT accept a group-scoped post');
 
-        // Direct post to Dave cannot be requested or accepted by Carol
+        // Direct post to Dave cannot be requested or accepted by Carol — and, as for a group post above, she is told what an
+        // unknown post id gets (engine/post-sight.ts): "This direct post is not addressed to you" confirmed it was one.
         const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
         let nonTargetReqFailed = false;
         try {
             requestPost(directOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonTargetReqFailed = e.message.includes('UNAUTHORIZED');
+            nonTargetReqFailed = e.message === 'Post not found';
         }
-        assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post');
+        assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post (told "Post not found")');
 
         let nonTargetAcceptFailed = false;
         try {
             acceptPost(directOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonTargetAcceptFailed = e.message.includes('UNAUTHORIZED');
+            nonTargetAcceptFailed = e.message === 'Post not found or not active';
         }
-        assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post');
+        assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post (told "Post not found or not active")');
 
         // 7. Public posts clear foreign target fields:
         const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
@@ -744,14 +745,15 @@ async function runTests() {
             pollOptions: [{ id: 'opt_yes', text: 'Yes' }, { id: 'opt_no', text: 'No' }]
         })!;
 
-        // Bob (not target or assigned) attempts to vote on direct poll -> MUST fail
+        // Bob (not target or assigned) attempts to vote on direct poll -> MUST fail, told what an unknown poll id gets
+        // (engine/post-sight.ts): "This direct poll is not addressed to you" confirmed it was one.
         let nonTargetVoteFailed = false;
         try {
             votePoll(directPoll.id, bob.pubKeyHex, 'opt_yes');
         } catch (e: any) {
-            nonTargetVoteFailed = e.message.includes('UNAUTHORIZED') && e.message.includes('direct poll is not addressed to you');
+            nonTargetVoteFailed = e.message === 'Poll not found';
         }
-        assert(nonTargetVoteFailed, '10dd. Non-target Bob CANNOT vote on direct-scoped poll');
+        assert(nonTargetVoteFailed, '10dd. Non-target Bob CANNOT vote on direct-scoped poll (told "Poll not found")');
 
         // Target Dave votes on direct poll -> MUST succeed
         const targetVote = votePoll(directPoll.id, dave.pubKeyHex, 'opt_yes');

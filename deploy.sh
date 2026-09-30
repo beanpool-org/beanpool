@@ -457,7 +457,7 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/"8080:8080"/d' docker-compose.yml
       sed -i '/"8443:8443"/d' docker-compose.yml
     fi
-    echo "Public IP: $PUBLIC_IP"
+    echo "Public IP: \$PUBLIC_IP"
     echo "DNS Record: $CF_RECORD_NAME"
     if [ -n "${DEPLOY_TAG:-}" ]; then
       echo "Image Tag: ${DEPLOY_TAG}"

@@ -191,7 +191,9 @@ async function main(): Promise<void> {
     assertThrows(() => getEventThread('not-an-event-id', host), /Event not found/, 'a chat for something that is not an event is a 404');
     assert(!!getEventThread(entEv.id, keeper).isHost, 'a keeper of the enterprise host reads without an RSVP');
     assert(!!getEventThread(groupEv.id, convenor).isHost, 'an active convenor of the group reads without an RSVP');
-    assertThrows(() => getEventThread(groupEv.id, stranger), /Only the host and people going/, 'a non-member cannot open a group-only event chat');
+    // Told what an id nobody has gets (engine/post-sight.ts): "Only the host and people going" confirmed that the group's
+    // event exists to someone who can't see it, an invite-only group's included.
+    assertThrows(() => getEventThread(groupEv.id, stranger), /^Event not found$/, 'a non-member cannot open a group-only event chat, and is told "Event not found"');
 
     // The participants mirror is not authority: a row left behind by a replica is not a ticket in.
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(ev.id, maybe);

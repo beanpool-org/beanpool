@@ -1939,6 +1939,29 @@ export function isFreshProjectId(id: unknown): id is string {
 }
 
 /**
+ * Does `id` name money already on this node: one of the ledger's own accounts (the Commons, an escrow, a bridge), any
+ * account or member row, the escrow `escrow_<id>`, a crowdfund project, a deal, or a cross-community settlement?
+ *
+ * For ids a caller chooses. A cross-community settlement holds its Beans in `escrow_<key>`, so a key naming a project's
+ * or a deal's escrow had that escrow paid out to whoever abandoned the settlement (federation-settlement-exchange.ts
+ * beginOutboundSettlement). A post's id once named `escrow_<post id>` too. Every other id that names an account is made
+ * by the node (a deal's, a pledge's, a project's, an enterprise's key), so it names nothing until the node makes it.
+ * Only an outbound settlement counts: an inbound one's key is the peer's choice and names no account here (the seller's
+ * side has no escrow), so counting it would let a trading peer take ids the node makes itself, like `pulse_<date>`.
+ */
+export function idNamesMoney(id: string): boolean {
+    if (isSyntheticAccount(id)) return true;
+    return !!db.prepare(`
+        SELECT 1 FROM members WHERE public_key = @id
+        UNION ALL SELECT 1 FROM accounts WHERE public_key = @id OR public_key = 'escrow_' || @id
+        UNION ALL SELECT 1 FROM projects WHERE id = @id
+        UNION ALL SELECT 1 FROM marketplace_transactions WHERE id = @id
+        UNION ALL SELECT 1 FROM settlements WHERE key = @id AND direction = 'outbound'
+        LIMIT 1
+    `).get({ id });
+}
+
+/**
  * Does `id` name something that is never a crowdfund project: a person (a member's or visitor's row that isn't an
  * enterprise), or one of the ledger's own accounts (the Commons, an escrow, a bridge)? Every project is its own
  * enterprise row (createCrowdfundProject, a bounded POST /api/enterprise, the Slice 3 migration), or an older projects

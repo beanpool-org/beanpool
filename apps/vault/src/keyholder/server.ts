@@ -61,7 +61,11 @@ export interface KeyholderServer {
     close(): Promise<void>;
 }
 
-export async function listenKeyholder(kh: Keyholder, socketPath: string): Promise<KeyholderServer> {
+/**
+ * `mode`: 0600 by default; the image gives 0660 with the keyholder's group, which only the API's user is in (the
+ * directory is systemd's RuntimeDirectory, owned by the keyholder and that group).
+ */
+export async function listenKeyholder(kh: Keyholder, socketPath: string, mode = 0o600): Promise<KeyholderServer> {
     const dir = path.dirname(socketPath);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (existsSync(socketPath)) rmSync(socketPath);
@@ -94,6 +98,39 @@ export async function listenKeyholder(kh: Keyholder, socketPath: string): Promis
                 }
             });
         });
+    });
+    await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(socketPath, () => resolve());
+    });
+    chmodSync(socketPath, mode);
+    return {
+        close: () => new Promise<void>(resolve => {
+            for (const s of sockets) s.destroy();
+            server.close(() => resolve());
+        }),
+    };
+}
+
+/**
+ * The data partition's key for root (the image's vault-data helper): each connection gets K_disk's 32 bytes and is
+ * closed while the vault is open, and is closed with nothing while it is locked. The socket is 0600 in a 0700
+ * directory, both the keyholder's own, so only the keyholder's user and root can connect; nothing is read from the
+ * connection. See Keyholder.diskKey.
+ */
+export async function listenDiskKey(kh: Keyholder, socketPath: string): Promise<KeyholderServer> {
+    const dir = path.dirname(socketPath);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    if (existsSync(socketPath)) rmSync(socketPath);
+    const sockets = new Set<net.Socket>();
+    const server = net.createServer(socket => {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => socket.destroy());
+        const key = kh.diskKey();
+        if (!key) return void socket.end();
+        socket.end(key, () => key.fill(0));
     });
     await new Promise<void>((resolve, reject) => {
         server.once('error', reject);

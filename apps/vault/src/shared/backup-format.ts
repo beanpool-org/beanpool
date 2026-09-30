@@ -45,6 +45,75 @@ export interface ParsedBackup {
 
 export const BACKUP_NAME_RE = /^bv-\d{8}T\d{6}Z(?:-\d+)?\.bin$/;
 
+/** A restore from backup waiting for the unlock, in the API's `restoreDir`: a copy of one backup file. */
+export const RESTORE_PENDING_NAME = 'restore-pending.bin';
+
+/**
+ * The keyholder's marker for that restore, in its `stateDir`: written only when custodians restore a backup into a fresh
+ * vault (adoptState), removed once the restore is finished. Root's monthly step keeps a pending restore by it.
+ */
+export const RESTORE_MARKER_NAME = 'restore-pending.json';
+
+/**
+ * Local backups kept at most, whatever their size: the API writes one an hour and keeps 30 days (about 720, and a
+ * same-second one rarely), so 1,000 leaves a wide margin. Without it, empty files under backup names would cost no
+ * bytes and could use up the state partition's inodes.
+ */
+export const MAX_BACKUP_FILES = 1000;
+
+/** What a backup costs on disk, as the budget counts it: its length, or the blocks it holds if more (preallocated). */
+export function backupBytes(st: { size: number; blocks: number }): number {
+    return Math.max(st.size, st.blocks * 512);
+}
+
+/**
+ * The local backups a byte budget lets go, by name: the one rule for the API's rotation after each backup
+ * (backup-store.ts) and root's monthly step (install.ts), each giving it the files' lstat. Each backup costs
+ * backupBytes: its length or its blocks, whichever is more. None costing more than the budget on its own stays, the
+ * newest included: a sealed backup of small copies near the budget is a sign of abuse, not of a big vault. Of the
+ * rest, the newest stays, then older ones while they all fit together and number no more than `maxFiles`; the first
+ * that doesn't goes, with every older one.
+ *
+ * `latest` is the newest name a backup can have now: for the API, the backup it has just written; for root, the name
+ * the name a backup made a day from now would get (latestBackupName: timesyncd may have set the clock back). Anything named after it goes, whatever it costs. Only
+ * a planted file, or one written while the clock was ahead, can be named later than now, and the one just written
+ * holds newer data either way. So the API keeps what it just wrote, root keeps the same, and neither keeps both.
+ */
+export function backupsPastBudget(backups: readonly { name: string; size: number; blocks: number }[], maxBytes: number,
+    opts: { latest: string; maxFiles?: number }): string[] {
+    const maxFiles = opts.maxFiles ?? MAX_BACKUP_FILES;
+    const past: string[] = [];
+    let total = 0;
+    let kept = 0;
+    let full = false;
+    for (const b of [...backups].sort((x, y) => compareBackupNames(y.name, x.name))) {
+        const bytes = backupBytes(b);
+        if (compareBackupNames(b.name, opts.latest) > 0 || bytes > maxBytes) past.push(b.name);
+        else if (!full && kept < maxFiles && total + bytes <= maxBytes) {
+            total += bytes;
+            kept++;
+        } else {
+            full = true;
+            past.push(b.name);
+        }
+    }
+    return past;
+}
+
+/**
+ * How far root's step lets a backup's name run ahead of its clock. The image runs systemd-timesyncd, which steps the
+ * clock: set back a few seconds after the API named its newest backup, a cutoff of one second deleted that backup
+ * (confirmation 6, NB-A). A day covers any step timesyncd makes. A file planted within it stays only until the API's next
+ * backup (the API cuts at the name it just wrote), and it still counts against the byte budget and MAX_BACKUP_FILES, so
+ * it can't hold the partition.
+ */
+export const ROOT_CLOCK_MARGIN_MS = 24 * 60 * 60 * 1000;
+
+/** For root: the latest name a backup can have now, allowing for a clock set back since it was written. */
+export function latestBackupName(now: number): string {
+    return backupNameFor(now + ROOT_CLOCK_MARGIN_MS);
+}
+
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */
 export function backupNameFor(ms: number): string {
     return `bv-${new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}.bin`;

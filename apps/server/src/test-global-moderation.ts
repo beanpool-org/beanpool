@@ -257,8 +257,8 @@ async function main(): Promise<void> {
     // ── 2. global profile ────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. global profile ──');
     process.env.NODE_PROFILE = 'global';
-    // As a node started on the global profile decides at boot: the listings are a public read there, so their photos
-    // carry no key (engine/photo-keys.ts). This run switched profile without a restart.
+    // As a node started on the global profile decides at boot: the listings are a public read there, so a board
+    // listing's photos carry no key (engine/photo-keys.ts). This run switched profile without a restart.
     installPhotoKeysAtBoot();
     f = (await info()).features ?? {};
     assert(f.probation === true && f.autoHideReports === true && f.autoMute === true,

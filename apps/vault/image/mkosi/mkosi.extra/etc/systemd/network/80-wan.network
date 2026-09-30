@@ -1,0 +1,22 @@
+# The VPS's network: DHCP and router advertisements (to confirm with 1984: host design §6, "IPv6?"). The vault's own
+# resolver and time come from its config, not from the network.
+[Match]
+Type=ether
+Kind=!*
+
+[Network]
+DHCP=yes
+IPv6AcceptRA=yes
+LinkLocalAddressing=ipv6
+
+[DHCPv4]
+UseDNS=no
+UseNTP=no
+UseDomains=no
+
+[DHCPv6]
+UseDNS=no
+UseNTP=no
+
+[IPv6AcceptRA]
+UseDNS=no

@@ -193,6 +193,30 @@ describe('a reshare switches only once two new custodians hold their shares', ()
         expect(existsSync(path.join(v.stateDir, PENDING_FILE))).toBe(false);
     });
 
+    it('the answer is lost: the third new custodian fetches their share after two switched it, and it opens the vault', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const c5 = custodianKey(crypto.randomBytes(32));
+        const newSet = [c1.publicKey, c4.publicKey, c5.publicKey];
+        await present(v, c1, g.shares[0], { purpose: 'reshare', newCustodians: newSet });
+        await present(v, c2, g.shares[1], { purpose: 'reshare', newCustodians: newSet }); // thrown away
+        const held: CustodianShare[] = [];
+        for (const who of [c1, c4, c5]) {
+            const f = await fetchPendingShare(v.baseUrl, who, v.call());
+            expect(f.call.status).toBe(200);
+            expect(f.share).toMatchObject({ custodian: who.publicKey, generation: 2 });
+            held.push(f.share as CustodianShare);
+            expect((await confirmShare(v.baseUrl, who, f.share as CustodianShare, v.call())).status).toBe(200);
+        }
+        expect(v.keyholder().status()).toMatchObject({ generation: 2, switched: { generation: 2, confirmed: newSet } });
+        // c4 and c5 alone (c1's share destroyed) open it after a restart.
+        await v.restartKeyholder();
+        await present(v, c4, held[1]);
+        expect((await present(v, c5, held[2])).body).toMatchObject({ state: 'open' });
+    });
+
     it('the answer is lost and the keyholder restarts: the old shares still open it, and two current custodians drop the reshare', async () => {
         const { v, g, c1, c2, c3, c4, member, reshare } = await setUp();
         await reshare(); // thrown away: nobody saved the new shares

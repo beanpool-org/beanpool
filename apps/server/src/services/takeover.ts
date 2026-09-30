@@ -81,6 +81,7 @@ import {
     adoptCarriedOpenJoinKey, installCarriedOpenJoinKey, liveOpenJoinRecords, openJoinKeyOffLine, openJoinKeyState, OPEN_JOIN_KEY_FILE,
 } from './open-join-key.js';
 import { installCommunitySettings, keptCommunitySettings } from '../config/community-settings.js';
+import { notePhotoUrlShapeNow } from '../engine/photo-keys.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -1010,6 +1011,9 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
             // boot left the visitors' rows to a main server as a standby's does: the pass runs now, not at the next
             // restart. It does nothing if the main server's marks were copied (db.ts markExistingVisitors).
             if (configured === 'primary') markExistingVisitors();
+            // And the listing-photo URLs' shape, recorded as a standby's by the state engine's boot: a main server's now,
+            // so a phone that synced from the server it replaced is answered whole at once (engine/photo-keys.ts).
+            notePhotoUrlShapeNow();
         }
 
         auditRan = runPendingPromotionAudit(j);

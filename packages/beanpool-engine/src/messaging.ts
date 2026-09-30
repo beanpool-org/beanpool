@@ -4,6 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import { avatarUrlFor } from '@beanpool/core';
+import { postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -148,21 +149,26 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
         }
     }
 
+    // A chat about a listing shows the listing's first photo, by the URL its listing's photos carry (photo-url.ts: keyed
+    // where they are), and only for a listing this member can see (getPosts' audience rule, hidden by reports included):
+    // a chat can outlast their place in a group. It read a `posts.photos` column no schema has, so it threw whenever a
+    // chat had a listing; every chat is written with none today (createConversation), so none has shown one.
     const postIds = Array.from(new Set(rows.map(r => r.post_id).filter(id => id != null)));
     const postPhotosById = new Map<string, string | null>();
-    if (postIds.length > 0) {
-        const allPosts = selectInChunks(db, postIds, ph => `SELECT id, photos FROM posts WHERE id IN (${ph})`);
-
-        for (const post of allPosts) {
-            let postPhoto: string | null = null;
-            if (post.photos) {
-                try {
-                    const arr = JSON.parse(post.photos);
-                    if (Array.isArray(arr) && arr.length > 0) postPhoto = arr[0];
-                } catch {}
-            }
-            postPhotosById.set(post.id, postPhoto);
-        }
+    for (let i = 0; i < postIds.length; i += 500) {
+        const chunk = postIds.slice(i, i + 500);
+        const firstPhotos = db.prepare(`
+            SELECT pp.post_id, pp.order_num, pp.updated_at, p.audience_scope
+              FROM post_photos pp JOIN posts p ON p.id = pp.post_id
+             WHERE pp.post_id IN (${chunk.map(() => '?').join(',')})
+               AND pp.order_num = (SELECT MIN(first.order_num) FROM post_photos first WHERE first.post_id = pp.post_id)
+               AND ((p.audience_scope IS NULL OR p.audience_scope = 'public')
+                    OR p.author_pubkey = ?
+                    OR (p.audience_scope = 'group' AND p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))
+                    OR (p.audience_scope = 'direct' AND (p.target_pubkey = ? OR p.assigned_to = ?)))
+               AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
+        `).all(...chunk, pubkey, pubkey, pubkey, pubkey, pubkey) as { post_id: string; order_num: number; updated_at: string | null; audience_scope: string | null }[];
+        for (const ph of firstPhotos) postPhotosById.set(ph.post_id, postPhotoUrl(ph.post_id, ph.order_num, ph.updated_at, ph.audience_scope));
     }
 
     return rows.map(r => {

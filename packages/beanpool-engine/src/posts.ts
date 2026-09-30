@@ -331,7 +331,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         completedAt: row.completed_at,
         lat: row.lat,
         lng: row.lng,
-        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at)),
+        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
         originNode: row.origin_node,
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
@@ -759,6 +759,87 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
 }
 
+/**
+ * One page of a heal read (getPostsForPhotoHeal): where it starts, how many listings it may hold, and, once read, where
+ * the next page starts.
+ */
+export interface PhotoHealRead {
+    /** Where the page starts: `next` of the page before, or '' (or nothing) for the first. */
+    after?: string;
+    /** How many listings the page holds at most. May be 0: then it only says whether any is still to come. */
+    limit: number;
+    /**
+     * Set by the read. Where the next page starts, while a listing WITH a photo is still to come after this page, or
+     * null when none is: a listing with no photo holds no URL that could stop opening, so it needs no page of its own.
+     */
+    next?: string | null;
+}
+
+/** Whether a listing has a photo, and whether it is on the board by its own row. Both 0 or 1, never NULL. */
+const HEAL_PHOTO_SQL = 'EXISTS (SELECT 1 FROM post_photos pp WHERE pp.post_id = p.id)';
+const HEAL_LIVE_SQL = "CASE WHEN p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed')) THEN 1 ELSE 0 END";
+
+/** A heal page's start, as `next` gave it: [photo, live, updated_at, created_at, id], or null for the first page. */
+function healKeyOf(after: string | undefined): [number, number, string, string, string] | null {
+    if (!after) return null;
+    try {
+        const k = JSON.parse(after);
+        if (Array.isArray(k) && k.length === 5 && (k[0] === 0 || k[0] === 1) && (k[1] === 0 || k[1] === 1)
+            && typeof k[2] === 'string' && typeof k[3] === 'string' && typeof k[4] === 'string') {
+            return k as [number, number, string, string, string];
+        }
+    } catch { /* not a key: the first page */ }
+    return null;
+}
+
+/**
+ * The listings a phone that holds listing-photo URLs of an old shape needs (apps/server engine/photo-keys.ts), in the order
+ * it needs them: those with a photo first, and of those, the ones on the board by their own row (active, open) before the
+ * finished ones, then newest first; the listings with no photo after them, the same way. As a first sync reads them: every
+ * status, a hidden listing as a removal, and each reader's own audience (a sync read of `filter`, with no cursor).
+ *
+ * Paged by key, never by offset: the order holds every listing's own columns only (none of its author's standing, nor
+ * the time), and every one of them moves `updated_at` when it changes, so a listing that changes between two pages is
+ * in the delta of the sync that reads the next one, and a listing that doesn't keeps its place. No listing is skipped.
+ * Ranked on ids alone, then the page read in full, as a read with a point is (postRowsNear).
+ */
+export function getPostsForPhotoHeal(db: Db, filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
+    return getPostsRankedBy(db, {
+        ...filter, updatedAfter: undefined, sync: true, near: undefined, sortByDistance: undefined, limit: undefined, offset: undefined,
+    }, postRowsNear, heal);
+}
+
+/** The rows of one heal page, in heal order, with `heal.next` set (getPostsForPhotoHeal). */
+function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: PhotoHealRead): any[] {
+    const limit = Math.max(0, Math.floor(heal.limit));
+    let sql = `
+        SELECT id, photo, live, upd, cre FROM (
+            SELECT p.id AS id, ${HEAL_PHOTO_SQL} AS photo, ${HEAL_LIVE_SQL} AS live,
+                   COALESCE(p.updated_at, '') AS upd, COALESCE(p.created_at, '') AS cre
+            FROM posts p
+            LEFT JOIN members m ON p.author_pubkey = m.public_key
+            WHERE 1=1${where}
+        )`;
+    const params: unknown[] = [...whereParams];
+    const after = healKeyOf(heal.after);
+    if (after) {
+        sql += ' WHERE (photo, live, upd, cre, id) < (?, ?, ?, ?, ?)';
+        params.push(...after);
+    }
+    // One more than the page, to know whether a listing with a photo comes after it.
+    sql += ' ORDER BY photo DESC, live DESC, upd DESC, cre DESC, id DESC LIMIT ?';
+    params.push(limit + 1);
+    const ranked = db.prepare(sql).all(...params) as Array<{ id: string; photo: number; live: number; upd: string; cre: string }>;
+    const page = ranked.slice(0, limit);
+    const beyond = ranked[limit];
+    const last = page[page.length - 1];
+    heal.next = !beyond || beyond.photo !== 1 ? null
+        : last ? JSON.stringify([last.photo, last.live, last.upd, last.cre, last.id]) : (heal.after ?? '');
+    const full = selectInChunks(db, page.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const byId = new Map(full.map(row => [row.id as string, row]));
+    return page.flatMap(r => byId.get(r.id) ?? []);
+}
+
 /** How a read with a point finds its page's rows, in order, each with its `distance_km` (postRowsNear). */
 export type RowsNear = (db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter) => any[];
 
@@ -767,7 +848,7 @@ export type RowsNear = (db: Db, near: NonNullable<PostFilter['near']>, where: st
  * (apps/server test-distance-search-perf.ts) passes another: the one query nearest first was before the circles, so the
  * two are timed through the same conditions and the same code after them, on one database, in one run.
  */
-export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNear: RowsNear): MarketplacePost[] {
+export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNear: RowsNear, heal?: PhotoHealRead): MarketplacePost[] {
     // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
     // every read without one runs exactly the query it always has.
     const near = filter?.near;
@@ -918,7 +999,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     let rows: any[];
-    if (near) {
+    if (heal) {
+        rows = postRowsForHeal(db, where, params, heal);
+    } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
     } else {
         let query = `${POST_ROW_SELECT}

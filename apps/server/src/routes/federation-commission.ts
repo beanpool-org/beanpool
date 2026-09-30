@@ -16,7 +16,6 @@
  */
 
 import Router from '@koa/router';
-import crypto from 'node:crypto';
 // Top-level, not `await import(...)` inside the handler (review finding, accepted — though not for the reason
 // given). ESM caches a module after its first import, so a dynamic import in a handler is a resolved-promise
 // await on an already-loaded module, not "per-request module loading overhead". And libp2p is loaded at boot by
@@ -26,7 +25,7 @@ import crypto from 'node:crypto';
 // The purchase route still does it dynamically. Left alone here rather than swept up: it is a different file
 // with no coverage in this PR, and a one-line drive-by in the path that debits members is not free.
 import { peerIdFromString } from '@libp2p/peer-id';
-import { getMember, getActingMember, getNodeConfig, canOperateTreasury } from '../state-engine.js';
+import { getMember, getActingMember, canOperateTreasury, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import {
     getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -35,22 +34,12 @@ import { settleCrossNodePurchase } from '../federation-protocol.js';
 import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
-import { SettlementError } from '../federation-settlement-exchange.js';
+import { SettlementError, settlementKeyFor } from '../federation-settlement-exchange.js';
 import { getFederationLink } from '../federation-link.js';
 import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfCachedPost } from '../federation-commission.js';
 import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
 import { checkMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
-
-/** This node's own public address, or null. Same helper as the purchase route, same reasoning. */
-function ourPublicUrl(): string | null {
-    try {
-        const hostname = ((getNodeConfig() as any)?.publicAddress?.hostname ?? '').trim();
-        return hostname ? `https://${hostname}` : null;
-    } catch {
-        return null;
-    }
-}
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_COMMISSION_ERROR = 'Only a member of this community can commission across a boundary';
@@ -242,12 +231,25 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        // 9. THE KEY, minted here. A client may supply one to retry — the outbound path is idempotent on it,
+        // 9. THE KEY, minted here. A client may send one back only to retry — the outbound path is idempotent on it,
         //    so a retry after a dropped connection finishes the original commission rather than funding a
         //    second one. `xc-` rather than `xn-` so a commission is identifiable in a settlement row without
         //    joining anything: the two have different funding and different authorisation, and when one of
         //    them is stuck at 3am that distinction is the first thing worth knowing.
-        const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xc-${crypto.randomUUID()}`;
+        //
+        //    Never the keeper's choice: the settlement holds the Beans in `escrow_<key>`, and a chosen key naming another
+        //    project's escrow paid its Beans into the link when the ask failed (#1329's round-3 review). The key sent back
+        //    must be this link's own commission of this listing, for this amount (settlementKeyFor), or it is refused
+        //    here, before the Commons tops the link up. The payer is the link, so any of its keepers may retry it.
+        const keyed = settlementKeyFor(body.key, 'xc-', {
+            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount,
+        });
+        if (!keyed.ok) {
+            ctx.status = keyed.status;
+            ctx.body = { error: keyed.error, reason: keyed.reason };
+            return;
+        }
+        const key = keyed.key;
 
         // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
         // against the enterprise (never the keeper's own) from the settlement row settleCrossNodePurchase writes as it
@@ -287,7 +289,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
                 // partner commissions their work.
                 buyerPublicKey: link.treasuryPubkey,
                 buyerCallsign: link.name,
-                buyerHomeNode: ourPublicUrl(),
+                // This node's own public address, or null: the same as the purchase route's.
+                buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey: seller,
                 postId,
                 amount: funding.amount,

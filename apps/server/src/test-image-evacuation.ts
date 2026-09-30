@@ -234,13 +234,14 @@ async function main(): Promise<void> {
     assert(store.get(freshRow.storage_key)!.equals(freshBytes), 'the store holds exactly those bytes');
 
     // ── 3. serving, before evacuation ──────────────────────────────────────────────────────────
-    // A photo's URL is the one a read of its listing hands out, its key included on a local community, whose listings
-    // are its members' (engine/photo-keys.ts): the URL of the photo as its row is now. Evacuation keeps the row's
+    // A photo's URL is the one a read of its listing hands out, its key included where its listing's photos are keyed
+    // (engine/photo-keys.ts): the URL of the photo as its row is now. Evacuation keeps the row's
     // `updated_at`, so the URL a member already holds keeps working.
     const { postPhotoUrl } = await import('@beanpool/engine');
     const photoUrlOf = (postId: string, orderNum: number): string => {
-        const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
-        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at)}`;
+        const row = db.prepare(`SELECT pp.updated_at, p.audience_scope FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+                                WHERE pp.post_id = ? AND pp.order_num = ?`).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null } | undefined;
+        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope)}`;
     };
     const legacyUrl = photoUrlOf(fixture.photos[0].postId, 0);
     const beforeRes = await fetch(legacyUrl);

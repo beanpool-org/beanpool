@@ -1,0 +1,51 @@
+# vault-api, run by vault-launcher (key vault design §3): the launcher starts the image's API, and hands over to a
+# newer two-signed release's API without a restart or an unlock (src/launcher/launcher.ts). Caddy reaches the API
+# through /run/beanpool-vault/api/api.sock, a symlink each API points at its own socket.
+[Unit]
+Description=BeanPool key vault: API (through its launcher)
+Wants=network-online.target beanpool-vault-keyholder.service beanpool-vault-dns.service
+After=network-online.target beanpool-vault-keyholder.service beanpool-vault-dns.service nftables.service
+
+[Service]
+Type=simple
+User=vault-api
+Group=vault-api-socket
+SupplementaryGroups=vault-keyholder-socket
+ExecStart=/opt/node/bin/node --disable-sigusr1 /usr/lib/beanpool-vault/vault-launcher.mjs --config /etc/beanpool-vault/launcher.json
+Restart=always
+RestartSec=5
+LimitCORE=0
+UMask=0007
+RuntimeDirectory=beanpool-vault/api
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=no
+# The database lives on the data partition (mounted by beanpool-vault-data.service once the vault is open); the
+# releases it downloads, its local backup copies, a restore from backup waiting for the unlock, and its inbox for a
+# new image (root checks it again at the monthly restart) on the state partition.
+ReadWritePaths=/var/lib/beanpool-vault/data /var/lib/beanpool-vault/releases /var/lib/beanpool-vault/backups /var/lib/beanpool-vault/restore /var/lib/beanpool-vault/staged
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @debug @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

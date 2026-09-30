@@ -94,7 +94,8 @@ export class VaultDb {
         const file = path.join(dir, name);
         const db = new Database(file);
         // auto_vacuum must be set before the first table exists; on an existing file it is already set.
-        db.exec('PRAGMA auto_vacuum = FULL; PRAGMA secure_delete = ON; PRAGMA journal_mode = TRUNCATE; PRAGMA temp_store = MEMORY;');
+        // busy_timeout: during a release's handover two API processes have the file open for a few seconds.
+        db.exec('PRAGMA auto_vacuum = FULL; PRAGMA secure_delete = ON; PRAGMA journal_mode = TRUNCATE; PRAGMA temp_store = MEMORY; PRAGMA busy_timeout = 5000;');
         db.exec(SCHEMA);
         return new VaultDb(db, file);
     }

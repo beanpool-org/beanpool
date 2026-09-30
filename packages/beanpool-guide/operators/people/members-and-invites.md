@@ -29,13 +29,15 @@ Open **People & Safety**, then **Onboarding Funnel**. It sits next to Invites & 
 
 **Counts only.** Nobody is named and nobody can be picked out of any of this. Your server keeps no per-person record of it, so there is none to show — and that is a deliberate choice, not a missing feature.
 
-The screen has three parts, and they answer three different questions. Read each on its own.
+The screen has four parts, and they answer four different questions. Read each on its own.
 
 **The people who joined.** One group of people, followed. **Joined** is everyone who joined in the window you picked, and is 100%. **Has a photo** and **Has posted** are how many of those same people have a profile photo now, and have ever listed something here. Because they are counted from the same people, these can never pass 100%. Somebody who joined before the window is not in the group, even if they posted inside it — the question is how the people who arrived are getting on, not how much happened this month.
 
 **Steps inside the app.** Seeing the protection screen, choosing how to be protected, finishing the guide. These happen on a member's own phone, so their app tells your server about them. Your server does not record who reported what, so it **cannot tie these to the people above** — do not read them as a percentage of anything. Each is counted once per person, from the date the screen names. Older figures, from before apps counted this way, are left out and the screen says how many: back then an app counted every time a screen was drawn, so one person could be counted several times over, and there is no way to go back and work out which.
 
 **Codes.** How many invite codes were entered, and why any were rejected. These are **attempts, not people**: one person trying a code three times is three attempts, which is why nothing above is worked out as a share of them. Already-a-member re-entries are named separately — that is somebody arriving twice, neither a rejection nor a signup. A run of **expired** codes usually means printed cards sat around too long: invites last 30 days.
+
+**Open door.** The open door lets someone join by signing in with an account they already have, such as Google or Apple, instead of using an invite code. It is open on the global community; on a local one it is normally shut, and the screen says which yours is. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **too many new accounts from one network** (the door takes 5 an hour and 20 a day from one address) and **that sign-in already joined here** (one sign-in account is one member). With the door shut, these stay at 0.
 
 Owners and admins can open it, signed in either way. A moderator cannot, and does not see the tab.
 

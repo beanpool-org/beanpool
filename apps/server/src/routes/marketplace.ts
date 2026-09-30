@@ -15,12 +15,12 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf,
+    nodeRoleOf, getPostsForPhotoHeal,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeysRequired } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -84,14 +84,19 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // never by asking the store whether a file happens to be lying around: the delete paths remove the row
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
+    // With its listing's audience as the row says now; `listed` is 0 for a photo whose listing is gone.
     const photo = db.prepare(
-        `SELECT photo_data, storage_key, sha256, bytes, mime, updated_at FROM post_photos WHERE post_id = ? AND order_num = ?`
-    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null }) | undefined;
+        `SELECT pp.photo_data, pp.storage_key, pp.sha256, pp.bytes, pp.mime, pp.updated_at, p.audience_scope, p.id IS NOT NULL AS listed
+           FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+          WHERE pp.post_id = ? AND pp.order_num = ?`
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null; audience_scope: string | null; listed: number }) | undefined;
 
-    // Where the listings are members' (a local community with reads enforced), a photo goes only to a URL carrying the
-    // key the node hands out with its listing (engine/photo-keys.ts): an <img> cannot sign. Anything else is answered as
-    // no photo, so neither says whether there is one.
-    if (!photo || (photoKeysRequired() && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
+    // A photo that isn't everyone's goes only to a URL carrying the key the node hands out with its listing
+    // (engine/photo-keys.ts): an <img> cannot sign. Every listing's where the listings are members' (a local community
+    // with reads enforced); where they are a public read, a listing's off the board (a group's, one for one person),
+    // and one whose listing is gone. Anything else is answered as no photo, so neither says whether there is one.
+    const keyed = !!photo && photoKeyRequiredFor(photo.listed ? photo.audience_scope : undefined);
+    if (!photo || (keyed && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;
@@ -227,6 +232,19 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // A delta from before this node's listing-photo URLs last changed (keys switched on or off, a new secret:
+    // engine/photo-keys.ts) is answered whole: the phone keeps the URLs it was handed, and a listing that didn't change
+    // since would never be sent again with the URL that now opens its photo. So is each later sync of a key whose heal
+    // didn't fit one answer (photoHealFor). Not a read with a point: no phone's sync has one.
+    const heal = point ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
+    // A whole sync read right after a heal page to the key (a take-over's, after the pull the phone threw away) starts
+    // the key's heal again from the first page: the phone keeps what the pull doesn't carry, and the page the key's row
+    // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
+    // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
+    // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
+    if (!point && sync && !updatedAfter && !id && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+        restartPhotoHealFor(ctx.state.actor as string | undefined);
+    }
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
@@ -268,7 +286,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was. The visitors'
     // view is a view of its own: a key that becomes a member (same key, same URL) must not have its visitor's copy
     // confirmed, and a member is never answered 304 for one.
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
+    // A delta answered whole (heal) is a body of its own, so its ETag is too (`:whole`, or `:heal:` and where its page
+    // starts): a copy of the delta held for the same URL is never confirmed with a 304 in its place.
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -296,6 +316,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
         if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            // A heal answer confirmed is a page that went to the key: its row's time moves (engine/photo-keys.ts
+            // restartPhotoHealFor), and nothing else, since the row already records this answer.
+            if (heal) notePhotoHealAnsweredAgain(ctx.state.actor as string | undefined);
             ctx.status = 304;
             return;
         }
@@ -325,10 +348,32 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
-    const posts = getPosts({
-        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
-        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
-    });
+    const listing = {
+        id, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined,
+    };
+    let posts: MarketplacePost[];
+    if (heal && updatedAfter) {
+        // Answered whole: first the delta, exactly as asked (every row changed since the cursor, the author standing
+        // changes and the listings sent again among them), then the node's other listings in heal order (engine
+        // getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished ones), as a first
+        // sync reads them for this reader. The delta is main's, uncut; the page after it holds PHOTO_HEAL_PAGE_ROWS less
+        // the delta's rows, and at least PHOTO_HEAL_MIN_PAGE_ROWS, so an answer is about as large as main's largest (a
+        // first sync) and a phone on a slow link still gets it inside its 30 s; a node with more listings heals over the
+        // key's next syncs.
+        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync });
+        const pageRows = Math.max(PHOTO_HEAL_MIN_PAGE_ROWS, PHOTO_HEAL_PAGE_ROWS - delta.length);
+        const read = { after: heal.after, limit: Math.min(limit, pageRows), next: null as string | null };
+        const inDelta = new Set(delta.map(p => p.id));
+        const rest = getPostsForPhotoHeal(listing, read).filter(p => !inDelta.has(p.id));
+        posts = [...delta, ...rest];
+        notePhotoHealServed(ctx.state.actor as string | undefined, updatedAfter, heal, read.next ?? null);
+    } else {
+        posts = getPosts({
+            ...listing, limit, offset, updatedAfter, sync,
+            near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+        });
+    }
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
     // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
     const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)

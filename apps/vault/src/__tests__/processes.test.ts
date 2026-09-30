@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { confirmShare, custodianKey, genesis, presentShare } from '../custodian/lib.js';
 import type { CustodianShare } from '../shared/ceremony.js';
+import { LocalDirectoryFeed } from '../shared/release-feed.js';
+import { makeRelease, publish } from './release-kit.js';
 
 /**
  * The two programs as they run: vault-keyholder and vault-api in their own processes (their `main.ts`, through tsx),
@@ -82,7 +84,12 @@ describe('the two programs', () => {
         const keyholderConfig = path.join(dir, 'keyholder.json');
         const apiConfig = path.join(dir, 'api.json');
         const port = await freePort();
-        writeFileSync(keyholderConfig, JSON.stringify({ stateDir: path.join(dir, 'state'), socketPath, genesisCustodians: custodians.map(c => c.publicKey) }));
+        const release = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(1) });
+        publish(path.join(dir, 'feed'), release);
+        const opts = { acceptNoHardwareProof: true, trust: { feed: new LocalDirectoryFeed(path.join(dir, 'feed')), rootKeys: custodians.map(c => c.publicKey) } };
+        writeFileSync(keyholderConfig, JSON.stringify({
+            stateDir: path.join(dir, 'state'), socketPath, genesisCustodians: custodians.map(c => c.publicKey), releaseHash: release.manifest.imageHash,
+        }));
         writeFileSync(apiConfig, JSON.stringify({ dataDir: path.join(dir, 'data'), keyholderSocket: socketPath, hosts: ['127.0.0.1'], backupDir: path.join(dir, 'store'), port, host: '127.0.0.1' }));
 
         let keyholder = await start('src/keyholder/main.ts', keyholderConfig);
@@ -92,12 +99,12 @@ describe('the two programs', () => {
         const health = async () => (await (await fetch(`${url}/v1/health`)).json() as { state: string }).state;
         expect(await health()).toBe('locked');
 
-        const g = await genesis(url, custodians[0], { acceptNoHardwareProof: true });
+        const g = await genesis(url, custodians[0], opts);
         expect(g.status).toBe(200);
         const shares = g.body.custodianShares as CustodianShare[];
         expect(await health()).toBe('locked');
-        await confirmShare(url, custodians[0], shares[0], { acceptNoHardwareProof: true });
-        expect((await confirmShare(url, custodians[1], shares[1], { acceptNoHardwareProof: true })).body.state).toBe('open');
+        await confirmShare(url, custodians[0], shares[0], opts);
+        expect((await confirmShare(url, custodians[1], shares[1], opts)).body.state).toBe('open');
         expect(await health()).toBe('open');
 
         expect(await stop(keyholder.child)).toBe(0);
@@ -105,8 +112,8 @@ describe('the two programs', () => {
         keyholder = await start('src/keyholder/main.ts', keyholderConfig);
         expect(keyholder.out()).toContain('vault-keyholder: locked');
         expect(await health()).toBe('locked');
-        await presentShare(url, custodians[2], shares[2], { acceptNoHardwareProof: true });
-        const opened = await presentShare(url, custodians[0], shares[0], { acceptNoHardwareProof: true });
+        await presentShare(url, custodians[2], shares[2], opts);
+        const opened = await presentShare(url, custodians[0], shares[0], opts);
         expect(opened.body.state).toBe('open');
         expect(await health()).toBe('open');
 

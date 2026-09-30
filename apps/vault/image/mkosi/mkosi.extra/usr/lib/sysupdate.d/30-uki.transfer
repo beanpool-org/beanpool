@@ -1,0 +1,21 @@
+# The UKI of a staged image, beside the one in use. systemd-boot boots the newest; if it fails three times, the one
+# before (boot counting, systemd-bless-boot). Two are kept.
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=regular-file
+Path=/var/lib/beanpool-vault/install
+MatchPattern=beanpool-vault_@v.efi
+
+[Target]
+Type=regular-file
+Path=/EFI/Linux
+PathRelativeTo=boot
+MatchPattern=beanpool-vault_@v+@l-@d.efi \
+             beanpool-vault_@v+@l.efi \
+             beanpool-vault_@v.efi
+Mode=0444
+TriesLeft=3
+TriesDone=0
+InstancesMax=2

@@ -27,8 +27,7 @@ import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import type Koa from 'koa';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
-import { audienceOf } from '@beanpool/core';
-import { getNodeRole, getNodeConfig, lostRegistrarHosts } from '../state-engine.js';
+import { getNodeRole, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { readNodeIdentity, type NodeIdentity } from './takeover-envelope.js';
 
@@ -149,23 +148,17 @@ export function verifyEpochStatement(body: unknown, identity: NodeIdentity): Epo
 
 // ── The check ─────────────────────────────────────────────────────────────────────────────
 
-/** Where this server's own public address serves the statement, or null when it has none. */
+/**
+ * Where this server's own public address serves the statement, or null when it has none: the registrar's hostname, else
+ * CF_RECORD_NAME as set. A name another community holds (services/registrar-name-watch.ts) leads to that community:
+ * never asked (state-engine.ts PUBLIC_URL_RULES.identityEpoch).
+ */
 export function ownPublicEpochUrl(): string | null {
     // Tests only: the address the suite's "public hostname" answers at. Unset in every real deployment.
     const test = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL;
     if (test) return test;
-    let host: string | null = null;
-    // A name another community holds (services/registrar-name-watch.ts) leads to that community: never asked.
-    let lost = new Set<string>();
-    try {
-        const config = getNodeConfig();
-        lost = lostRegistrarHosts(config);
-        const pa = (config as any)?.publicAddress;
-        if (pa && typeof pa.hostname === 'string' && pa.hostname.trim() && !lost.has(audienceOf(pa.hostname.trim()) ?? '')) host = pa.hostname.trim();
-    } catch { /* no node_config yet */ }
-    if (!host && process.env.CF_RECORD_NAME && !lost.has(audienceOf(process.env.CF_RECORD_NAME.trim()) ?? '')) host = process.env.CF_RECORD_NAME.trim();
-    if (!host) return null;
-    return `https://${host.replace(/^https?:\/\//, '').replace(/\/+$/, '')}${IDENTITY_EPOCH_PATH}`;
+    const origin = resolvePublicNodeUrl(PUBLIC_URL_RULES.identityEpoch);
+    return origin ? `${origin}${IDENTITY_EPOCH_PATH}` : null;
 }
 
 export type EpochCheck =

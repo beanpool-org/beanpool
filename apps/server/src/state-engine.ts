@@ -26,6 +26,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { admitByAddress } from './db/writes-by-address.js';
@@ -651,6 +652,9 @@ export function initStateEngine(): void {
     // asked for — a request for a year of history would have pruned to 180 days first and
     // then answered as though that was all there had ever been.
     pruneFunnel();
+    // The web app's visits a day: 400 days kept. Pruned here and on each day's first visit (engine/web-visits.ts), never
+    // on the read.
+    pruneWebVisits();
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage

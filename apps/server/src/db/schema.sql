@@ -181,6 +181,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL;
+-- Has this account ever paid that one (engine/money-limits.ts, before each payment to someone): one seek, where either
+-- single-column index above would scan all of a busy account's rows.
+CREATE INDEX IF NOT EXISTS idx_transactions_from_to ON transactions(from_pubkey, to_pubkey);
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -440,6 +443,57 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 CREATE INDEX IF NOT EXISTS idx_messages_updated_at ON messages(updated_at);
 
+-- The old conversation ids each line names (chat consolidation): a line folded into a pair's one DM keeps the id it was
+-- encrypted under in its metadata, as `originalConversationId` or in the list `originalConversationIds`, and a send to an
+-- old id goes to the conversation such a line is in (engine/messaging.ts consolidatedConversationOf). Kept from
+-- messages.metadata by the three triggers below, on each server, and never copied: a standby keeps its own from the lines
+-- it imports, as posts_fts is kept from posts. An index, so an id nobody has is answered as fast as a real one: scanning
+-- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review). db.ts fills it once
+-- from the lines already there (migration_message_old_conversation_ids_v1).
+CREATE TABLE IF NOT EXISTS message_old_conversation_ids (
+    old_conversation_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (old_conversation_id, message_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_message_old_conversation_ids_message ON message_old_conversation_ids(message_id);
+
+-- Each trigger reads the metadata only once json_valid() says it is JSON, inside a CASE: a malformed line must fail no
+-- write, and SQLite may evaluate a WHERE's terms in any order. `typeof(key) = 'integer'` keeps a list's items only.
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_ai
+AFTER INSERT ON messages
+FOR EACH ROW
+WHEN instr(NEW.metadata, 'originalConversationId') > 0
+BEGIN
+    INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+    SELECT json_extract(m, '$.originalConversationId'), NEW.id
+      FROM (SELECT CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END AS m)
+     WHERE json_type(m, '$.originalConversationId') = 'text'
+    UNION
+    SELECT value, NEW.id FROM json_each(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END, '$.originalConversationIds')
+     WHERE type = 'text' AND typeof(key) = 'integer';
+END;
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_au
+AFTER UPDATE OF metadata ON messages
+FOR EACH ROW
+WHEN OLD.metadata IS NOT NEW.metadata
+BEGIN
+    DELETE FROM message_old_conversation_ids WHERE message_id = OLD.id;
+    INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+    SELECT json_extract(m, '$.originalConversationId'), NEW.id
+      FROM (SELECT CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END AS m)
+     WHERE json_type(m, '$.originalConversationId') = 'text'
+    UNION
+    SELECT value, NEW.id FROM json_each(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END, '$.originalConversationIds')
+     WHERE type = 'text' AND typeof(key) = 'integer';
+END;
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_ad
+AFTER DELETE ON messages
+FOR EACH ROW
+WHEN OLD.metadata IS NOT NULL
+BEGIN
+    DELETE FROM message_old_conversation_ids WHERE message_id = OLD.id;
+END;
+
 -- 7. Relations (Friends, Ratings, Abuse)
 CREATE TABLE IF NOT EXISTS friends (
     owner_pubkey TEXT REFERENCES members(public_key),
@@ -557,6 +611,45 @@ CREATE TABLE IF NOT EXISTS writes_by_address (
 );
 CREATE INDEX IF NOT EXISTS idx_writes_by_address_kind ON writes_by_address(kind, ip_hash);
 CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(made_at);
+
+-- 11d. The money limits' day (engine/money-limits.ts; the numbers are config/writer-limits.ts MONEY_LIMITS): one row per
+-- payment, marketplace request or pledge change an account made, for the account whose Beans or deal it was (a member's
+-- own key, or the enterprise a keeper acted for), written in the same step as the check so a restart keeps the day's
+-- counts. `recipient` is who a payment goes to when that is someone (a member, a visitor or an enterprise; NULL for the
+-- Commons or a crowdfund's escrow); `new_recipient` is 1 when this account had never completed a payment to them before.
+-- `keeper` is who did it when the account is an enterprise (the keeper who signed): one person's enterprise work is
+-- counted across every enterprise they keep. `for_enterprise` is set instead when a keeper acted for an enterprise whose own
+-- day was spent: the act is then the keeper's own (`account` is the keeper), counted against their own limits, and
+-- `new_recipient` says whether the enterprise had paid them. A purchase from another community is counted from its own
+-- settlements row instead; a commission's row (`settlement_key`, the settlement's key) is there only for its keeper's
+-- count, as the enterprise's is its settlement, unless it is the keeper's own (`for_enterprise`), when it is the count and
+-- the enterprise's leaves that settlement out. This server's own, never copied, and deleted once a day old.
+CREATE TABLE IF NOT EXISTS money_acts (
+    account TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('payment', 'request', 'pledge')),
+    recipient TEXT,
+    new_recipient INTEGER NOT NULL DEFAULT 0,
+    made_at TEXT NOT NULL,
+    keeper TEXT,
+    settlement_key TEXT,
+    for_enterprise TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_money_acts_account ON money_acts(account, kind, made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_made_at ON money_acts(made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_keeper ON money_acts(keeper, kind, made_at) WHERE keeper IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_money_acts_settlement ON money_acts(settlement_key) WHERE settlement_key IS NOT NULL;
+
+-- 11e. The posts a keeper put up for an enterprise once its own day's posts (WRITER_LIMITS.enterprisePostsPerDay) were
+-- up (engine/writer-bounds.ts): each counts against the keeper's own posts instead, as on a member's own, so one keeper
+-- who uses up an enterprise's day can't stop its other keepers posting for it. One row per such post, its created_at as
+-- `made_at`. This server's own, never copied, and deleted once a day old.
+CREATE TABLE IF NOT EXISTS keeper_own_posts (
+    post_id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
@@ -1388,6 +1481,17 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
 -- visitor is not a signup, and a federated listing is not somebody getting started here.
 CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;
+
+-- 20b. Web app visits a day (engine/web-visits.ts), shown to the operator on the manager's Home.
+-- One row per UTC day and these three columns only: never an address, a browser, a hash, a cookie or a member.
+-- `uniques` is counted in memory under a key that lives for the day and is never stored; only the count is here.
+-- Rows older than 400 days are deleted with no tombstone. Node-local: a standby counts its own
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS web_visit_days (
+    day     TEXT PRIMARY KEY,                          -- YYYY-MM-DD, UTC
+    visits  INTEGER NOT NULL DEFAULT 0 CHECK (visits >= 0),
+    uniques INTEGER NOT NULL DEFAULT 0 CHECK (uniques >= 0)
+);
 
 -- 21. Mirror Sync Audit Log (#134)
 -- Permanent audit trail: every importRemoteState() call writes one row recording

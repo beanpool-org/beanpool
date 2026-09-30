@@ -42,8 +42,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 
-const PORT = 8571;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
 let run = 0, passed = 0;
@@ -167,7 +167,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const store = getImageStore();
 
     // The posts the fixture's photos belong to. `posts` is created by schema.sql, so it could not exist in
@@ -509,7 +510,7 @@ async function main(): Promise<void> {
         const { signSyncPayload, importRemoteState, setNodeRole } = await import('./state-engine.js');
         const { startP2P } = await import('./p2p.js');
         const { addConnector } = await import('./connector-manager.js');
-        const p2pNode = await startP2P(4072, 4073);
+        const p2pNode = await startP2P(0, 0);
         addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${p2pNode.peerId.toString()}`, 'mirror', 'imgstore-self-test-peer');
 
         // Watch every put the import makes and record whether a transaction was open at the time.

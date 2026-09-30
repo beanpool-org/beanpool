@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
@@ -211,6 +211,14 @@ router.post('/api/messages/send', async (ctx) => {
     if (target?.type === GROUP_THREAD_TYPE) {
         if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
     }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by reports)
+    // is an id nobody has. The engine goes by the participants mirror, which keeps the seat of someone Going who has
+    // since been removed from the group, and told them "Post to an event chat through the event" instead.
+    if (target?.type === 'event_thread' && eventChatUnknownTo(conversationId, authorPubkey)) {
+        ctx.status = SEND_NOT_FOUND.status;
+        ctx.body = { error: SEND_NOT_FOUND.error };
+        return;
+    }
     let msg;
     try {
         // G3, global profile: a muted member sends nothing (403). A new account reaches at most 10 new people a
@@ -365,8 +373,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it. The
-    // unread counts leave out the same chats, as the badge every push carries does (getListedUnreadCounts).
+    // An event hidden by reports (G3) is not there for anyone but its author, nor a group's event for someone no longer in
+    // the group, and its chat is named after it (chatHiddenFrom). The unread counts leave out the same chats, as the
+    // badge every push carries does (getListedUnreadCounts).
     const convs = getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
@@ -415,6 +424,11 @@ router.post('/api/messages/mark-read', async (ctx) => {
         }
         ctx.body = { success: true };
         return;
+    } else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        // A group's event the caller can't see (or one hidden by reports): an id nobody has, not "not a participant".
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
     } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
@@ -453,6 +467,11 @@ router.post('/api/messages/mute', async (ctx) => {
         return;
     }
     if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
+    if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
+    }
     if (conv.type !== GROUP_THREAD_TYPE && !canOpenChat(conv, actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not in this conversation' };
@@ -479,6 +498,13 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // pending request, an open invitation and an outsider are all refused; node admins get no exception.
     if (conv.type === GROUP_THREAD_TYPE) {
         if (refuseGroupChat(ctx, conversationId, ctx.state.actor as string | undefined, CONVERSATION_NOT_FOUND)) return;
+    }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by
+    // reports) is an id nobody has, before the participant check below could say "not a participant".
+    else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, ctx.state.actor as string | undefined)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Under read-auth the signer is a verified member (ctx.state.actor); require

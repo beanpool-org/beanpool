@@ -34,8 +34,8 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { sealSeedToSso } from '@beanpool/core';
 
-const PORT = 8745;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -160,7 +160,8 @@ async function main(): Promise<void> {
     console.log('\n=== A sign-in provider outage answers 503 try again, over real HTTPS ===\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     _resetJwksCacheForTests();
     _clearNoncesForTests();
     primeGoogle();

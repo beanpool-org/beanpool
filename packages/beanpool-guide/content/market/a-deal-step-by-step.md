@@ -9,6 +9,8 @@ related: my-deals, when-a-deal-goes-wrong, posting, how-it-works
 
 When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans "credits" in a few places; they mean the same thing.
 
+You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you pay for counts as one of your 100 payments a day too (see "Sending a gift"). Releasing beans, cancelling and being paid are never limited.
+
 ## Taking up someone's Offer
 
 - Open the Offer and tap **Accept Offer**.

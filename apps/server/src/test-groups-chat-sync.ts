@@ -56,7 +56,7 @@ async function asReplica(payload: any): Promise<void> {
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4076, 4077);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4077/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 

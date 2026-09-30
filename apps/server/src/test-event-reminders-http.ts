@@ -33,8 +33,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { createPost as createPostEngine, removePost, rsvpEvent } from './engine/posts.js';
 
-const PORT = 8703;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -101,7 +101,8 @@ async function main(): Promise<void> {
     console.log('\nYour events and reminders, over real HTTP\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const me = makeIdentity('MineMaeve');
     const someoneElse = makeIdentity('OtherOtto');

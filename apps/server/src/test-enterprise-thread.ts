@@ -57,8 +57,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 
-const PORT = 8631;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -355,7 +355,8 @@ async function main() {
     // Step 7: HTTP API routes
     // ─────────────────────────────────────────────────────────────────────────
     console.log('── Step 7: HTTP API routes ──');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // GET /api/treasury/:treasury/thread
     const getRes = await signedFetch('GET', `/api/treasury/${bakery}/thread`, danActive);

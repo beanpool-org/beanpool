@@ -64,8 +64,8 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import Database from 'better-sqlite3';
 
-const PORT = 8583;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const ADMIN_PW = 'Snapshot-Completeness-Pw-41!';
 
@@ -223,7 +223,8 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(DATA_DIR, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const store = getImageStore();
 
     // ── The node at T ──────────────────────────────────────────────────────────────────────────

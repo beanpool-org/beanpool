@@ -51,7 +51,7 @@ async function run() {
     console.log('Running Step 7 Recovery Backup Durability & Live Replication Tests...\n');
 
     initStateEngine();
-    const node = await startP2P(4024, 4025);
+    const node = await startP2P(0, 0);
     const nodeId = node.peerId.toString();
     const trustedAddr = `/ip4/127.0.0.1/tcp/4025/p2p/${nodeId}`;
 

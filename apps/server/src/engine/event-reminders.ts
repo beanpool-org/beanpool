@@ -44,6 +44,7 @@
 import { postPhotoUrl } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
+import { postInSightSql } from './post-sight.js';
 
 /** The five offsets the picker offers, in minutes before the start. Nothing else is storable. */
 export const EVENT_REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
@@ -157,13 +158,16 @@ export function setEventReminderOffsets(
 ): { offsets: number[] | null } {
     const stored = offsets === null ? null : JSON.stringify(offsets);
     // A visitor's row has no RSVP here, as a key with no row has none, whatever row it holds from before visitors were
-    // refused one.
+    // refused one. Nor has a member removed from the event's group, or who left it or was banned: their RSVP is kept but
+    // gives nothing while the event is out of their sight (engine/event-thread.ts canReadEventThread), and a key with no
+    // RSVP is answered as they are.
     const res = db.prepare(
         `UPDATE event_rsvps
             SET reminder_offsets = ?,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
           WHERE post_id = ? AND member_pubkey = ?
-            AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)`
+            AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)
+            AND EXISTS (SELECT 1 FROM posts p WHERE p.id = event_rsvps.post_id AND ${postInSightSql('p', 'event_rsvps.member_pubkey')})`
     ).run(stored, postId, memberPubkey);
     if (res.changes === 0) throw new Error(NO_RSVP_MESSAGE);
     return { offsets };
@@ -205,6 +209,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
            AND COALESCE(p.event_state, '') != 'cancelled'
            AND p.event_end_at > ?
            AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
+           -- A group's event after its member was removed, left or was banned: the RSVP is kept, the event is gone from
+           -- their feed (getPosts), and from here (engine/event-thread.ts canReadEventThread).
+           AND ${postInSightSql('p', 'r.member_pubkey')}
          ORDER BY p.event_start_at ASC
     `).all(memberPubkey, nowIso, memberPubkey) as any[];
 
@@ -296,6 +303,9 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                -- A visitor's row has no RSVP here (setEventReminderOffsets), whatever row it holds from before visitors
                -- were refused one: its push token gets what is sent to it, its messages and Beans.
                AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = r.member_pubkey AND m.is_visitor = 1)
+               -- Nor a member removed from the event's group, or who left it or was banned: their RSVP is kept, and a
+               -- reminder would name the event (engine/event-thread.ts canReadEventThread).
+               AND ${postInSightSql('p', 'r.member_pubkey')}
              ORDER BY p.event_start_at ASC
         `).all(nowIso, horizonIso) as any[];
     } catch {

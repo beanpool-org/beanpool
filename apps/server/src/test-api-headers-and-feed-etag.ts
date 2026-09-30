@@ -39,8 +39,8 @@ import { db } from './db/db.js';
 import { recordActivity, pruneOldActivity } from './db/activity-feed-db.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8561;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -70,7 +70,8 @@ async function main(): Promise<void> {
     `).run(authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed');
 
     // Start real HTTPS server
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // GET signed as the member (replay-proof headers; the path is signed without its query string).
     const memberFetch = (path: string, extra: Record<string, string> = {}) => {

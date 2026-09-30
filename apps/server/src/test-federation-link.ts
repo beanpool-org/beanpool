@@ -38,8 +38,8 @@ import {
 } from './federation-link.js';
 import { bridgeAccountId } from './federation-bridge.js';
 
-const PORT = 8552;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 
 const PEER_ID = '12D3KooWEastGippyLinkTestPeer00000000000000';
@@ -143,7 +143,8 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const baseline = nodeTotal();
 

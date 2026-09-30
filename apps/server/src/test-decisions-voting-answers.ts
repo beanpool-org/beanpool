@@ -621,7 +621,7 @@ async function run() {
     completedTrade(restored, voters[0], 3, new Date(Date.now() - DAY));
     const { startP2P } = await import('./p2p.js');
     const { addConnector } = await import('./connector-manager.js');
-    const p2pNode = await startP2P(4038, 4039);
+    const p2pNode = await startP2P(0, 0);
     try {
         const nodeId = p2pNode.peerId.toString();
         const snapshot = await exportSyncState(nodeId);

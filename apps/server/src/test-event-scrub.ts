@@ -124,7 +124,7 @@ const msgCtx = (convId: string, actor: string | undefined): any => ({
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4046, 4047);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4047/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 

@@ -156,7 +156,7 @@ function searchThenEdit(
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4062, 4063);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4063/p2p/${nodeId}`, 'mirror', 'fts-self-test-peer');
 

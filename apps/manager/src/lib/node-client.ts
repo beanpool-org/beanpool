@@ -638,6 +638,44 @@ export async function fetchOnboardingFunnel(
     return res.json();
 }
 
+/** One UTC day of web app visits: page loads, and about how many different visitors made them. */
+export interface WebVisitDay {
+    day: string;
+    visits: number;
+    uniques: number;
+}
+
+export interface WebVisitsResponse {
+    days: number;
+    retentionDays: number;
+    /** Exactly `days` entries, oldest first; the last is today (UTC). */
+    series: WebVisitDay[];
+}
+
+/** The node's own count of web app visits a day (no cookies, nobody identified): the manager's Home card. */
+export async function fetchWebVisits(
+    nodeUrl: string,
+    adminPassword?: string,
+    days = 30,
+    tfaToken?: string,
+): Promise<WebVisitsResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/web-visits', { days: String(days) });
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        if (res.status === 401) {
+            throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
+        }
+        if (res.status === 404) {
+            throw new Error("This node's build doesn't count web app visits yet. Update it to see them.");
+        }
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<GatewayConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
     const res = await fetch(endpoint, {

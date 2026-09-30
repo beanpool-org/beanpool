@@ -20,8 +20,8 @@ import { db } from './db/db.js';
 import { getImageStore } from './storage/image-store.js';
 import { lockedDm } from './dm-test-payload.js';
 
-const PORT = 8549;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -57,7 +57,8 @@ async function main() {
     console.log('Running message attachment integration tests...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const Alice = makeIdentity('Alice');
     const Bob = makeIdentity('Bob');

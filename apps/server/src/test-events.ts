@@ -98,7 +98,7 @@ async function listIds(router: any, query: Record<string, string>, actor?: strin
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4042, 4043);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
@@ -203,7 +203,9 @@ async function main(): Promise<void> {
     rsvpEvent(capture, ev.id, maybe, 'interested');
     assertThrows(() => rsvpEvent(capture, ev.id, goer, 'maybe' as any), /must be 'going', 'interested' or null/, 'an unknown RSVP status is refused');
     assertThrows(() => rsvpEvent(capture, ev2.id, goer, 'going'), /has ended/, 'RSVP to an ended event is refused');
-    assertThrows(() => rsvpEvent(capture, groupEvents[0].id, stranger, 'going'), /UNAUTHORIZED/, 'a non-member cannot RSVP to a group-only event');
+    // Told what an id nobody has gets (engine/post-sight.ts): "UNAUTHORIZED: Must be an active convenor or member of the
+    // group" confirmed the group's event to someone who can't see it, an invite-only group's included.
+    assertThrows(() => rsvpEvent(capture, groupEvents[0].id, stranger, 'going'), /^Event not found$/, 'a non-member cannot RSVP to a group-only event, and is told "Event not found"');
     assert(rsvpEvent(capture, groupEvents[0].id, groupie, 'going').post.goingCount === 1, 'a group member can RSVP to a group-only event');
     const offer = createPost('offer', 'food', 'Carrots', 'Fresh', 5, 'fixed', stranger, undefined, undefined, [])!;
     assertThrows(() => rsvpEvent(capture, offer.id, goer, 'going'), /Event not found/, 'RSVP to a post that is not an event is refused');

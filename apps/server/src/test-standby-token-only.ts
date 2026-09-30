@@ -115,7 +115,7 @@ async function main() {
     assert(getLocalConfig().replicationTokenOnly === undefined, '1. an existing install (locked) keeps its unset token-only flag (reads as off)');
 
     initStateEngine();
-    const node = await startP2P(4062, 4063);
+    const node = await startP2P(0, 0);
     const nodeId = node.peerId.toString();
     const mirrorAddr = `/ip4/127.0.0.1/tcp/4063/p2p/${nodeId}`;
     addConnector(mirrorAddr, 'mirror', 'self-test-primary');

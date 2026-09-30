@@ -83,8 +83,8 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 
-const PORT = 8761;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ADMIN_PW = 'Knock-Knock-Admin-Pw-62!';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -181,7 +181,8 @@ async function main(): Promise<void> {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a
     // knock's times by hand and read the row straight after.
     tidyEvery(DAY_MS);
@@ -485,7 +486,7 @@ async function main(): Promise<void> {
     assert(annScrubbed?.status === 'approved' && annScrubbed?.invite_code === code && annScrubbed?.decided_by === max.pk, 'the record stays');
 
     console.log('\n── 13. replication to a standby ──');
-    const p2p = await startP2P(4096, 4097);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4097/p2p/${nodeId}`, 'mirror', 'knock-standby-test');
     const expected = db.prepare('SELECT id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at FROM join_requests ORDER BY id').all();

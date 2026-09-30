@@ -1060,7 +1060,8 @@ function sweepSettledEscrowAccounts(): void {
 export function addWsClient(ws: any): void {
     wsClients.add(ws);
     try {
-        const counts = getCommunityInfo();
+        // The cached counts (communityCountsCached): every socket's greeting ran three full-table counts before.
+        const counts = communityCountsCached();
         ws.send(JSON.stringify({
             type: 'state_snapshot',
             memberCount: counts.memberCount,
@@ -1077,7 +1078,7 @@ export function removeWsClient(ws: any): void {
 // The ETag version counters now live in engine/versions.ts — a dependency-free module, so that
 // low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
-import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
+import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVersion as postsVersionNow, getMembersVersion as membersVersionNow } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
@@ -5595,22 +5596,68 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures } {
-    const memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
-    const postCount = getActivePostCount();
-    let txCount = 0;
-    if (publicKey) {
-        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?").get(publicKey, publicKey) as any).c;
-    } else {
-        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
-    }
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures };
+
+interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
+
+function countCommunity(): CommunityCounts {
+    return {
+        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c,
+        postCount: getActivePostCount(),
+        transactionCount: (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c,
+    };
+}
+
+/**
+ * How long the node-wide counts a public read or a /ws greeting carries may be reused. Three full-table counts ran on
+ * every GET /api/community/info (throttle-exempt as a peer protocol read) and every socket's connect, on the one event
+ * loop (DoS review F4); now at most once in this long, or sooner once a member or a listing changes (the ETag version
+ * counters, engine/versions.ts). A card's count a few seconds behind a trade is nothing anyone can see.
+ */
+export const COMMUNITY_COUNTS_TTL_MS = 30_000;
+let countsCache: (CommunityCounts & { at: number; members: number; posts: number }) | null = null;
+
+/** The node-wide counts, from COMMUNITY_COUNTS_TTL_MS's cache. Never for a decision: getCommunityInfo counts afresh. */
+export function communityCountsCached(now = Date.now()): CommunityCounts {
+    const members = membersVersionNow();
+    const posts = postsVersionNow();
+    if (countsCache && now >= countsCache.at && now - countsCache.at < COMMUNITY_COUNTS_TTL_MS
+        && countsCache.members === members && countsCache.posts === posts) return countsCache;
+    countsCache = { ...countCommunity(), at: now, members, posts };
+    return countsCache;
+}
+
+/** Tests only: forget the cached counts and public health. */
+export function resetCommunityReadCaches(): void {
+    countsCache = null;
+    publicHealthCache = null;
+}
+
+function communityInfoWith(counts: CommunityCounts, publicKey?: string): CommunityInfo {
+    const txCount = publicKey
+        ? (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?").get(publicKey, publicKey) as any).c
+        : counts.transactionCount;
     const config = getLocalConfig();
+    const { memberCount, postCount } = counts;
     // profile + features are additive: the apps read them to know what this node does; older apps ignore them.
     return {
         memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         profile: getNodeProfile(), features: getNodeFeatures(),
     };
+}
+
+/** The community's counts, profile and features, counted afresh (the seed-invite route decides by memberCount). */
+export function getCommunityInfo(publicKey?: string): CommunityInfo {
+    return communityInfoWith(countCommunity(), publicKey);
+}
+
+/**
+ * The same for the public read (GET /api/community/info): the node-wide counts from communityCountsCached; the verified
+ * signer's own transaction count, the one per-caller figure, is counted for them (an index lookup, not a scan).
+ */
+export function getPublicCommunityInfo(publicKey?: string): CommunityInfo {
+    return communityInfoWith(communityCountsCached(), publicKey);
 }
 
 /**
@@ -6230,10 +6277,13 @@ function readWatchdogStatus(): WatchdogStatus {
     } catch { return empty; }
 }
 
-export function getCommunityHealth(): CommunityHealth {
-    const now = Date.now();
-    const t = getThresholds();
-    
+/** The health figures that scan tables: the member and activity counts both health reads carry. */
+interface HealthCounts {
+    totalMembers: number; activeMemberCount: number; inactiveMemberCount: number;
+    totalTransactions: number; totalPosts: number; last7Days: number; last30Days: number;
+}
+
+function countHealth(t: ReturnType<typeof getThresholds>): HealthCounts {
     // Active vs Inactive member counts (excluding genesis admin account)
     let activeMemberCount = 0;
     let inactiveMemberCount = 0;
@@ -6266,7 +6316,66 @@ export function getCommunityHealth(): CommunityHealth {
 
     // ⚡ O(1) SQL count instead of materialising every member row to read .length
     const totalMembers = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
-    
+    return {
+        totalMembers, activeMemberCount, inactiveMemberCount,
+        totalTransactions: (db.prepare(`SELECT COUNT(*) as c FROM transactions`).get() as any).c,
+        totalPosts: (db.prepare(`SELECT COUNT(*) as c FROM posts WHERE status IN ('active', 'pending')`).get() as any).c,
+        last7Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-7 days')`).get() as any).c,
+        last30Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-30 days')`).get() as any).c,
+    };
+}
+
+/** The fields both health reads share, from its counts and what is read live (config, versions, the Commons balance). */
+function healthBody(counts: HealthCounts, reportCount: number, watchdog: WatchdogStatus): Omit<CommunityHealth, 'flags'> {
+    const config = getLocalConfig();
+    return {
+        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
+        version: getVersion(),
+        // The app reads both of these. `minAppVersion` is this node's floor — below it
+        // the app says so and will not let you dismiss it. `appVersions` is what the
+        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
+        // downloaded onto a phone on a metered off-grid connection to learn one number.
+        minAppVersion: getMinAppVersion(),
+        appVersions: getAppStoreVersions(),
+        currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
+        tree: { totalMembers: counts.totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
+        activity: {
+            totalTransactions: counts.totalTransactions,
+            totalPosts: counts.totalPosts,
+            last7Days: counts.last7Days,
+            last30Days: counts.last30Days,
+            activeMemberCount: counts.activeMemberCount,
+            inactiveMemberCount: counts.inactiveMemberCount,
+            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
+        },
+        reportCount,
+        watchdog
+    };
+}
+
+/**
+ * How long GET /api/community/health may reuse its counts, the pending reports and the watchdog's file. The route is
+ * public and throttle-exempt (a peer protocol read), every phone asks it every 30 s, and it ran getCommunityHealth
+ * whole: eight table scans and the fraud analysis (wash trading, rings, funnels), whose flags it then threw away (DoS
+ * review F4). Its floor and store versions, name and currency are read live, so a changed minimum app version reaches
+ * the next phone that asks.
+ */
+export const PUBLIC_HEALTH_TTL_MS = 30_000;
+let publicHealthCache: { at: number; counts: HealthCounts; reportCount: number; watchdog: WatchdogStatus } | null = null;
+
+/** What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed. */
+export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags'> {
+    if (!publicHealthCache || now < publicHealthCache.at || now - publicHealthCache.at >= PUBLIC_HEALTH_TTL_MS) {
+        publicHealthCache = { at: now, counts: countHealth(getThresholds()), reportCount: getReportCount(), watchdog: readWatchdogStatus() };
+    }
+    return healthBody(publicHealthCache.counts, publicHealthCache.reportCount, publicHealthCache.watchdog);
+}
+
+export function getCommunityHealth(): CommunityHealth {
+    const now = Date.now();
+    const t = getThresholds();
+    const counts = countHealth(t);
+
     // ========== HEALTH FLAG DETECTION ==========
     const flags: HealthFlag[] = [];
     
@@ -6550,33 +6659,8 @@ export function getCommunityHealth(): CommunityHealth {
         }
     } catch (e) { console.error('Health flag check (unhandled rejections) failed:', e); }
 
-    const config = getLocalConfig();
-    const reportCount = getReportCount();
-    
-    return {
-        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
-        version: getVersion(),
-        // The app reads both of these. `minAppVersion` is this node's floor — below it
-        // the app says so and will not let you dismiss it. `appVersions` is what the
-        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
-        // downloaded onto a phone on a metered off-grid connection to learn one number.
-        minAppVersion: getMinAppVersion(),
-        appVersions: getAppStoreVersions(),
-        currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
-        tree: { totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
-        activity: {
-            totalTransactions: (db.prepare(`SELECT COUNT(*) as c FROM transactions`).get() as any).c,
-            totalPosts: (db.prepare(`SELECT COUNT(*) as c FROM posts WHERE status IN ('active', 'pending')`).get() as any).c,
-            last7Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-7 days')`).get() as any).c,
-            last30Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-30 days')`).get() as any).c,
-            activeMemberCount,
-            inactiveMemberCount,
-            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
-        },
-        flags,
-        reportCount,
-        watchdog
-    };
+    const { reportCount, watchdog: watchdogStatus, ...rest } = healthBody(counts, getReportCount(), watchdog);
+    return { ...rest, flags, reportCount, watchdog: watchdogStatus };
 }
 
 // ===================== ADMIN CONTROLS =====================

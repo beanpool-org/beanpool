@@ -39,7 +39,7 @@ import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
-import { guestPost, isTradeParty, withoutTradeParty, type MarketplacePost } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, ONE_PASS_MAX_MEASURED, type MarketplacePost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -369,9 +369,12 @@ router.get('/api/marketplace/posts', async (ctx) => {
         posts = [...delta, ...rest];
         notePhotoHealServed(ctx.state.actor as string | undefined, updatedAfter, heal, read.next ?? null);
     } else {
+        // A read with a point measures at most ONE_PASS_MAX_MEASURED posts in a single pass (DoS review F5): the radius
+        // is optional and the offset unbounded, so one public GET could otherwise measure and sort every post on the node.
         posts = getPosts({
             ...listing, limit, offset, updatedAfter, sync,
             near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+            measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined,
         });
     }
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or

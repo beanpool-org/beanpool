@@ -9,12 +9,12 @@ import {
     registerMember, getMembers, getAllMembers, getMember,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
-    getCommunityInfo,
+    getCommunityInfo, getPublicCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
-    getCommunityHealth,
+    getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, getReportCount, getReportablePulseItemOwner, findPendingReport, isReportRateLimited,
@@ -749,9 +749,11 @@ router.post('/api/local/reset', async (ctx) => {
 
 router.get('/api/community/info', async (ctx) => {
     // The per-member transaction count is only for the verified signer. An unverified X-Public-Key header
-    // or ?publicKey= gets the node-wide figures, like any anonymous caller.
+    // or ?publicKey= gets the node-wide figures, like any anonymous caller. The node-wide counts are cached for a few
+    // seconds (state-engine communityCountsCached): this read is exempt from the gateway's usual buckets (a peer protocol
+    // read), and ran three full-table counts on every hit (DoS review F4).
     ctx.body = {
-        ...getCommunityInfo(ctx.state.actor as string | undefined),
+        ...getPublicCommunityInfo(ctx.state.actor as string | undefined),
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
@@ -862,9 +864,10 @@ router.get('/api/community/health', async (ctx) => {
     // The fleet manager — the only thing that displays flags — reads them from
     // POST /api/local/admin/data, which calls getCommunityHealth() in-process behind
     // checkAdminAuth. Nothing changes for it.
-    const { flags, ...publicHealth } = getCommunityHealth();
-    void flags;
-    ctx.body = publicHealth;
+    //
+    // So this read never computes them (getPublicCommunityHealth): it ran the whole fraud analysis on every hit, and
+    // threw it away, with no throttle in front of it. Its table counts are cached for a few seconds (DoS review F4).
+    ctx.body = getPublicCommunityHealth();
 });
 
 // Lightweight membership probe — returns whether a public key is a registered member or recovering.

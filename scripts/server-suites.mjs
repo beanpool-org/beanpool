@@ -109,6 +109,7 @@ export const SUITES = [
     'test-settlement-orchestration',
     'test-federation-purchase-route',
     'test-federation-commission',
+    'test-federation-settlement-key',
     'test-p2p-announce',
     'test-federation-settlement',
     'test-admin-actor-name',

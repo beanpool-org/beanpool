@@ -11,7 +11,8 @@
  *
  *  1. S's first copy: each of M's listing photos by reference, its object fetched once (a photo on two listings once), the
  *     one inline with its bytes; every row's object in S's store with its sha256, and S is M's. (Before: every photo's
- *     bytes inline in the pages, no object fetched.)
+ *     bytes inline in the pages, no object fetched.) M checks S's replication token with scrypt once for the whole copy,
+ *     not once for each object (review 4148896207).
  *  2. A second whole copy fetches no object; one new photo on M is fetched alone, by the next delta.
  *  3. An object M can't read: the copy names it in photosOmitted and S keeps its own row and object, exact. An object M can
  *     no longer serve when S asks (a 404): a whole copy and a delta both land without that photo's row, S keeping its own
@@ -19,7 +20,8 @@
  *  4. An object changed in transit: asked for again, and the right one lands. Changed every time: the delta and the whole
  *     copy are each refused, loudly, nothing of the object or its row written, and the next pull lands.
  *  5. The object route: no token or a wrong one is 401, an address not in lowercase hex 400, one no listing photo of M names
- *     404 (a chat attachment's object in M's store, a member's avatar, nothing at all), a listing photo's the bytes. A copy
+ *     404 (a chat attachment's object in M's store, a member's avatar, nothing at all), a listing photo's the bytes. Each
+ *     wrong token pays its scrypt; a token rotated or revoked on M is refused at once, though the old one was remembered. A copy
  *     asked for without the format that reads photos by reference (an older standby) is refused, 426, logged on M; S's
  *     pull fails saying so, S unchanged.
  *  6. More accounts than BACKUP_DELTA_BYTES (scaled) of them, which every delta carries whole: eight pulls in a row, a member
@@ -293,8 +295,10 @@ async function main(): Promise<void> {
 
         await step('1. S\'s first copy: each listing photo by reference, its object fetched once; the inline one with its bytes', async () => {
             const g0 = gets();
+            const k0: number = await main.send('count-scrypts');
             const p1 = await pullAndSwap(false);
             const fetched = px.objectGets.slice(g0);
+            const tokenScrypts = (await main.send('count-scrypts')) - k0;
             const pages = pagesOf(px);
             const photos = pages.flatMap((pg) => Array.isArray(pg.photos) ? pg.photos : []);
             const byRef = photos.filter((r: any) => typeof r.sha256 === 'string' && r.photo_data === undefined);
@@ -309,6 +313,9 @@ async function main(): Promise<void> {
             const rec = await standby.send('record');
             assert(mismatch.length === 0 && diff.length === 0 && rec.lastWhole?.exact === true,
                 `every one of S's listing photos has its object in S's store with M's bytes, and S is M's (photos ${first(mismatch)}; tables ${first(diff)}; ${JSON.stringify(rec.lastWhole)})`);
+            // Review 4148896207: the replication token's scrypt, once for the copy, not once for every object it fetched.
+            assert(fetched.length > 20 && tokenScrypts >= 1 && tokenScrypts <= 2,
+                `M checked S's replication token with scrypt ${tokenScrypts} time(s) for a copy of ${pages.length} pages and ${fetched.length} objects (before: once per request, ${fetched.length + pages.length}+)`);
         });
 
         await step('2. a second whole copy fetches nothing; one new photo is fetched alone by the next delta', async () => {
@@ -399,6 +406,22 @@ async function main(): Promise<void> {
             const badToken = await at(made[0].sha256, { 'X-Replication-Token': 'f'.repeat(64) });
             assert(good.status === 200 && sha256(good.bytes) === made[0].sha256 && noToken.status === 401 && badToken.status === 401,
                 `a listing photo's address gets its bytes with the token, and 401 without it or with a wrong one (${good.status}, ${noToken.status}, ${badToken.status})`);
+            // The token's verdict is remembered (review 4148896207), and only a right one: each wrong one still pays its scrypt,
+            // and a token rotated or revoked on M is refused at once.
+            const k5: number = await main.send('count-scrypts');
+            for (let i = 0; i < 3; i++) await at(made[0].sha256, { 'X-Replication-Token': crypto.randomBytes(32).toString('hex') });
+            const k5b: number = await main.send('count-scrypts');
+            const rotated = crypto.randomBytes(32).toString('hex');
+            await main.send('set-token', { token: rotated });
+            const oldAfterRotation = await at(made[0].sha256);
+            const newAfterRotation = await at(made[0].sha256, { 'X-Replication-Token': rotated });
+            await main.send('set-token', { token: null });
+            const afterRevocation = await at(made[0].sha256, { 'X-Replication-Token': rotated });
+            await main.send('set-token', { token: replicationToken });
+            const restored = await at(made[0].sha256);
+            assert(k5b - k5 === 3 && oldAfterRotation.status === 401 && newAfterRotation.status === 200 && afterRevocation.status === 401 && restored.status === 200,
+                `three wrong tokens pay three scrypts (${k5b - k5}); rotated, the old token is refused at once (${oldAfterRotation.status}) and the new one taken `
+                + `(${newAfterRotation.status}); revoked, refused (${afterRevocation.status}); set again, taken (${restored.status})`);
             const upper = await at(made[0].sha256.toUpperCase());
             const junk = await at('not-an-address');
             const nobody = await at(crypto.randomBytes(32).toString('hex'));
@@ -523,7 +546,28 @@ async function main(): Promise<void> {
 
 // ── Inside M's or S's process ──────────────────────────────────────────────────────────────
 
+/** How many scrypts this process has started (count-scrypts): node:crypto's `scrypt`, wrapped once, as every module sees it. */
+let scrypts: number | null = null;
+
 const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
+    'count-scrypts': async () => {
+        if (scrypts === null) {
+            scrypts = 0;
+            const nodeCrypto = (await import('node:crypto')).default as unknown as Record<string, unknown>;
+            const { syncBuiltinESMExports } = await import('node:module');
+            const real = nodeCrypto.scrypt as (...a: unknown[]) => unknown;
+            nodeCrypto.scrypt = (...a: unknown[]) => { scrypts!++; return real(...a); };
+            syncBuiltinESMExports();
+        }
+        return scrypts;
+    },
+    /** The replication token this main server takes, set (as the operator rotates it) or, with null, revoked. */
+    'set-token': async (a: { token: string | null }) => {
+        const { setReplicationToken, clearReplicationToken } = await import('./config/local-config.js');
+        if (a.token) setReplicationToken(a.token);
+        else clearReplicationToken();
+        return true;
+    },
     /**
      * Listing photos in this server's image store, as a member's upload puts them (storage/image-columns.ts): `perPost` of
      * `bytes` random bytes each on every listing in `posts`, from slot `from`; or one with the bytes of the object `sameAs`.

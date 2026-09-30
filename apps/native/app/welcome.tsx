@@ -140,9 +140,10 @@ export default function WelcomeScreen() {
     // vault: a callsign and the community's address, looked up as they type.
     const [ssoCallsign, setSsoCallsign] = useState('');
     /**
-     * In a build with a key vault: the sign-in the vault said, signed, that it keeps no copy for (utils/sso-recovery.ts
-     * `vaultKeepsNoCopyFor`), whose copy may still be at the member's community. That sign-in's restore goes on there,
-     * on the same screen a build without a vault shows (PR #1336 review finding 3). Null otherwise.
+     * In a build with a key vault: the provider the vault said, signed, that it keeps no copy for (utils/sso-recovery.ts
+     * `vaultKeepsNoCopyFor`, kept per provider, not per sign-in account), whose copy may still be at the member's
+     * community. The restore with that provider goes on there, on the same screen a build without a vault shows (PR
+     * #1336 review finding 3). Null otherwise.
      */
     const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
@@ -2721,7 +2722,7 @@ export default function WelcomeScreen() {
     // A build without a key vault: the restore at the member's community, as before the vault. In a build with one, the
     // same restore for the one sign-in the vault said, signed, that it keeps no copy for (review finding 3).
     if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
-        /** The sign-ins this screen offers: every one without a vault; with one, only the sign-in the vault has no copy for. */
+        /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
         const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
         return (
             <SafeAreaView style={styles.container}>

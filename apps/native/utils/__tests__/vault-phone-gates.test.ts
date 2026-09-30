@@ -3,8 +3,8 @@
  *
  * - **Finding 3** (PR #1336 review): a member whose only copy is still at a community gets back in. A vault build used to
  *   restore only through the vault, and the move card showed only in Settings. Now, on the vault's SIGNED "no copy" for a
- *   sign-in, the restore goes on at the community exactly as a build without a vault does it, and the move card is
- *   offered at once. An unsigned, forged, replayed, locked or missing answer never opens that path.
+ *   sign-in, the restore with that provider goes on at the community exactly as a build without a vault does it, and
+ *   the move card is offered at once. The "no copy" is kept per provider, not per sign-in account. An unsigned, forged, replayed, locked or missing answer never opens that path.
  * - **N1** (confirmation review 2): "none" is believed for 7 days per account per phone; then the app-open check asks
  *   again, once. A copy the member made meanwhile on another phone is learnt of there: its holds show, and its push token
  *   reaches the copy.
@@ -168,9 +168,9 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         expect(await vaultMoveOffer(result.identity, COMMUNITY)).toEqual({ kind: 'move', provider: 'google', communityUrl: COMMUNITY });
     });
 
-    it('the welcome screen: the community form only on that signed answer, only for that sign-in; then Settings, whose first card is the move', () => {
+    it('the welcome screen: the community form only on that signed answer, only for that provider; then Settings, whose first card is the move', () => {
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
-        // The form a build without a vault shows, and in a vault build only for a sign-in the vault has no copy for.
+        // The form a build without a vault shows, and in a vault build only for a provider the vault has no copy for.
         expect(welcome).toMatch(/if \(mode === 'ssoRecover' && \(!hasVault\(\) \|\| ssoAtCommunity\)\) \{/);
         expect(welcome.match(/setSsoAtCommunity\((?!null\))[^)]*\)/g)).toEqual(['setSsoAtCommunity(provider)']);
         expect(welcome).toMatch(/\} else if \(vaultKeepsNoCopyFor\(provider\)\) \{\n(\s*\/\/.*\n)*\s*setError\(null\);\n\s*setSsoAtCommunity\(provider\);/);
@@ -239,7 +239,7 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         expect(await loadIdentity()).toBeNull();
     });
 
-    it('it opens the community only for the sign-in the vault answered, and only while that is the vault\'s latest word', async () => {
+    it('it opens the community only for the provider the vault answered (per provider, not per sign-in account), and only while that is the vault\'s latest word', async () => {
         await copyOnlyAtCommunity();
         await expect(startSsoRestore('google')).rejects.toMatchObject({ reason: 'no_copy' });
         // Facebook was never asked about at the vault: not at the community either.

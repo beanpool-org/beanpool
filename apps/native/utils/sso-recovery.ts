@@ -20,8 +20,8 @@
  * The waiting restore lives on this phone (SecureStore, this device only) until the account is saved, so a restart, a
  * lost answer or a failed save comes back to the same hold.
  *
- * When the vault answers, signed, that it keeps no copy for the sign-in ({@link vaultKeepsNoCopyFor}), the copy may
- * still be at the member's community, made before the vault and never moved: the restore goes on there, as below, with
+ * When the vault answers, signed, that it keeps no copy for a sign-in, the phone remembers that per provider
+ * ({@link vaultKeepsNoCopyFor}), and the copy may still be at the member's community, made before the vault and never moved: the restore goes on there, as below, with
  * the callsign, the community's address and a second sign-in for the community's own nonce. Then the move card is
  * offered at once (PR #1336 review finding 3).
  *
@@ -115,8 +115,8 @@ export const COMMUNITY_RESTORE_NOT_OFFERED = "Getting back in with a sign-in goe
 
 /**
  * The restore at the member's community, with the callsign and the community's address: a build without a vault's only
- * sign-in restore. In a build with a vault, only for a sign-in the vault has said, signed, that it keeps no copy for
- * ({@link vaultKeepsNoCopyFor}); otherwise it refuses before anything is sent.
+ * sign-in restore. In a build with a vault, only with a provider the vault has said, signed, that it keeps no copy for
+ * ({@link vaultKeepsNoCopyFor}, per provider); otherwise it refuses before anything is sent.
  */
 export async function recoverAccountWithSso(options: {
     callsign: string;
@@ -396,11 +396,18 @@ export async function recoverAccountWithSso(options: {
  *
  * Only the vault's signed "no copy" counts (utils/vault.ts `VaultFailure` 'no_copy'). An answer the phone can't check,
  * a 5xx, a timeout or no answer at all never does: otherwise a server at the vault's address could send members down
- * the old path. Each restore with a sign-in starts by forgetting it, so it is always the vault's latest word.
+ * the old path. Each restore with a provider starts by forgetting it, so it is always the vault's latest word.
+ *
+ * Kept per provider, not per sign-in account: a "no copy" for one Google account opens the community's restore to
+ * another Google account on this phone too, until the next restore with Google. That exposes nothing new: the
+ * community's copy answers a build without a vault, for any account, anyway.
  */
 const noCopyAtVault = new Set<SsoProvider>();
 
-/** Whether the vault's signed answer to this phone's last restore with `provider` was "no copy" ({@link noCopyAtVault}). */
+/**
+ * Whether the vault's signed answer to this phone's last restore with `provider`, whichever of its accounts, was "no
+ * copy" ({@link noCopyAtVault}: per provider, not per sign-in account).
+ */
 export function vaultKeepsNoCopyFor(provider: SsoProvider): boolean {
     return noCopyAtVault.has(provider);
 }

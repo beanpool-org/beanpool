@@ -20,8 +20,8 @@
  * #1349). CLOSED:
  * - the vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below);
  * - a member whose only copy is still at a community gets back in there: on the vault's signed "no copy" for a sign-in,
- *   the restore goes on at the community as a build without a vault does it, and the move card is offered at once
- *   (finding 3; sso-recovery.ts `vaultKeepsNoCopyFor`);
+ *   the restore with that provider goes on at the community as a build without a vault does it, and the move card is
+ *   offered at once (finding 3; sso-recovery.ts `vaultKeepsNoCopyFor`, kept per provider, not per sign-in account);
  * - a phone told "none" ({@link vaultCopyKnowledge}) learns of a copy the member makes later on another phone: "none" is
  *   believed for a week, then the app-open check asks again ({@link VAULT_NONE_KEPT_MS}; confirmation N1);
  * - a 2xx status answer that isn't a status is not recorded as "none" ({@link vaultStatus}; confirmation N2).

@@ -326,12 +326,18 @@ async function main(): Promise<void> {
     // The keyholder's marker of a pending restore from backup (keyholder.json's stateDir): root plants it here, as a
     // custodians' restore would, to see root's step keep the restore's files while it is there (verify 4, NB-1).
     const MARKER = '/var/lib/beanpool-vault/keyholder/restore-pending.json';
+    // Confirm 5, NB-1: a one-byte "backup" holding 1.1 GiB of blocks preallocated past its end (fallocate --keep-size;
+    // it stays through a remount), which the budget must count by its blocks.
+    const keepSizeFile = path.join(BACKUPS, 'bv-20260101T000000Z.bin');
+    asApi(`require('fs').writeFileSync(process.argv[1], 'x')`, keepSizeFile);
+    const keptSize = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '--keep-size', '-o', '0', '-l', String(1100 << 20), keepSizeFile]);
     const fill = varSpace().avail - (12 << 20);
     const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
     asApi(`const fs = require('fs'), [b, s, r] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
-        fs.writeFileSync(b + '/bv-20990101T000000Z.bin', '');
-        fs.truncateSync(b + '/bv-20990101T000000Z.bin', 1073741825);
+        fs.writeFileSync(b + '/bv-20260102T000000Z.bin', '');
+        fs.truncateSync(b + '/bv-20260102T000000Z.bin', 1073741825);
+        for (let i = 1; i <= 1002; i++) fs.writeFileSync(b + '/bv-20260103T000000Z-' + i + '.bin', '');
         fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
         fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');
         fs.mkdirSync(r, { recursive: true });
@@ -351,8 +357,11 @@ async function main(): Promise<void> {
         `${tidy.out.split('\n').filter(l => /removed|nothing/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
     // A newest "backup" past api.json's backupMaxBytes (1 GiB; sparse here, its size is what counts): the API never
     // writes one, and root removes it (verify 4, the director's hard cap).
-    check('root removes a newest backup larger than the budget', !readdirSync(BACKUPS).includes('bv-20990101T000000Z.bin') && /1 backup past the budget/.test(cleanup),
-        `backups ${readdirSync(BACKUPS).join(' ')}; ${cleanup}`);
+    const backupsLeft = readdirSync(BACKUPS);
+    check('root removes a backup longer than the budget, one holding more blocks than the budget (fallocate --keep-size), and empty ones past 1,000 files',
+        keptSize.status === 0 && !backupsLeft.includes('bv-20260102T000000Z.bin') && !backupsLeft.includes('bv-20260101T000000Z.bin')
+            && backupsLeft.length <= 1000 && !backupsLeft.includes('bv-20260103T000000Z-1.bin') && /backups past the budget/.test(cleanup),
+        `fallocate --keep-size: ${keptSize.status} ${keptSize.out}; ${backupsLeft.length} left in backups; ${cleanup}`);
     const restoreKept = readdirSync(RESTORE).sort().join(' ');
     check('while the keyholder marks a restore from backup pending, root keeps its file and partial file, and nothing else in restore/',
         restoreKept === 'restore-pending.bin restore-pending.bin.part', restoreKept);

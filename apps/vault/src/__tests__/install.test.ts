@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -6,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { LocalDirectoryStore } from '../api/backup-store.js';
 import { custodianKey } from '../custodian/lib.js';
 import { clearApiDirs, INSTALL_SPARE_BYTES, installStaged, processesOf, type ApiDirs, type InstallOptions } from '../install/install.js';
+import { backupsPastBudget, MAX_BACKUP_FILES } from '../shared/backup-format.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
 import { stagedNames } from '../shared/staged-image.js';
 import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit.js';
@@ -20,6 +22,8 @@ import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit
 const dir = mkdtempSync(path.join(os.tmpdir(), 'bvi-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 let n = 0;
+/** A block: backup sizes here are whole blocks, so a file's length and the blocks it holds agree (APFS and ext4). */
+const K = 4096;
 
 interface Image {
     uki: Buffer;
@@ -215,12 +219,36 @@ describe('the monthly restart installs only what root checks from the pinned key
     });
 });
 
+describe('backupsPastBudget, the one rule for root and the API (confirm 5, NB-1)', () => {
+    const MiB = 1 << 20;
+
+    it('a backup costs its blocks when they are more than its length: one byte long with 400 MiB preallocated (fallocate --keep-size) is past a 64 MiB budget', () => {
+        const backups = [
+            { name: 'bv-20260903T000000Z.bin', size: 1, blocks: (400 * MiB) / 512 },
+            { name: 'bv-20260902T000000Z.bin', size: 10 * MiB, blocks: (10 * MiB) / 512 },
+            // Several small ones whose blocks fit alone but not together.
+            { name: 'bv-20260901T000000Z.bin', size: 1, blocks: (30 * MiB) / 512 },
+            { name: 'bv-20260831T000000Z.bin', size: 1, blocks: (30 * MiB) / 512 },
+        ];
+        expect(backupsPastBudget(backups, 64 * MiB).sort()).toEqual(['bv-20260831T000000Z.bin', 'bv-20260903T000000Z.bin']);
+        // A sparse file (length past its blocks) still costs its length.
+        expect(backupsPastBudget([{ name: 'bv-20260903T000000Z.bin', size: 65 * MiB, blocks: 0 }], 64 * MiB)).toEqual(['bv-20260903T000000Z.bin']);
+    });
+
+    it('no more than maxFiles stay, whatever they cost: the newest', () => {
+        const empty = Array.from({ length: 1005 }, (_, i) => ({ name: `bv-20260801T000000Z-${i + 1}.bin`, size: 0, blocks: 0 }));
+        expect(backupsPastBudget(empty, 64 * MiB).sort()).toEqual([1, 2, 3, 4, 5].map(i => `bv-20260801T000000Z-${i}.bin`).sort());
+        expect(MAX_BACKUP_FILES).toBe(1000);
+        expect(backupsPastBudget(empty.slice(0, 3), 64 * MiB, { maxFiles: 2 })).toEqual(['bv-20260801T000000Z-1.bin']);
+    });
+});
+
 describe('the monthly restart removes what the API left on the state partition, once the API is stopped (#1314 round 3, 4138896706)', () => {
     /** The API's directories as a compromised API might leave them (the reviewer filled releases/ with fallocate). */
     function planted() {
         const base = path.join(dir, `api-${++n}`);
         const d: ApiDirs = {
-            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700,
+            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 7 * K,
             restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
         };
         for (const p of [d.releases, d.backups, d.restore, path.dirname(d.restoreMarker)]) mkdirSync(p, { recursive: true });
@@ -234,13 +262,15 @@ describe('the monthly restart removes what the API left on the state partition, 
         mkdirSync(path.join(d.releases, 'deep', 'b', 'c'), { recursive: true });
         writeFileSync(path.join(d.releases, 'deep', 'b', 'c', 'f'), 'x');
         symlinkSync(outside, path.join(d.releases, 'link-out'));
-        // backups/: three backups (300 bytes each: two fit in 700), a file that is no backup, a directory and a link
+        // backups/: three backups (3 blocks each: two fit in 7), a file that is no backup, a directory and a link
         // under backup names, a partial write.
-        for (const day of ['01', '02', '03']) writeFileSync(path.join(d.backups, `bv-202609${day}T000000Z.bin`), Buffer.alloc(300));
+        for (const day of ['01', '02', '03']) writeFileSync(path.join(d.backups, `bv-202609${day}T000000Z.bin`), Buffer.alloc(3 * K));
         writeFileSync(path.join(d.backups, 'junk'), Buffer.alloc(1 << 20));
         mkdirSync(path.join(d.backups, 'bv-20260904T000000Z.bin'));
         writeFileSync(path.join(d.backups, 'bv-20260904T000000Z.bin', 'inside'), 'x');
         symlinkSync(path.join(outside, 'precious'), path.join(d.backups, 'bv-20260905T000000Z.bin'));
+        // A FIFO under a backup name: removed, never opened (opening one would wait for a writer).
+        execFileSync('mkfifo', [path.join(d.backups, 'bv-20260907T000000Z.bin')]);
         writeFileSync(path.join(d.backups, 'bv-20260906T000000Z.bin.part'), 'x');
         // restore/: a pending restore's file, its partial, a directory. (Pending only while the keyholder's marker is.)
         writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(500));
@@ -277,7 +307,7 @@ describe('the monthly restart removes what the API left on the state partition, 
         const record = JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup?: string };
         expect(record).toEqual({
             at: 7, installed: true, version: '1.1.0',
-            cleanup: 'removed what the API left on the state partition: 4 in releases, 4 in backups that are not a backup, 1 backup past the budget, 1 in restore',
+            cleanup: 'removed what the API left on the state partition: 4 in releases, 5 in backups that are not a backup, 1 backup past the budget, 1 in restore',
         });
     });
 
@@ -302,12 +332,12 @@ describe('the monthly restart removes what the API left on the state partition, 
         const t = setUp();
         const { d } = planted();
         markPending(d);
-        writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(701));
-        writeFileSync(path.join(d.restore, 'restore-pending.bin.part'), Buffer.alloc(1400));
+        writeFileSync(path.join(d.restore, 'restore-pending.bin'), Buffer.alloc(7 * K + 1));
+        writeFileSync(path.join(d.restore, 'restore-pending.bin.part'), Buffer.alloc(14 * K));
         await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
         expect(readdirSync(d.restore).sort()).toEqual(['restore-pending.bin', 'restore-pending.bin.part']);
-        expect(statSync(path.join(d.restore, 'restore-pending.bin')).size).toBe(701);
-        expect(statSync(path.join(d.restore, 'restore-pending.bin.part')).size).toBe(1400);
+        expect(statSync(path.join(d.restore, 'restore-pending.bin')).size).toBe(7 * K + 1);
+        expect(statSync(path.join(d.restore, 'restore-pending.bin.part')).size).toBe(14 * K);
         // Only regular files: a directory under the pending name goes, marker or not.
         rmSync(path.join(d.restore, 'restore-pending.bin'));
         mkdirSync(path.join(d.restore, 'restore-pending.bin'));
@@ -318,7 +348,7 @@ describe('the monthly restart removes what the API left on the state partition, 
     it('a newest backup larger than the budget goes too (the API never writes one); older ones that fit stay (verify 4, the director\'s hard cap)', async () => {
         const t = setUp();
         const { d } = planted();
-        writeFileSync(path.join(d.backups, 'bv-20260903T000000Z.bin'), Buffer.alloc(701));
+        writeFileSync(path.join(d.backups, 'bv-20260903T000000Z.bin'), Buffer.alloc(7 * K + 1));
         const resultFile = path.join(dir, `result-${n}.json`);
         await installStaged(t.opts({ apiDirs: d, resultFile, stopApi: () => true }));
         expect(readdirSync(d.backups).sort()).toEqual(['bv-20260901T000000Z.bin', 'bv-20260902T000000Z.bin']);
@@ -327,17 +357,17 @@ describe('the monthly restart removes what the API left on the state partition, 
 
     it('root\'s step and the API\'s rotation keep the same backups from the same files (backupsPastBudget)', async () => {
         const files: [string, number][] = [
-            ['bv-20260901T000000Z.bin', 300], ['bv-20260902T000000Z.bin', 300], ['bv-20260903T000000Z.bin', 701], ['bv-20260904T000000Z.bin', 300],
+            ['bv-20260901T000000Z.bin', 3 * K], ['bv-20260902T000000Z.bin', 3 * K], ['bv-20260903T000000Z.bin', 7 * K + 1], ['bv-20260904T000000Z.bin', 3 * K],
         ];
         // The API: 0904 is the backup it writes, into a store holding the rest.
         const store = path.join(dir, `store-${++n}`);
         mkdirSync(store);
         for (const [name, size] of files.slice(0, 3)) writeFileSync(path.join(store, name), Buffer.alloc(size));
-        await new LocalDirectoryStore(store, { maxBytes: 700 }).put(files[3][0], Buffer.alloc(files[3][1]));
+        await new LocalDirectoryStore(store, { maxBytes: 7 * K }).put(files[3][0], Buffer.alloc(files[3][1]));
         // Root: the same four files.
         const base = path.join(dir, `api-${++n}`);
         const d: ApiDirs = {
-            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 700,
+            releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 7 * K,
             restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
         };
         mkdirSync(d.backups, { recursive: true });
@@ -346,6 +376,23 @@ describe('the monthly restart removes what the API left on the state partition, 
         // The one past the budget on its own goes; of the rest, the newest two fit together, the oldest doesn't.
         const kept = ['bv-20260902T000000Z.bin', 'bv-20260904T000000Z.bin'];
         expect({ api: readdirSync(store).sort(), root: readdirSync(d.backups).sort() }).toEqual({ api: kept, root: kept });
+    });
+
+    it('many empty files under backup names: no more than MAX_BACKUP_FILES stay, the oldest go (confirm 5, NB-1: they cost no bytes, but inodes)', async () => {
+        const t = setUp();
+        const { d } = planted();
+        const cap = 1000;
+        // The planted three (0901-0903), and cap + 2 empty ones newer than them, in one second.
+        for (let i = 1; i <= cap + 2; i++) writeFileSync(path.join(d.backups, `bv-20260906T000000Z-${i}.bin`), '');
+        await installStaged(t.opts({ apiDirs: d, stopApi: () => true }));
+        const left = readdirSync(d.backups).filter(f => f.startsWith('bv-'));
+        // The newest 1,000 (MAX_BACKUP_FILES) stay: the empty ones from the highest suffix down. The two oldest of
+        // them and the planted three go.
+        expect(left).toHaveLength(cap);
+        expect(left).toContain(`bv-20260906T000000Z-${cap + 2}.bin`);
+        expect(left).toContain('bv-20260906T000000Z-3.bin');
+        for (const gone of ['bv-20260906T000000Z-2.bin', 'bv-20260906T000000Z-1.bin', 'bv-20260903T000000Z.bin']) expect(left).not.toContain(gone);
+        expect(MAX_BACKUP_FILES).toBe(cap);
     });
 
     it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {
@@ -357,7 +404,7 @@ describe('the monthly restart removes what the API left on the state partition, 
         const r = await installStaged(t.opts({ apiDirs: d, resultFile, stopApi: () => false }));
         expect(r).toMatchObject({ installed: false, reason: expect.stringContaining('more than one boot file') });
         expect(readdirSync(d.releases)).toHaveLength(4);
-        expect(readdirSync(d.backups)).toHaveLength(7);
+        expect(readdirSync(d.backups)).toHaveLength(8);
         // Its files unlinked, the directory left alone.
         expect(readdirSync(t.inbox)).toEqual(['beanpool-vault_1.2.0.efi']);
         expect(JSON.parse(readFileSync(resultFile, 'utf8'))).toMatchObject({ cleanup: 'the API could not be stopped: what it left on the state partition stays until the next restart' });

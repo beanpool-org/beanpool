@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { BACKUP_NAME_RE, backupsPastBudget, compareBackupNames } from '../shared/backup-format.js';
 
@@ -59,7 +59,9 @@ export class LocalDirectoryStore implements BackupStore {
     /** What the budget lets go (backupsPastBudget), but never `written`, the backup just made. */
     private keepWithin(maxBytes: number, written: string): void {
         const backups = readdirSync(this.dir).filter(n => BACKUP_NAME_RE.test(n))
-            .map(name => ({ name, size: statSync(path.join(this.dir, name)).size }));
+            .map(name => ({ name, st: lstatSync(path.join(this.dir, name)) }))
+            .filter(b => b.st.isFile())
+            .map(b => ({ name: b.name, size: b.st.size, blocks: b.st.blocks }));
         for (const name of backupsPastBudget(backups, maxBytes)) {
             if (name !== written) rmSync(path.join(this.dir, name), { force: true });
         }

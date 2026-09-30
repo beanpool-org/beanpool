@@ -55,19 +55,39 @@ export const RESTORE_PENDING_NAME = 'restore-pending.bin';
 export const RESTORE_MARKER_NAME = 'restore-pending.json';
 
 /**
- * The local backups a byte budget lets go, by name: the one rule for the API's rotation after each backup
- * (backup-store.ts) and root's monthly step (install.ts). None larger than the budget on its own stays, the newest
- * included: a sealed backup of small copies near the budget is a sign of abuse, not of a big vault. Of the rest, the
- * newest stays, then older ones while they all fit together; the first that doesn't fit goes, with every older one.
+ * Local backups kept at most, whatever their size: the API writes one an hour and keeps 30 days (about 720, and a
+ * same-second one rarely), so 1,000 leaves a wide margin. Without it, empty files under backup names would cost no
+ * bytes and could use up the state partition's inodes.
  */
-export function backupsPastBudget(backups: readonly { name: string; size: number }[], maxBytes: number): string[] {
+export const MAX_BACKUP_FILES = 1000;
+
+/** What a backup costs on disk, as the budget counts it: its length, or the blocks it holds if more (preallocated). */
+export function backupBytes(st: { size: number; blocks: number }): number {
+    return Math.max(st.size, st.blocks * 512);
+}
+
+/**
+ * The local backups a byte budget lets go, by name: the one rule for the API's rotation after each backup
+ * (backup-store.ts) and root's monthly step (install.ts), each giving it the files' lstat. Each backup costs
+ * backupBytes: its length or its blocks, whichever is more. None costing more than the budget on its own stays, the
+ * newest included: a sealed backup of small copies near the budget is a sign of abuse, not of a big vault. Of the
+ * rest, the newest stays, then older ones while they all fit together and number no more than `maxFiles`; the first
+ * that doesn't goes, with every older one.
+ */
+export function backupsPastBudget(backups: readonly { name: string; size: number; blocks: number }[], maxBytes: number,
+    opts: { maxFiles?: number } = {}): string[] {
+    const maxFiles = opts.maxFiles ?? MAX_BACKUP_FILES;
     const past: string[] = [];
     let total = 0;
+    let kept = 0;
     let full = false;
     for (const b of [...backups].sort((x, y) => compareBackupNames(y.name, x.name))) {
-        if (b.size > maxBytes) past.push(b.name);
-        else if (!full && total + b.size <= maxBytes) total += b.size;
-        else {
+        const bytes = backupBytes(b);
+        if (bytes > maxBytes) past.push(b.name);
+        else if (!full && kept < maxFiles && total + bytes <= maxBytes) {
+            total += bytes;
+            kept++;
+        } else {
             full = true;
             past.push(b.name);
         }

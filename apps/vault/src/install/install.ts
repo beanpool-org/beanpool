@@ -32,10 +32,11 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * (a compromised API could otherwise fill it, and deny every later update, until a reinstall): `releasesDir` is
  * emptied (the launcher starts the image's own API after the restart, and the API downloads a release's bundle
  * again), `backups/` keeps only backups (regular files under a backup name) within the budget, by the API's own rule
- * (backupsPastBudget): none larger than the budget, the newest included (the API never writes one), then the newest
- * and older ones while they fit together. `restore/` is
- * emptied unless the keyholder's marker says a restore from backup is pending (only custodians restoring a backup into
- * a fresh vault make one): then its file and its partial file stay, whatever their size (the API finishes the restore
+ * (backupsPastBudget): each costs its length or its blocks, whichever is more (so preallocated blocks count); none
+ * costing more than the budget stays, the newest included (the API never writes one); then the newest and older ones
+ * while they fit together, and no more than MAX_BACKUP_FILES of them (so empty files can't use up the inodes).
+ * `restore/` is emptied unless the keyholder's marker says a restore from backup is pending (only a restore a fresh keyholder accepts
+ * makes one): then its file and its partial file stay, whatever their size (the API finishes the restore
  * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image
  * is made of (a directory named like a boot file among them). The API's private /var/tmp
  * goes with its unit's stop. If the API can't be stopped, its directories are left as they are, root only unlinks the
@@ -164,7 +165,7 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string
     const releases = names(dirs.releases).filter(n => removeWhole(path.join(dirs.releases, n)));
     if (releases.length) said.push(`${releases.length} in releases`);
 
-    const backups: { name: string; size: number }[] = [];
+    const backups: { name: string; size: number; blocks: number }[] = [];
     let others = 0;
     for (const name of names(dirs.backups)) {
         const p = path.join(dirs.backups, name);
@@ -174,7 +175,9 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void): string
         } catch {
             continue;
         }
-        if (st.isFile() && BACKUP_NAME_RE.test(name)) backups.push({ name, size: st.size });
+        // Only a regular file under a backup name is a backup (lstat: a link is never followed, and goes itself, as
+        // does a directory with all it holds, a FIFO or a socket).
+        if (st.isFile() && BACKUP_NAME_RE.test(name)) backups.push({ name, size: st.size, blocks: st.blocks });
         else if (removeWhole(p)) others++;
     }
     let dropped = 0;

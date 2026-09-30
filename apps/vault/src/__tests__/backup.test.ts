@@ -230,16 +230,17 @@ describe('backups', () => {
         // The store alone, with backups of known sizes (same-second ones in their order).
         const dir = mkdtempSync(path.join(os.tmpdir(), 'bvb-'));
         try {
-            const store = new LocalDirectoryStore(dir, { maxBytes: 2500 });
+            const store = new LocalDirectoryStore(dir, { maxBytes: 10240 });
             const names = ['bv-20261001T100000Z.bin', 'bv-20261001T110000Z.bin', 'bv-20261001T110000Z-1.bin', 'bv-20261001T120000Z.bin'];
-            for (const name of names.slice(0, 3)) await store.put(name, crypto.randomBytes(1000));
-            // 3000 bytes > 2500: the oldest went, after the third.
+            // Whole blocks (4096 bytes), so a file's length and the blocks it holds agree.
+            for (const name of names.slice(0, 3)) await store.put(name, crypto.randomBytes(4096));
+            // 12288 bytes > 10240: the oldest went, after the third.
             expect(await store.list()).toEqual(names.slice(1, 3));
-            await store.put(names[3], crypto.randomBytes(1000));
+            await store.put(names[3], crypto.randomBytes(4096));
             expect(await store.list()).toEqual(names.slice(2, 4));
             // One backup larger than the whole budget: refused, never written (no partial file either), and nothing
             // removed for it.
-            await expect(store.put('bv-20261001T130000Z.bin', crypto.randomBytes(3000))).rejects.toThrow('too large: 3000 bytes > budget 2500');
+            await expect(store.put('bv-20261001T130000Z.bin', crypto.randomBytes(12288))).rejects.toThrow('too large: 12288 bytes > budget 10240');
             expect(await store.list()).toEqual(names.slice(2, 4));
             expect(readdirSync(dir).sort()).toEqual(names.slice(2, 4).sort());
             // Without a budget nothing goes but by age (the API's 30 days).

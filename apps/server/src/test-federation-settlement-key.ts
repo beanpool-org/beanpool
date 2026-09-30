@@ -292,8 +292,14 @@ async function engineChecks(): Promise<void> {
             beginOutboundSettlement({ key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 10 });
         } catch (e) { thrown = e; }
         const reason = thrown instanceof SettlementError ? thrown.reason : String((thrown as any)?.message ?? thrown);
-        assert(thrown instanceof SettlementError && thrown.reason === 'key_clash' && !getSettlement(key) && !hasAccount(`escrow_escrow_${deal}`),
-            `1. a new settlement keyed on ${what} is refused with key_clash, and no row is written (${reason}, row ${JSON.stringify(getSettlement(key)?.state ?? null)})`);
+        const row = getSettlement(key)?.state ?? null;
+        assert(thrown instanceof SettlementError && thrown.reason === 'key_clash' && !row && !hasAccount(`escrow_escrow_${deal}`),
+            `1. a new settlement keyed on ${what} is refused with key_clash, and no row is written (${reason}, row ${JSON.stringify(row)})`);
+        // Where a build let it through (origin/main did), the ask fails and the hold is released: that release is where
+        // the escrow's Beans went to the caller. Never reached here when the settlement is refused.
+        if (row === 'escrowed') {
+            try { abandonOutboundSettlement(key, 'ASK_UNREACHABLE'); } catch (e: any) { console.log(`   (abandoning it threw: ${e?.message ?? e})`); }
+        }
         assert(held() === heldBefore && nodeTotal() === baseline,
             `1. and nothing moves: the buyer, the escrows, the enterprise, the node's total (${heldBefore} → ${held()}, ${baseline} → ${nodeTotal()})`);
     }
@@ -315,15 +321,17 @@ async function engineChecks(): Promise<void> {
     console.log('\n--- 7. the operators\' data checks ---');
     // A settlement made the old way, under a project's id, and the release it paid out of that project's escrow. Planted:
     // this build refuses to make one, which is the point.
+    const legacy = uuid();
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Pool', 'test', '[]', 1000, 'ACTIVE')`).run(legacy, holder);
     db.prepare(`INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, seller_pubkey, amount, fee, state, failure_reason)
-                VALUES (?, 'outbound', ?, ?, ?, 40, 0.6, 'abandoned', 'ASK_UNREACHABLE')`).run(project, PEER, holder, seller);
+                VALUES (?, 'outbound', ?, ?, ?, 40, 0.6, 'abandoned', 'ASK_UNREACHABLE')`).run(legacy, PEER, holder, seller);
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 40.6, ?, ?)`)
-        .run(uuid(), `escrow_${project}`, holder, `Released cross-community hold (${project})`, new Date().toISOString());
+        .run(uuid(), `escrow_${legacy}`, holder, `Released cross-community hold (${legacy})`, new Date().toISOString());
     const foreign = db.prepare(SQL_FOREIGN_KEYS).all() as { key: string }[];
-    assert(foreign.length === 1 && foreign[0].key === project,
+    assert(foreign.length === 1 && foreign[0].key === legacy,
         `7. the first check lists the settlement under a project's id, and not the one under a key the node made (${JSON.stringify(foreign.map(f => f.key))})`);
     const moves = db.prepare(SQL_FOREIGN_KEY_MOVES).all() as { key: string; from_pubkey: string; amount: number }[];
-    assert(moves.length === 1 && moves[0].from_pubkey === `escrow_${project}` && moves[0].amount === 40.6,
+    assert(moves.length === 1 && moves[0].from_pubkey === `escrow_${legacy}` && moves[0].amount === 40.6,
         `7. the second lists what it moved: 40.6 out of that project's escrow (${JSON.stringify(moves)})`);
     // A projects row under an enterprise's key, made by someone who does not keep it (the old crowdfund route took ids).
     db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status) VALUES (?, ?, 'Taken', 'test', '[]', 10, 'ACTIVE')`).run(shop, holder);

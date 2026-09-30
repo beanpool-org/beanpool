@@ -13,6 +13,7 @@ describe('SuggestChangePanel', () => {
         render(<SuggestChangePanel appVersion="1.2.37" submit={vi.fn()} />);
         openPanel();
         expect(screen.getByText(/This goes to the BeanPool project team, not to your community/i)).toBeInTheDocument();
+        expect(screen.getByText(/Don't include personal details/)).toBeInTheDocument();
         expect(screen.getByLabelText(/Your community/i)).toHaveValue('');
     });
 
@@ -26,7 +27,7 @@ describe('SuggestChangePanel', () => {
         fireEvent.change(screen.getByLabelText(/Your community/i), { target: { value: 'Alpha Node' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-        await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/reached the BeanPool project team/));
         expect(submit).toHaveBeenCalledWith(expect.objectContaining({
             text: TEXT,
             kind: 'problem',

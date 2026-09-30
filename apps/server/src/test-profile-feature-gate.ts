@@ -12,8 +12,8 @@ import { startHttpsServer } from './https-server.js';
 import { featureOffFor, respondProfileRefusal } from './routes/profile-feature-gate.js';
 import { BeansOffError, FeatureOffError, PROFILE_NO_BEANS } from './config/node-profile.js';
 
-const PORT = 8831;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -93,7 +93,8 @@ async function main() {
     console.log('\n── 3. HTTPS Server Integration for profileFeatureGate ──');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const resGated1 = await fetch(`${BASE}/api/treasury/info`);
     assert(resGated1.status === 404, 'gated route GET /api/treasury/info returns 404 when disabled');

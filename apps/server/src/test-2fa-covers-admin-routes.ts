@@ -308,8 +308,7 @@ async function main() {
         const { initTls } = await import('./services/tls.js');
         const { startHttpsServer } = await import('./https-server.js');
         await initTls();
-        const WS_PORT = 8599;
-        await startHttpsServer(WS_PORT);
+        const WS_PORT = await startHttpsServer(0);
         const wsStatus = (): Promise<number> => new Promise(resolve => {
             const r = https.request({
                     host: '127.0.0.1', port: WS_PORT, path: `/ws/logs?auth=${encodeURIComponent(PW)}`, rejectUnauthorized: false,

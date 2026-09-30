@@ -43,8 +43,8 @@ import { db } from './db/db.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { postPhotoUrl } from '@beanpool/engine';
 
-const PORT = 8757;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -665,7 +665,8 @@ async function partTwo(): Promise<void> {
                 VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
         .run(member.pub, `photo-${member.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     console.log('\n── 2a. A post with a photo in each format: POST /api/marketplace/posts → GET …/photos/:n ──');
     const create = await signed('POST', '/api/marketplace/posts', {

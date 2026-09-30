@@ -56,8 +56,8 @@ import { openShareRow } from './engine/recovery-shares.js';
 import { isNodeWrapped } from './services/recovery-seal-key.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 
-const PORT = 8729;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -163,7 +163,8 @@ async function main(): Promise<void> {
     console.log('\n=== The open door: /api/join over real HTTPS ===\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     primeJwks();
     _clearNoncesForTests();
 

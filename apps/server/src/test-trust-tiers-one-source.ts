@@ -22,8 +22,8 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 
-const PORT = 8674;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestTiersOneSource123!';
 
 let run = 0, passed = 0;
@@ -69,7 +69,8 @@ async function main() {
     assert(tierForCredit(getPosts({ id: 'post-tier-g1400' })[0].authorEnergyCycled!).name === 'Elder', 'a granted Elder shows as Elder on their cards');
 
     // 2. Admin member list
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const res = await fetch(`${BASE}/api/local/admin/data`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': PW },
     });

@@ -54,7 +54,7 @@ async function run() {
     console.log('Running sync payload security tests (SRV-1 trust boundary)...\n');
 
     initStateEngine();
-    const p2pNode = await startP2P(4016, 4017);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     // A multiaddr whose /p2p/<id> component makes isPeerTrusted(nodeId) true.
     const trustedAddr = `/ip4/127.0.0.1/tcp/4017/p2p/${nodeId}`;

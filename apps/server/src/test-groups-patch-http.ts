@@ -25,8 +25,8 @@ import { initStateEngine, createGroup, joinGroup } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8642;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -87,7 +87,8 @@ async function main() {
     if (roleOf(group.id, convenor.pub) !== 'convenor') throw new Error('fixture: creator is not convenor');
     if (roleOf(group.id, member.pub) !== 'member') throw new Error('fixture: joiner is not a member');
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const rolePath = `/api/groups/${encodeURIComponent(group.id)}/members/${encodeURIComponent(member.pub)}`;
     const groupPath = `/api/groups/${encodeURIComponent(group.id)}`;

@@ -29,8 +29,8 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 import crypto from 'node:crypto';
 import { lockedDm } from './dm-test-payload.js'; // no engine import: safe to hoist
 
-const PORT = 8597;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -65,7 +65,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');

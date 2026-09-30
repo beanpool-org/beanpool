@@ -33,8 +33,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
 
-const PORT = 8691;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const WC = '/api/node/owner/words-check';
 const LIST = '/api/local/admin/takeover/words-checks';
 const STATEMENT = { attestation: 'owner-12-words-checked' };
@@ -132,7 +132,8 @@ async function main() {
         totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'Words Test',
     } as any);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. Recording a check ──
     console.log('\n1. POST words-check');

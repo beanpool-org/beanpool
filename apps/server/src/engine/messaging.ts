@@ -25,6 +25,7 @@ import {
     assertCanWriteInGroupChat, groupChatEditedCiphertext, groupChatRefusal, broadcastGroupChatUpdate,
 } from './group-thread.js';
 import { writeMessageTombstone } from './message-tombstone.js';
+import { eventChatUnknownTo } from './event-thread.js';
 import { unmutedRecipients } from './chat-mutes.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
 
@@ -443,6 +444,10 @@ export function toggleMessageReaction(
     // Refused before the participant check: the thread is readable by members, so this hides nothing.
     const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (convType?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_REACT_ERROR, 403);
+    // A line of an event chat whose event isn't there for this caller (a hidden group's event, one they were removed
+    // from or left while Going) answers as an id nobody has, before the participants mirror, where a removed member
+    // keeps their seat: "Reactions are not part of an event chat" would confirm the line is real (the #828 rule).
+    if (convType?.type === 'event_thread' && eventChatUnknownTo(row.conversation_id, authorPubkey)) return null;
 
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
 
@@ -572,8 +577,12 @@ export function editMessage(
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
-    // neither, so it refuses (docs/events-on-the-map.md §2.2).
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
+    // event, or one they were removed from or left) is answered first, as an id nobody has (the #828 rule).
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+        throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Whether this caller may SEE the chat at all is settled BEFORE the author match and before anything else
@@ -675,7 +684,11 @@ export function deleteOwnMessage(
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    // An event chat's line: first answered as an id nobody has for someone the event isn't there for, as the edit is.
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Who may SEE this chat comes FIRST — before the author match, and before the system-line refusal, both of

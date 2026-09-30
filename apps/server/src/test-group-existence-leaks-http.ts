@@ -29,7 +29,7 @@
  *    chat id and someone else's old DM id as for an id nobody has.
  * 5. Out of the group while Going (the director, 2026-09-30, from #1333's review): a member removed by a convenor, and one
  *    who left, each answered as an outsider is (and as for an id nobody has) by the event's chat, its private note, the
- *    chat's write routes, the reminder and the RSVP; the event is gone from their "Your events", their chat list, the
+ *    chat's write routes, react, edit and delete on a real line of it, the reminder and the RSVP; the event is gone from their "Your events", their chat list, the
  *    chat's live lines, reminders and change pushes. Their RSVP stays recorded, and a member invited back is Going
  *    again. An account the community closed is refused every request, a real id's as an unknown one's. A member still
  *    in the group reads the chat and its note, and gets all of it.
@@ -419,6 +419,13 @@ async function main(): Promise<void> {
         const said = await call('POST', `/api/marketplace/posts/${supper.id}/chat/message`, stayer, { text: 'Bring a plate' });
         const lineId = said.body?.message?.id as string;
         assert(!!lineId, `setup: a line in the chat (${show(said)})`);
+        // A line each of the two about to be out writes while Going: the one line id they hold that is surely real.
+        const lineOf = new Map<string, string>();
+        for (const who of [ousted, leaver]) {
+            const own = await call('POST', `/api/marketplace/posts/${supper.id}/chat/message`, who, { text: `${who.name} is coming` });
+            lineOf.set(who.pk, own.body?.message?.id);
+            assert(!!own.body?.message?.id, `setup: ${who.name} writes a line while Going (${show(own)})`);
+        }
 
         removeGroupMember(hidden.id, convenor.pk, ousted.pk);
         removeGroupMember(hidden.id, leaver.pk, leaver.pk);
@@ -461,15 +468,26 @@ async function main(): Promise<void> {
             ['POST', '/api/marketplace/posts/{E}/rsvp', { status: 'interested' }],
             ['POST', '/api/marketplace/posts/{E}/rsvp', { status: null }],
             ['GET', '/api/marketplace/posts?id={E}'],
+            // A line of the chat, by its id (#1333 review): {L} is a line the member still in wrote, {WHO_L} the one the
+            // member out of the group wrote while Going; for the unknown event, an id nobody has.
+            ['POST', '/api/messages/react', { messageId: '{L}', authorPubkey: '{ME}', emoji: '👍' }],
+            ['POST', '/api/messages/react', { messageId: '{WHO_L}', authorPubkey: '{ME}', emoji: '👍' }],
+            ['POST', '/api/messages/edit', { messageId: '{L}', ciphertext: 'changed', nonce: 'plaintext-v1' }],
+            ['POST', '/api/messages/edit', { messageId: '{WHO_L}', ciphertext: 'changed', nonce: 'plaintext-v1' }],
+            ['POST', '/api/messages/delete', { messageId: '{L}' }],
+            ['POST', '/api/messages/delete', { messageId: '{WHO_L}' }],
         ];
-        const at = (path: string, e: string, me: Id) => path.replace(/\{E\}/g, e).replace(/\{ME\}/g, me.pk);
-        const bodyAt = (b: unknown, e: string, me: Id) => b === undefined ? undefined : JSON.parse(at(JSON.stringify(b), e, me));
+        const ghostLine = crypto.randomUUID();
+        // `who` is the member out of the group whose line {WHO_L} names: an outsider tries the same line.
+        const at = (path: string, e: string, me: Id, who: Id = me) => path.replace(/\{E\}/g, e).replace(/\{ME\}/g, me.pk)
+            .replace(/\{L\}/g, e === E ? lineId : ghostLine).replace(/\{WHO_L\}/g, e === E ? (lineOf.get(who.pk) ?? lineId) : ghostLine);
+        const bodyAt = (b: unknown, e: string, me: Id, who: Id = me) => b === undefined ? undefined : JSON.parse(at(JSON.stringify(b), e, me, who));
         const as = (r: Res, e: string, me: Id) => `${r.status} ${r.text.split(e).join('<E>').split(me.pk).join('<ME>')}`;
         for (const who of [ousted, leaver]) {
             const differ: string[] = [];
             for (const [method, path, body] of EVENT_ROUTES) {
                 const mine = await call(method, at(path, E, who), who, bodyAt(body, E, who));
-                const outsiders = await call(method, at(path, E, outsider), outsider, bodyAt(body, E, outsider));
+                const outsiders = await call(method, at(path, E, outsider, who), outsider, bodyAt(body, E, outsider, who));
                 const nobodys = await call(method, at(path, ghostE, who), who, bodyAt(body, ghostE, who));
                 if (as(mine, E, who) !== as(outsiders, E, outsider) || as(mine, E, who) !== as(nobodys, ghostE, who)) {
                     differ.push(`${method} ${path}: ${show(mine)}  |  an outsider: ${show(outsiders)}  |  an id nobody has: ${show(nobodys)}`);
@@ -495,14 +513,29 @@ async function main(): Promise<void> {
             const lines = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ? AND author_pubkey IN (?, ?)').get(E, ...outs) as any).c;
             const mutes = (db.prepare('SELECT COUNT(*) AS c FROM chat_mutes WHERE conversation_id = ? AND member_pubkey IN (?, ?)').get(E, ...outs) as any).c;
             const offsets = (db.prepare('SELECT reminder_offsets AS o FROM event_rsvps WHERE post_id = ? AND member_pubkey IN (?, ?)').all(E, ...outs) as any[]).map(r => r.o);
-            assert(lines === 0 && mutes === 0 && offsets.every(o => o === '[120]'),
-                `nothing they were refused was written: no line, no mute, their reminders as they set them (${lines}, ${mutes}, ${offsets.join(' ')})`);
+            // The lines react, edit and delete were tried on: as they were written, no reaction, no edit, not taken down.
+            const touched = (db.prepare(`SELECT id, type, edited_at, metadata FROM messages WHERE id IN (?, ?, ?)`)
+                .all(lineId, lineOf.get(ousted.pk), lineOf.get(leaver.pk)) as any[])
+                .filter(m => m.type === 'removed' || m.edited_at || (m.metadata && /reactions/.test(m.metadata))).length;
+            assert(lines === 2 && mutes === 0 && offsets.every(o => o === '[120]') && touched === 0,
+                `nothing they were refused was written: only the line each wrote while Going, no mute, their reminders as they set them, `
+                + `no line reacted to, edited or taken down (${lines}, ${mutes}, ${offsets.join(' ')}, ${touched})`);
         }
         // The RSVP stays recorded, and a member invited back is Going again without tapping it.
         const rsvp = (pk: string) => (db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(E, pk) as any)?.status;
         assert(rsvp(ousted.pk) === 'going' && rsvp(leaver.pk) === 'going', `their RSVPs are still recorded (${rsvp(ousted.pk)}, ${rsvp(leaver.pk)})`);
         const stays = await call('GET', `/api/marketplace/posts/${E}/chat`, stayer);
         assert(readsNote(stays), `the member still in reads the chat and its note (${show(stays)})`);
+        // A member still in the group, who sees the event chat, keeps the event chat's own refusal on its lines.
+        {
+            const react = await call('POST', '/api/messages/react', stayer, { messageId: lineId, authorPubkey: stayer.pk, emoji: '👍' });
+            const edit = await call('POST', '/api/messages/edit', stayer, { messageId: lineId, ciphertext: 'changed', nonce: 'plaintext-v1' });
+            const del = await call('POST', '/api/messages/delete', stayer, { messageId: lineId });
+            assert(react.status === 403 && react.body?.error === 'Reactions are not part of an event chat'
+                && edit.status === 403 && edit.body?.error === 'Messages in an event chat cannot be edited'
+                && del.status === 403 && del.body?.error === 'Messages in an event chat cannot be deleted',
+                `the member still in hears why a line of the event chat takes no reaction, edit or delete (${show(react)} | ${show(edit)} | ${show(del)})`);
+        }
         inviteGroupMember(hidden.id, convenor.pk, ousted.pk, 'member');
         joinGroup(hidden.id, ousted.pk);
         const back = await call('GET', `/api/marketplace/posts/${E}/chat`, ousted);

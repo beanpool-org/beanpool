@@ -6,7 +6,7 @@
  * GitHub's `sub` is the account's public, sequential user id: anyone reads it from GitHub's API with the account's
  * name. So a recovery copy sealed to it is locked to nothing its owner controls, and the hashes made from it (a copy's
  * lookup hash, sso.ts ssoLookupHash, with its salt in the same row; an open-door record's, engine/open-join.ts
- * openJoinHash, with its key in node_config) tell anyone holding a copy of this server's data which GitHub account is
+ * openJoinHash, with its key beside the database) tell anyone holding a copy of this server's data which GitHub account is
  * which member. Google's and Apple's are not public. So GitHub left the provider table (packages/beanpool-signin), and
  * what a server stored while it was a sign-in is removed here, not kept.
  *

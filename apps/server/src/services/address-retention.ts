@@ -23,9 +23,9 @@
  *     `forgetAddressesInStoredCopy`. A snapshot kept for weeks holds none, and a server restored from one brings none
  *     back. A copy also loses the sign-up, knock and write limiters' address hashes (`open_joins.ip_hash`,
  *     `join_requests.ip_hash`, `writes_by_address.ip_hash`): with their key, a hash gives back the address to anyone who
- *     tries all of IPv4. The key is a file now (services/open-join-key.ts), but a database from before that holds it as
- *     the node_config row `openJoinSalt`, and a copy loses that row too. And it loses every address in its log lines. Nothing is left in the file's free
- *     space or beside it: the copy is a VACUUM INTO (no free space comes along) made with secure_delete on (no page
+ *     tries all of IPv4. The key is a file now (services/open-join-key.ts), but a database from before that holds it
+ *     as the node_config row `openJoinSalt`, and a copy loses that row too. And it loses every address in its log
+ *     lines. Nothing is left in the file's free space or beside it: the copy is a VACUUM INTO (no free space comes along) made with secure_delete on (no page
  *     it builds keeps an old row in its gap), cleaned with its freed bytes zeroed and its journal in memory, and
  *     renamed into place only then;
  *   - in the copies this server already keeps, made before this version (their addresses are of any age: main never
@@ -173,8 +173,8 @@ function holdsAddresses(conn: Database.Database): boolean {
 
 /**
  * Every address out of a copy of the database, in place, whatever its age: the three rows', the limiters' address
- * hashes and any in a log line; and the open door's key, where an older database kept it (`openJoinSalt`). What it frees is zeroed, but free space the file already had (free pages, a page's gap)
- * is not touched: make the copy with `copyWithoutAddresses`, whose VACUUM INTO leaves none. True when it is done. Never
+ * hashes and any in a log line; and the open door's key, where an older database kept it (`openJoinSalt`). What it
+ * frees is zeroed, but free space the file already had (free pages, a page's gap) is not touched: make the copy with `copyWithoutAddresses`, whose VACUUM INTO leaves none. True when it is done. Never
  * throws: a copy is a recovery point, and one that failed here still holds only what this server keeps anyway (7 days
  * at most, a day for a hash), which a server restored from it clears at its first boot. So it is kept, and the log
  * says so.

@@ -825,11 +825,12 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.
 --
 -- Created on EVERY node whatever its profile, and empty where the door is shut, so every node has one schema
--- (snapshots, restores and a later Postgres move see the same tables). Replicated to standbys with its key (the
--- node_config row) and carried in the take-over bundle, all but `ip_hash`; `updated_at` is the replication
+-- (snapshots, restores and a later Postgres move see the same tables). Replicated to standbys (never its key) and
+-- carried in the take-over bundle, all but `ip_hash`; `updated_at` is the replication
 -- watermark, stamped by a join, a release and a re-key (engine/open-join.ts). `join_hash` UNIQUE is the rule "one sign-in
 -- account, one identity here". It is HMAC-SHA-256 over the provider and the provider's subject, keyed by a
--- secret per node (node_config `openJoinSalt`): the raw subject and the email are never stored, and two nodes'
+-- secret per node kept in a file, never in this database (data/open-join.key, services/open-join-key.ts; node_config
+-- `openJoinKeyId` says which key): the raw subject and the email are never stored, and two nodes'
 -- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the sign-up limit, 5 an
 -- hour and 20 a day per address, and is cleared once it is a day old, when the limiter no longer needs it.
 -- A member in good standing who deletes their own account frees their sign-in account: the row stays, still

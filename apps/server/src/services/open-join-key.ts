@@ -139,8 +139,13 @@ export function noteMainServerOpenJoinKeyId(id: unknown): void {
     if (isOpenJoinKeyId(id) && id !== recordedOpenJoinKeyId()) recordKeyId(id);
 }
 
-/** How many open-door records here could match a sign-in: a released one's hash matches nothing (releaseOpenJoin). */
-function liveJoins(): number {
+/** Whether any open-door record here could match a sign-in: a released one's hash matches nothing (releaseOpenJoin). */
+function holdsLiveJoins(): boolean {
+    return !!db.prepare("SELECT 1 FROM open_joins WHERE join_hash NOT LIKE 'released:%' LIMIT 1").get();
+}
+
+/** How many open-door records here could match a sign-in, for what a boot, a restore or a take-over says. */
+export function liveOpenJoinRecords(): number {
     return (db.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%'").get() as { n: number }).n;
 }
 
@@ -148,31 +153,44 @@ export type OpenJoinKeyState =
     | { on: true; key: Buffer }
     /**
      * `missing`: no key file, and this server holds live records (or is a standby, which makes none).
-     * `other-key`: a key file that is not the one the records were made with. `not-a-key`: a file too short or too long.
+     * `other-key`: a key file that is not the one the records were made with. `not-a-key`: a file too short or too long,
+     * or one that cannot be read.
      */
-    | { on: false; why: 'missing' | 'other-key' | 'not-a-key'; records: number; file: Buffer | null };
+    | { on: false; why: 'missing' | 'other-key' | 'not-a-key'; file: Buffer | null };
 
 /**
  * The key the door checks a sign-in with, or why there is none it may use (see the header). Read on every use (a key put
- * back by hand counts at once). `create`: a main server with no key and no live record makes one (the default); at boot
- * nothing is made.
+ * back by hand counts at once), and cheap: a file of a few bytes and one row, plus, only when they disagree, whether one
+ * live record exists. `create`: a main server with no key and no live record makes one (the default); at boot nothing
+ * is made. Only a main server records a key as its records' own: a standby's record is its main server's (every copy
+ * carries it).
  */
 export function openJoinKeyState(opts: { create?: boolean } = {}): OpenJoinKeyState {
-    const file = readKeyFile();
+    let file: Buffer | null;
+    // A file that is there but cannot be read (its mode, a failing disk) keys nothing: the door stays shut, as for one
+    // that is not a key, rather than every join and knock failing on the error.
+    try { file = readKeyFile(); } catch { return { on: false, why: 'not-a-key', file: null }; }
+    const standby = getNodeRole() === 'backup';
     if (file) {
-        if (!isKeyBytes(file)) return { on: false, why: 'not-a-key', records: liveJoins(), file: null };
+        if (!isKeyBytes(file)) return { on: false, why: 'not-a-key', file: null };
         const id = openJoinKeyId(file);
         if (recordedOpenJoinKeyId() === id) return { on: true, key: file };
-        const records = liveJoins();
-        if (records > 0) return { on: false, why: 'other-key', records, file };
-        recordKeyId(id);
+        if (holdsLiveJoins()) return { on: false, why: 'other-key', file };
+        if (!standby) recordKeyId(id);
         return { on: true, key: file };
     }
-    const records = liveJoins();
-    if (records > 0 || opts.create === false || getNodeRole() === 'backup') return { on: false, why: 'missing', records, file: null };
+    if (opts.create === false || standby || holdsLiveJoins()) return { on: false, why: 'missing', file: null };
     const key = crypto.randomBytes(NEW_KEY_BYTES);
+    let made: boolean;
+    try {
+        made = createKeyFileOnce(openJoinKeyPath(), key);
+    } catch (e) {
+        // A data folder that takes no new file (full, read-only): the door stays shut until one can be made.
+        console.warn(`🚪 Open door: could not make data/${OPEN_JOIN_KEY_FILE}: ${(e as Error)?.message || e}`);
+        return { on: false, why: 'missing', file: null };
+    }
     // False when another writer made one first: that one is read back and used.
-    if (createKeyFileOnce(openJoinKeyPath(), key)) {
+    if (made) {
         recordKeyId(openJoinKeyId(key));
         return { on: true, key };
     }
@@ -283,7 +301,7 @@ export function adoptCarriedOpenJoinKey(b64: string): 'recorded' | 'same' | 'oth
     const id = openJoinKeyId(Buffer.from(b64, 'base64'));
     const recorded = recordedOpenJoinKeyId();
     if (recorded === id) return 'same';
-    if (recorded && liveJoins() > 0) return 'other-key-recorded';
+    if (recorded && holdsLiveJoins()) return 'other-key-recorded';
     recordKeyId(id);
     return 'recorded';
 }
@@ -371,13 +389,22 @@ export function installOpenJoinKeyAtBoot(opts: { standby: boolean }): void {
     try {
         moveLegacyKeyRow(opts.standby);
         const state = openJoinKeyState({ create: false });
-        if (state.on || state.records === 0) return;
+        if (state.on) return;
+        const records = liveOpenJoinRecords();
+        if (state.why === 'not-a-key' && !opts.standby) {
+            // Nothing makes a key over a file that is here, even with no record to check (a crash can leave one empty).
+            console.warn(`⚠️ Open door: data/${OPEN_JOIN_KEY_FILE} is not a key, so joining with a sign-in is refused. `
+                + (records === 0 ? `No sign-in record here needs it: remove the file and a new key is made at the next join.`
+                    : openJoinKeyOffLine(records, state.why)));
+            return;
+        }
+        if (records === 0) return;
         if (opts.standby) {
-            console.log(`🚪 Open door: a standby holds no key of its own for its ${state.records} sign-in record(s). A take-over brings its `
+            console.log(`🚪 Open door: a standby holds no key of its own for its ${records} sign-in record(s). A take-over brings its `
                 + `main server's data/${OPEN_JOIN_KEY_FILE} inside the locked keys.`);
             return;
         }
-        console.warn(`⚠️ ${openJoinKeyOffLine(state.records, state.why)}`);
+        console.warn(`⚠️ ${openJoinKeyOffLine(records, state.why)}`);
     } catch (e) {
         installedAs = null;
         console.error(`🚨 Open door: ${(e as Error)?.message || e}. The server runs; the next boot tries again.`);

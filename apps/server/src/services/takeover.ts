@@ -78,7 +78,7 @@ import {
 import { writeOpenJoinRecord } from '../engine/open-join.js';
 import { installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 import {
-    adoptCarriedOpenJoinKey, installCarriedOpenJoinKey, openJoinKeyOffLine, openJoinKeyState, OPEN_JOIN_KEY_FILE,
+    adoptCarriedOpenJoinKey, installCarriedOpenJoinKey, liveOpenJoinRecords, openJoinKeyOffLine, openJoinKeyState, OPEN_JOIN_KEY_FILE,
 } from './open-join-key.js';
 import { installCommunitySettings, keptCommunitySettings } from '../config/community-settings.js';
 
@@ -643,10 +643,9 @@ function carriedOpenJoinKey(bundle: TakeoverBundle): string | null {
     return typeof legacy === 'string' && /^[A-Za-z0-9_-]+$/.test(legacy) ? Buffer.from(legacy, 'base64url').toString('base64') : null;
 }
 
-/** Whether this standby holds open-door records a sign-in could match. */
+/** Whether this standby holds open-door records a sign-in could match, with no key here they were made with. */
 function holdsOpenJoinRecords(): boolean {
-    const state = openJoinKeyState({ create: false });
-    return !state.on && state.records > 0;
+    return !openJoinKeyState({ create: false }).on && liveOpenJoinRecords() > 0;
 }
 
 /** In the preview's list of what will be missing, when the keys carry no open-door key and this standby holds records. */
@@ -868,8 +867,9 @@ function installOpenJoinKey(bundle: TakeoverBundle): string {
     const done = installCarriedOpenJoinKey(carried);
     if (done.outcome === 'absent' || done.outcome === 'invalid') {
         const state = openJoinKeyState({ create: false });
-        if (state.on || state.records === 0) return 'no key for the open door\'s hashes in the keys, and none needed here';
-        const line = openJoinKeyOffLine(state.records, state.why, 'envelope');
+        const records = liveOpenJoinRecords();
+        if (state.on || records === 0) return 'no key for the open door\'s hashes in the keys, and none needed here';
+        const line = openJoinKeyOffLine(records, state.why, 'envelope');
         logger.warn('SYS', `[Takeover] ${line}`);
         return line;
     }
@@ -879,7 +879,7 @@ function installOpenJoinKey(bundle: TakeoverBundle): string {
     }
     if (adoptCarriedOpenJoinKey(carried!) === 'other-key-recorded') {
         const state = openJoinKeyState({ create: false });
-        const line = state.on ? null : openJoinKeyOffLine(state.records, state.why);
+        const line = state.on ? null : openJoinKeyOffLine(liveOpenJoinRecords(), state.why);
         if (line) logger.warn('SYS', `[Takeover] ${line}`);
         return `the key for the open door's hashes brought from the keys${kept}; ${line ?? 'it is the key its records were made with'}`;
     }

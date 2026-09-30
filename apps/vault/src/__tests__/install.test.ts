@@ -417,6 +417,22 @@ describe('the monthly restart removes what the API left on the state partition, 
         expect({ api: readdirSync(store).sort(), root: readdirSync(d.backups).sort() }).toEqual({ api: kept, root: kept });
     });
 
+    it('a clock set back since the newest backup was named never costs root that backup (confirm 6, NB-A)', () => {
+        // The API named its newest backup at 12:00:00; timesyncd then stepped the clock back. Root's step runs at each skew.
+        for (const skewMs of [2_000, 5_000, 60_000, 2 * 60 * 60 * 1000]) {
+            const base = path.join(dir, `skew-${++n}`);
+            const d: ApiDirs = {
+                releases: path.join(base, 'releases'), backups: path.join(base, 'backups'), restore: path.join(base, 'restore'), backupMaxBytes: 64 * K,
+                restoreMarker: path.join(base, 'keyholder', 'restore-pending.json'),
+            };
+            mkdirSync(d.backups, { recursive: true });
+            const names = ['bv-20260905T100000Z.bin', 'bv-20260905T110000Z.bin', 'bv-20260905T120000Z.bin'];
+            for (const name of names) writeFileSync(path.join(d.backups, name), Buffer.alloc(4 * K));
+            clearApiDirs(d, () => undefined, Date.UTC(2026, 8, 5, 12) - skewMs);
+            expect({ skewMs, left: readdirSync(d.backups).sort() }).toEqual({ skewMs, left: names });
+        }
+    });
+
     it('the API not stopped: nothing of its user\'s is walked into or removed whole, and the record says so', async () => {
         const t = setUp();
         const { d } = planted();

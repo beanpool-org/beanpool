@@ -75,7 +75,7 @@ export function backupBytes(st: { size: number; blocks: number }): number {
  * that doesn't goes, with every older one.
  *
  * `latest` is the newest name a backup can have now: for the API, the backup it has just written; for root, the name
- * a backup made in the next second would get (latestBackupName). Anything named after it goes, whatever it costs. Only
+ * the name a backup made a day from now would get (latestBackupName: timesyncd may have set the clock back). Anything named after it goes, whatever it costs. Only
  * a planted file, or one written while the clock was ahead, can be named later than now, and the one just written
  * holds newer data either way. So the API keeps what it just wrote, root keeps the same, and neither keeps both.
  */
@@ -100,9 +100,18 @@ export function backupsPastBudget(backups: readonly { name: string; size: number
     return past;
 }
 
-/** For root: the name a backup made in the second after `now` would get; no backup made by `now` sorts after it. */
+/**
+ * How far root's step lets a backup's name run ahead of its clock. The image runs systemd-timesyncd, which steps the
+ * clock: set back a few seconds after the API named its newest backup, a cutoff of one second deleted that backup
+ * (confirmation 6, NB-A). A day covers any step timesyncd makes. A file planted within it stays only until the API's next
+ * backup (the API cuts at the name it just wrote), and it still counts against the byte budget and MAX_BACKUP_FILES, so
+ * it can't hold the partition.
+ */
+export const ROOT_CLOCK_MARGIN_MS = 24 * 60 * 60 * 1000;
+
+/** For root: the latest name a backup can have now, allowing for a clock set back since it was written. */
 export function latestBackupName(now: number): string {
-    return backupNameFor(now + 1000);
+    return backupNameFor(now + ROOT_CLOCK_MARGIN_MS);
 }
 
 /** `bv-YYYYMMDDTHHMMSSZ.bin`: names sort in time order, which is how "newer" is decided. */

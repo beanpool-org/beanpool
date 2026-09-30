@@ -35,7 +35,8 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * (backupsPastBudget): each costs its length or its blocks, whichever is more (so preallocated blocks count); none
  * costing more than the budget stays, the newest included (the API never writes one); then the newest and older ones
  * while they fit together, and no more than MAX_BACKUP_FILES of them (so empty files can't use up the inodes). A backup
- * named later than now goes too, as the API's rotation removes it.
+ * named more than a day later than now goes too, as the API's rotation removes it (a day, so a clock that timesyncd set
+ * back never costs the newest backup: ROOT_CLOCK_MARGIN_MS).
  * `restore/` is emptied unless the keyholder's marker says a restore from backup is pending (only a restore a fresh keyholder accepts
  * makes one): then its file and its partial file stay, whatever their size (the API finishes the restore
  * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image

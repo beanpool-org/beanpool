@@ -1390,6 +1390,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                 return (
                                     <SectionErrorBoundary sectionName="Home" resetKey={activeNode?.id}>
                                         <HomeScreen
+                                            activeNode={activeNode}
                                             communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
                                             publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
                                             version="1.4.2"

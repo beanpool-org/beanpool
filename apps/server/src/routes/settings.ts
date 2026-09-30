@@ -26,6 +26,7 @@ import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
+import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
@@ -691,6 +692,9 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
 router.get('/app', async (ctx) => {
     const indexPath = path.join(PUBLIC_DIR, 'index.html');
     if (fs.existsSync(indexPath)) {
+        // One visit when a person opens it (engine/web-visits.ts): a count a day, nobody identified. /app/… is counted in
+        // https-server.ts's SPA fallback.
+        countWebAppPageLoad(ctx);
         useAppDocumentPolicy(ctx);
         ctx.type = 'html';
         ctx.body = fs.createReadStream(indexPath);

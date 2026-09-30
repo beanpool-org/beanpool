@@ -283,6 +283,7 @@ run_federation_suites() {
       test-pricing-aggregator-lifecycle
       test-activity-feed
       test-member-purge
+      test-purge-during-rekey
       test-removed-member-delete
       test-keeper-deposit
       test-keeper-routes
@@ -295,6 +296,7 @@ run_federation_suites() {
       test-keeper-http
       test-open-join
       test-web-door
+      test-web-visits
       test-global-moderation
       test-community-me
       test-distance-search
@@ -532,6 +534,7 @@ run_federation_suites() {
       test-groups-routes
       test-groups-invite-only-hidden
       test-group-existence-leaks
+      test-group-existence-leaks-http
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat

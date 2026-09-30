@@ -37,8 +37,8 @@
  * `busy`. Pages must be asked in order: the next one, or the last one again (a retry after a timeout gets the same bytes);
  * any other number answers 409. A copy closes when its last page is served (its snapshot at once; the last page stays
  * for a retry until the copy is idle), when no page was asked for COPY_IDLE_MS, COPY_MAX_MS after it opened, and when
- * something needs the database to itself (engine/open-copies.ts closeOpenCopies). A copy lives in memory only: after a
- * restart every copy id answers 404, and the standby asks for a new copy.
+ * something needs the database to itself (engine/open-copies.ts closeOpenCopies), and when its standby closes it (closeCopy).
+ * A copy lives in memory only: after a restart every copy id answers 404, and the standby asks for a new copy.
  */
 
 import crypto from 'node:crypto';
@@ -528,6 +528,18 @@ export async function openCopy(opts: { nodeId: string; since: string | null; com
         return failed(copy, e);
     }
     return { status: 200, page: copy.lastPage };
+}
+
+/**
+ * Close copy `copyId` now, as the standby asks when it won't finish it (a delta too big to take, a page it refused): its
+ * snapshot closed and its id answering 404, so the next copy opens at once rather than after COPY_IDLE_MS. Whether it
+ * was the copy being served.
+ */
+export function closeCopy(copyId: string): boolean {
+    const copy = current;
+    if (!copy || copy.id !== copyId) return false;
+    dropCopy(copy, 'its standby closed it');
+    return true;
 }
 
 /** Page `n` of copy `copyId`: the next page, or the last one again. */

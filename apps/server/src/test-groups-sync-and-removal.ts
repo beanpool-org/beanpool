@@ -20,13 +20,14 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables,
+    initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     createGroup, getGroup, listGroups, joinGroup, removeGroupMember, inviteGroupMember, approveGroupMember,
     handOverGroupLead, getGroupLead,
     setMemberRole, isGroupMember, getMemberGroupIds, createPost, getPosts, signSyncPayload,
 } from './state-engine.js';
 import { getStateHash, getReplicaConsistency } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { addConnector } from './connector-manager.js';
 
 let run = 0, passed = 0;
@@ -193,10 +194,10 @@ async function main(): Promise<void> {
     assert(exportedPost?.audienceScope === 'group' && exportedPost?.targetGroupId === guild.id,
         'a group-only post is exported with its scope and group');
 
-    // A fresh node: the replicated tables are empty. clearReplicatedTables is the force-resync path and has to
-    // empty the group tables too; they are also wiped by hand so the import below is what puts them back.
-    clearReplicatedTables();
-    assert(count('groups') === 0 && count('group_members') === 0, 'force-resync clears groups and group_members');
+    // A fresh node: the copied tables are empty, as a new standby's whole copy starts (engine/copied-tables.ts), the group
+    // tables among them; they are also wiped by hand so the import below is what puts them back.
+    emptyCopiedTables(db);
+    assert(count('groups') === 0 && count('group_members') === 0, 'a whole copy starts without groups and group_members');
     db.prepare('DELETE FROM group_members').run();
     db.prepare('DELETE FROM groups').run();
     assert(count('posts') === 0 && count('members') === 0, 'the replica starts empty');

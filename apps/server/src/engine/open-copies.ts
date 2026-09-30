@@ -1,6 +1,8 @@
 /**
  * The copies this server is serving in pages (engine/copy-pages.ts) whose snapshot is open: each holds a read transaction
- * on a second connection to state.db, which keeps every page written since in the WAL until it closes. What needs the
+ * on a second connection to state.db, which keeps every page written since in the WAL until it closes. On a standby, the
+ * whole copy it is building while the stager's closing checks read its live database (services/stager.ts): closing it
+ * stops that copy. What needs the
  * database to itself closes them first: the recovery seal's VACUUM and its checkpoint (services/recovery-seal-key.ts),
  * which a reader holding the WAL makes fail; every other truncating checkpoint on this server's connection, which would
  * wait on that reader for the whole busy timeout with the event loop held and then leave the WAL as it was (the operator's

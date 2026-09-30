@@ -741,28 +741,34 @@ async function main(): Promise<void> {
             `at boot it waits: every copy it holds is in the old form (${brief(s.atBoot)})`);
         check(whole?.route === 'snapshot' && whole.snapshotCursor === null && delta?.route === 'delta',
             `its first pull is a routine whole copy, never a 304, then a delta (${JSON.stringify((s.pulls ?? []).map((p: any) => p.route))})`);
-        check(delta?.before?.rows === 0 && /removed 12 sign-in recovery copies its main server deleted before the seal/.test(r.stdout),
-            `the whole copy, which holds none of them, removes all ${N} (${brief(delta?.before)}; ${sealLines(r)})`);
+        // A whole copy is built from nothing in a staging database and swapped in at a restart (P2, services/stager.ts): the
+        // copies the main server no longer holds are never written to the new database, so there is nothing to remove from
+        // it and no free page to clear; the database it replaced, which holds them, is kept beside it until the next copy
+        // lands, and then deleted. (Before P2: the whole copy was imported over the standby's rows, removed all 12, and
+        // the standby cleared state.db by a VACUUM it didn't record.)
+        check(delta?.before?.rows === 0 && delta.before.previous === true && delta.before.inPrevious > 0,
+            `the whole copy, which holds none of them, is swapped in without them; the database it replaced still holds ${delta?.before?.inPrevious} (${brief(delta?.before)})`);
         check(delta?.before?.inFiles === 0,
             `...after which its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${delta?.before?.inFiles}; ${before} older ones before)`);
         check(delta?.before?.cleared === null,
             `...and it records no clear: nothing yet shows its main server has sealed (${brief(delta?.before)})`);
-        const unrecorded = /holds no sign-in recovery copy now: the 12 sign-in recovery copies it held in the form stored before the seal are gone\. It cleared state\.db/;
-        check(unrecorded.test(r.stdout), '...and says so');
+        check(next?.before?.previous === false && next.before.inPrevious === 0,
+            `...and the delta after it lands and deletes the database it replaced: no file holds them any more (${JSON.stringify(next?.before && { previous: next.before.previous, inPrevious: next.before.inPrevious })})`);
         check(typeof next?.before?.cleared === 'string' && next.before.rows === 1 && next.before.unwrapped === 0 && next.before.inFiles === 0,
             `the delta that brings the first wrapped copy is when it records the clear (${brief(next?.before)})`);
 
         // (2) The same standby force-resynced from the main server, which holds no copy.
         const resyncDir = copyOf(pristine, 'all-deleted-resync');
         const resyncFile = path.join(tempDir('all-deleted-resync-script'), 'script.json');
-        fs.writeFileSync(resyncFile, JSON.stringify({ resyncFirst: true, reconcileMinutes: 0, pulls: 1, watch, steps: [[]] } satisfies StandbyScript));
+        fs.writeFileSync(resyncFile, JSON.stringify({ resyncFirst: true, reconcileMinutes: 0, pulls: 2, watch, steps: [[]] } satisfies StandbyScript));
         const rr = await runChild([SCRIPT], resyncDir, { RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup', SEAL_SCRIPT: resyncFile });
         const t = resultOf(rr);
         check(t.atBoot?.rows === N && t.resync?.ok === true && t.final?.rows === 0,
             `a force-resync from it leaves the standby holding no copy (${JSON.stringify({ boot: t.atBoot?.rows, resync: t.resync, after: t.final?.rows })})`);
         check(t.final?.inFiles === 0,
             `...and its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${t.final?.inFiles})`);
-        check(t.final?.cleared === null && unrecorded.test(rr.stdout), `...and it records no clear, and says so (${brief(t.final)}; ${sealLines(rr)})`);
+        check(t.final?.cleared === null && t.final?.previous === false && t.final?.inPrevious === 0,
+            `...and it records no clear, and the delta after it deletes the database the copy replaced, which held them (${brief(t.final)}; ${JSON.stringify(t.final && { previous: t.final.previous, inPrevious: t.final.inPrevious })})`);
     });
 
     // ── 18. a rollback after the standby recorded its clear ────────────────────────────────────────

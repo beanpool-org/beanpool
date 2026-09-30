@@ -13,7 +13,7 @@
  *
  *  1. The main server M: an enterprise with a lead and keepers, a keeper's wage owed (the enterprise held nothing when it
  *     hired him), invites made and used.
- *  2. The standby S's first copy: every plain table is M's, row for row and stamp for stamp, and its copy is format 6.
+ *  2. The standby S's first copy: every plain table is M's, row for row and stamp for stamp, and its copy is the current format.
  *  3. More on M, then a delta: a keeper request with pledged backing approved into a keeper change in its objection
  *     window; a lead succession vote and a convenor vote, open; a Decision open with three ballots and a removal passed
  *     into its grace period; an owner suspended by an admin (a Decision, her role held aside); a moderator suspended and
@@ -60,10 +60,10 @@ const AHEAD_MS = 3600_000;
 const DAY = 86400_000;
 const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
 /**
- * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 5 was this suite's (G3), 6 is members' devices' (G4).
- * The one before G3's, a standby to re-seed.
+ * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 5 was this suite's (G3), 6 members' devices' (G4), 7 a
+ * whole copy built from nothing in a staging database (P2). The one before G3's, a standby to re-seed.
  */
-const FORMAT = '6';
+const FORMAT = '7';
 const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */
@@ -279,7 +279,8 @@ async function child(): Promise<void> {
             const open = payload.plainTables.decisions.find((d: any) => d.author_pubkey === a.author && d.status === 'open');
             payload.plainTables.decisions.push({ ...open, id: `forged-${crypto.randomUUID()}`, title: 'A second open one', updated_at: later });
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** Import a payload as the puller does, straight into this standby: `whole` as a snapshot, else as a delta. */
         import: async (a: { payload: any; whole?: boolean }) => {

@@ -47,7 +47,6 @@ import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
-import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -414,8 +413,11 @@ import {
     signSyncBody as signSyncBodyEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
-    clearReplicatedRows,
+    verifySyncPayload,
+    mergeCopyPages,
+    isCopyPage,
     writeSyncAuditLog,
+    type CopyPart,
     type ImportOptions,
     type ImportResult,
     type SyncAuditEntry,
@@ -5804,14 +5806,15 @@ export function signSyncBody(body: string): Promise<{ signature: string; publicK
 }
 
 /**
- * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies, which keepers' pledges and which rows of the plain tables the main server no longer holds. `seed`
- * and `clear`: what the puller decided about the copy's conservation guard and a force-resync's clear (engine/sync.ts
- * ImportOptions); left out, the copy is held to the ledger here and clears nothing.
+ * `full`: the payload is a whole copy of the main server, not a delta. Only a whole copy shows which recovery copies,
+ * which keepers' pledges and which rows of the plain tables the main server no longer holds. `seed`: what the puller
+ * decided about the copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger
+ * here. `received`: a whole payload, or every page of one copy served in pages, in order (engine/sync.ts importRemoteState).
  */
-export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
+export function importRemoteState(received: SyncPayload | readonly SyncPayload[], opts: { full?: boolean } & Omit<ImportOptions, 'part' | 'whole'> = {}): Promise<ImportResult> {
+    const remote: SyncPayload = Array.isArray(received) ? mergeCopyPages(received) : received as SyncPayload;
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, clear: opts.clear, whole: opts.full === true })
+    return importRemoteStateEngine(getSyncCb(), received, { seed: opts.seed, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
@@ -5828,6 +5831,25 @@ export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } 
             return result;
         })
         .finally(forgetLedgerHistory);
+}
+
+/**
+ * One page of a whole copy served in pages, into this process's database: a staging database the stager builds the copy
+ * in (services/stager.ts), never a standby's live one. As a seed: the conservation guard runs once over the finished copy
+ * against the live ledger. The recovery seal's clean-up after an import is not run here: the staging holds nothing but the
+ * copy, and the standby runs it once the copy is swapped in (services/backup-puller.ts).
+ */
+export function importCopyPart(page: SyncPayload, part: CopyPart): Promise<ImportResult> {
+    return importRemoteStateEngine(getSyncCb(), page, { seed: true, part }).finally(forgetLedgerHistory);
+}
+
+/**
+ * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer this standby
+ * trusts as its mirror (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
+ */
+export function verifyCopyPage(page: SyncPayload): Promise<string> {
+    if (!isCopyPage(page)) return Promise.reject(new Error('[Sync] Not a page of a copy'));
+    return verifySyncPayload(getSyncCb(), page);
 }
 // ===================== RATINGS =====================
 
@@ -7843,21 +7865,6 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);
     }
-}
-
-/**
- * A force-resync's clear on its own, committed: the replicated tables emptied, the photo rows named in `keepPhotoRows`
- * kept (engine/sync.ts clearReplicatedRows, which says which tables and why). The suites start a copy from nothing with it.
- * A force-resync never runs it: its import clears in the copy's own transaction, after every check, so a refused copy
- * clears nothing (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §4.2). THROWS if it cannot spare the named
- * photo rows, leaving every table as it found them.
- */
-export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
-    db.transaction(() => clearReplicatedRows({
-        keepPhotoRows: [...keepPhotoRows], invalidatedKeys: opts.invalidatedKeys === true, standing: opts.standing === true,
-    }))();
-    // The directory's listed communities are kept in memory for the reads; the table is empty now.
-    forgetListedCommunities();
 }
 
 // ===================== PUSH NOTIFICATIONS =====================

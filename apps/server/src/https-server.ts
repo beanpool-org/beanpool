@@ -898,6 +898,16 @@ function isOwnDeleteAccount(method: string, path: string): boolean {
 
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
+/** The administrative requests one client may make in a window (adminRateWindowMs). */
+export const ADMIN_RATE_LIMIT = 300;
+/**
+ * The administrative limiter's window: a minute. A suite (NODE_ENV=test) may scale it down with ADMIN_RATE_WINDOW_MS, to
+ * prove a standby's pace against it in seconds (test-standby-paged-copies-pacing.ts); nothing else can, so no .env loosens it.
+ */
+export function adminRateWindowMs(): number {
+    const scaled = Number(process.env.ADMIN_RATE_WINDOW_MS);
+    return process.env.NODE_ENV === 'test' && Number.isFinite(scaled) && scaled > 0 ? scaled : 60 * 1000;
+}
 /** Tests only: forget every administrative bucket. */
 export function resetAdminRateLimit(): void {
     adminRateLimits.clear();
@@ -1134,8 +1144,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (!isPollingEndpoint) {
                 const ip = clientLimiterKey(ctx); // IPv6: the /64 (client-ip.ts)
                 const now = Date.now();
-                const windowMs = 60 * 1000; // 1 minute
-                const limit = 300; // max 300 administrative requests per minute
+                const windowMs = adminRateWindowMs(); // 1 minute
+                const limit = ADMIN_RATE_LIMIT; // max 300 administrative requests per minute
 
                 let timestamps = adminRateLimits.get(ip) || [];
                 timestamps = timestamps.filter(t => now - t < windowMs);
@@ -1156,7 +1166,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     // Periodic unref'd garbage collection for rate-limiting maps to prevent memory leaks
     const rateLimitCleaner = setInterval(() => {
         const now = Date.now();
-        const windowMs = 60 * 1000;
+        const windowMs = adminRateWindowMs();
         pruneGatewayBuckets(now);
         for (const [ip, timestamps] of adminRateLimits) {
             const valid = timestamps.filter(t => now - t < windowMs);

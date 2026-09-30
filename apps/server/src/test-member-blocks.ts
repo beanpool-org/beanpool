@@ -49,11 +49,12 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole, clearReplicatedTables,
+    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
@@ -498,7 +499,7 @@ async function main(): Promise<void> {
     const tieTomb2 = tombOf(eve.pk, bo.pk);
     assert(!rowOf(eve.pk, bo.pk) && !!tieTomb2 && !!tieRow && tieTomb2 >= tieRow.updated_at, `and unblocking it again then is stamped no earlier than it (${tieTomb2} ≥ ${tieRow?.updated_at})`);
 
-    // The replica audit counts the table, and a force-resync clears it.
+    // The replica audit counts the table, and a whole copy starts without it (engine/copied-tables.ts).
     const audit = attempt(() => getReplicaConsistency(db, { memberBlocks: exported } as any, 0));
     const auditRow = audit?.tables.find((t: any) => t.name === 'member_blocks');
     assert(!!auditRow && auditRow.primary === exported.length, `the replica audit counts member_blocks (${JSON.stringify(auditRow)})`);
@@ -507,13 +508,13 @@ async function main(): Promise<void> {
     const olderAudit = attempt(() => getReplicaConsistency(db, {} as any, 0));
     assert(held > 0 && !!olderAudit && !olderAudit.tables.some((t: any) => t.name === 'member_blocks'),
         `a copy without block lists, from a main server that predates them, is not counted against the ${held} this standby holds (${JSON.stringify(olderAudit?.tables.find((t: any) => t.name === 'member_blocks') ?? null)})`);
-    attempt(() => clearReplicatedTables());
+    attempt(() => emptyCopiedTables(db));
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n);
-    assert(cleared === 0, `a force-resync clears the table before the whole copy comes in (${cleared})`);
+    assert(cleared === 0, `a whole copy starts without the table, built from nothing in a staging database (${cleared})`);
 
     // ── 9. no member can flood the node ─────────────────────────────────────────────────────────
     // The deciding review of #1239 (4114300128): 500 keys that needn't be anyone's, then Unblock All, wrote 500 tombstones
-    // every two requests, each kept 30 days, and a whole copy carried them all. The force-resync above emptied the tables.
+    // every two requests, each kept 30 days, and a whole copy carried them all. The empty copy above emptied the tables.
     console.log('\n── 9. no member can flood the node ──');
     const CEILING = blocks?.MEMBER_BLOCK_TOMBSTONES_MAX ?? 500;
     const fay = member('Fay');

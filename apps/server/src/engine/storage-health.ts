@@ -17,6 +17,7 @@ import {
     DiskImageStore, ImageStoreUnavailableError, deleteObjectUnless, getImageStore, imagesDir, scanOurObjectsAsync,
     type ImageStore, type ObjectInfo,
 } from '../storage/image-store.js';
+import { stagedObjects } from '../services/stager.js';
 
 export interface DiskBreakdownItem {
     dbSizeBytes: number;
@@ -310,6 +311,15 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * that can ever reclaim one. No row can point at it — the object is written before the row, and under a name
  * no row would ever hold — so the only question is age, and the same grace period answers it: a `put` in
  * flight right now looks exactly like a leftover.
+ *
+ * ## A standby's whole copy being staged
+ *
+ * A standby builds a whole copy in a staging database beside the live one and swaps it in at a restart
+ * (services/stager.ts). Its stager puts each listing photo in this same store, and until the swap only the staging
+ * database names it; a copy of a big community runs longer than the grace period. So while a staging is there, the
+ * objects it names count as referenced, and nothing written since the copy started is judged at all (a page's photos are
+ * put before its rows commit): stagedObjects. A staging that can't be read judges nothing an orphan, as a failed read of
+ * the live rows does (review 4139589323).
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
@@ -363,8 +373,8 @@ function sweepBatchFor(store: ImageStore): number {
  * listed fresh, and the grace period passes over it.
  */
 async function findOrphanedImageObjects(db: any, options: { dataDir?: string; store?: ImageStore } | undefined, nowMs = Date.now()):
-    Promise<{ objects: ObjectInfo[]; totalBytes: number }> {
-    const out = { objects: [] as ObjectInfo[], totalBytes: 0 };
+    Promise<{ objects: ObjectInfo[]; totalBytes: number; stagedSince: number | null }> {
+    const out = { objects: [] as ObjectInfo[], totalBytes: 0, stagedSince: null as number | null };
     let store: ImageStore;
     try {
         store = sweepStore(options);
@@ -387,8 +397,17 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
             return out;
         }
     }
+    // A whole copy staging beside this database: what it names, and what was written since it started, are kept.
+    let staged: { since: number; keys: Set<string> } | null;
+    try {
+        staged = stagedObjects(options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'));
+    } catch {
+        return out;
+    }
+    out.stagedSince = staged?.since ?? null;
     for (const o of listed) {
-        if (referenced.has(o.key)) continue;
+        if (referenced.has(o.key) || staged?.keys.has(o.key)) continue;
+        if (staged && o.mtimeMs >= staged.since) continue;
         if (nowMs - o.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
         out.objects.push(o);
         out.totalBytes += o.bytes;
@@ -398,6 +417,7 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
     // (S3) has none, and does not implement this.
     try {
         for (const t of store.listTemporary?.() ?? []) {
+            if (staged && t.mtimeMs >= staged.since) continue;
             if (nowMs - t.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
             out.objects.push(t);
             out.totalBytes += t.bytes;
@@ -459,7 +479,9 @@ async function sweepOnce(
     const started = Date.now();
     const max = limits.max ?? sweepBatchFor(store);
     const clock = () => options?.nowMs ?? Date.now();
-    const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS;
+    // Written again since the listing: inside the grace period again, or since a staged copy started.
+    const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS
+        || (found.stagedSince !== null && now.mtimeMs >= found.stagedSince);
     let reached = 0;
     let failures = 0;
     for (const o of found.objects) {

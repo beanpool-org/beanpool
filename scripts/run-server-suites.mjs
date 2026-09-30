@@ -38,6 +38,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_ENV, SUITES, VARIANTS, SERIAL } from './server-suites.mjs';
+import { hasCountLine } from './suite-count-line.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_DIR = path.join(ROOT, 'apps/server');
@@ -206,7 +207,11 @@ function runOne(run, workDir) {
             // Whatever the run left running in its own group goes with it (a suite that forgot a child).
             try { process.kill(-child.pid, 'SIGKILL'); } catch { /* the group is gone, as it should be */ }
             const seconds = (Date.now() - started) / 1000;
-            const status = timedOut ? 'timeout' : code === 0 ? 'pass' : 'fail';
+            // A suite that exits 0 without its closing count (N/N passed, or its PASSED line) stopped part-way: something it
+            // drove in its own process exited with 0, and every check after that ran nowhere. It fails, as NO-COUNT (#1334,
+            // review 4139589216: a standby suite stopped at 32 of its 82 checks, and exit 0 alone counted it green).
+            const counted = () => hasCountLine(fs.readFileSync(run.log, 'utf8'));
+            const status = timedOut ? 'timeout' : code !== 0 ? 'fail' : counted() ? 'pass' : 'nocount';
             resolve({ ...run, status, code, signal: sig, seconds });
         };
         child.on('exit', finish);
@@ -225,7 +230,8 @@ const fmt = (s) => {
     return `${Math.floor(whole / 60)}m${String(whole % 60).padStart(2, '0')}s`;
 };
 const header = (r) => `━━━ ${r.name}${r.label ? ` (${r.label})` : ''} ━━━`;
-const rollupName = (r) => (r.status === 'timeout' ? (r.tag ? `${r.name}(${r.tag},TIMEOUT)` : `${r.name}(TIMEOUT)`) : r.id);
+const rollupName = (r) => (r.status === 'timeout' ? (r.tag ? `${r.name}(${r.tag},TIMEOUT)` : `${r.name}(TIMEOUT)`)
+    : r.status === 'nocount' ? (r.tag ? `${r.name}(${r.tag},NO-COUNT)` : `${r.name}(NO-COUNT)`) : r.id);
 
 async function runAll(runs, jobs, root, results) {
     const queue = [...runs];
@@ -238,7 +244,8 @@ async function runAll(runs, jobs, root, results) {
             results.push(r);
             // ✘, not ✗: scripts/test-all-lib.sh counts every ✗ line as a failing assertion of the suite above it.
             const mark = r.status === 'pass' ? '✓' : '✘';
-            const why = r.status === 'timeout' ? ` TIMEOUT after ${TIMEOUT_S}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}` : '';
+            const why = r.status === 'timeout' ? ` TIMEOUT after ${TIMEOUT_S}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
+                : r.status === 'nocount' ? ' exit 0 with no closing count (NO-COUNT)' : '';
             console.log(`${mark} ${r.id}${why}  ${fmt(r.seconds)}  [${results.length}/${total}]`);
             if (r.status === 'pass') fs.rmSync(workDir, { recursive: true, force: true });
         }
@@ -323,7 +330,7 @@ async function main() {
             console.log('…');
             console.log(lines.slice(-200).join('\n'));
         }
-        const how = r.status === 'timeout' ? `killed after ${TIMEOUT_S}s` : `exit ${r.code ?? r.signal}`;
+        const how = r.status === 'timeout' ? `killed after ${TIMEOUT_S}s` : r.status === 'nocount' ? 'exit 0 with no closing count' : `exit ${r.code ?? r.signal}`;
         console.log(`── ${r.id}: ${how}, ${fmt(r.seconds)}; log ${r.log}`);
     }
     if (process.env.TEST_ALL_LOG_DIR) {

@@ -15,7 +15,7 @@
  *     stamped leave, #1258, and signs back in on it), mute chats, a keeper reads the enterprise's thread, an event
  *     reminder is sent, the activity list fills (a line older than a month pruned, with no tombstone), the admin edits the
  *     pricing guide and a member reports a price.
- *  2. The standby S's first copy: every G4 table is M's, row for row and stamp for stamp, and its copy is format 6.
+ *  2. The standby S's first copy: every G4 table is M's, row for row and stamp for stamp, and its copy is the current format.
  *  3. More on M, then a delta: Ann unmutes one chat and is re-keyed (her phone goes, her mute moves to her new key) and
  *     registers again; Bo leaves a phone; a custom pricing item is made and deleted; another activity line. S is M's
  *     again, each delete by its tombstone, the unmute's applied before S follows the re-key.
@@ -78,8 +78,11 @@ const PW_STANDBY = 'Devices-Standby-Pw-8830!';
 const AHEAD_MS = 3600_000;
 const DAY = 86400_000;
 const MIN = 60_000;
-/** The importer format this change's copy records (engine/sync.ts REPLICA_FORMAT); the one before it, a standby to re-seed. */
-const FORMAT = '6';
+/**
+ * The importer format a copy records now (engine/sync.ts REPLICA_FORMAT: 6 was this change's, 7 a whole copy built from
+ * nothing in a staging database, P2); the one before this change's, a standby to re-seed.
+ */
+const FORMAT = '7';
 const FORMAT_BEFORE = '5';
 /**
  * The standby's cap on the rows of any one table in a copy (engine/sync.ts MAX_IMPORT_ROWS_PER_CATEGORY, 250,000 by

@@ -73,6 +73,8 @@ function guardFetch(): { blocked: string[] } {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        // The update check, 30 s after any node's start (routes/settings.ts), as the other standby suites answer it.
+        if (url.hostname === 'api.github.com' && url.pathname.startsWith('/repos/beanpool-org/beanpool/')) return new Response('{}', { status: 404 });
         seen.blocked.push(url.hostname);
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
@@ -259,7 +261,8 @@ async function child(): Promise<void> {
             });
             payload.communitySettings = rec;
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** The ledger conservation audit (promotionSanityCheck), run now. */
         'ledger-audit': async () => {
@@ -437,7 +440,13 @@ async function main(): Promise<void> {
     try {
         // ── 1. M sets its community up ──
         console.log('\n— 1. the main server sets its community up —');
-        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        // Every main server's first directory push, 30 s after its start (services/directory-publisher.ts), goes to a registry
+        // on this machine: a standby's copies take a restart each now, so the suite runs past it. A standby keeps the real
+        // address, so one that pushed would still be counted below.
+        const quiet = await directoryRegistry();
+        closers.push(quiet.close);
+        const asMain = { DIRECTORY_REGISTRY_URL: quiet.url };
+        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary', asMain));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
@@ -567,7 +576,7 @@ async function main(): Promise<void> {
             `an install whose write of local-config.json fails (a full disk) stops: not marked installed, nothing of it applied (${j({ threw: failed.threw, installedAt: failed.kept?.installedAt, applied: first(differing(s2Own, communitySettings(failed))) })})`);
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary'));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
         nodes.push(standby2);
         require_(standby2.ready.role === 'primary', `S2 starts as a main server, with no take-over (${standby2.ready.role})`);
         let s2: Settings = await standby2.send('settings');
@@ -581,7 +590,7 @@ async function main(): Promise<void> {
         await standby2.send('set-local', { patch: { communityName: 'Renamed After Promotion' } });
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary'));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
         nodes.push(standby2);
         s2 = await standby2.send('settings');
         assert(s2.localConfig.communityName === 'Renamed After Promotion',
@@ -713,7 +722,7 @@ async function main(): Promise<void> {
         // The process dies inside this request, the moment `open-door` is recorded: there may be no answer.
         await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY3 });
         await standby3.exited;
-        standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
+        standby3 = await spawnNode(SCRIPT, dir('standby3'), { ...s3Env, ...asMain });
         nodes.push(standby3);
         require_(standby3.ready.role === 'primary' && standby3.ready.resumed === true,
             `S3's next start finishes the take-over, with no restart after it (${j({ role: standby3.ready.role, resumed: standby3.ready.resumed })})`);

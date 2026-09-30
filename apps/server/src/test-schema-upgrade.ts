@@ -733,10 +733,12 @@ END`;
         assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
         const d = new Database(path.join(dir, 'state.db'));
         const freshMembers = columns(d, 'members');
-        assert(freshMembers.includes('is_visitor'), 'a fresh install has members.is_visitor');
+        const freshMemberIndexes = indexes(d, 'members');
+        assert(freshMembers.includes('is_visitor') && freshMemberIndexes.includes('idx_members_member_keys'),
+            'a fresh install has members.is_visitor, and the index of the members\' own keys');
         // As the node runs (db.ts): rows may name an inviter this node has no row for ('genesis', 'open:google').
         d.pragma('foreign_keys = OFF');
-        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN is_visitor;
+        d.exec(`DROP TRIGGER members_touch_updated_at; DROP INDEX idx_members_member_keys; ALTER TABLE members DROP COLUMN is_visitor;
                 DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
         assert(!columns(d, 'members').includes('is_visitor'), 'the fixture genuinely lacks the column');
         const OLD = '2025-01-01T00:00:00.000Z';
@@ -785,6 +787,8 @@ END`;
             `the boot says how many it marked and how many ambiguous rows it kept as members (${(result.output.match(/Visitors' rows marked[^\n]*/) || [''])[0].slice(0, 160)})`);
         const after = new Database(path.join(dir, 'state.db'));
         assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'members: exactly the columns a fresh install has');
+        assert(JSON.stringify(indexes(after, 'members')) === JSON.stringify(freshMemberIndexes),
+            `members: exactly the indexes a fresh install has (${indexes(after, 'members').join(', ')})`);
         const flag = (pk: string) => (after.prepare('SELECT is_visitor, updated_at FROM members WHERE public_key = ?').get(pk) as any);
         for (const [label, pk] of Object.entries(visitors)) {
             const r = flag(pk);
@@ -844,7 +848,7 @@ END`;
         assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
         let d = new Database(path.join(dir, 'state.db'));
         d.pragma('foreign_keys = OFF');
-        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN is_visitor;
+        d.exec(`DROP TRIGGER members_touch_updated_at; DROP INDEX idx_members_member_keys; ALTER TABLE members DROP COLUMN is_visitor;
                 DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
         const visitor = seed(d, 10, { callsign: 'Visitor-0a0a0a0a' });
         const member = seed(d, 20, { invited_by: key(1), invite_code: 'INV-ABCD-EFGH' });

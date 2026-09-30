@@ -247,7 +247,9 @@ async function child(): Promise<void> {
                 payload.accounts.push({ ...x, balance: x.balance - 50 });
             }
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            const { asOnePageCopy } = await import('./copy-test-support.js');
+            return signSyncPayload(asOnePageCopy(payload) as any);
         },
         /** Import a payload as the puller does, straight into this standby. */
         import: async (a: { payload: any }) => {

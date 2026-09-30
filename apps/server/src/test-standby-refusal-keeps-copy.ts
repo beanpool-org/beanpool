@@ -1,68 +1,57 @@
 /**
  * Test Suite: a refused copy never leaves a standby with less, and one table never blocks the rest (N and D of
- * scratch/global-node/DESIGN-replica-flood-bounds-opus.md, §4.4).
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md, §4.4), as they stand since paged copies (P2 of
+ * scratch/global-node/DESIGN-paged-copies-fable.md): a whole copy is built in pages in a staging database and swapped in
+ * at a restart (services/stager.ts), a delta comes in pages imported as one payload, and nothing refuses or leaves out a
+ * copy for its size. The steps that checked the row cap's rule (a table over it left out, or a copy refused over one the
+ * ledger needs whole) now check that the same floods land whole: the intended change P retires the cap for, not a
+ * weakened test. Each refusal is now made by what still refuses a copy: a node_config key the replication manifest
+ * doesn't classify (the stager refuses a whole copy over it; no delta reads it), the conservation guard, a disk cap, a
+ * trigger on a row a delta writes.
  *
  * A main server M and a standby S, each its own process with its own data dir (takeover-test-harness.ts), M serving its
  * real HTTPS server (members act through it with signed requests) and S pulling through its real puller (`pullNow`, the
- * loop's own step; `requestResync`, the operator's) from M's real backup routes. S's row cap is scaled to 150
+ * loop's own step; `requestResync`, the operator's) from M's real backup routes. S's old row cap is scaled to 150
  * (MAX_IMPORT_ROWS_PER_CATEGORY), as a flood past the real 250,000 would be; the flood's rows are written on M behind the
- * routes, to stay fast (the route-driven flood is measured in the design's §1). Nothing leaves this machine.
+ * routes, to stay fast. A standby that makes a whole copy ready restarts, and the harness starts it again as Docker does.
+ * Nothing leaves this machine.
  *
  *  1. M: members, listings, a DM, a completed trade (Beans in the ledger), an unused invite. S's first copy (the format
  *     re-seed a new standby takes) lands, exact.
- *  2. Chat messages and invites over the cap (neither in the ledger set). S's delta lands: a member M made after the flood
- *     reaches S, the two tables are left out, and S keeps its own rows of them; the record and the report name them. A
- *     whole copy lands, not exact, the two named and nothing else, no force-resync asked, and the next pull is a delta. An
- *     operator's force-resync lands too, and S keeps its own messages (the clear spares a table the copy leaves out). M's
- *     owners are told which tables, and not to run a force-resync. The flood gone from M, the next whole copy is exact.
- *     (Before: every copy refused, and the force-resync left S with 0 members, 0 listings and 0 accounts.)
- *  3. A table of the ledger set on the generic path (keepers' wages owed) over the cap: S's delta is refused, naming it, S is
- *     unchanged, and the next delta lands once M holds fewer, which clears it. Members over the cap in whole copies only
- *     (stamped long ago, as years of growth): deltas land, whole copies are refused, and S (and M's owners) keep saying so
- *     until a whole copy lands.
- *  4. Members over the cap (the ledger set): S's delta is refused, with why `oversized` naming `members`, and S is
- *     unchanged, row for row, its cursor too. Five pulls inside one reconcile interval ask M for one whole copy (before:
- *     five).
+ *  2. Chat messages and invites past the old cap: S's delta carries them whole, with a member M made after the flood; a
+ *     whole copy lands exact, nothing left out; M's owners are told of nothing; an operator's force-resync lands. The flood
+ *     gone from M with no tombstone, the next whole copy finds S holding it and asks for the held force-resync, which lands
+ *     exact. (Before P2: the two tables left out, reported, and kept stale.)
+ *  3. Keepers' wages owed (a table of the ledger set) past the old cap: the delta lands with them. Members past it in whole
+ *     copies only (stamped long ago): the whole copy lands, exact. (Before P2: refused over them.)
+ *  4. Members past the old cap by delta: it lands. Five pulls inside one reconcile interval ask M for one whole copy.
  *  5. The force-resync a copy that didn't match asks for (a balance planted on S; S restarted, its puller resuming from the
- *     cursor it saved): refused, S's ledger as it was (the plant included), and nothing held (no `replica_held_sum`).
- *     (Before: S cleared.)
- *  6. An operator's force-resync: refused, naming members, and S holds every member, listing, account and balance it had,
- *     its format record and its cursor (before: 0 members). M's owners are told `members`, and not to run a force-resync.
- *     A new standby with no copy, refused the same way, waits instead of asking again at once.
- *  7. The format re-seed (S restarted with the format before this one): refused, S keeps everything and its old format
+ *     cursor it saved), refused: S's ledger as it was (the plant included), and nothing held (no `replica_held_sum`).
+ *  6. An operator's force-resync, refused: S holds every member, listing, account and balance it had, its format record
+ *     and its cursor. A new standby with no copy, refused the same way, waits instead of asking again at once.
+ *  7. The format re-seed (S restarted with the format before this one), refused: S keeps everything and its old format
  *     record, the next pull is a delta, and the re-seed is asked for again once the retry time passes, not before.
- *  8. The flood gone from M: the format re-seed lands, exact, the format recorded, S's ledger M's.
- *  9. Deletions over the cap: S's delta lands without them and asks for one force-resync; that force-resync's copy skips
- *     them and lands exact (the message M deleted is gone from S); the pull after it is a delta. (Before: refused.)
- * 10. A write that fails inside a copy's transaction fails the whole copy, and S is exactly as it was, on disk too:
- *     S's files capped (RLIMIT_FSIZE) during an operator's force-resync, so its clear runs out of room (SQLITE_IOERR);
- *     a trigger's RAISE(ROLLBACK) on a delete in the clear; one on a single row a delta's block lists write. (Before: the
- *     clear carried on outside the rolled-back transaction, S lost its groups and the listing aimed at one was
- *     cancelled; the block lists' rows after the refused one landed.)
- * 11. A standby with a cursor and no format record (every standby that copied before the record), its re-seed refused
- *     (members over the cap in whole copies only): its deltas still land, and are held to its ledger. M's +7 Beans
- *     planted on one account is refused (before: taken as a seed, and S's total went from 0 to 7). The plant and the
- *     rows gone from M, the re-seed lands, exact.
- * 12. A table the delta's stateHash canary reads, over the cap (listings): twelve pulls ask M for no whole copy (before:
- *     every other pull). A whole copy that lands with a table left out holds the next back until the next routine one,
- *     drift the canary finds meanwhile included (before: the next pull).
- * 13. Listings flooded under the cap per delta, each delta landing, then a whole copy that leaves them out, with routine
- *     whole copies off for size (#1304 review 4128951076): S lacks no listing, so the canary still reads. A group
- *     membership gone from S with no tombstone is drift it finds, and the next routine time's whole copy brings it back.
- *     The flood gone from M, the canary finds that too, and the whole copy it asks for carries listings again: S's record
- *     and report no longer name them. (Before: the canary was off while any copy left listings out, so neither came.)
- * 14. The same, with 20 more listings and a trade written on M just before the whole copy, and the flood still running
- *     after it (#1315 reviews 4131868827 and 4132483095): that copy leaves listings out, so it keeps S's cursor at its last
- *     delta's, and the next delta brings the 21 listings it skipped: the gap stays 0 (before: 21 for good; before that, a
- *     whole copy at every hold, each moving the cursor past 5 more). S's record reads listings as lacking (the
- *     copy's own hash of them isn't S's), so the canary stays off: pulls over two holds ask M for no whole copy. The trade,
- *     which the whole copy and the next delta both carry, is on S once, its ledger M's. A record an older version wrote
- *     (no lastLacking) reads its left-out listings as lacking too.
- * 15. Listings current by hash when the restart's whole copy leaves them out, then the flood resumes and a group
- *     membership goes from S with no tombstone (#1315 review 4132483095): the canary finds it, and at the hold one whole
- *     copy brings it back. That copy leaves listings out and keeps S's cursor, so the next delta carries the listings
- *     written since the last one: the gap stays 0 (before: 5 for good), S holds each of M's listings once, and its ledger
- *     is as it was.
+ *  8. The key gone: the format re-seed lands, exact, the format recorded, S's ledger M's.
+ *  9. Deletions past the old cap: S's delta carries them, the message M deleted is gone, and no force-resync is asked.
+ *     (Before P2: left out, and one force-resync to mend them.)
+ * 10. A copy that fails fails whole, and S is exactly as it was, on disk too: S's files capped (RLIMIT_FSIZE) during an
+ *     operator's force-resync, so the copy's staging database runs out of room; a trigger's RAISE(ROLLBACK) on a single row
+ *     a delta's block lists write. A trigger planted on S's live tables is nothing to a copy built beside them: that
+ *     force-resync lands. (Before P2: the clear ran on the live tables, and a trigger on it refused the copy.)
+ * 11. A standby with a cursor and no format record (every standby that copied before the record), its re-seed refused:
+ *     its deltas still land, and are held to its ledger. M's +7 Beans planted on one account is refused (before: taken as
+ *     a seed, and S's total went from 0 to 7). The plant and the key gone, the re-seed lands, exact.
+ * 12. Listings past the old cap: twelve pulls ask M for no whole copy (they come by delta, and the canary finds nothing).
+ *     The routine whole copy lands whole and holds nothing back: drift the canary finds after it (a listing gone from S)
+ *     is mended by a whole copy at the next pull. (Before P2: listings left out, the canary off, and drift held back.)
+ * 13. Listings flooded per delta, then a restart whose routine whole copy (due by the cadence S's record keeps) carries
+ *     them all, exact; a group membership gone from S with no tombstone is drift the canary finds, and one whole copy
+ *     brings it back.
+ * 14. Listings flooded, and a trade on M, just before a whole copy: the copy carries them and moves S's cursor to its own,
+ *     and the trade is on S once after the next delta too. A record an older version wrote (no lastLacking, lastLeftOut
+ *     naming listings) reads them as lacking until the next whole copy, which leaves nothing out, clears both.
+ * 15. The flood running on and a membership gone from S: the canary finds it at the first delta, the next pull's whole
+ *     copy brings it back, and no listing of M's is ever missing from S; S's ledger is M's.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-refusal-keeps-copy.ts
@@ -151,7 +140,7 @@ async function child(): Promise<void> {
             const result = await pullNow();
             if (a.whole) process.env.BACKUP_RECONCILE_EVERY_MS = was;
             const s = getBackupStatus() as any;
-            return { ok: result.ok, error: result.error ?? null, mode: s.lastPullMode ?? null, landedWhole: s.lastFullReconcileAt !== before };
+            return { ok: result.ok, error: result.error ?? null, mode: s.lastPullMode ?? null, landedWhole: s.lastFullReconcileAt !== before, staged: (result as any).staged === true };
         },
         /**
          * The puller's start as index.ts makes it (initBackupPuller): it resumes from the cursor this database saved. Its
@@ -266,10 +255,10 @@ async function child(): Promise<void> {
                     json_extract(NEW.value, '$.recent[0].auth'), json_extract(NEW.value, '$.recent[0].reason')); END`);
             return true;
         },
-        /** The whole copies this main server served (a snapshot pull that wasn't a 304), since `since`, as 'watch-pulls' saw them. */
+        /** The whole copies this main server opened (routes/backup.ts sync-copy, logged as 'whole copy in pages'), since `since`, as 'watch-pulls' saw them. */
         'whole-copies': async (a: { since: number }) => {
             const { db } = await import('./db/db.js');
-            return (db.prepare(`SELECT COUNT(*) AS n FROM temp.pulls_seen WHERE at >= ? AND auth <> 'rejected' AND reason IS NULL`).get(a.since) as { n: number }).n;
+            return (db.prepare(`SELECT COUNT(*) AS n FROM temp.pulls_seen WHERE at >= ? AND auth <> 'rejected' AND reason = 'whole copy in pages'`).get(a.since) as { n: number }).n;
         },
         /** The whole-copy check on M's current whole copy, fetched with the replication token and not imported. */
         'check-copy': async () => {
@@ -458,100 +447,98 @@ async function main(): Promise<void> {
         require_(r1.lastWhole?.exact === true && s1.tables.messages.count === m1.tables.messages.count && s1.tables.messages.count >= 3 && s1.tables.transactions.count > 0 && s1.format !== null,
             `S's copy is M's, exact: ${counts(s1, 'members', 'posts', 'accounts', 'transactions', 'messages', 'invite_codes')} (M: ${counts(m1, 'members', 'posts', 'accounts', 'transactions', 'messages', 'invite_codes')}; verdict ${JSON.stringify(r1.lastWhole?.differs)})`);
 
-        // ── 2. Chat messages and invites over the cap: left out, and the rest lands ──
-        console.log('\n— 2. chat messages and invites over the cap: left out of each copy, and the rest lands —');
+        /**
+         * A pull that makes a whole copy ready restarts S (the harness starts it again): this waits for the new start, and
+         * starts its puller as index.ts does, so it resumes from the copy swapped in.
+         */
+        const pullAndSwap = async (args: Record<string, unknown> = {}, cmd: 'pull' | 'resync' = 'pull') => {
+            const before = standby.swaps();
+            const p = await standby.send(cmd, args);
+            if (p?.staged || p?.restarting) {
+                const end = Date.now() + 30_000;
+                while (standby.swaps() === before && Date.now() < end) await sleep(50);
+                await standby.send('boot-puller');
+            }
+            return p;
+        };
+        // A key no replication manifest entry classifies, planted on S: the stager refuses every whole copy over it (it can't
+        // tell whether S keeps it of its own), and no delta reads it. Before P2 a flood of members past the row cap refused
+        // these copies; nothing refuses a copy for its size now, so this is what makes one refused.
+        const UNCLASSIFIED = 'refusal_test_unclassified';
+        const plantUnclassified = (on: NodeProc) => on.send('sql', { sql: `INSERT OR REPLACE INTO node_config (key, value) VALUES ('${UNCLASSIFIED}', 'x')` });
+        const unplantUnclassified = (on: NodeProc) => on.send('sql', { sql: `DELETE FROM node_config WHERE key = '${UNCLASSIFIED}'` });
+
+        // ── 2. Chat messages and invites past the old row cap: carried whole ──
+        console.log('\n— 2. chat messages and invites past the old row cap: every copy carries them whole —');
         await main.send('flood', { kind: 'messages', n: FLOOD, conversationId, author: ann.pk });
         await main.send('flood', { kind: 'invites', n: FLOOD, author: gwen.pk });
         await join(eve); // a member made after the flood
         const delta2 = await standby.send('pull', {});
         let s2: Snap = await standby.send('snapshot', { tables: HASHED });
+        let m2: Snap = await main.send('snapshot', { tables: HASHED });
         const r2 = await standby.send('record');
-        assert(delta2.ok === true && delta2.mode === 'delta', `S's delta lands (${JSON.stringify(delta2)}; before: refused, "category 'messages' has ${FLOOD + 0} rows")`);
-        assert(s2.tables.members.count === s1.tables.members.count + 1, `Eve, who joined M after the flood, reached S (${s1.tables.members.count} → ${s2.tables.members.count} members)`);
-        assert(s2.tables.messages.hash === s1.tables.messages.hash && s2.tables.invite_codes.hash === s1.tables.invite_codes.hash,
-            `S keeps its own messages and invites as they were, row for row (${counts(s2, 'messages', 'invite_codes')})`);
-        assert(JSON.stringify(r2.lastLeftOut?.tables) === JSON.stringify(['invite_codes', 'messages']) && JSON.stringify(r2.report.leftOut) === JSON.stringify(['invite_codes', 'messages']),
-            `S's record and the report its next pull sends name the two tables left out (${JSON.stringify({ record: r2.lastLeftOut, report: r2.report.leftOut })})`);
+        assert(delta2.ok === true && delta2.mode === 'delta' && s2.tables.members.count === s1.tables.members.count + 1
+            && s2.tables.messages.hash === m2.tables.messages.hash && s2.tables.invite_codes.hash === m2.tables.invite_codes.hash
+            && r2.lastLeftOut === null && Array.isArray(r2.report.leftOut) && r2.report.leftOut.length === 0,
+            `S's delta lands whole: Eve, who joined after the flood, and every line and invite of it (${JSON.stringify(delta2)}; ${counts(s2, 'members', 'messages', 'invite_codes')}; before: the two tables left out)`);
         const whole2 = await standby.send('pull', { whole: true });
         const r2w = await standby.send('record');
-        assert(whole2.ok === true && whole2.mode === 'full' && whole2.landedWhole === true, `S's whole copy lands (${JSON.stringify(whole2)})`);
-        assert(r2w.lastWhole?.exact === false && Array.isArray(r2w.lastWhole?.differs) && r2w.lastWhole.differs.length === 0 && r2w.lastWhole.resyncAsked === false
-            && JSON.stringify(r2w.lastLeftOut?.tables) === JSON.stringify(['invite_codes', 'messages']),
-            `it is not exact, the two tables named and nothing else found different, and no force-resync asked: one would read the same rows (${JSON.stringify({ whole: r2w.lastWhole, leftOut: r2w.lastLeftOut })})`);
-        const next2 = await standby.send('pull', {});
-        assert(next2.ok === true && next2.mode === 'delta', `the next pull is a delta (${JSON.stringify(next2)})`);
+        assert(whole2.ok === true && whole2.mode === 'full' && whole2.landedWhole === true && r2w.lastWhole?.exact === true && r2w.lastLeftOut === null,
+            `S's whole copy lands, exact, nothing left out (${JSON.stringify({ pull: whole2, whole: r2w.lastWhole })}; before: not exact, the two tables named)`);
         const banner2 = await main.send('health');
-        const lines2 = (banner2.incident?.lines ?? []).join(' ');
-        const todo2 = (banner2.incident?.whatToDo ?? []).join(' ');
-        assert(/leave out invites and chat messages/.test(lines2) && !/run a force-resync|a force-resync there copies/.test(todo2) && /would not help/.test(todo2),
-            `M's owners are told which tables its standby's copies leave out, and not to run a force-resync (${JSON.stringify({ lines: banner2.incident?.lines, whatToDo: banner2.incident?.whatToDo })})`);
-        const beforeResync2: Snap = await standby.send('snapshot', { tables: HASHED });
-        const resync2 = await standby.send('resync');
+        assert(!/leave out/.test((banner2.incident?.lines ?? []).join(' ')),
+            `M's owners are told of no table left out (${JSON.stringify(banner2.incident?.lines ?? null)})`);
+        const resync2 = await pullAndSwap({}, 'resync');
         s2 = await standby.send('snapshot', { tables: HASHED });
-        const m2: Snap = await main.send('snapshot', { tables: HASHED });
-        assert(resync2.ok === true, `an operator's force-resync lands (${JSON.stringify(resync2)}; before: refused, and S left with 0 members, 0 listings, 0 accounts)`);
-        assert(s2.tables.members.count === m2.tables.members.count && s2.tables.posts.count === m2.tables.posts.count && s2.tables.accounts.hash === m2.tables.accounts.hash
-            && s2.tables.transactions.hash === m2.tables.transactions.hash,
-            `S's members, listings, accounts and trades are M's (${counts(s2, 'members', 'posts', 'accounts', 'transactions')}; M ${counts(m2, 'members', 'posts', 'accounts', 'transactions')})`);
-        assert(s2.tables.messages.hash === beforeResync2.tables.messages.hash && s2.tables.messages.count === s1.tables.messages.count,
-            `and S keeps its own messages: the clear spares a table the copy leaves out (${counts(s2, 'messages')}; before: cleared, and none put back)`);
+        m2 = await main.send('snapshot', { tables: HASHED });
+        assert(resync2.ok === true && resync2.restarting === true && s2.tables.members.hash === m2.tables.members.hash && s2.tables.posts.hash === m2.tables.posts.hash
+            && s2.tables.accounts.hash === m2.tables.accounts.hash && s2.tables.transactions.hash === m2.tables.transactions.hash && s2.tables.messages.hash === m2.tables.messages.hash,
+            `an operator's force-resync lands, built in a staging database and swapped in at a restart: S's members, listings, ledger and messages are M's (${JSON.stringify(resync2)}; ${counts(s2, 'members', 'posts', 'accounts', 'messages')}; before: refused, and S left with 0 members)`);
+        // The flood gone from M with no tombstone: S still holds it, so the next whole copy doesn't match, and the held
+        // force-resync it asks for, built from nothing, mends it.
         const gone2 = await main.send('unflood');
         const clean2 = await standby.send('pull', { whole: true });
         const r2c = await standby.send('record');
-        assert(gone2 === 2 * FLOOD && clean2.ok === true && r2c.lastWhole?.exact === true && r2c.lastLeftOut === null,
-            `the flood gone from M, the next whole copy is exact and leaves nothing out (${JSON.stringify({ gone: gone2, pull: clean2, whole: r2c.lastWhole, leftOut: r2c.lastLeftOut })})`);
+        const mend2 = await pullAndSwap({});
+        const r2m = await standby.send('record');
+        s2 = await standby.send('snapshot', { tables: HASHED });
+        m2 = await main.send('snapshot', { tables: HASHED });
+        assert(gone2 === 2 * FLOOD && clean2.ok === true && r2c.lastWhole?.exact === false && r2c.lastWhole?.resyncAsked === true
+            && mend2.ok === true && mend2.mode === 'resync' && r2m.lastWhole?.exact === true && s2.tables.messages.hash === m2.tables.messages.hash,
+            `the flood gone from M with no tombstone, the next whole copy finds S holding it and asks for the held force-resync, which lands exact (${JSON.stringify({ gone: gone2, whole: r2c.lastWhole, mend: mend2, after: r2m.lastWhole })})`);
 
-        // ── 3. A table of the ledger set on the generic path over the cap ──
-        console.log('\n— 3. keepers\' wages owed over the cap: refused, and S unchanged —');
-        const s3a: Snap = await standby.send('snapshot', { tables: HASHED });
+        // ── 3. A table of the ledger set past the old row cap: carried whole ──
+        console.log('\n— 3. keepers\' wages owed, and members stamped long ago, past the old row cap: carried whole —');
         await main.send('flood', { kind: 'wages', n: FLOOD, author: gwen.pk });
         const delta3 = await standby.send('pull', {});
-        const s3: Snap = await standby.send('snapshot', { tables: HASHED });
+        let s3: Snap = await standby.send('snapshot', { tables: HASHED });
+        let m3: Snap = await main.send('snapshot', { tables: HASHED });
         const r3 = await standby.send('record');
-        assert(delta3.ok === false && /deferred_wage_claims/.test(delta3.error ?? '') && r3.lastWhy === 'oversized' && JSON.stringify(r3.lastOversized?.tables) === JSON.stringify(['deferred_wage_claims']),
-            `S's delta is refused, naming the table (${JSON.stringify({ pull: delta3, why: r3.lastWhy, oversized: r3.lastOversized })})`);
-        assert(snapDiff(s3a, s3).length === 0, `and S is unchanged, row for row, cursor and format too (differences ${first(snapDiff(s3a, s3))})`);
-        await main.send('unflood');
-        const after3 = await standby.send('pull', {});
-        const r3b = await standby.send('record');
-        assert(after3.ok === true && after3.mode === 'delta' && r3b.lastOversized === null && JSON.stringify(r3b.report.oversized) === '[]',
-            `the next delta lands once M holds fewer, and S says nothing is over the cap any more (${JSON.stringify({ pull: after3, oversized: r3b.lastOversized, report: r3b.report.oversized })})`);
-        // Members over the cap in whole copies only (rows stamped long ago, as years of growth would be): every delta lands,
-        // and every whole copy is refused. S says so until a whole copy lands. The routine whole copy every 2.5 s, so each is
-        // due after a short wait, and a refused one holds the next back for that long.
+        assert(delta3.ok === true && delta3.mode === 'delta' && s3.tables.deferred_wage_claims.hash === m3.tables.deferred_wage_claims.hash && r3.lastOversized === null,
+            `S's delta lands with every wage owed (${JSON.stringify(delta3)}; ${counts(s3, 'deferred_wage_claims')}; before: refused, naming the table)`);
+        // Members past the old cap in whole copies only (stamped long ago, as years of growth): no delta carries them, and a
+        // whole copy does.
         await main.send('flood', { kind: 'members', n: FLOOD, old: true });
-        await standby.send('set-reconcile-ms', { ms: 2500 });
-        await sleep(2700);
-        const wholeOld = await standby.send('pull', {});
-        const deltaOld = await standby.send('pull', {});
-        const deltaOld2 = await standby.send('pull', {}); // carries the report of a delta that landed
-        const r3c = await standby.send('record');
-        assert(wholeOld.ok === false && wholeOld.mode === 'full' && /members/.test(wholeOld.error ?? '') && deltaOld.ok === true && deltaOld.mode === 'delta'
-            && deltaOld2.ok === true && r3c.lastOversized?.whole === true && JSON.stringify(r3c.report.oversized) === JSON.stringify(['members']) && r3c.fails === 0,
-            `with members over the cap in whole copies only, the whole copy is refused, deltas land, and S keeps saying so after they do (${JSON.stringify({ whole: [wholeOld.mode, wholeOld.error?.slice(0, 60)], delta: [deltaOld.mode, deltaOld.ok], oversized: r3c.lastOversized, report: r3c.report.oversized })})`);
+        const whole3 = await standby.send('pull', { whole: true });
+        s3 = await standby.send('snapshot', { tables: HASHED });
+        m3 = await main.send('snapshot', { tables: HASHED });
+        const r3b = await standby.send('record');
+        assert(whole3.ok === true && whole3.mode === 'full' && s3.tables.members.count === m3.tables.members.count && r3b.lastOversized === null
+            && r3b.lastWhole?.exact === true && JSON.stringify(r3b.report.oversized) === '[]',
+            `the whole copy lands with all ${m3.tables.members.count} members, exact, and S reports nothing over any cap (${JSON.stringify({ pull: whole3, whole: r3b.lastWhole })}; before: refused over members, deltas only)`);
         const banner3 = await main.send('health');
-        assert((banner3.incident?.lines ?? []).some((l: string) => /refuses whole copies of this server: this server holds more rows of members/.test(l) && /Changes still reach it one by one/.test(l)),
-            `M's owners are told its whole copies are refused over members, and that changes still reach it (${JSON.stringify(banner3.incident?.lines)})`);
-        await main.send('unflood');
-        await sleep(2700);
-        const wholeBack = await standby.send('pull', {});
-        const r3d = await standby.send('record');
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
-        assert(wholeBack.ok === true && wholeBack.mode === 'full' && r3d.lastOversized === null && r3d.lastWhole?.exact === true,
-            `the rows gone from M, the next whole copy lands exact, and nothing is over the cap any more (${JSON.stringify({ pull: wholeBack, oversized: r3d.lastOversized, exact: r3d.lastWhole?.exact })})`);
+        assert(!/more rows of/.test((banner3.incident?.lines ?? []).join(' ')), `M's owners are told of no table refused (${JSON.stringify(banner3.incident?.lines ?? null)})`);
 
-        // ── 4. Members over the cap ──
-        console.log('\n— 4. members over the cap: every copy refused, and S keeps everything —');
-        const s4a: Snap = await standby.send('snapshot', { tables: HASHED });
+        // ── 4. Members past the old cap, by delta; the routine whole copy's cadence ──
+        console.log('\n— 4. members past the old cap: the delta lands, and five pulls in one interval ask M for one whole copy —');
         await main.send('flood', { kind: 'members', n: FLOOD });
         const delta4 = await standby.send('pull', {});
         const s4: Snap = await standby.send('snapshot', { tables: HASHED });
+        const m4: Snap = await main.send('snapshot', { tables: HASHED });
         const r4 = await standby.send('record');
-        assert(delta4.ok === false && delta4.mode === 'delta' && r4.lastWhy === 'oversized' && JSON.stringify(r4.report.oversized) === JSON.stringify(['members']),
-            `S's delta is refused, why 'oversized', and the report names members (${JSON.stringify({ pull: delta4, why: r4.lastWhy, report: r4.report })})`);
-        assert(snapDiff(s4a, s4).length === 0, `S is unchanged, row for row, its cursor too (differences ${first(snapDiff(s4a, s4))})`);
-        // Five pulls inside one reconcile interval: the first is the routine whole copy, due (the last one landed in step 2,
-        // more than an interval ago), and refused; then deltas.
+        assert(delta4.ok === true && delta4.mode === 'delta' && s4.tables.members.hash === m4.tables.members.hash && r4.lastWhy === null,
+            `S's delta lands with every member (${JSON.stringify(delta4)}; ${counts(s4, 'members')}; before: refused, why 'oversized')`);
+        // Five pulls inside one reconcile interval: the first is the routine whole copy, due, and lands; then deltas.
         await standby.send('set-reconcile-ms', { ms: 4000 });
         await sleep(4200);
         const t4 = Date.now();
@@ -563,8 +550,9 @@ async function main(): Promise<void> {
         }
         await standby.send('set-reconcile-ms', { ms: 86400000 });
         const served4 = await main.send('whole-copies', { since: t4 });
-        assert(served4 === 1 && modes4[0] === 'full:refused' && modes4.slice(1).every((x) => x === 'delta:refused'),
-            `five pulls inside one reconcile interval ask M for one whole copy, then deltas (${served4} served; ${modes4.join(', ')}; before: five)`);
+        assert(served4 === 1 && modes4[0] === 'full:ok' && modes4.slice(1).every((x) => x === 'delta:ok'),
+            `five pulls inside one reconcile interval ask M for one whole copy, which lands, then deltas (${served4} served; ${modes4.join(', ')})`);
+        const s4a: Snap = await standby.send('snapshot', { tables: HASHED });
 
         // A standby restarted as index.ts starts one: its puller resumes from the cursor it saved. Its record's last
         // force-resync for a copy that didn't match is put more than six hours back, so each step below may ask one.
@@ -592,6 +580,7 @@ async function main(): Promise<void> {
         assert(resumed5 === s4a.savedCursor && !!resumed5, `S restarts, and its puller resumes from the cursor it saved (${resumed5})`);
         await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 4 WHERE public_key = ?', args: [ann.pk] });
         await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 4 WHERE public_key = ?', args: [bo.pk] });
+        await plantUnclassified(standby);
         const s5a: Snap = await standby.send('snapshot', { tables: HASHED });
         const check5 = await standby.send('check-copy');
         const r5a = await standby.send('record');
@@ -599,28 +588,25 @@ async function main(): Promise<void> {
             `a whole copy whose ledger doesn't match S's (4 Beans planted on S) asks for a force-resync (${JSON.stringify({ check5, asked: r5a.lastMismatchResyncAt })})`);
         const held5 = await standby.send('pull', {});
         const s5: Snap = await standby.send('snapshot', { tables: HASHED });
-        assert(held5.mode === 'resync' && held5.ok === false && /members/.test(held5.error ?? ''), `that force-resync is refused, members over the cap (${JSON.stringify(held5)})`);
+        assert(held5.mode === 'resync' && held5.ok === false && new RegExp(UNCLASSIFIED).test(held5.error ?? ''),
+            `that force-resync is refused at the stager's closing check (${JSON.stringify(held5)})`);
         assert(snapDiff(s5a, s5).length === 0 && s5.held === null && s5.tables.members.count > 0 && Math.abs(s5.ledgerSum - s5a.ledgerSum) < 1e-9,
             `S's ledger is as it was, the plant included, its rows and cursor too, and nothing is held (differences ${first(snapDiff(s5a, s5))}; held ${s5.held}; ${counts(s5, 'members', 'accounts')}; before: S cleared, and its next copies held to replica_held_sum)`);
 
         // ── 6. An operator's force-resync ──
-        console.log('\n— 6. an operator\'s force-resync with members over the cap: refused, and S keeps everything —');
+        console.log('\n— 6. an operator\'s force-resync, refused: S keeps everything; a new standby refused waits —');
         const resync6 = await standby.send('resync');
         const s6: Snap = await standby.send('snapshot', { tables: HASHED });
-        assert(resync6.ok === false && /members/.test(resync6.error ?? ''), `an operator's force-resync is refused, naming members (${JSON.stringify(resync6)})`);
+        assert(resync6.ok === false && new RegExp(UNCLASSIFIED).test(resync6.error ?? ''), `an operator's force-resync is refused, naming the key (${JSON.stringify(resync6)})`);
         assert(snapDiff(s5, s6).length === 0 && s6.tables.members.count > 0 && s6.tables.posts.count > 0 && s6.tables.accounts.count > 0 && s6.format !== null && s6.savedCursor === s4a.savedCursor,
             `S holds every member, listing, account and balance it had, its format record and its cursor (differences ${first(snapDiff(s5, s6))}; ${counts(s6, 'members', 'posts', 'accounts')}; format ${s6.format}; before: 0 members, 0 listings, 0 accounts, no format, cursor '')`);
-        const banner6 = await main.send('health');
-        const lines6 = (banner6.incident?.lines ?? []).join(' ');
-        const todo6 = (banner6.incident?.whatToDo ?? []).join(' ');
-        assert(/more rows of members/.test(lines6) && !/run a force-resync|a force-resync there copies/.test(todo6),
-            `M's owners are told the standby refuses copies over members, and not to run a force-resync (${JSON.stringify({ lines: banner6.incident?.lines, whatToDo: banner6.incident?.whatToDo })})`);
         // A new standby, with no copy yet, refused the same way: it waits, and doesn't ask M for another whole copy at once.
         fs.mkdirSync(dir('fresh'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('fresh'), 'genesis.json'));
         const fresh = await spawnNode(SCRIPT, dir('fresh'), env(PW_STANDBY, 'backup'));
         nodes.push(fresh);
         await fresh.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        await plantUnclassified(fresh);
         const f1 = await fresh.send('pull', {});
         const tf = Date.now();
         const f2 = await fresh.send('pull', {});
@@ -643,7 +629,7 @@ async function main(): Promise<void> {
         const s7a: Snap = await standby.send('snapshot', { tables: HASHED });
         const reseed7 = await standby.send('pull', {});
         const s7: Snap = await standby.send('snapshot', { tables: HASHED });
-        assert(reseed7.mode === 'resync' && reseed7.ok === false && /members/.test(reseed7.error ?? ''), `S's first pull is the format re-seed, and it is refused (${JSON.stringify(reseed7)})`);
+        assert(reseed7.mode === 'resync' && reseed7.ok === false && new RegExp(UNCLASSIFIED).test(reseed7.error ?? ''), `S's first pull is the format re-seed, and it is refused (${JSON.stringify(reseed7)})`);
         assert(snapDiff(s7a, s7).length === 0 && s7.format === olderFormat,
             `S keeps everything, its old format record and its cursor (differences ${first(snapDiff(s7a, s7))}; format ${s7.format}; before: every row cleared, no format, cursor '')`);
         const next7 = await standby.send('pull', {});
@@ -652,14 +638,12 @@ async function main(): Promise<void> {
         const again7 = await standby.send('pull', {});
         assert(again7.mode === 'resync' && again7.ok === false, `after the retry time the re-seed is asked for again (${JSON.stringify(again7)})`);
 
-        // ── 8. The flood gone from M ──
-        console.log('\n— 8. the flood gone from M: the re-seed lands, exact —');
+        // ── 8. The key gone ──
+        console.log('\n— 8. the key gone: the re-seed lands, exact —');
+        await unplantUnclassified(standby);
         await main.send('unflood');
         await sleep(RETRY_MS + 300);
-        await standby.send('checkpoint');
-        const land8 = await standby.send('pull', {});
-        // Recorded, not held to a number (design §4.3): the clear and the copy in one transaction write each row twice.
-        console.log(`  (the write-ahead log after this force-resync, from empty: ${JSON.stringify(await standby.send('wal-bytes'))} bytes)`);
+        const land8 = await pullAndSwap({});
         const s8: Snap = await standby.send('snapshot', { tables: HASHED });
         const m8: Snap = await main.send('snapshot', { tables: HASHED });
         const r8 = await standby.send('record');
@@ -668,55 +652,50 @@ async function main(): Promise<void> {
         assert(s8.tables.accounts.hash === m8.tables.accounts.hash && s8.tables.members.count === m8.tables.members.count && s8.tables.transactions.hash === m8.tables.transactions.hash,
             `S's ledger and members are M's again, the plant gone (${counts(s8, 'members', 'accounts', 'transactions')}; M ${counts(m8, 'members', 'accounts', 'transactions')})`);
 
-        // ── 9. Deletions over the cap: one force-resync, never a refusal ──
-        console.log('\n— 9. deletions over the cap: the delta lands without them, and one force-resync mends the rest —');
+        // ── 9. Deletions past the old cap: carried whole ──
+        console.log('\n— 9. deletions past the old row cap: the delta carries them, and no force-resync is asked —');
         await main.send('delete-message', { id: sent[0] });
         await main.send('flood', { kind: 'tombstones', n: FLOOD });
+        const r9a = await standby.send('record');
         const delta9 = await standby.send('pull', {});
         const s9: Snap = await standby.send('snapshot', { tables: HASHED });
-        const r9 = await standby.send('record');
-        assert(delta9.ok === true && delta9.mode === 'delta' && s9.tables.messages.count === s1.tables.messages.count,
-            `S's delta lands without the deletions: the message M deleted is still here (${JSON.stringify(delta9)}; ${counts(s9, 'messages')}; before: refused)`);
-        assert(r9.lastMismatchResyncAt !== null && Date.now() - r9.lastMismatchResyncAt < 60_000 && (r9.lastLeftOut?.tables ?? []).includes('tombstones')
-            && !(r9.report.leftOut ?? ['?']).includes('tombstones'),
-            `it asks for one force-resync, recorded, and tells M nothing of it: it mends itself (${JSON.stringify({ asked: r9.lastMismatchResyncAt, leftOut: r9.lastLeftOut, report: r9.report.leftOut })})`);
-        const resync9 = await standby.send('pull', {});
-        const s9b: Snap = await standby.send('snapshot', { tables: HASHED });
-        const r9b = await standby.send('record');
         const m9: Snap = await main.send('snapshot', { tables: HASHED });
-        assert(resync9.ok === true && resync9.mode === 'resync' && s9b.tables.messages.count === s1.tables.messages.count - 1 && s9b.tables.messages.hash === m9.tables.messages.hash && r9b.lastWhole?.exact === true,
-            `that force-resync skips the deletions, and lands exact: the deleted message is gone (${JSON.stringify(resync9)}; ${counts(s9b, 'messages')}; M ${counts(m9, 'messages')}; verdict ${JSON.stringify(r9b.lastWhole)})`);
+        const r9 = await standby.send('record');
+        assert(delta9.ok === true && delta9.mode === 'delta' && s9.tables.messages.count === s1.tables.messages.count - 1 && s9.tables.messages.hash === m9.tables.messages.hash,
+            `S's delta carries every deletion: the message M deleted is gone (${JSON.stringify(delta9)}; ${counts(s9, 'messages')}; before: left out, and one force-resync to mend it)`);
+        assert(r9.lastMismatchResyncAt === r9a.lastMismatchResyncAt && r9.lastLeftOut === null,
+            `and asks for no force-resync (${JSON.stringify({ asked: [r9a.lastMismatchResyncAt, r9.lastMismatchResyncAt], leftOut: r9.lastLeftOut })})`);
         const next9 = await standby.send('pull', {});
-        assert(next9.ok === true && next9.mode === 'delta', `the pull after it is a delta: one force-resync, not one a pull (${JSON.stringify(next9)})`);
+        assert(next9.ok === true && next9.mode === 'delta', `the pull after it is a delta (${JSON.stringify(next9)})`);
 
-        // ── 10. A write that fails inside a copy's transaction fails the whole copy ──
-        console.log('\n— 10. a write that fails inside the copy\'s transaction: the copy refused, and S exactly as it was —');
-        // S holds many long chat messages of its own (written behind the routes), so a force-resync's clear writes more into
-        // the write-ahead log than S's files may take once they are capped, as a disk full or failing stops them (design
-        // §4.3: the clear and the copy share one transaction, and every page they touch goes into the log).
-        await standby.send('flood', { kind: 'long-messages', n: LONG_MESSAGES, conversationId, author: ann.pk });
+        // ── 10. A copy that fails fails whole ──
+        console.log('\n— 10. a copy that fails: refused whole, and S exactly as it was —');
+        // M holds many long chat messages S hasn't copied yet, so a whole copy's staging database needs more room than S's
+        // files may take once they are capped, as a disk full or failing stops them; S's own database needs none of it.
+        await main.send('flood', { kind: 'long-messages', n: LONG_MESSAGES, conversationId, author: ann.pk });
         const resumed10 = await restart(() => {}, { maxFileBytes: CAPPED_BYTES });
         require_(!!resumed10, `S restarts with its files capped at ${CAPPED_BYTES / 1048576} MB, and resumes from its cursor (${resumed10})`);
         const s10a: Snap = await standby.send('snapshot', { tables: HASHED });
         const disk10 = await standby.send('resync');
         const s10: Snap = await standby.send('snapshot', { tables: HASHED });
         const r10 = await standby.send('record');
-        assert(disk10.ok === false && r10.lastOutcome === 'refused' && /disk|I\/O|full/i.test(disk10.error ?? ''),
-            `an operator's force-resync that runs out of room mid-clear is refused, as the disk error it is (${JSON.stringify({ pull: disk10, outcome: r10.lastOutcome, why: r10.lastWhy })})`);
+        assert(disk10.ok === false && r10.lastOutcome === 'refused' && /disk|I\/O|full|stager|EFBIG|too large/i.test(disk10.error ?? ''),
+            `an operator's force-resync that runs out of room in its staging database is refused, as the disk error it is (${JSON.stringify({ pull: disk10, outcome: r10.lastOutcome, why: r10.lastWhy })})`);
         assert(snapDiff(s10a, s10).length === 0 && s10.tables.groups.count > 0 && s10.tables.messages.count === s10a.tables.messages.count,
-            `S is exactly as it was: every table row for row, its triggers, its cursor and its format record (differences ${first(snapDiff(s10a, s10))}; ${counts(s10, 'groups', 'group_members', 'posts', 'messages')}; before: the tables after chat messages cleared, groups among them, and the listing aimed at the group cancelled)`);
+            `S is exactly as it was: every table row for row, its cursor and its format record (differences ${first(snapDiff(s10a, s10))}; ${counts(s10, 'groups', 'group_members', 'posts', 'messages')}; before: the tables after chat messages cleared, groups among them, and the listing aimed at the group cancelled)`);
         await restart();
         const s10b: Snap = await standby.send('snapshot', { tables: HASHED });
         assert(snapDiff(s10a, s10b).length === 0, `and so it is on disk: restarted without the cap, S still holds all of it (differences ${first(snapDiff(s10a, s10b))})`);
-        // A trigger's RAISE(ROLLBACK) on a delete in the clear rolls the transaction back just the same.
+        // A trigger planted on S's live database (a RAISE(ROLLBACK) on any delete of a chat) is nothing to a copy built from
+        // nothing in a staging database: the force-resync lands, and S's own long messages, which M never had, are gone.
         await standby.send('sql', { sql: "CREATE TRIGGER planted_refusal BEFORE DELETE ON conversations BEGIN SELECT RAISE(ROLLBACK, 'planted: this delete is refused'); END" });
-        const s10c: Snap = await standby.send('snapshot', { tables: HASHED });
-        const trig10 = await standby.send('resync');
+        const trig10 = await pullAndSwap({}, 'resync');
         const s10d: Snap = await standby.send('snapshot', { tables: HASHED });
-        await standby.send('sql', { sql: 'DROP TRIGGER planted_refusal' });
-        assert(trig10.ok === false && /planted/.test(trig10.error ?? '') && snapDiff(s10c, s10d).length === 0,
-            `a force-resync whose clear a trigger rolls back is refused, and S is exactly as it was (${JSON.stringify(trig10)}; differences ${first(snapDiff(s10c, s10d))}; before: the clear carried on outside the transaction)`);
-        // And one on a single row the copy writes: a delta's block lists, whose merge leaves a row this table refuses out.
+        const m10d: Snap = await main.send('snapshot', { tables: HASHED });
+        assert(trig10.ok === true && trig10.restarting === true && s10d.tables.messages.hash === m10d.tables.messages.hash,
+            `a force-resync with a trigger planted on S's live tables lands: the copy is built beside them (${JSON.stringify(trig10)}; ${counts(s10d, 'messages')}; M ${counts(m10d, 'messages')}; before: refused, the clear rolled back)`);
+        // And one on a single row a delta writes, over S's own rows: the delta's block lists, whose merge leaves a row this
+        // table refuses out.
         for (const who of [bo, cy, dee]) {
             built(`Ann blocks ${who.name}`, await As(ann, '/api/blocks', { targetPubkey: who.pk }));
             await sleep(5); // each block its own stamp, in this order
@@ -728,24 +707,28 @@ async function main(): Promise<void> {
         await standby.send('sql', { sql: 'DROP TRIGGER planted_block' });
         assert(row10.ok === false && row10.mode === 'delta' && snapDiff(s10e, s10f).length === 0 && s10f.tables.member_blocks.count === 0,
             `a delta one of whose rows a trigger rolls back is refused whole, and S is exactly as it was (${JSON.stringify(row10)}; differences ${first(snapDiff(s10e, s10f))}; before: the blocks after the refused one landed)`);
-        const land10 = await standby.send('resync');
+        const land10 = await standby.send('pull', {});
         const s10g: Snap = await standby.send('snapshot', { tables: HASHED });
         const m10: Snap = await main.send('snapshot', { tables: HASHED });
-        const r10g = await standby.send('record');
-        assert(land10.ok === true && r10g.lastWhole?.exact === true && s10g.tables.member_blocks.hash === m10.tables.member_blocks.hash
+        assert(land10.ok === true && land10.mode === 'delta' && s10g.tables.member_blocks.hash === m10.tables.member_blocks.hash
             && s10g.tables.messages.hash === m10.tables.messages.hash && s10g.tables.posts.hash === m10.tables.posts.hash,
-            `with nothing in the way, the force-resync lands, exact: S's block lists, messages and listings are M's (${JSON.stringify({ pull: land10, verdict: r10g.lastWhole })}; ${counts(s10g, 'member_blocks', 'messages', 'posts')}; M ${counts(m10, 'member_blocks', 'messages', 'posts')})`);
+            `with nothing in the way, the delta lands: S's block lists, messages and listings are M's (${JSON.stringify(land10)}; ${counts(s10g, 'member_blocks', 'messages', 'posts')}; M ${counts(m10, 'member_blocks', 'messages', 'posts')})`);
+        // M's long messages gone (no tombstone): an operator's force-resync makes S M's again, small, for the steps after.
+        await main.send('unflood');
+        await pullAndSwap({}, 'resync');
 
         // ── 11. A standby from before the format record ──
         console.log('\n— 11. a cursor and no format record, the re-seed refused: deltas land, held to the ledger —');
-        await main.send('flood', { kind: 'members', n: FLOOD, old: true });
-        const resumed11 = await restart((db) => { db.prepare("DELETE FROM node_config WHERE key = 'replica_format'").run(); });
+        const resumed11 = await restart((db) => {
+            db.prepare("DELETE FROM node_config WHERE key = 'replica_format'").run();
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('${UNCLASSIFIED}', 'x')`).run();
+        });
         const s11a: Snap = await standby.send('snapshot', { tables: HASHED });
         require_(!!resumed11 && s11a.format === null, `S restarts with a cursor and no format record, as every standby that copied before the record (${JSON.stringify({ cursor: resumed11, format: s11a.format })})`);
         const reseed11 = await standby.send('pull', {});
         const s11b: Snap = await standby.send('snapshot', { tables: HASHED });
-        assert(reseed11.mode === 'resync' && reseed11.ok === false && /members/.test(reseed11.error ?? '') && snapDiff(s11a, s11b).length === 0,
-            `its re-seed is refused (members over the cap in whole copies), and S keeps everything (${JSON.stringify(reseed11)}; differences ${first(snapDiff(s11a, s11b))})`);
+        assert(reseed11.mode === 'resync' && reseed11.ok === false && new RegExp(UNCLASSIFIED).test(reseed11.error ?? '') && snapDiff(s11a, s11b).length === 0,
+            `its re-seed is refused, and S keeps everything (${JSON.stringify(reseed11)}; differences ${first(snapDiff(s11a, s11b))})`);
         const jam = await offer(gwen, 'Jam', 2);
         const jam11 = await standby.send('pull', {});
         const s11c: Snap = await standby.send('snapshot', { tables: HASHED });
@@ -758,17 +741,17 @@ async function main(): Promise<void> {
             && Math.abs(s11d.ledgerSum - s11c.ledgerSum) < 1e-9,
             `7 Beans planted on M's ledger come in a delta, which the ledger check refuses: S's total stays ${s11c.ledgerSum} (${JSON.stringify(mint11)}; total ${s11d.ledgerSum}; before: taken as a seed, unchecked, and S's total went up 7)`);
         await main.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
-        await main.send('unflood');
+        await unplantUnclassified(standby);
         await sleep(RETRY_MS + 300);
-        const land11 = await standby.send('pull', {});
+        const land11 = await pullAndSwap({});
         const s11e: Snap = await standby.send('snapshot', { tables: HASHED });
         const m11: Snap = await main.send('snapshot', { tables: HASHED });
         const r11 = await standby.send('record');
         assert(land11.ok === true && land11.mode === 'resync' && r11.lastWhole?.exact === true && s11e.format !== null && s11e.tables.accounts.hash === m11.tables.accounts.hash,
-            `the plant and the rows gone from M, the re-seed lands, exact, and the format is recorded (${JSON.stringify({ pull: land11, verdict: r11.lastWhole, format: s11e.format })})`);
+            `the plant and the key gone, the re-seed lands, exact, and the format is recorded (${JSON.stringify({ pull: land11, verdict: r11.lastWhole, format: s11e.format })})`);
 
-        // ── 12. A table the delta canary reads, over the cap ──
-        console.log('\n— 12. listings over the cap: no whole copy every other pull; a whole copy with a table left out holds the next back —');
+        // ── 12. Listings past the old cap: the canary reads them, and a whole copy is never held back ──
+        console.log('\n— 12. listings past the old cap: no whole copy asked for while nothing drifts; drift found after a whole copy is mended at once —');
         await main.send('flood', { kind: 'posts', n: FLOOD, author: gwen.pk });
         const t12 = Date.now();
         const modes12: string[] = [];
@@ -778,39 +761,29 @@ async function main(): Promise<void> {
         }
         const served12 = await main.send('whole-copies', { since: t12 });
         const r12 = await standby.send('record');
-        assert(served12 === 0 && modes12.every((x) => x === 'delta:ok') && (r12.lastLeftOut?.tables ?? []).includes('posts'),
-            `twelve pulls with listings over the cap ask M for no whole copy: the canary can't read drift while listings are left out (${served12} served; ${modes12.join(', ')}; left out ${JSON.stringify(r12.lastLeftOut?.tables)}; before: 6, every other pull)`);
-        await main.send('unflood');
-        const clean12 = await standby.send('pull', { whole: true });
-        const r12b = await standby.send('record');
-        assert(clean12.ok === true && r12b.lastWhole?.exact === true && r12b.lastLeftOut === null,
-            `the flood gone from M, the next whole copy is exact and leaves nothing out (${JSON.stringify({ pull: clean12, verdict: r12b.lastWhole, leftOut: r12b.lastLeftOut })})`);
-        // Chat messages over the cap (the canary doesn't read them), and the routine whole copy every 5 s: the one that lands
-        // leaves them out, and holds the next back until the next routine one. A listing then gone from S with no tombstone
-        // is drift the canary sees, which waits for it.
+        assert(served12 === 0 && modes12.every((x) => x === 'delta:ok') && r12.lastLeftOut === null,
+            `twelve pulls with listings past the old cap ask M for no whole copy: they come by delta, and the canary finds nothing (${served12} served; ${modes12.join(', ')}; before: left out, and the canary off)`);
+        // Chat messages past the old cap too, and the routine whole copy every 5 s: it lands whole, and holds nothing back. A
+        // listing then gone from S with no tombstone is drift the canary sees, and the next pull mends it.
         await main.send('flood', { kind: 'messages', n: FLOOD, conversationId, author: ann.pk });
         const HOLD_MS = 5000;
         await standby.send('set-reconcile-ms', { ms: HOLD_MS });
         await sleep(HOLD_MS + 200);
         const routine12 = await standby.send('pull', {});
-        const tHold = Date.now();
         await standby.send('sql', { sql: 'DELETE FROM posts WHERE id = ?', args: [jam.id] });
         const drift12 = await standby.send('pull', {});
-        const held12 = await standby.send('pull', {});
-        const servedHold = await main.send('whole-copies', { since: tHold });
-        assert(routine12.ok === true && routine12.mode === 'full' && drift12.ok === true && drift12.mode === 'delta' && held12.mode === 'delta' && servedHold === 0,
-            `a whole copy that lands with chat messages left out holds the next back, drift found meanwhile included (${JSON.stringify({ routine: [routine12.mode, routine12.ok], then: [drift12.mode, held12.mode], served: servedHold })}; before: the pull after the drift was a whole copy)`);
-        await sleep(HOLD_MS + 200);
         const mend12 = await standby.send('pull', {});
         const s12: Snap = await standby.send('snapshot', { tables: HASHED });
         const m12: Snap = await main.send('snapshot', { tables: HASHED });
         await standby.send('set-reconcile-ms', { ms: 86400000 });
-        assert(mend12.ok === true && mend12.mode === 'full' && s12.tables.posts.hash === m12.tables.posts.hash,
-            `at the next routine time the whole copy comes, and brings the listing back (${JSON.stringify(mend12)}; ${counts(s12, 'posts')}; M ${counts(m12, 'posts')})`);
+        assert(routine12.ok === true && routine12.mode === 'full' && drift12.ok === true && drift12.mode === 'delta'
+            && mend12.ok === true && mend12.mode === 'full' && s12.tables.posts.hash === m12.tables.posts.hash,
+            `the routine whole copy lands whole; the drift the next delta's canary finds is mended by a whole copy at the next pull (${JSON.stringify({ routine: [routine12.mode, routine12.ok], then: [drift12.mode, mend12.mode] })}; ${counts(s12, 'posts')}; M ${counts(m12, 'posts')}; before: held back until the next routine time)`);
         await main.send('unflood');
+        await pullAndSwap({}, 'resync');
 
-        // ── 13. Listings flooded under the cap per delta: the canary still reads ──
-        console.log('\n— 13. listings flooded under the cap per delta, a whole copy leaving them out: the canary still reads, and clears it —');
+        // ── 13. The canary reads every table, whatever a whole copy carried ──
+        console.log('\n— 13. listings flooded per delta, then a restart: the whole copy carries them, and the canary still reads —');
         for (let i = 0; i < 3; i++) {
             await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
             const d = await standby.send('pull', {});
@@ -820,182 +793,106 @@ async function main(): Promise<void> {
         const m13a: Snap = await main.send('snapshot', { tables: HASHED });
         assert(s13a.tables.posts.hash === m13a.tables.posts.hash && s13a.tables.posts.count > CAP,
             `every listing reached S by delta (${counts(s13a, 'posts')}; M ${counts(m13a, 'posts')})`);
-        // A restart, and its first pull is the routine whole copy: listings are over the cap in it, and every whole copy is
-        // over the size gate (2,000 bytes standing in for 8 MB), so routine whole copies go off.
-        await restart();
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
+        // A restart with the last whole copy an interval old (S's record keeps when it landed): the first pull is the
+        // routine whole copy, which carries every listing.
+        await restart((db) => {
+            const row = db.prepare("SELECT value FROM node_config WHERE key = 'standby_copy_record'").get() as { value: string } | undefined;
+            const r = row ? JSON.parse(row.value) : {};
+            r.lastWholeCopy = { ...(r.lastWholeCopy ?? { pages: 1, generatedAt: null }), at: Date.now() - 2 * HOLD_MS };
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('standby_copy_record', ?)").run(JSON.stringify(r));
+        });
         await standby.send('set-reconcile-ms', { ms: HOLD_MS });
         const whole13 = await standby.send('pull', {});
         const r13a = await standby.send('record');
-        assert(whole13.ok === true && whole13.mode === 'full' && JSON.stringify(r13a.lastLeftOut?.tables) === JSON.stringify(['posts'])
-            && Array.isArray(r13a.lastWhole?.differs) && r13a.lastWhole.differs.length === 0 && r13a.lastLacking === null,
-            `the whole copy lands with listings left out, nothing else differs, and S lacks no listing: the copy's hash of them is S's (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut?.tables, differs: r13a.lastWhole?.differs, lacking: r13a.lastLacking?.tables ?? null })})`);
+        assert(whole13.ok === true && whole13.mode === 'full' && r13a.lastLeftOut === null && r13a.lastLacking === null && r13a.lastWhole?.exact === true,
+            `the restart's routine whole copy lands, exact, carrying every listing (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut, lacking: r13a.lastLacking, whole: r13a.lastWhole })}; before: listings left out)`);
         const t13 = Date.now();
         require_((await standby.send('sql', { sql: 'DELETE FROM group_members WHERE group_id = ?', args: [groupId] })) > 0,
             'S: the group\'s membership deleted, with no tombstone');
         const drift13 = await standby.send('pull', {});
-        await sleep(HOLD_MS + 200);
         const mend13 = await standby.send('pull', {});
         const s13b: Snap = await standby.send('snapshot', { tables: HASHED });
         const m13b: Snap = await main.send('snapshot', { tables: HASHED });
         const served13 = await main.send('whole-copies', { since: t13 });
         assert(drift13.ok === true && drift13.mode === 'delta' && mend13.ok === true && mend13.mode === 'full' && served13 === 1
             && s13b.tables.group_members.hash === m13b.tables.group_members.hash,
-            `the next delta's canary finds the drift, and at the routine time one whole copy brings the membership back (${JSON.stringify({ drift: drift13.mode, mend: mend13.mode, served: served13 })}; ${counts(s13b, 'group_members')}; M ${counts(m13b, 'group_members')}; before: deltas only, and S kept 0)`);
+            `the next delta's canary finds the drift, and one whole copy brings the membership back (${JSON.stringify({ drift: drift13.mode, mend: mend13.mode, served: served13 })}; ${counts(s13b, 'group_members')}; M ${counts(m13b, 'group_members')})`);
         await main.send('unflood');
-        const gone13 = await standby.send('pull', {});
-        await sleep(HOLD_MS + 200);
-        const clear13 = await standby.send('pull', {});
-        const r13c = await standby.send('record');
-        assert(gone13.mode === 'delta' && clear13.ok === true && clear13.mode === 'full' && r13c.lastLeftOut === null
-            && Array.isArray(r13c.report.leftOut) && r13c.report.leftOut.length === 0,
-            `the flood gone from M, the canary asks for a whole copy, which carries listings: S's record and report name no table left out (${JSON.stringify({ gone: gone13.mode, clear: clear13.mode, leftOut: r13c.lastLeftOut, report: r13c.report.leftOut })}; before: listings named until a restart)`);
-        // S still held the listings M deleted with no tombstone: that whole copy asked for the force-resync that mends it.
-        const resync13 = await standby.send('pull', {});
-        const s13c: Snap = await standby.send('snapshot', { tables: HASHED });
-        const m13c: Snap = await main.send('snapshot', { tables: HASHED });
-        const r13d = await standby.send('record');
-        assert(resync13.ok === true && resync13.mode === 'resync' && r13d.lastWhole?.exact === true && s13c.tables.posts.hash === m13c.tables.posts.hash,
-            `and the force-resync it asked for (S still held the listings M deleted) lands exact (${JSON.stringify({ pull: resync13, verdict: r13d.lastWhole })}; ${counts(s13c, 'posts')}; M ${counts(m13c, 'posts')})`);
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
         await standby.send('set-reconcile-ms', { ms: 86400000 });
+        await pullAndSwap({}, 'resync');
 
-        // ── 14. The flood still running when the whole copy leaves listings out: the canary stays off ──
-        console.log('\n— 14. 20 listings written just before a whole copy that leaves listings out, the flood running on: the canary stays off, and the next delta brings the 20 and a trade —');
+        // ── 14. A record an older version wrote ──
+        console.log('\n— 14. listings flooded, a whole copy carrying them and the trade in its window, and a record an older version wrote —');
         for (let i = 0; i < 3; i++) {
             await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
             const d = await standby.send('pull', {});
             require_(d.ok === true && d.mode === 'delta', `S's delta after 60 more listings on M lands (${JSON.stringify(d)})`);
         }
-        const cursor14: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
         await main.send('flood', { kind: 'posts', n: 20, author: gwen.pk });
         // A trade on M in the same window: the whole copy brings its rows, and the next delta brings them again.
         const jam14 = await offer(ann, 'Plum jam', 3);
         const tx14 = built('Gwen asks for the plum jam', await As(gwen, '/api/marketplace/posts/request', { postId: jam14.id, buyerPublicKey: gwen.pk })).transaction;
         built('Ann approves: the Beans are held', await As(ann, '/api/marketplace/transactions/approve', { transactionId: tx14.id, authorPublicKey: ann.pk }));
         built('Gwen confirms: the Beans are released', await As(gwen, '/api/marketplace/transactions/complete', { transactionId: tx14.id, confirmerPublicKey: gwen.pk }));
-        await restart();
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
-        await standby.send('set-reconcile-ms', { ms: HOLD_MS });
-        const t14 = Date.now();
-        const whole14 = await standby.send('pull', {});
+        const cursor14: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
+        const whole14 = await standby.send('pull', { whole: true });
         const r14a = await standby.send('record');
-        assert(whole14.ok === true && whole14.mode === 'full' && JSON.stringify(r14a.lastLeftOut?.tables) === JSON.stringify(['posts'])
-            && JSON.stringify(r14a.lastLacking?.tables) === JSON.stringify(['posts']),
-            `the whole copy lands with listings left out, and S's record says it lacks listings: the copy's hash of them isn't S's (${JSON.stringify({ pull: whole14, leftOut: r14a.lastLeftOut?.tables, lacking: r14a.lastLacking?.tables ?? null })}; before: not lacking)`);
         const after14: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
-        assert(typeof cursor14 === 'string' && after14 === cursor14,
-            `and S's cursor stays at its last delta's, saved too (${JSON.stringify({ before: cursor14, after: after14 })}; before: the whole copy's, past the 20 listings it left out)`);
-        /**
-         * Five more listings on M before each pull, for `ms`: each pull's mode, M's listings less S's after it, and the whole
-         * copies M served for it. Counted pull by pull because M's access log keeps only its last 20 pulls: over a whole
-         * window, 20 deltas push out whatever M served before them, and a machine quick enough for a 20th pull read the
-         * restart's whole copy as none.
-         */
-        const floodOn = async (ms: number) => {
-            const out: { mode: string; ok: boolean; whole: boolean; gap: number; served: number }[] = [];
-            const t0 = Date.now();
-            while (Date.now() - t0 < ms) {
-                await main.send('flood', { kind: 'posts', n: 5, author: gwen.pk });
-                const tPull = Date.now();
-                const p = await standby.send('pull', {});
-                const served: number = await main.send('whole-copies', { since: tPull });
-                const gs: Snap = await standby.send('snapshot', { tables: ['posts'] });
-                const gm: Snap = await main.send('snapshot', { tables: ['posts'] });
-                out.push({ mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count, served });
-                await sleep(500);
-            }
-            return out;
-        };
-        const show = (ps: { mode: string; ok: boolean; whole: boolean; gap: number }[]) => ps.map((p) => `${p.mode}${p.ok ? '' : '!'}[${p.gap}]`).join(',');
-        const servedSum = (ps: { served: number }[]) => ps.reduce((n, p) => n + p.served, 0);
-        // The restart's whole copy, counted before the flood can push it out of M's log.
-        const servedBefore14: number = await main.send('whole-copies', { since: t14 });
-        const pulls14 = await floodOn(2 * HOLD_MS + 500);
-        const served14 = servedBefore14 + servedSum(pulls14);
-        assert(pulls14.length >= 4 && pulls14.every((p) => p.mode === 'delta' && p.ok && !p.whole) && served14 === 1,
-            `the flood running on, every pull over two holds is a delta that lands, and M serves no whole copy but the restart's (${JSON.stringify({ served: served14 })}; ${show(pulls14)}; before: a whole copy at each hold)`);
-        assert(pulls14.every((p) => p.gap === 0),
-            `the next delta brings the 21 listings that copy left out (the 20, and the jam's), and the gap stays 0 (${pulls14.map((p) => p.gap).join(', ')}; before: 21 for good, and before that growing by 5 at every hold)`);
+        assert(whole14.ok === true && whole14.mode === 'full' && r14a.lastLeftOut === null && r14a.lastLacking === null && after14 !== cursor14,
+            `the whole copy lands with every listing, and moves S's cursor to its own (${JSON.stringify({ pull: whole14, leftOut: r14a.lastLeftOut, lacking: r14a.lastLacking, cursor: [cursor14, after14] })}; before: listings left out, the cursor kept)`);
+        const next14 = await standby.send('pull', {});
         const LEDGER = ['accounts', 'transactions', 'marketplace_transactions'];
-        const s14l: Snap = await standby.send('snapshot', { tables: LEDGER });
-        const m14l: Snap = await main.send('snapshot', { tables: LEDGER });
-        assert(LEDGER.every((t) => s14l.tables[t].hash === m14l.tables[t].hash) && s14l.ledgerSum === m14l.ledgerSum,
-            `the trade M made in that window, in the whole copy and again in the next delta, is on S once: its accounts, transactions and trades are M's, row for row (${counts(s14l, ...LEDGER)}; M ${counts(m14l, ...LEDGER)}; sum ${s14l.ledgerSum}/${m14l.ledgerSum})`);
-        // A record an older version wrote: no lastLacking, and lastLeftOut naming listings.
-        require_((await standby.send('sql', { sql: `UPDATE node_config SET value = json_remove(value, '$.lastLacking') WHERE key = 'standby_copy_record'` })) === 1,
-            'S: its record as a version before lastLacking wrote it');
+        const s14l: Snap = await standby.send('snapshot', { tables: [...LEDGER, 'posts'] });
+        const m14l: Snap = await main.send('snapshot', { tables: [...LEDGER, 'posts'] });
+        assert(next14.ok === true && next14.mode === 'delta' && LEDGER.every((t) => s14l.tables[t].hash === m14l.tables[t].hash) && s14l.ledgerSum === m14l.ledgerSum
+            && s14l.tables.posts.count === m14l.tables.posts.count,
+            `the trade M made in that window, in the whole copy and again in the next delta, is on S once: its accounts, transactions and trades are M's, and every listing (${counts(s14l, ...LEDGER, 'posts')}; M ${counts(m14l, ...LEDGER, 'posts')})`);
+        // A record an older version wrote: no lastLacking, and lastLeftOut naming listings (no copy leaves a table out now,
+        // but a record from before P2 may say one did). It reads them as lacking until a whole copy clears it, as before.
+        require_((await standby.send('sql', {
+            sql: `UPDATE node_config SET value = json_set(json_remove(value, '$.lastLacking'), '$.lastLeftOut', json(?)) WHERE key = 'standby_copy_record'`,
+            args: [JSON.stringify({ since: Date.now() - 60_000, at: Date.now() - 60_000, tables: ['posts'] })],
+        })) === 1, 'S: its record as a version before lastLacking wrote it, naming listings left out');
         const r14b = await standby.send('record');
-        const pulls14b = await floodOn(HOLD_MS + 1000);
-        const served14b = servedSum(pulls14b);
-        assert(JSON.stringify(r14b.lastLacking?.tables) === JSON.stringify(['posts'])
-            && pulls14b.every((p) => p.mode === 'delta' && p.ok && !p.whole && p.gap === 0) && served14b === 0,
-            `that record reads its left-out listings as lacking, and the canary stays off past a hold (${JSON.stringify({ lacking: r14b.lastLacking?.tables ?? null, served: served14b })}; ${show(pulls14b)})`);
+        const clear14 = await standby.send('pull', { whole: true });
+        const r14c = await standby.send('record');
+        assert(JSON.stringify(r14b.lastLacking?.tables) === JSON.stringify(['posts']) && clear14.ok === true && r14c.lastLacking === null && r14c.lastLeftOut === null,
+            `that record reads its left-out listings as lacking, and the next whole copy, which leaves nothing out, clears both (${JSON.stringify({ lacking: r14b.lastLacking?.tables ?? null, after: { lacking: r14c.lastLacking, leftOut: r14c.lastLeftOut } })})`);
         await main.send('unflood');
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
+        await pullAndSwap({}, 'resync');
 
-        // ── 15. Listings current by hash, then the flood resumes and the canary finds drift elsewhere ──
-        console.log('\n— 15. listings current by hash when a whole copy leaves them out, the flood resuming, a membership gone from S: one whole copy mends it, and the next delta brings the listings it skipped —');
-        const resync15 = await standby.send('resync');
-        const s15a: Snap = await standby.send('snapshot', { tables: HASHED });
-        const m15a: Snap = await main.send('snapshot', { tables: HASHED });
-        const r15a = await standby.send('record');
-        require_(resync15.ok === true && s15a.tables.posts.hash === m15a.tables.posts.hash && r15a.lastLacking === null,
-            `S: an operator's force-resync, with M's flood gone, brings S back to M's listings and lacking nothing (${JSON.stringify({ resync: resync15, lacking: r15a.lastLacking })}; ${counts(s15a, 'posts')}; M ${counts(m15a, 'posts')})`);
+        // ── 15. Drift found while listings flood on: mended at once, the cursor moved, nothing missed ──
+        console.log('\n— 15. the flood running on and a membership gone from S: one whole copy mends it, and no listing is missed —');
         for (let i = 0; i < 3; i++) {
             await main.send('flood', { kind: 'posts', n: 60, author: gwen.pk });
             const d = await standby.send('pull', {});
             require_(d.ok === true && d.mode === 'delta', `S's delta after 60 more listings on M lands (${JSON.stringify(d)})`);
         }
-        // A restart in a lull: its routine whole copy leaves listings out, and its hash of them is S's.
-        await restart();
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: '2000' });
-        await standby.send('set-reconcile-ms', { ms: HOLD_MS });
-        const whole15 = await standby.send('pull', {});
-        const r15b = await standby.send('record');
-        require_(whole15.ok === true && whole15.mode === 'full' && JSON.stringify(r15b.lastLeftOut?.tables) === JSON.stringify(['posts']) && r15b.lastLacking === null,
-            `S: the restart's whole copy lands with listings left out, and S lacks none (${JSON.stringify({ pull: whole15, leftOut: r15b.lastLeftOut?.tables, lacking: r15b.lastLacking?.tables ?? null })})`);
         require_((await standby.send('sql', { sql: 'DELETE FROM group_members WHERE group_id = ?', args: [groupId] })) > 0,
             'S: the group\'s membership deleted, with no tombstone');
         const ledger15: Snap = await standby.send('snapshot', { tables: ['accounts', 'transactions', 'marketplace_transactions'] });
-        // Five more listings on M before each pull, for three holds: each pull's mode, M's listings less S's, S's cursor
-        // before and after it, and the membership on each side.
-        const pulls15: { mode: string; ok: boolean; whole: boolean; gap: number; kept: boolean; members: string }[] = [];
-        const t15b = Date.now();
-        while (Date.now() - t15b < 3 * HOLD_MS) {
+        const pulls15: { mode: string; ok: boolean; whole: boolean; gap: number; members: string }[] = [];
+        for (let i = 0; i < 6; i++) {
             await main.send('flood', { kind: 'posts', n: 5, author: gwen.pk });
-            const before: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
             const p = await standby.send('pull', {});
             const gs: Snap = await standby.send('snapshot', { tables: ['posts', 'group_members'] });
             const gm: Snap = await main.send('snapshot', { tables: ['posts', 'group_members'] });
-            pulls15.push({
-                mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count,
-                kept: gs.savedCursor === before, members: `${gs.tables.group_members.count}/${gm.tables.group_members.count}`,
-            });
-            await sleep(500);
+            pulls15.push({ mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count, members: `${gs.tables.group_members.count}/${gm.tables.group_members.count}` });
+            await sleep(300);
         }
-        const show15 = pulls15.map((p) => `${p.mode}${p.ok ? '' : '!'}[gap ${p.gap}; members ${p.members}${p.whole ? `; cursor ${p.kept ? 'kept' : 'moved'}` : ''}]`).join(', ');
-        const wholes15 = pulls15.filter((p) => p.whole);
+        const show15 = pulls15.map((p) => `${p.mode}${p.ok ? '' : '!'}[gap ${p.gap}; members ${p.members}]`).join(', ');
         const s15b: Snap = await standby.send('snapshot', { tables: HASHED });
         const m15b: Snap = await main.send('snapshot', { tables: HASHED });
-        assert(pulls15.every((p) => p.ok) && wholes15.length === 1 && wholes15[0].mode === 'full' && wholes15[0].kept
-            && s15b.tables.group_members.hash === m15b.tables.group_members.hash,
-            `the canary finds the drift, and at the hold one whole copy brings the membership back, leaving S's cursor where the last delta left it (${show15}; before: the whole copy's cursor)`);
-        const deltas15 = pulls15.filter((p) => p.mode === 'delta');
-        assert(deltas15.length >= 4 && deltas15.every((p) => p.gap === 0) && pulls15[pulls15.length - 1].gap === 0,
-            `every delta, the one after that whole copy included, leaves no listing of M's missing from S: the gap stays 0 (${pulls15.map((p) => p.gap).join(', ')}; before: 0 until that copy, then 5 for good)`);
-        // Listings by key: S's restart filled in the search keywords of the 180 M wrote behind its routes (db.ts's boot
-        // backfill), so their rows differ in that column alone.
+        assert(pulls15.every((p) => p.ok) && pulls15.filter((p) => p.whole).length === 1 && pulls15[1].mode === 'full'
+            && s15b.tables.group_members.hash === m15b.tables.group_members.hash && pulls15.every((p) => p.gap === 0),
+            `the canary finds the drift at the first delta, the next pull's whole copy brings the membership back, and no listing of M's is ever missing from S (${show15}; before: held back until the routine time)`);
         const sk15 = await standby.send('keys', { table: 'posts', key: 'id' });
         const mk15 = await main.send('keys', { table: 'posts', key: 'id' });
         assert(sk15.hash === mk15.hash && sk15.count === sk15.distinct
             && ['accounts', 'transactions', 'marketplace_transactions'].every((t) => s15b.tables[t].hash === ledger15.tables[t].hash && s15b.tables[t].hash === m15b.tables[t].hash)
             && s15b.ledgerSum === m15b.ledgerSum,
-            `the window that delta carried again lands once: S holds M's listings, each once, and its accounts, transactions and trades are as before it and M's (${JSON.stringify({ S: sk15, M: mk15, sum: [s15b.ledgerSum, m15b.ledgerSum] })})`);
+            `S holds M's listings, each once, and its accounts, transactions and trades are as before and M's (${JSON.stringify({ S: sk15, M: mk15, sum: [s15b.ledgerSum, m15b.ledgerSum] })})`);
         await main.send('unflood');
-        await standby.send('set-env', { name: 'BACKUP_RECONCILE_MAX_BYTES', value: null });
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
 
         refused.push(...(await standby.send('fetches')).blocked, ...(await main.send('fetches')).blocked);
         assert(refused.length === 0, `no node reached anything off this machine (${JSON.stringify(refused)})`);

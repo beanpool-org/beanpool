@@ -43,6 +43,7 @@ import { execFileSync } from 'node:child_process';
 import vm from 'node:vm';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
+import Database from 'better-sqlite3';
 
 const ADMIN_PW = 'Standby-Main-Pw-7731!xq';
 process.env.ADMIN_PASSWORD = ADMIN_PW;
@@ -290,7 +291,20 @@ async function main() {
         const pulled = await requestResync();
         assert(pulled.ok, `7. a full copy with the token succeeds (${pulled.error || 'ok'})`);
         assert(getReplicationAccessLog().lastPullAuth === 'token', '7. the main server logged a token pull');
-        assert(memberCount() === before.m && accountCount() === before.a, '7. the copy rebuilt the same members and accounts');
+        // A force-resync is a whole copy built in data/staging and swapped in at a restart. This process registered no
+        // restart (index.ts does, at boot), so the copy waits there for the next start, and this process carries on.
+        const staged = (() => {
+            if (!fs.existsSync(path.join(DATA_DIR!, 'staging', 'READY'))) return null;
+            const copy = new Database(path.join(DATA_DIR!, 'staging', 'state.db'), { readonly: true });
+            try {
+                return {
+                    m: (copy.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c,
+                    a: (copy.prepare('SELECT COUNT(*) AS c FROM accounts').get() as { c: number }).c,
+                };
+            } finally { copy.close(); }
+        })();
+        assert(pulled.restarting === false && staged?.m === before.m && staged?.a === before.a,
+            `7. the copy, made ready in data/staging for the next start, holds the same members and accounts (${JSON.stringify({ staged, before })})`);
         assert(!!getBackupStatus().lastSuccessAt, '7. the standby records a successful pull');
         updateLocalConfig({ replicationTokenOnly: true });
         const pulledTokenOnly = await requestResync();

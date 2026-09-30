@@ -179,9 +179,7 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
             expect(welcome, p).toMatch(new RegExp(`offeredHere\\('${p}'\\) && \\(\\s*<\\w+Button\\s+title="Recover with \\w+"\\s+onPress=\\{\\(\\) => handleSsoRecoverAtCommunity\\('${p}'\\)\\}`));
         }
         // Back in from the community's copy in a vault build: Settings, whose first card (under the hold banner) is the move.
-        const at = welcome.indexOf('async function handleSsoRecoverAtCommunity(');
-        const handler = welcome.slice(at, welcome.indexOf('\n    }\n', at));
-        expect(handler).toMatch(/if \(hasVault\(\)\) \{[\s\S]*?router\.replace\('\/\(tabs\)\/settings'\);\n\s*\} else \{\n\s*router\.replace\('\/'\);\n\s*\}/);
+        // Where the member actually lands is measured in member-landing.test.ts, through the root guard's own landing.
         const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
         const menu = settings.slice(settings.indexOf("{mode === 'menu' && ("));
         const top = menu.slice(0, menu.indexOf('<NodeAdminEntry'));

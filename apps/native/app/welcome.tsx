@@ -48,6 +48,7 @@ import {
     waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
@@ -1131,17 +1132,20 @@ export default function WelcomeScreen() {
             // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
             await returnToApp();
             await clearPendingOnboarding();
+            const vault = hasVault();
+            // Back in with a copy only the community keeps (the vault said it keeps none): straight to Settings, whose first
+            // card is the move (components/VaultMoveCard.tsx), not only when the member happens to open it (PR #1336 review
+            // finding 3). Asked of the root guard BEFORE the identity is set, and never navigated to from here: the guard's
+            // own landing from welcome is queued behind any replace made here, and wins (PR #1357 review;
+            // utils/member-landing.ts).
+            if (vault) landNextOn('/(tabs)/settings');
             setOutgoingIdentity(null);
             setIdentity(result.identity);
             setMode('home');
-            if (hasVault()) {
-                // Back in with a copy only the community keeps (the vault said it keeps none): straight to Settings, whose
-                // first card is the move (components/VaultMoveCard.tsx), not only when the member happens to open it (PR
-                // #1336 review finding 3). A sign-in restore this phone left waiting is stopped with the account's own
-                // key, as after the 12 words.
+            if (vault) {
+                // A sign-in restore this phone left waiting is stopped with the account's own key, as after the 12 words.
                 setSsoAtCommunity(null);
                 void stopSsoRestoreAfterWords(result.identity);
-                router.replace('/(tabs)/settings');
             } else {
                 router.replace('/');
             }

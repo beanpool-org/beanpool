@@ -602,8 +602,10 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
-    // A listing's photos behind a key in every photo URL, where the listings are members' (a local community with reads
-    // enforced, engine/photo-keys.ts): an <img> cannot sign. Decided here, once, as the faces are.
+    // A listing's photos behind a key in their URLs for those who may read the listing (engine/photo-keys.ts): every
+    // listing's where the listings are members' (a local community with reads enforced), and elsewhere, where they are a
+    // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
+    // here, once, as the faces are.
     installPhotoKeysAtBoot(READ_AUTH_ON);
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything

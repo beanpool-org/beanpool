@@ -133,8 +133,8 @@ export function settlementKeyFor(
     sent: unknown,
     prefix: SettlementKeyPrefix,
     trade: { payer: string; peerId: string; sellerPublicKey: string; postId: string | null; amount: number },
-): { ok: true; key: string; retry: boolean } | { ok: false; status: 400 | 409; reason: string; error: string } {
-    if (sent === undefined || sent === null) return { ok: true, key: mintSettlementKey(prefix), retry: false };
+): { ok: true; key: string } | { ok: false; status: 400 | 409; reason: string; error: string } {
+    if (sent === undefined || sent === null) return { ok: true, key: mintSettlementKey(prefix) };
     if (!isMintedSettlementKey(sent, prefix)) {
         return {
             ok: false, status: 400, reason: 'invalid_key',
@@ -150,10 +150,10 @@ export function settlementKeyFor(
         || round4(row.amount) !== round4(trade.amount)) {
         return {
             ok: false, status: 409, reason: 'key_conflict',
-            error: 'That key is for a different purchase: the same seller, listing and amount try it again. Nothing has been deducted.',
+            error: 'That key is for a different purchase. Try it again with the same seller, listing and amount. Nothing has been deducted.',
         };
     }
-    return { ok: true, key: sent, retry: true };
+    return { ok: true, key: sent };
 }
 
 function requireAmount(amount: number): void {

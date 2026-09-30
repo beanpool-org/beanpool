@@ -158,6 +158,11 @@ skip_check() {
 #
 # Local runs are untouched. A developer machine has the cores, and a cap there would only make
 # `pnpm test-all` slower for no one benefit.
+# The native vitest suite reads this (apps/native/vitest.config.ts) as its test and hook timeout: the
+# 5 s default fails on a busy shared Mac. Passed through turbo by turbo.json. Generous, not tight: a
+# real hang still fails, just at 30 s.
+export TEST_ALL_TIMEOUT_MS="${TEST_ALL_TIMEOUT_MS:-30000}"
+
 if [ -n "${CI:-}" ]; then
   TURBO_TEST_ARGS="--concurrency=2"   # at most 2 vitest processes at a time
   TURBO_AUX_ARGS="--concurrency=1"    # lint and typecheck have the most slack of all

@@ -66,6 +66,11 @@
  *     a main server by hand: the staging is discarded and state.previous.db, S's own copy, is state.db again; the server runs
  *     on every member and message it had. (Before: it started on a new, empty database and deleted that copy as "the
  *     database the last swap replaced".)
+ * 22. A main server a take-over promoted (its audit found trouble, so state.previous.db is kept), its state.db moved away by
+ *     hand, then emptied: each start refuses, saying what is missing and what to do, and nothing is lost; the state.db put
+ *     back, it runs on it. (Before: it ran as the main server on the older database, unaudited, and said nothing.)
+ * 23. A standby whose state.db is moved away by hand: it puts state.previous.db back and the next delta brings it level
+ *     with M.
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -1064,6 +1069,84 @@ async function main(): Promise<void> {
                 + `(${JSON.stringify({ before: c0, after: c1, previous: f('state.previous.db') })}; before: a new, empty database, and S's copy deleted)`);
         });
 
+        await step('22. a main server a take-over promoted, its state.db moved away or emptied: it refuses to start, and loses nothing', async () => {
+            const name = await newStandby('standby8');
+            const d = dir(name);
+            const f = (n: string) => path.join(d, n);
+            const w22 = await wholeCopy();
+            require_(w22.ok === true && fs.existsSync(f('state.previous.db')), `S8 holds a whole copy, the old database beside it (${JSON.stringify(w22)})`);
+            const code22 = recoveryCode ?? (await main.send('make-envelope')).code;
+            require_(await standby.send('envelope') === 'stored', 'S8 holds M\'s take-over envelope');
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] }); // the audit finds trouble
+            await standby.send('takeover-restart-off');
+            const pw = { 'X-Admin-Password': PW_STANDBY };
+            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: code22 }, pw);
+            const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+            require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status})`);
+            await standby.kill('SIGKILL');
+            standby = await spawnNode(SCRIPT, d, envS);
+            nodes.push(standby);
+            const audit = await standby.send('audit');
+            require_(standby.ready.role === 'primary' && audit?.ok === false && fs.existsSync(f('state.previous.db')), `promoted, the audit found trouble, the old database kept (${JSON.stringify(audit)})`);
+            // Written on the promoted server: in its state.db only.
+            await standby.send('sql', { sql: `UPDATE members SET bio = 'AFTER-22' WHERE public_key = ?`, args: [ann.pk] });
+            const look = async () => ({
+                bio: (await standby.send('rows', { sql: 'SELECT bio FROM members WHERE public_key = ?', args: [ann.pk] }))[0]?.bio ?? null,
+                balance: (await standby.send('rows', { sql: 'SELECT balance FROM accounts WHERE public_key = ?', args: [ann.pk] }))[0]?.balance ?? null,
+                messages: (await standby.send('rows', { sql: 'SELECT COUNT(*) AS n FROM messages' }))[0].n as number,
+            });
+            const before = await look();
+            await standby.kill('SIGKILL');
+            // An operator moves state.db away (to look at it, or to "start fresh").
+            const aside = f('moved-away');
+            fs.mkdirSync(aside);
+            for (const x of ['', '-wal', '-shm']) if (fs.existsSync(f(`state.db${x}`))) fs.renameSync(f(`state.db${x}`), path.join(aside, `state.db${x}`));
+            const startRefused = async (): Promise<string | null> => {
+                try {
+                    const n = await spawnNode(SCRIPT, d, envS);
+                    nodes.push(n);
+                    standby = n;
+                    return null;
+                } catch (e: any) { return String(e?.output ?? e?.message ?? e); }
+            };
+            const missing = await startRefused();
+            const kept = () => fs.existsSync(f('state.previous.db')) && fs.existsSync(path.join(aside, 'state.db'));
+            assert(missing !== null && /FATAL: .*state\.db is missing, and .*state\.previous\.db is there/.test(missing) && /rename state\.previous\.db/.test(missing)
+                && kept() && !fs.existsSync(f('state.db')),
+                `with state.db moved away, the main server refuses to start, says what is missing and what to do, and changes no file `
+                + `(${missing === null ? 'it started' : JSON.stringify(missing.split('\n').find((l) => /FATAL/.test(l)) ?? '').slice(0, 300)}; before: it ran as the main server on the older database, unaudited)`);
+            fs.writeFileSync(f('state.db'), ''); // emptied
+            const empty = await startRefused();
+            assert(empty !== null && /FATAL: .*state\.db is empty, and .*state\.previous\.db is there/.test(empty) && kept(),
+                `with state.db emptied, it refuses too (${empty === null ? 'it started' : 'refused'}; before: it served an empty community, and the next start deleted the older database)`);
+            fs.rmSync(f('state.db'));
+            for (const x of ['', '-wal', '-shm']) if (fs.existsSync(path.join(aside, `state.db${x}`))) fs.renameSync(path.join(aside, `state.db${x}`), f(`state.db${x}`));
+            require_(await startRefused() === null, 'with state.db put back, it starts');
+            const after = await look();
+            assert(standby.ready.role === 'primary' && JSON.stringify(after) === JSON.stringify(before),
+                `it runs on the database it had, as it was (${JSON.stringify({ before, after })})`);
+        });
+
+        await step('23. a standby whose state.db is moved away: it puts state.previous.db back, and the next delta brings it level', async () => {
+            const name = await newStandby('standby9');
+            const d = dir(name);
+            const f = (n: string) => path.join(d, n);
+            const w23 = await wholeCopy();
+            require_(w23.ok === true && fs.existsSync(f('state.previous.db')), `S9 holds a whole copy, the old database beside it (${JSON.stringify(w23)})`);
+            await standby.kill('SIGKILL');
+            const aside = f('moved-away');
+            fs.mkdirSync(aside);
+            for (const x of ['', '-wal', '-shm']) if (fs.existsSync(f(`state.db${x}`))) fs.renameSync(f(`state.db${x}`), path.join(aside, `state.db${x}`));
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 23', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            standby = await spawnNode(SCRIPT, d, envS);
+            nodes.push(standby);
+            const back = /state\.previous\.db was there: it is this server's copy, and is state\.db again/.test(standby.output());
+            const d23 = await standby.send('pull', {});
+            const diff23 = await exactNow();
+            assert(back && !fs.existsSync(f('state.previous.db')) && d23.ok === true && diff23.length === 0,
+                `S9 starts on its previous database, put back, and the next pull brings it level with M (${JSON.stringify({ back, pull: d23 })}; differences ${first(diff23)})`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -1150,12 +1233,21 @@ if (process.argv.includes('--child')) {
     // named fs call on a path ending in `suffix`, as a power cut would (before the swap at boot, which runPagedCopyChild runs).
     const arm = `${process.env.BEANPOOL_DATA_DIR}.kill-at`;
     if (fs.existsSync(arm)) {
-        const { op, suffix } = JSON.parse(fs.readFileSync(arm, 'utf-8')) as { op: 'renameSync' | 'rmSync'; suffix: string };
+        const { op, suffix, action = 'kill', when = 'before' } = JSON.parse(fs.readFileSync(arm, 'utf-8')) as {
+            op: 'renameSync' | 'rmSync'; suffix: string; action?: 'kill' | 'throw'; when?: 'before' | 'after';
+        };
         fs.rmSync(arm);
         const real = (fs as any)[op];
+        const act = (p: string) => {
+            if (action === 'kill') process.kill(process.pid, 'SIGKILL');
+            throw Object.assign(new Error(`test: ${op}(${p}) refused`), { code: 'EACCES' });
+        };
         (fs as any)[op] = (p: fs.PathLike, ...rest: any[]) => {
-            if (String(p).endsWith(suffix)) process.kill(process.pid, 'SIGKILL');
-            return real(p, ...rest);
+            const hit = String(p).endsWith(suffix);
+            if (hit && when === 'before') act(String(p));
+            const r = real(p, ...rest);
+            if (hit && when === 'after') act(String(p));
+            return r;
         };
     }
     runPagedCopyChild({ ...photoCommands, ...roomCommands }).catch((e) => { console.error(e); process.exit(1); });

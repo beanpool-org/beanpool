@@ -24,8 +24,10 @@
  * - A take-over that is under way (its journal, services/takeover.ts, not complete): the staging goes. A copy made
  *   before a take-over must never replace what the take-over wrote.
  * - Any of these after a swap stopped between its renames (the staged copy torn, or a take-over under way): the staging
- *   goes and `state.previous.db`, which is this server's copy, becomes `state.db` again (putPreviousBack). So does a
- *   `state.previous.db` found with no `state.db` at all, whatever the swap did.
+ *   goes and `state.previous.db`, which is this server's copy, becomes `state.db` again (putPreviousBack).
+ * - `state.db` missing or empty and `state.previous.db` there with no staging: taken away from outside (by hand, or the
+ *   disk). A standby puts the previous one back (its next copy brings it level); a main server refuses to start and says
+ *   what to do, since that database is older than the one it ran on (swapStagedCopyAtBoot).
  *
  * Never throws: a swap that fails leaves the live copy as it was and says why.
  */
@@ -101,12 +103,52 @@ function putPreviousBack(dataDir: string, say = true): boolean {
     }
 }
 
+/** No database of this server's own: `state.db` missing, or an empty file. */
+function noDatabase(live: string): boolean {
+    try { return !fs.existsSync(live) || fs.statSync(live).size === 0; } catch { return true; }
+}
+
+/** This server's role as config/node-role.ts resolves it (local-config.json's `nodeRole`, then NODE_ROLE), read here. */
+function roleAtBoot(dataDir: string): 'primary' | 'backup' {
+    try {
+        const c = JSON.parse(fs.readFileSync(path.join(dataDir, 'local-config.json'), 'utf-8')) as { nodeRole?: unknown };
+        if (c?.nodeRole === 'primary' || c?.nodeRole === 'backup') return c.nodeRole;
+    } catch { /* no readable config: the environment decides */ }
+    return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
+}
+
+/** A boot condition this server must not start past, said as index.ts says its own (one line), then exit 1. */
+function refuseToStart(why: string): never {
+    console.error(`🚨 FATAL: ${why}`);
+    process.exit(1);
+}
+
 /** The swap for `dataDir` (BEANPOOL_DATA_DIR, as db/db.ts reads it). Once a process. */
 export function swapStagedCopyAtBoot(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): SwapOutcome {
     if (done) return done;
     done = swap(dataDir);
-    putPreviousBack(dataDir); // after any outcome: a swap that failed part way, or none, with state.db gone
-    startedOnDatabase = isDatabase(path.join(dataDir, 'state.db'));
+    const live = path.join(dataDir, 'state.db');
+    if (noDatabase(live) && fs.existsSync(path.join(dataDir, PREVIOUS_DB))) {
+        if (fs.existsSync(path.join(dataDir, STAGING))) {
+            // The swap's own doing (it failed part way, its staging kept for the next start): the previous one is this
+            // server's copy.
+            putPreviousBack(dataDir);
+        } else if (roleAtBoot(dataDir) === 'backup') {
+            // Taken away from outside (by hand, or the disk). On a standby the previous database carries its own cursor and
+            // copy record: put back, the next copy brings it level with its main server.
+            if (fs.existsSync(live)) fs.rmSync(live, { force: true }); // an empty file: nothing
+            putPreviousBack(dataDir);
+        } else {
+            // On a main server (a take-over promoted it, or its role set by hand) the previous database is from before the
+            // standby's last whole copy: older than the one it ran on, and never checked as a main server. Never run on it
+            // unasked (#1334 review round 4, finding 1).
+            refuseToStart(`${path.join(dataDir, 'state.db')} is ${fs.existsSync(live) ? 'empty' : 'missing'}, and ${path.join(dataDir, PREVIOUS_DB)} is there: `
+                + 'that is the database from before this server\'s last whole copy as a standby, older than the one it ran on, so it is not started on. '
+                + `Put back the state.db that was moved, or restore it from a backup; or, to run on the older database, rename ${PREVIOUS_DB} `
+                + '(and its -wal and -shm, if there) to state.db, and start the server again.');
+        }
+    }
+    startedOnDatabase = isDatabase(live);
     return done;
 }
 

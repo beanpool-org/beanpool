@@ -110,3 +110,12 @@ export function vaultPushTokenStoreKey(publicKey: string): string {
 export function vaultConnectWantedStoreKey(publicKey: string): string {
     return `beanpool_vault_connect_wanted:${publicKey.toLowerCase()}`;
 }
+
+/**
+ * Set while this phone knows the key vault keeps a copy for one account: it deposited one, restored the account from
+ * one, or Account Protection's status read listed one; cleared when a status read lists none. The app-open check and
+ * the Settings banner ask the vault only while it is set (utils/vault.ts `vaultCopyKnown`).
+ */
+export function vaultCopyKnownStoreKey(publicKey: string): string {
+    return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;
+}

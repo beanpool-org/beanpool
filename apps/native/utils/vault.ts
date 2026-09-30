@@ -64,6 +64,7 @@ import {
     PUSH_TOKEN_STORE_KEY,
     VAULT_RESTORE_STORE_KEY,
     vaultConnectWantedStoreKey,
+    vaultCopyKnownStoreKey,
     vaultPushTokenStoreKey,
 } from './storage-keys';
 
@@ -259,6 +260,7 @@ export async function depositWithVault(input: {
         '/v1/copies', { ticket: input.ticket, provider: input.provider, idToken: input.idToken, box }, input.identity,
     );
     if (body?.ok !== true) throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    await noteVaultCopy(input.identity.publicKey, true);
     if (pushToken) await AsyncStorage.setItem(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
     await forgetConnectWanted(input.identity.publicKey, input.provider);
     return { provider: input.provider, replaced: body.replaced === true, wordsSealed: input.wordsSealed };
@@ -299,7 +301,31 @@ export function readVaultStatus(body: unknown): VaultStatus {
 
 /** Which sign-ins the vault keeps a copy for, and any restore waiting. Never a copy. */
 export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEOUT_MS): Promise<VaultStatus> {
-    return readVaultStatus(await vaultPost('/v1/copies/status', {}, identity, timeoutMs));
+    const status = readVaultStatus(await vaultPost('/v1/copies/status', {}, identity, timeoutMs));
+    await noteVaultCopy(identity.publicKey, status.providers.length > 0);
+    return status;
+}
+
+/**
+ * Whether this phone knows the vault keeps a copy for `publicKey` ({@link noteVaultCopy}). Asked of the phone, never
+ * of the vault. The app-open check and the Settings banner reach the vault only when it does (PR #1336 review
+ * finding 1): a member with no copy there is never asked about, and nothing asks on a timer.
+ */
+export async function vaultCopyKnown(publicKey: string): Promise<boolean> {
+    try {
+        return (await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey))) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (Account
+ * Protection opening, a user action), which is how a phone learns of a copy another of the member's devices made.
+ */
+export async function noteVaultCopy(publicKey: string, kept: boolean): Promise<void> {
+    const key = vaultCopyKnownStoreKey(publicKey);
+    await (kept ? AsyncStorage.setItem(key, '1') : AsyncStorage.removeItem(key)).catch(() => {});
 }
 
 /** Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7). */
@@ -335,13 +361,14 @@ const holdsAlerted = new Set<string>();
  * The app-open check (design §1.5, V4): in the background, the vault's status for the account on this phone. Resolves
  * with the restores of this account waiting that haven't been brought up yet in this run, and gives the vault this
  * phone's push token when it has changed. Short timeout, never throws, and nothing waits for it: a slow or unreachable
- * vault shows nothing. No vault in this build: nothing is asked.
+ * vault shows nothing. No vault in this build, or no copy there that this phone knows of ({@link vaultCopyKnown}):
+ * nothing is asked.
  *
  * Marks nothing: the caller marks the holds it actually shows ({@link takeHoldsToShow}), at the moment it shows them.
  * An answer that arrives after the screen asking for it has gone (a remount) must not use up the hold's one alert.
  */
 export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold[]> {
-    if (!hasVault()) return [];
+    if (!hasVault() || !(await vaultCopyKnown(identity.publicKey))) return [];
     try {
         const status = await vaultStatus(identity, 15_000);
         if (status.providers.length) void keepVaultPushTokenCurrent(identity);

@@ -85,7 +85,7 @@ import { finishMove, moveLater, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
     approveVaultHold, connectWanted, holdEndsText, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
-    takeHoldsToShow,
+    takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
@@ -623,6 +623,13 @@ describe('the source: only a build without a vault asks a community for a nonce,
 });
 
 describe('status, disconnect, push token, and the check at app open', () => {
+    it('a deposit here tells the phone the vault keeps a copy (so the app-open check may ask about holds)', async () => {
+        await memberOnCommunity();
+        expect(await vaultCopyKnown(member.publicKey)).toBe(false);
+        await connect('google');
+        expect(await vaultCopyKnown(member.publicKey)).toBe(true);
+    });
+
     it('Account Protection reads the vault: the sign-ins it keeps a copy for', async () => {
         await memberOnCommunity();
         await connect('google');

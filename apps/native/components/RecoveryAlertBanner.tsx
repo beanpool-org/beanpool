@@ -1,16 +1,19 @@
 /**
  * RecoveryAlertBanner — someone is getting back into this account.
  *
- * Two sources, each read in the background when the banner shows and whenever the app comes back, so nothing waits
- * for them: a slow or unreachable one shows nothing.
+ * Two sources, each read in the background so nothing waits for them: a slow or unreachable one shows nothing.
  *
- * - **BeanPool's key vault** (`/v1/copies/status`, utils/vault.ts): a sign-in restore of this account, waiting (D2:
- *   every sign-in restore waits a day). Two answers, each confirmed first:
+ * - **BeanPool's key vault** (`/v1/copies/status`, utils/vault.ts), in a build that has one: a sign-in restore of this
+ *   account, waiting (D2: every sign-in restore waits a day). Read when the banner first shows, when the app comes back
+ *   to the front, and after a Stop or "Yes, it's me" that didn't go through: never on a timer, and never for a member
+ *   the phone knows no copy at the vault for (`vaultCopyKnown`; PR #1336 review finding 1). The vault is off the
+ *   everyday path (Marty, 2026-09-28). Two answers, each confirmed first:
  *     - **Stop**: it is never released. Whoever started it gets nothing, and has to use the 12 words.
  *     - **Yes, it's me**: it goes through now, to the phone or computer that asked. Behind the phone's lock, since it
  *       hands the account to another device.
- * - **The member's community** (`/api/recovery/collect/mine`): a restore at a community that still keeps an old
- *   sign-in copy, until the date those are removed (key vault design §5.1). Stop cancels it.
+ * - **The member's community** (`/api/recovery/collect/mine`): a restore at a community that keeps a sign-in copy
+ *   (every copy, in a build without a vault; old ones until the date they are removed, in a build with one, key vault
+ *   design §5.1). Watched every ~30 s while the app is in front, as before the vault. Stop cancels it.
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -22,7 +25,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import {
-    approveVaultHold, hasVault, holdEndsText, stopVaultHold, vaultStatus, type VaultHold,
+    approveVaultHold, hasVault, holdEndsText, stopVaultHold, vaultCopyKnown, vaultStatus, type VaultHold,
 } from '../utils/vault';
 
 interface RecoverySession {
@@ -67,7 +70,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     }, []);
 
     const fetchHolds = useCallback(async () => {
-        if (!identity || !hasVault()) return;
+        // Only a build with a vault, and only for an account this phone knows the vault keeps a copy for.
+        if (!identity || !hasVault() || !(await vaultCopyKnown(identity.publicKey))) return;
         try {
             setHolds((await vaultStatus(identity)).holds);
         } catch (e) {
@@ -76,18 +80,23 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         }
     }, [identity]);
 
-    const refresh = useCallback(() => {
-        void fetchSessions();
+    // The vault: once now, and once each time the app comes back to the front. No interval.
+    useEffect(() => {
         void fetchHolds();
-    }, [fetchSessions, fetchHolds]);
+        const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+            if (next === 'active') void fetchHolds();
+        });
+        return () => sub.remove();
+    }, [fetchHolds]);
 
+    // The community: watched while the app is in front, as before the vault.
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
 
         const startPolling = () => {
             if (!interval) {
-                refresh();
-                interval = setInterval(refresh, withJitter(30_000));
+                void fetchSessions();
+                interval = setInterval(() => { void fetchSessions(); }, withJitter(30_000));
             }
         };
 
@@ -116,7 +125,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
             stopPolling();
             sub.remove();
         };
-    }, [refresh]);
+    }, [fetchSessions]);
 
     const handleStopIt = useCallback(async () => {
         Alert.alert(

@@ -53,6 +53,7 @@ import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } fr
 import { ReplaceNotSaved } from '../restore-account';
 import {
     KNOCKS_STORE_KEY, PUSH_LEAVE_STATEMENTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY,
+    vaultCopyKnownStoreKey,
 } from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
@@ -100,6 +101,14 @@ function accountStorage(publicKey: string): Record<string, string> {
         // switcher. Never Byron, where it was only a guest (push-registrations.ts).
         [PUSH_REGISTERED_AT_STORE_KEY]: JSON.stringify([MULLUM, BELLINGEN]),
     };
+}
+
+/**
+ * What the phone writes for the account it has just restored from the key vault: that the vault keeps a copy for it,
+ * so the app-open check may ask about holds (utils/vault.ts `vaultCopyKnown`). The new account's, never the old one's.
+ */
+function copyKnown(): Record<string, string> {
+    return { [vaultCopyKnownStoreKey(released.publicKey)]: '1' };
 }
 
 function asyncStorage(): Record<string, string> {
@@ -221,7 +230,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         await restore(async () => true);
 
         // Kim's guest markers, the communities Kim asked to join, Kim's sync cursors, Kim's wizard: all gone.
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
     });
 
@@ -247,7 +256,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         expect(confirmReplace).toHaveBeenCalledTimes(1);
         expect(result.identity.publicKey).toBe(restoredPub);
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
     });
 
     it('a caller that cannot ask is refused rather than allowed to replace', async () => {
@@ -297,7 +306,7 @@ describe('a sign-in restore with nothing to replace', () => {
 
         await restore();
 
-        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE });
+        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE, ...copyKnown() });
     });
 
     it('no account on the phone: restores as it always did, never asking', async () => {
@@ -358,7 +367,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(result.identity.publicKey).toBe(restoredPub);
         const { [PUSH_LEAVE_STATEMENTS_STORE_KEY]: leaves, [PUSH_STAMP_STORE_KEY]: stamp, ...rest } = asyncStorage();
-        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT, ...copyKnown() });
         // Kept on purpose: the old account's leave statements for the communities it couldn't reach, presented later
         // until each confirms (push-leave.ts), and the phone's push stamp.
         const asked = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url)).origin).sort();

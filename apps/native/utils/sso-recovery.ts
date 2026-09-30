@@ -60,6 +60,7 @@ import {
     clearPendingVaultRestore,
     collectVaultRestore,
     loadPendingVaultRestore,
+    noteVaultCopy,
     startVaultRestore,
     type PendingVaultRestore,
     type RestoredFromVault,
@@ -405,5 +406,8 @@ export async function finishSsoRestore(
     anchorUrl: string,
     options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
 ): Promise<BeanPoolIdentity> {
-    return restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
+    const identity = await restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
+    // The vault keeps a copy for this account (it just released one): its holds are worth asking about at app open.
+    await noteVaultCopy(identity.publicKey, true);
+    return identity;
 }

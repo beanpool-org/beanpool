@@ -87,7 +87,7 @@ import { finishMove, moveLater, removeInstead, vaultMoveOffer, COMMUNITY_TIMEOUT
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
     approvedHolds, approveVaultHold, connectWanted, holdAnswerIsFinal, holdEndsText, vaultRefusal, keepVaultPushTokenCurrent, readVaultConfig, rememberConnectWanted, stopVaultHold,
-    takeHoldsToShow, vaultCopyKnown,
+    noteVaultCopy, takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
@@ -657,7 +657,7 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
             openedAt: Date.now(), releaseAt: Date.now() + HOLD_MS, cancelled: false, released: false,
         });
         // This phone had once read "no copy" for this account (before it was linked from another device).
-        mem.async.set(`beanpool_vault_copy_known:${member.publicKey.toLowerCase()}`, '0');
+        await noteVaultCopy(member.publicKey, false);
         expect(await vaultHoldsAtOpen(member)).toEqual([]);
         await stopSsoRestoreAfterWords(member);
         expect((await vaultHoldsAtOpen(member)).map(h => h.holdId)).toEqual(['hold-other']);
@@ -748,10 +748,15 @@ describe('the source: only a build without a vault asks a community for a nonce,
         const enrol = src('utils/keeper-enrolment.ts');
         expect(body(enrol, 'enrolSsoKeeper')).toMatch(/'ticket' in input \? enrolAtVault\(input\) : enrolAtCommunity\(input\)/);
         expect(body(enrol, 'disconnectSsoKeeper')).toMatch(/if \(signInCopiesAt\(\) === 'community'\) return disconnectAtCommunity\(/);
-        // The restore at a community: only the welcome screen's community branch.
+        // The restore at a community: only the welcome screen's community branch. A build with a vault shows it only for a
+        // sign-in the vault said, signed, that it keeps no copy for (PR #1336 review finding 3), and the restore itself
+        // refuses otherwise, before anything is sent (vault-phone-gates.test.ts).
         const callersOfRestore = sources().filter(({ src: s }) => /recoverAccountWithSso\(/.test(s)).map(c => c.rel).sort();
         expect(callersOfRestore).toEqual(['app/welcome.tsx', 'utils/sso-recovery.ts']);
-        expect(src('app/welcome.tsx')).toMatch(/if \(mode === 'ssoRecover' && !hasVault\(\)\) \{/);
+        expect(src('app/welcome.tsx')).toMatch(/if \(mode === 'ssoRecover' && \(!hasVault\(\) \|\| ssoAtCommunity\)\) \{/);
+        expect(body(src('utils/sso-recovery.ts'), 'recoverAccountWithSso')).toMatch(
+            /^function recoverAccountWithSso\([^]*?\): Promise<SsoRecoveryResult> \{\n {4}if \(hasVault\(\) && !vaultKeepsNoCopyFor\(options\.provider\)\) throw /,
+        );
     });
 
     it('the sign-in sheets are reached with a nonce only from the sign-in flows and the global door', () => {

@@ -113,8 +113,9 @@ export function vaultConnectWantedStoreKey(publicKey: string): string {
 
 /**
  * What this phone knows about a key vault copy for one account: '1' kept (it deposited one, restored the account from
- * one, or a status read listed one), '0' none (a status read listed none), absent unknown (a restore with the 12 words
- * clears it). The app-open check and the Settings banner skip only '0' (utils/vault.ts `vaultCopyKnowledge`).
+ * one, or a status read listed one), '0:<ms>' none (a status read listed none, at that time), absent unknown (a restore
+ * with the 12 words clears it). The app-open check and the Settings banner skip only a "none" less than a week old
+ * (utils/vault.ts `vaultCopyKnowledge`, `VAULT_NONE_KEPT_MS`).
  */
 export function vaultCopyKnownStoreKey(publicKey: string): string {
     return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;

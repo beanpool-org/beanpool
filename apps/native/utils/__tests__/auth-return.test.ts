@@ -33,6 +33,7 @@ vi.mock('expo-web-browser', () => ({
 
 import { redirectSystemPath } from '../../app/+native-intent';
 import { setupRedirect, isAuthReturnLink } from '../auth-return';
+import { memberRedirect } from '../member-landing';
 import { extractInviteToken, normaliseInviteCode } from '../invite-parser';
 
 const APP = path.resolve(__dirname, '../../app');
@@ -108,7 +109,10 @@ describe('a stray return link that opens the app from cold', () => {
     it('a set-up member goes on from welcome to home, as on any launch', () => {
         const layout = fs.readFileSync(path.join(APP, '_layout.tsx'), 'utf-8');
         expect(setupRedirect(['welcome'], SET_UP)).toBeNull();
-        expect(layout).toMatch(/root === 'welcome'\) \{\s*router\.replace\('\/\(tabs\)'\);/);
+        // The guard's last check lands them where utils/member-landing.ts says: the tabs' index unless a screen asked for
+        // another landing before setting the identity (member-landing.test.ts).
+        expect(layout).toMatch(/const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\s*if \(landing\) router\.replace\(landing\);/);
+        expect(memberRedirect(['welcome'])).toBe('/(tabs)');
     });
 });
 

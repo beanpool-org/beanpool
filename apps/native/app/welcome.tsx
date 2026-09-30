@@ -44,10 +44,11 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import {
-    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, waitingSsoRestore,
-    type PendingVaultRestore, type RestoredFromVault,
+    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, vaultKeepsNoCopyFor,
+    waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
@@ -138,6 +139,13 @@ export default function WelcomeScreen() {
     // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
     // vault: a callsign and the community's address, looked up as they type.
     const [ssoCallsign, setSsoCallsign] = useState('');
+    /**
+     * In a build with a key vault: the provider the vault said, signed, that it keeps no copy for (utils/sso-recovery.ts
+     * `vaultKeepsNoCopyFor`, kept per provider, not per sign-in account), whose copy may still be at the member's
+     * community. The restore with that provider goes on there, on the same screen a build without a vault shows (PR
+     * #1336 review finding 3). Null otherwise.
+     */
+    const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
     const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
@@ -1125,10 +1133,28 @@ export default function WelcomeScreen() {
             // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
             await returnToApp();
             await clearPendingOnboarding();
+            const vault = hasVault();
+            // Back in with a copy only the community keeps (the vault said it keeps none): straight to Settings, whose first
+            // card is the move (components/VaultMoveCard.tsx), not only when the member happens to open it (PR #1336 review
+            // finding 3). Asked of the root guard BEFORE the identity is set, and never navigated to from here: the guard's
+            // own landing from welcome is queued behind any replace made here, and wins (PR #1357 review;
+            // utils/member-landing.ts).
+            if (vault) {
+                landNextOn('/(tabs)/settings', result.identity.publicKey);
+                // The node's answer for this key, before the guard reads it: an old "stranger" for the account this phone
+                // held would keep the member on welcome until the app came back (PR #1357 confirmation, N2).
+                await recheckNodeStatus().catch(() => {});
+            }
             setOutgoingIdentity(null);
             setIdentity(result.identity);
             setMode('home');
-            router.replace('/');
+            if (vault) {
+                // A sign-in restore this phone left waiting is stopped with the account's own key, as after the 12 words.
+                setSsoAtCommunity(null);
+                void stopSsoRestoreAfterWords(result.identity);
+            } else {
+                router.replace('/');
+            }
         } catch (e: any) {
             // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
             // its key unless even that failed): the app must not go on as it.
@@ -1171,6 +1197,10 @@ export default function WelcomeScreen() {
         } catch (e: any) {
             if (e?.reason === 'cancelled' || e?.message === 'Sign-in was cancelled.') {
                 setError(null);
+            } else if (vaultKeepsNoCopyFor(provider)) {
+                // The vault's signed "no copy": the copy may still be at the member's community (review finding 3).
+                setError(null);
+                setSsoAtCommunity(provider);
             } else {
                 setError(e?.message || `Recovery failed: ${String(e)}`);
             }
@@ -2694,8 +2724,11 @@ export default function WelcomeScreen() {
         );
     }
 
-    // A build without a key vault: the restore at the member's community, as before the vault.
-    if (mode === 'ssoRecover' && !hasVault()) {
+    // A build without a key vault: the restore at the member's community, as before the vault. In a build with one, the
+    // same restore for the one sign-in the vault said, signed, that it keeps no copy for (review finding 3).
+    if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
+        /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
+        const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -2708,9 +2741,20 @@ export default function WelcomeScreen() {
                             <Text style={styles.title} accessibilityRole="header">
                                 🌐 Recover with Social Sign-In
                             </Text>
-                            <Text style={styles.subtitle}>
-                                Enter your callsign and node address to restore your account with any linked sign-in.
-                            </Text>
+                            {ssoAtCommunity ? (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        BeanPool's key vault keeps no copy for this {SSO_PROVIDER_NAMES[ssoAtCommunity]} account. Your community may still keep one.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        Enter your callsign and your community, then sign in with {SSO_PROVIDER_NAMES[ssoAtCommunity]} once more. Your 12 words work any time.
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={styles.subtitle}>
+                                    Enter your callsign and node address to restore your account with any linked sign-in.
+                                </Text>
+                            )}
 
                             <TextInput
                                 accessibilityLabel="Callsign"
@@ -2819,29 +2863,33 @@ export default function WelcomeScreen() {
 
                             {!loading && (
                                 <>
-                                    {Platform.OS === 'ios' && (
+                                    {Platform.OS === 'ios' && offeredHere('apple') && (
                                         <AppleButton
                                             title="Recover with Apple"
                                             onPress={() => handleSsoRecoverAtCommunity('apple')}
                                             style={{ marginBottom: 10, width: '100%' }}
                                         />
                                     )}
-                                    <GoogleButton
-                                        title="Recover with Google"
-                                        onPress={() => handleSsoRecoverAtCommunity('google')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <FacebookButton
-                                        title="Recover with Facebook"
-                                        onPress={() => handleSsoRecoverAtCommunity('facebook')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
+                                    {offeredHere('google') && (
+                                        <GoogleButton
+                                            title="Recover with Google"
+                                            onPress={() => handleSsoRecoverAtCommunity('google')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
+                                    {offeredHere('facebook') && (
+                                        <FacebookButton
+                                            title="Recover with Facebook"
+                                            onPress={() => handleSsoRecoverAtCommunity('facebook')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
                                 </>
                             )}
 
                             <Pressable
                                 style={styles.backBtn}
-                                onPress={() => { setMode('member'); setError(null); }}
+                                onPress={() => { setMode('member'); setSsoAtCommunity(null); setError(null); }}
                                 disabled={loading}
                                 accessibilityRole="button"
                                 accessibilityLabel="Back to Restore Options"

@@ -1139,7 +1139,12 @@ export default function WelcomeScreen() {
             // finding 3). Asked of the root guard BEFORE the identity is set, and never navigated to from here: the guard's
             // own landing from welcome is queued behind any replace made here, and wins (PR #1357 review;
             // utils/member-landing.ts).
-            if (vault) landNextOn('/(tabs)/settings');
+            if (vault) {
+                landNextOn('/(tabs)/settings', result.identity.publicKey);
+                // The node's answer for this key, before the guard reads it: an old "stranger" for the account this phone
+                // held would keep the member on welcome until the app came back (PR #1357 confirmation, N2).
+                await recheckNodeStatus().catch(() => {});
+            }
             setOutgoingIdentity(null);
             setIdentity(result.identity);
             setMode('home');

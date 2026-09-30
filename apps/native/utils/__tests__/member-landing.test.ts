@@ -212,6 +212,27 @@ describe('memberRedirect: the root guard\'s landing from welcome', () => {
     });
 });
 
+describe('a landing is only for the account it was asked for (PR #1357 confirmation, N1)', () => {
+    it('asked for A, then Sign Out and B restored: B lands on the index, and A\'s landing is gone', () => {
+        landNextOn('/(tabs)/settings', 'key-A');
+        // The node called A a stranger: the guard never reached its landing, then A signed out and B came back.
+        expect(memberRedirect(['welcome'], 'key-B')).toBe('/(tabs)');
+        expect(memberRedirect(['welcome'], 'key-A')).toBe('/(tabs)');
+    });
+
+    it('dropped even while another account sits elsewhere in the app', () => {
+        landNextOn('/(tabs)/settings', 'key-A');
+        expect(memberRedirect(['(tabs)'], 'key-B')).toBeNull();
+        expect(memberRedirect(['welcome'], 'key-A')).toBe('/(tabs)');
+    });
+
+    it('the account it was asked for still lands on it', () => {
+        landNextOn('/(tabs)/settings', 'key-A');
+        expect(memberRedirect(['(tabs)'], 'key-A')).toBeNull();
+        expect(memberRedirect(['welcome'], 'key-A')).toBe('/(tabs)/settings');
+    });
+});
+
 describe('the model is the app', () => {
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
 
@@ -219,7 +240,7 @@ describe('the model is the app', () => {
         const layout = read('../../app/_layout.tsx');
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
         const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
-        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\]\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*$/);
+        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*$/);
         expect(body).not.toMatch(/root === 'welcome'\) \{\s*router\.replace/);
     });
 
@@ -230,14 +251,18 @@ describe('the model is the app', () => {
         expect(handler).toMatch(new RegExp([
             String.raw`const vault = hasVault\(\);`,
             String.raw`(?:\s*//.*)*`,
-            String.raw`\s*if \(vault\) landNextOn\('/\(tabs\)/settings'\);`,
+            String.raw`\s*if \(vault\) \{`,
+            String.raw`\s*landNextOn\('/\(tabs\)/settings', result\.identity\.publicKey\);`,
+            String.raw`(?:\s*//.*)*`,
+            String.raw`\s*await recheckNodeStatus\(\)\.catch\(\(\) => \{\}\);`,
+            String.raw`\s*\}`,
             String.raw`\s*setOutgoingIdentity\(null\);`,
             String.raw`\s*setIdentity\(result\.identity\);`,
             String.raw`\s*setMode\('home'\);`,
             String.raw`\s*if \(vault\) \{`,
         ].join('')));
         expect(handler).toMatch(/\} else \{\n\s*router\.replace\('\/'\);\n\s*\}/);
-        expect(handler).not.toMatch(/\(tabs\)\/settings'\)(?<!landNextOn\('\/\(tabs\)\/settings'\))/);
+        expect(handler).not.toMatch(/router\.\w+\('\/\(tabs\)\/settings'/);
         expect(handler.match(/router\.(replace|push|navigate)\(/g)).toEqual(['router.replace(']);
     });
 });

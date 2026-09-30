@@ -111,7 +111,7 @@ describe('a stray return link that opens the app from cold', () => {
         expect(setupRedirect(['welcome'], SET_UP)).toBeNull();
         // The guard's last check lands them where utils/member-landing.ts says: the tabs' index unless a screen asked for
         // another landing before setting the identity (member-landing.test.ts).
-        expect(layout).toMatch(/const landing = memberRedirect\(segments as string\[\]\);\s*if \(landing\) router\.replace\(landing\);/);
+        expect(layout).toMatch(/const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\s*if \(landing\) router\.replace\(landing\);/);
         expect(memberRedirect(['welcome'])).toBe('/(tabs)');
     });
 });

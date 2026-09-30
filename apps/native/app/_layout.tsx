@@ -577,7 +577,7 @@ function RootLayoutNav() {
 
         // Stuck on the welcome screen or root with a valid identity → into the secure area: the tabs' index, or the one
         // landing a screen asked for before it set the identity (utils/member-landing.ts).
-        const landing = memberRedirect(segments as string[]);
+        const landing = memberRedirect(segments as string[], identity.publicKey);
         if (landing) router.replace(landing);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 

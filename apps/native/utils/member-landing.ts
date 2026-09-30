@@ -8,7 +8,9 @@
  * in the commit that brings the identity the guard's own replace is queued behind the screen's and wins. PR #1357's
  * deciding review measured that: a vault build's community restore asked for Settings and landed on Home.
  *
- * Kept in memory for this run only, and read once.
+ * Kept in memory for this run only, read once, and only for the account it was asked for: a landing left over (the
+ * node called the restored key a stranger, so the guard never reached its landing) is dropped when another account, or
+ * none, is on the phone, so a later account never lands on it (PR #1357 confirmation, N1).
  */
 
 export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
@@ -16,14 +18,14 @@ export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
 /** The tabs' index: every landing from welcome but the one a screen asked for. */
 export const DEFAULT_MEMBER_LANDING: MemberLanding = '/(tabs)';
 
-let next: MemberLanding | null = null;
+let next: { to: MemberLanding; publicKey: string | null } | null = null;
 
 /**
  * The guard's next landing from welcome goes to `to`. Call it before `setIdentity`, and don't navigate: the guard does.
  * Today only the welcome screen's community restore in a vault build uses it (Settings, whose first card is the move).
  */
-export function landNextOn(to: MemberLanding): void {
-    next = to;
+export function landNextOn(to: MemberLanding, publicKey: string | null = null): void {
+    next = { to, publicKey };
 }
 
 /**
@@ -31,9 +33,11 @@ export function landNextOn(to: MemberLanding): void {
  * root, where to go (a landing asked for with `landNextOn`, taken once, else the tabs' index). Anywhere else, null:
  * stay, and leave a landing asked for untouched.
  */
-export function memberRedirect(segments: readonly string[]): MemberLanding | null {
+export function memberRedirect(segments: readonly string[], publicKey: string | null = null): MemberLanding | null {
+    // Asked for another account than the one now on the phone: never used, whatever the route.
+    if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
     if (segments.length !== 0 && segments[0] !== 'welcome') return null;
-    const to = next ?? DEFAULT_MEMBER_LANDING;
+    const to = next?.to ?? DEFAULT_MEMBER_LANDING;
     next = null;
     return to;
 }

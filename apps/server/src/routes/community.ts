@@ -875,9 +875,12 @@ router.get('/api/community/health', async (ctx) => {
 router.get('/api/community/membership/:publicKey', async (ctx) => {
     const member = getMember(ctx.params.publicKey);
     if (member && !isVisitorKey(member.publicKey)) {
-        // On a node that shows visitors the listings and not the people (G9a), a key is not turned into a name for
-        // anyone but its holder: the web app adopting its own name and the phone's probe both sign as that key.
-        const named = !getProfileSwitches().guestListingsOnly || ctx.state.actor === ctx.params.publicKey;
+        // A key is not turned into a name for anyone but its holder, on every node (G9a on the global node; a local
+        // community since 2026-10-01, "nothing on a private node should be public"): the only readers of the name are
+        // the web app adopting its own (lib/member-name.ts, signed as that key) and the phone's restore, which signs
+        // with the key it restored (native db.ts fetchNodeCallsign). Whether the key is a member stays public: the
+        // apps ask it unsigned of every community they know, and it takes the key to ask.
+        const named = ctx.state.actor === ctx.params.publicKey;
         ctx.body = { isMember: true, callsign: named ? member.callsign : null };
     } else {
         ctx.body = {
@@ -988,14 +991,14 @@ router.post('/api/invite/generate', async (ctx) => {
 });
 
 /**
- * The member card a redeem answers with. A new join's is its own. An existing member's, on a node that shows guests the
- * listings and not the people, goes only to a request signed by that member's key: the phone re-entering signs its
- * redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a code or
- * a ticket learns only that the key is a member, as the public membership probe says, and not its name or face.
+ * The member card a redeem answers with. A new join's is its own. An existing member's, on every node (G9a on the global
+ * node; a local community since 2026-10-01), goes only to a request signed by that member's key: the phone re-entering
+ * signs its redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a
+ * code or a ticket learns only that the key is a member, as the public membership probe says, and not its name or face.
  */
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;
-    if (result.alreadyMember && getProfileSwitches().guestListingsOnly && !signedByKey(ctx, publicKey)) return undefined;
+    if (result.alreadyMember && !signedByKey(ctx, publicKey)) return undefined;
     return publicMemberCard(result.member);
 }
 
@@ -1955,16 +1958,15 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 
     // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
     // predicates cannot drift apart — see the note there for why that matters on a public
-    // endpoint. It already returns public-safe fields only.
+    // endpoint.
     ctx.status = 200;
-    // On a node that shows visitors the listings and not the people (G9a-2), whoever asks is a stranger until they
-    // are recovered: the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by.
-    // The key stays, as the recovery flow may need it; alone it opens nothing there (engine/avatar-keys.ts).
-    if (getProfileSwitches().guestListingsOnly) {
-        ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
-        return;
-    }
-    ctx.body = findRecoveryCandidates(callsign);
+    // Whoever asks is a stranger until they are recovered, on every node (G9a-2 on the global node; a local community
+    // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
+    // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
+    // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
+    // web-restore.ts) and whether a sign-in can bring it back. On the global node the key alone opens nothing
+    // (engine/avatar-keys.ts); a local community's faces are not keyed yet.
+    ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and

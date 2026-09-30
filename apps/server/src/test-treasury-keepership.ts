@@ -102,8 +102,12 @@ async function main() {
     assert(reqRes.status === 200, `worker bids on enterprise Need (got ${reqRes.status} ${reqRes.error ?? ''})`);
     const dealTxId = reqRes.body.transaction.id;
 
-    // Verify treasury detail exposes pendingBids and activeDeals to operator, but hides them on unauthenticated read
-    const unauthBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    // Verify treasury detail exposes pendingBids and activeDeals to operator, but hides them from a member who keeps
+    // nothing there. (An unsigned read is refused whole: the enterprises are members' reads, 2026-10-01.)
+    const onlooker = makeIdentity('onlooker');
+    const unsignedDetail = await fetch(`${BASE}/api/treasury/${eggs}`);
+    assert(unsignedDetail.status === 401, `an unsigned read of the treasury detail is refused (got ${unsignedDetail.status})`);
+    const unauthBeforeApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, onlooker)).body;
     assert(Array.isArray(unauthBeforeApprove.pendingBids) && unauthBeforeApprove.pendingBids.length === 0, 'public read hides pending bids');
     const detailBeforeApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
     assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need to keeper');
@@ -113,7 +117,7 @@ async function main() {
     const escrowTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(eggs, `escrow_${dealTxId}`) as any;
     assert(escrowTxRow?.auth_signer === doone.pubKeyHex, 'escrow hold transaction auth_signer records acting operator');
 
-    const unauthAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    const unauthAfterApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, onlooker)).body;
     assert(Array.isArray(unauthAfterApprove.activeDeals) && unauthAfterApprove.activeDeals.length === 0, 'public read hides active deals');
     const detailAfterApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
     assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need to keeper');
@@ -139,7 +143,7 @@ async function main() {
                ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', 50.0, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
     `).run(eggs, doone.pubKeyHex, eggs, doone.pubKeyHex);
 
-    const pubDetail = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    const pubDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, onlooker)).body;
     assert(Array.isArray(pubDetail.deferredClaims), 'public read returns deferredClaims array');
     assert(pubDetail.deferredClaims.length === 1, 'public read only sees pending claims, NOT historical paid claims');
     assert(pubDetail.deferredClaims[0].id === 'claim-priv-pending', 'public read sees pending claim id');
@@ -178,11 +182,11 @@ async function main() {
     assert(dBal.keeperOf.length === 1 && dBal.keeperOf[0] === eggs, 'keeperOf lists only the enterprise they keeper');
     assert(dBal.canOperate === true, 'canOperate stays true as the coarse "is a keeper" flag');
 
-    // ── 3. Transparency — members can see who keepers what ─────────────────────
-    const pub = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
-    assert(Array.isArray(pub.keepers), 'public treasury detail exposes keepers');
+    // ── 3. Transparency — members can see who keepers what (a member who keeps nothing: members' reads, 2026-10-01) ──
+    const pub = (await signedFetch('GET', `/api/treasury/${eggs}`, onlooker)).body;
+    assert(Array.isArray(pub.keepers), "a member's read of the treasury detail exposes keepers");
     assert(pub.keepers.length === 1 && pub.keepers[0].callsign === 'doone', 'keepers names the accountable member');
-    const list = await fetch(`${BASE}/api/treasuries`).then(r => r.json()) as any;
+    const list = (await signedFetch('GET', '/api/treasuries', onlooker)).body;
     assert(list.treasuries.every((t: any) => Array.isArray(t.keepers)), 'treasury list carries keepers per enterprise');
 
     // ── 4. Revoke takes effect with no restart ──────────────────────────────────

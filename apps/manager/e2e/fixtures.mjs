@@ -902,7 +902,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/node-roles\/[^/]+\/[^/]+$/.test(pathname)) return ok({ success: true });
 
     // ---- treasuries / enterprises ----
-    if (pathname === '/api/treasuries') return ok({ treasuries: ENTERPRISES });
+    // Settings lists them with the admin password (a GET); a POST to the same path creates one.
+    if (pathname === '/api/local/admin/treasury' && m === 'GET') return ok({ treasuries: ENTERPRISES });
     if (pathname === '/api/local/admin/treasury') return ok({ success: true, publicKey: pubkey('treasury-new') });
     if (/^\/api\/local\/admin\/treasury\/[^/]+\/operators$/.test(pathname)) {
         const idx = pathname.includes(ENTERPRISES[1].publicKey) ? 1 : 0;

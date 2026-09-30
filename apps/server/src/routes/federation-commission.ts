@@ -16,7 +16,6 @@
  */
 
 import Router from '@koa/router';
-import crypto from 'node:crypto';
 // Top-level, not `await import(...)` inside the handler (review finding, accepted — though not for the reason
 // given). ESM caches a module after its first import, so a dynamic import in a handler is a resolved-promise
 // await on an already-loaded module, not "per-request module loading overhead". And libp2p is loaded at boot by
@@ -35,7 +34,7 @@ import { settleCrossNodePurchase } from '../federation-protocol.js';
 import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
-import { SettlementError } from '../federation-settlement-exchange.js';
+import { SettlementError, settlementKeyFor } from '../federation-settlement-exchange.js';
 import { getFederationLink } from '../federation-link.js';
 import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfCachedPost } from '../federation-commission.js';
 import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
@@ -242,12 +241,25 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        // 9. THE KEY, minted here. A client may supply one to retry — the outbound path is idempotent on it,
+        // 9. THE KEY, minted here. A client may send one back only to retry — the outbound path is idempotent on it,
         //    so a retry after a dropped connection finishes the original commission rather than funding a
         //    second one. `xc-` rather than `xn-` so a commission is identifiable in a settlement row without
         //    joining anything: the two have different funding and different authorisation, and when one of
         //    them is stuck at 3am that distinction is the first thing worth knowing.
-        const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xc-${crypto.randomUUID()}`;
+        //
+        //    Never the keeper's choice: the settlement holds the Beans in `escrow_<key>`, and a chosen key naming another
+        //    project's escrow paid its Beans into the link when the ask failed (#1329's round-3 review). The key sent back
+        //    must be this link's own commission of this listing, for this amount (settlementKeyFor), or it is refused
+        //    here, before the Commons tops the link up. The payer is the link, so any of its keepers may retry it.
+        const keyed = settlementKeyFor(body.key, 'xc-', {
+            payer: link.treasuryPubkey, peerId, sellerPublicKey: seller, postId, amount,
+        });
+        if (!keyed.ok) {
+            ctx.status = keyed.status;
+            ctx.body = { error: keyed.error, reason: keyed.reason };
+            return;
+        }
+        const key = keyed.key;
 
         // The money limits (engine/money-limits.ts): a commission is the link enterprise's payment to the seller, counted
         // against the enterprise (never the keeper's own) from the settlement row settleCrossNodePurchase writes as it

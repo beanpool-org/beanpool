@@ -31,7 +31,8 @@
  * unbacked local mint.
  */
 
-import { db } from './db/db.js';
+import crypto from 'node:crypto';
+import { db, idNamesMoney } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import {
@@ -41,7 +42,7 @@ import {
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
 import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import {
-    openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
+    openSettlement, claimSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
 } from './federation-settlement-state.js';
 import { signReceipt, verifyReceipt, type SettlementReceipt } from './federation-receipt.js';
@@ -92,12 +93,67 @@ export const crossNodeFee = (amount: number): number => round4(amount * TRANSACT
 /** The local escrow account holding a pending cross-node purchase. Derived from the key, so no column. */
 const escrowAccountFor = (key: string): string => `escrow_${key}`;
 
-/** Read a balance straight from the rows. Used to tell "already funded" from "not yet". */
-const balanceOfAccount = (id: string): number =>
-    round4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id) as any)?.balance ?? 0);
-
 export class SettlementError extends Error {
     constructor(message: string, readonly reason: string) { super(message); }
+}
+
+/**
+ * THE KEYS THIS NODE MINTS, and the only ones a client may send back. `xn-` is a member's purchase, `xc-` a link's
+ * commission; then a UUID, lower case, as `crypto.randomUUID()` writes it.
+ *
+ * A key names an account: the settlement's Beans are held in `escrow_<key>`. A crowdfund project's escrow is
+ * `escrow_<project id>` and a deal's is `escrow_<transaction id>`, so a key the caller chose could be either, and
+ * abandoning that settlement paid its hold out of their escrow to the caller (measured on #1329's round-3 review: a
+ * member with 0 Beans took 40.6 of a project's 50). A minted key names nothing until this node makes it.
+ */
+export type SettlementKeyPrefix = 'xn-' | 'xc-';
+const MINTED_KEY = /^x[nc]-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export const mintSettlementKey = (prefix: SettlementKeyPrefix): string => `${prefix}${crypto.randomUUID()}`;
+
+export const isMintedSettlementKey = (key: unknown, prefix: SettlementKeyPrefix): key is string =>
+    typeof key === 'string' && key.startsWith(prefix) && MINTED_KEY.test(key);
+
+/** The words for a key that is no retry of the caller's own. The same whether nobody holds it or someone else does. */
+const NOT_YOUR_KEY = 'That key is not one of yours. Send the purchase without a key to start a new one. Nothing has been deducted.';
+
+/**
+ * The key a buyer-side route settles under: a new one minted here, or the caller's own, sent back to RETRY the trade it
+ * already started (`runOutboundSettlement` resumes from the row's state, so a retry after a dropped connection finishes
+ * the first attempt instead of starting a second).
+ *
+ * A key sent back must be one this node minted for this kind of trade, on an outbound settlement already here, whose
+ * payer is `trade.payer` (the actor for a purchase, the link enterprise for a commission; never a body field), with the
+ * same peer, seller, post and amount. Anything else is refused before anything moves, never silently replaced by a new
+ * key: a retry answered with a second purchase is the double charge the key exists to prevent.
+ *
+ * Absent means `undefined` or `null`. Every other value is a key the caller sent, and is judged as one.
+ */
+export function settlementKeyFor(
+    sent: unknown,
+    prefix: SettlementKeyPrefix,
+    trade: { payer: string; peerId: string; sellerPublicKey: string; postId: string | null; amount: number },
+): { ok: true; key: string; retry: boolean } | { ok: false; status: 400 | 409; reason: string; error: string } {
+    if (sent === undefined || sent === null) return { ok: true, key: mintSettlementKey(prefix), retry: false };
+    if (!isMintedSettlementKey(sent, prefix)) {
+        return {
+            ok: false, status: 400, reason: 'invalid_key',
+            error: 'This community makes the key for each purchase. Send it without one to start a purchase, '
+                + 'or with the key it gave you to try that purchase again. Nothing has been deducted.',
+        };
+    }
+    const row = getSettlement(sent);
+    if (!row || row.direction !== 'outbound' || row.buyerPubkey !== trade.payer || row.peerId !== trade.peerId) {
+        return { ok: false, status: 409, reason: 'key_conflict', error: NOT_YOUR_KEY };
+    }
+    if ((row.sellerPubkey ?? null) !== trade.sellerPublicKey || (row.postId ?? null) !== (trade.postId ?? null)
+        || round4(row.amount) !== round4(trade.amount)) {
+        return {
+            ok: false, status: 409, reason: 'key_conflict',
+            error: 'That key is for a different purchase: the same seller, listing and amount try it again. Nothing has been deducted.',
+        };
+    }
+    return { ok: true, key: sent, retry: true };
 }
 
 function requireAmount(amount: number): void {
@@ -161,6 +217,20 @@ export function beginOutboundSettlement(input: {
     const fee = crossNodeFee(amount);
     const escrowAccount = escrowAccountFor(input.key);
 
+    // A NEW SETTLEMENT'S KEY MUST NAME NO MONEY: no account, member, project, deal or escrow, and so no `escrow_<key>`
+    // that already exists. It used to be read the other way round (#1329's round-3 review): a new row whose escrow
+    // already held Beans was "funded by an earlier attempt", so nobody was debited, and abandoning it paid that escrow's
+    // Beans (a project's pledges, a deal's hold) to the caller. The routes send only keys they mint or the caller's own
+    // retry (settlementKeyFor); this is where it holds for every caller.
+    //
+    // A guard, so outside the transaction: a refusal here has moved nothing. All of this is synchronous, so nothing can
+    // run between it and the insert below on Node's one thread, and a row found here is a retry, which funds nothing.
+    if (!getSettlement(input.key) && idNamesMoney(input.key)) {
+        throw new SettlementError(
+            'That purchase could not be started: its key is already in use here. Nothing has been deducted.', 'key_clash',
+        );
+    }
+
     return settlementTransaction(() => {
         // Claim the KEY FIRST, inside the transaction, and only debit the buyer if this call is the one
         // that created the row.
@@ -171,7 +241,7 @@ export function beginOutboundSettlement(input: {
         // debit stands. The row's PRIMARY KEY is a perfectly good mutex; use it as one rather than checking
         // and hoping. `openSettlement` also validates the payload, so a mismatched retry throws here instead
         // of being treated as an idempotent hit.
-        const row = openSettlement({
+        const { row, created } = claimSettlement({
             key: input.key,
             direction: 'outbound',
             peerId: input.peerId,
@@ -184,9 +254,9 @@ export function beginOutboundSettlement(input: {
             state: 'escrowed',
         });
 
-        // Not ours to fund: either an earlier call already escrowed for this key, or it has moved on.
-        if (row.state !== 'escrowed' || row.createdAt !== row.updatedAt) return row;
-        if (balanceOfAccount(escrowAccount) > 0) return row;   // already funded by an earlier attempt
+        // Not ours to fund: an earlier call made the row and escrowed for it in the same transaction, or it has moved on.
+        // Only the insert knows which call made it. An escrow's balance never says so: see the guard above.
+        if (!created) return row;
 
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
             .run(escrowAccount);

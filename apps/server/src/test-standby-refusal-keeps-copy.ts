@@ -886,23 +886,33 @@ async function main(): Promise<void> {
         const after14: string | null = (await standby.send('snapshot', { tables: [] }) as Snap).savedCursor;
         assert(typeof cursor14 === 'string' && after14 === cursor14,
             `and S's cursor stays at its last delta's, saved too (${JSON.stringify({ before: cursor14, after: after14 })}; before: the whole copy's, past the 20 listings it left out)`);
-        /** Five more listings on M before each pull, for `ms`: each pull's mode, and M's listings less S's after it. */
+        /**
+         * Five more listings on M before each pull, for `ms`: each pull's mode, M's listings less S's after it, and the whole
+         * copies M served for it. Counted pull by pull because M's access log keeps only its last 20 pulls: over a whole
+         * window, 20 deltas push out whatever M served before them, and a machine quick enough for a 20th pull read the
+         * restart's whole copy as none.
+         */
         const floodOn = async (ms: number) => {
-            const out: { mode: string; ok: boolean; whole: boolean; gap: number }[] = [];
+            const out: { mode: string; ok: boolean; whole: boolean; gap: number; served: number }[] = [];
             const t0 = Date.now();
             while (Date.now() - t0 < ms) {
                 await main.send('flood', { kind: 'posts', n: 5, author: gwen.pk });
+                const tPull = Date.now();
                 const p = await standby.send('pull', {});
+                const served: number = await main.send('whole-copies', { since: tPull });
                 const gs: Snap = await standby.send('snapshot', { tables: ['posts'] });
                 const gm: Snap = await main.send('snapshot', { tables: ['posts'] });
-                out.push({ mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count });
+                out.push({ mode: p.mode, ok: p.ok, whole: p.landedWhole === true, gap: gm.tables.posts.count - gs.tables.posts.count, served });
                 await sleep(500);
             }
             return out;
         };
         const show = (ps: { mode: string; ok: boolean; whole: boolean; gap: number }[]) => ps.map((p) => `${p.mode}${p.ok ? '' : '!'}[${p.gap}]`).join(',');
+        const servedSum = (ps: { served: number }[]) => ps.reduce((n, p) => n + p.served, 0);
+        // The restart's whole copy, counted before the flood can push it out of M's log.
+        const servedBefore14: number = await main.send('whole-copies', { since: t14 });
         const pulls14 = await floodOn(2 * HOLD_MS + 500);
-        const served14 = await main.send('whole-copies', { since: t14 });
+        const served14 = servedBefore14 + servedSum(pulls14);
         assert(pulls14.length >= 4 && pulls14.every((p) => p.mode === 'delta' && p.ok && !p.whole) && served14 === 1,
             `the flood running on, every pull over two holds is a delta that lands, and M serves no whole copy but the restart's (${JSON.stringify({ served: served14 })}; ${show(pulls14)}; before: a whole copy at each hold)`);
         assert(pulls14.every((p) => p.gap === 0),
@@ -916,9 +926,8 @@ async function main(): Promise<void> {
         require_((await standby.send('sql', { sql: `UPDATE node_config SET value = json_remove(value, '$.lastLacking') WHERE key = 'standby_copy_record'` })) === 1,
             'S: its record as a version before lastLacking wrote it');
         const r14b = await standby.send('record');
-        const t14b = Date.now();
         const pulls14b = await floodOn(HOLD_MS + 1000);
-        const served14b = await main.send('whole-copies', { since: t14b });
+        const served14b = servedSum(pulls14b);
         assert(JSON.stringify(r14b.lastLacking?.tables) === JSON.stringify(['posts'])
             && pulls14b.every((p) => p.mode === 'delta' && p.ok && !p.whole && p.gap === 0) && served14b === 0,
             `that record reads its left-out listings as lacking, and the canary stays off past a hold (${JSON.stringify({ lacking: r14b.lastLacking?.tables ?? null, served: served14b })}; ${show(pulls14b)})`);

@@ -42,8 +42,8 @@ import { ensureFederationLink } from './federation-link.js';
 import { ledger } from './engine/ledger.js';
 import { lockedDm } from './dm-test-payload.js';
 
-const PORT = 8663;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 let run = 0, passed = 0;
@@ -94,7 +94,8 @@ async function main() {
     console.log('Running Slice 6 / #840 / #841 review-finding tests (real HTTPS)...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. keeperOf and a Decision-suspended keeper ────────────────────────────────────────────
     console.log('\n── 1. keeperOf ──');

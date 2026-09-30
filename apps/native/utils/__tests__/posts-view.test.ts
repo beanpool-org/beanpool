@@ -164,6 +164,6 @@ describe('an author a guest view hides is never opened', () => {
     });
 
     it('a post opened on its own (getPost) never writes a guest view over a member\'s row', () => {
-        expect(read('utils/db.ts')).toMatch(/if \(viewOf\(res\) === 'guest' && await postsViewRefusal\(res, anchorUrl, \(await loadIdentity\(\)\)\?\.publicKey\)\) return null;/);
+        expect(read('utils/db.ts')).toMatch(/if \(viewOf\(res\) === 'guest' && await postsViewRefusal\(res, anchorUrl, \(await loadIdentity\(\)\)\?\.publicKey\)\) return false;/);
     });
 });

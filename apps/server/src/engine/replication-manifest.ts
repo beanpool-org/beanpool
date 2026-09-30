@@ -431,8 +431,11 @@ export const TABLES: Record<string, TableEntry> = {
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
+    money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
     message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },
 };
 
@@ -588,6 +591,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
     photoKeySecret: { kind: 'per-server', reason: "the key behind listings' photo URLs, made at boot (engine/photo-keys.ts)" },
+    photoKeysShape: { kind: 'per-server', reason: "what this server's listing-photo URLs look like (keyed by its own secret, or not), recorded at boot (engine/photo-keys.ts)" },
+    photoKeysSince: { kind: 'per-server', reason: "when this server's listing-photo URLs last changed shape; a phone's sync from before it is answered whole (engine/photo-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },

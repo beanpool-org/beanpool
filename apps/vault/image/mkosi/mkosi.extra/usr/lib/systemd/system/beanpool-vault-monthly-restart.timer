@@ -1,0 +1,12 @@
+# The monthly planned restart (key vault design §3, D3): the first Sunday of each month, 09:00 UTC. Kept in step with
+# src/shared/schedule.ts (a test compares them); /v1/report announces the next one.
+[Unit]
+Description=BeanPool key vault: the monthly planned restart
+
+[Timer]
+OnCalendar=Sun *-*-01..07 09:00:00 UTC
+AccuracySec=1min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

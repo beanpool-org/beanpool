@@ -721,7 +721,7 @@ async function main(): Promise<void> {
     const hideOnlyAt = hiddenAt(hideOnly);
     const hideInsertAt = hiddenAt(hideInsert);
     assert(!!hideOnlyAt && !!hideInsertAt, 'setup: two hidden posts');
-    const p2p = await startP2P(4282, 4283);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`, 'mirror', 'self-test-peer');
     const payload: any = await exportSyncState(nodeId);

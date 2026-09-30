@@ -21,8 +21,7 @@
  */
 
 import Router from '@koa/router';
-import crypto from 'node:crypto';
-import { getMember, getActingMember, getNodeConfig } from '../state-engine.js';
+import { getMember, getActingMember, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import {
     getConnectorByAddress, getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -31,23 +30,10 @@ import { settleCrossNodePurchase } from '../federation-protocol.js';
 import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
-import { SettlementError } from '../federation-settlement-exchange.js';
+import { SettlementError, settlementKeyFor } from '../federation-settlement-exchange.js';
+import { settlementStartedBy } from '../engine/money-limits.js';
+import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
-
-/**
- * This node's own public address, or null if it has never claimed one.
- *
- * Set by the public-address registrar when an operator claims `<name>.beanpool.org` (or brings their own
- * domain), so it is the only place a node knows what it is called from the outside.
- */
-function ourPublicUrl(): string | null {
-    try {
-        const hostname = ((getNodeConfig() as any)?.publicAddress?.hostname ?? '').trim();
-        return hostname ? `https://${hostname}` : null;
-    } catch {
-        return null;   // never let a config read stop a purchase — the peer can derive it
-    }
-}
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_PURCHASE_ERROR = 'Only a member of this community can make a cross-community purchase';
@@ -236,30 +222,49 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        // 6. THE KEY. Minted by the buyer's node (§2.5). A client may supply one to RETRY: the whole outbound
-        //    path is idempotent on it, and `runOutboundSettlement` resumes from the row's state — so a retry
-        //    after a dropped connection finishes the original purchase instead of starting a second one. Minting
-        //    a fresh key on every attempt is what would double-charge.
-        const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : `xn-${crypto.randomUUID()}`;
+        // 6. THE KEY. Minted by the buyer's node (§2.5). A client may send one back only to RETRY its own purchase:
+        //    the whole outbound path is idempotent on it, and `runOutboundSettlement` resumes from the row's state —
+        //    so a retry after a dropped connection finishes the original purchase instead of starting a second one.
+        //    Minting a fresh key on every attempt is what would double-charge.
+        //
+        //    It is never the caller's choice. The settlement holds the Beans in `escrow_<key>`, so a chosen key could
+        //    name a crowdfund project's or a deal's escrow, and abandoning it paid their Beans to the caller (#1329's
+        //    round-3 review). settlementKeyFor takes only a key this node minted, on this buyer's own purchase of the
+        //    same thing from the same community; anything else is refused here, before anything moves.
+        const postIdOrNull = typeof postId === 'string' ? postId : null;
+        const keyed = settlementKeyFor(body.key, 'xn-', { payer: buyerPublicKey, peerId, sellerPublicKey, postId: postIdOrNull, amount });
+        if (!keyed.ok) {
+            ctx.status = keyed.status;
+            ctx.body = { error: keyed.error, reason: keyed.reason };
+            return;
+        }
+        const key = keyed.key;
 
         try {
             const { peerIdFromString } = await import('@libp2p/peer-id');
+            // 7. THE MONEY LIMITS (engine/money-limits.ts): a purchase is a payment to its seller, and counts against the
+            //    buyer's day from the settlement row settleCrossNodePurchase writes as its first act, when it escrows the
+            //    Beans. Checked here, after the last await, so nothing runs between this check and that row. A retry of a
+            //    purchase this member already started is no new payment.
+            if (!settlementStartedBy(key, buyerPublicKey)
+                && refuseOverMoneyLimits(ctx, buyerPublicKey, [{ kind: 'payment', recipient: sellerPublicKey }])) return;
             const outcome = await settleCrossNodePurchase(node, peerIdFromString(peerId), node.peerId.toString(), privateKey, {
                 key,
                 peerId,
                 buyerPublicKey,
                 buyerCallsign: buyer.callsign,
-                // OUR public address, if this node has claimed one — the peer records it so its own members can
-                // see which community a visiting buyer belongs to.
+                // OUR public address, if this node has claimed one (the registrar's hostname; state-engine.ts
+                // PUBLIC_URL_RULES.buyerHomeNode) — the peer records it so its own members can see which community a
+                // visiting buyer belongs to. A config read never stops a purchase: one that fails is null.
                 //
                 // Sent as a courtesy, not as the source of truth. `handlePurchaseRequest` prefers to derive our
                 // URL from its own connector record for us, because that comes from the authenticated
                 // connection whereas this is just a string we sent. Null when no address has been claimed, and
                 // that is fine: the peer's fallback covers it, and only if BOTH are absent does the purchase
                 // refuse with `unknown_home_node`.
-                buyerHomeNode: ourPublicUrl(),
+                buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey,
-                postId: typeof postId === 'string' ? postId : null,
+                postId: postIdOrNull,
                 amount,
             });
             ctx.status = statusFor(outcome.status);

@@ -1,0 +1,2 @@
+# A TEST image only: the boot test's driver runs (before 10-beanpool-vault.preset's "disable *").
+enable beanpool-vault-test.service

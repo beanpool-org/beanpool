@@ -1,0 +1,98 @@
+name: Key vault image (built twice, compared)
+
+# The key vault's boot file must be reproducible (key vault design §3; host design §5.1 item 5): anyone can rebuild a
+# release's image and compare its hash. This builds apps/vault/image twice from scratch directories, with the same
+# (throwaway, public-only) custodian keys, and fails unless image.json and every artifact are byte-identical. It runs
+# when the image or the bundle script changes, and by hand. The package cache only saves downloads: apt checks every
+# package against the pinned snapshot's signed index either way.
+#
+# What test-all checks on every push instead: the bundles are the same bytes on two builds (bundle.test.ts), the
+# manifest, chain and imageHash vector (release.test.ts).
+#
+# Then a TEST image (image/test-image/make.mjs: the same image plus the boot test's driver and three throwaway custodian
+# keys made here, private halves included; never published) is built and booted: a genesis inside it, the vault opens,
+# its API names the image, unsigned files the API's user stages are not installed, the firewall's DHCP rules, room on
+# the state partition, and a signed new image followed by an API-only release: the API keeps the image staged and
+# root's install step installs it into the other slot.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/vault/image/**'
+      - 'apps/vault/src/**'
+      - 'apps/vault/scripts/bundle.mjs'
+      - '.github/workflows/vault-image.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-twice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @beanpool/core --filter @beanpool/signin build
+      - name: Throwaway custodian keys (public halves only; printed, so anyone can build the same image elsewhere)
+        run: |
+          node -e 'const c=require("crypto");console.log(JSON.stringify({genesisCustodians:[0,1,2].map(()=>c.randomBytes(32).toString("hex"))}))' > "${RUNNER_TEMP}/keys.json"
+          cat "${RUNNER_TEMP}/keys.json"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/image-cache
+          key: vault-image-${{ hashFiles('apps/vault/image/pins.env', 'apps/vault/image/mkosi/mkosi.conf') }}
+      - name: First build
+        run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
+      - name: Second build
+        run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/two" --cache "${RUNNER_TEMP}/image-cache"
+      - name: What the first build listed (to compare with a build elsewhere)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-image-listing
+          path: |
+            ${{ runner.temp }}/keys.json
+            ${{ runner.temp }}/one/image.json
+            ${{ runner.temp }}/one/root-files.txt
+            ${{ runner.temp }}/one/uki-sections.txt
+            ${{ runner.temp }}/one/initrd-files.txt
+            ${{ runner.temp }}/one/partitions.txt
+            ${{ runner.temp }}/one/esp-files.txt
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: The same bytes
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/one"
+          for f in image.json vault.efi vault-root.raw vault-root-verity.raw beanpool-vault_0.0.1.raw bundles/*.mjs; do
+            cmp "$f" "${RUNNER_TEMP}/two/$f"
+            echo "same: $f ($(sha256sum "$f" | cut -c1-16))"
+          done
+          cat image.json
+      - name: The data partition helper on loop devices (formats, reopens, refuses another key or a foreign file system)
+        run: |
+          sudo apt-get install -y -qq cryptsetup-bin e2fsprogs >/dev/null
+          sudo "$(command -v node)" apps/vault/image/data-test.mjs
+      - name: Boot it and check its memory hygiene from inside (QEMU, UEFI, no network out)
+        run: apps/vault/image/boot-test.sh --image "${RUNNER_TEMP}/one" --limit 900
+      - name: The boot's serial log
+        if: always()
+        run: cat "${RUNNER_TEMP}/one/boot-test/serial.log" 2>/dev/null | tail -n 300 || true
+      - name: A test image (the driver and throwaway keys inside; never a release) booted, a genesis run in it
+        run: |
+          node apps/vault/image/test-image/make.mjs --out "${RUNNER_TEMP}/test-tree"
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/test-tree/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/test" --cache "${RUNNER_TEMP}/image-cache" --extra "${RUNNER_TEMP}/test-tree/extra"
+          apps/vault/image/boot-test.sh --image "${RUNNER_TEMP}/test" --limit 900 --verdict vault-test
+      - name: The test image's serial log
+        if: always()
+        run: cat "${RUNNER_TEMP}/test/boot-test/serial.log" 2>/dev/null | tail -n 300 || true

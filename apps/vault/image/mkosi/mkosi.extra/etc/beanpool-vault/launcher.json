@@ -1,0 +1,6 @@
+{
+  "apiBundle": "/usr/lib/beanpool-vault/vault-api.mjs",
+  "apiConfig": "/etc/beanpool-vault/api.json",
+  "nodeArgs": ["--disable-sigusr1"],
+  "imageIdentityFile": "/run/beanpool-vault-image.json"
+}

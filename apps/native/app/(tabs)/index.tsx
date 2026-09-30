@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
+import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { membersOnlyHere } from '../../utils/members-only-listings';
 import { GLOBAL_NODE_URL } from '../../utils/node-profile';
@@ -1383,7 +1384,7 @@ export default function MarketScreen() {
                 >
                     <View style={styles.gridImageWrapper}>
                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: coverImage }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                            <Image source={{ uri: coverImage }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
                         ) : (
                             <View style={[styles.gridImage, styles.gridFallback]}>
                                 <Text style={styles.gridFallbackEmoji}>
@@ -1515,7 +1516,7 @@ export default function MarketScreen() {
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
                     ) : (
                         <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}>
                             <Text style={{ fontSize: 32, opacity: 0.5 }}>

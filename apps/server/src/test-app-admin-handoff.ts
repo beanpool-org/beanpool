@@ -26,8 +26,8 @@ import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } 
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 
-const PORT = 8688;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -120,7 +120,8 @@ async function main() {
     grantNodeRole(admin.pub, 'admin', owner.pub);
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'Handoff Test' } as any);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. Whose role ──
     console.log('\n1. GET /api/node-admin/me');

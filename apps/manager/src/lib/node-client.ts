@@ -605,6 +605,8 @@ export interface FunnelRow {
 export interface OnboardingFunnelResponse {
     days: number;
     rows: FunnelRow[];
+    /** Whether the open door takes joins now (the node's `openJoin`). A node from before it was sent leaves it out. */
+    openDoor?: boolean;
 }
 
 /**

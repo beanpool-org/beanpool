@@ -32,8 +32,8 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 
-const PORT = 8719;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -163,7 +163,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const alice: Id = { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)

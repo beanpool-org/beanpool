@@ -16,7 +16,8 @@
  *     visitor already met, are never counted; another member is unaffected.
  *  5. Enterprises: 3 a day (the 4th 429 enterprises_per_day); 20 running (the 21st 429 enterprises_live), and winding
  *     one up makes room.
- *  6. Posts: 100 a day (the 101st 429 posts_per_day), a keeper's posts for an enterprise counted with their own.
+ *  6. Posts: 100 a day (the 101st 429 posts_per_day); a keeper's posts for an enterprise count against the enterprise,
+ *     not the keeper (its own 1,000 a day is driven to the end in test-money-limits step 6).
  *  7. Groups: 5 a day (the 6th 429 groups_per_day).
  *  8. Invites: 20 a day (the 21st 429 invites_per_day); 50 unused (the 51st 429 invites_unused), and a used one makes
  *     room; the codes an owner makes in Settings under the first member never count against that member's own; an
@@ -379,12 +380,16 @@ async function main(): Promise<void> {
         assert(!!ent, 'setup: Max keeps an enterprise');
         // The marketplace asks every author for a profile photo first, an enterprise too.
         db.prepare("UPDATE members SET avatar_url = 'https://example.com/e.jpg' WHERE public_key = ?").run(ent);
-        const own = await many(WRITER_LIMITS.postsPerDay - 1, 8, () => post(max));
+        // Changed by W-money (Marty, 2026-09-29: "maybe needs to be higher for enterprise/project"): what a keeper puts up
+        // for an enterprise used to count with their own 100, so a keeper stocking a shop had nothing left for themselves.
+        // It now counts against the enterprise's own WRITER_LIMITS.enterprisePostsPerDay.
         const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', credits: 0 });
-        const overEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0 });
+        const own = await many(WRITER_LIMITS.postsPerDay, 8, () => post(max));
         const overOwn = await post(max);
-        assert(own.every(s => s === 200) && forEnt.status === 200 && overEnt.status === 429 && overEnt.body?.code === 'posts_per_day' && overOwn.status === 429,
-            `a keeper's 99 own posts and one for the enterprise make 100; the next, either way, is 429 posts_per_day (${forEnt.status}, ${show(overEnt)}, ${overOwn.status})`);
+        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0 });
+        assert(forEnt.status === 200 && own.every(s => s === 200) && overOwn.status === 429 && overOwn.body?.code === 'posts_per_day',
+            `a keeper's post for the enterprise takes none of their 100: they still put up 100 of their own, and the 101st is 429 posts_per_day (${forEnt.status}, ${[...new Set(own)].join(',')}, ${show(overOwn)})`);
+        assert(stillEnt.status === 200, `and past their own 100 they still post for the enterprise, against its own day (${show(stillEnt)})`);
     }
 
     // ── 7. Groups ─────────────────────────────────────────────────────────────────────────────────────────────

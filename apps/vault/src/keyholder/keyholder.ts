@@ -44,6 +44,7 @@ import {
     BACKUP_NAME_RE,
     BACKUP_SIG_TAG,
     parseBackupFile,
+    RESTORE_MARKER_NAME,
     type BackupHeader,
 } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
@@ -144,11 +145,22 @@ const ENVELOPE_TAG = Buffer.from('beanpool-vault-envelope/1');
 const REPORT_TAG = 'beanpool-vault-report/1\n';
 const DELETIONS_INFO = Buffer.from('beanpool-vault-deletions/1');
 const BODY_INFO = Buffer.from('beanpool-vault-backup-body/1');
-const RESTORE_PENDING_FILE = 'restore-pending.json';
+const RESTORE_PENDING_FILE = RESTORE_MARKER_NAME;
 const ROW_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 function fail(code: string, message: string): never {
     throw new KeyholderError(code, message);
+}
+
+/**
+ * The ceremony that switched at this boot. Its new shares, sealed to their custodians, stay fetchable until a restart:
+ * after a lost answer the third new custodian may fetch theirs only once two others have already switched the vault.
+ * `confirmed` is who has shown they hold their share at this boot, for the report.
+ */
+interface Switched {
+    file: PendingStateFile;
+    shares: CustodianShare[] | null;
+    confirmed: string[];
 }
 
 /** A genesis or reshare waiting for two of its custodians (see the class comment). */
@@ -181,6 +193,7 @@ export class Keyholder {
     private collected = new Map<string, string>();
     private collecting: { purpose: string; proposal: string; newCustodians?: string[] } | null = null;
     private pending: Pending | null = null;
+    private switched: Switched | null = null;
     private lastError: string | null = null;
     private readonly clock: () => number;
     private readonly attestor: Attestor;
@@ -230,6 +243,17 @@ export class Keyholder {
         };
     }
 
+    /** The ceremony that switched at this boot, while it is the one in force: who has confirmed their share. */
+    private switchedInForce(): Switched | null {
+        const s = this.switched;
+        return s && this.stateFile && s.file.state.generation === this.stateFile.generation && s.file.state.vaultId === this.stateFile.vaultId ? s : null;
+    }
+
+    private switchedStatus() {
+        const s = this.switchedInForce();
+        return s ? { generation: s.file.state.generation, custodians: [...s.file.state.custodians], confirmed: [...s.confirmed] } : null;
+    }
+
     private get restorePending(): boolean {
         return existsSync(path.join(this.opts.stateDir, RESTORE_PENDING_FILE));
     }
@@ -264,6 +288,7 @@ export class Keyholder {
             releaseHash: this.opts.releaseHash ?? 'unreleased',
             restorePending: this.restorePending,
             pending: this.pendingStatus(),
+            switched: this.switchedStatus(),
             publicKeys: keys ? { ticket: keys.ticketPublicKeys, deposit: keys.depositPublicKeys } : null,
             wrapVersion: keys ? keys.wrap[0].version : null,
             memory: this.hygiene,
@@ -280,6 +305,7 @@ export class Keyholder {
             this.pending.shares = null;
             this.pending.cancels.clear();
         }
+        this.switched = null;
         this.dropCollected();
         this.newHelloKey();
         if (this.state === 'open') this.setState('locked');
@@ -358,7 +384,7 @@ export class Keyholder {
      * the new shares) the vault is open on them; otherwise it is locked until two custodians unlock with the new shares,
      * which the two who confirmed hold.
      */
-    private switchToPending(keys: WorkingKeys | null): void {
+    private switchToPending(keys: WorkingKeys | null, heldBy: string[] = []): void {
         const p = this.pending as Pending;
         writeStateFile(this.opts.stateDir, p.file.state);
         removePendingFile(this.opts.stateDir);
@@ -366,6 +392,7 @@ export class Keyholder {
         if (p.keys !== keys) p.keys?.wipe();
         this.keys = keys;
         this.stateFile = p.file.state;
+        this.switched = { file: p.file, shares: p.shares, confirmed: [...new Set([...p.file.confirmed, ...heldBy])] };
         this.pending = null;
         this.dropCollected();
         this.newHelloKey();
@@ -373,11 +400,18 @@ export class Keyholder {
         this.setState(keys ? 'open' : 'locked');
     }
 
-    /** A new custodian's own share of the ceremony waiting, sealed to their key, while this process still has it. */
+    /**
+     * A new custodian's own share of the ceremony waiting, sealed to their key, while this process still has it. After the
+     * switch, the same until a restart or the next ceremony: the third new custodian may be the one whose answer was lost.
+     */
     pendingShare(args: { custodian?: unknown }) {
+        const custodian = String(args.custodian);
         const p = this.pending;
+        const s = p ? null : this.switchedInForce();
+        const j = s ? s.file.state.custodians.indexOf(custodian) : -1;
+        if (s && j >= 0) return { pending: null, switched: this.switchedStatus(), share: s.shares ? s.shares[j] : null };
         if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
-        const i = p.file.state.custodians.indexOf(String(args.custodian));
+        const i = p.file.state.custodians.indexOf(custodian);
         if (i < 0) fail('unknown_custodian', 'That key receives no share in the ceremony that is waiting.');
         return { pending: this.pendingStatus(), share: p.shares ? p.shares[i] : null };
     }
@@ -387,22 +421,20 @@ export class Keyholder {
      * so a restart in between loses no confirmation.
      */
     confirmShare(raw: unknown) {
-        const p = this.pending;
-        if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
         const c = raw as ShareConfirmation;
         if (!c || typeof c !== 'object') fail('bad_request', 'Not a confirmation.');
+        const p = this.pending;
+        const s = p ? null : this.switchedInForce();
+        // A confirmation for the ceremony that already switched at this boot (the third custodian's): checked the same
+        // way, and counted for the report.
+        if (s && s.file.state.custodians.includes(String(c.custodian))) {
+            this.checkConfirmation(s.file, c);
+            if (!s.confirmed.includes(c.custodian)) s.confirmed.push(c.custodian);
+            return { state: this.state, switched: true, generation: s.file.state.generation, pending: this.pendingStatus(), late: true };
+        }
+        if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
         const next = p.file.state;
-        const i = next.custodians.indexOf(String(c.custodian));
-        if (i < 0) fail('unknown_custodian', 'That key receives no share in the ceremony that is waiting.');
-        if (c.vaultId !== next.vaultId || c.generation !== next.generation || c.index !== i + 1) {
-            fail('bad_confirmation', 'That confirmation is for another share.');
-        }
-        if (!verifyStatement(c.custodian, confirmStatement(c), c.sig)) fail('bad_signature', 'The confirmation is not signed by that custodian.');
-        const expected = Buffer.from(p.file.shareChecks[i]);
-        const given = Buffer.from(String(c.shareCheck));
-        if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) {
-            fail('bad_confirmation', 'That is not the share this vault made for that custodian.');
-        }
+        this.checkConfirmation(p.file, c);
         if (!p.file.confirmed.includes(c.custodian)) {
             const record = { ...p.file, confirmed: [...p.file.confirmed, c.custodian] };
             writePendingFile(this.opts.stateDir, record);
@@ -411,6 +443,22 @@ export class Keyholder {
         if (p.file.confirmed.length < next.threshold) return { state: this.state, switched: false, pending: this.pendingStatus() };
         this.switchToPending(p.keys);
         return { state: this.state, switched: true, generation: next.generation, pending: null };
+    }
+
+    /** A confirmation of this custodian's own share of `file`: signed by them, over the check of the very words made for them. */
+    private checkConfirmation(file: PendingStateFile, c: ShareConfirmation): void {
+        const next = file.state;
+        const i = next.custodians.indexOf(String(c.custodian));
+        if (i < 0) fail('unknown_custodian', 'That key receives no share in the ceremony that is waiting.');
+        if (c.vaultId !== next.vaultId || c.generation !== next.generation || c.index !== i + 1) {
+            fail('bad_confirmation', 'That confirmation is for another share.');
+        }
+        if (!verifyStatement(c.custodian, confirmStatement(c), c.sig)) fail('bad_signature', 'The confirmation is not signed by that custodian.');
+        const expected = Buffer.from(file.shareChecks[i]);
+        const given = Buffer.from(String(c.shareCheck));
+        if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) {
+            fail('bad_confirmation', 'That is not the share this vault made for that custodian.');
+        }
     }
 
     /** Two current custodians (the pinned ones, for a genesis) drop a ceremony nobody finished. Counted in memory. */
@@ -564,7 +612,7 @@ export class Keyholder {
             }
             const openedNext = purpose === 'unlock' ? tryOpen(next) : null;
             if (openedNext?.ok) {
-                this.switchToPending(openedNext.keys);
+                this.switchToPending(openedNext.keys, contributors);
                 return { state: this.state, sharesPresent: 0, threshold, switched: true, generation: this.stateFile?.generation };
             }
             const reason = (opened ?? openedNext)?.reason ?? 'wrong_m';
@@ -898,6 +946,17 @@ export class Keyholder {
             k.deletions.fill(0);
             k.body.fill(0);
         }
+    }
+
+    /**
+     * K_disk, for the data partition's LUKS2 volume (design §2.1), or null while locked. The one key that leaves this
+     * process, and only to root on this machine (server.ts `listenDiskKey`), which hands it to the kernel's dm-crypt:
+     * root can read this process's memory anyway, so it learns nothing it couldn't take. A restore from backup still
+     * waiting gets it too: the restore is built on that partition (on a new machine, formatted with the backup's key).
+     */
+    diskKey(): Buffer | null {
+        if (this.state !== 'open' || !this.keys) return null;
+        return Buffer.from(this.keys.kDisk);
     }
 
     /** The restore a custodian started is finished: forget which backup it named. */

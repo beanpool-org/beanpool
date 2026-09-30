@@ -26,8 +26,8 @@ import { initAdminPassword } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
 
-const PORT = 8551;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 
 // A multiaddr with a peer id, because that is the shape a real connector carries and `peerIdFromAddress`
@@ -66,7 +66,8 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── The operator's own path: add the peer, then choose a limit for it. ────────────────────────────────
     const added = await post('/api/local/connectors', {

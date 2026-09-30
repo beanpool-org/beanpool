@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -24,10 +24,10 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '@beanpool/signin';
-import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
+import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import { NonceStore, verifySignedRequest } from './auth.js';
-import type { BackupStore } from './backup-store.js';
+import { BackupTooLarge, type BackupStore } from './backup-store.js';
 import { DB_FILE, VaultDb, type CopyRow, type DeletionRow, type HoldRow } from './db.js';
 import { KeyholderCallError, KeyholderClient, KeyholderUnavailable } from './keyholder-client.js';
 import { PushSender, type PushKind } from './push.js';
@@ -47,7 +47,6 @@ export const HOLD_MS = 24 * 60 * 60 * 1000;
 export const GLOBAL_ORIGIN = 'https://global.beanpool.org';
 export const BACKUP_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
-const RESTORE_PENDING = 'restore-pending.bin';
 const RESTORE_BUILD = `${DB_FILE}.restore`;
 /** After a restore from backup failed to finish, the next try waits this long (requests meanwhile get 503 at once). */
 export const RESTORE_RETRY_MS = 30_000;
@@ -75,10 +74,44 @@ export interface VaultApiOptions {
     expoAccessToken?: string;
     /** Take the client address from the last X-Forwarded-For entry (Caddy on the same machine, V3). */
     trustProxy?: boolean;
+    /** What this process is, for `/v1/report`: its API bundle, the release checks, the next restart. */
+    about?: () => AboutThisApi;
+    /**
+     * `dataDir` is where the data partition is mounted once the vault is open (the image: LUKS2 under K_disk). Until
+     * it is, no database is opened (it would land on the partition underneath) and the vault answers as locked. Once
+     * it is, the API opens the database itself (finishing a restore from backup): it looks every `dataPollMs`.
+     */
+    requireDataMount?: boolean;
+    /**
+     * Where a restore from backup waits for the unlock (`restore-pending.bin`, sealed under K_backup). It must not be
+     * under `dataDir` when that is a mount point: the mount would hide it and the restore never finish. The image:
+     * `/var/lib/beanpool-vault/restore` on the state partition. Defaults to `dataDir` without `requireDataMount`.
+     */
+    restoreDir?: string;
+    /** Whether the data partition is mounted at `dataDir` (default: `dataDir` is on another device than its parent). */
+    dataMounted?: () => boolean;
+    dataPollMs?: number;
+}
+
+export interface AboutThisApi {
+    /** SHA-256 of the running API bundle, or `source`. */
+    api: string;
+    /** The updater's last check (updater.ts), or null when this API doesn't check releases. */
+    update: unknown;
+    /** The next planned restart (ISO time), or null. */
+    nextRestart: string | null;
 }
 
 export interface VaultApi {
     listen(port?: number, host?: string): Promise<number>;
+    /**
+     * Listens on a Unix socket of its own beside `linkPath` (`api-<pid>.sock`), then points `linkPath`, a symlink Caddy
+     * connects through, at it in one rename. From that moment new connections come here; an API still listening on
+     * its own socket keeps the connections it has. Returns the socket's own path.
+     */
+    listenUnix(linkPath: string, mode?: number): Promise<string>;
+    /** Takes no new connection, finishes those it has (up to `timeoutMs`), then closes as {@link close} does. */
+    drain(timeoutMs?: number): Promise<void>;
     close(): Promise<void>;
     /** One backup now; the hourly job calls this. Returns its name. */
     runBackup(): Promise<string>;
@@ -94,6 +127,8 @@ interface KeyholderStatus {
     custodians: string[];
     /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
     pending: { purpose: string; generation: number; custodians: string[]; confirmed: string[] } | null;
+    /** The genesis or reshare that switched at this boot: who has shown they hold their new share (in memory only). */
+    switched: { generation: number; custodians: string[]; confirmed: string[] } | null;
     generation: number | null;
     platform: string;
     releaseHash: string;
@@ -193,6 +228,7 @@ class Counters {
 
 export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const clock = opts.clock ?? (() => Date.now());
+    const about = opts.about ?? ((): AboutThisApi => ({ api: 'source', update: null, nextRestart: null }));
     const startedAt = clock();
     const kh = new KeyholderClient(opts.keyholderSocket);
     const store = opts.store;
@@ -203,6 +239,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let previousReport: { text: string; signature: string } | null = null;
     let lastBackupOkAt: number | null = null;
     let backupFailuresInARow = 0;
+    /** Why the last backup failed, for the report: a backup past the store's budget says so; anything else, 'failed'. */
+    let backupError: string | null = null;
 
     const limits = {
         tickets: new RateLimiter(LIMITS.ticketsPerAddressPerMinute, 60_000),
@@ -233,8 +271,26 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const background = new Set<Promise<unknown>>();
     let writeChain: Promise<unknown> = Promise.resolve();
 
-    const pendingPath = path.join(opts.dataDir, RESTORE_PENDING);
+    if (opts.requireDataMount) {
+        // Outside: the way from dataDir to it starts by going up (`..pending` is a name under it).
+        const way = opts.restoreDir ? path.relative(opts.dataDir, opts.restoreDir) : '';
+        const outside = way === '..' || way.startsWith(`..${path.sep}`) || path.isAbsolute(way);
+        if (!opts.restoreDir || !outside) throw new Error('With requireDataMount, restoreDir must be outside dataDir (the mount hides what is under it).');
+    }
+    const restoreDir = opts.restoreDir ?? opts.dataDir;
+    const pendingPath = path.join(restoreDir, RESTORE_PENDING_NAME);
     const dbPath = path.join(opts.dataDir, DB_FILE);
+
+    /** The data directory is ready: always, unless it must be a mount point and isn't yet. */
+    function dataReady(): boolean {
+        if (!opts.requireDataMount) return true;
+        if (opts.dataMounted) return opts.dataMounted();
+        try {
+            return statSync(opts.dataDir).dev !== statSync(path.dirname(opts.dataDir)).dev;
+        } catch {
+            return false;
+        }
+    }
 
     function track<T>(p: Promise<T>): void {
         const job = p.catch(() => {
@@ -259,7 +315,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             return { ...(await call<Omit<KeyholderStatus, 'reachable'>>('status')), reachable: true };
         } catch {
             return {
-                state: 'locked', since: startedAt, custodians: [], pending: null, generation: null, platform: 'none', releaseHash: 'unknown',
+                state: 'locked', since: startedAt, custodians: [], pending: null, switched: null, generation: null, platform: 'none', releaseHash: 'unknown',
                 restorePending: false, publicKeys: null, wrapVersion: null, memory: null, reachable: false,
             };
         }
@@ -287,11 +343,14 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         opening = (async () => {
             const status = await keyholderStatus();
             if (status.state !== 'open') throw new KeyholderUnavailable();
+            if (!dataReady()) {
+                throw new HttpError(503, 'data_not_ready', 'The key vault is opening its data partition. Please try again shortly.', { locked: true });
+            }
             if (status.restorePending) {
                 // A crash after the keyholder took the backup's state but before the file got its name.
                 if (!existsSync(pendingPath) && existsSync(`${pendingPath}.part`)) renameSync(`${pendingPath}.part`, pendingPath);
                 if (!existsSync(pendingPath)) {
-                    restoreFailure = 'the backup it was started from is missing from the data directory';
+                    restoreFailure = 'the backup it was started from is missing from the restore directory';
                     throw restoreWaiting();
                 }
                 if (clock() < restoreRetryAt) throw restoreWaiting();
@@ -319,6 +378,16 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         });
         return opening;
     }
+
+    /*
+     * The data partition is mounted by root after the unlock (the image's vault-data helper), with no request to wait
+     * for: once it is there, the database opens (a restore from backup finishes) without one. A locked keyholder or a
+     * restore still failing only means another try later.
+     */
+    const dataWatch = opts.requireDataMount ? setInterval(() => {
+        if (!db && !opening && dataReady()) ensureDb().catch(() => undefined);
+    }, opts.dataPollMs ?? 5000) : null;
+    dataWatch?.unref();
 
     /**
      * After the unlock of a vault restored from a backup: the backup's database is built beside the vault's file, every
@@ -535,7 +604,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     // A vault still finishing a restore from backup serves nothing yet: locked, to the outside.
     route('GET', '/v1/health', 'none', true, async ctx => json(200, {
-        state: ctx.status.state === 'open' && !ctx.status.restorePending ? 'open' : 'locked',
+        state: ctx.status.state === 'open' && !ctx.status.restorePending && dataReady() ? 'open' : 'locked',
         release: ctx.status.releaseHash,
         since: new Date(ctx.status.since).toISOString(),
     }));
@@ -782,9 +851,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             v: 1, day, at: now, copies: database.countCopies(), counts,
             // After a reshare, envelopes still under the old K_wrap (which the old M opens) until the re-wrap is done.
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
-            backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow },
+            backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow, error: backupError },
             pushes: { sent: push.sent, failed: push.failed },
+            // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
+            shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
+            api: about().api, update: about().update, nextRestart: about().nextRestart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
         });
     }
@@ -826,6 +898,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             await ensureDb();
         } catch (e) {
             if (e instanceof HttpError && e.code === 'restoring') throw new HttpError(503, 'restoring', e.message, { ...e.extra, reason: restoreFailure });
+            // The keys are open; the data partition follows (the image's vault-data helper), and the database, its
+            // restore and re-wrap with it, at the first request after that.
+            if (e instanceof HttpError && e.code === 'data_not_ready') return;
             throw e;
         }
         track(rewrapAll());
@@ -849,8 +924,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     route('POST', '/v1/unlock/confirm', 'custodian', true, async ctx => {
         const confirmation = ctx.body.confirmation as { custodian?: unknown } | undefined;
         if (!confirmation || confirmation.custodian !== ctx.key) throw new HttpError(403, 'not_yours', 'A share is confirmed by the custodian it belongs to.');
-        const result = await call<{ state: string; switched: boolean }>('confirm', { confirmation });
-        if (result.switched && result.state === 'open') await unlocked();
+        const result = await call<{ state: string; switched: boolean; late?: boolean }>('confirm', { confirmation });
+        if (result.switched && !result.late && result.state === 'open') await unlocked();
         return json(200, result);
     });
 
@@ -876,7 +951,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch (e) {
             throw new HttpError(400, 'bad_backup', (e as Error).message);
         }
-        mkdirSync(opts.dataDir, { recursive: true, mode: 0o700 });
+        // Off the data partition's mount point (restoreDir): the unlock mounts the partition, which would hide it.
+        mkdirSync(restoreDir, { recursive: true, mode: 0o700 });
         writeFileSync(`${pendingPath}.part`, bytes, { mode: 0o600 });
         try {
             await call('adoptState', { custodian: ctx.key, sig: ctx.body.sig, backupName: name, state: header.state });
@@ -885,6 +961,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             throw e;
         }
         renameSync(`${pendingPath}.part`, pendingPath);
+        // A database this API still has open (the keyholder came back fresh while it ran) is the one the backup replaces:
+        // the next open, after the unlock, runs the restore (ensureDb) rather than serving it.
+        await withWriteLock(async () => {
+            db?.close();
+            db = null;
+        });
         return json(200, { state: 'locked', vaultId: header.vaultId, generation: header.generation });
     });
 
@@ -924,10 +1006,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             });
             lastBackupOkAt = clock();
             backupFailuresInARow = 0;
+            backupError = null;
             counters.counts.backupsOk++;
             return name;
         } catch (e) {
             backupFailuresInARow++;
+            backupError = e instanceof BackupTooLarge ? e.message : 'failed';
             counters.counts.backupsFailed++;
             throw e;
         }
@@ -1078,21 +1162,52 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         handle(req, res).catch(() => send(res, json(500, { error: 'The key vault could not do that.', code: 'internal' })));
     });
 
+    async function closeRest(): Promise<void> {
+        if (dataWatch) clearInterval(dataWatch);
+        await Promise.allSettled([...background]);
+        await push.idle();
+        kh.close();
+        db?.close();
+        db = null;
+    }
+
     return {
         listen: (port = 0, host = '127.0.0.1') => new Promise<number>((resolve, reject) => {
             server.once('error', reject);
             server.listen(port, host, () => resolve((server.address() as AddressInfo).port));
         }),
+        listenUnix: async (linkPath, mode = 0o660) => {
+            const own = path.join(path.dirname(linkPath), `api-${process.pid}.sock`);
+            rmSync(own, { force: true });
+            await new Promise<void>((resolve, reject) => {
+                server.once('error', reject);
+                server.listen(own, () => resolve());
+            });
+            chmodSync(own, mode);
+            const next = `${linkPath}.${process.pid}`;
+            rmSync(next, { force: true });
+            symlinkSync(path.basename(own), next);
+            renameSync(next, linkPath);
+            return own;
+        },
+        drain: async (timeoutMs = 30_000) => {
+            await new Promise<void>(resolve => {
+                const timer = setTimeout(() => server.closeAllConnections(), timeoutMs);
+                server.close(() => {
+                    clearTimeout(timer);
+                    resolve();
+                });
+                server.closeIdleConnections();
+            });
+            await closeRest();
+        },
         close: async () => {
             await Promise.allSettled([...background]);
-            await push.idle();
             await new Promise<void>(resolve => {
                 server.closeAllConnections();
                 server.close(() => resolve());
             });
-            kh.close();
-            db?.close();
-            db = null;
+            await closeRest();
         },
         runBackup,
         maintenance,

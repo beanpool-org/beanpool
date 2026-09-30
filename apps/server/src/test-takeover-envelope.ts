@@ -405,9 +405,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    const PORT = 8677;
+    const PORT = await startHttpsServer(0);
     process.env.PORT_HTTPS = String(PORT);
-    await startHttpsServer(PORT);
     const signedGet = async (p: string, w?: Who) => {
         const headers: Record<string, string> = {};
         if (w) {

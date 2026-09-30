@@ -227,6 +227,8 @@ import {
     type Rating,
     type FriendEntry,
     getPosts as getPostsEngine,
+    getPostsForPhotoHeal as getPostsForPhotoHealEngine,
+    type PhotoHealRead,
     withoutPollVoters,
     withoutTradeParty,
     isTradeParty,
@@ -748,8 +750,10 @@ export function initStateEngine(): void {
     }, 24 * 60 * 60 * 1000);
 
     if (getNodeRole() === 'primary') {
-        // One-time migration: move escrow funds from old post-keyed wallets to transaction-keyed wallets
-        migrateEscrowWalletKeys();
+        // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
+        // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
+        // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
+        // into a pending deal whose escrow was empty.
 
         // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
         migrateConsolidateConversations();
@@ -894,52 +898,6 @@ function backfillSearchKeywords(): void {
     }
     
     console.log(`✅ FTS5 search keywords backfilled for ${posts.length} posts.`);
-}
-
-/**
- * One-time migration: Existing pending transactions have funds in escrow_<post_id>.
- * New code expects escrow_<transaction_id>. Move funds from old to new wallet key.
- * Safe to re-run: it checks if the old wallet has a balance before attempting.
- */
-function migrateEscrowWalletKeys(): void {
-    const pending = db.prepare("SELECT id, post_id, credits FROM marketplace_transactions WHERE status='pending'").all() as any[];
-    if (pending.length === 0) return;
-
-    let migrated = 0;
-    for (const tx of pending) {
-        const oldKey = `escrow_${tx.post_id}`;
-        const newKey = `escrow_${tx.id}`;
-
-        // Check if funds are already in the new wallet (already migrated)
-        const newAcc = ledger.getAccount(newKey);
-        if (newAcc && newAcc.balance > 0) continue;
-
-        // Check if old wallet has funds to migrate
-        const oldAcc = ledger.getAccount(oldKey);
-        if (!oldAcc || oldAcc.balance <= 0) {
-            console.warn(`[Migration] Cannot migrate escrow for tx ${tx.id}: old wallet ${oldKey} has no balance`);
-            continue;
-        }
-
-        // Transfer whatever the old wallet actually has (may be slightly less than tx.credits due to demurrage).
-        // For recurring posts, the old wallet may serve multiple transactions, so take only this tx's share.
-        const amountToMove = Math.min(oldAcc.balance, tx.credits);
-
-        // Ensure the new escrow wallet has a row in the accounts table
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(newKey);
-
-        // Move funds: old wallet -> new wallet
-        const result = transfer(oldKey, newKey, amountToMove, `Escrow wallet key migration: ${oldKey} -> ${newKey}`, 'escrow', true);
-        if (result) {
-            migrated++;
-            console.log(`[Migration] ✅ Migrated ${amountToMove} beans from ${oldKey} to ${newKey} (original: ${tx.credits})`);
-        } else {
-            console.error(`[Migration] ❌ Failed to migrate escrow for tx ${tx.id}`);
-        }
-    }
-    if (migrated > 0) {
-        console.log(`[Migration] Escrow wallet key migration complete: ${migrated}/${pending.length} transactions migrated`);
-    }
 }
 
 /**
@@ -2132,7 +2090,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Every other caller already runs transfer() inside a conservingTransaction of its own (escrow,
     // settlement, wizards, admin deletes), so for them this is a SAVEPOINT nested in their transaction and
     // the outer commit is still what makes anything durable. The two callers that did NOT wrap — the
-    // member-to-member send route and `migrateEscrowWalletKeys` — are the ones this closes.
+    // member-to-member send route and the old escrow-key boot migration (since removed) — are the ones this closed.
     const txn = conservingTransaction<Transaction | null>(() => {
         const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
         if (!success) return null;
@@ -4527,6 +4485,11 @@ export function createPost(
 
 export function getPosts(filter?: PostFilter): MarketplacePost[] {
     return getPostsEngine(db, filter);
+}
+
+/** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
+export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
+    return getPostsForPhotoHealEngine(db, filter, heal);
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {
@@ -7405,13 +7368,44 @@ export function lostRegistrarHosts(config: NodeConfig = getNodeConfig()): Set<st
     return out;
 }
 
+/** Where resolvePublicNodeUrl looks for this community's address, per caller (PUBLIC_URL_RULES). */
+export interface PublicUrlRules {
+    /**
+     * `any`: a plain-string `publicAddress`, else its `hostname`, else its `name` (`<name>.beanpool.org` when it has no
+     * dot, as for a claim the registrar hasn't answered with a hostname yet). `hostname`: its `hostname` only.
+     */
+    publicAddress: 'any' | 'hostname';
+    /** When `publicAddress` gives none: CF_RECORD_NAME, a bare name as `<name>.beanpool.org` (`in-zone`) or as set (`as-set`); or none (`never`). */
+    cfRecordName: 'in-zone' | 'as-set' | 'never';
+    /** `skip`: never a name marked lost (lostRegistrarHosts); the next source is tried. `keep`: lost or not. */
+    lostNames: 'skip' | 'keep';
+}
+
 /**
- * This community's public address: the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`, else
- * CF_RECORD_NAME. Never a lost name (lostRegistrarHosts): the directory's `publicUrl` and this community's own names
- * (engine/own-addresses.ts item 1) must not send anyone to a name another community holds.
+ * Each caller's rules. They differ as the callers did before they shared this one resolver (#1112's note): the
+ * differences are kept, and written here rather than in copies (test-public-url-callers.ts pins every caller's output).
  */
-export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
-    const lost = lostRegistrarHosts(config);
+export const PUBLIC_URL_RULES = {
+    /** The directory's `publicUrl` (getDirectoryInfo) and this community's own names (engine/own-addresses.ts item 1). */
+    community: { publicAddress: 'any', cfRecordName: 'in-zone', lostNames: 'skip' },
+    /** Where this server asks for its own identity-epoch statement (services/identity-epoch.ts ownPublicEpochUrl). */
+    identityEpoch: { publicAddress: 'hostname', cfRecordName: 'as-set', lostNames: 'skip' },
+    /** The `buyerHomeNode` a cross-community purchase or commission sends (routes/federation-*.ts); the peer works it out when null. */
+    buyerHomeNode: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'keep' },
+} as const satisfies Record<string, PublicUrlRules>;
+
+/**
+ * This community's public address, `https://<host>`, or null: by default (`community`) the registrar's
+ * `publicAddress.hostname`, else `<name>.beanpool.org`, else CF_RECORD_NAME, never a lost name: the directory's `publicUrl`
+ * and this community's own names must not send anyone to a name another community holds. A scheme and trailing slashes
+ * are taken off; a host that is nothing else is none. With no `config` it reads node_config, and one it can't read is
+ * none (a purchase or the epoch check never fails over it).
+ */
+export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.community, config?: NodeConfig | null): string | null {
+    if (config === undefined) {
+        try { config = getNodeConfig(); } catch { config = null; }
+    }
+    const lost = config && rules.lostNames === 'skip' ? lostRegistrarHosts(config) : new Set<string>();
     const usable = (host: string | null): string | null => {
         if (!host) return null;
         const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -7420,22 +7414,22 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
         return h && lost.has(h) ? null : clean;
     };
     let host: string | null = null;
-    const pa: any = config.publicAddress;
+    const pa: any = config?.publicAddress;
     if (pa) {
-        if (typeof pa === 'string' && pa.trim()) {
+        if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {
             host = usable(pa.trim());
         } else if (typeof pa === 'object') {
             if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
                 host = usable(pa.hostname.trim());
-            } else if (typeof pa.name === 'string' && pa.name.trim()) {
+            } else if (rules.publicAddress === 'any' && typeof pa.name === 'string' && pa.name.trim()) {
                 const n = pa.name.trim();
                 host = usable(n.includes('.') ? n : `${n}.beanpool.org`);
             }
         }
     }
-    if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
-        const cf = process.env.CF_RECORD_NAME.trim();
-        host = usable(cf.includes('.') ? cf : `${cf}.beanpool.org`);
+    const cf = (process.env.CF_RECORD_NAME ?? '').trim();
+    if (!host && cf && rules.cfRecordName !== 'never') {
+        host = usable(rules.cfRecordName === 'in-zone' && !cf.includes('.') ? `${cf}.beanpool.org` : cf);
     }
     return host ? `https://${host}` : null;
 }
@@ -7451,7 +7445,7 @@ export function getDirectoryInfo(): any {
     const localConfig = getLocalConfig();
     const info: any = {
         name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
-        publicUrl: resolvePublicNodeUrl(config),
+        publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
         communityName: localConfig.communityName || null,
     };
 

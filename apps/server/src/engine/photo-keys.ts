@@ -23,18 +23,114 @@
  * - Decided at boot, like the rest of what a node runs as: keyed where reads are enforced (ENFORCE_READ_AUTH) and the
  *   visitors' view (`guestListingsOnly`) is off. Elsewhere the listings are a public read, and so are their photos, as
  *   before. An operator who changes either restarts the node, so the URLs it emits and the URLs it serves agree.
+ * - A phone keeps the photo URLs it was handed in its own copy of the listings, and syncs by cursor: it is sent again
+ *   only a listing that changed. Keying (or no longer keying) the photos, or a new secret (a restore from a backup
+ *   older than it), changes every listing's URLs and no listing's `updated_at`, so the URLs such a phone holds would
+ *   answer 404 for good. So the boot that changes the URLs' shape records when (`node_config.photoKeysSince`, beside
+ *   `photoKeysShape`, what they were), and a sync whose cursor is older is answered whole (routes/marketplace.ts,
+ *   photoHealFor): the delta it asked for, every row main would send, first, then a page of the node's other listings
+ *   in heal order (engine getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished
+ *   ones), PHOTO_HEAL_PAGE_ROWS of them less the delta's rows and never fewer than PHOTO_HEAL_MIN_PAGE_ROWS. So an answer
+ *   holds 200 rows, as main's largest (a first sync) does, or its delta and 50 more when the delta alone is 150 or more.
+ *   Measured with listings as members write them (1, 3 or 5 photos, descriptions of 80-600 characters, about 1.4 KB a
+ *   row; test-photo-keys-resync section 9): main's first sync 282,760 bytes, the largest heal answer 278,045, and the
+ *   worst case, a phone whose own delta is full (200 rows and 50 more), 351,655 (1.24 times main's largest; it was
+ *   561,165 with a page of 200 after a full delta). A standby's first boot as the main server counts as a change (photoUrlShape), and so does a standby promoted in this process by a take-over that finishes at
+ *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both. To make every phone's next sync whole by
+ *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
+ *   restart (operator manual, Updates and health).
+ * - A node with more listings with a photo than one page heals a phone over its next syncs: the page's last place in
+ *   heal order is kept for that key (`photo_url_heals`, this server's own), and each sync after it carries its delta
+ *   and the next page, until no listing with a photo is left. The phone moves its cursor only when a whole sync
+ *   succeeded, and its cursor is that sync's time less five minutes (pillar-sync.ts). So the key's row answers:
+ *   - the same cursor the last page went to: that page again. It may not have arrived (a pull that ran out of time, a
+ *     cycle that failed after it), so no page is skipped;
+ *   - a cursor older than photoKeysSince by more than those five minutes: the first page, whatever the row says. That
+ *     device has finished no sync since the change, so it holds no page of this heal: the one the row counts may have
+ *     gone to another device on the key, or to a pull the phone threw away (an epoch-aware phone's first pull after a
+ *     take-over, which it follows with a whole pull: pillar-sync.ts). Review of fe4c27ce, finding 1;
+ *   - a newer cursor than the row's from a device that has synced since the change (inside its overlap, or past
+ *     photoKeysSince): the page after the row's, or, once the heal is done, a delta. A finished heal's row is kept
+ *     (after_key NULL), so the whole answer goes once, not at every sync of the overlap. It stays until a boot drops it
+ *     (below): no read says the phone that finished it is past its overlap. One from another device on the key, or a
+ *     filtered delta, may come with a cursor past photoKeysSince while that phone is still inside it, and deleting the
+ *     row then sent the phone the whole heal again (review of fe4c27ce, finding 4);
+ *   - an older cursor than the row's, still inside the overlap (another device of the key moved it): the first page.
+ * - A whole sync read from a member's key (`sync=true` with no cursor and no filter) within HEAL_RESTART_WINDOW_MS
+ *   (10 minutes) of the key's last heal page starts that key's heal again from the first page (restartPhotoHealFor,
+ *   from the route: not in photoHealFor, since the phone's read of one listing by id has no cursor either). That is a
+ *   take-over's whole pull, right after the pull the phone threw away: it carries the 200 listings updated last, and
+ *   the phone keeps what else it held, with its old URLs. A later whole pull (a new install on the key, an emptied
+ *   cache) holds no old URL and leaves the row as it is.
+ * - The place is kept per key, not per phone or per read. One key on two phones: the pages go to whichever phone syncs
+ *   next, so each gets some of them. Each phone's first sync after the change gets the first page only when that
+ *   phone's clock is not ahead of the node's by more than the time since its last sync, and not after a take-over. At
+ *   those edges a phone can miss pages, the first one included: a phone whose clock is ahead counts as having synced
+ *   since the change (photoHealFor), and after a take-over the restart gives the first page to whichever phone syncs
+ *   next. The node can't tell two devices of one key apart. A listing a phone missed reaches it when its thumbnail
+ *   fails to load in a build with the Market's photo net (apps/native utils/photo-refresh.ts), when it is opened (every
+ *   build: utils/db.ts refreshCachedPost), when it changes, or at the next shape change. And any read with a cursor
+ *   counts, whatever its filters: a filtered delta (`author=`) from that key would take a page nobody shows. No client
+ *   sends a cursor with a filter today, so that is latent. A read with no key, or a signer who is no member, keeps no
+ *   place: each of its syncs from before photoKeysSince gets the first page, and each after it a delta, as before.
+ * - Rows from an earlier shape are dropped at the next boot, and so is a row whose last page is 30 days old or more
+ *   (noteUrlShape), a finished heal's included: not as they age, so a row lasts until a boot at least 30 days after its
+ *   last page.
  */
 import crypto from 'node:crypto';
 import { configurePhotoKeys, photoVersionOf } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { getNodeRole } from '../config/node-role.js';
 
 export const PHOTO_KEY_SECRET_ROW = 'photoKeySecret';
+/**
+ * What the photo URLs this server emits look like: `open`, or `keyed:` and a fingerprint of the secret, and `@standby`
+ * on a standby (photoUrlShape).
+ */
+export const PHOTO_KEYS_SHAPE_ROW = 'photoKeysShape';
+/** When that last changed (ISO 8601): a sync from before it holds URLs that no longer open. */
+export const PHOTO_KEYS_SINCE_ROW = 'photoKeysSince';
+/**
+ * The rows of a heal answer, its delta and its page together: the 200 every other page stops at (https-server.ts
+ * clampLimit). The node sends JSON uncompressed, and the phone's posts pull has 30 s for the whole answer
+ * (apps/native services/pillar-sync.ts); a page of 1000 was about 900 KB, which a phone below about 250 kbit/s never
+ * finished, retrying the same page for ever (review of a6b65b84, finding 2). The rest heals over the key's next syncs.
+ */
+export const PHOTO_HEAL_PAGE_ROWS = 200;
+/**
+ * A heal page is PHOTO_HEAL_PAGE_ROWS less the rows of the delta it follows, and never fewer than this, so a phone whose
+ * own delta is full still heals (review of fe4c27ce, finding 3): an answer holds at most 250 rows, where main's largest
+ * holds 200.
+ */
+export const PHOTO_HEAL_MIN_PAGE_ROWS = 50;
+/**
+ * How far a phone's cursor trails its last successful sync (apps/native services/pillar-sync.ts: its last sync less
+ * 300,000 ms): a cursor this much older than photoKeysSince, or more, comes from a device with no sync since the change.
+ */
+const PHONE_CURSOR_LAG_MS = 5 * 60 * 1000;
+/**
+ * How long a key's heal is kept after its last page (photo_url_heals), under way or finished: dropped at the first boot
+ * after that, not by a read (photoHealFor).
+ */
+const HEAL_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * How recently a key's heal must have had a page for a whole sync read from the key to start it again
+ * (restartPhotoHealFor): 10 minutes. The read that needs it is a take-over's whole pull, which the phone makes in the
+ * same cycle as the pull it throws away (apps/native services/pillar-sync.ts), right after that pull's answer, each with
+ * 30 s: seconds apart, and 10 minutes leaves room for a slow phone many times over. A cycle that fails between the two
+ * pulls asks the first again at its next try, and that answer (a 304 too: notePhotoHealAnsweredAgain) counts as a page.
+ * A new install on the key, or an emptied cache, comes later than that and holds no old URL: its whole pull no longer
+ * sends the key's devices the whole node again (review of 1bc39eb0, finding 2: 1,500 listings, about 2 MB, each time).
+ */
+const HEAL_RESTART_WINDOW_MS = 10 * 60 * 1000;
 
 /** The key's length: 22 base64url characters, 132 bits. */
 const KEY_CHARS = 22;
 
 let secret: Buffer | null = null;
+/** photoKeysSince in ms, as this boot found or wrote it; null before installPhotoKeysAtBoot. */
+let urlsChangedAtMs: number | null = null;
 
 function photoKeySecret(): Buffer {
     let row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(PHOTO_KEY_SECRET_ROW) as { value: string } | undefined;
@@ -62,12 +158,169 @@ export function installPhotoKeysAtBoot(enforceReadAuth: boolean = process.env.EN
     if (!enforceReadAuth || getProfileSwitches().guestListingsOnly) {
         secret = null;
         configurePhotoKeys(null);
+        noteUrlShape(null);
         return false;
     }
     const s = photoKeySecret();
     secret = s;
     configurePhotoKeys((postId, orderNum, version) => keyFor(s, postId, orderNum, version));
+    noteUrlShape(s);
     return true;
+}
+
+/**
+ * The shape of every listing-photo URL this server emits with `s` (null: unkeyed). Keyed, a fingerprint of the secret
+ * (an HMAC of a fixed text, so it says nothing of the secret): a new secret is a new shape. A standby's is marked as
+ * such: no phone syncs from it, and the phones that sync from it once it takes over hold the URLs of the main server
+ * it replaced, keyed with that server's secret, not its own. So its first boot as the main server (a take-over, or a
+ * promotion by hand) is a new shape too, for a phone that predates the identity epoch (apps/native
+ * services/pillar-sync.ts) as much as for one that has it.
+ */
+function photoUrlShape(s: Buffer | null): string {
+    const shape = s ? `keyed:${crypto.createHmac('sha256', s).update('photo-url-shape', 'utf-8').digest('base64url').slice(0, 16)}` : 'open';
+    return getNodeRole() === 'backup' ? `${shape}@standby` : shape;
+}
+
+/**
+ * At boot: when the photo URLs' shape is not the one recorded (keys switched on or off, a new secret, or no record, as on
+ * a node from before this record, whose phones may hold URLs of either shape), record it, and as photoKeysSince now, or
+ * the start of time where the node holds no listing photo yet (a new node): no phone can hold a URL that stopped
+ * opening, so no sync is answered whole for it. Otherwise keep both. Either way this boot answers by photoKeysSince
+ * (photoUrlsChangedAfter).
+ */
+function noteUrlShape(s: Buffer | null): void {
+    const read = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    const shape = photoUrlShape(s);
+    let since = read(PHOTO_KEYS_SINCE_ROW);
+    if (read(PHOTO_KEYS_SHAPE_ROW) !== shape || !since || !Number.isFinite(Date.parse(since))) {
+        const anyPhoto = db.prepare('SELECT 1 FROM post_photos LIMIT 1').get() !== undefined;
+        since = new Date(anyPhoto ? Date.now() : 0).toISOString();
+        const put = db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)');
+        db.transaction(() => {
+            put.run(PHOTO_KEYS_SHAPE_ROW, shape);
+            put.run(PHOTO_KEYS_SINCE_ROW, since);
+        })();
+    }
+    urlsChangedAtMs = Date.parse(since);
+    // A heal's pages are for the shape it began under: one left from an earlier shape starts again from its first page.
+    // And one with no page sent in a month is forgotten: that phone's next sync, if it comes, is whole anyway or a delta.
+    db.prepare('DELETE FROM photo_url_heals WHERE since != ? OR served_at < ?').run(since, new Date(Date.now() - HEAL_KEPT_MS).toISOString());
+}
+
+/**
+ * The shape again, now: for a standby that a take-over finishing at boot promotes in this process (services/takeover.ts
+ * resumeTakeoverAtBoot), after installPhotoKeysAtBoot recorded it as a standby's. Without it the phones that synced from
+ * the server it replaced would wait for the next restart. Does nothing before installPhotoKeysAtBoot.
+ */
+export function notePhotoUrlShapeNow(): void {
+    if (urlsChangedAtMs === null) return;
+    noteUrlShape(secret);
+}
+
+/**
+ * Whether a sync whose cursor is `updatedAfter` (an ISO 8601 time) was made before this server's listing-photo URLs
+ * last changed shape (photoKeysSince): then every listing it holds may carry a URL that no longer opens, and it is
+ * healed (photoHealFor). False without a cursor, or with one that isn't a time.
+ *
+ * The phone's cursor is its clock at its last sync less five minutes (apps/native services/pillar-sync.ts), so a phone
+ * that syncs in the five minutes after the change still sends a cursor older than photoKeysSince; that is what heals a
+ * phone whose clock is up to five minutes fast, and it happens only after a boot that changed the URLs. Its key's heal
+ * row tells photoHealFor which of those syncs already got a page, so each page goes once.
+ */
+export function photoUrlsChangedAfter(updatedAfter: string | undefined): boolean {
+    if (urlsChangedAtMs === null || !updatedAfter) return false;
+    const cursor = Date.parse(updatedAfter);
+    return Number.isFinite(cursor) && cursor < urlsChangedAtMs;
+}
+
+/** How a sync is answered for its photo URLs (photoHealFor). */
+export interface PhotoHealPlan {
+    /** `whole`: from the first page. `heal:…`: a later page for this key. */
+    tag: string;
+    /** Where the page starts ('' for the first). */
+    after: string;
+}
+
+interface HealRow { cursor: string; from_key: string; after_key: string | null }
+
+const sinceIso = () => new Date(urlsChangedAtMs!).toISOString();
+
+/** The plan for a page starting at `from` ('' the first). */
+function pageFrom(from: string): PhotoHealPlan {
+    return from === '' ? { tag: 'whole', after: '' }
+        : { tag: `heal:${crypto.createHash('sha256').update(from).digest('hex').slice(0, 16)}`, after: from };
+}
+
+/**
+ * How the sync of `viewer` (the signer, if any) with cursor `updatedAfter` is answered: a heal page (its delta, then the
+ * page), or null for a plain delta. By the key's row (photo_url_heals), when it has one for this shape:
+ * - the same cursor the row's last page went to: that page again. The phone moves its cursor only after a sync that
+ *   succeeded, so it may never have had it (a retry);
+ * - a cursor past photoKeysSince, or older than it but newer than the row's from a device that has finished a sync
+ *   since the change (cursor + PHONE_CURSOR_LAG_MS >= photoKeysSince: the phone that got the last page, syncing again
+ *   inside its five-minute overlap): the page after it, or, when the heal is done, null. A finished heal's row stays
+ *   until a boot drops it (HEAL_KEPT_MS), so the whole answer isn't sent again;
+ * - otherwise (no row; a cursor from a device with no sync since the change, which holds no page of it whatever the row
+ *   says; or one no newer than the row's): from the first page when the cursor is older than photoKeysSince, else null.
+ * A phone whose clock is slow by δ counts as having no sync since the change until its own clock passes photoKeysSince,
+ * so it gets the first page again for δ after the change: waste, bounded by its clock's error.
+ */
+export function photoHealFor(updatedAfter: string | undefined, viewer: string | undefined): PhotoHealPlan | null {
+    if (urlsChangedAtMs === null || !updatedAfter) return null;
+    const cursor = Date.parse(updatedAfter);
+    if (!Number.isFinite(cursor)) return null;
+    const stale = photoUrlsChangedAfter(updatedAfter);
+    const row = viewer
+        ? db.prepare('SELECT cursor, from_key, after_key FROM photo_url_heals WHERE viewer = ? AND since = ?').get(viewer, sinceIso()) as HealRow | undefined
+        : undefined;
+    if (row) {
+        if (row.cursor === updatedAfter) return pageFrom(row.from_key);
+        const rowCursor = Date.parse(row.cursor);
+        // The device's last successful sync is its cursor plus the lag: one from before the change has had no page yet.
+        const syncedSince = cursor + PHONE_CURSOR_LAG_MS >= urlsChangedAtMs;
+        if (!stale || (syncedSince && Number.isFinite(rowCursor) && cursor > rowCursor)) {
+            // A finished heal's row stays: see HEAL_KEPT_MS.
+            return row.after_key !== null ? pageFrom(row.after_key) : null;
+        }
+    }
+    return stale ? pageFrom('') : null;
+}
+
+/**
+ * After a page of `plan` went to `viewer` for cursor `updatedAfter`: where its next sync picks up (`next`, the read's; null
+ * when no listing with a photo is left, kept so the key's next syncs inside the overlap are deltas). Kept only for a key
+ * with a member row here, so a key that merely signs can't fill what the node keeps; a read with no key keeps nothing.
+ */
+export function notePhotoHealServed(viewer: string | undefined, updatedAfter: string, plan: PhotoHealPlan, next: string | null): void {
+    if (!viewer || urlsChangedAtMs === null) return;
+    if (!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) return;
+    db.prepare(`INSERT OR REPLACE INTO photo_url_heals (viewer, since, cursor, from_key, after_key, served_at)
+                VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)
+        .run(viewer, sinceIso(), updatedAfter, plan.after, next);
+}
+
+/**
+ * A heal answer to `viewer` confirmed with a 304 (the phone's platform HTTP cache revalidates by itself): a page went to
+ * the key, so its row's time moves as notePhotoHealServed would move it (restartPhotoHealFor's window). Nothing else
+ * changes: the answer is the one the row already records.
+ */
+export function notePhotoHealAnsweredAgain(viewer: string | undefined): void {
+    if (!viewer || urlsChangedAtMs === null) return;
+    db.prepare("UPDATE photo_url_heals SET served_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE viewer = ? AND since = ?").run(viewer, sinceIso());
+}
+
+/**
+ * A whole sync read (`sync=true`, no cursor, no filter) from `viewer`: its key's heal, if it has one for this shape and
+ * had a page in the last HEAL_RESTART_WINDOW_MS, starts again from the first page at the key's next sync. That is a
+ * take-over's whole pull: it carries only the listings updated last, and the phone keeps the rest it held, with their
+ * old URLs, while the key's row counts the page that went to the pull it threw away just before. The row then holds no
+ * cursor, so no sync is a retry of it (photoHealFor). A whole pull later than that (a new install, an emptied cache)
+ * holds no old URL and leaves the row as it is; served_at doesn't move, so it doesn't keep the row either.
+ */
+export function restartPhotoHealFor(viewer: string | undefined): void {
+    if (!viewer || urlsChangedAtMs === null) return;
+    db.prepare("UPDATE photo_url_heals SET cursor = '', from_key = '', after_key = '' WHERE viewer = ? AND since = ? AND served_at >= ?")
+        .run(viewer, sinceIso(), new Date(Date.now() - HEAL_RESTART_WINDOW_MS).toISOString());
 }
 
 /** Whether this node serves a listing's photo only to a URL with its key (installPhotoKeysAtBoot). */

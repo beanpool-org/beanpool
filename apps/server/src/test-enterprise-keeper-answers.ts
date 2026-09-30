@@ -28,8 +28,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 
-const PORT = 8671;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AFTER_WINDOW = () => Date.now() + KEEPER_CHANGE_OBJECTION_MS + 1000;
 
 let run = 0, passed = 0;
@@ -402,7 +402,8 @@ async function main() {
 
     // =====================================================================
     console.log('\n── HTTP: the routes the apps call ──');
-    startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     await new Promise(r => setTimeout(r, 500));
     {
         const lead = makeIdentity('HLead', 20), k2 = makeIdentity('HK2', 20), k3 = makeIdentity('HK3', 20);

@@ -6,7 +6,7 @@
  * - **BeanPool's key vault** (`/v1/copies/status`, utils/vault.ts), in a build that has one: a sign-in restore of this
  *   account, waiting (D2: every sign-in restore waits a day). Read when the banner first shows, when the app comes back
  *   to the front, and after a Stop or "Yes, it's me" that didn't go through: never on a timer, and never for a member
- *   the phone knows no copy at the vault for (`vaultCopyKnown`; PR #1336 review finding 1). The vault is off the
+ *   the phone knows has no copy at the vault (`vaultCopyKnowledge` 'none'; PR #1336 review finding 1). The vault is off the
  *   everyday path (Marty, 2026-09-28). Two answers, each confirmed first:
  *     - **Stop**: it is never released. Whoever started it gets nothing, and has to use the 12 words.
  *     - **Yes, it's me**: it goes through now, to the phone or computer that asked. Behind the phone's lock, since it
@@ -25,7 +25,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import {
-    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdEndsText, stopVaultHold, vaultCopyKnown, vaultStatus,
+    approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdEndsText, stopVaultHold, vaultCopyKnowledge, vaultStatus,
     type VaultHold,
 } from '../utils/vault';
 
@@ -79,8 +79,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     }, []);
 
     const fetchHolds = useCallback(async () => {
-        // Only a build with a vault, and only for an account this phone knows the vault keeps a copy for.
-        if (!identity || !hasVault() || !(await vaultCopyKnown(identity.publicKey))) return;
+        // Only a build with a vault, and never for an account the phone knows has no copy there.
+        if (!identity || !hasVault() || (await vaultCopyKnowledge(identity.publicKey)) === 'none') return;
         try {
             const listed = (await vaultStatus(identity)).holds;
             await forgetEndedApprovals(identity.publicKey, listed);

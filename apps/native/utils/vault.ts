@@ -311,25 +311,43 @@ export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEO
 }
 
 /**
- * Whether this phone knows the vault keeps a copy for `publicKey` ({@link noteVaultCopy}). Asked of the phone, never
- * of the vault. The app-open check and the Settings banner reach the vault only when it does (PR #1336 review
- * finding 1): a member with no copy there is never asked about, and nothing asks on a timer.
+ * What this phone knows about a copy at the vault for `publicKey` ({@link noteVaultCopy}), asked of the phone, never of
+ * the vault: `'kept'` (it deposited one, restored the account from one, or a status read listed one), `'none'` (a
+ * status read listed none), or `'unknown'` (nothing learnt yet: a phone that got the account back with the 12 words,
+ * or a new account, or a phone updated from a build before this record).
+ *
+ * The app-open check and the Settings banner skip only `'none'` (PR #1336 review finding 1: a member with no copy
+ * there is never asked about, and nothing asks on a timer). `'unknown'` is asked, once, and the answer is kept: a phone
+ * restored with the 12 words must see and stop a sign-in restore of its account (D2), and its push token must reach the
+ * copy (confirmation review NEW-1).
  */
-export async function vaultCopyKnown(publicKey: string): Promise<boolean> {
+export type VaultCopyKnowledge = 'kept' | 'none' | 'unknown';
+
+export async function vaultCopyKnowledge(publicKey: string): Promise<VaultCopyKnowledge> {
     try {
-        return (await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey))) === '1';
+        const v = await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey));
+        return v === '1' ? 'kept' : v === '0' ? 'none' : 'unknown';
     } catch {
-        return false;
+        return 'unknown';
     }
 }
 
+/** Whether this phone knows the vault keeps a copy for `publicKey` ({@link vaultCopyKnowledge} is `'kept'`). */
+export async function vaultCopyKnown(publicKey: string): Promise<boolean> {
+    return (await vaultCopyKnowledge(publicKey)) === 'kept';
+}
+
 /**
- * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (Account
- * Protection opening, a user action), which is how a phone learns of a copy another of the member's devices made.
+ * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (the app-open
+ * check, Account Protection), which is how a phone learns of a copy another of the member's devices made.
  */
 export async function noteVaultCopy(publicKey: string, kept: boolean): Promise<void> {
-    const key = vaultCopyKnownStoreKey(publicKey);
-    await (kept ? AsyncStorage.setItem(key, '1') : AsyncStorage.removeItem(key)).catch(() => {});
+    await AsyncStorage.setItem(vaultCopyKnownStoreKey(publicKey), kept ? '1' : '0').catch(() => {});
+}
+
+/** Forget what the phone knew (a restore with the 12 words): the next app open asks the vault again. */
+export async function forgetVaultCopyKnowledge(publicKey: string): Promise<void> {
+    await AsyncStorage.removeItem(vaultCopyKnownStoreKey(publicKey)).catch(() => {});
 }
 
 /** Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7). */
@@ -395,14 +413,15 @@ const holdsAlerted = new Set<string>();
  * The app-open check (design §1.5, V4): in the background, the vault's status for the account on this phone. Resolves
  * with the restores of this account waiting that haven't been brought up yet in this run, and gives the vault this
  * phone's push token when it has changed. Short timeout, never throws, and nothing waits for it: a slow or unreachable
- * vault shows nothing. No vault in this build, or no copy there that this phone knows of ({@link vaultCopyKnown}):
- * nothing is asked.
+ * vault shows nothing. No vault in this build, or an account the phone knows has no copy there
+ * ({@link vaultCopyKnowledge} `'none'`): nothing is asked. An account it knows nothing about yet is asked, and the
+ * answer is kept.
  *
  * Marks nothing: the caller marks the holds it actually shows ({@link takeHoldsToShow}), at the moment it shows them.
  * An answer that arrives after the screen asking for it has gone (a remount) must not use up the hold's one alert.
  */
 export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold[]> {
-    if (!hasVault() || !(await vaultCopyKnown(identity.publicKey))) return [];
+    if (!hasVault() || (await vaultCopyKnowledge(identity.publicKey)) === 'none') return [];
     try {
         const status = await vaultStatus(identity, 15_000);
         if (status.providers.length) void keepVaultPushTokenCurrent(identity);

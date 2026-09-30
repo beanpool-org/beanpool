@@ -63,6 +63,7 @@ import { sealSeedToSso } from '@beanpool/core';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { approveVaultHold, vaultHoldsAtOpen, vaultStatus, vaultCopyKnown, disconnectFromVault } from '../vault';
 import { installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
+import { PUSH_TOKEN_STORE_KEY } from '../storage-keys';
 
 const COPY_KNOWN = (pk: string) => `beanpool_vault_copy_known:${pk.toLowerCase()}`;
 const TEN_MINUTES = 10 * 60;
@@ -129,7 +130,8 @@ describe('the Settings banner asks the vault on no timer', () => {
         expect(community.calls).toBeGreaterThan(1);
     }, TEN_MINUTES_OF_FAKE_TIME_MS);
 
-    it('a member with no copy at the vault: never asked, not when the banner shows, not on a timer, not on return', async () => {
+    it('a member the phone knows has no copy at the vault: never asked, not when the banner shows, not on a timer, not on return', async () => {
+        mem.async.set(COPY_KNOWN(who.identity.publicKey), '0');
         await mountAndWait(TEN_MINUTES);
         await backToFront();
         expect(statusCalls()).toBe(0);
@@ -138,8 +140,9 @@ describe('the Settings banner asks the vault on no timer', () => {
 });
 
 describe('the app-open check asks only for a member the phone knows a copy for', () => {
-    it('no copy known: no request at all', async () => {
+    it('known to have no copy: no request at all', async () => {
         vi.useRealTimers();
+        mem.async.set(COPY_KNOWN(who.identity.publicKey), '0');
         expect(await vaultHoldsAtOpen(who.identity)).toEqual([]);
         expect(net.sent).toEqual([]);
     });
@@ -160,6 +163,51 @@ describe('the app-open check asks only for a member the phone knows a copy for',
         await disconnectFromVault(who.identity, 'google');
         await vaultStatus(who.identity);
         expect(await vaultCopyKnown(who.identity.publicKey)).toBe(false);
+    });
+});
+
+describe('a phone that got the account back with its 12 words (confirmation review NEW-1)', () => {
+    /** Phone A linked Google and is lost; the vault's copy has only A's push token. Someone with the member's Google opens a hold. */
+    async function lostPhoneAndAHold() {
+        net.vault.keep('google', 'google-sub-42', who.identity.publicKey, await sealSeedToSso(new Uint8Array(32).fill(7), 'google', 'google-sub-42'));
+        net.vault.copies.get('google:google-sub-42')!.pushTokens.push('ExponentPushToken[phone-A]');
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[phone-B]');
+        net.vault.holds.set('hold-attacker', {
+            holdId: 'hold-attacker', copy: 'google:google-sub-42', requester: 'cd'.repeat(32), provider: 'google',
+            openedAt: Date.now(), releaseAt: Date.now() + 86_400_000, cancelled: false, released: false,
+        });
+    }
+
+    it('the next app open asks the vault, brings the hold up, and gives the copy this phone\'s push token', async () => {
+        vi.useRealTimers();
+        await lostPhoneAndAHold();
+        // This phone (B) knows nothing yet about a copy for the account: it came back with the 12 words.
+        const seen = await vaultHoldsAtOpen(who.identity);
+        expect(seen.map(h => h.holdId)).toEqual(['hold-attacker']);
+        await vi.waitFor(() => expect(net.vault.copies.get('google:google-sub-42')!.pushTokens).toContain('ExponentPushToken[phone-B]'));
+        expect(await vaultCopyKnown(who.identity.publicKey)).toBe(true);
+    });
+
+    it('the Settings banner offers Stop for it', async () => {
+        vi.useRealTimers();
+        await lostPhoneAndAHold();
+        vi.useFakeTimers();
+        await mountAndWait(1);
+        const text = host.textContent ?? '';
+        expect(text).toContain('Someone is getting back into your account');
+        expect(text).toContain('Stop');
+        expect(text).toContain("Yes, it's me");
+    });
+
+    it('an account with no copy at the vault is asked once, and then never again', async () => {
+        vi.useRealTimers();
+        expect(await vaultHoldsAtOpen(who.identity)).toEqual([]);
+        expect(statusCalls()).toBe(1);
+        await vaultHoldsAtOpen(who.identity);
+        vi.useFakeTimers();
+        await mountAndWait(5);
+        await backToFront();
+        expect(statusCalls()).toBe(1);
     });
 });
 

@@ -623,6 +623,21 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
         expect(await waitingSsoRestore()).toBeNull();
     });
 
+    it('a words restore forgets what the phone knew about a vault copy: the next app open asks, and sees a hold', async () => {
+        await kept();
+        // Someone else's device is getting back in with the member's Google (a hold this phone didn't start).
+        const attacker = await draftIdentity('Mallory');
+        net.vault.holds.set('hold-other', {
+            holdId: 'hold-other', copy: `google:${SUBS.google}`, requester: attacker.publicKey, provider: 'google',
+            openedAt: Date.now(), releaseAt: Date.now() + HOLD_MS, cancelled: false, released: false,
+        });
+        // This phone had once read "no copy" for this account (before it was linked from another device).
+        mem.async.set(`beanpool_vault_copy_known:${member.publicKey.toLowerCase()}`, '0');
+        expect(await vaultHoldsAtOpen(member)).toEqual([]);
+        await stopSsoRestoreAfterWords(member);
+        expect((await vaultHoldsAtOpen(member)).map(h => h.holdId)).toEqual(['hold-other']);
+    });
+
     it('the words brought back a different account: the hold is not that key\'s to stop, and stays on record', async () => {
         await kept();
         const held = await startSsoRestore('google');

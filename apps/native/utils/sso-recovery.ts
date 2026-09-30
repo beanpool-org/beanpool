@@ -59,6 +59,7 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } f
 import {
     clearPendingVaultRestore,
     collectVaultRestore,
+    forgetVaultCopyKnowledge,
     hasVault,
     loadPendingVaultRestore,
     noteVaultCopy,
@@ -406,13 +407,18 @@ export async function abandonSsoRestore(): Promise<void> {
 }
 
 /**
- * After the 12 words brought an account back on this phone: a sign-in restore this phone left waiting is stopped at the
- * vault with the account's own key, so the member's devices stop asking "Is this you?" about their own phone, and the
- * phone forgets it. A hold the vault won't stop for this key (another account's, or one already over) stays on record:
- * its own sign-in may still collect it, and collecting one that is over forgets it. Never throws.
+ * After the 12 words brought an account back on this phone:
+ * - whatever the phone knew about a vault copy for the account is forgotten, so the next app open asks the vault and
+ *   this phone sees, and can stop, any sign-in restore of it (confirmation review NEW-1);
+ * - a sign-in restore this phone left waiting is stopped at the vault with the account's own key, so the member's
+ *   devices stop asking "Is this you?" about their own phone, and the phone forgets it. A hold the vault won't stop for
+ *   this key (another account's, or one already over) stays on record: its own sign-in may still collect it, and
+ *   collecting one that is over forgets it.
+ * Never throws.
  */
 export async function stopSsoRestoreAfterWords(identity: VaultSigner): Promise<void> {
     if (!hasVault()) return;
+    await forgetVaultCopyKnowledge(identity.publicKey);
     const pending = await loadPendingVaultRestore();
     if (!pending) return;
     // No hold on record: the answer was lost, so there is nothing this phone can name to stop.

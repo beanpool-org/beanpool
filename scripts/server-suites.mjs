@@ -407,4 +407,7 @@ export const SERIAL = {
     // Its unpaced copy must make 300 requests inside a scaled 20 s limiter window (11.6 s alone, 15 s with all 12 cores
     // busy): a loaded neighbour can push it past the window, and the check then says nothing about the code (#1334).
     'test-standby-paged-copies-pacing': 'request rate inside a scaled 20 s window',
+    // Its stager boots in ~8 s under load against M's copy idle time scaled to 3 s: M closes the copy (404) and the steps
+    // after it cascade (48/77 in the pool, 93/93 alone, #1334).
+    'test-standby-paged-copies': 'stager boot against a scaled 3 s copy idle time',
 };

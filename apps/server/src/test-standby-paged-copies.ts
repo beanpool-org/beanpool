@@ -55,6 +55,9 @@
  *     stayed for good, holding rows members deleted since.)
  * 18. S killed between the swap's two renames (state.db already state.previous.db, the staging database not yet state.db):
  *     the next start finishes the swap, S's copy row for row as it was, the old database kept; the first delta deletes it.
+ * 19. A take-over whose audit finds trouble (a balance planted on the standby): the promoted server keeps the database its
+ *     last swap replaced, saying the date it goes, 30 days from the audit; a start past that date deletes it. (Before: kept
+ *     for good, a warning nobody on a stranger's install acts on.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -375,6 +378,8 @@ async function main(): Promise<void> {
             return p;
         };
         const wholeCopy = () => pullAndSwap(true);
+        /** M's recovery code, made in step 10 (a second would replace it). */
+        let recoveryCode: string | null = null;
         /** Kill S and start it again on its data dir, as a crash and Docker would. */
         const restartS = async (opts: { maxFileBytes?: number } = {}) => {
             await standby.kill('SIGKILL');
@@ -614,6 +619,7 @@ async function main(): Promise<void> {
 
         await step('10. a take-over confirmed while a whole copy is being built: the copy stops, and the promoted server holds the copy it had', async () => {
             const env10 = await main.send('make-envelope');
+            recoveryCode = env10.code;
             const held = await standby.send('envelope');
             require_(held === 'stored', `S holds M's take-over envelope (${held})`);
             await standby.send('checkpoint');
@@ -939,6 +945,42 @@ async function main(): Promise<void> {
             const st18b = await standby.send('staging');
             assert(d18.ok === true && d18.mode === 'delta' && !st18b.previous && (await exactNow()).length === 0,
                 `the first delta lands on it and deletes the old database (${JSON.stringify({ d18, previous: st18b.previous })}; before: kept for good, the copy carrying no marker of the swap)`);
+        });
+
+        await step('19. a take-over whose audit finds trouble: the old database kept 30 days from the audit, then deleted', async () => {
+            const name = await newStandby('standby4');
+            const st19 = await standby.send('staging');
+            require_(st19.previous, `S4's first copy swapped in, the old database beside it (${JSON.stringify(st19)})`);
+            const code19 = recoveryCode ?? (await main.send('make-envelope')).code;
+            require_(await standby.send('envelope') === 'stored', 'S4 holds M\'s take-over envelope');
+            // A balance M never had: the take-over's audit finds the ledger isn't the main server's.
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('takeover-restart-off');
+            const pw = { 'X-Admin-Password': PW_STANDBY };
+            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: code19 }, pw);
+            const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+            require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body).slice(0, 160)})`);
+            await standby.kill('SIGKILL');
+            standby = await spawnNode(SCRIPT, dir(name), envS);
+            nodes.push(standby);
+            const audit = await standby.send('audit');
+            const kept = await standby.send('staging');
+            const out = standby.output();
+            const goes = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+            assert(await standby.send('role') === 'primary' && audit?.ok === false && kept.previous
+                && new RegExp(`state\\.previous\\.db, the database this server's last swap as a standby replaced, is kept until ${goes}`).test(out),
+                `the audit found trouble: the promoted server keeps the old database and says it goes on ${goes} (${JSON.stringify({ audit, previous: kept.previous })})`);
+            // 31 days on: the journal's audit stamped that long ago, and the next start.
+            await standby.kill('SIGKILL');
+            const journalFile = path.join(dir(name), 'takeover-journal.json');
+            const journal = JSON.parse(fs.readFileSync(journalFile, 'utf-8'));
+            journal.steps.audit.at = new Date(Date.now() - 31 * 86_400_000).toISOString();
+            fs.writeFileSync(journalFile, JSON.stringify(journal));
+            standby = await spawnNode(SCRIPT, dir(name), envS);
+            nodes.push(standby);
+            const gone = await standby.send('staging');
+            assert(await standby.send('role') === 'primary' && !gone.previous && /kept 30 days after the take-over's audit found trouble/.test(standby.output()),
+                `a start more than 30 days after the audit deletes it (${JSON.stringify({ previous: gone.previous })}; before: kept for good)`);
         });
 
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];

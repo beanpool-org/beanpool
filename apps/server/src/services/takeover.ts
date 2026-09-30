@@ -970,6 +970,9 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
     return { resumed, auditRan };
 }
 
+/** How long a promoted server keeps the database its last swap replaced after the take-over's audit found trouble. */
+const PREVIOUS_KEPT_AFTER_TROUBLE_MS = 30 * 86_400_000;
+
 /**
  * On a main server, the database a swap replaced when this server was a standby (db/swap-at-boot.ts): a take-over promoted
  * it with the database that replaced it, and its puller, which deletes it on a standby, never runs again. It holds rows
@@ -979,24 +982,34 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
  *   deletePreviousDatabase keeps it otherwise, as the only whole database there may be). A copy staged before the take-over
  *   never swaps in after it: the confirm deletes it, and the swap at boot discards one while a take-over is under way;
  * - a take-over's audit has read it and found the ledger adds up and is the main server's as last copied. Until its audit
- *   has run it stays, and while the audit's finding is trouble it stays too, and each start says so: the database before
- *   that swap is then what an operator may need to look at.
+ *   has run it stays. When the audit found trouble it stays PREVIOUS_KEPT_AFTER_TROUBLE_MS (30 days) from the audit, the
+ *   database before that swap being what an operator may need to look at, each start saying the date it goes; then the
+ *   first start after that deletes it. Most servers are strangers' installs, where nobody acts on a warning: it never
+ *   stays for good.
  * A main server with no take-over (its role set by hand) has only that database to run on: the file goes.
  */
 function deletePreviousDatabaseOnMainServer(j: Journal | null): void {
     if (getNodeRole() !== 'primary' || !fs.existsSync(dataPath(PREVIOUS_DB))) return;
     if (j && !j.steps.audit) return; // this take-over's audit hasn't read the database yet: a later start deletes it
+    let troubleExpired = false;
     if (j && j.result.audit && !j.result.audit.ok) {
-        logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: the take-over's audit `
-            + 'found trouble, and it may be needed to look into it. It holds rows members deleted since that swap: delete it once the ledger is sorted out.');
-        return;
+        const auditedMs = Date.parse(j.steps.audit!.at);
+        const goesMs = (Number.isFinite(auditedMs) ? auditedMs : 0) + PREVIOUS_KEPT_AFTER_TROUBLE_MS;
+        if (Date.now() < goesMs) {
+            logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept until `
+                + `${new Date(goesMs).toISOString().slice(0, 10)}: the take-over's audit found trouble, and it may be needed to look into it. `
+                + 'It holds rows members deleted since that swap, so the first start after that date deletes it.');
+            return;
+        }
+        troubleExpired = true;
     }
     const r = deletePreviousDatabase(dataDir());
     for (const e of r.errors) logger.warn('SYS', `[Takeover] ${e}`);
     if (r.kept) logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: ${r.kept}.`);
     else if (r.deleted) {
         logger.info('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, deleted: `
-            + (j ? "this server is the main server now, on the database the take-over's audit checked." : 'this server is a main server, which never swaps its database.'));
+            + (troubleExpired ? `it was kept ${PREVIOUS_KEPT_AFTER_TROUBLE_MS / 86_400_000} days after the take-over's audit found trouble.`
+                : j ? "this server is the main server now, on the database the take-over's audit checked." : 'this server is a main server, which never swaps its database.'));
     }
 }
 

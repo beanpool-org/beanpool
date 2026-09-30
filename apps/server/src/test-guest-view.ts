@@ -1241,6 +1241,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/storage/disk-health', 'GET /api/local/admin/stranded-escrows',
             'POST /api/local/admin/stranded-escrows/:escrowId/write-off', 'GET /api/local/admin/sync-audit-log', 'POST /api/local/admin/sync-copy',
             'DELETE /api/local/admin/sync-copy/:copyId', 'GET /api/local/admin/sync-copy/:copyId/:n', 'GET /api/local/admin/sync-delta',
+            'GET /api/local/admin/sync-object/:sha256',
             'GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/takeover-envelope', 'POST /api/local/admin/takeover/cancel',
             'POST /api/local/admin/takeover/confirm', 'POST /api/local/admin/takeover/open', 'POST /api/local/admin/takeover/phone/start',
             'POST /api/local/admin/takeover/phone/wait', 'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/takeover/recovery-code',

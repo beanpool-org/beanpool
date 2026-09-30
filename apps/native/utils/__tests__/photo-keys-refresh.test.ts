@@ -58,7 +58,8 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import { applyDelta, getDb, getPost } from '../db';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { applyDelta, getDb, getPost, refreshPostForPhoto } from '../db';
 import { MAX_PER_WINDOW, RETRY_AFTER_MS, WINDOW_MS, refreshListingAfterPhotoError, resetPhotoRefreshForTests } from '../photo-refresh';
 
 const ANN = 'a'.repeat(64);
@@ -80,9 +81,13 @@ const answer = (posts: unknown[]) => ({ ok: true, status: 200, headers: { get: (
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 const fetchMock = vi.fn();
+const OTHER = 'https://other.beanpool.org';
+/** The community the phone is on (AsyncStorage's anchor), as a switch in use-communities.ts sets it. */
+const anchorIs = (url: string) => vi.mocked(AsyncStorage.getItem).mockImplementation(async (k: string) => (k === 'beanpool_anchor_url' ? url : null));
 
 beforeEach(async () => {
     emitted.length = 0;
+    anchorIs(ANCHOR);
     resetPhotoRefreshForTests();
     fetchMock.mockReset().mockResolvedValue({ ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) });
     (globalThis as any).fetch = fetchMock;
@@ -175,5 +180,49 @@ describe('a thumbnail that fails to load reads its listing again, bounded', () =
         expect(refreshListingAfterPhotoError('post-1', `https://other.beanpool.org${KEYLESS}`)).toBe(true);
         for (let i = 0; i < 5; i++) await flush();
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("a community switch in the middle of a read never writes one community's listing into another's cache", () => {
+    const url = `${ANCHOR}${KEYLESS}`;
+    /** The node's answer, once the member has switched to another community and its database is open. */
+    const answerAfterSwitch = () => fetchMock.mockImplementation(async () => {
+        anchorIs(OTHER);
+        await getDb();
+        return answer([offer({ photos: [KEYED] })]);
+    });
+
+    it('a thumbnail read: the switch lands while the read is out', async () => {
+        await applyDelta({ posts: [offer()] });
+        emitted.length = 0;
+        answerAfterSwitch();
+        expect(await refreshPostForPhoto('post-1', url)).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(photosOf()).toBe(JSON.stringify([KEYLESS]));
+        expect(emitted).not.toContain('sync_data_updated');
+    });
+
+    it('a thumbnail read: the switch lands between reading the community and opening its database', async () => {
+        await applyDelta({ posts: [offer()] });
+        emitted.length = 0;
+        fetchMock.mockResolvedValue(answer([offer({ photos: [KEYED] })]));
+        // The first read of the anchor is the old community's; the database then opened is the new one's.
+        vi.mocked(AsyncStorage.getItem)
+            .mockImplementationOnce(async (k: string) => (k === 'beanpool_anchor_url' ? ANCHOR : null))
+            .mockImplementation(async (k: string) => (k === 'beanpool_anchor_url' ? OTHER : null));
+        expect(await refreshPostForPhoto('post-1', url)).toBe(false);
+        expect(photosOf()).toBe(JSON.stringify([KEYLESS]));
+        expect(emitted).not.toContain('sync_data_updated');
+    });
+
+    it("opening a listing: the refresh after the switch writes nothing", async () => {
+        await applyDelta({ posts: [offer()] });
+        emitted.length = 0;
+        answerAfterSwitch();
+        await getPost('post-1');
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        for (let i = 0; i < 5; i++) await flush();
+        expect(photosOf()).toBe(JSON.stringify([KEYLESS]));
+        expect(emitted).not.toContain('sync_data_updated');
     });
 });

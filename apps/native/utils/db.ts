@@ -835,6 +835,10 @@ export async function getMyPosts(pubkey: string) {
  * calls this, so an unconditional emit fetch-loops. The photos are part of it: a node that now keys its listings'
  * photos (or keys them with a new secret) hands out new URLs for a listing that did not otherwise change, and the
  * screen must reload to show them (the old ones answer 404). Resolves whether it told them.
+ *
+ * Writes only into `database` while it is still the open one and belongs to `anchorUrl`'s community: a community switch
+ * between the caller reading the anchor and opening the database, or while the read is out, would otherwise put one
+ * community's listing in another's cache (as applyDelta's `expectedDbName` guard does for the sync).
  */
 async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: string, id: string): Promise<boolean> {
     const res = await fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`);
@@ -848,6 +852,9 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     );
     await acquireSyncLock();
     try {
+        // Checked under the lock: a switch closes the database under the same lock (closeDB, getDb), so none lands
+        // between this check and the write.
+        if (db !== database || currentDbName !== getDatabaseFilenameForNode(anchorUrl)) return false;
         // The sync's own row writer: a second copy of it here had already drifted, and put a group
         // listing back to 'public' every time someone opened it.
         await writeSyncedPost(database, { ...p, id: p.id ?? id });

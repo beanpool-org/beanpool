@@ -59,12 +59,15 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } f
 import {
     clearPendingVaultRestore,
     collectVaultRestore,
+    hasVault,
     loadPendingVaultRestore,
     noteVaultCopy,
     startVaultRestore,
+    stopVaultHold,
     type PendingVaultRestore,
     type RestoredFromVault,
     type VaultCollect,
+    type VaultSigner,
 } from './vault';
 
 export type { PendingVaultRestore, RestoredFromVault, VaultCollect } from './vault';
@@ -371,7 +374,8 @@ export async function recoverAccountWithSso(options: {
 /**
  * Sign in with `provider` and ask the vault for this account's copy. Resolves with the hold: when it goes through.
  * `onSignedIn` runs once the provider is done (the screen brings the app back to the front there). `signal`, aborted
- * before the restore is sent, sends nothing.
+ * before the restore is sent, sends nothing. A restore this phone already started keeps its key, so the same sign-in
+ * comes back to the same hold ("Start again", a restart, a lost answer).
  */
 export async function startSsoRestore(
     provider: SsoProvider,
@@ -392,9 +396,33 @@ export async function checkSsoRestore(): Promise<VaultCollect | null> {
     return collectVaultRestore(pending);
 }
 
-/** Stop waiting on this phone: the member chose to start again, or to use their 12 words instead. */
+/**
+ * Forget the restore this phone is waiting on, key and all. Not what "Start again" or "Use my 12 words instead" do: the
+ * key is what lets the same sign-in come back to its hold ({@link startSsoRestore}), and a hold whose key is gone can't
+ * be collected or replaced for up to two days (PR #1336 review finding 2). See {@link stopSsoRestoreAfterWords}.
+ */
 export async function abandonSsoRestore(): Promise<void> {
     await clearPendingVaultRestore();
+}
+
+/**
+ * After the 12 words brought an account back on this phone: a sign-in restore this phone left waiting is stopped at the
+ * vault with the account's own key, so the member's devices stop asking "Is this you?" about their own phone, and the
+ * phone forgets it. A hold the vault won't stop for this key (another account's, or one already over) stays on record:
+ * its own sign-in may still collect it, and collecting one that is over forgets it. Never throws.
+ */
+export async function stopSsoRestoreAfterWords(identity: VaultSigner): Promise<void> {
+    if (!hasVault()) return;
+    const pending = await loadPendingVaultRestore();
+    if (!pending) return;
+    // No hold on record: the answer was lost, so there is nothing this phone can name to stop.
+    if (!pending.holdId) return clearPendingVaultRestore();
+    try {
+        await stopVaultHold(identity, pending.holdId);
+        await clearPendingVaultRestore();
+    } catch (e) {
+        console.log(`[VAULT] the restore left waiting was not stopped: ${(e as Error).message}`);
+    }
 }
 
 /**

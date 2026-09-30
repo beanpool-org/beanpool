@@ -44,7 +44,7 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import {
-    abandonSsoRestore, checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, waitingSsoRestore,
+    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, waitingSsoRestore,
     type PendingVaultRestore, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
@@ -1016,6 +1016,8 @@ export default function WelcomeScreen() {
                 confirmReplace: askToReplace('recover'),
                 nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
             });
+            // A sign-in restore this phone left waiting for this account is stopped now, with the account's own key.
+            void stopSsoRestoreAfterWords(identity);
             setOutgoingIdentity(null);
             setIdentity(identity);
         } catch (err) {
@@ -1230,9 +1232,13 @@ export default function WelcomeScreen() {
         }
     }
 
-    /** Stop waiting for this restore on this phone, to start again or to use the 12 words instead. */
+    /**
+     * Leave the waiting screen, to start again or to use the 12 words instead. The restore stays on the phone, key and
+     * all: the same sign-in comes back to the same hold, and a words restore stops it at the vault once the account is
+     * back (utils/sso-recovery.ts `stopSsoRestoreAfterWords`). Throwing the key away would leave the member's own
+     * restore waiting where nothing can collect or replace it for up to two days (PR #1336 review finding 2).
+     */
     async function handleSsoStartAgain(then: 'ssoRecover' | 'recover') {
-        await abandonSsoRestore();
         setSsoWaiting(null);
         setSsoReleased(null);
         setError(null);

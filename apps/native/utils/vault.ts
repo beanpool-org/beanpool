@@ -498,25 +498,35 @@ export async function startVaultRestore(
     opts: { signal?: AbortSignal; onSignedIn?: () => void | Promise<void> } = {},
 ): Promise<PendingVaultRestore> {
     requireVault();
-    // A restore whose answer was lost earlier is tried again with the same key, so the vault answers with that hold.
+    // A restore this phone started earlier keeps its throwaway key, whatever sign-in is tried next: after a lost answer,
+    // a restart, or "Start again" (PR #1336 review finding 2). The vault answers the key that opened a hold with that
+    // hold, and only another key with "already waiting on another phone", which for the member's own sign-in would shut
+    // them out for up to two days. Only saving the account, a Stop, or the hold ending gives the key up.
     const earlier = await loadPendingVaultRestore();
-    const key = earlier && earlier.holdId === null && earlier.provider === provider ? earlier : await throwawayKey();
+    const key = earlier ?? await throwawayKey();
     const { ticket, nonce } = await vaultTicket(key, 'restore', provider);
     const { idToken } = await signIn(provider, nonce);
     const sub = subjectOf(idToken);
     await opts.onSignedIn?.();
     if (opts.signal?.aborted) throw Object.assign(new Error('Sign-in was cancelled.'), { reason: 'cancelled' });
 
+    // The same sign-in again keeps the hold it already has on record until the vault answers.
+    const same = earlier && earlier.provider === provider && earlier.sub === sub ? earlier : null;
     const pending: PendingVaultRestore = {
-        v: 1, provider, publicKey: key.publicKey, privateKey: key.privateKey, sub, holdId: null, until: null,
+        v: 1, provider, publicKey: key.publicKey, privateKey: key.privateKey, sub, holdId: same?.holdId ?? null, until: same?.until ?? null,
     };
     await savePendingVaultRestore(pending);
     let body: { status?: unknown; holdId?: unknown; until?: unknown } | null;
     try {
         body = await vaultPost('/v1/restore', { ticket, provider, idToken }, key);
     } catch (e) {
-        // A refusal the vault gave for good leaves nothing waiting; no answer at all may have opened a hold.
-        if (e instanceof VaultError && !['unreachable', 'locked'].includes(e.reason)) await clearPendingVaultRestore();
+        // A refusal the vault gave for good leaves nothing waiting for this sign-in; no answer at all may have opened a
+        // hold. A hold this key already had (an earlier sign-in's) is still this phone's to collect: it goes back on
+        // record, key and all, rather than being lost with this try.
+        if (e instanceof VaultError && !['unreachable', 'locked'].includes(e.reason)) {
+            if (earlier?.holdId) await savePendingVaultRestore(earlier);
+            else await clearPendingVaultRestore();
+        }
         throw e;
     }
     if (body?.status !== 'held' || typeof body.holdId !== 'string' || !body.holdId || typeof body.until !== 'number') {

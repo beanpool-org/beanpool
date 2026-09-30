@@ -80,7 +80,9 @@ import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } fr
 import { hexToBytes } from '../crypto';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { disconnectSsoKeeper, vaultProtection } from '../keeper-enrolment';
-import { abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, waitingSsoRestore } from '../sso-recovery';
+import {
+    abandonSsoRestore, checkSsoRestore, finishSsoRestore, startSsoRestore, stopSsoRestoreAfterWords, waitingSsoRestore,
+} from '../sso-recovery';
 import { finishMove, moveLater, vaultMoveOffer, COMMUNITY_TIMEOUT_MS, MOVE_AGAIN_AFTER_MS } from '../vault-move';
 import { signInAtDoor, submitJoin } from '../global-join';
 import {
@@ -537,6 +539,63 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
         const held = await startSsoRestore('google');
         expect(held.publicKey).toBe(lost!.publicKey);
         expect(held.holdId).toEqual(expect.any(String));
+    });
+
+    it('"Start again" with the same sign-in comes back to the same hold, never "waiting on another phone"', async () => {
+        await kept();
+        const held = await startSsoRestore('google');
+        // Start again (welcome.tsx) leaves the restore on the phone; the member signs in with Google again.
+        const again = await startSsoRestore('google');
+        expect(again).toMatchObject({ holdId: held.holdId, publicKey: held.publicKey, until: held.until });
+        expect((await vaultStatus(member)).holds).toHaveLength(1);
+        expect(await waitingSsoRestore()).toMatchObject({ holdId: held.holdId });
+    });
+
+    it('another sign-in in between keeps the key: the first sign-in still comes back to its own hold', async () => {
+        await kept();
+        net.vault.keep('facebook', SUBS.facebook, member.publicKey,
+            await sealSeedToSso(toEd25519Seed(hexToBytes(member.privateKey)), 'facebook', SUBS.facebook));
+        const first = await startSsoRestore('google');
+        const second = await startSsoRestore('facebook');
+        expect(second.publicKey).toBe(first.publicKey);
+        expect(second.holdId).not.toBe(first.holdId);
+        expect(await startSsoRestore('google')).toMatchObject({ holdId: first.holdId });
+    });
+
+    it('a sign-in the vault has no copy for does not lose the key of a hold already waiting', async () => {
+        await kept();
+        const held = await startSsoRestore('google');
+        await expect(startSsoRestore('facebook')).rejects.toMatchObject({ reason: 'no_copy' });
+        expect(await waitingSsoRestore()).toMatchObject({ provider: 'google', holdId: held.holdId, publicKey: held.publicKey });
+        expect(await checkSsoRestore()).toMatchObject({ status: 'held' });
+    });
+
+    it('"Use my 12 words instead": once the words bring the account back, its own key stops the hold it left, and the phone forgets it', async () => {
+        await kept();
+        const held = await startSsoRestore('google');
+        // The words restore saves the member's account on this phone; then the phone tidies up (welcome.tsx).
+        await stopSsoRestoreAfterWords(member);
+        expect(net.vault.holds.get(held.holdId!)?.cancelled).toBe(true);
+        expect((await vaultStatus(member)).holds).toEqual([]);
+        expect(await waitingSsoRestore()).toBeNull();
+    });
+
+    it('the words brought back a different account: the hold is not that key\'s to stop, and stays on record', async () => {
+        await kept();
+        const held = await startSsoRestore('google');
+        const someoneElse = await draftIdentity('Kim');
+        await stopSsoRestoreAfterWords(someoneElse);
+        expect(net.vault.holds.get(held.holdId!)?.cancelled).toBe(false);
+        expect(await waitingSsoRestore()).toMatchObject({ holdId: held.holdId });
+    });
+
+    it('the welcome screen\'s Start again and "Use my 12 words instead" keep the restore\'s key; a words restore stops it', () => {
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        const at = welcome.indexOf('async function handleSsoStartAgain(');
+        const startAgain = welcome.slice(at, welcome.indexOf('\n    }\n', at));
+        expect(startAgain).not.toMatch(/abandonSsoRestore|clearPendingVaultRestore/);
+        expect(welcome).not.toMatch(/abandonSsoRestore\(/);
+        expect(welcome).toMatch(/await restoreFromWords\([\s\S]{0,400}stopSsoRestoreAfterWords\(identity\)/);
     });
 
     it('the throwaway key signs the restore; the release opens only with it', async () => {

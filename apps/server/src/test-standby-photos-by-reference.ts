@@ -413,8 +413,16 @@ async function main(): Promise<void> {
             const open = (format: string | null) => fetch(`${m}/api/local/admin/sync-copy`, {
                 method: 'POST', headers: { 'X-Replication-Token': replicationToken, ...(format ? { 'X-Replica-Format': format } : {}) },
             }).then(async (r) => ({ status: r.status, text: await r.text() }));
+            // A copy one of them opens after all is closed at once, so the steps after it can open theirs.
+            const closeIfOpened = async (a: { status: number; text: string }) => {
+                if (a.status !== 200) return;
+                const id = (JSON.parse(a.text) as { copyId?: string }).copyId;
+                if (id) await fetch(`${m}/api/local/admin/sync-copy/${id}`, { method: 'DELETE', headers: { 'X-Replication-Token': replicationToken } });
+            };
             const none = await open(null);
+            await closeIfOpened(none);
             const seven = await open('7');
+            await closeIfOpened(seven);
             const log = await main.send('access-log');
             assert(none.status === 426 && seven.status === 426 && /replica format 8/.test(none.text) && /replica format 8/.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
                 `a copy asked for by a standby that doesn't read photos by reference (no format, or 7) is refused, 426, and M's Replication Access log says why `
@@ -491,12 +499,15 @@ async function main(): Promise<void> {
         await step('8. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
+            const before429 = new Set<number>();
             for (; n < 400 && status !== 429; n++) {
                 const r = await fetch(`${m}/api/local/admin/sync-object/${made[1].sha256}`, { headers: { 'X-Replication-Token': replicationToken } });
                 status = r.status;
+                if (status !== 429) before429.add(status);
                 await r.arrayBuffer();
             }
-            assert(status === 429 && n <= 301, `past its administrative requests a minute from one address, the object route answers 429 (${status} after ${n})`);
+            assert(status === 429 && n <= 301 && before429.size === 1 && before429.has(200),
+                `the object route serves the photo until, past its administrative requests a minute from one address, it answers 429 (${status} after ${n}; before it ${JSON.stringify([...before429])})`);
         });
 
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];

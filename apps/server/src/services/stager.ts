@@ -19,6 +19,7 @@
  *  1. every page arrived once, in order: each category's and plain table's rows, counted as they came, are what the
  *     copy's last page says it sent (`rowsSent`), which are what its opening page counted in its snapshot (`rowCounts`),
  *     but for the listing photos the main server could not read (`photosOmitted`), which it counted and did not send;
+ *     and every listing photo it brought has its object in the image store;
  *  2. the staging's tables against the copy's own table hashes (engine/replica-hashes.ts): the whole-copy check's verdict,
  *     recorded with the copy (a table this importer writes otherwise than the main server holds it is reported, and asks
  *     for the held force-resync at most every six hours; the values this database's rules refuse are reported alone);
@@ -43,12 +44,15 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 /** The staging directory, inside the data directory; the swap at boot knows it by this name too (db/swap-at-boot.ts). */
 export const STAGING_DIR_NAME = 'staging';
 /** Written by the puller once the stager's closing checks pass: the copy may be swapped in. */
 export const READY_FILE = 'READY';
+/** Written when the staging directory is made: when the copy started (`at`, ms), which the orphan sweep reads (stagedObjects). */
+const STARTED_FILE = 'STARTED';
 /** Where the database the last swap replaced is kept until the standby's next copy lands on the new one (db/swap-at-boot.ts). */
 export const PREVIOUS_DB = 'state.previous.db';
 /** The files the stager's boot reads from its data directory, copied in; never written back. */
@@ -120,6 +124,37 @@ export function copyStaging(): { pid: number | null } | null {
     return current ? { pid: current.pid ?? null } : null;
 }
 
+/**
+ * The image store objects the standby's orphan sweep (engine/storage-health.ts) must keep while a whole copy is staging in
+ * `dataDir`'s staging directory, being built or made ready (review 4139589323). The stager puts each listing photo's
+ * object into the one image store (data/staging/images is a link to data/images), and until the swap only the staging
+ * database names it; a copy that takes longer than the sweep's hour of grace would otherwise lose them. So: every object
+ * the staging database names (its listing and chat photos), and every object written since the copy started (a page's
+ * photos are put before its rows commit). Null: no copy staging. Throws when the staging database is there and can't be
+ * read: the sweep then judges nothing an orphan.
+ */
+export function stagedObjects(dataDir: string): { since: number; keys: Set<string> } | null {
+    const dir = path.join(dataDir, STAGING_DIR_NAME);
+    if (!fs.existsSync(dir)) return null;
+    // No start written yet (the directory being made), or unreadable: every object is newer than it.
+    let since = 0;
+    try { since = Number(JSON.parse(fs.readFileSync(path.join(dir, STARTED_FILE), 'utf-8'))?.at) || 0; } catch { since = 0; }
+    const keys = new Set<string>();
+    const file = path.join(dir, 'state.db');
+    if (fs.existsSync(file)) {
+        const conn = new Database(file, { readonly: true, fileMustExist: true });
+        try {
+            for (const t of ['post_photos', 'message_attachments']) {
+                if ((conn.prepare(`SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = 'storage_key'`).get(t) as { n: number }).n === 0) continue;
+                for (const [key] of conn.prepare(`SELECT storage_key FROM ${t} WHERE storage_key IS NOT NULL`).raw().iterate() as Iterable<[string]>) keys.add(key);
+            }
+        } finally {
+            conn.close();
+        }
+    }
+    return { since, keys };
+}
+
 function removeStaging(): void {
     try { fs.rmSync(stagingDir(), { recursive: true, force: true }); } catch (e) {
         console.warn(`[Stager] The staging directory could not be deleted: ${(e as Error)?.message || e}`);
@@ -131,6 +166,7 @@ function prepareStagingDir(): string {
     const dir = stagingDir();
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
+    fs.writeFileSync(path.join(dir, STARTED_FILE), JSON.stringify({ at: Date.now() }));
     for (const name of FILES_FOR_THE_STAGER) {
         const from = path.join(DATA_DIR, name);
         if (!fs.existsSync(from)) continue;
@@ -331,7 +367,7 @@ async function stagerChild(): Promise<void> {
     const { keepMainServerRecords, LEDGER_RESYNC_EVERY_MS } = await import('./backup-puller.js');
     const { noteCopyLanded, noteWholeCopyCheck, noteUncomparedCheck, noteWholeCopyTaken, readCopyRecord } = await import('./standby-copy-record.js');
     const { LEDGER_DIFFERS } = await import('./standby-report.js');
-    const Database = (await import('better-sqlite3')).default;
+    const { getImageStore, scanOurObjectsAsync } = await import('../storage/image-store.js');
 
     await ensureGenesis();
     initStateEngine();
@@ -437,6 +473,26 @@ async function stagerChild(): Promise<void> {
         if (off.length > 0) throw refused(`The copy's pages don't add up to what it says it holds: ${off.slice(0, 6).join('; ')}`);
         const rows = Object.entries(received).reduce((n, [k, v]) => n + (k === 'plainTables' ? 0 : v as number), 0)
             + Object.values(received.plainTables ?? {}).reduce((n, v) => n + v, 0);
+
+        // 1b. Every listing photo the copy brought has its object in the image store: the importer put it before its row
+        //     committed, and nothing may have removed it since (the standby's orphan sweep keeps a staging's objects:
+        //     stagedObjects). Swapped in without them, those listings would show no photo, the check would call the copy
+        //     exact, and no delta would bring them back (review 4139589323). The photos the main server left out are this
+        //     standby's own rows, carried over below, as they were.
+        const named = db.prepare('SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL').pluck().all() as string[];
+        if (named.length > 0) {
+            let stored: Set<string>;
+            try {
+                stored = new Set((await scanOurObjectsAsync(getImageStore())).map((o) => o.key));
+            } catch (e: any) {
+                throw refused(`The image store could not be listed to check the copy's listing photos: ${e?.message || e}`);
+            }
+            const missing = named.filter((k) => !stored.has(k));
+            if (missing.length > 0) {
+                throw refused(`${missing.length} of the copy's ${named.length} listing photo(s) have no object in this server's image store `
+                    + `(${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', …' : ''})`);
+            }
+        }
 
         // 2. The copy's table hashes, made in its snapshot, against the staging's: the whole-copy check's verdict
         //    (services/backup-puller.ts checkWholeCopy), recorded with the copy. Every page came once, signed, and the counts

@@ -38,6 +38,11 @@
  * 14. S's stager SIGKILLed between two pages (page 1 imported, the puller waiting to ask page 2): the pull fails at the
  *     next page, within seconds, its staging deleted and S unchanged; the next whole copy lands. (Before: the pull waited
  *     PAGE_TIMEOUT_MS, 15 minutes, holding every delta back.)
+ * 15. S's orphan sweep run two hours ahead in the middle of a whole copy that brings 60 new listing photos: it removes none
+ *     of them (the staging names them, though their objects were aged to before the copy began), nor an object nobody
+ *     names written since the copy began; after the swap every photo's object is there, and the next sweep removes that
+ *     object. A copy one of whose photo objects is removed while it stages is refused at the closing check, S unchanged,
+ *     and the next lands. (Before: the sweep removed every one, and the copy landed "exact" without them.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -72,6 +77,8 @@ const FLOOD = 160;
 const CAPPED_BYTES = 6 * 1024 * 1024;
 /** Step 7's listing photos M can't read at once: more than the thousand terms SQLite takes in one list. */
 const BULK_PHOTOS = 1200;
+/** Step 15's new listing photos, which a whole copy brings while S's orphan sweep runs. */
+const NEW_PHOTOS = 60;
 /** How long M keeps a copy no page was asked of (SYNC_COPY_IDLE_MS), scaled down from two minutes. */
 const COPY_IDLE_MS = 3000;
 /** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
@@ -739,6 +746,67 @@ async function main(): Promise<void> {
             assert(p14b.ok === true && p14b.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p14b)})`);
         });
 
+        await step('15. the orphan sweep while a whole copy stages removes none of its photos; a copy whose photo object is gone is refused', async () => {
+            const [honey] = await main.send('rows', { sql: `SELECT id FROM posts WHERE title = 'Honey'` });
+            require_(!!honey, 'M has the honey listing');
+            await main.send('sql', {
+                sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${NEW_PHOTOS})
+                      INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) SELECT ?, ?, 100 + i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
+                args: [honey.id, TINY_PNG],
+            });
+            const liveKeys = new Set((await standby.send('photo-objects')).keys as string[]);
+            await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '1000' } });
+            const pulling = pullAndSwap(true);
+            // The photos' page imported, and more pages to come: the copy is part-built, and only its staging names them.
+            let staged: { storage_key: string }[] = [];
+            const midway = await until('the new photos in the staging', async () => {
+                staged = (await standby.send('staged-photos')) ?? [];
+                return staged.length >= NEW_PHOTOS + 1 && (await standby.send('staging')).building !== null;
+            });
+            const fresh = staged.map((r) => r.storage_key).filter((k) => !liveKeys.has(k));
+            require_(midway && fresh.length === NEW_PHOTOS, `the copy is part-built, and its staging alone names the ${fresh.length} new photos`);
+            // Their objects as old as three hours: only the staging's names keep them. And an object nobody names, written
+            // now: only the copy's start keeps it.
+            await standby.send('age-objects', { keys: fresh, ms: 3 * 60 * 60_000 });
+            const planted = 'posts/planted-during-the-copy/0-00000000.png';
+            await standby.send('put-object', { key: planted });
+            const swept = await standby.send('sweep', { aheadMs: 2 * 60 * 60_000 });
+            const gone = await standby.send('missing-objects', { keys: [...fresh, planted] });
+            assert(gone.length === 0, `the sweep, two hours ahead in the middle of the copy, removes none of its ${fresh.length} photos nor the object written since it began `
+                + `(${JSON.stringify({ swept, gone: gone.slice(0, 3) })}; before: it removed every photo only the staging names)`);
+            const p15 = await pulling;
+            const photos = await standby.send('photo-objects');
+            const r15 = await standby.send('record');
+            assert(p15.ok === true && p15.staged === true && photos.keys.length >= NEW_PHOTOS + 1 && photos.missing.length === 0 && r15.lastWhole?.exact === true,
+                `the copy lands, and every one of S's ${photos.keys.length} listing photos has its object (missing ${JSON.stringify(photos.missing.slice(0, 3))}; ${JSON.stringify(p15)})`);
+            const after = await standby.send('sweep', { aheadMs: 2 * 60 * 60_000 });
+            const plantedGone = (await standby.send('missing-objects', { keys: [planted] })).length === 1;
+            assert(plantedGone && (await standby.send('photo-objects')).missing.length === 0,
+                `with no copy staging, the next sweep removes the object nobody names, and no photo's (${JSON.stringify(after)})`);
+
+            // A photo object removed while the copy stages: the closing check refuses the copy.
+            await standby.send('checkpoint');
+            const before = await snapS();
+            const pulling2 = standby.send('pull', { whole: true });
+            let staged2: { storage_key: string }[] = [];
+            await until('the photos in the staging', async () => {
+                staged2 = (await standby.send('staged-photos')) ?? [];
+                return staged2.length >= NEW_PHOTOS + 1 && (await standby.send('staging')).building !== null;
+            });
+            const lost = staged2.map((r) => r.storage_key).find((k) => fresh.includes(k)) ?? '';
+            await standby.send('rm-object', { key: lost });
+            const p15b = await pulling2;
+            const st15 = await standby.send('staging');
+            const r15b = await standby.send('record');
+            assert(p15b.ok === false && /no object in this server's image store/.test(p15b.error ?? '') && (p15b.error ?? '').includes(lost)
+                && !st15.staging && snapDiff(before, await snapS()).length === 0 && r15b.lastOutcome === 'refused',
+                `a copy whose photo object is gone is refused at the closing check, naming it, S unchanged, no staging (${JSON.stringify(p15b)}; before: it landed exact)`);
+            await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
+            const p15c = await wholeCopy();
+            assert(p15c.ok === true && p15c.staged === true && (await standby.send('photo-objects')).missing.length === 0 && (await exactNow()).length === 0,
+                `the next whole copy puts the object back and lands (${JSON.stringify(p15c)})`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -751,8 +819,53 @@ async function main(): Promise<void> {
     }
 }
 
+/** Step 15's look at S's image store (data/images, the disk store) and the orphan sweep's pass, inside S's process. */
+const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
+    /** The listing photos a whole copy being built has in its staging database so far; null before it has one. */
+    'staged-photos': async () => {
+        const file = path.join(process.env.BEANPOOL_DATA_DIR!, 'staging', 'state.db');
+        if (!fs.existsSync(file)) return null;
+        const Database = (await import('better-sqlite3')).default;
+        try {
+            const conn = new Database(file, { readonly: true, fileMustExist: true });
+            try { return conn.prepare('SELECT post_id, order_num, storage_key FROM post_photos WHERE storage_key IS NOT NULL').all(); } finally { conn.close(); }
+        } catch { return null; }
+    },
+    /** This database's listing photos' objects, and the ones not in the store. */
+    'photo-objects': async () => {
+        const { db } = await import('./db/db.js');
+        const keys = db.prepare('SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL').pluck().all() as string[];
+        return { keys, missing: keys.filter((k) => !fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'images', k))) };
+    },
+    'missing-objects': async (a: { keys: string[] }) => a.keys.filter((k) => !fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'images', k))),
+    /** Each object's time moved back by `ms`, as if written that long ago. */
+    'age-objects': async (a: { keys: string[]; ms: number }) => {
+        for (const k of a.keys) {
+            const file = path.join(process.env.BEANPOOL_DATA_DIR!, 'images', k);
+            const at = new Date(fs.statSync(file).mtimeMs - a.ms);
+            fs.utimesSync(file, at, at);
+        }
+        return true;
+    },
+    'put-object': async (a: { key: string }) => {
+        const file = path.join(process.env.BEANPOOL_DATA_DIR!, 'images', a.key);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, Buffer.from('an object nobody names'));
+        return true;
+    },
+    'rm-object': async (a: { key: string }) => {
+        fs.rmSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'images', a.key));
+        return true;
+    },
+    /** One pass of the orphan sweep (engine/storage-health.ts), as it sees the store `aheadMs` from now. */
+    sweep: async (a: { aheadMs: number }) => {
+        const { sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
+        return sweepOrphanedImageObjects({ nowMs: Date.now() + a.aheadMs });
+    },
+};
+
 if (process.argv.includes('--child')) {
-    runPagedCopyChild().catch((e) => { console.error(e); process.exit(1); });
+    runPagedCopyChild(photoCommands).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });
 }

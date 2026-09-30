@@ -27,8 +27,9 @@
  *  8. A delta of 3 pages, with a member re-keyed and a friendship of the old key deleted first: taken as one payload, in
  *     the importer's order, and S is M's.
  *  9. A delta of 5 pages is not taken: the next pull is a whole copy, which lands.
- * 10. A take-over confirmed on S while a whole copy is being built: the copy is stopped and its staging deleted, and the
- *     promoted server holds the copy it had.
+ * 10. A take-over confirmed on S while a whole copy is being built, the database S's last swap replaced still there: the
+ *     copy is stopped and its staging deleted, and the promoted server holds the copy it had; that old database goes at the
+ *     promoted server's start, once its audit found the ledger adds up. (Before: kept for good; its puller never runs again.)
  * 11. S's files capped (RLIMIT_FSIZE) during a whole copy: the stager runs out of room, the copy fails, and the live
  *     database was never written by it (its WAL stays small); S unchanged.
  * 12. A node_config key the replication manifest doesn't classify, planted on S: the closing check refuses the copy and
@@ -49,6 +50,11 @@
  *     taken, and the next pull is a whole copy, which lands. After it, with too little room for a second copy but for that
  *     database's, a whole copy is refused saying so; with room once it goes, it goes first and the copy lands. (Before:
  *     no delta was ever taken, only a whole copy and a restart every other pull, and the database it replaced stayed.)
+ * 17. A whole copy swapped in, the start's puller reading its marker, then S restarted before any copy landed: the database
+ *     the swap replaced goes at the first delta after. (Before: only the start that read the marker deleted it, so it
+ *     stayed for good, holding rows members deleted since.)
+ * 18. S killed between the swap's two renames (state.db already state.previous.db, the staging database not yet state.db):
+ *     the next start finishes the swap, S's copy row for row as it was, the old database kept; the first delta deletes it.
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -355,6 +361,7 @@ async function main(): Promise<void> {
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
         let standby = await spawnNode(SCRIPT, dir('standby'), envS);
         nodes.push(standby);
+        let standbyDir = dir('standby');
         await standby.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
         const S = () => standby;
         const snapS = async (): Promise<Snap> => S().send('snapshot', { tables: HASHED });
@@ -371,7 +378,7 @@ async function main(): Promise<void> {
         /** Kill S and start it again on its data dir, as a crash and Docker would. */
         const restartS = async (opts: { maxFileBytes?: number } = {}) => {
             await standby.kill('SIGKILL');
-            standby = await spawnNode(SCRIPT, dir('standby'), envS, opts);
+            standby = await spawnNode(SCRIPT, standbyDir, envS, opts);
             nodes.push(standby);
         };
 
@@ -622,6 +629,7 @@ async function main(): Promise<void> {
             });
             const st10 = await standby.send('staging');
             const pid = st10.building?.pid ?? null;
+            require_(st10.previous, `the database S's last swap replaced is there (${JSON.stringify(st10)})`);
             const pw = { 'X-Admin-Password': PW_STANDBY };
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: env10.code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
@@ -637,6 +645,11 @@ async function main(): Promise<void> {
             const after = await snapS();
             assert(role === 'primary' && after.tables.messages.count === before.tables.messages.count,
                 `S starts as the main server on the copy it had, not the one being built (${JSON.stringify({ role, messages: [before.tables.messages.count, after.tables.messages.count] })})`);
+            const st10c = await standby.send('staging');
+            const audit = await standby.send('audit');
+            assert(st10b.previous && !st10c.previous && audit?.ok === true,
+                `the database S's last swap replaced, there until the restart, is gone at the promoted server's start, once its audit found the ledger adds up `
+                + `(${JSON.stringify({ beforeRestart: st10b.previous, after: st10c.previous, audit })}; before: kept for good, its puller never running again)`);
         });
 
         // The standby took over: a new one for the rest, set up from nothing.
@@ -645,6 +658,7 @@ async function main(): Promise<void> {
             fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir(name), 'genesis.json'));
             standby = await spawnNode(SCRIPT, dir(name), envS, opts);
             nodes.push(standby);
+            standbyDir = dir(name);
             await standby.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
             await sleep(COPY_IDLE_MS + 500); // a copy the standby before it left open on M closes first
             const p = await pullAndSwap(false);
@@ -876,6 +890,57 @@ async function main(): Promise<void> {
                 `with room once it goes, that database is deleted first, and the copy lands (${JSON.stringify(roomy)})`);
         });
 
+        await step('17. S restarted between a swap and the first copy on it: the database the swap replaced goes at the first copy after', async () => {
+            const w17 = await wholeCopy();
+            const st17 = await standby.send('staging');
+            require_(w17.ok === true && w17.staged === true && st17.previous, `a whole copy swapped in, the old database kept beside it (${JSON.stringify({ w17, st17 })})`);
+            await standby.send('boot-puller'); // the start's puller, as index.ts starts it: it reads the swap's marker, and deletes it
+            await restartS();
+            const marker = await standby.send('rows', { sql: `SELECT key FROM node_config WHERE key = 'standby_swapped_copy'` });
+            const st17b = await standby.send('staging');
+            require_(marker.length === 0 && st17b.previous, `S started again before any copy landed: the swap's marker read, the old database still there (${JSON.stringify(st17b)})`);
+            const deltas: { ok: boolean; mode: string }[] = [];
+            const left: boolean[] = [];
+            for (let i = 0; i < 2; i++) {
+                await main.send('sql', { sql: `UPDATE members SET bio = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [`edit 17.${i}`, ann.pk] });
+                deltas.push(await standby.send('pull', {}));
+                left.push((await standby.send('staging')).previous);
+            }
+            assert(deltas.every((d) => d.ok && d.mode === 'delta') && left.every((p) => !p) && (await exactNow()).length === 0,
+                `the first delta after the restart lands and deletes the database the swap replaced (${JSON.stringify({ deltas: deltas.map((d) => d.mode), previousAfterEach: left })}; `
+                + 'before: only the start that read the marker deleted it, so it stayed for good)');
+        });
+
+        await step('18. S killed between the swap\'s two renames: the next start finishes the swap, and the first delta deletes the old database', async () => {
+            await standby.send('pull', {}); // S is M's
+            await standby.send('checkpoint');
+            const before = await snapS();
+            await standby.kill('SIGKILL');
+            // The swap killed between its renames (db/swap-at-boot.ts): state.db (and its WAL) is state.previous.db, and a
+            // staging database made ready, S's own copy here, is not yet state.db.
+            const f = (n: string) => path.join(standbyDir, n);
+            fs.rmSync(f('staging'), { recursive: true, force: true });
+            fs.mkdirSync(f('staging'));
+            for (const s of ['', '-wal']) if (fs.existsSync(f(`state.db${s}`))) fs.copyFileSync(f(`state.db${s}`), f(`staging/state.db${s}`));
+            fs.writeFileSync(f('staging/READY'), JSON.stringify({ pages: 1, generatedAt: new Date().toISOString() }));
+            for (const s of ['', '-wal', '-shm']) {
+                fs.rmSync(f(`state.previous.db${s}`), { force: true });
+                if (fs.existsSync(f(`state.db${s}`))) fs.renameSync(f(`state.db${s}`), f(`state.previous.db${s}`));
+            }
+            require_(!fs.existsSync(f('state.db')) && fs.existsSync(f('state.previous.db')) && fs.existsSync(f('staging/state.db')), 'S stopped between the two renames');
+            standby = await spawnNode(SCRIPT, standbyDir, envS);
+            nodes.push(standby);
+            const st18 = await standby.send('staging');
+            const after = await snapS();
+            assert(!st18.staging && st18.previous && snapDiff(before, after).length === 0 && (await exactNow()).length === 0,
+                `the next start finishes the swap: no staging, S's copy row for row as it was, the old database kept (${JSON.stringify(st18)}; differences ${first(snapDiff(before, after))})`);
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 18', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            const d18 = await standby.send('pull', {});
+            const st18b = await standby.send('staging');
+            assert(d18.ok === true && d18.mode === 'delta' && !st18b.previous && (await exactNow()).length === 0,
+                `the first delta lands on it and deletes the old database (${JSON.stringify({ d18, previous: st18b.previous })}; before: kept for good, the copy carrying no marker of the swap)`);
+        });
+
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];
         assert(blocked.length === 0, `nothing tried to leave this machine (${JSON.stringify(blocked)})`);
     } finally {
@@ -935,6 +1000,12 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
 
 /** Step 16's look at the room a whole copy needs (services/stager.ts roomForStaging), and the disk's free space as it sees it. */
 const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
+    /** Step 10's promoted server: its take-over audit, as recorded (services/takeover.ts runPendingPromotionAudit). */
+    audit: async () => {
+        const { getLocalConfig } = await import('./config/local-config.js');
+        const a = getLocalConfig().lastPromotionAudit;
+        return a ? { ok: a.ok, drift: a.drift, copy: a.copy?.match ?? null } : null;
+    },
     room: async () => (await import('./services/stager.js')).roomForStaging(),
     'set-free-bytes': async (a: { n: number | null }) => {
         (await import('./services/stager.js'))._setFreeBytesForTests(a.n);

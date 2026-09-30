@@ -68,7 +68,8 @@ import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus, forgetPullCursor } from './backup-puller.js';
-import { abortStagedCopy } from './stager.js';
+import { abortStagedCopy, PREVIOUS_DB } from './stager.js';
+import { deletePreviousDatabase } from '../db/swap-at-boot.js';
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
@@ -962,10 +963,41 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
         }
 
         auditRan = runPendingPromotionAudit(j);
+        deletePreviousDatabaseOnMainServer(j);
     } catch (e: any) {
         logger.error('SYS', `[Takeover] Boot check failed: ${e?.message || e}`);
     }
     return { resumed, auditRan };
+}
+
+/**
+ * On a main server, the database a swap replaced when this server was a standby (db/swap-at-boot.ts): a take-over promoted
+ * it with the database that replaced it, and its puller, which deletes it on a standby, never runs again. It holds rows
+ * members deleted since that swap (#1334 review 4144658979), so it goes here, at boot, once the database this server runs on
+ * is known good:
+ * - the swap that made it is final: this start's swap did not fail part way, and `state.db` is there (swap-at-boot's
+ *   deletePreviousDatabase keeps it otherwise, as the only whole database there may be). A copy staged before the take-over
+ *   never swaps in after it: the confirm deletes it, and the swap at boot discards one while a take-over is under way;
+ * - a take-over's audit has read it and found the ledger adds up and is the main server's as last copied. Until its audit
+ *   has run it stays, and while the audit's finding is trouble it stays too, and each start says so: the database before
+ *   that swap is then what an operator may need to look at.
+ * A main server with no take-over (its role set by hand) has only that database to run on: the file goes.
+ */
+function deletePreviousDatabaseOnMainServer(j: Journal | null): void {
+    if (getNodeRole() !== 'primary' || !fs.existsSync(dataPath(PREVIOUS_DB))) return;
+    if (j && !j.steps.audit) return; // this take-over's audit hasn't read the database yet: a later start deletes it
+    if (j && j.result.audit && !j.result.audit.ok) {
+        logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: the take-over's audit `
+            + 'found trouble, and it may be needed to look into it. It holds rows members deleted since that swap: delete it once the ledger is sorted out.');
+        return;
+    }
+    const r = deletePreviousDatabase(dataDir());
+    for (const e of r.errors) logger.warn('SYS', `[Takeover] ${e}`);
+    if (r.kept) logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: ${r.kept}.`);
+    else if (r.deleted) {
+        logger.info('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, deleted: `
+            + (j ? "this server is the main server now, on the database the take-over's audit checked." : 'this server is a main server, which never swaps its database.'));
+    }
 }
 
 /**

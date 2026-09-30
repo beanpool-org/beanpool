@@ -59,6 +59,7 @@ import {
     type CopyPage, type ValueLeftOut,
 } from '../engine/sync.js';
 import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
+import { deletePreviousDatabase as deletePreviousFile } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
@@ -209,8 +210,8 @@ let pendingReconcile = false; // set when a delta's stateHash canary detects dri
 let deltaTooBig = false;
 // The first pull of this process reads what the database says of the copies before it (restoreFromDatabase).
 let restored = false;
-// The database the last swap replaced (db/swap-at-boot.ts), deleted once the new one passes its first check
-// (deletePreviousDatabase).
+// The database the last swap replaced (db/swap-at-boot.ts) is here, at this process's first pull: deleted once the new one
+// passes its first check (deletePreviousDatabase).
 let previousToDelete = false;
 // A whole copy is ready to be swapped in: this process restarts (registerSwapRestart), and pulls nothing more. Never set in a
 // process that registered no restart: it carries on, and the copy waits in data/staging for the next start.
@@ -748,18 +749,15 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
 /**
  * The database the last swap replaced (db/swap-at-boot.ts), gone once the one that replaced it has started and passed its
  * first check: a copy that lands on it (a delta, or a whole copy of one page), or a whole copy's closing checks, which read
- * it; or sooner, when a whole copy needs its room (roomForStaging). Never throws.
+ * it; or sooner, when a whole copy needs its room (roomForStaging). Kept in a process whose swap failed part way
+ * (db/swap-at-boot.ts deletePreviousDatabase). Never throws.
  */
 function deletePreviousDatabase(why: string): void {
     previousToDelete = false;
-    const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    const had = fs.existsSync(path.join(dir, PREVIOUS_DB));
-    for (const s of ['', '-wal', '-shm']) {
-        try { fs.rmSync(path.join(dir, PREVIOUS_DB + s), { force: true }); } catch (e) {
-            logger.warn('P2P', `[Backup] ${PREVIOUS_DB}${s} could not be deleted: ${errorMessage(e)}`);
-        }
-    }
-    if (had) logger.info('P2P', `[Backup] ${PREVIOUS_DB}, the database the last swap replaced, deleted: ${why}.`);
+    const r = deletePreviousFile();
+    for (const e of r.errors) logger.warn('P2P', `[Backup] ${e}`);
+    if (r.kept) logger.warn('P2P', `[Backup] ${PREVIOUS_DB}, the database the last swap replaced, is kept: ${r.kept}.`);
+    else if (r.deleted) logger.info('P2P', `[Backup] ${PREVIOUS_DB}, the database the last swap replaced, deleted: ${why}.`);
 }
 
 /**
@@ -1436,8 +1434,8 @@ function restoreCadence(): void {
  * What this process takes from its database of the copies before it, once, before its first pull: the cursor, when the
  * last whole copy landed and how many pages it took (the routine one's cadence, standby-copy-record.ts lastWholeCopy), and,
  * at the first start on a whole copy swapped in (db/swap-at-boot.ts; services/stager.ts wrote SWAPPED_COPY_KEY into it),
- * that copy's time, the recovery seal's clean-up after a whole copy (services/recovery-seal-key.ts), and the database it
- * replaced, deleted once the next copy lands. Never throws.
+ * that copy's time and the recovery seal's clean-up after a whole copy (services/recovery-seal-key.ts); and, at any start,
+ * whether the database the last swap replaced is there, deleted once the next copy lands. Never throws.
  */
 function restoreFromDatabase(): void {
     restoreCadence();
@@ -1448,6 +1446,11 @@ function restoreFromDatabase(): void {
         const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(SWAPPED_COPY_KEY) as { value: string } | undefined;
         if (row) swapped = JSON.parse(row.value);
     } catch { swapped = null; }
+    // The database the last swap replaced, whenever it is there, not only at the start that swapped: a standby restarted, or
+    // stopped, before a copy landed on the new one must not keep it for good. A swap is the only thing that makes one, so it
+    // is the one this database replaced; it holds rows members deleted since (#1334 review 4144658979).
+    const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+    previousToDelete = fs.existsSync(path.join(dir, PREVIOUS_DB));
     if (!swapped) return;
     const generatedAt = typeof swapped.generatedAt === 'string' ? swapped.generatedAt : null;
     if (generatedAt) {
@@ -1466,8 +1469,6 @@ function restoreFromDatabase(): void {
         logger.warn('P2P', `[Backup] The recovery seal's clean-up after the whole copy swapped in could not run: ${errorMessage(e)}`);
     }
     try { db.prepare('DELETE FROM node_config WHERE key = ?').run(SWAPPED_COPY_KEY); } catch { /* read again at the next start */ }
-    const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    previousToDelete = fs.existsSync(path.join(dir, PREVIOUS_DB));
     logger.info('P2P', `[Backup] This standby started on the whole copy of its main server made at ${generatedAt ?? '?'} `
         + `(${String(swapped.pages ?? '?')} page(s)), swapped in at this start.`);
 }

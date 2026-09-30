@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 79,
-  "hash": "6e11959a9a4b64a3afaf2b218e8d10796447c9ef11cbce6368f1353ef5fb3ad8",
+  "version": 80,
+  "hash": "c1a937faa3a47f90022666e236338c0d5ab460e81cebcf2a458497b8c3343484",
   "sections": [
     {
       "id": "setup",
@@ -944,7 +944,7 @@
         },
         {
           "type": "p",
-          "text": "The screen has three parts, and they answer three different questions. Read each on its own."
+          "text": "The screen has four parts, and they answer four different questions. Read each on its own."
         },
         {
           "type": "p",
@@ -957,6 +957,10 @@
         {
           "type": "p",
           "text": "**Codes.** How many invite codes were entered, and why any were rejected. These are **attempts, not people**: one person trying a code three times is three attempts, which is why nothing above is worked out as a share of them. Already-a-member re-entries are named separately — that is somebody arriving twice, neither a rejection nor a signup. A run of **expired** codes usually means printed cards sat around too long: invites last 30 days."
+        },
+        {
+          "type": "p",
+          "text": "**Open door.** The open door lets someone join by signing in with an account they already have, such as Google or Apple, instead of using an invite code. It is open on the global community; on a local one it is normally shut, and the screen says which yours is. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **too many new accounts from one network** (the door takes 5 an hour and 20 a day from one address) and **that sign-in already joined here** (one sign-in account is one member). With the door shut, these stay at 0."
         },
         {
           "type": "p",

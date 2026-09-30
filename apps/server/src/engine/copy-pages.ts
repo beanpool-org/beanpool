@@ -16,11 +16,13 @@
  * many rows each category and plain table of this copy holds (`rowCounts`). Then every page, the opening one included,
  * carries the next rows: the payload's categories in the payload's order (engine sync.ts EXPORT_CATEGORIES), the plain
  * tables under `plainTables` in the manifest's order, the tombstones last; each row shaped by the code the whole export
- * shapes it with, the photos' bytes put back from the image store as the export puts them back. A page ends at
+ * shapes it with, but for the listing photos, which go by reference (engine/sync.ts photoRowsByReference: each one's
+ * object named by its sha256, which the standby fetches only when its store lacks it, routes/backup.ts sync-object). The
+ * opening route answers only a standby that reads them (REPLICA_FORMAT, routes/backup.ts). A page ends at
  * SYNC_PAGE_BYTES of rows' JSON or SYNC_PAGE_ROWS rows, whichever first, never inside a row and never before its first:
  * one row bigger than the bound is a page of its own. The page where the rows end says `last: true` and carries the
- * closing fields: how many pages, the rows sent per category, the photo rows left out because this server can't read
- * their objects (`photosOmitted`), and for a whole copy the table hashes (engine/replica-hashes.ts), read in the same
+ * closing fields: how many pages, the rows sent per category, the photo rows left out because this server can't find or
+ * read their objects (`photosOmitted`), and for a whole copy the table hashes (engine/replica-hashes.ts), read in the same
  * snapshot, so they always match the rows and always go. A small copy is one page: the POST's answer, one round trip, as
  * the whole payload was.
  *
@@ -46,7 +48,7 @@ import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { EXPORT_CATEGORIES, exportTreasuryOperators, getStateHash, plainTableRead, type ExportCategory } from '@beanpool/engine';
 import { PLAIN_TABLES, TABLES } from './replication-manifest.js';
-import { payloadRecords, restorePhotoRows, warnPhotosOmitted } from './sync.js';
+import { payloadRecords, photoRowsByReference, warnPhotosOmitted } from './sync.js';
 import { tableContentHashesInSlices, type TableHashes } from './replica-hashes.js';
 import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
 import { noteCopyClosed, noteCopyOpen } from './open-copies.js';
@@ -64,8 +66,11 @@ export const COPY_MAX_MS = 60 * 60_000;
  * Between slices the event loop is let go.
  */
 const SLICE_ROWS = 1000;
-/** Photo rows read at once: each one's bytes come back from the image store, so a slice is at most a few past a full page. */
-const PHOTO_SLICE_ROWS = 16;
+/**
+ * Photo rows read at once: each one's object is looked for in the image store (a head, a round trip on S3, 8 at a time),
+ * and a row that holds its bytes inline brings them, so a slice of those is at most a few past a full page.
+ */
+const PHOTO_SLICE_ROWS = 64;
 /**
  * Rows hashed at once for the closing page's table hashes, at most; a hash slice also ends at the page's bytes (the copy's
  * pageBytes, SYNC_PAGE_BYTES), and holds one row at a time (replica-hashes.ts tableContentHashesInSlices).
@@ -288,14 +293,14 @@ async function buildPage(copy: Copy, n: number): Promise<{ page: string; last: b
         const limit = Math.min(copy.pageRows - rows, step.photos ? PHOTO_SLICE_ROWS : SLICE_ROWS);
         const slice = readSlice(copy.conn, step, copy.after, limit, copy.pageBytes - bytes);
         const shaped: ({ row: unknown } | { omitted: string })[] = step.photos
-            ? await restorePhotoRows(slice.rows)
+            ? await photoRowsByReference(slice.rows)
             : step.shape(copy.conn, slice.rows).map((row) => ({ row }));
         stillOpen(copy);
         for (let i = 0; i < shaped.length; i++) {
             const r = shaped[i];
             if ('omitted' in r) {
-                // A photo whose object this server can't read: not sent, and named in the last page (engine/sync.ts
-                // restoreInlinePhotos), so a standby keeps its own copy.
+                // A photo whose object this server can't find or read: not sent, and named in the last page (engine/sync.ts
+                // photoRowsByReference), so a standby keeps its own copy.
                 copy.photosOmitted.push(r.omitted);
                 copy.after = slice.keys[i];
                 continue;

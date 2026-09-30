@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
-import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readCommunitySettings } from '../config/community-settings.js';
@@ -82,8 +82,17 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     scratch/global-node/DESIGN-paged-copies-fable.md §4, P2; services/stager.ts): exact by construction, with no table
  *     left out for its size. A copy made by format 6 or older was an import over the rows the standby held, cleared first
  *     only by a force-resync, and may lack the rows of a table a copy left out for its size.
+ *  8. Listing photos travel by reference (P4): a copy's photo rows name each object by its sha256, and the standby fetches
+ *     only the objects its store lacks (routes/backup.ts sync-object). A standby sends this number when it opens a copy
+ *     (X-Replica-Format), and a main server sends photos by reference only to one at this format or later: an older one's
+ *     import drops a photo row that carries no bytes, so it is refused, loudly, rather than sent a copy without its photos.
+ *     A copy made by format 7 holds the same rows, its photos stored from the bytes that came inline; its re-seed fetches
+ *     no object this standby's store already holds.
  */
-export const REPLICA_FORMAT = 7;
+export const REPLICA_FORMAT = 8;
+
+/** The format a standby must say it reads for its main server to send it a copy (routes/backup.ts sync-copy): photos by reference. */
+export const PHOTOS_BY_REFERENCE_FORMAT = 8;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -502,16 +511,41 @@ export async function signSyncBody(cb: SyncCallbacks, rawBody: string): Promise<
  * Through the store's NON-blocking write, a few at a time: on an S3 node each photo is a PUT to the bucket,
  * and a first full snapshot carries every photo a peer holds — one blocking round trip each would hold the
  * node for minutes, and the host watchdog restarts a node that stops answering for one.
+ *
+ * A photo by reference (photoReferenceOf) carries no bytes: its row names the object the puller fetched into this
+ * server's store before the import (services/backup-puller.ts fetchPhotoObjects), under the key this server keeps it by.
+ * A copy one of whose photos by reference has no object there, at its size, or no address a store keeps, is refused
+ * here, before anything is written: a row naming an object this server doesn't hold would be a listing that shows no
+ * photo, which no later delta mends (its stamp never moves). On a page of a whole copy built in a staging database
+ * (`objectsLater`) the objects are fetched once every page is in, and the copy's closing check refuses it if any listing
+ * photo it holds has no object (services/stager.ts): its rows are written as they come.
  */
-async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColumns & { updated_at: string | null }>> {
+async function storeImportedPhotos(photos: any[], opts: { objectsLater: boolean }): Promise<Map<string, PhotoColumns & { updated_at: string | null }>> {
     const store = getImageStore();
     // Written a few at a time; results kept by index so "last one wins" below still means the payload's order.
     const written: (PhotoColumns | null)[] = new Array(photos.length).fill(null);
+    const withoutObject: string[] = [];
     let next = 0;
     const worker = async (): Promise<void> => {
         while (next < photos.length) {
             const i = next++;
             const ph = photos[i];
+            if (namesPhotoObject(ph)) {
+                const ref = photoReferenceOf(ph);
+                if (!ref) {
+                    withoutObject.push(`${String(ph?.post_id)}|${String(ph?.order_num)} (no address a store keeps)`);
+                    continue;
+                }
+                const columns: PhotoColumns = { photo_data: null, storage_key: ref.key, sha256: ref.sha256, bytes: ref.bytes, mime: ref.mime };
+                if (opts.objectsLater) {
+                    written[i] = columns;
+                    continue;
+                }
+                const held = await headObject(store, ref.key);
+                if (held && held.bytes === ref.bytes) written[i] = columns;
+                else withoutObject.push(`${ref.post_id}|${ref.order_num}`);
+                continue;
+            }
             if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
             written[i] = await storePhotoColumnsAsync(
                 store,
@@ -521,6 +555,10 @@ async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColu
         }
     };
     await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
+    if (withoutObject.length > 0) {
+        throw new Error(`[Sync] ${withoutObject.length} listing photo(s) this copy names by reference have no object in this server's image store `
+            + `(${withoutObject.slice(0, 3).join(', ')}${withoutObject.length > 3 ? ', …' : ''}): refused, nothing written`);
+    }
     const out = new Map<string, PhotoColumns & { updated_at: string | null }>();
     for (let i = 0; i < photos.length; i++) {
         const ph = photos[i];
@@ -530,13 +568,158 @@ async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColu
         // applying one can only destroy: INSERT OR REPLACE would overwrite an intact local photo with a row
         // the evacuation job skips and the photo route serves as a 404, and the peer's unchanged
         // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
-        if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
+        if (!written[i]) continue;
         // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice. With the
         // main server's stamp: this standby's own would outrank a delete made there after it (a photo tombstone). Null
         // when it holds none; the row's INSERT fills that from the listing.
         out.set(`${ph.post_id}|${ph.order_num}`, { ...written[i]!, updated_at: typeof ph.updated_at === 'string' ? ph.updated_at : null });
     }
     return out;
+}
+
+/**
+ * A listing photo by reference, as a copy's page names it (photoRowsByReference): its object's sha256 (lowercase hex),
+ * media type and size, and the key this server's store keeps it under (storage/image-store.ts postPhotoKey, from the row's
+ * listing and slot and those). Content-addressed on both servers: the same photo is the same key here whatever key the
+ * main server's store has it under, so a standby that holds it already fetches nothing.
+ */
+export interface PhotoReference {
+    post_id: string;
+    order_num: number;
+    sha256: string;
+    mime: string;
+    bytes: number;
+    key: string;
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+/** A media type as a data URL or an object carries it (`type/subtype`), nothing a header or a key could be broken by. */
+const PHOTO_MIME = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}$/;
+
+/** Whether a copy's photo row names its object by reference: no bytes, and a `sha256`, well formed or not. */
+export function namesPhotoObject(row: unknown): boolean {
+    const r = row as { photo_data?: unknown; sha256?: unknown } | null;
+    return !!r && typeof r === 'object' && (typeof r.photo_data !== 'string' || r.photo_data.length === 0) && r.sha256 !== undefined && r.sha256 !== null;
+}
+
+/**
+ * A photo row's reference, checked: its sha256, media type, size (at most MAX_OBJECT_BYTES) and slot, and the key it is
+ * kept under. Null when any is not one a store keeps. The main server sends by reference only a row this accepts; the
+ * standby refuses a copy that names an object any other way (services/backup-puller.ts).
+ */
+export function photoReferenceOf(row: unknown): PhotoReference | null {
+    const r = row as { post_id?: unknown; order_num?: unknown; sha256?: unknown; mime?: unknown; bytes?: unknown } | null;
+    if (!r || typeof r !== 'object') return null;
+    const { post_id, order_num, sha256, mime, bytes } = r;
+    if (typeof post_id !== 'string' || !post_id || typeof order_num !== 'number' || !Number.isInteger(order_num) || order_num < 0) return null;
+    if (typeof sha256 !== 'string' || !SHA256_HEX.test(sha256)) return null;
+    if (typeof mime !== 'string' || !PHOTO_MIME.test(mime)) return null;
+    if (typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes <= 0 || bytes > MAX_OBJECT_BYTES) return null;
+    let key: string;
+    try { key = postPhotoKey(post_id, order_num, sha256, mime); } catch { return null; }
+    return { post_id, order_num, sha256, mime, bytes, key };
+}
+
+/**
+ * The listing photos' objects this server holds whose bytes are not the ones their rows name (a same-size corruption at
+ * rest, which a head can't see), by storage key: found by the object route as it hashes what it would send
+ * (routes/backup.ts sync-object), which answers 410 for one instead. photoRowsByReference then leaves each out of a copy and
+ * names it in `photosOmitted`, as a photo whose object this server can't find, so a standby keeps its own copy and a new
+ * one seeds without it (review 4148896755). In memory: after a restart the next standby that asks finds it again.
+ */
+const unreadablePhotoObjects = new Set<string>();
+
+/**
+ * A listing photo's object whose bytes hash to `got`, not the `sha256` its row names: remembered (unreadablePhotoObjects),
+ * and said once in the log, for the operator, the first time it is found.
+ */
+export function notePhotoObjectUnreadable(key: string, sha256: string, got: string, bytes: number): void {
+    if (unreadablePhotoObjects.has(key)) return;
+    unreadablePhotoObjects.add(key);
+    console.error(`[Sync] A listing photo's object in this server's image store is not the photo its row names: ${key} holds ${bytes} bytes `
+        + `with sha256 ${got.slice(0, 12)}…, not ${sha256.slice(0, 12)}…. Copies leave that photo out (a standby keeps its own copy of it) `
+        + 'until the object is restored, from a standby\'s store or a backup, or the member posts the photo again.');
+}
+
+/**
+ * Whether a listing photo's object found unreadable (unreadablePhotoObjects) still is: read and hashed again, so an object
+ * restored under it is sent again and forgotten here. A read that fails keeps it so.
+ */
+async function stillUnreadable(key: string, sha256: string): Promise<boolean> {
+    try {
+        const bytes = await readObject(getImageStore(), key);
+        if (bytes && crypto.createHash('sha256').update(bytes).digest('hex') === sha256) {
+            unreadablePhotoObjects.delete(key);
+            console.log(`[Sync] A listing photo's object found not to be its photo reads right again (${key}): copies send it again.`);
+            return false;
+        }
+    } catch { /* still unreadable */ }
+    return true;
+}
+
+/**
+ * Each photo row of a copy served in pages (`SELECT * FROM post_photos`, engine/copy-pages.ts), by index, as a standby that
+ * takes photos by reference is sent it (design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): a row whose bytes
+ * are in this server's image store goes without them, naming its object by `sha256`, `mime` and `bytes`, which the standby
+ * fetches only when its own store lacks it (routes/backup.ts sync-object). Nothing is read but a head of the object, so a
+ * whole copy of a community with 30,000 photos no longer carries their 4 GB, every day.
+ *
+ * `photosOmitted` keeps its rule: a row whose object this server can't find in its store at its size (a lost or unmounted
+ * images directory, a bucket that doesn't answer), or whose object's bytes were found not to be its photo when a standby
+ * asked for them (notePhotoObjectUnreadable), is left out and named, so a standby keeps its own copy. A row that holds
+ * its bytes inline (one its store couldn't reproduce exactly, or not yet evacuated), or whose store columns name no object
+ * by reference (photoReferenceOf), goes with its bytes, exactly as every copy's did (restorePhotoRows).
+ */
+export async function photoRowsByReference(photos: any[]): Promise<({ row: any } | { omitted: string })[]> {
+    const store = getImageStore();
+    const results: ({ row: any } | { omitted: string })[] = new Array(photos.length);
+    const withBytes: number[] = [];
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        while (next < photos.length) {
+            const i = next++;
+            const row = photos[i];
+            const stored = (typeof row.photo_data !== 'string' || row.photo_data.length === 0) && typeof row.storage_key === 'string' && row.storage_key.length > 0;
+            const ref = stored ? photoReferenceOf({ post_id: row.post_id, order_num: row.order_num, sha256: row.sha256, mime: row.mime, bytes: row.bytes }) : null;
+            if (!ref) {
+                withBytes.push(i);
+                continue;
+            }
+            let held: ObjectInfo | null;
+            try {
+                // A head, not a read: on an S3 node a round trip with no body, and the node keeps serving meanwhile.
+                held = await headObject(store, row.storage_key);
+            } catch (e) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
+                console.error('[Sync] Could not find a photo in the image store; omitting the row from this copy so a replica keeps its own:', (e as Error)?.message || e);
+                continue;
+            }
+            if (!held || held.bytes !== ref.bytes) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
+                console.error(`[Sync] ${held ? `The object of a photo is ${held.bytes} bytes, where its row says ${ref.bytes}` : 'A photo\'s object is missing from the image store'} `
+                    + `(${row.storage_key}); omitting the row from this copy so a replica keeps its own copy.`);
+                continue;
+            }
+            // Its bytes found not to be its photo (notePhotoObjectUnreadable): left out and named, as one this server can't find.
+            if (unreadablePhotoObjects.has(row.storage_key) && await stillUnreadable(row.storage_key, ref.sha256)) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
+                continue;
+            }
+            const out: any = { post_id: row.post_id, order_num: row.order_num };
+            if (row.updated_at !== undefined) out.updated_at = row.updated_at;
+            out.sha256 = ref.sha256;
+            out.mime = ref.mime;
+            out.bytes = ref.bytes;
+            results[i] = { row: out };
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
+    if (withBytes.length > 0) {
+        withBytes.sort((a, b) => a - b);
+        const restored = await restorePhotoRows(withBytes.map((i) => photos[i]));
+        withBytes.forEach((i, j) => { results[i] = restored[j]; });
+    }
+    return results;
 }
 
 /**
@@ -1380,7 +1563,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     // It also keeps a failed import honest. If the transaction rolls back after the puts, the objects it
     // wrote are orphans, but they are content-addressed: the retry re-derives the same keys and re-uses
     // them, and the storage-health sweep reclaims whatever is genuinely left over.
-    const importedPhotoColumns = remote.photos ? await storeImportedPhotos(remote.photos) : null;
+    // A photo by reference names its object, which the puller fetched before this import: on a page of a whole copy built
+    // in a staging database, after every page is in, and checked at the copy's closing (services/stager.ts).
+    const importedPhotoColumns = remote.photos ? await storeImportedPhotos(remote.photos, { objectsLater: part !== null }) : null;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
@@ -2038,9 +2223,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             }
 
             if (remote.messages) {
-                for (const msg of remote.messages) {
-                    if (droppedChatGroups.has(msg.conversationId)) continue;
-                    const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
+                // Prepared once, above the loop, as the creator channels' below: better-sqlite3 compiles on every prepare(),
+                // and each statement's native memory goes only when the garbage collector finalizes its handle. A page of
+                // 15,000 chat lines with little else on the heap to prompt a collection held the stager at 1.3 GB (measured,
+                // P4: design scratch/global-node/DESIGN-paged-copies-fable.md §1 names this loop).
+                const writeMessage = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     conversation_id = excluded.conversation_id,
@@ -2053,7 +2240,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     edited_at = excluded.edited_at,
                                     updated_at = excluded.updated_at
                                 WHERE excluded.updated_at IS NOT NULL
-                                  AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`).run(
+                                  AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`);
+                for (const msg of remote.messages) {
+                    if (droppedChatGroups.has(msg.conversationId)) continue;
+                    const res = writeMessage.run(
                         msg.id,
                         msg.conversationId,
                         msg.authorPubkey,

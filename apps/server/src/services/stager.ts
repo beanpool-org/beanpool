@@ -19,7 +19,9 @@
  *  1. every page arrived once, in order: each category's and plain table's rows, counted as they came, are what the
  *     copy's last page says it sent (`rowsSent`), which are what its opening page counted in its snapshot (`rowCounts`),
  *     but for the listing photos the main server could not read (`photosOmitted`), which it counted and did not send;
- *     and every listing photo it brought has its object in the image store;
+ *     and every listing photo it brought has its object in the image store: a photo sent by reference (engine/sync.ts
+ *     photoRowsByReference) has its row written as its page comes and its object fetched by the puller once every page
+ *     is in (services/backup-puller.ts fetchPhotoObjects);
  *  2. the staging's tables against the copy's own table hashes (engine/replica-hashes.ts): the whole-copy check's verdict,
  *     recorded with the copy (a table this importer writes otherwise than the main server holds it is reported, and asks
  *     for the held force-resync at most every six hours; the values this database's rules refuse are reported alone);
@@ -45,6 +47,7 @@ import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import type { PhotoReference } from '../engine/sync.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 /** The staging directory, inside the data directory; the swap at boot knows it by this name too (db/swap-at-boot.ts). */
@@ -75,6 +78,8 @@ const CREDENTIALS_LEFT_OUT = [
 export const SWAPPED_COPY_KEY = 'standby_swapped_copy';
 /** A page the stager takes longer than this to import fails the copy (a stager that hangs). */
 const PAGE_TIMEOUT_MS = 15 * 60_000;
+/** The listing photos by reference the copy's pages named, a line each (StagedCopy.notePhotoReferences). */
+const PHOTO_REFERENCES_FILE = 'photo-references.jsonl';
 
 export function stagingDir(): string {
     return path.join(DATA_DIR, STAGING_DIR_NAME);
@@ -305,6 +310,34 @@ export class StagedCopy {
     }
 
     /**
+     * The listing photos a page names by reference (engine/sync.ts photoRowsByReference), kept in the staging directory, not
+     * in memory, until every page is in and the puller fetches the objects this server's store lacks (photoReferences).
+     */
+    notePhotoReferences(refs: readonly PhotoReference[]): void {
+        if (refs.length === 0) return;
+        fs.appendFileSync(path.join(this.dir, PHOTO_REFERENCES_FILE), refs.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    }
+
+    /**
+     * Every listing photo by reference the copy's pages named, in page order (notePhotoReferences). The file is closed however
+     * the reading ends: read to its end, or returned early (a fetch that failed, services/backup-puller.ts fetchPhotoObjects),
+     * or a line that doesn't parse. Left open, each failed copy would hold a descriptor on its deleted file, and its blocks,
+     * until this process restarts (review 4148896385).
+     */
+    async *photoReferences(): AsyncGenerator<PhotoReference> {
+        const file = path.join(this.dir, PHOTO_REFERENCES_FILE);
+        if (!fs.existsSync(file)) return;
+        const input = fs.createReadStream(file, 'utf-8');
+        const lines = readline.createInterface({ input, crlfDelay: Infinity });
+        try {
+            for await (const line of lines) if (line) yield JSON.parse(line) as PhotoReference;
+        } finally {
+            lines.close();
+            input.destroy();
+        }
+    }
+
+    /**
      * The closing checks, and what this standby keeps of its own carried over from `live` (its database), read-only. `seed`:
      * the puller took this copy as a seed (the conservation guard lets it in whatever it sums to). `resync`: a force-resync
      * of any kind, which owes nothing any more for the deletes the main server pruned. Refused: StagedCopyRefused.
@@ -332,6 +365,11 @@ export class StagedCopy {
         // What the stager was writing when it was killed goes too, once it has stopped.
         void this.exited.then(() => { if (!fs.existsSync(path.join(stagingDir(), READY_FILE))) removeStaging(); });
         console.warn(`[Stager] The whole copy being built was stopped and its staging deleted: ${why}`);
+    }
+
+    /** Why this copy was stopped (abort: a take-over confirmed, or any failure) or can't be built (its stager gone); null while it goes on. */
+    get stoppedBecause(): string | null {
+        return this.aborted ?? this.gone;
     }
 
     /** The stager has stopped. */
@@ -480,10 +518,10 @@ async function stagerChild(): Promise<void> {
             + Object.values(received.plainTables ?? {}).reduce((n, v) => n + v, 0);
 
         // 1b. Every listing photo the copy brought has its object in the image store: the importer put it before its row
-        //     committed, and nothing may have removed it since (the standby's orphan sweep keeps a staging's objects:
-        //     stagedObjects). Swapped in without them, those listings would show no photo, the check would call the copy
-        //     exact, and no delta would bring them back (review 4139589323). The photos the main server left out are this
-        //     standby's own rows, carried over below, as they were.
+        //     committed, or, sent by reference, the puller fetched it once every page was in, and nothing may have removed it
+        //     since (the standby's orphan sweep keeps a staging's objects: stagedObjects). Swapped in without them, those
+        //     listings would show no photo, the check would call the copy exact, and no delta would bring them back (review
+        //     4139589323). The photos the main server left out are this standby's own rows, carried over below, as they were.
         const named = db.prepare('SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL').pluck().all() as string[];
         if (named.length > 0) {
             let stored: Set<string>;
@@ -618,7 +656,7 @@ async function stagerChild(): Promise<void> {
                     else drop.run(key);
                 }
                 // The listing photos the main server could not read: this standby's own rows of them, which may be the only
-                // readable ones left (engine/sync.ts restoreInlinePhotos).
+                // readable ones left (engine/sync.ts photoRowsByReference).
                 if (photosOmitted.length > 0 && has(live, 'post_photos')) {
                     const here = new Set(columnsOf(db, 'post_photos'));
                     const cols = columnsOf(live, 'post_photos').filter((c) => here.has(c));

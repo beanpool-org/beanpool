@@ -352,7 +352,9 @@ async function main(): Promise<void> {
     };
     const gwen = newId('Gwen');
     const [ann, bo, cy, dee] = ['Ann', 'Bo', 'Cy', 'Dee'].map(newId);
-    const auth = { 'X-Replication-Token': replicationToken };
+    // As a standby asks: with the importer format it reads (engine/sync.ts REPLICA_FORMAT; routes/backup.ts refuses a copy to
+    // one older than photos by reference). The old routes ignore it.
+    const auth = { 'X-Replication-Token': replicationToken, 'X-Replica-Format': '8' };
     const unsigned: string[] = [];
 
     let main = await spawnNode(SCRIPT, dir, env);

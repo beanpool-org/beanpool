@@ -167,6 +167,7 @@ export const SUITES = [
     'test-standby-paged-copies',
     'test-standby-swap-at-boot',
     'test-standby-paged-copies-pacing',
+    'test-standby-photos-by-reference',
     'test-recovery-tombstones',
     'test-github-sign-in-removed',
     'test-unlock-cancel',

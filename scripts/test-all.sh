@@ -423,6 +423,7 @@ run_federation_suites() {
       test-former-address
       test-registrar-names-record
       test-registrar-name-watch
+      test-public-url-callers
       test-read-auth-default
       test-privacy-defaults
       test-activity-feed-members-only

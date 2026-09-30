@@ -22,7 +22,7 @@
 
 import Router from '@koa/router';
 import crypto from 'node:crypto';
-import { getMember, getActingMember, getNodeConfig } from '../state-engine.js';
+import { getMember, getActingMember, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import {
     getConnectorByAddress, getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -35,21 +35,6 @@ import { SettlementError } from '../federation-settlement-exchange.js';
 import { settlementStartedBy } from '../engine/money-limits.js';
 import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
-
-/**
- * This node's own public address, or null if it has never claimed one.
- *
- * Set by the public-address registrar when an operator claims `<name>.beanpool.org` (or brings their own
- * domain), so it is the only place a node knows what it is called from the outside.
- */
-function ourPublicUrl(): string | null {
-    try {
-        const hostname = ((getNodeConfig() as any)?.publicAddress?.hostname ?? '').trim();
-        return hostname ? `https://${hostname}` : null;
-    } catch {
-        return null;   // never let a config read stop a purchase — the peer can derive it
-    }
-}
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_PURCHASE_ERROR = 'Only a member of this community can make a cross-community purchase';
@@ -257,15 +242,16 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 peerId,
                 buyerPublicKey,
                 buyerCallsign: buyer.callsign,
-                // OUR public address, if this node has claimed one — the peer records it so its own members can
-                // see which community a visiting buyer belongs to.
+                // OUR public address, if this node has claimed one (the registrar's hostname; state-engine.ts
+                // PUBLIC_URL_RULES.buyerHomeNode) — the peer records it so its own members can see which community a
+                // visiting buyer belongs to. A config read never stops a purchase: one that fails is null.
                 //
                 // Sent as a courtesy, not as the source of truth. `handlePurchaseRequest` prefers to derive our
                 // URL from its own connector record for us, because that comes from the authenticated
                 // connection whereas this is just a string we sent. Null when no address has been claimed, and
                 // that is fine: the peer's fallback covers it, and only if BOTH are absent does the purchase
                 // refuse with `unknown_home_node`.
-                buyerHomeNode: ourPublicUrl(),
+                buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey,
                 postId: typeof postId === 'string' ? postId : null,
                 amount,

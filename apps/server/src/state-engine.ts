@@ -7405,13 +7405,44 @@ export function lostRegistrarHosts(config: NodeConfig = getNodeConfig()): Set<st
     return out;
 }
 
+/** Where resolvePublicNodeUrl looks for this community's address, per caller (PUBLIC_URL_RULES). */
+export interface PublicUrlRules {
+    /**
+     * `any`: a plain-string `publicAddress`, else its `hostname`, else its `name` (`<name>.beanpool.org` when it has no
+     * dot, as for a claim the registrar hasn't answered with a hostname yet). `hostname`: its `hostname` only.
+     */
+    publicAddress: 'any' | 'hostname';
+    /** When `publicAddress` gives none: CF_RECORD_NAME, a bare name as `<name>.beanpool.org` (`in-zone`) or as set (`as-set`); or none (`never`). */
+    cfRecordName: 'in-zone' | 'as-set' | 'never';
+    /** `skip`: never a name marked lost (lostRegistrarHosts); the next source is tried. `keep`: lost or not. */
+    lostNames: 'skip' | 'keep';
+}
+
 /**
- * This community's public address: the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`, else
- * CF_RECORD_NAME. Never a lost name (lostRegistrarHosts): the directory's `publicUrl` and this community's own names
- * (engine/own-addresses.ts item 1) must not send anyone to a name another community holds.
+ * Each caller's rules. They differ as the callers did before they shared this one resolver (#1112's note): the
+ * differences are kept, and written here rather than in copies (test-public-url-callers.ts pins every caller's output).
  */
-export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
-    const lost = lostRegistrarHosts(config);
+export const PUBLIC_URL_RULES = {
+    /** The directory's `publicUrl` (getDirectoryInfo) and this community's own names (engine/own-addresses.ts item 1). */
+    community: { publicAddress: 'any', cfRecordName: 'in-zone', lostNames: 'skip' },
+    /** Where this server asks for its own identity-epoch statement (services/identity-epoch.ts ownPublicEpochUrl). */
+    identityEpoch: { publicAddress: 'hostname', cfRecordName: 'as-set', lostNames: 'skip' },
+    /** The `buyerHomeNode` a cross-community purchase or commission sends (routes/federation-*.ts); the peer works it out when null. */
+    buyerHomeNode: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'keep' },
+} as const satisfies Record<string, PublicUrlRules>;
+
+/**
+ * This community's public address, `https://<host>`, or null: by default (`community`) the registrar's
+ * `publicAddress.hostname`, else `<name>.beanpool.org`, else CF_RECORD_NAME, never a lost name: the directory's `publicUrl`
+ * and this community's own names must not send anyone to a name another community holds. A scheme and trailing slashes
+ * are taken off; a host that is nothing else is none. With no `config` it reads node_config, and one it can't read is
+ * none (a purchase or the epoch check never fails over it).
+ */
+export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.community, config?: NodeConfig | null): string | null {
+    if (config === undefined) {
+        try { config = getNodeConfig(); } catch { config = null; }
+    }
+    const lost = config && rules.lostNames === 'skip' ? lostRegistrarHosts(config) : new Set<string>();
     const usable = (host: string | null): string | null => {
         if (!host) return null;
         const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -7420,22 +7451,22 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
         return h && lost.has(h) ? null : clean;
     };
     let host: string | null = null;
-    const pa: any = config.publicAddress;
+    const pa: any = config?.publicAddress;
     if (pa) {
-        if (typeof pa === 'string' && pa.trim()) {
+        if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {
             host = usable(pa.trim());
         } else if (typeof pa === 'object') {
             if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
                 host = usable(pa.hostname.trim());
-            } else if (typeof pa.name === 'string' && pa.name.trim()) {
+            } else if (rules.publicAddress === 'any' && typeof pa.name === 'string' && pa.name.trim()) {
                 const n = pa.name.trim();
                 host = usable(n.includes('.') ? n : `${n}.beanpool.org`);
             }
         }
     }
-    if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
-        const cf = process.env.CF_RECORD_NAME.trim();
-        host = usable(cf.includes('.') ? cf : `${cf}.beanpool.org`);
+    const cf = (process.env.CF_RECORD_NAME ?? '').trim();
+    if (!host && cf && rules.cfRecordName !== 'never') {
+        host = usable(rules.cfRecordName === 'in-zone' && !cf.includes('.') ? `${cf}.beanpool.org` : cf);
     }
     return host ? `https://${host}` : null;
 }
@@ -7451,7 +7482,7 @@ export function getDirectoryInfo(): any {
     const localConfig = getLocalConfig();
     const info: any = {
         name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
-        publicUrl: resolvePublicNodeUrl(config),
+        publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
         communityName: localConfig.communityName || null,
     };
 

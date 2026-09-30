@@ -68,6 +68,13 @@
  *     photoKeysSince (another device, a filtered delta) doesn't start the finished heal again: the phone's next sync,
  *     still inside the overlap, is a delta (review of fe4c27ce, finding 4).
  *
+ * A whole pull restarts a key's heal only right after a heal page to the key (review of 1bc39eb0, finding 2):
+ * 14. 1,500 listings: Bob's phone heals them all; an hour after its last heal page a new install on his key pulls whole,
+ *     then both sync ten times each: they carry no row, where a restart re-sent all 1,500.
+ * 15. A take-over whose cycle failed after the pull the phone throws away, tried again 15 minutes later: that pull is
+ *     answered 304 (the phone's HTTP cache revalidates), and it still counts as a page, so the whole pull after it
+ *     restarts the heal and all 700 listings with a photo heal.
+ *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-keys-resync.ts
  */
 
@@ -197,6 +204,13 @@ async function child(): Promise<void> {
             return a.ids.length;
         },
         heals: () => db.prepare('SELECT COUNT(*) AS n FROM photo_url_heals').get(),
+        // Time passing for the heals kept: each row's last page `ms` earlier.
+        ageHeals: (a: { ms: number }) => {
+            const rows = db.prepare('SELECT viewer, served_at FROM photo_url_heals').all() as { viewer: string; served_at: string }[];
+            const put = db.prepare('UPDATE photo_url_heals SET served_at = ? WHERE viewer = ?');
+            for (const r of rows) put.run(new Date(Date.parse(r.served_at) - a.ms).toISOString(), r.viewer);
+            return rows.length;
+        },
         // Every listing's photo URLs as `pk`'s sync reads it now: what a healed phone holds.
         photosFor: (a: { pk: string }) => Object.fromEntries(se.getPosts({
             types: ['offer', 'need', 'poll', 'event'], excludeEvents: false, viewerPubkey: a.pk, includeHidden: !!se.nodeRoleOf(a.pk),
@@ -928,6 +942,52 @@ async function main(): Promise<void> {
             const next = await P.sync(since + 10_000 + 4 * 30_000);
             assert(next.status === 200 && rowsOf(next).length === 0,
                 `the phone's next sync inside its overlap is a delta, not the first page again (${rowsOf(next).length} rows)`);
+            await stop(node);
+        });
+
+        await section('14. a whole pull long after a finished heal does not start it again', async () => {
+            const { since, held } = await changedNode('reheal', 1500);
+            const P = new Phone(bob, since - 60_000, held);
+            const rows: number[] = [];
+            for (let k = 0; k < 9; k++) rows.push(rowsOf(await P.sync(since + 10_000 + k * 30_000)).length);
+            const current: Record<string, string[]> = await node.send('photosFor', { pk: bob.pk });
+            assert(P.stale(current).length === 0 && rows[8] === 0,
+                `setup: Bob's phone heals all 1,500 inside its overlap, then a delta (${P.stale(current).length} stale; ${rows.join(', ')})`);
+            // An hour after the heal's last page, a new install on Bob's key pulls whole; then both phones sync in turn.
+            await node.send('ageHeals', { ms: HOUR });
+            const whole = await pull(node, bob, null);
+            assert(whole.status === 200 && rowsOf(whole).length === 200, `setup: the new install's whole pull (${whole.status}, ${rowsOf(whole).length} rows)`);
+            const Q = new Phone(bob, Date.now(), {});
+            P.lastSync = Date.now() - 2 * MIN;
+            let carried = 0;
+            for (let k = 0; k < 10; k++) {
+                carried += rowsOf(await P.sync(Date.now())).length;
+                carried += rowsOf(await Q.sync(Date.now())).length;
+            }
+            assert(carried === 0, `the key's next 20 syncs carry no heal again: nothing changed, nothing sent (${carried} rows)`);
+            await stop(node);
+        });
+
+        await section('15. a take-over retried 15 minutes on, its thrown-away pull answered 304: the whole pull still restarts the heal', async () => {
+            const { since, held } = await changedNode('takeover304', 600, { finished: 100, bare: 50 });
+            const P = new Phone(bob, since - 60_000, held);
+            const thrownPath = `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(cursorAt(P.lastSync))}`;
+            const first = await signed(node, bob, 'GET', thrownPath);
+            // The cycle fails before its whole pull. Its next try, 15 minutes on, asks the same pull again, and the
+            // phone's HTTP cache sends the ETag it holds.
+            await node.send('ageHeals', { ms: 15 * MIN });
+            const again = await signed(node, bob, 'GET', thrownPath, undefined, first.etag ? { 'If-None-Match': first.etag } : {});
+            assert(first.status === 200 && rowsOf(first).length === 200 && again.status === 304,
+                `setup: the pull thrown away is a heal page, and the same pull again is a 304 (${first.status}, ${rowsOf(first).length} rows; ${again.status})`);
+            const whole = await pull(node, bob, null);
+            for (const p of rowsOf(whole)) P.held.set(p.id, p.photos ?? []);
+            P.lastSync = since + 20_000;
+            for (let k = 0; k < 12; k++) await P.sync(since + 50_000 + k * 30_000);
+            const current: Record<string, string[]> = await node.send('photosFor', { pk: bob.pk });
+            const withPhoto = Object.values(current).filter((p) => p.length > 0).length;
+            const stale = P.stale(current);
+            assert(whole.status === 200 && withPhoto === 700 && stale.length === 0,
+                `the phone's syncs after its whole pull heal every listing with a photo (${stale.length} stale of ${withPhoto})`);
             await stop(node);
         });
     } finally {

@@ -108,6 +108,16 @@ const PHONE_CURSOR_LAG_MS = 5 * 60 * 1000;
  * after that, not by a read (photoHealFor).
  */
 const HEAL_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * How recently a key's heal must have had a page for a whole sync read from the key to start it again
+ * (restartPhotoHealFor): 10 minutes. The read that needs it is a take-over's whole pull, which the phone makes in the
+ * same cycle as the pull it throws away (apps/native services/pillar-sync.ts), right after that pull's answer, each with
+ * 30 s: seconds apart, and 10 minutes leaves room for a slow phone many times over. A cycle that fails between the two
+ * pulls asks the first again at its next try, and that answer (a 304 too: notePhotoHealAnsweredAgain) counts as a page.
+ * A new install on the key, or an emptied cache, comes later than that and holds no old URL: its whole pull no longer
+ * sends the key's devices the whole node again (review of 1bc39eb0, finding 2: 1,500 listings, about 2 MB, each time).
+ */
+const HEAL_RESTART_WINDOW_MS = 10 * 60 * 1000;
 
 /** The key's length: 22 base64url characters, 132 bits. */
 const KEY_CHARS = 22;
@@ -284,15 +294,27 @@ export function notePhotoHealServed(viewer: string | undefined, updatedAfter: st
 }
 
 /**
- * A whole sync read (`sync=true`, no cursor, no filter) from `viewer`: its key's heal, if it has one for this shape,
- * starts again from the first page at the key's next sync. The whole pull carries only the listings updated last, and
- * the phone keeps the rest it held, with their old URLs, while the key's row may count pages that went to a pull the
- * phone threw away (a take-over's first pull) or to another device. The row then holds no cursor, so no sync is a
- * retry of it (photoHealFor).
+ * A heal answer to `viewer` confirmed with a 304 (the phone's platform HTTP cache revalidates by itself): a page went to
+ * the key, so its row's time moves as notePhotoHealServed would move it (restartPhotoHealFor's window). Nothing else
+ * changes: the answer is the one the row already records.
+ */
+export function notePhotoHealAnsweredAgain(viewer: string | undefined): void {
+    if (!viewer || urlsChangedAtMs === null) return;
+    db.prepare("UPDATE photo_url_heals SET served_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE viewer = ? AND since = ?").run(viewer, sinceIso());
+}
+
+/**
+ * A whole sync read (`sync=true`, no cursor, no filter) from `viewer`: its key's heal, if it has one for this shape and
+ * had a page in the last HEAL_RESTART_WINDOW_MS, starts again from the first page at the key's next sync. That is a
+ * take-over's whole pull: it carries only the listings updated last, and the phone keeps the rest it held, with their
+ * old URLs, while the key's row counts the page that went to the pull it threw away just before. The row then holds no
+ * cursor, so no sync is a retry of it (photoHealFor). A whole pull later than that (a new install, an emptied cache)
+ * holds no old URL and leaves the row as it is; served_at doesn't move, so it doesn't keep the row either.
  */
 export function restartPhotoHealFor(viewer: string | undefined): void {
     if (!viewer || urlsChangedAtMs === null) return;
-    db.prepare("UPDATE photo_url_heals SET cursor = '', from_key = '', after_key = '' WHERE viewer = ? AND since = ?").run(viewer, sinceIso());
+    db.prepare("UPDATE photo_url_heals SET cursor = '', from_key = '', after_key = '' WHERE viewer = ? AND since = ? AND served_at >= ?")
+        .run(viewer, sinceIso(), new Date(Date.now() - HEAL_RESTART_WINDOW_MS).toISOString());
 }
 
 /** Whether this node serves a listing's photo only to a URL with its key (installPhotoKeysAtBoot). */

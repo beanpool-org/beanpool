@@ -147,10 +147,6 @@ function hiddenFromCaller(hiddenAt: string | null | undefined, authorPubkey: str
 }
 
 /**
- * Approving a request opens an escrow, funded (on an Offer) by a requester the post is now hidden from. The author
- * knows it is hidden, so they are told why; the request waits, and either side can still back out of it.
- */
-/**
  * A deal's price is a finite number of Beans, 0 or more, or no Beans move for it (review F1/F6, 2026-10-01). A listing
  * row whose price was stored as text ("abc", before the edit route checked it) or a quantity of Infinity made NaN, and
  * every `<` guard reads NaN as "fine". Asked at every door before a conservingTransaction opens, so it is a plain
@@ -160,6 +156,24 @@ function assertDealAmount(credits: unknown): asserts credits is number {
     if (!isBeanAmount(credits)) throw new Error('This listing has no valid price — ask the seller to edit it');
 }
 
+/**
+ * The same check on a deal row that already holds an amount that is not a number of Beans (one struck from a text
+ * price before this fix). Editing the listing can't mend it: an open deal keeps the price it was struck at (#1374).
+ * The message names what does clear it. A request: the listing's author declines it, the requester withdraws it, or
+ * the listing is removed. A deal in escrow: it can't be completed, cancelled or disputed, and the seller can't remove
+ * a listing with a deal in escrow, so only a moderator removing the listing closes it (adminDeletePost).
+ */
+function assertDealRowAmount(credits: unknown, stage: 'requested' | 'pending'): asserts credits is number {
+    if (isBeanAmount(credits)) return;
+    throw new Error(stage === 'requested'
+        ? "This request holds an amount that isn't a valid number of Beans, so it can't be approved. Decline it, or remove the listing, to clear it."
+        : "This deal holds an amount that isn't a valid number of Beans, so it can't be completed, cancelled or disputed. Ask a moderator to remove the listing to clear it.");
+}
+
+/**
+ * Approving a request opens an escrow, funded (on an Offer) by a requester the post is now hidden from. The author
+ * knows it is hidden, so they are told why; the request waits, and either side can still back out of it.
+ */
 function postHiddenNoNewDeal(): Error {
     return Object.assign(
         new Error('This post is hidden while a moderator looks at reports about it, so no new deal can start on it. You can approve this request once it is restored.'),
@@ -321,7 +335,7 @@ export function approvePostRequest(
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
     if (post.hidden_by_reports_at) throw postHiddenNoNewDeal();
-    assertDealAmount(row.credits);
+    assertDealRowAmount(row.credits, 'requested');
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
@@ -839,12 +853,12 @@ export function completePostTransaction(
     if (typeof finalHours === 'number' && finalHours > 0 && !isDealQuantity(finalHours)) {
         throw new Error(`The final quantity must be a number above 0, at most ${POST_HOURS_MAX}`);
     }
-    assertDealAmount(row.credits);
+    assertDealRowAmount(row.credits, 'pending');
     let releaseCredits = row.credits;
     if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
         releaseCredits = (row.credits / bookedHours) * finalHours;
     }
-    assertDealAmount(releaseCredits);
+    assertDealRowAmount(releaseCredits, 'pending');
 
     const completedAt = new Date().toISOString();
     let releaseResult: any = null;
@@ -999,7 +1013,7 @@ export function cancelPostTransaction(
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
     assertNodeMember(cancellerPublicKey);
-    assertDealAmount(row.credits);
+    assertDealRowAmount(row.credits, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -1108,7 +1122,7 @@ export function resolveEscrowDispute(
     if (!row) {
         throw new Error('Transaction not found or not in pending escrow');
     }
-    assertDealAmount(row.credits);
+    assertDealRowAmount(row.credits, 'pending');
 
     assertNotPartyToDispute(row, adminSigner.trim());
 

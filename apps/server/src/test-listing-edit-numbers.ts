@@ -25,7 +25,7 @@ import { db } from './db/db.js';
 import { LedgerManager, setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, createPost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
-    moveToCommons, payFromCommons, getCommonsBalanceExact,
+    moveToCommons, payFromCommons, getCommonsBalanceExact, cancelPostTransaction, rejectPostRequest, removePost, adminDeletePost,
 } from './state-engine.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 
@@ -230,6 +230,36 @@ async function main() {
     const pAcc = attempt(() => acceptPost(poisoned.id, third));
     check(!pReq.ok && /no valid price/.test(pReq.error) && !pAcc.ok && /no valid price/.test(pAcc.error),
         `a listing row already holding "abc" as its price can't be requested or accepted (${JSON.stringify([pReq.ok ? 'requested' : pReq.error, pAcc.ok ? 'accepted' : pAcc.error])})`);
+
+    // A deal ROW already holding text (struck before this fix): the listing edit can't mend it, since an open deal keeps
+    // the price it was struck at (#1374), so each refusal names what does clear it, and that path is measured here.
+    const txStatus = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as any)?.status;
+    const reqListing = createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', seller)!;
+    const rq = requestPost(reqListing.id, buyer);
+    db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(rq.id);
+    const rqAppr = attempt(() => approvePostRequest(rq.id, seller));
+    check(!rqAppr.ok && /can't be approved\. Decline it, or remove the listing/.test(rqAppr.error),
+        `a request row holding "abc" can't be approved, and the refusal says to decline it (${rqAppr.ok ? 'approved' : rqAppr.error})`);
+    const rqRej = attempt(() => rejectPostRequest(rq.id, seller));
+    check(rqRej.ok && txStatus(rq.id) === 'rejected', `and declining it clears it (${rqRej.ok ? txStatus(rq.id) : rqRej.error})`);
+
+    const dealListing = createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', seller)!;
+    const dq = requestPost(dealListing.id, buyer);
+    approvePostRequest(dq.id, seller);
+    db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(dq.id);
+    const dCancelBuyer = attempt(() => cancelPostTransaction(dq.id, buyer));
+    const dCancelSeller = attempt(() => cancelPostTransaction(dq.id, seller));
+    const dDone = attempt(() => completePostTransaction(dq.id, buyer));
+    const rowMsg = /can't be completed, cancelled or disputed\. Ask a moderator to remove the listing/;
+    check(!dCancelBuyer.ok && rowMsg.test(dCancelBuyer.error) && !dCancelSeller.ok && rowMsg.test(dCancelSeller.error)
+        && !dDone.ok && rowMsg.test(dDone.error) && txStatus(dq.id) === 'pending',
+        `a deal in escrow holding "abc" can't be cancelled by either side or completed, and says a moderator clears it (${JSON.stringify([dCancelBuyer, dCancelSeller, dDone].map((r) => r.ok ? 'ok' : r.error))})`);
+    const dRemove = attempt(() => removePost(dealListing.id, seller));
+    check(!dRemove.ok && /deal in escrow/.test(dRemove.error), `the seller can't remove a listing with that deal in escrow (${dRemove.ok ? 'removed' : dRemove.error})`);
+    const dAdmin = attempt(() => adminDeletePost(dealListing.id));
+    check(dAdmin.ok && dAdmin.value === true && txStatus(dq.id) === 'cancelled',
+        `a moderator removing the listing closes the deal (${dAdmin.ok ? `${dAdmin.value}, ${txStatus(dq.id)}` : dAdmin.error})`);
+
     const s3end = ledgerState(everyone);
     check(s3end.bad === 0 && s3end.memoryFinite && Math.abs(s3end.total - s3.total) < 1e-9,
         `every balance is still a finite number and the total has not moved (${s3.total} → ${s3end.total}, ${s3end.bad} bad rows)`);

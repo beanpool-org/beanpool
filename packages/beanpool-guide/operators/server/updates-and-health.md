@@ -17,6 +17,8 @@ Members stay signed in to their apps. Anyone signed in to Settings from the app,
 
 The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one.
 
+**Blank listing photos after going back.** If you went back to an older version and then forward again, or restored an old backup, members' apps can keep listing photos that no longer open. To make every app read all the listings again at its next sync, run once: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"DELETE FROM node_config WHERE key = 'photoKeysShape'\").run()" and then: docker compose restart beanpool-node
+
 The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared
 
 Take the new docker-compose.yml with each update, not only the image. The server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server.

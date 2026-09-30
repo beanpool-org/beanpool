@@ -56,6 +56,14 @@ function makeRepo() {
     git(work, 'config', 'commit.gpgsign', 'false');
     git(work, 'add', '-A');
     git(work, 'commit', '-q', '-m', 'base');
+    // A published main, as main is once the director has published: a branch's page edits that wait to be published
+    // (every guide PR's since #1328) are published in the copy first, or "nothing to publish" could never hold here.
+    const published = build(work, '--publish');
+    if (published.status !== 0) throw new Error(`publishing the copy failed: ${published.stderr || published.stdout}`);
+    if (git(work, 'status', '--porcelain')) {
+        git(work, 'add', '-A');
+        git(work, 'commit', '-q', '-m', 'published');
+    }
     git(work, 'remote', 'add', 'origin', path.join(root, 'origin.git'));
     git(work, 'push', '-q', '-u', 'origin', 'main');
     return { root, work, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };

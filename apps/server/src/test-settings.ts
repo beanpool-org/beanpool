@@ -16,8 +16,8 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8567;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0;
 let passed = 0;
@@ -62,7 +62,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. Apple App Site Association ─────────────────────────────
     const appleRes1 = await fetch(`${BASE}/.well-known/apple-app-site-association`);

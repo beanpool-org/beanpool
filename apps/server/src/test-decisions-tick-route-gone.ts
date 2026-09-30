@@ -41,8 +41,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
 
-const PORT = 8709;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const TICK_PATH = '/api/commons/decisions/tick';
 const ADMIN_PW = 'TickRouteGone123!';
 
@@ -105,7 +105,8 @@ async function main(): Promise<void> {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt });
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const author = makeMember('TickTina');
     const subject = makeMember('TickTom');

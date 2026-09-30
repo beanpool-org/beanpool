@@ -32,8 +32,8 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 
-const PORT = 8552;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || '.';
 const CONNECTORS_PATH = path.join(DATA_DIR, 'connectors.json');
@@ -90,7 +90,8 @@ async function main() {
         `1b. and persisted to connectors.json (got ${onDisk[0]?.publicUrl})`);
 
     // ── 2. Derivation from each address shape an operator can actually type. ─────────────────────────────
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const ip4 = await addConnectorOverHttp({ address: '/ip4/10.1.2.3/tcp/4001/p2p/12D3KooWDerivIp4', callsign: 'a' });
     assert(ip4.json?.connector?.publicUrl === 'https://10.1.2.3',

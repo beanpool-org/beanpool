@@ -17,8 +17,8 @@ import { initStateEngine, getPosts } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8551;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -58,7 +58,8 @@ async function main() {
     console.log('Running Post Pause & Resume tests...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const author = makeMember('postauthor');
     const stranger = makeMember('stranger');

@@ -74,7 +74,7 @@ async function run() {
     refuseEdge();
     initStateEngine();
     const fake = await useFakeCloudflared(path.join(DATA_DIR, 'fake-cloudflared'));
-    const p2pNode = await startP2P(4020, 4021);
+    const p2pNode = await startP2P(0, 0);
     const pubkey = nodePubkeyHex();
 
     assert(typeof pubkey === 'string' && pubkey.length === 64, `P2P identity generated valid 32-byte Ed25519 pubkey: ${pubkey.slice(0, 16)}...`);

@@ -32,8 +32,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 
-const PORT = 8643;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
 
@@ -86,7 +86,8 @@ async function main() {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PASSWORD);
     saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const keeper = makeIdentity('KeeperKim');
     const member = makeIdentity('MemberMo');

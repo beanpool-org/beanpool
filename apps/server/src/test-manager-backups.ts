@@ -29,8 +29,8 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 
-const PORT = 8563;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ADMIN_PW = 'TestManagerAdmin123!';
 
 /**
@@ -75,7 +75,8 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // 1. GET /api/manager/backups/status
     // Unauthenticated request -> 401

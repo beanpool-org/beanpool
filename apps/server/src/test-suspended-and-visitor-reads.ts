@@ -549,7 +549,7 @@ async function main() {
         const yan = keypair('YanVisitor');
         se.transfer('genesis', zed.pubKeyHex, 1, 'hello', 'direct', true);
         se.transfer('genesis', yan.pubKeyHex, 1, 'hello', 'direct', true);
-        const p2p = await startP2P(4296, 4297);
+        const p2p = await startP2P(0, 0);
         const nodeId = p2p.peerId.toString();
         addConnector(`/ip4/127.0.0.1/tcp/4297/p2p/${nodeId}`, 'mirror', 'self-test-peer');
         const payload: any = await se.exportSyncState(nodeId);

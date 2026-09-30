@@ -102,7 +102,7 @@ async function main(): Promise<void> {
     console.log('=== Pulse Resolver & Cache Test Suite ===\n');
 
     initStateEngine();
-    const p2pNode = await startP2P(4034, 4035);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4035/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 

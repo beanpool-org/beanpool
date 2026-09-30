@@ -32,8 +32,8 @@ process.env.ADMIN_PASSWORD = 'Decisions-Off-Admin-61!';
 
 import crypto from 'node:crypto';
 
-const PORT = 8766;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ADMIN_PW = process.env.ADMIN_PASSWORD;
 const ADMIN = { 'x-admin-password': ADMIN_PW };
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -82,7 +82,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const de = await import('./decisions-engine.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
 

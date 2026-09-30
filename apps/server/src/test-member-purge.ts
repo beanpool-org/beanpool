@@ -169,8 +169,7 @@ async function runTests() {
 
     // 9. HTTP Endpoint Test with Replay-Proof Signing
     initTls();
-    const port = 8549;
-    await startHttpsServer(port);
+    const port = await startHttpsServer(0);
 
     const dave = makeKeypair();
     const inv5 = generateInvite(admin.pubKeyHex)!;

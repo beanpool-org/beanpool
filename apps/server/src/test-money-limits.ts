@@ -131,9 +131,17 @@ function newId(name: string): Id {
 
 interface Res { status: number; body: any; headers: Headers }
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+/** When each server last answered this suite, for the message of a request that fails. */
+const lastAnswer = new Map<string, number>();
 async function callAt(base: string, method: Method, id: Id | null, urlPath: string, body?: unknown): Promise<Res> {
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    // A new connection for every request, never a kept-alive one. The main server runs in this process, and the suite
+    // seeds rows synchronously between requests (moneyActs, entPosts, gatewayWrites), which holds the event loop. When
+    // that hold outlasts the server's keep-alive timeout (5 s, plus Node 22's 1 s buffer), fetch hands the next request
+    // to the idle socket before the timer has run; the timer then fires and the server destroys the socket with the
+    // request unread: `fetch failed`, cause `read ECONNRESET` (CI, Node 22, at the two longest holds). A child node's
+    // socket goes stale the same way while this process is held.
+    const headers: Record<string, string> = { Connection: 'close' };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -143,7 +151,16 @@ async function callAt(base: string, method: Method, id: Id | null, urlPath: stri
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${base}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    let res: Response;
+    try {
+        res = await fetch(`${base}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    } catch (e) {
+        // fetch says only `fetch failed`; why is in its cause (ECONNRESET, ECONNREFUSED, a timeout...).
+        const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+        const since = lastAnswer.has(base) ? `${Date.now() - lastAnswer.get(base)!} ms after its last answer` : 'before any answer';
+        throw new Error(`${method} ${base}${urlPath} failed: ${cause?.code ?? ''} ${cause?.message ?? String(e)} (${since})`, { cause: e });
+    }
+    lastAnswer.set(base, Date.now());
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }

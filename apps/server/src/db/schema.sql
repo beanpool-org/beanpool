@@ -354,6 +354,8 @@ CREATE TABLE IF NOT EXISTS post_photos (
     PRIMARY KEY (post_id, order_num)
 );
 CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
+-- A listing photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
+CREATE INDEX IF NOT EXISTS idx_post_photos_sha256 ON post_photos(sha256) WHERE sha256 IS NOT NULL;
 
 -- Encrypted message attachments (lazy-loaded; the node only ever holds ciphertext).
 -- data = base64 AEAD ciphertext of the image; nonce = its x25519-xc20p-v2 nonce.

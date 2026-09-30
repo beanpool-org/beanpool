@@ -419,8 +419,13 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             json: async () => ({ treasuries: mockTreasuries }),
         });
 
-        const treasuries = await fetchNodeTreasuries('https://node.example.com');
+        const treasuries = await fetchNodeTreasuries('https://node.example.com', 'pwd123', 'tfa-session');
         expect(treasuries).toEqual(mockTreasuries);
+        // The public list is members' on every node: Settings asks the admin route, with the admin password.
+        const [url, init] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+        expect(url).toBe(resolveNodeApiUrl('https://node.example.com', '/api/local/admin/treasury'));
+        expect(init?.headers?.['X-Admin-Password']).toBe('pwd123');
+        expect(init?.headers?.['X-Admin-2FA-Session']).toBe('tfa-session');
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
         const empty = await fetchNodeTreasuries('https://node.example.com');

@@ -4,11 +4,11 @@
  * A /ws socket with no verified member gets PUBLIC_WS_EVENTS as bare `{ type }` doorbells, and its app reads again what
  * it may read on each one. On a node that shows visitors the listings and not the people (`guestListingsOnly`, the
  * global profile), an unsigned reader, and one signed by a key that is no member here, reads the listings' guest view
- * and nothing of the Commons: the decisions, projects, crowdfunds and enterprises are members-only there, or switched
- * off. So there such a socket gets the listings' doorbells (new_post, post_updated, post_removed) and state_synced, and
- * none for a project, a decision or an enterprise. On a local node it is the other way round: the Commons' reads are
- * public and the listings are its members' (Marty, 2026-09-28), so such a socket gets every public doorbell but the
- * listings'. A socket that holds a key (a visitor's, a suspended member's) gets every public doorbell everywhere.
+ * and nothing of the Commons: the decisions, projects, crowdfunds and enterprises are members-only on every node, or
+ * switched off. So there such a socket gets the listings' doorbells (new_post, post_updated, post_removed) and
+ * state_synced, and none for a project, a decision or an enterprise. On a local node the listings are its members' too
+ * (Marty, 2026-09-28), so such a socket gets state_synced only (2026-10-01). A socket that holds a key (a visitor's, a
+ * suspended member's) gets every public doorbell everywhere.
  *
  * The real server in this process, real sockets over TLS, every change made over HTTP through the signature middleware
  * or by the engine's own functions, where this node can make one:
@@ -16,8 +16,8 @@
  *      a suspended member's (a key, so unchanged)
  *   2. a listing posted, edited and taken down over HTTP: the doorbell for each reaches every socket, bare to all but
  *      the member's
- *   3. a Decision proposed and voted on over HTTP: its doorbells reach the key-less sockets only where an unsigned
- *      reader can read the decisions; the member's socket, the visitor's and the suspended member's get them everywhere
+ *   3. a Decision proposed and voted on over HTTP: its doorbells reach no key-less socket, as an unsigned reader reads
+ *      no decision on any node; the member's socket, the visitor's and the suspended member's get them everywhere
  *   4. a Commons project proposed and placed on the map (the engine's createProject and setEnterpriseLocation), where
  *      this node runs them: the same
  *   5. the table: every type in PUBLIC_WS_EVENTS broadcast once, and a state_synced for an import that counted only
@@ -35,8 +35,8 @@
  *   - global: NODE_PROFILE=global as it ships: listings only
  *   - local+guest: a local node with `guestListingsOnly` overridden on: listings only (the switch decides, not the
  *     profile), and Beans on, so section 4 runs
- *   - local: NODE_PROFILE unset: every public doorbell but the listings' (section 4 runs); the board section 6 checks is
- *     then read by a member, as a stranger may not read it there
+ *   - local: NODE_PROFILE unset: state_synced only (section 4 runs); the board section 6 checks is then read by a
+ *     member, as a stranger may not read it there
  *   - standby-read-open: a global standby started with ENFORCE_READ_AUTH=false (a main server refuses to start so), where
  *     every read is open to anyone: every public doorbell, as before (section 5 only: a standby makes no changes)
  * Section 6 runs on each of the other three.
@@ -298,11 +298,7 @@ async function main(): Promise<void> {
             assert(DECISION_EVENTS.every(t => typesOf(s).has(t)) && bare(s), `${who} socket still gets both, bare, as before (${show(s)})`);
         }
         for (const [who, s] of keyless) {
-            if (LISTINGS_ONLY) {
-                assert(got(s).length === 0, `${who} socket gets no doorbell for it: an unsigned reader reads no Decision here (${show(s)})`);
-            } else {
-                assert(DECISION_EVENTS.every(t => typesOf(s).has(t)) && bare(s), `${who} socket gets both, bare, as before: the decisions are a public read here (${show(s)})`);
-            }
+            assert(got(s).length === 0, `${who} socket gets no doorbell for it: an unsigned reader reads no Decision here (${show(s)})`);
         }
 
         // ── 4. a Commons project, placed on the map ─────────────────────────────────────────────
@@ -321,11 +317,7 @@ async function main(): Promise<void> {
                 assert(wanted.every(t => typesOf(s).has(t)) && bare(s), `${who} socket still gets both, bare, as before (${show(s)})`);
             }
             for (const [who, s] of keyless) {
-                if (LISTINGS_ONLY) {
-                    assert(!wanted.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for either: projects and enterprises are members-only here (${show(s)})`);
-                } else {
-                    assert(wanted.every(t => typesOf(s).has(t)) && bare(s), `${who} socket gets both, bare, as before: they are public reads here (${show(s)})`);
-                }
+                assert(!wanted.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for either: projects and enterprises are members-only here (${show(s)})`);
             }
         }
     }
@@ -334,8 +326,10 @@ async function main(): Promise<void> {
     console.log('\n── 5. the table: every public type, once each ──');
     clear();
     const PUBLIC = [...se.PUBLIC_WS_EVENTS];
+    // With the visitors' view, the listings' and state_synced; with every read open (the standby), all of them; on a local
+    // community, whose listings and Commons are its members', state_synced only.
     const keylessRow = LISTINGS_ONLY ? new Set([...LISTING_EVENTS, 'state_synced'])
-        : KEYLESS_HEARS_LISTINGS ? new Set(PUBLIC) : new Set(PUBLIC.filter(t => !LISTING_EVENTS.includes(t)));
+        : KEYLESS_HEARS_LISTINGS ? new Set(PUBLIC) : new Set(['state_synced']);
     assert(keylessRow.size <= PUBLIC.length && [...keylessRow].every(t => se.PUBLIC_WS_EVENTS.has(t)), 'setup: this node\'s row of the table is within PUBLIC_WS_EVENTS');
     for (const type of PUBLIC) se.broadcast({ type, sweep: true });
     // An import that counted only groups (engine/sync.ts): its counts miss tables it writes, so it still rings.
@@ -357,7 +351,7 @@ async function main(): Promise<void> {
         const extra = [...t].filter(x => !keylessRow.has(x));
         const missing = [...keylessRow].filter(x => !t.has(x));
         assert(extra.length === 0 && missing.length === 0,
-            `${who} socket gets exactly ${LISTINGS_ONLY ? 'the listings\' doorbells and state_synced' : KEYLESS_HEARS_LISTINGS ? 'every public type, as before' : 'every public type but the listings\''} (extra ${JSON.stringify(extra)}, missing ${JSON.stringify(missing)})`);
+            `${who} socket gets exactly ${LISTINGS_ONLY ? 'the listings\' doorbells and state_synced' : KEYLESS_HEARS_LISTINGS ? 'every public type, as before' : 'state_synced only'} (extra ${JSON.stringify(extra)}, missing ${JSON.stringify(missing)})`);
         assert(bare(s), `${who} socket gets them bare: { type } only`);
         assert(got(s).filter(e => e.type === 'state_synced').length === 2, `${who} socket gets state_synced for the import that counted only groups too`);
         assert(!t.has('system_announcement'), `${who} socket gets no member-only event`);

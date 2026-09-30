@@ -250,17 +250,22 @@ async function run() {
     // ── I. Secret ballots ─────────────────────────────────────────────────
     console.log('\n--- I. Secret ballots ---');
     // A member's socket (a /ws socket signed by a member is tagged with _memberPubkey at upgrade, and _memberFeed for
-    // one who reads as a member) gets the full event; a stranger's socket gets decision_vote_cast only as a bare
-    // doorbell (PUBLIC_WS_EVENTS), since the decisions list and detail are public reads.
+    // one who reads as a member) gets the full event. A socket that holds a key off the member feed (a visitor's, a
+    // suspended member's) gets decision_vote_cast only as a bare doorbell (PUBLIC_WS_EVENTS). A stranger's socket gets
+    // nothing of it on a local community, whose decisions are members' reads (2026-10-01).
     const seen: any[] = [];
     const fakeSocket = { _memberPubkey: proposerA, _memberFeed: true, send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
+    const keyedSeen: any[] = [];
+    const keyedSocket = { _memberPubkey: trader, send: (m: string) => keyedSeen.push(JSON.parse(m)), readyState: 1 };
     const strangerSeen: any[] = [];
     const strangerSocket = { send: (m: string) => strangerSeen.push(JSON.parse(m)), readyState: 1 };
     addWsClient(fakeSocket);
+    addWsClient(keyedSocket);
     addWsClient(strangerSocket);
     seen.length = 0;
     const secretVote = castDecisionVote(poolA.id, partner1, false, 1);
     removeWsClient(fakeSocket);
+    removeWsClient(keyedSocket);
     removeWsClient(strangerSocket);
     assert(secretVote.success, 'partner1 votes No on pool A');
     const castEvent = seen.find(e => e.type === 'decision_vote_cast');
@@ -268,9 +273,11 @@ async function run() {
     assert(castEvent && !('voterPubkey' in castEvent) && !('support' in castEvent) && !('weight' in castEvent) && !('creditCost' in castEvent),
         `the broadcast names no voter, side or weight (got keys ${castEvent ? Object.keys(castEvent).join(',') : 'none'})`);
     assert(!JSON.stringify(seen).includes(partner1), 'no broadcast carries the voter key');
-    const strangerCast = strangerSeen.filter(e => e.type === 'decision_vote_cast');
-    assert(strangerCast.length === 1 && JSON.stringify(strangerCast[0]) === '{"type":"decision_vote_cast"}',
-        `a stranger's socket gets decision_vote_cast as a bare doorbell, no decision id or tally (got ${JSON.stringify(strangerSeen)})`);
+    const keyedCast = keyedSeen.filter(e => e.type === 'decision_vote_cast');
+    assert(keyedCast.length === 1 && JSON.stringify(keyedCast[0]) === '{"type":"decision_vote_cast"}',
+        `a keyed socket off the member feed gets decision_vote_cast as a bare doorbell, no decision id or tally (got ${JSON.stringify(keyedSeen)})`);
+    assert(!strangerSeen.some(e => e.type === 'decision_vote_cast'),
+        `a stranger's socket gets no decision_vote_cast here: the decisions are members' reads (got ${JSON.stringify(strangerSeen)})`);
 
     const detailAsOther = await callRouter(commons, 'GET', `/api/commons/decisions/${poolA.id}`, { actor: proposerA });
     assert(detailAsOther.status === 200 && !('votes' in detailAsOther.body), 'GET /decisions/:id no longer returns a votes list');
@@ -606,7 +613,9 @@ async function run() {
     const adminCard = adminDecisions.body.decisions.find((d: any) => d.id === suspendedCard.id);
     assert(adminCard?.params?.suspendedBy === keyAdmin, 'the admin Decisions list still says who suspended');
     const heard: any[] = [];
-    const listener = { send: (m: string) => heard.push(JSON.parse(m)), readyState: 1 };
+    // A member's socket, on the member feed, so it hears each event in full: a key-less one hears no Decision's doorbell on
+    // a local community (its Decisions are members-only, 2026-10-01), and a bare doorbell could carry no key anyway.
+    const listener = { send: (m: string) => heard.push(JSON.parse(m)), readyState: 1, _memberPubkey: voters[0], _memberFeed: true };
     addWsClient(listener);
     const wsTarget = makeMember('WsTarget');
     const wsSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${wsTarget}/suspend`, { actor: keyAdmin, body: { reason: 'Broadcast carries no admin key' } });

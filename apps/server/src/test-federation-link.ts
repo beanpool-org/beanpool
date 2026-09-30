@@ -70,6 +70,24 @@ async function get(path: string): Promise<{ status: number; json: any }> {
     return { status: res.status, json };
 }
 
+/** A member's read, signed with her key as the apps sign one: the enterprises are members' reads (2026-10-01). */
+async function signedGet(signer: { pk: string; priv: crypto.KeyObject }, route: string): Promise<{ status: number; json: any }> {
+    resetGatewayRateLimit();
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const res = await fetch(`${BASE}${route}`, {
+        headers: {
+            'X-Public-Key': signer.pk,
+            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${route.split('?')[0]}\n${ts}\n${nonce}\n`), signer.priv).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        },
+    });
+    let json: any = null;
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, json };
+}
+
 /** A member's request, signed with her key as the apps sign one. */
 async function signedPost(signer: { pk: string; priv: crypto.KeyObject }, route: string, body: unknown): Promise<{ status: number; json: any }> {
     resetGatewayRateLimit();
@@ -231,14 +249,23 @@ async function main() {
 
     // ── 6. The Commons list, which is where a member actually meets this. ────────────────────────────────
     const ordinary = createTreasury('Egg Flock', 'bundled://sprout', 0);
-    const treasuries = await get('/api/treasuries');
+    // Read as a member: the enterprises are members' reads on every node (2026-10-01).
+    const reader = { pk: '', priv: null as unknown as crypto.KeyObject };
+    {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        reader.pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+        reader.priv = privateKey;
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+                    VALUES (?, 'Reader', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'TEST', 'https://example.com/r.jpg', 'active')`).run(reader.pk);
+    }
+    const treasuries = await signedGet(reader, '/api/treasuries');
     const linkCard = (treasuries.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
     const plainCard = (treasuries.json?.treasuries ?? []).find((t: any) => t.publicKey === ordinary.publicKey);
     assert(linkCard?.link?.peerId === PEER_ID,
         '6a. the link appears in the Commons list carrying its link fields, so the card can say what it is');
     assert(plainCard !== undefined && plainCard.link == null,
         '6b. and an ORDINARY enterprise carries link=null — the card must not imply an egg flock owes another community work');
-    const detail = await get(`/api/treasury/${link!.treasuryPubkey}`);
+    const detail = await signedGet(reader, `/api/treasury/${link!.treasuryPubkey}`);
     assert(detail.json?.link?.peerId === PEER_ID, '6c. the detail read carries it too, keyed by peer id for the ceiling route');
     assert(getLinkByTreasury(ordinary.publicKey) === null, '6d. and the treasury→link lookup does not invent one');
 
@@ -249,13 +276,13 @@ async function main() {
     // computed on the SERVER, by the same `commissionAllowanceFor` the enforcement path uses, and shipped on
     // both reads. A client recomputing it would be a second definition of the rule that refuses the button.
     tiltBridge(PEER_ID, -480);
-    const owedList = await get('/api/treasuries');
+    const owedList = await signedGet(reader, '/api/treasuries');
     const owedCard = (owedList.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
     assert(owedCard?.link?.commissionAllowance === 480,
         `6e. with a tab of −480 and a ceiling of 0 the card carries an allowance of 480 (got ${owedCard?.link?.commissionAllowance}) — "commissioning off" beside "they owe us 480" told the keeper the opposite of the truth`);
     assert(owedCard?.link?.commissionCeiling === 0,
         '6f. while still reporting the ceiling separately — they are different facts and the card shows both');
-    const owedDetail = await get(`/api/treasury/${link!.treasuryPubkey}`);
+    const owedDetail = await signedGet(reader, `/api/treasury/${link!.treasuryPubkey}`);
     assert(owedDetail.json?.link?.commissionAllowance === 480,
         `6g. and the detail read agrees with the list (got ${owedDetail.json?.link?.commissionAllowance}) — one shape function, so they cannot drift`);
     tiltBridge(PEER_ID, 480);   // back to square, so the checks below start where they expect

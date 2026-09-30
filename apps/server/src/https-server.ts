@@ -280,21 +280,24 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 //     request cannot carry signature headers. Message attachments are E2E
 //     ciphertext (NAT-1), so serving them unauthenticated leaks no plaintext.
 //     (A token-in-URL scheme for these is tracked as follow-up.)
+// Some entries are here only so that, switched off by the node's profile, they answer 404 feature_off to everyone:
+// otherwise they are members' reads on every node (MEMBERS_ONLY_READS_*), and the listings and the Commons pot are
+// public only on some (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT, MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT).
 export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
     '/api/node/config',
     '/api/directory/info',
-    '/api/commons/balance',          // community transparency (single aggregate)
-    '/api/commons/projects',         // community transparency
-    '/api/crowdfund/projects',       // public crowdfund list
-    '/api/treasuries',               // community transparency: list of treasuries
-    '/api/enterprises',              // community transparency: list of enterprises
-    '/api/enterprises/map',          // map pins: enterprises with a location
-    '/api/map/enterprises',          // map pins: alias
-    '/api/treasuries/map',           // map pins: alias
-    '/api/commons/decisions',        // governance transparency: list of decisions
+    '/api/commons/balance',          // the Commons pot, a community total: public on a local community (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT)
+    '/api/commons/projects',         // members only (MEMBERS_ONLY_READS_PATTERNS); here for its 404 when switched off
+    '/api/crowdfund/projects',       // members only; here for its 404 when switched off
+    '/api/treasuries',               // members only; here for its 404 when switched off
+    '/api/enterprises',              // members only; here for its 404 when switched off
+    '/api/enterprises/map',          // members only; here for its 404 when switched off
+    '/api/map/enterprises',          // members only; here for its 404 when switched off
+    '/api/treasuries/map',           // members only; here for its 404 when switched off
+    '/api/commons/decisions',        // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
     '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
@@ -302,7 +305,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
-    '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)
+    '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
@@ -337,48 +340,55 @@ export function isPeerProtocolRead(ctx: { method: string; path: string }): boole
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
 export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
-    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
-    /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
-    /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
-    /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
-    /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
-    /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
+    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member? (its name only to the key's own signer)
+    /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability (rate-limited)
+    /^\/api\/crowdfund\/projects\/[^/]+$/,                  // members only (MEMBERS_ONLY_READS_PATTERNS); here for its 404 when switched off
+    /^\/api\/treasury\/[^/]+$/,                             // members only; here for its 404 when switched off
+    /^\/api\/enterprise\/[^/]+$/,                           // members only; here for its 404 when switched off
+    /^\/api\/commons\/decisions\/[^/]+$/,                   // members only (MEMBERS_ONLY_READS_PATTERNS)
+    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: the exact callsign's SSO recovery candidate, no photo (rate-limited)
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed for every listing where the listings are members', and for a listing off the board where they are a public read (engine/photo-keys.ts)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
-// Public reads that name members, on a node that shows visitors the listings and not the people (`guestListingsOnly`,
-// on the global profile by default and overridable anywhere, G9a): off the allowlist there, so the ordinary gate
-// answers them for members only, whatever else is switched on. Each names people: a decision carries its author's key
-// and can name a member in its params (a suspension), the pool balance belongs to a ledger a visitor has no part in,
-// and the Pulse feed carries each member's key, name, face and their own pages elsewhere. The lobby has nothing of
-// them to be transparent about. Everywhere else they stay public.
-export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+// Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
+// gate answers them for a member of this node (passesReadGate, a suspended member included) and nobody else, a visitor's
+// row and a signed non-member included, as it answers a local community's listings. Marty, 2026-09-28: "nothing on a
+// private node should be public now that we have a global node"; on the global node (G9a) they were members' already.
+// Each names people: a decision carries its author's key and can name a member in its params (a suspension, a
+// removal), and the Pulse feed carries each member's key, name, face and their own pages elsewhere (Instagram, YouTube).
+// A local community refuses them with the listings' code and the global community's address (COMMUNITY_MEMBERS_ONLY).
+export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
-    '/api/commons/balance',
     '/api/pulse/feed',
 ]);
-// And every public read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
-// projects, wherever those are switched on with the visitors' view (a global node with Beans back on, a local node
-// with the view overridden on). Members only rather than stripped for a visitor, as a post is: each is people and
-// money through and through. An enterprise names its keepers and their backing pledges (key, name, face), who paused
-// it, who is winding it up and who placed it, and its flow carries members' memos; a crowdfund names its creator, a
-// project its proposer; each carries balances from a ledger a visitor has no part in, and an enterprise its own face
-// and exact place. A visitor's copy would be a second guestPost over some fifty fields, every new one a leak until
-// someone decides; off the allowlist, a new field or a new public read under these prefixes is members-only already.
-// The apps read a refused one as "none", as they do on a node with them off. (The phone reads the treasuries list and
-// its crowdfund sync unsigned, native db.ts getTreasuries and pillar-sync, so on such a node a member's phone lists
-// none of them until those two reads are signed.)
-export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
+// And every read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
+// projects, where they are switched on (switched off, each answers 404 feature_off to everyone). Members only rather
+// than stripped for a stranger, as a post is on the global node: each is people and money through and through. An
+// enterprise names its keepers and their backing pledges (key, name, face, amount), who paused it, who is winding it up
+// and who placed it, and its flow carries members' memos; a crowdfund names its creator, a project its proposer; each
+// carries balances, and an enterprise its own face and exact place. A stranger's copy would be a second guestPost over
+// some fifty fields, every new one a leak until someone decides; off the allowlist, a new field or a new public read
+// under these prefixes is members-only already. The apps read a refused one as "none", as they do on a node with them
+// off; a member's phone signs every read of its own community (native node-request-signing.ts), and the web app every
+// read it makes with a key (lib/api.ts request). The node's own Settings list the enterprises with the admin password
+// (GET /api/local/admin/treasury).
+export const MEMBERS_ONLY_READS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/decisions\/[^/]+$/,
     /^\/api\/(treasury|treasuries|enterprise|enterprises)(\/|$)/,
     /^\/api\/map\/enterprises$/,
     /^\/api\/crowdfund(\/|$)/,
     /^\/api\/commons\/projects(\/|$)/,
 ];
+// The Commons pot: a community total, and public on a local community, as its circulation and its counts are
+// (/api/community/info). On a node that shows visitors the listings and not the people (`guestListingsOnly`, the global
+// node, G9a) it is members' too: the pool belongs to a ledger a visitor has no part in, and the lobby has nothing of it
+// to be transparent about.
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/commons/balance',
+]);
 
 // Public reads that are the listings, and public only on a node that shows visitors the listings and not the people
 // (`guestListingsOnly`, the global node): there anyone looks around, in the visitors' view (rough areas, no people). On
@@ -401,6 +411,17 @@ export const LISTINGS_MEMBERS_ONLY = {
     global: 'https://global.beanpool.org',
 } as const;
 
+/**
+ * The refusal of a local community's other members' reads (MEMBERS_ONLY_READS_*: its enterprises, Decisions, Commons
+ * projects, crowdfunds and Pulse) to anyone but its members: the listings' code and the global community's address, in
+ * words that fit any of them. The global node refuses them as any gated read, as before.
+ */
+export const COMMUNITY_MEMBERS_ONLY = {
+    error: "This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    code: 'members_only',
+    global: 'https://global.beanpool.org',
+} as const;
+
 function isListingsRead(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
     return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed);
@@ -411,25 +432,36 @@ function isAllowlisted(path: string): boolean {
 }
 
 // The router answers a path with one trailing slash as the path itself (@koa/router's default, strict: false), so this
-// test does too. Otherwise `/api/pulse/feed/` would miss it, be held only to the gate's usual live-member test, and
-// reach the feed as a pruned account. Only a public read: the gated reads under the same prefixes (an enterprise's
-// ledger, its thread) keep the gate's usual test.
+// test does too, and `/api/pulse/feed/` is refused with the same words as `/api/pulse/feed`. Only a read on the
+// allowlist: the gated reads under the same prefixes (an enterprise's ledger, its thread) keep the gate's usual answer.
 function namesMembers(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
     return isAllowlisted(routed)
-        && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
+        && (MEMBERS_ONLY_READS_EXACT.has(routed) || MEMBERS_ONLY_READS_PATTERNS.some(re => re.test(routed)));
 }
 
 function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
+    // The switches are read only for these few paths, so no other request pays for them.
     // The listings: public only where visitors get the listings' view.
     if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
-    // The switches are read only for these few paths, so no other request pays for them.
+    // The Commons pot: public everywhere but there.
+    if (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return !getProfileSwitches().guestListingsOnly;
     if (!namesMembers(path)) return true;
-    const switches = getProfileSwitches();
     // A Beans read that is switched off names nobody: it answers 404 feature_off to everyone (profileFeatureGate), a
-    // visitor as a member, as it did before this switch existed.
-    return !switches.guestListingsOnly || featureOffFor(path, switches) !== null;
+    // stranger as a member.
+    return featureOffFor(path) !== null;
+}
+
+/**
+ * What the gate answers someone it refuses one of a local community's members' reads, the listings and the rest: their
+ * code and the global community's address, which the apps turn into their sign-in page. Null for any other gated read,
+ * and for these on a node with the visitors' view, whose refusal says nothing more.
+ */
+function membersOnlyRefusal(path: string): typeof LISTINGS_MEMBERS_ONLY | typeof COMMUNITY_MEMBERS_ONLY | null {
+    if (isListingsRead(path)) return LISTINGS_MEMBERS_ONLY;
+    if (namesMembers(path) && !getProfileSwitches().guestListingsOnly) return COMMUNITY_MEMBERS_ONLY;
+    return null;
 }
 
 // Gated reads that are nothing but what only members may read, so the gate asks readsAsMember of the signer rather than
@@ -1368,7 +1400,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         } else {
             if (!pubKeyHex || !signatureBase64) {
                 ctx.status = 401;
-                ctx.body = isGatedRead && isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Missing cryptographic signature headers' };
+                const refusal = isGatedRead ? membersOnlyRefusal(ctx.path) : null;
+                ctx.body = refusal ? { ...refusal } : { error: 'Missing cryptographic signature headers' };
                 return;
             }
         }
@@ -1490,7 +1523,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             // membership isn't required there — e.g. first-time registration.)
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
-                ctx.body = isListingsRead(ctx.path) ? { ...LISTINGS_MEMBERS_ONLY } : { error: 'Read access requires a member identity' };
+                const refusal = membersOnlyRefusal(ctx.path);
+                ctx.body = refusal ? { ...refusal } : { error: 'Read access requires a member identity' };
                 return;
             }
 

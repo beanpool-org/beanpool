@@ -737,8 +737,9 @@ export default function PostDetailModal() {
             const updated = await getPost(post.id);
             setPost(updated);
             setEditMode(false);
-        } catch (e) {
-            Alert.alert('Error', 'Failed to save changes');
+        } catch (e: any) {
+            // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
+            Alert.alert('Error', String(e?.message || 'Failed to save changes'));
         }
         setSaving(false);
     };

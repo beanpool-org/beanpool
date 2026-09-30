@@ -423,8 +423,10 @@ async function main() {
         const hadd = approveKeeperRequest(requestToJoinEnterprise(ent, happ.pubKeyHex, 3).id, lead.pubKeyHex);
         const anonRes = await fetch(`${BASE}/api/enterprise/${ent}`);
         const anon = await anonRes.json() as any;
-        assert(anonRes.status === 200 && anon.publicKey === ent, 'HTTP: fixture — the enterprise detail is public-read');
-        assert(Array.isArray(anon.keeperChanges) && anon.keeperChanges.length === 0, 'HTTP: an anonymous reader gets no keeper changes');
+        // The enterprise detail is members' on every node (2026-10-01): an anonymous reader is refused it whole.
+        assert(anonRes.status === 401 && anon.code === 'members_only' && !JSON.stringify(anon).includes(ent),
+            'HTTP: an anonymous reader is refused the enterprise detail (members only)');
+        assert(!('keeperChanges' in anon), 'HTTP: an anonymous reader gets no keeper changes');
         const outsider = makeIdentity('HOutsider', 5);
         const out = await signedFetch('GET', `/api/enterprise/${ent}`, outsider);
         assert(out.status === 200 && Array.isArray(out.body?.keeperChanges) && out.body.keeperChanges.length === 0,

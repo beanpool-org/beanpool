@@ -12,7 +12,8 @@
  *   3. a member who took part in the trade → 200 with the trade in it
  *   4. a member who took NO part in it → 200 with the same trade (it is a community feed, not a
  *      per-participant one)
- *   5. every public read a guest needs still returns 200, unsigned and signed by the non-member
+ *   5. every public read a guest needs still returns 200, unsigned and signed by the non-member; the enterprises and
+ *      the Pulse feed, which name members, are members' since 2026-10-01 and refused to both
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-activity-feed-members-only.ts
  */
@@ -112,16 +113,11 @@ async function main() {
     // feed" while members saw each other's trades.
     assert(!hasTrade(asCarol.body) && !JSON.stringify(asCarol.body).includes('Sourdough'), 'carol does not see the alice→bob trade');
 
-    console.log('\n── a guest can still browse the public community ──');
+    console.log('\n── a guest can still read what is public, and nothing that names members ──');
     const enterprise = createTreasury('Guest Visible Bakery', 'data:image/png;base64,iVBORw0KGgo=', 0, { leadKeeperPubkey: alice.pubKeyHex }).publicKey;
     const guestReads: string[] = [
         '/api/community/info',
         '/api/node/info',
-        // Not /api/marketplace/posts: a local community's listings are its members' since 2026-09-28 (test-privacy-defaults).
-        '/api/enterprises',
-        '/api/enterprises/map',
-        `/api/enterprise/${enterprise}`,
-        '/api/pulse/feed',
         '/api/invite/check?code=NOT-A-REAL-CODE',
     ];
     for (const path of guestReads) {
@@ -129,6 +125,16 @@ async function main() {
         assert(u.status === 200, `unsigned GET ${path.split('?')[0]} is 200 (got ${u.status})`);
         const g = await get(path, guest);
         assert(g.status === 200, `non-member guest, signed, GET ${path.split('?')[0]} is 200 (got ${g.status})`);
+    }
+    // Not /api/marketplace/posts: a local community's listings are its members' since 2026-09-28, and its enterprises and
+    // Pulse feed, which name members, since 2026-10-01 (test-privacy-defaults).
+    for (const path of ['/api/enterprises', '/api/enterprises/map', `/api/enterprise/${enterprise}`, '/api/pulse/feed']) {
+        const u = await get(path);
+        assert(u.status === 401, `unsigned GET ${path} is refused, 401 (got ${u.status})`);
+        const g = await get(path, guest);
+        assert(g.status === 403, `non-member guest, signed, GET ${path} is refused, 403 (got ${g.status})`);
+        const m = await get(path, carol);
+        assert(m.status === 200, `a member reads ${path} (got ${m.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

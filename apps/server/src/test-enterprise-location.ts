@@ -254,8 +254,9 @@ async function main() {
         assert(directDbCheckLngFailed, 'Direct SQLite UPDATE with lng=200 fails CHECK constraint');
 
         // ── 6. Map Endpoint (/api/enterprises/map) ──
+        // Read by a member who keeps none of them: the enterprises' reads are members' on every node (2026-10-01).
         // Check current map pins: both shed and flock have location set
-        let mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        let mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         assert(mapRes.ok, `GET /api/enterprises/map succeeds (status ${mapRes.status})`);
         let mapData = await mapRes.json();
         const pins = mapData.enterprises as any[];
@@ -264,7 +265,7 @@ async function main() {
 
         // Paused enterprise in map endpoint: pause the flock
         pauseEnterprise(flock, adminId.pubKeyHex);
-        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         mapData = await mapRes.json();
         const pausedFlockPin = mapData.enterprises.find((p: any) => p.publicKey === flock);
         assert(pausedFlockPin !== undefined, 'Paused enterprise is included in map endpoint');
@@ -278,34 +279,34 @@ async function main() {
             lng: 153.51,
             locationAuthSigner: adminId.pubKeyHex,
         });
-        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         mapData = await mapRes.json();
         assert(mapData.enterprises.some((p: any) => p.publicKey === shadeHouse), 'ShadeHouse with location initially appears in map endpoint');
 
         // Wind up / complete ShadeHouse
         db.prepare("UPDATE members SET status = 'completed', wind_up_finalised_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(shadeHouse);
 
-        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         mapData = await mapRes.json();
         assert(!mapData.enterprises.some((p: any) => p.publicKey === shadeHouse), 'Completed enterprise is EXCLUDED from map endpoint');
 
         // An enterprise with no location is also excluded
         const { publicKey: noLocCoop } = createTreasury('NoLocationCoop', AVATAR, 0);
-        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         mapData = await mapRes.json();
         assert(!mapData.enterprises.some((p: any) => p.publicKey === noLocCoop), 'Enterprise without location is excluded from map endpoint');
 
         // Legacy/unspecified enterprise with NULL status and location set IS INCLUDED in map endpoint
         db.prepare("UPDATE members SET status = NULL WHERE public_key = ?").run(shed);
-        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapRes = await signedFetch('GET', '/api/enterprises/map', bobStranger);
         mapData = await mapRes.json();
         const nullStatusPin = mapData.enterprises.find((p: any) => p.publicKey === shed);
         assert(nullStatusPin !== undefined, 'Enterprise with NULL status and location appears in map endpoint');
         assert(nullStatusPin.status === 'active', 'Enterprise with NULL status defaults to active in map pin response');
         db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(shed);
 
-        // ── 7. Public read transparency endpoints include location ──
-        const treasuriesRes = await fetch(`${BASE}/api/treasuries`);
+        // ── 7. The members' reads of the enterprises include location ──
+        const treasuriesRes = await signedFetch('GET', '/api/treasuries', bobStranger);
         assert(treasuriesRes.ok, 'GET /api/treasuries succeeds');
         const treasuriesData = await treasuriesRes.json();
         const shedInTreasuries = treasuriesData.treasuries.find((t: any) => t.publicKey === shed);
@@ -313,7 +314,7 @@ async function main() {
         assert(shedInTreasuries.lng === approx.lng, 'GET /api/treasuries includes lng');
         assert(shedInTreasuries.locationAuthSigner === aliceKeeper.pubKeyHex, 'GET /api/treasuries includes locationAuthSigner');
 
-        const detailRes = await fetch(`${BASE}/api/enterprise/${shed}`);
+        const detailRes = await signedFetch('GET', `/api/enterprise/${shed}`, bobStranger);
         assert(detailRes.ok, 'GET /api/enterprise/:id succeeds');
         const detailData = await detailRes.json();
         assert(detailData.lat === approx.lat, 'GET /api/enterprise/:id includes lat');
@@ -348,7 +349,7 @@ async function main() {
         // 8b. List and detail endpoints never return coordinates for a completed enterprise
         const servedCompleted = completedWithCoords('ServedWoundUp', -28.531, 153.521);
         for (const listPath of ['/api/treasuries', '/api/enterprises']) {
-            const listRes = await fetch(`${BASE}${listPath}`);
+            const listRes = await signedFetch('GET', listPath, bobStranger);
             assert(listRes.ok, `GET ${listPath} succeeds`);
             const listData = await listRes.json();
             const rows = (listData.treasuries ?? listData.enterprises) as any[];
@@ -359,7 +360,7 @@ async function main() {
             assert(activeRow.lat === approx.lat && activeRow.lng === approx.lng, `GET ${listPath} still returns coordinates for an active enterprise`);
         }
         for (const detailPath of [`/api/enterprise/${servedCompleted}`, `/api/treasury/${servedCompleted}`]) {
-            const res = await fetch(`${BASE}${detailPath}`);
+            const res = await signedFetch('GET', detailPath, bobStranger);
             assert(res.ok, `GET ${detailPath} succeeds (status ${res.status})`);
             const data = await res.json();
             assert(data.lat === null && data.lng === null, `GET ${detailPath} omits coordinates for a completed enterprise (got ${data.lat}, ${data.lng})`);

@@ -152,8 +152,9 @@ export default function WelcomeScreen() {
     /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
     const skipNextSsoLookupRef = useRef(false);
 
-    // Look up as they type, on the prefix. A member given `paul12` because `paul` was taken has no
-    // reason to remember the digits months later, and being told "no account" reads as "it is gone".
+    // Look up as they type. A community answers only the whole name, case forgiven, with no photo or
+    // join date (every community since 2026-10-01, the global one before: a stranger must not list its
+    // members by typing a letter), so "Is this you?" appears once the name is complete.
     // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
     useEffect(() => {
         // Tapping a candidate writes the full callsign here, which matches itself on the server and
@@ -1022,7 +1023,7 @@ export default function WelcomeScreen() {
         try {
             const identity = await restoreFromWords(words, finalAnchorUrl, {
                 confirmReplace: askToReplace('recover'),
-                nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
+                nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(finalAnchorUrl, publicKey, privateKey),
             });
             // A sign-in restore this phone left waiting for this account is stopped now, with the account's own key.
             void stopSsoRestoreAfterWords(identity);
@@ -1240,7 +1241,7 @@ export default function WelcomeScreen() {
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
-                nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
+                nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(finalAnchorUrl, publicKey, privateKey),
             });
             await clearPendingOnboarding();
             setOutgoingIdentity(null);
@@ -2768,10 +2769,10 @@ export default function WelcomeScreen() {
                                 editable={!loading}
                             />
 
-                            {/* Recognise, do not recall. Tapping a face is a far easier thing to ask
-                                of someone who has lost their phone than reproducing a string they
-                                chose months ago — and the node only lists accounts that actually
-                                have a sign-in fragment, so none of these is a dead end. */}
+                            {/* The account the whole name found, to confirm. The node only lists
+                                accounts that actually have a sign-in fragment, so none of these is a
+                                dead end. A community sends no photo or join date to a stranger, so the
+                                row falls back to the name's initial. */}
                             {!loading && ssoCandidates.length > 0 && (
                                 <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>

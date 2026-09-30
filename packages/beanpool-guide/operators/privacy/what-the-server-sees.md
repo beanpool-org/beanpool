@@ -37,15 +37,27 @@ On the global community, the server also keeps a scrambled reference to each Goo
 
 GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas).
 
+## What someone who is not a member can read
+
+Your community is for its members. Someone who is not a member, signed in to BeanPool or not, can read only this:
+
+- the community's name, its counts and totals (members, posts, trades, the Commons pot), what it has switched on, and its health summary;
+- the price guide: things and their usual prices, with no people or posts in it;
+- what it takes to join or come back: whether an invite code works and who sent it, whether a name is taken here, and whether a key is a member here, but never that member's name. For a sign-in recovery, the one member whose whole name was typed, with their key and no photo. The name checks are limited to 15 a minute from one internet address;
+- the pictures an app shows without signing: a profile picture by the member's key, a post's photos at their own addresses (see below), the locked attachments of direct messages, and the pictures of Pulse items.
+
+Everything else is for members only: the market, the enterprises with who keeps and backs them, Decisions, Commons projects, crowdfunds and the Pulse. Someone who is not a member is told it is for members, and pointed to the global community, global.beanpool.org, to look around.
+
+Profile pictures on your community are not locked with a key of their own yet. Anyone who has a member's key can see their picture: another member, someone they messaged or paid, or someone who typed their exact name into the sign-in recovery.
+
 ## Who can read what over the internet
 
 - Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.
-- Some things are public on purpose: the Pulse, the community's health summary and profile pictures.
-- The market is for your members: its posts, and the photos in them. An app shows a photo without signing, so the server gives each photo an address with a key in it, and the photo opens only at that address. Someone who has only a post's id gets nothing, not even whether the post exists.
-- If you turn ENFORCE_READ_AUTH off, anyone can read the market and see its photos. A post for a group, or for one person, still reaches only the people it is for, and so do its photos.
+- An app shows a photo without signing, so the server gives each post's photo an address with a key in it, and the photo opens only at that address. Someone who has only a post's id gets nothing, not even whether the post exists.
+- If you turn ENFORCE_READ_AUTH off, anyone can read all of it: the market and its photos, the enterprises, the Decisions and the Pulse. A post for a group, or for one person, still reaches only the people it is for, and so do its photos.
 - The live-updates channel tells the apps about changes as they happen. Every version of the BeanPool app signs its connection, so the server knows which member is listening.
 - A member hears about changes to the whole community, such as new posts, new members and announcements. They also hear about the private things they are part of: their own messages, their own trades, and the groups and event chats they are in. They never hear another member's messages or trades. When someone else's trade changes the market, for example a listing is taken, other members are told only that something changed, so their app can check again.
-- Anyone who is not a member is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.
+- Anyone who is not a member is told nothing of what happens on your community. On the global community a visitor is told only that a post on the market changed, never what changed or who changed it. This is on by default.
 - The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false sends the community-wide changes to anyone who can reach your server, as it was before, but never anyone's messages or trades. Do not use false.
 
 ## What admins see in Settings

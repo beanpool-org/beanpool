@@ -605,10 +605,11 @@ export async function startVaultRestore(
         body = await vaultPost('/v1/restore', { ticket, provider, idToken }, key);
     } catch (e) {
         // A refusal the vault gave for good leaves nothing waiting for this sign-in; no answer at all may have opened a
-        // hold. A hold this key already had (an earlier sign-in's) is still this phone's to collect: it goes back on
-        // record, key and all, rather than being lost with this try.
+        // hold. Whatever this phone had on record before this try goes back, key and all: a hold this key already has
+        // (an earlier sign-in's, even one whose answer was lost, so its hold id is unknown) is still this phone's to
+        // collect, and the same sign-in comes back to it (confirmation review NEW-2).
         if (e instanceof VaultError && !['unreachable', 'locked'].includes(e.reason)) {
-            if (earlier?.holdId) await savePendingVaultRestore(earlier);
+            if (earlier) await savePendingVaultRestore(earlier);
             else await clearPendingVaultRestore();
         }
         throw e;

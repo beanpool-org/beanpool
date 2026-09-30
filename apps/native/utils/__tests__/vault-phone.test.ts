@@ -605,6 +605,29 @@ describe('a sign-in restore: no name, no address, and every one waits (D2)', () 
         expect(await startSsoRestore('google')).toMatchObject({ holdId: first.holdId });
     });
 
+    it('a lost answer, then a sign-in with no copy: the key is kept, and the first sign-in comes back to its hold', async () => {
+        await kept();
+        // The vault opens the hold, but its answer never reaches the phone.
+        const network = globalThis.fetch;
+        let dropped = false;
+        globalThis.fetch = (async (input: any, init?: any) => {
+            const res = await network(input, init);
+            if (!dropped && String(input).endsWith('/v1/restore')) { dropped = true; throw new TypeError('Network request failed'); }
+            return res;
+        }) as typeof fetch;
+        await expect(startSsoRestore('google')).rejects.toMatchObject({ reason: 'unreachable' });
+        const lost = (await waitingSsoRestore())!;
+        expect(lost).toMatchObject({ provider: 'google', holdId: null });
+        expect((await vaultStatus(member)).holds).toHaveLength(1);
+
+        await expect(startSsoRestore('facebook')).rejects.toMatchObject({ reason: 'no_copy' });
+        expect(await waitingSsoRestore()).toMatchObject({ provider: 'google', publicKey: lost.publicKey });
+
+        const again = await startSsoRestore('google');
+        expect(again.publicKey).toBe(lost.publicKey);
+        expect(again.holdId).toBe((await vaultStatus(member)).holds[0].holdId);
+    });
+
     it('a sign-in the vault has no copy for does not lose the key of a hold already waiting', async () => {
         await kept();
         const held = await startSsoRestore('google');

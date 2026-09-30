@@ -33,6 +33,13 @@
  *
  * `clientCopy` is exactly what the apps seal today, `sealSeedToSso(seed, provider, sub, {words})`: this module never
  * changes that format and the vault never holds the plain seed.
+ *
+ * ## Signed answers
+ *
+ * Every release, every deposit receipt and every other answer the phone acts on is signed with the ticket key, under
+ * a domain tag of its own kind, about the key that asked and bound to a challenge the phone sent with the request
+ * ({@link signVaultAnswer}, {@link checkVaultAnswer}). A box proves only who can open it; the signature proves the vault
+ * sent it.
  */
 
 import { Buffer } from 'buffer';
@@ -395,4 +402,179 @@ export function openVaultRelease(box: unknown, requesterPrivateKey: Uint8Array):
         throw new Error('The release does not hold a copy.');
     }
     return { provider: parsed.provider, pubkey: parsed.pubkey, clientCopy: parsed.clientCopy };
+}
+
+// ─── Signed answers ────────────────────────────────────────────────────────────────────────
+
+/**
+ * What the vault signs besides tickets (PR #1336 review finding 4, the first gate before a vault-configured build):
+ * each release, each deposit receipt, and every other answer the phone acts on. Until these were signed, a server at
+ * the vault's address with a valid certificate (a DNS or network attacker, or a fake vault: design §1.4, §7) could
+ * plant a key it knew on a restoring phone, or answer a deposit `{ok: true}` it never kept, after which the move card
+ * deleted the community's copy.
+ *
+ *   signed    = base64url(payload JSON) "." base64url(signature)
+ *   signature = Ed25519(ticketKey, utf8(vaultAnswerTag(kind) "\n" base64url(payload JSON)))
+ *   payload   = {v: 1, kind, key, challenge, at, ...what the answer says}
+ *
+ * - **The ticket key signs.** The phone pins it already (design §1.1: room for two, newest first), and the keyholder,
+ *   which holds it, signs tickets, the daily report and backups with it. The deposit key is X25519 and can't sign.
+ * - **One domain tag per kind** (`beanpool-vault-answer-<kind>/1`), and the kind is in the payload too, so no
+ *   signature is taken as another kind's, as a ticket, a report or a backup.
+ * - **`key`** is the key that signed the request: the member's, or a restore's throwaway key. The vault states things
+ *   only about the key that asked.
+ * - **`challenge`** is 32 random bytes the phone put in that request's body. The request's own signature binds it to
+ *   one host, method, path and body, so an answer bearing it answers that request and no other: no earlier answer can
+ *   be replayed to the phone. `at` is the vault's clock, for the record.
+ *
+ * The phone reads what an answer says only from a payload it has checked ({@link checkVaultAnswer}). An answer it
+ * can't check is one the vault didn't give: nothing is saved, deleted or shown as done.
+ */
+export type VaultAnswerKind =
+    /** A deposit kept: `provider`, `copy` ({@link vaultCopyDigest}), `signIn` (the ticket's nonce), `replaced`. */
+    | 'receipt'
+    /** A copy handed out: `provider`, `pubkey` (the account's key) and `box` (the release sealed to `key`). */
+    | 'release'
+    /** `/v1/copies/status`: `copies` and `holds`. */
+    | 'status'
+    /** `/v1/copies/delete`: `deleted`, how many copies went. */
+    | 'deleted'
+    /** `/v1/push-token` and `/remove`: `updated`. */
+    | 'push-token'
+    /** `/v1/restore`: `status` (held), `holdId`, `until`. */
+    | 'restore'
+    /** `/v1/restore/collect` short of a release: `status` (held or stopped), `until`. */
+    | 'collect'
+    /** `/v1/holds/cancel` and `/approve`: `status` (stopped or approved), `releaseAt`. */
+    | 'hold'
+    /** A 4xx answer to a signed request: `status` (the HTTP status) and `code`. */
+    | 'refusal';
+
+export const VAULT_ANSWER_KINDS: readonly VaultAnswerKind[] = ['receipt', 'release', 'status', 'deleted', 'push-token', 'restore', 'collect', 'hold', 'refusal'];
+
+export function isVaultAnswerKind(value: unknown): value is VaultAnswerKind {
+    return typeof value === 'string' && (VAULT_ANSWER_KINDS as readonly string[]).includes(value);
+}
+
+/** The domain tag an answer of `kind` is signed under. */
+export function vaultAnswerTag(kind: VaultAnswerKind): string {
+    return `beanpool-vault-answer-${kind}/1`;
+}
+
+/** The bytes the ticket key signs for an answer of `kind`. */
+export function vaultAnswerSigningBytes(kind: VaultAnswerKind, payloadB64: string): Uint8Array {
+    return utf8ToBytes(`${vaultAnswerTag(kind)}\n${payloadB64}`);
+}
+
+/** A fresh challenge for one request: 32 random bytes, base64url. */
+export function newVaultChallenge(): string {
+    return vaultB64(randomBytes(32));
+}
+
+/** A challenge as a request carries it: exactly 32 bytes of base64url. */
+export function isVaultChallenge(value: unknown): value is string {
+    const b = vaultUnb64(value, 32);
+    return !!b && b.length === 32;
+}
+
+/** Fields every signed answer carries, which what it says may not replace. */
+export const VAULT_ANSWER_HEAD = ['v', 'kind', 'key', 'challenge', 'at'] as const;
+
+export interface VaultAnswerHead {
+    v: 1;
+    kind: VaultAnswerKind;
+    /** The hex key that signed the request this answers. */
+    key: string;
+    /** The request's challenge. */
+    challenge: string;
+    /** The vault's clock when it signed, in milliseconds. */
+    at: number;
+}
+
+export type VaultAnswer = VaultAnswerHead & Record<string, unknown>;
+
+/** Longest signed answer the phone reads: a release (about 1.5 KB) or a status with a few copies and holds. */
+const MAX_SIGNED_ANSWER_CHARS = 32 * 1024;
+
+/**
+ * Sign an answer with a 32-byte Ed25519 seed. Only the vault's keyholder holds the ticket key's seed; tests use their
+ * own. `says` is what the answer states; its fields may not be the head's.
+ */
+export function signVaultAnswer(
+    head: { kind: VaultAnswerKind; key: string; challenge: string; at: number }, says: Record<string, unknown>, ticketSeed: Uint8Array,
+): string {
+    if (!isVaultAnswerKind(head.kind)) throw new Error('Not a kind of vault answer.');
+    if (!isVaultKeyHex(head.key)) throw new Error('A vault answer names a 64-character hex key.');
+    if (!isVaultChallenge(head.challenge)) throw new Error('A vault answer carries the 32-byte challenge of the request it answers.');
+    if (!Number.isSafeInteger(head.at)) throw new Error('A vault answer carries a time.');
+    for (const k of VAULT_ANSWER_HEAD) if (Object.prototype.hasOwnProperty.call(says, k)) throw new Error(`A vault answer's ${k} is not what it says.`);
+    const payload: VaultAnswer = { v: 1, kind: head.kind, key: head.key, challenge: head.challenge, at: head.at, ...says };
+    const payloadB64 = vaultB64(utf8ToBytes(JSON.stringify(payload)));
+    if (payloadB64.length > MAX_SIGNED_ANSWER_CHARS) throw new Error('That vault answer is too long to sign.');
+    return `${payloadB64}.${vaultB64(ed25519.sign(vaultAnswerSigningBytes(head.kind, payloadB64), ticketSeed))}`;
+}
+
+export type VaultAnswerRefusal = 'missing' | 'malformed' | 'signature' | 'wrong_kind' | 'wrong_key' | 'wrong_challenge';
+export type VaultAnswerCheck = { ok: true; answer: VaultAnswer } | { ok: false; reason: VaultAnswerRefusal };
+
+export interface VaultAnswerCheckOptions {
+    /** The vault's ticket public keys (hex), newest first: the phone's pinned ones. */
+    ticketKeys: readonly string[];
+    /** The kinds this request may be answered with. */
+    kinds: readonly VaultAnswerKind[];
+    /** The key that signed the request. */
+    key: string;
+    /** The challenge the request carried. */
+    challenge: string;
+}
+
+/**
+ * Whether `signed` is an answer the vault signed with one of `ticketKeys`, of one of `kinds`, about `key`, to the
+ * request that carried `challenge`. The payload is returned only when all of that holds; what else it says is the
+ * caller's to check against what it asked.
+ */
+export function checkVaultAnswer(signed: unknown, opts: VaultAnswerCheckOptions): VaultAnswerCheck {
+    if (signed === undefined || signed === null) return { ok: false, reason: 'missing' };
+    if (typeof signed !== 'string' || signed.length > MAX_SIGNED_ANSWER_CHARS + 100) return { ok: false, reason: 'malformed' };
+    const dot = signed.indexOf('.');
+    if (dot <= 0 || dot !== signed.lastIndexOf('.')) return { ok: false, reason: 'malformed' };
+    const payloadB64 = signed.slice(0, dot);
+    const payloadBytes = vaultUnb64(payloadB64, MAX_SIGNED_ANSWER_CHARS);
+    const signature = vaultUnb64(signed.slice(dot + 1), 64);
+    if (!payloadBytes || !signature || signature.length !== 64) return { ok: false, reason: 'malformed' };
+    let raw: unknown;
+    try {
+        raw = JSON.parse(Buffer.from(payloadBytes).toString('utf8'));
+    } catch {
+        return { ok: false, reason: 'malformed' };
+    }
+    const p = raw as Record<string, unknown>;
+    if (!p || typeof p !== 'object' || Array.isArray(p) || p.v !== 1 || !isVaultAnswerKind(p.kind) || !isVaultKeyHex(p.key)
+        || !isVaultChallenge(p.challenge) || typeof p.at !== 'number' || !Number.isSafeInteger(p.at)) {
+        return { ok: false, reason: 'malformed' };
+    }
+    // Checked under the tag of the kind the payload claims: a signature made under another kind's tag fails here.
+    const bytes = vaultAnswerSigningBytes(p.kind, payloadB64);
+    const valid = opts.ticketKeys.some(k => {
+        if (!isVaultKeyHex(k)) return false;
+        try {
+            return ed25519.verify(signature, bytes, hexToBytes(k), { zip215: false });
+        } catch {
+            return false;
+        }
+    });
+    if (!valid) return { ok: false, reason: 'signature' };
+    if (!opts.kinds.includes(p.kind)) return { ok: false, reason: 'wrong_kind' };
+    if (p.key !== opts.key) return { ok: false, reason: 'wrong_key' };
+    if (p.challenge !== opts.challenge) return { ok: false, reason: 'wrong_challenge' };
+    return { ok: true, answer: p as VaultAnswer };
+}
+
+/**
+ * What a deposit receipt names the copy by: base64url(SHA-256) of the copy's four fields in one JSON spelling. The
+ * phone computes it from the copy it sealed; the keyholder from the copy it opened out of the box and wrapped.
+ */
+export function vaultCopyDigest(clientCopy: SealedShare): string {
+    const { encryptedShare, shareIv, shareTag, kdfParams } = clientCopy;
+    return vaultB64(sha256(utf8ToBytes(JSON.stringify({ encryptedShare, shareIv, shareTag, kdfParams }))));
 }

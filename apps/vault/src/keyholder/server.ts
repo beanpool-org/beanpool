@@ -40,6 +40,7 @@ const HANDLERS: Record<string, Handler> = {
     rewrap: (kh, a) => kh.rewrap(a as Parameters<Keyholder['rewrap']>[0]),
     release: (kh, a) => kh.release(a as Parameters<Keyholder['release']>[0]),
     signTicket: (kh, a) => kh.signTicket(a),
+    signAnswer: (kh, a) => kh.signAnswer(a),
     signReport: (kh, a) => kh.signReport(a),
     sealBackup: (kh, a, bin): BinaryAnswer => ({ json: { ok: true }, binary: kh.sealBackup(a, bin) }),
     openBackup: (kh, _a, bin): BinaryAnswer => {

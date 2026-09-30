@@ -685,11 +685,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // The raw fingerprints this cycle recorded as it read each body go too (parseIfChanged records one before the
         // cycle is known to succeed): otherwise the next cycle, sent the same page for the same cursor, finds it
         // "already applied", writes nothing, and moves the cursor past a page it never wrote (a photo heal's page,
-        // engine/photo-keys.ts on the server; review of fe4c27ce, finding 2).
+        // engine/photo-keys.ts on the server; review of fe4c27ce, finding 2). The member delta's is kept outside rawGated
+        // (see its read above), so it is named here and at the two forgets below.
         const activeAnchorNow = await AsyncStorage.getItem('beanpool_anchor_url');
         if (getDatabaseFilenameForNode(activeAnchorNow) !== expectedDbName) {
             console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl} → ${activeAnchorNow}); discarding fetched delta to avoid cross-node contamination.`);
-            forgetCycleFingerprints(anchorUrl, [...rawGated, ...earlyApplied]);
+            forgetCycleFingerprints(anchorUrl, [...rawGated, 'membersDelta', ...earlyApplied]);
             result.aborted = true;
             result.errorMessage = 'Node switched during sync';
             result.durationMs = Date.now() - startTime;
@@ -744,7 +745,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // server having posts. Invalidate the fingerprints for every table we
                 // tried to write this cycle — the batch AND the early fast-paint apply
                 // — so the next sync re-fetches and re-applies.
-                forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), ...earlyApplied]);
+                forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), 'membersDelta', ...earlyApplied]);
                 throw applyErr;
             }
         }
@@ -752,7 +753,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // As a switch found above: nothing counts as applied, and the cursor stays, so the next cycle on this
             // community asks again and writes what it is sent.
             console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl}); nothing written, the cursor stays.`);
-            forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), ...rawGated, ...earlyApplied]);
+            forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), ...rawGated, 'membersDelta', ...earlyApplied]);
             result.aborted = true;
             result.errorMessage = 'Node switched during sync';
             result.durationMs = Date.now() - startTime;

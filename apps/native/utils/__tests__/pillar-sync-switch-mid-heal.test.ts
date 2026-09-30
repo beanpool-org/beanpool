@@ -50,8 +50,9 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 // applyDelta as it is, except that the next sync's write can be made to find another community open (its guard: the
-// member switched after the cycle's own check, while the write waited for the sync lock), so it writes nothing.
-const gate = { switchBeforeNextWrite: false };
+// member switched after the cycle's own check, while the write waited for the sync lock), so it writes nothing; or the
+// next write can throw (a database closing mid wipe or restore).
+const gate = { switchBeforeNextWrite: false, throwOnNextWrite: false };
 vi.mock('../db', async (importOriginal) => {
     const real = await importOriginal<typeof import('../db')>();
     return {
@@ -60,6 +61,10 @@ vi.mock('../db', async (importOriginal) => {
             if (gate.switchBeforeNextWrite && expectedDbName) {
                 gate.switchBeforeNextWrite = false;
                 return false;
+            }
+            if (gate.throwOnNextWrite && expectedDbName) {
+                gate.throwOnNextWrite = false;
+                throw new Error('database closed');
             }
             return real.applyDelta(delta, expectedDbName);
         }),
@@ -77,6 +82,7 @@ import { applyDelta, getDb } from '../db';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
+const NEW = 'n'.repeat(64);
 const LAST_SYNC_KEY = 'pillar_sync_beanpool_a.beanpool.org.db_last-sync';
 const KEYLESS = (id: string) => `/api/marketplace/posts/${id}/photos/0?v=1790000000000`;
 const KEYED = (id: string) => `${KEYLESS(id)}&k=${'K'.repeat(22)}`;
@@ -91,7 +97,7 @@ function listing(id: string, photo: string) {
 
 // The node: a heal's pages as the server answers one phone on its key. The phone's old cursor gets page 1 (L1 keyed),
 // and it again, byte for byte, while that cursor is sent; a newer cursor gets page 2 (L2 keyed).
-const node = { firstCursor: '', page1: '', page2: '', switchOnMembers: false, pulls: [] as string[] };
+const node = { firstCursor: '', page1: '', page2: '', switchOnMembers: false, newMember: false, pulls: [] as string[] };
 function answer(status: number, body: string) {
     return {
         ok: status >= 200 && status < 300, status,
@@ -108,6 +114,8 @@ const fetchMock = vi.fn(async (url: string) => {
     if (url.includes('/api/members')) {
         // The member switches community while this cycle is out (Settings, another community's invite).
         if (node.switchOnMembers) store.set('beanpool_anchor_url', B_URL);
+        // The incremental member delta (a member who joined since the last members sync), when a test asks for one.
+        if (node.newMember && url.includes('updatedAfter=')) return answer(200, JSON.stringify([{ publicKey: NEW, callsign: 'Newbie', joinedAt: '2026-09-30T00:00:00.000Z' }]));
         return answer(200, '[]');
     }
     return answer(404, '');
@@ -121,6 +129,7 @@ beforeEach(async () => {
     store.set('beanpool_anchor_url', A_URL);
     resetSyncFingerprints();
     gate.switchBeforeNextWrite = false;
+    gate.throwOnNextWrite = false;
     (globalThis as any).fetch = fetchMock;
     await getDb();
     for (const t of ['posts', 'marketplace_transactions', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
@@ -132,7 +141,7 @@ beforeEach(async () => {
         firstCursor: new Date(t0 - 300_000).toISOString(),
         page1: JSON.stringify([listing('L1', KEYED('L1'))]),
         page2: JSON.stringify([listing('L2', KEYED('L2'))]),
-        switchOnMembers: false, pulls: [],
+        switchOnMembers: false, newMember: false, pulls: [],
     });
 });
 
@@ -198,5 +207,50 @@ describe('a heal page read by a cycle that then wrote nothing', () => {
         expect(node.pulls[1]).toBe('');
         expect(photoOf('L2')).toBe(KEYED('L2'));
         expect(store.get(LAST_SYNC_KEY)).toBeDefined();
+    });
+});
+
+// The member delta is read through the raw gate too ('membersDelta'), so a cycle that aborts must forget that
+// fingerprint as well: otherwise the next cycle, sent the same delta, skips it as applied and moves its cursor past a
+// member it never wrote (review of 1bc39eb0, finding 3). It then waited for the hourly full directory.
+describe('a member delta read by a cycle that then wrote nothing', () => {
+    const newMember = () => sql.prepare('SELECT callsign FROM members WHERE public_key = ?').get(NEW);
+    beforeEach(() => {
+        // Members synced 10 minutes ago (no full directory this hour) and one held: the cycle reads the member delta.
+        sql.exec(`INSERT OR REPLACE INTO members (public_key, callsign) VALUES ('${ANN}', 'Ann')`);
+        store.set('pillar_sync_beanpool_a.beanpool.org.db_members_last_sync', String(Date.now() - 10 * 60_000));
+        node.newMember = true;
+    });
+
+    it('a switch found before the write: the next cycle on the community writes the new member', async () => {
+        node.switchOnMembers = true;
+        const r1 = await performSync();
+        expect(r1.aborted).toBe(true);
+        expect(newMember()).toBeUndefined();
+
+        node.switchOnMembers = false;
+        store.set('beanpool_anchor_url', A_URL);
+        expect((await performSync()).success).toBe(true);
+        expect(newMember()).toBeDefined();
+    });
+
+    it('a switch at the batch write (applyDelta writes nothing): the next cycle writes the new member', async () => {
+        gate.switchBeforeNextWrite = true;
+        const r1 = await performSync();
+        expect(r1.aborted).toBe(true);
+        expect(newMember()).toBeUndefined();
+
+        expect((await performSync()).success).toBe(true);
+        expect(newMember()).toBeDefined();
+    });
+
+    it('a batch write that throws: the next cycle writes the new member', async () => {
+        gate.throwOnNextWrite = true;
+        const r1 = await performSync();
+        expect(r1.success).toBe(false);
+        expect(newMember()).toBeUndefined();
+
+        expect((await performSync()).success).toBe(true);
+        expect(newMember()).toBeDefined();
     });
 });

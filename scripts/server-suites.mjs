@@ -184,6 +184,7 @@ export const SUITES = [
     'test-genesis',
     'test-hardening',
     'test-logger-sanitization',
+    'test-codes-out-of-logs',
     'test-manager-build',
     'test-onboarding-funnel',
     'test-funnel-cohort',

@@ -67,6 +67,7 @@ import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
+import { inviteLogTag } from '../sanitize-message.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
@@ -217,7 +218,7 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         if (genesisMember) {
             const invite = adminGenerateInvite(genesisMember.publicKey, genesisType, undefined, issuedBy);
             if (invite) {
-                logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
+                logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
                 const tierLabels: Record<string, string> = { standard: '🥚 Newcomer', trusted: '🏠 Resident', ambassador: '🏛️ Steward', elder: '⛰️ Elder' };
                 ctx.body = { success: true, code: invite.code, type: genesisType, tierLabel: tierLabels[genesisType], message: `${tierLabels[genesisType]} invite generated` };
                 return;
@@ -246,7 +247,7 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         return;
     }
 
-    logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
+    logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
     ctx.body = { success: true, code: invite.code, type: genesisType, message: 'Genesis member created + seed invite generated' };
 });
 

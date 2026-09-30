@@ -74,6 +74,9 @@
  * 24. Step 21's torn staging on a server started as a main server, killed again right after the discard deleted the
  *     staging: the next start runs on its own copy. (Before: the discard deleted the staging first and put the copy back
  *     after, so that kill left no staging and no state.db, which a main server now refuses to start on.)
+ * 25. A standby whose state.db is gone, and whose put-back of state.previous.db fails (every rename of its -wal refused):
+ *     it stops before opening any database, changing nothing; the next start puts it back, and a delta brings it level.
+ *     (Before: it started on a new, empty database beside its copy.)
  *
  * The pace of a copy of more than 300 pages against M's administrative limiter is test-standby-paged-copies-pacing.ts.
  *
@@ -1178,6 +1181,33 @@ async function main(): Promise<void> {
             const c1 = runs ? await count() : null;
             assert(runs && c1 === c0 && !f('state.previous.db'),
                 `the next start runs as the main server on its own copy, all ${c1} messages (${JSON.stringify({ runs, before: c0, after: c1, previous: f('state.previous.db') })}; before: no staging and no state.db, and it refused to start)`);
+        });
+
+        await step('25. a put-back that fails: the server stops before opening any database, and the next start puts it back', async () => {
+            const name = await newStandby('standby11');
+            const d = dir(name);
+            const f = (n: string) => fs.existsSync(path.join(d, n));
+            const w25 = await wholeCopy();
+            require_(w25.ok === true && f('state.previous.db') && f('state.previous.db-wal'), `S11 holds a whole copy, the old database and its WAL beside it (${JSON.stringify(w25)})`);
+            await standby.kill('SIGKILL');
+            const aside = path.join(d, 'moved-away');
+            fs.mkdirSync(aside);
+            for (const x of ['', '-wal', '-shm']) if (f(`state.db${x}`)) fs.renameSync(path.join(d, `state.db${x}`), path.join(aside, `state.db${x}`));
+            // Every rename of the previous database's WAL refused at the next start: the put-back fails.
+            const arm = `${d}.kill-at`;
+            fs.writeFileSync(arm, JSON.stringify({ op: 'renameSync', suffix: 'state.previous.db-wal', action: 'throw' }));
+            let out: string | null = null;
+            try { nodes.push(standby = await spawnNode(SCRIPT, d, envS)); } catch (e: any) { out = String(e?.output ?? e); }
+            assert(out !== null && /could not be put back/.test(out) && /FATAL: .*state\.db is missing, and .*state\.previous\.db, this server's copy, could not be put back/.test(out)
+                && !f('state.db') && f('state.previous.db') && f('state.previous.db-wal'),
+                `the put-back fails and the standby stops before opening any database, changing nothing (${out === null ? 'it started, on a new, empty database' : 'stopped'}; before: it ran on a new, empty database)`);
+            await main.send('sql', { sql: `UPDATE members SET bio = 'edit 25', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`, args: [ann.pk] });
+            let runs = true;
+            try { nodes.push(standby = await spawnNode(SCRIPT, d, envS)); } catch { runs = false; }
+            const d25 = runs ? await standby.send('pull', {}) : null;
+            const diff25 = runs ? await exactNow() : ['not running'];
+            assert(runs && !f('state.previous.db') && d25?.ok === true && diff25.length === 0,
+                `the next start puts it back, and the next pull brings it level with M (${JSON.stringify({ runs, pull: d25 })}; differences ${first(diff25)})`);
         });
 
         const blocked = [...(await main.send('fetches')).blocked, ...(await standby.send('fetches')).blocked];

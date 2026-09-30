@@ -28,6 +28,8 @@
  * - `state.db` missing or empty and `state.previous.db` there with no staging: taken away from outside (by hand, or the
  *   disk). A standby puts the previous one back (its next copy brings it level); a main server refuses to start and says
  *   what to do, since that database is older than the one it ran on (swapStagedCopyAtBoot).
+ * - Still no database of its own after that (a put-back that failed): the server stops before db/db.ts makes an empty one,
+ *   and a restart tries again. It never runs on an empty database beside its copy.
  *
  * Never throws: a swap that fails leaves the live copy as it was and says why.
  */
@@ -147,6 +149,15 @@ export function swapStagedCopyAtBoot(dataDir = process.env.BEANPOOL_DATA_DIR || 
                 + `Put back the state.db that was moved, or restore it from a backup; or, to run on the older database, rename ${PREVIOUS_DB} `
                 + '(and its -wal and -shm, if there) to state.db, and start the server again.');
         }
+    }
+    // Still no database of its own beside the previous one (a put-back that failed: a rename refused, a full disk): stop
+    // before db/db.ts makes a new, empty state.db, which would serve an empty community, drop a WAL moved under the live
+    // name, and let a later start delete the previous database as "the one the last swap replaced". A restart tries the
+    // put-back again (#1334 review round 4, finding 2).
+    if (noDatabase(live) && fs.existsSync(path.join(dataDir, PREVIOUS_DB))) {
+        refuseToStart(`${live} is ${fs.existsSync(live) ? 'empty' : 'missing'}, and ${path.join(dataDir, PREVIOUS_DB)}, this server's copy, `
+            + 'could not be put back in its place (the reason is above). Nothing was changed, and starting again tries again. '
+            + `If it keeps failing, rename ${PREVIOUS_DB} (and its -wal and -shm, if there) to state.db by hand.`);
     }
     startedOnDatabase = isDatabase(live);
     return done;

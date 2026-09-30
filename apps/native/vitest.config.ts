@@ -25,5 +25,10 @@ export default defineConfig({
         // stopwatch. See scripts/test-all.sh. Uncapped locally.
         minWorkers: process.env.CI ? 1 : undefined,
         maxWorkers: process.env.CI ? 2 : undefined,
+        // Set by scripts/test-all.sh, which runs on a machine shared with build lanes. Vitest's 5 s
+        // default timed out 52 tests at load average ~60 that pass in 3.5 s alone. Unset for a
+        // developer running `npx vitest` directly: the default stays.
+        testTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
+        hookTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
     },
 });

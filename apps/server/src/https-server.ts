@@ -148,6 +148,7 @@ import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
+import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import { gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
@@ -1616,6 +1617,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/app') || ctx.path === '/') {
                 const indexPath = path.join(PUBLIC_DIR, 'index.html');
                 if (fs.existsSync(indexPath)) {
+                    // A person opening the web app is one visit a day's count holds (engine/web-visits.ts): no address,
+                    // browser or cookie is kept. Its files, the API, Settings and the manager never reach this line.
+                    countWebAppPageLoad(ctx);
                     useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');

@@ -63,6 +63,10 @@ Your server keeps no one's internet address for more than 7 days, and its logs n
 
 ![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
 
+## Web app visits
+
+Home shows how many times the web app was opened on your server each day for the last 30 days, and about how many different visitors that was. Your server counts this itself as it sends the web app's page: there is no cookie, no outside service and nothing extra in the app. It counts a person's browser opening the web app, and not the app's own requests, its files, Settings, the phone app, search engines, link previews or uptime checks. For each day it keeps the date (in UTC), the number of visits and the number of visitors, and nothing else, for 400 days. To tell visitors apart it scrambles each visit's internet address and browser name with a key made for that day, which is kept in memory only and thrown away at midnight UTC; only the count is saved, never an address, a browser name, a scrambled code or who is a member, and nothing about it goes in the logs. So the number of visitors is an estimate: people on one internet connection with the same browser count once, and after a restart someone who comes back counts again. A standby does not copy the counts: each server counts the visits it serves.
+
 ## What your server sends elsewhere
 
 - The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).

@@ -35,11 +35,24 @@
  *   boot (notePhotoUrlShapeNow). A restart that changes nothing keeps both. To make every phone's next sync whole by
  *   hand (a rollback to an image from before these records, then forward again), delete the photoKeysShape row and
  *   restart (operator manual, Updates and health).
- * - A node with more listings with a photo than one answer holds heals a phone over its next syncs: the answer's last
- *   place in heal order is kept for that key (`photo_url_heals`, this server's own), and each sync after it, whatever
- *   its cursor, carries its delta and the next page, until no listing with a photo is left. A sync that failed on the
- *   phone comes again with the same cursor, and gets the same page again. A read with no key, or one key on two phones
- *   at once, gets the first page only: each sync of such a phone after that is a delta, as before.
+ * - A node with more listings with a photo than one page heals a phone over its next syncs: the page's last place in
+ *   heal order is kept for that key (`photo_url_heals`, this server's own), and each sync after it carries its delta
+ *   and the next page, until no listing with a photo is left. The phone moves its cursor only when a whole sync
+ *   succeeded (pillar-sync.ts), so a cursor other than the one the last page went to means that page arrived: the
+ *   next page follows. The same cursor again means it may not have (a pull that ran out of time, a cycle that failed
+ *   after it): the same page again, so no page is skipped. That holds inside the phone's five-minute overlap too, where
+ *   its cursor is still older than photoKeysSince: a cursor newer than the one the last page went to carries on from
+ *   it, and a finished heal's row is kept (after_key NULL) until the key's cursor is past photoKeysSince, so the whole
+ *   answer goes once, not at every sync of those five minutes. An older cursor than that row's (not the phone that
+ *   moved it) starts again from the first page, as it can't be told what arrived.
+ * - The place is kept per key, not per phone or per read. One key on two phones takes the pages in turn: each sync of
+ *   either gets the page after the last one sent to the key, so each phone gets some of the pages; each keeps healing,
+ *   and each gets every listing it lacks when the other stops syncing or the listing changes (reviewed on a6b65b84: at
+ *   1,471 listings one phone healed all, the other 997). And any read with a cursor counts, whatever its filters: a
+ *   filtered delta (`author=`) from that key would take a page nobody shows. No client sends a cursor with a filter
+ *   today, so that is latent. A read with no key, or a signer who is no member, keeps no place: each of its syncs from
+ *   before photoKeysSince gets the first page, and each after it a delta, as before. Rows from an earlier shape, and
+ *   rows not asked for in 30 days, are dropped at the next boot (noteUrlShape), not as they age.
  */
 import crypto from 'node:crypto';
 import { configurePhotoKeys, photoVersionOf } from '@beanpool/engine';

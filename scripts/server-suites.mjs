@@ -287,6 +287,7 @@ export const SUITES = [
     'test-moderation-notices-kept',
     'test-member-blocks',
     'test-member-blocks-standby',
+    'test-blocks-on-messaging',
     'test-polls',
     'test-poll-voters-members-only',
     'test-suspended-and-visitor-reads',

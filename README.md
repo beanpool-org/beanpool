@@ -97,11 +97,12 @@ Deterministic identity from a BIP-39 mnemonic:
 - **Recovery mode** — enter 12 words + callsign to restore identity on any device
 - **WebCrypto SHA-256 + PKCS8** — no external crypto dependencies
 
-### 🛡️ Sign-In Recovery (phone app only)
+### 🛡️ Sign-In Recovery
 An optional second way back onto a new device:
-- **Link an account** — Apple, Google, Facebook or GitHub, from Settings on the phone app.
-- **Two pieces, both held by your node** — one stored in the clear, one encrypted so that signing in with the linked account is what unlocks it. Your node therefore needs only your sign-in identity to rebuild the account, which is why SSO is a convenience, not a second custodian.
-- **Not a copy of your words** — it restores the account, and only while your community node is running. The 12 words are the way back that depends on nobody.
+- **Link an account** — Apple, Google or Facebook, from Settings on the phone app. Joining the global community with a sign-in (phone or web) links that one too. GitHub is no longer offered.
+- **One locked copy, held by your node** — your key, and your 12 words if the device had them, locked so that the linked sign-in's id opens it. The node checks that sign-in itself, so it learns the id: **the people who run the node can open the copy**. The node locks the stored copy again with `data/recovery-seal.key`, so a copy of its database alone opens none. SSO is a convenience, custodial by design, not a second custodian.
+- **Only while your community node is running.** The 12 words are the way back that depends on nobody.
+- **BeanPool's key vault** (`apps/vault`, not live yet) is to keep these copies instead, one for every community. The vault can open the copies it keeps. Its keys open only when 2 of 3 custodians unlock it (until the reshare, one person holds all three shares). Every restore through it waits 24 hours, tells the member's devices, and can be stopped from them.
 
 > **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery
 > keepers is no longer offered on either client. See

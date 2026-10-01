@@ -55,7 +55,7 @@ BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locke
 
 ## Who can open the copy
 
-A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.
+A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. On the global community, that is BeanPool. A stolen copy of the server's database can't, once the server has been updated for it. Anyone who takes over your sign-in account can get in too: see "If someone else tries".
 
 If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Disconnecting does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too.
 

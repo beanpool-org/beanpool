@@ -875,10 +875,12 @@ export default function RootLayout() {
                         <NodeStatusProvider>
                             <RootLayoutNav />
                         </NodeStatusProvider>
+                        {/* "Update required", over everything and outside the sign-in: only at a safe moment (a cold
+                            start, back after 5 minutes away, a switch of community), never mid-use
+                            (utils/force-update.ts). Inside the identity only to offer the member's 12 words and leaving
+                            the community; it shows with or without an account. */}
+                        <ForceUpdateBlock />
                     </IdentityProvider>
-                    {/* "Update required", over everything and outside the account: only at a safe moment (a cold
-                        start, or back after 5 minutes away), never mid-use (utils/force-update.ts). */}
-                    <ForceUpdateBlock />
                 </ThemeProvider>
             </KeyboardProvider>
         </SafeAreaProvider>

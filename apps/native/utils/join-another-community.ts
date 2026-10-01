@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { signInCopiesAt } from './vault-config';
+import { communitySwitched } from './community-switch';
 
 export interface JoinDeps {
     closeDB(): Promise<void>;
@@ -95,6 +96,8 @@ export async function joinAnotherCommunity(
         await deps.initDB();
         throw err;
     }
+    // The phone is on the new community now: the update screen asks it (utils/community-switch.ts).
+    communitySwitched();
     // Registered here: no longer a guest, if this phone ever looked in as one.
     await deps.clearGuestNode(targetUrl).catch(() => {});
     deps.requestSync().catch(() => {});

@@ -38,10 +38,20 @@ Apps from before the full-screen update show the banner only, whatever the date.
 
 ## Undoing it
 
-A phone too old for the new version cannot install it, and its member cannot get past the screen, which tells them to ask you. Lower the floor, or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
+A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor, or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
+
+## What the screen still lets a member do
+
+The screen stops your community only, never the member's account. From it a member can:
+
+- **Use another community** saved on the same phone. The app moves there, and that community's own floor decides. Coming back to yours is checked again, so your floor still holds here.
+- **See their 12 words**, or add them to a phone that has none, so they never lose the account.
+- **Leave this community**: the app's usual Account Deletion & Sign Out.
+
+The same goes for a server that sets a floor it should not: whatever it says, it can stop its own community on a phone, and nothing else on it.
 
 ## The web app
 
 The web app has no floor. It is your server's own copy, loaded fresh every time a page opens, so it is always the server's version. A page left open across a server update shows a banner asking to refresh, and refreshing loads the new one. The floors are for the phone apps only.
 
-Each server sets its own floor. An app on another community follows that community's.
+Each server sets its own floor. A phone that holds several communities follows each one's floor while it is using that one.

@@ -35,6 +35,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
@@ -218,6 +219,9 @@ export async function signOutOfThisPhone(account: LeavingAccount | null): Promis
     await clearDB();
     await releaseAccountFromPhone(account);
     await wipeIdentity();
+    // No community and no account on the phone now: the update screen's block, if one was up, comes down
+    // (utils/community-switch.ts).
+    communitySwitched();
 }
 
 /**
@@ -228,4 +232,5 @@ export async function signOutOfThisPhone(account: LeavingAccount | null): Promis
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);
     await wipeIdentity();
+    communitySwitched();
 }

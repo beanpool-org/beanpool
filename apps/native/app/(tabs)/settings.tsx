@@ -29,7 +29,9 @@ import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/nod
 import { fetchMembership } from '../../utils/membership-probe';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect, useIsFocused } from 'expo-router';
+import { isAccountSection, setAccountSectionInFront } from '../../utils/update-block-escape';
+import { communitySwitched } from '../../utils/community-switch';
 import Constants from 'expo-constants';
 import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
@@ -541,7 +543,7 @@ export default function SettingsScreen() {
     const [diagLoading, setDiagLoading] = useState(false);
     const [dbSize, setDbSize] = useState<string>('0.0 MB');
     const [remoteStats, setRemoteStats] = useState<{ members: number, posts: number, transactions: number } | null>(null);
-    const params = useLocalSearchParams<{ section?: string }>();
+    const params = useLocalSearchParams<{ section?: string; open?: string }>();
 
     // Location permission (relocated here from the global header)
     const [locationEnabled, setLocationEnabled] = useState(false);
@@ -599,11 +601,30 @@ export default function SettingsScreen() {
                 // progress. Without this branch the alert's "Review" button dropped them
                 // on the root menu with no sign of the attack.
                 setMode('protection');
+            } else if (params.section === 'seed') {
+                // The full-screen "Update required" (components/ForceUpdateBlock.tsx): the member's 12 words, which
+                // one community's floor must never keep from them. `open` is new on every tap, so a second visit opens
+                // it again.
+                openViewWords();
+            } else if (params.section === 'wipe') {
+                // The same screen's "Leave this community": Account Deletion & Sign Out, from its start.
+                setMode('wipe');
+                setWipeType('options');
+                setWipeConfirm('');
+                setPurgeConfirm('');
             } else {
                 setMode('menu');
             }
-        }, [params.section])
+        }, [params.section, params.open])
     );
+    // The update screen steps aside only while one of the account's own sections is in front here
+    // (utils/update-block-escape.ts), and comes back the moment the member goes anywhere else: another section, the
+    // menu, another tab, another screen.
+    const settingsFocused = useIsFocused();
+    useEffect(() => {
+        setAccountSectionInFront(settingsFocused && isAccountSection(mode));
+    }, [settingsFocused, mode]);
+    useEffect(() => () => setAccountSectionInFront(false), []);
 
     // Notification preference state
     const [notifChat, setNotifChat] = useState(true);
@@ -1201,6 +1222,8 @@ export default function SettingsScreen() {
             // The database is successfully suspended to Cold Storage.
             await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
             await initDB();
+            // The update screen's block was the community left's (utils/community-switch.ts).
+            communitySwitched();
             
             // Hard bounce the Application State Tree via the Welcome resolver
             router.replace('/welcome');
@@ -1423,6 +1446,8 @@ export default function SettingsScreen() {
             const { closeDB, initDB } = await import('../../utils/db');
             await closeDB();
             await initDB();
+            // A switch too: the update screen asks the community now in use (utils/community-switch.ts).
+            communitySwitched();
 
             const { requestSync } = await import('../../services/pillar-sync');
             requestSync()

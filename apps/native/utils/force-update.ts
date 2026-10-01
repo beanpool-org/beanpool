@@ -80,6 +80,12 @@ export interface ForceUpdateGate {
     start(appState: string | null | undefined): Promise<void>;
     /** Every AppState change. */
     appStateChanged(next: string): Promise<void>;
+    /**
+     * The phone moved to another community, or left its last one (utils/community-switch.ts). The block was the
+     * community left's, so it comes down; and a switch bounces the app through Welcome, so it is a safe moment: the
+     * community now in use is asked at once. Switching back to a community whose floor stops this app puts it up again.
+     */
+    communitySwitched(): Promise<void>;
 }
 
 export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGate {
@@ -139,6 +145,11 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
                 inFront = false;
                 leftAt = deps.now();
             }
+        },
+        async communitySwitched() {
+            asks++;
+            show(null);
+            if (inFront) await safeMoment();
         },
     };
 }

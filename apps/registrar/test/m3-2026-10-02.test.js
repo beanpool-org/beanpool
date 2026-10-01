@@ -47,6 +47,8 @@ async function sweeps(w, n) {
     return s;
 }
 const liveTunnels = (w, name) => routing(w, name).tunnels;
+// A name's rotates as if they were made `s` seconds earlier: one rotate per ROTATE_EVERY_S (5 minutes) per name.
+const ageRotates = (w, s = 600) => w.sqlite.prepare("UPDATE name_events SET at = at - ? WHERE event = 'rotated'").run(s);
 
 // ── D2: a content swap is paused, after an hour of it ──────────────────────────────────────────────────────────────
 
@@ -311,6 +313,7 @@ test('rotate: the owner moves its live name onto a fresh tunnel — a new token,
         assert.equal((await w.status(owner)).body.tunnelToken, r.body.tunnelToken, '/status hands out the new token');
 
         // With an origin: the new tunnel leads there.
+        ageRotates(w);
         const r2 = await rotate(w, owner, { name: 'riverbend', origin: 'http://127.0.0.1:9090' });
         assert.equal(r2.body.status, 'live', JSON.stringify(r2.body));
         const row2 = await w.row('riverbend');
@@ -319,6 +322,7 @@ test('rotate: the owner moves its live name onto a fresh tunnel — a new token,
         assert.equal(w.cf.liveTunnel(row.tunnel_id), null);
 
         // Without a name: the key's own.
+        ageRotates(w);
         const r3 = await rotate(w, owner);
         assert.equal(r3.body.status, 'live', JSON.stringify(r3.body));
         assert.notEqual((await w.row('riverbend')).tunnel_id, row2.tunnel_id);
@@ -366,6 +370,26 @@ test('rotate: only the name\'s own key, and only a name it may route — refused
 
         assert.equal((await rotate(w, other, { name: 'nowhere' })).status, 404, 'no such name');
         assert.equal((await rotate(w, owner, { name: 'riverbend', origin: 'ftp://example.com' })).status, 400, 'a bad origin');
+    } finally { w.restore(); }
+});
+
+test('rotate: one per name every 5 minutes — a second one sooner is a 429 and changes nothing; a heal is never held back', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'riverbend', owner);
+        assert.equal((await rotate(w, owner, { name: 'riverbend' })).status, 200);
+        const row = await w.row('riverbend');
+        const calls = w.cf.calls.length;
+        const again = await rotate(w, owner, { name: 'riverbend' });
+        assert.equal(again.status, 429, JSON.stringify(again.body));
+        assert.ok(again.body.retry_after > 0 && again.body.retry_after <= 300, JSON.stringify(again.body));
+        assert.equal(again.body.tunnelToken, undefined);
+        assert.deepEqual(await w.row('riverbend'), { ...row, last_contact_at: (await w.row('riverbend')).last_contact_at }, 'the row is as it was');
+        assert.deepEqual(w.cf.calls.slice(calls), [], 'nothing at Cloudflare');
+        assert.equal((await w.heal(owner, { name: 'riverbend' })).body.status, 'live', 'its heal is not held back');
+        ageRotates(w, 301);
+        assert.equal((await rotate(w, owner, { name: 'riverbend' })).status, 200, 'five minutes on, it rotates again');
     } finally { w.restore(); }
 });
 

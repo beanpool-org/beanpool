@@ -850,6 +850,9 @@ async function handleHeal(request, env, bodyText) {
 // Cloudflare won't delete it, it goes back on the row and nothing has changed: 503, since its token still works and the
 // rotate must not look done. Then the owner's heal (heal()) makes the fresh tunnel, and the answer carries its token. If
 // that fails, the old tunnel is gone all the same, and the node's next heal (or the sweep's repair) makes the new one.
+// One per name every ROTATE_EVERY_S: each deletes and makes a tunnel at Cloudflare, whose API budget every community's
+// claims and heals share, so a key may not churn it. A heal is never held back by it.
+const ROTATE_EVERY_S = 300;
 async function handleRotate(request, env, bodyText) {
     const pubkey = await signer(request, env, bodyText);
     if (pubkey instanceof Response) return pubkey;
@@ -875,6 +878,11 @@ async function handleRotate(request, env, bodyText) {
         if (await awaitingApproval(env, cur)) return json({ error: 'awaiting approval: the name has no tunnel yet', status: 'pending', name: cur.name }, 409);
         if ((b.mode === 'tunnel' || b.mode === 'direct' ? b.mode : cur.mode) !== 'tunnel')
             return json({ error: 'a direct name runs no tunnel, so it has no token to rotate: a heal with its new public_ip re-points it' }, 400);
+        const last = await db.lastEventAt(env, cur.name, 'rotated');
+        if (last !== null && now - last < ROTATE_EVERY_S) {
+            const wait = ROTATE_EVERY_S - (now - last);
+            return json({ error: `this name was given a new tunnel ${now - last} s ago: one rotate every ${ROTATE_EVERY_S / 60} minutes (try again in ${wait} s)`, retry_after: wait }, 429);
+        }
 
         const old = cur.tunnel_id ?? null;
         const dropped = { ...cur, tunnel_id: null, ...decision(cur) };

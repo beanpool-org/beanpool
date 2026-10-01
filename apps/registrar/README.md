@@ -112,8 +112,10 @@ leaves the row (a decision) before Cloudflare deletes it, so a request that read
 Cloudflare won't delete it, it goes back on the row and the answer is **503**, nothing changed (its token still works).
 If the new tunnel fails, the old one is gone all the same, and the node's next heal makes it. Refused: another key or no
 name (404), blocked or paused by the admin (403), released (409: a take-back is on a fresh tunnel anyway), awaiting
-approval (409), a direct name (400: it has no token; a heal with its new `public_ip` re-points it). The node's Settings
-offer it as **New tunnel key**.
+approval (409), a direct name (400: it has no token; a heal with its new `public_ip` re-points it), and a second rotate
+of a name within 5 minutes of its last (429 with `retry_after`: each one deletes and makes a tunnel, on the Cloudflare API
+budget every community's claims and heals share; a heal is never held back). The node's Settings offer it as **New
+tunnel key**.
 
 **The admin's release** (decision D-C, Marty 2026-09-28) holds the name 30 days for its key, as the owner's own
 release does: another key's claim is refused, and the key's node takes it back with its next claim (a misclick

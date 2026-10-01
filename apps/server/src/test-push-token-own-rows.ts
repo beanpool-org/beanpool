@@ -1,7 +1,7 @@
 /**
  * A key registers and removes only its own push rows — over a REAL HTTPS round trip, through the signature middleware.
  *
- * `push_tokens` is keyed by (public_key, token). The recovery alerts ("Someone is recovering an account…", "Your
+ * `push_tokens` is keyed by (public_key, token_id), the token's id. The recovery alerts ("Someone is recovering an account…", "Your
  * account was just restored…") reach the owner through `getPushTokens(owner)`, so a request that removed the owner's
  * row would silence them before a sign-in recovery. A device token is not a secret the node can lean on: every
  * community the phone registered with holds it. So registering a token adds the signer's row and touches nobody

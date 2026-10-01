@@ -9,7 +9,7 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## Private even from you
 
-- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
+- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. Each one is also locked to its sender, its message id and its chat: an app refuses one the server shows as the other person's, stores again under a new id, or moves to another chat, and marks one shown out of order. Keep every message's id, author and stored text exactly as they are. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
 
 ## What the server holds in the clear
 

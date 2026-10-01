@@ -35,6 +35,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -156,7 +157,12 @@ async function child(): Promise<void> {
             for (const [pk, token] of Object.entries(a.tokens)) registerPushToken(pk, token, 'android');
             return true;
         },
-        pushes: async () => pushed.splice(0, pushed.length),
+        // Each as its member is told it (push-notice-test-harness.ts): the communities are the notice's details on this
+        // node, and `generic` says the lock screen showed only "A community has started near you." and the notice.
+        pushes: async () => {
+            const { db } = await import('./db/db.js');
+            return pushed.splice(0, pushed.length).map((m) => ({ ...toldPush(db, m), generic: pushIsGeneric(m) && m.data.k === 'community.near' }));
+        },
         'export-delta': async (a: { since: string }) => {
             const { exportSyncState } = await import('./state-engine.js');
             return exportSyncState('test', a.since);
@@ -472,6 +478,9 @@ async function main(): Promise<void> {
         assert(to(wes).length === 0, `Wes, told at the first run, isn't told again (${to(wes).length})`);
         assert(to(quinn).length === 0,
             `Quinn, told on the old main server a moment ago, keeps his quiet day: no second notice today (${to(quinn).length})`);
+        const everyPush = [...pushes1, ...firstRunPushes, ...pushes];
+        assert(everyPush.length === 5 && everyPush.every((m: any) => m.generic && !JSON.stringify(m.sent).includes('peer-')),
+            `on either server, every push showed only "A community has started near you." and named no community (${everyPush.filter((m: any) => !m.generic).length} did not)`);
         const run4 = await standby.send('mirror');
         assert(run4.ok === true && run4.added === 0 && run4.notified === 0 && (await standby.send('pushes')).length === 0,
             'the run after that finds nothing new and tells nobody');

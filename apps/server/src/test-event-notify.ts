@@ -19,6 +19,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator,
     removePost as removePostStateful, updatePost as updatePostStateful,
@@ -179,10 +180,12 @@ async function main(): Promise<void> {
     // ── 5. All the way out to Expo, through the wired-up state engine ────────────────────────
     console.log('\n--- 5. The dispatcher, the channel and the preference ---');
     const realFetch = globalThis.fetch;
-    const sent: any[] = [];
+    // Each push as its member is told it (push-notice-test-harness.ts): the lock screen shows only the kind's fixed words,
+    // and the change title and where a tap lands are the notice's details, which the app reads from this server.
+    const sent: ToldPush[] = [];
     (globalThis as any).fetch = async (url: any, init: any) => {
         if (String(url).includes('exp.host')) {
-            sent.push(...JSON.parse(init.body));
+            sent.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
             return { ok: true, status: 200, json: async () => ({}) } as any;
         }
         return realFetch(url, init);
@@ -206,15 +209,18 @@ async function main(): Promise<void> {
         assert(sent[0]?.to === 'ExponentPushToken[goer]', 'to the member marked Going');
         assert(sent[0]?.channelId === 'marketplace' && sent[0].categoryId === 'marketplace',
             'on the marketplace Android channel and category — no app in the store needs an update (decision 27)');
-        assert(sent[0]?.title === EVENT_UPDATED_PUSH_TITLE, 'with the change title');
+        assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.update' && !JSON.stringify(sent[0]?.sent).includes(wired.id),
+            `its lock screen shows only "There is news about an event you're going to.", and it carries no post id (${sent[0]?.sent?.body})`);
+        assert(sent[0]?.title === EVENT_UPDATED_PUSH_TITLE, 'its details (what the app shows) have the change title');
         assert(sent[0]?.data?.screen === 'post' && sent[0]?.data?.postId === wired.id,
             'and the payload the phone routes to /post/:id');
 
         sent.length = 0;
         removePostStateful(wired.id, host);
         await new Promise(r => setImmediate(r));
-        assert(sent.length === 1 && sent[0]?.title === EVENT_CANCELLED_PUSH_TITLE && sent[0]?.channelId === 'marketplace',
-            'the wired-up cancel route sends the cancellation on the same channel');
+        assert(sent.length === 1 && sent[0]?.title === EVENT_CANCELLED_PUSH_TITLE && sent[0]?.channelId === 'marketplace'
+            && pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.update',
+            'the wired-up cancel route sends the cancellation on the same channel, with the same fixed words (its details say it is off)');
 
         // A member who turned Marketplace notifications off hears nothing.
         const optedOut = newEvent(host);

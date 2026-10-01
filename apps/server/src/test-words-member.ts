@@ -5,10 +5,10 @@
  * the Google JWKS is a test key, as in test-open-join. "The clock" is moved by moving rows back in time (members.joined_at,
  * a post's created_at), which is all the rules read.
  *
- *   1. the 12-words rules: /api/community/me says `words`, 2 posts, 4 photos, 3 new people a day, 7 days; the 3rd post in
- *      24 hours → 429 probation_limit saying why and that a sign-in lifts it; 5 photos on a post → 429, 4 → 200; a 4th
- *      new person → 429, while a reply to someone who wrote first is never limited. A sign-in member beside them keeps
- *      the ordinary 3 posts. Four days in with 3 kept posts a 12-words member is still on probation, a sign-in member is
+ *   1. the 12-words rules: /api/community/me says `words`, 2 posts, 4 photos, 3 new people a day, 7 days, and the same
+ *      3 knocks a day as everyone; the 3rd post in 24 hours → 429 probation_limit saying why and that a sign-in lifts it;
+ *      5 photos on a post → 429, 4 → 200; a 4th new person → 429, while a reply to someone who wrote first is never
+ *      limited. A sign-in member beside them keeps the ordinary 3 posts. Four days in with 3 kept posts a 12-words member is still on probation, a sign-in member is
  *      not; eight days in, neither
  *   2. one report: an established member's single report (off probation: 10 days, 3 kept posts) hides a 12-words
  *      newcomer's post; the same report on a sign-in newcomer's post hides nothing (3 needed); a report from a member under
@@ -181,8 +181,10 @@ async function main(): Promise<void> {
     const wesRules = await probation(wes);
     const samRules = await probation(sam);
     assert(wesRules?.onProbation === true && wesRules?.rules === 'words' && wesRules?.limits?.posts?.limit === 2 && wesRules?.limits?.photos?.limit === 4
-        && wesRules?.limits?.new_dm_recipients?.limit === 3 && wesRules?.endsWhen?.hours === 168 && wesRules?.endsWhen?.keptPosts === 3,
-        `Wes (12 words): /api/community/me says the 12-words rules, 2 posts, 4 photos, 3 new people, 7 days and 3 kept posts (${JSON.stringify(wesRules)})`);
+        && wesRules?.limits?.new_dm_recipients?.limit === 3 && wesRules?.endsWhen?.hours === 168 && wesRules?.endsWhen?.keptPosts === 3
+        // Knocking on a local community is the same for both doors (§2.3): the ordinary rules' 3 a day.
+        && wesRules?.limits?.knocks?.limit === 3,
+        `Wes (12 words): /api/community/me says the 12-words rules, 2 posts, 4 photos, 3 new people, 7 days and 3 kept posts; 3 knocks, as everyone (${JSON.stringify(wesRules)})`);
     assert(samRules?.rules === 'ordinary' && samRules?.limits?.posts?.limit === 3 && samRules?.endsWhen?.hours === 72,
         `Sam (a sign-in): the ordinary rules, 3 posts, 72 hours (${JSON.stringify({ rules: samRules?.rules, posts: samRules?.limits?.posts?.limit })})`);
     const wesPosts = [await post(wes), await post(wes), await post(wes)];

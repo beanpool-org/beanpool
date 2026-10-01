@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 94,
-  "hash": "594d2c889cea70b2493c3dbcafbddff21ffd4a3f22d2885b17335a49508e5e67",
+  "version": 95,
+  "hash": "d8db7eebce6f594515925a8e4a136d16b150202d942dc8784e251254f0b456bf",
   "sections": [
     {
       "id": "about",
@@ -4676,7 +4676,7 @@
             "Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See \"Messages\".",
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
-            "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. A backup of the server made before then keeps them until it is replaced. See \"Leaving or deleting your account\".",
+            "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. The server's own daily copies made before then keep them for up to 14 days. A backup an owner downloaded keeps them until the owner deletes it. See \"Leaving or deleting your account\".",
             "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\"."
           ]
         },
@@ -4727,8 +4727,29 @@
           "items": [
             "Their posts in the Market are hidden from you.",
             "They disappear from your People list and your chats, and you cannot message each other.",
-            "Their pins on the Map, their Pulse posts, and their messages in event chats still show.",
+            "Their pins on the Map and their Pulse posts still show.",
             "A report goes to your community's moderators, who can look into it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What your community does about it"
+        },
+        {
+          "type": "p",
+          "text": "Your community does this for blocks it keeps for you. Today that is a block made in the web app. A block made in the phone app stays on that phone, and your community does not know about it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Their direct messages never reach you. Your community does not deliver them to you, on any phone or computer, and you get no notification and no unread count for them.",
+            "If they start a new chat with you, it does not appear in your chats.",
+            "If you unblock them, nothing they sent while blocked arrives. Only messages they send after that reach you.",
+            "If they react to one of your messages, or change one of their old messages, you do not see it.",
+            "You get no notification when they write in a group chat, even when they mention you with @.",
+            "If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.",
+            "If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.",
+            "They cannot make a listing addressed only to you."
           ]
         },
         {
@@ -4738,7 +4759,11 @@
         {
           "type": "ul",
           "items": [
-            "They are not told.",
+            "They are not told. To them, their messages look sent.",
+            "Group chats, event chats and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.",
+            "A deal you already have with them goes on as before, with its notices and notifications.",
+            "If you have traded with them before, they can still send you Beans with a note. The Beans and the note arrive as from anyone, with no notification.",
+            "Notices from your community still come, even when they started them. For example, you are told when someone opens a vote to replace you as a group's lead convenor, and you get messages from the people who run your community.",
             "They can still see your posts.",
             "In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.",
             "In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.",
@@ -4930,6 +4955,49 @@
         {
           "type": "p",
           "text": "BeanPool never asks for your 12 words or a password in an alert."
+        },
+        {
+          "type": "h2",
+          "text": "When you tap an alert"
+        },
+        {
+          "type": "p",
+          "text": "Each alert carries your community's signature, made for you alone. BeanPool checks it before doing anything:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**It checks out:** BeanPool asks your community what the alert was about and opens it, if it's from the community you're in. An alert from another of your communities opens BeanPool where you left off: switch to that community to see it.",
+            "**It doesn't:** BeanPool opens nothing and tells you once: \"That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.\""
+          ]
+        },
+        {
+          "type": "p",
+          "text": "While BeanPool is open, an alert that doesn't check out isn't shown at all, and neither is one you've already seen."
+        },
+        {
+          "type": "p",
+          "text": "Your phone shows an alert's words before BeanPool can check them. So someone who got hold of your phone's alert address could put their own words on your lock screen. Tapping one does nothing, and BeanPool says so."
+        },
+        {
+          "type": "p",
+          "text": "An alert from a community you've removed from this phone does nothing either."
+        },
+        {
+          "type": "p",
+          "text": "If your community's server hasn't been updated yet, its alerts carry no signature. BeanPool shows them in general words (\"There is news from your community.\") and, when you tap one, opens where you left off."
+        },
+        {
+          "type": "h2",
+          "text": "Notices when BeanPool checks in"
+        },
+        {
+          "type": "p",
+          "text": "Every so often your phone lets BeanPool check in with your community in the background. If your community kept a notice for you that you haven't seen, such as what happened to one of your posts, BeanPool shows it on your phone in full, once."
+        },
+        {
+          "type": "p",
+          "text": "This needs nothing but your community's server, so it still works if alerts don't. It comes later than an alert would: your phone decides when, from about 15 minutes to a few hours."
         },
         {
           "type": "h2",
@@ -5128,7 +5196,7 @@
             "If you are below zero, the Commons covers the debt.",
             "Your profile becomes \"Deleted Member\".",
             "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
-            "Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted: the backup keeps them until it is replaced. In a chat with a person, older messages already on the other person's phone may stay there, like a screenshot or a backup.",
+            "Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see \"What stays a while\" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.",
             "Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.",
             "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
@@ -5140,6 +5208,26 @@
         {
           "type": "p",
           "text": "If you run your community's server and you are its only owner, you cannot delete your account until there is another owner."
+        },
+        {
+          "type": "h3",
+          "text": "What stays a while"
+        },
+        {
+          "type": "p",
+          "text": "Your community's server deletes all of the above at once. It also takes your name and key out of its log. Some copies hold on for a while:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.",
+            "**Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.",
+            "**Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.",
+            "**A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.",
+            "**The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.",
+            "**Your trades** stay in the ledger, under \"Deleted Member\", so everyone's beans still add up.",
+            "**Notices kept for other people.** For 7 days the server keeps the details of each notification it sent to the people you wrote to or dealt with, so their phone can show them (for example, that a message came in a chat). When you delete, your name and key are taken out of those notices, so one that said \"Wren sent you a message\" reads \"A member sent you a message\". The rest of a notice, such as which chat it was for, stays until its 7 days are up."
+          ]
         },
         {
           "type": "h3",

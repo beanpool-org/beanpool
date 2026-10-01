@@ -363,7 +363,7 @@ async function main(): Promise<void> {
         const stmt = realPrepare.call(db, sql);
         if (/SELECT invited_by FROM members/.test(sql)) {
             const realGet = stmt.get.bind(stmt);
-            (stmt as any).get = (...a: unknown[]) => { lookups++; return realGet(...a); };
+            (stmt as any).get = (...a: any[]) => { lookups++; return (realGet as any)(...a); };
         }
         return stmt;
     };

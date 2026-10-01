@@ -332,6 +332,7 @@ export const SUITES = [
     'test-groups-succession',
     'test-groups-succession-electorate',
     'test-groups-lead-convenor',
+    'test-groups-suspended-convenor',
     'test-member-wizards',
     'test-enterprise-pause',
     'test-enterprise-season-lifecycle',

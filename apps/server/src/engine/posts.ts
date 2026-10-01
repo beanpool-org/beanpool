@@ -26,6 +26,8 @@ import {
     generateSearchKeywords,
     hasListedOffer,
     isEventHost,
+    convenorHostPaused,
+    CONVENOR_POWERS_PAUSED,
     EVENT_READABLE_AFTER_END_MS,
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
@@ -600,6 +602,18 @@ export function isOwnListing(postId: unknown, publicKey: string): boolean {
     return !!row && row.author_pubkey === publicKey && (row.type === 'offer' || row.type === 'need') && row.origin_node == null;
 }
 
+/** The code a suspended convenor's refusal carries, for routes that answer 403 by code (routes/marketplace.ts). */
+export const CONVENOR_PAUSED_CODE = 'convenor_suspended';
+
+/**
+ * Refuse a suspended convenor acting on someone else's group post or event (@beanpool/engine convenorHostPaused): 403,
+ * in the words the group routes use. Their convenor power is resting until the suspension ends, not gone.
+ */
+function assertConvenorHostNotPaused(row: { author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }, actor: string): void {
+    if (!convenorHostPaused(db, row, actor)) return;
+    throw Object.assign(new Error(CONVENOR_POWERS_PAUSED), { status: 403, statusCode: 403, code: CONVENOR_PAUSED_CODE });
+}
+
 export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {
     const postRow = db.prepare("SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
     if (!postRow) return false;
@@ -622,6 +636,8 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!isAuthor && !isConvenor) {
         return false;
     }
+    // Someone else's group post, as a convenor whose account is suspended: refused, saying why.
+    if (!isAuthor) assertConvenorHostNotPaused(postRow, callerPublicKey);
     // Someone else's post, as a keeper or a convenor: only from a member of this node. Both rows read above outlast a
     // prune, and a pending re-key leaves them on the old key.
     if (!isDirectAuthor) assertNodeMember(callerPublicKey);
@@ -704,6 +720,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const actorPublicKey = actorPubkey || authorPublicKey;
     const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
     if (eventRow?.type === 'event') {
+        // A convenor whose account is suspended hosts none of their group's events until it ends: refused, saying why,
+        // rather than answered as someone who never hosted it.
+        assertConvenorHostNotPaused(eventRow, authorPublicKey);
         // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
         if (!isEventHost(db, eventRow, authorPublicKey)) return null;
         // Only from a member of this node, whichever host: the edit goes out under the author's name and moves everyone

@@ -10,7 +10,8 @@ import {
     type AudienceScope
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
-import { isVisitorKey } from './members.js';
+import { isVisitorKey, isSuspendedAccount } from './members.js';
+import { isGroupConvenor } from './groups.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { postPhotoUrl } from './photo-url.js';
@@ -225,6 +226,11 @@ export const EVENT_READABLE_AFTER_END_MS = 30 * 24 * 60 * 60 * 1000;
  * The host set for an event, and for every host-only action on it: the author, an active keeper of an
  * enterprise author, or an active convenor of the target group. The same set `removePost` trusts. A visitor's row
  * keeps no enterprise, whatever keeper row it holds from before visitors were refused one (isVisitorKey).
+ *
+ * "Active" is the account as well as the row, for a convenor as for a keeper: a suspended convenor hosts none of their
+ * group's events while it lasts (FABLE-sec-roles, 2026-10-01), and is a host again the moment it ends. The author is
+ * always a host of their own event, suspended or not, as before. convenorHostPaused says when a host power is resting
+ * rather than absent, so a write can say why it was refused.
  */
 export function isEventHost(
     db: Db,
@@ -240,11 +246,30 @@ export function isEventHost(
     `).get(pubkey, row.author_pubkey);
     if (keeper) return true;
     if (row.audience_scope === 'group' && row.target_group_id) {
-        return !!db.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
-        ).get(row.target_group_id, pubkey);
+        return !!db.prepare(`
+            SELECT 1 FROM group_members gm
+            JOIN members m ON m.public_key = gm.member_pubkey
+            WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.role = 'convenor' AND gm.status = 'active'
+              AND m.status = 'active' AND m.is_visitor = 0
+        `).get(row.target_group_id, pubkey);
     }
     return false;
+}
+
+/**
+ * Someone acting on another member's group post or event ONLY as a convenor of that group, while their account is
+ * suspended: the power is theirs and is resting, not missing. True for an active convenor row and a suspended account
+ * (isSuspendedAccount) who is not the post's author; false for everyone else, who get the refusal they always got. A
+ * write asks it before its own test, to answer in words that say why (groups.ts CONVENOR_POWERS_PAUSED).
+ */
+export function convenorHostPaused(
+    db: Db,
+    row: { author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null },
+    pubkey: string | undefined,
+): boolean {
+    if (!pubkey || row.author_pubkey === pubkey) return false;
+    if (row.audience_scope !== 'group' || !row.target_group_id) return false;
+    return isGroupConvenor(db, row.target_group_id, pubkey) && isSuspendedAccount(db, pubkey);
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.

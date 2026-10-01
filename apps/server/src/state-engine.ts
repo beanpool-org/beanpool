@@ -279,6 +279,7 @@ import {
     getGroupMembers as getGroupMembersEngine,
     getGroupMember as getGroupMemberEngine,
     isGroupConvenor as isGroupConvenorEngine,
+    isActingGroupConvenor as isActingGroupConvenorEngine,
     isGroupMember as isGroupMemberEngine,
     getGroupLead as getGroupLeadEngine,
     isGroupLead as isGroupLeadEngine,
@@ -7047,7 +7048,8 @@ export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null 
 export function assertMayPrune(publicKey: string, actor: string): void {
     const role = heldPrivilegedRole(publicKey);
     if (!role || actor === publicKey || actor === COMMUNITY_DECISION_ACTOR || isOwnerLevelActor(actor)) return;
-    const err: any = new Error(`Only an owner can remove ${role === 'owner' ? 'an owner' : 'an admin'}. Propose a Decision to remove them instead`);
+    // Not "propose a Decision instead": no community vote removes an owner or an admin (decisions-engine NODE_OPERATOR_EFFECTS).
+    const err: any = new Error(`Only an owner can remove ${role === 'owner' ? 'an owner' : 'an admin'}`);
     err.status = 403;
     throw err;
 }
@@ -8639,6 +8641,11 @@ export function getGroupMember(groupId: string, memberPubkey: string): GroupMemb
 
 export function isGroupConvenor(groupId: string, memberPubkey: string): boolean {
     return isGroupConvenorEngine(db, groupId, memberPubkey);
+}
+
+/** A convenor whose account is not suspended: their convenor powers are not resting (engine isActingGroupConvenor). */
+export function isActingGroupConvenor(groupId: string, memberPubkey: string): boolean {
+    return isActingGroupConvenorEngine(db, groupId, memberPubkey);
 }
 
 export function isGroupMember(groupId: string, memberPubkey: string): boolean {

@@ -267,6 +267,18 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
 
 /**
+ * "The node admin cannot be voted out — say so plainly" (docs/the-commons.md §3.8). An owner or an admin holds the
+ * server itself, and any admin can halt an open vote — the subject included — so a Decision that removed or suspended
+ * one would be theatre: it worked only on an admin who did not notice, and a faction with the quorum could strip the
+ * people running the node one by one. Neither effect names an owner or an admin, one whose role a suspension holds
+ * aside included (heldPrivilegedRole: a suspended owner is still an owner). An owner takes the role away first, and
+ * then they are a member like any other. Moderators are members with a job, and a vote can still remove one.
+ */
+const NODE_OPERATOR_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['remove_member', 'suspend_member']);
+export const NODE_OPERATOR_VOTE_REFUSAL = "A community vote can't remove or suspend an owner or admin of this community's "
+    + "server: they run the server itself. An owner can take that role away first; after that, they are a member like any other.";
+
+/**
  * The node profile switch an effect needs (config/node-profile.ts), or null. Every effect needs `decisions`: with
  * formal Decisions off nothing a vote decides is carried out. The pool effects pay Beans out of the Commons, outside
  * transfer(), so they are refused here when Beans are off: at the proposal, and again at execution.
@@ -686,6 +698,11 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (opts.effect === 'reinstate_member' && opts.subject && isDeletedByOwner(opts.subject)) {
         throw new Error(OWNER_DELETED_REFUSAL);
     }
+    // Refused before anyone votes on it, not after (NODE_OPERATOR_EFFECTS). One whose role comes after it opens is
+    // caught when it would be carried out (preflightAssert).
+    if (NODE_OPERATOR_EFFECTS.has(opts.effect) && opts.subject && heldPrivilegedRole(opts.subject)) {
+        throw new Error(NODE_OPERATOR_VOTE_REFUSAL);
+    }
 
     // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
     if (GRANT_EFFECTS.has(opts.effect)) assertGrantWithinCap(opts.params);
@@ -967,10 +984,11 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
-    if (decision.effect === 'remove_member' || decision.effect === 'suspend_member') {
+    if (NODE_OPERATOR_EFFECTS.has(decision.effect)) {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
-        if (isSoleOwner(decision.subject)) {
-            return { status: 'blocked', reason: 'Cannot remove or suspend sole node owner via community vote per §3.8' };
+        // An owner or admin now, whatever they were when it opened: the sole owner, a co-owner, an admin (§3.8).
+        if (heldPrivilegedRole(decision.subject)) {
+            return { status: 'blocked', reason: `${NODE_OPERATOR_VOTE_REFUSAL} (§3.8)` };
         }
     }
 
@@ -1602,9 +1620,9 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
-    // who thinks an owner must go proposes a member-removal Decision instead.
+    // who thinks an owner must go asks another owner: no community vote removes an owner (§3.8, NODE_OPERATOR_EFFECTS).
     if (isNodeOwner(subjectPubkey) && !isOwnerLevelActor(adminActor)) {
-        return { success: false, status: 403, error: 'Only an owner can suspend an owner. Propose a Decision to remove them instead' };
+        return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
     }
 
     const id = crypto.randomUUID();

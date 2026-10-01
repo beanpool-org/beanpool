@@ -10,6 +10,8 @@
 // this server (services/tunnel-connector.ts) runs whatever token that holds. That refresh runs on any main server holding a
 // tunnel address (live, or waiting for approval), however it was claimed, and never claims a name. Only with the env above does it also claim: the
 // name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved.
+// A name the registrar's sweep paused (another node's key, or something that is no BeanPool node, answered at it) is asked
+// back with a heal, never a claim, however it was claimed (services/tunnel-connector.ts healPausedAddress).
 // See docs/node-dns-registrar.md.
 //
 // The tunnel's destination is always this server's own loopback (LOOPBACK_ORIGIN): the tunnel runs inside the server.
@@ -19,7 +21,7 @@ import { getLocalConfig } from '../config/local-config.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { persistAddress, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
+import { persistAddress, healPausedAddress, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
 // Where it always lived; the take-over suites import it from here.
 export { withKeptTunnelToken };
@@ -56,6 +58,8 @@ export async function reconcile(): Promise<void> {
     if (st.status === 'live') { await persistAddress(st); return; }
     if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`); await persistAddress(st); return; }
 
+    // A pause of this server's own name that its heal lifts (the sweep's): asked back at once, by proving its key.
+    if (await healPausedAddress(st)) return;
     // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
     recordRegistrarAnswer(st, 'status');
     // The refresh never claims: only a server told to by its env claims a name.

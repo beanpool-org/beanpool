@@ -3,14 +3,15 @@
  *
  *   - GET /api/attest  (PUBLIC): proves this node still holds its registered identity. The registrar's
  *     cron calls it with a nonce; we return a reply signed by the node's Ed25519 key. Public by design.
- *   - Admin routes drive the node's public address for the manager "Public Address" tab (claim/status/offline).
+ *   - Admin routes drive the node's public address for the manager "Public Address" tab (claim/status/offline, and
+ *     rotate: a new tunnel key).
  */
 
 import Router from '@koa/router';
 import http from 'node:http';
-import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, nodePubkeyHex } from '../services/registrar-client.js';
-import { syncTunnel, restartTunnel, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
-import { getNodeConfig, updateNodeConfig } from '../state-engine.js';
+import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
+import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
+import { getNodeConfig, getNodeRole, updateNodeConfig } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import type { RouteDeps } from './types.js';
 
@@ -268,6 +269,44 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             addProbeLog('1/1', `❌ Tunnel restart failed: ${e.message}`, 'error');
             ctx.status = 500;
+            ctx.body = { error: e.message };
+        }
+    });
+
+    // Settings' "New tunnel key": the name onto a fresh tunnel (the registrar's rotate). The old tunnel is deleted, so a copy
+    // of its token (a copied data folder or backup, a standby given away, the token shown on this screen) stops working;
+    // the tunnel inside this server restarts on the new one. Only the main server runs the tunnel, so only it rotates.
+    router.post('/api/local/admin/public-address/rotate', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const pa = (getNodeConfig() as any).publicAddress;
+        if (getNodeRole() !== 'primary' || !pa?.name || pa.mode === 'direct' || pa.status !== 'live') {
+            ctx.status = 409;
+            ctx.body = { error: getNodeRole() !== 'primary'
+                ? 'Only the main server runs the tunnel, so only it can give the tunnel a new key.'
+                : 'This server has no live tunnel address to give a new key.' };
+            return;
+        }
+        const where = pa.hostname || pa.name;
+        try {
+            probeLogs.length = 0;
+            addProbeLog('1/2', `⏳ Asking the address service for a new tunnel key for ${where}...`, 'info');
+            const res = await rotateAddress(pa.name, LOOPBACK_ORIGIN);
+            if (res?.status !== 'live') {
+                recordRegistrarAnswer({ name: pa.name, hostname: pa.hostname, ...res }, 'status');
+                addProbeLog('1/2', `❌ The address service answered "${res?.status ?? 'nothing'}" for ${where}`, 'error');
+                ctx.status = 409;
+                ctx.body = { error: `The address service answered "${res?.status ?? 'nothing'}"${res?.reason ? ` (${res.reason})` : ''} for ${where}.`, status: res?.status ?? null, reason: res?.reason ?? null };
+                return;
+            }
+            addProbeLog('1/2', `✅ ${where} has a new tunnel key; the old one no longer works`, 'success');
+            const { changed: _changed, rotated: _rotated, attest: _attest, ...answer } = res;
+            const tunnel = await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+            const ok = tunnel.state === 'starting' || tunnel.state === 'connected';
+            addProbeLog('2/2', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
+            ctx.body = { success: true, status: 'live', name: pa.name, hostname: res.hostname || pa.hostname, tunnel };
+        } catch (e: any) {
+            addProbeLog('1/2', `❌ No new tunnel key: ${e.message}`, 'error');
+            ctx.status = 502;
             ctx.body = { error: e.message };
         }
     });

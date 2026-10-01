@@ -193,6 +193,19 @@ export const updateAddressMetadata = (communityName?: string, contact?: string) 
     });
 export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
 export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});
+/**
+ * Bring this server's own held name back (a pause its heal lifts): never a claim, so it can't take back a release or
+ * claim a name. The registrar routes it again only once this server proves its key: on a fresh tunnel only this signed
+ * request gets the token of, or through an attestation at the name signed by this key. Answers `paused` when it couldn't.
+ */
+export const healAddress = (name: string, origin?: string) =>
+    signedFetch('POST', '/api/registrar/heal', { name, ...(origin ? { origin } : {}) });
+/**
+ * Move this server's tunnel name onto a fresh tunnel: a new token, and the old tunnel deleted, so a copy of its token
+ * (a copied data folder or backup, a standby given away) stops working. `origin` re-points the tunnel at the same time.
+ */
+export const rotateAddress = (name: string, origin?: string) =>
+    signedFetch('POST', '/api/registrar/rotate', { name, ...(origin ? { origin } : {}) });
 
 /**
  * Who holds `name` (a bare label: `bname`, not `bname.beanpool.org`)? The registrar's answer (design

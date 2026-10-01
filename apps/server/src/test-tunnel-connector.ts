@@ -24,8 +24,12 @@
  *  6. A standby (role backup) with a publicAddress → no child. A take-over waiting on its tunnel step holds it; the step
  *     starts it.
  * 11. Two syncs in the same tick with different tokens → never two children.
- *  7. Settings: the claim sends the loopback origin; status shows the tunnel; Take offline stops the child and clears
- *     the address; Restart tunnel with no address says so.
+ * 12. The registrar paused the name (its sweep: another key, or no BeanPool node, answered there) → the agent's tick asks
+ *     for it back with a heal of the saved name (never a claim) and runs the fresh tunnel's token; so does the dead-tunnel
+ *     path. The admin's pause, a block, a release, or a pause of a name this server doesn't use: nothing is asked.
+ *  7. Settings: the claim sends the loopback origin; status shows the tunnel; New tunnel key (rotate) restarts the tunnel
+ *     on the new token, and a refusal or a standby changes nothing; Take offline stops the child and clears the address;
+ *     Restart tunnel with no address says so.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-tunnel-connector.ts
  */
@@ -109,9 +113,14 @@ const reg = {
     status: (): any => ({ status: 'none' }),
     claim: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-claim-${b.name}` }),
     offline: (): any => ({ status: 'released' }),
+    heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
+    /** [HTTP status, body]: the registrar refuses a rotate with a 403, 404 or 409. */
+    rotate: (b: any): [number, any] => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
 };
 const claims = () => reg.calls.filter((c) => c.path === '/api/registrar/claim');
 const statuses = () => reg.calls.filter((c) => c.path === '/api/registrar/status');
+const heals = () => reg.calls.filter((c) => c.path === '/api/registrar/heal');
+const rotates = () => reg.calls.filter((c) => c.path === '/api/registrar/rotate');
 
 async function startRegistrar(): Promise<http.Server> {
     const server = http.createServer((req, res) => {
@@ -126,6 +135,8 @@ async function startRegistrar(): Promise<http.Server> {
             if (p === '/api/registrar/status') return send(200, reg.status());
             if (p === '/api/registrar/claim') return send(200, reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
+            if (p === '/api/registrar/heal') return send(200, reg.heal(body));
+            if (p === '/api/registrar/rotate') { const [code, answer] = reg.rotate(body); return send(code, answer); }
             send(404, { error: 'not found' });
         });
     });
@@ -398,6 +409,65 @@ async function main(): Promise<void> {
             assert(await upOn(cur.tunnelToken), 'and back, still one');
         });
 
+        await section('12. the registrar paused the name → this server asks for it back with a heal, never a claim', async () => {
+            const T5 = 'eyJhIjoiYWxwaGEtNSJ9.token-five-healed';
+            const T6 = 'eyJhIjoiYWxwaGEtNiJ9.token-six-healed';
+            const before = pa();
+            assert(before?.name === 'alpha' && before?.status === 'live', `the saved address is alpha, live (${before?.name}, ${before?.status})`);
+            const paused = (reason: string, name = 'alpha') => ({ status: 'paused', name, hostname: `${name}.beanpool.org`, mode: 'tunnel', reason, since: 1 });
+            const c0 = claims().length;
+            const h0 = heals().length;
+            const pid = tunnelConnectorForTests().pid;
+
+            // Nothing this server's heal may lift: nothing asked.
+            for (const st of [paused('admin'), { status: 'blocked', name: 'alpha', hostname: 'alpha.beanpool.org' },
+                { status: 'released', name: 'alpha', hostname: 'alpha.beanpool.org', held_until: 9e9 }, paused('content-swap', 'elsewhere')]) {
+                reg.status = () => st;
+                await reconcile();
+                assert(heals().length === h0 && claims().length === c0, `${st.status}${(st as any).reason ? `/${(st as any).reason}` : ''} of ${st.name}: no heal, no claim`);
+            }
+            assert(tunnelConnectorForTests().pid === pid && pa()?.tunnelToken === before.tunnelToken, 'and the tunnel and the saved address are as they were');
+
+            // The sweep's pause (a content swap): one heal of the saved name, to this server's loopback; the fresh tunnel's token runs.
+            reg.status = () => paused('content-swap');
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T5, changed: ['tunnel', 'dns'] });
+            await reconcile();
+            const h = heals().at(-1);
+            assert(heals().length === h0 + 1 && h?.body?.name === 'alpha' && h?.body?.origin === LOOPBACK_ORIGIN,
+                `one heal of the saved name, to this server's loopback (${JSON.stringify(heals().slice(h0).map((x) => x.body))})`);
+            assert(!('contact' in (h?.body ?? {})) && !('community_name' in (h?.body ?? {})) && !('mode' in (h?.body ?? {})), 'and nothing else of the row\'s to change');
+            assert(claims().length === c0, 'never a claim (a claim of a released name would take it back)');
+            assert(await upOn(T5), 'the fresh tunnel\'s token runs, one child');
+            assert(pa()?.tunnelToken === T5 && pa()?.status === 'live' && pa()?.origin === LOOPBACK_ORIGIN, 'and is saved');
+
+            // The heal can't prove the key yet (another key still answers there): nothing changes, and the next tick asks again.
+            reg.status = () => paused('impostor');
+            reg.heal = () => ({ status: 'paused', name: 'alpha', reason: 'impostor', attest: 'impostor', why: 'valid signature by 0123456789abcdef…', changed: ['dns'] });
+            const pid5 = tunnelConnectorForTests().pid;
+            await reconcile();
+            assert(heals().length === h0 + 2 && claims().length === c0, `asked again: a heal, no claim (${heals().length - h0})`);
+            assert(tunnelConnectorForTests().pid === pid5 && pa()?.tunnelToken === T5 && pa()?.status === 'live', 'refused: the saved address and the tunnel are as they were');
+            assert(tunnelLogs().some((l) => /stays paused/.test(l.message)), 'the log says it stays paused');
+
+            // The dead-tunnel path: Cloudflare refuses the tunnel (the pause deleted it), the registrar says paused → a heal.
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T6, changed: ['tunnel', 'dns'] });
+            reg.status = () => paused('impostor');
+            fake.ready(503);
+            await until(() => getTunnelStatus().state !== 'connected');
+            const spam = setInterval(() => fake.say(UNAUTHORIZED), 60);
+            try {
+                assert(await until(() => heals().length === h0 + 3, 6_000), `Unauthorized past the threshold, status paused → one heal (${heals().length - h0})`);
+                assert(await until(() => tunnelConnectorForTests().runningToken === T6, 4_000), 'its fresh token is run');
+                assert(claims().length === c0, 'still never a claim');
+            } finally {
+                clearInterval(spam);
+            }
+            reg.status = () => live('alpha', T6);
+            fake.ready(200);
+            await until(() => getTunnelStatus().state === 'connected');
+            assert(await upOn(T6), 'one child, on it');
+        });
+
         await section('7. Settings: claim, status, Take offline, Restart tunnel', async () => {
             const deps = { checkAdminAuth: async () => true } as unknown as RouteDeps;
             const k = new Koa();
@@ -432,6 +502,31 @@ async function main(): Promise<void> {
             assert(res.status === 200 && ['starting', 'connected'].includes(s.tunnel?.state) && s.dockerSocket === false,
                 `Settings' status shows the tunnel's state and no socket warning (${JSON.stringify(s.tunnel)}, ${s.dockerSocket})`);
 
+            // New tunnel key: the registrar's rotate, of the saved name to this server's loopback; the child restarts on it.
+            const T_ROT = 'eyJ.token-beta-rotated';
+            reg.rotate = (b) => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T_ROT, rotated: true, changed: ['tunnel', 'dns'] }];
+            const r0 = rotates().length;
+            const oldPid = tunnelConnectorForTests().pid!;
+            const rot = await post('/api/local/admin/public-address/rotate');
+            const rq = rotates().at(-1);
+            assert(rot.status === 200 && rotates().length === r0 + 1 && rq?.body?.name === 'beta' && rq?.body?.origin === LOOPBACK_ORIGIN,
+                `New tunnel key asks the registrar to rotate the saved name, to this server's loopback (${rot.status}, ${JSON.stringify(rq?.body)})`);
+            assert(await upOn(T_ROT) && !alive(oldPid), 'the tunnel restarts on the new key; the old child is gone');
+            assert(pa()?.tunnelToken === T_ROT && pa()?.name === 'beta' && pa()?.status === 'live', 'and the new key is saved');
+            assert(!JSON.stringify(rot.body).includes(T_ROT), 'the answer to the browser does not carry the token');
+            // Refused by the registrar (paused by the admin): nothing changes here.
+            reg.rotate = () => [403, { error: 'paused by the admin' }];
+            const rotPid = tunnelConnectorForTests().pid;
+            const refused = await post('/api/local/admin/public-address/rotate');
+            assert(refused.status === 502 && /paused by the admin/.test(refused.body?.error || ''), `a refusal says why (${refused.status}: ${refused.body?.error})`);
+            assert(pa()?.tunnelToken === T_ROT && tunnelConnectorForTests().pid === rotPid, 'and changes nothing: same key, same child');
+            // A standby runs no tunnel, so it never rotates the name's.
+            setNodeRole('backup');
+            const r1 = rotates().length;
+            const standby = await post('/api/local/admin/public-address/rotate');
+            setNodeRole('primary');
+            assert(standby.status === 409 && rotates().length === r1, `a standby: 409, the registrar is not asked (${standby.status})`);
+
             const pid = tunnelConnectorForTests().pid!;
             reg.offline = () => ({ status: 'released', name: 'beta' });
             const off = await post('/api/local/admin/public-address/offline');
@@ -444,6 +539,8 @@ async function main(): Promise<void> {
 
             const restart = await post('/api/local/admin/public-address/restart-tunnel');
             assert(restart.status === 409 && /no tunnel/i.test(restart.body?.error || ''), `Restart tunnel with no address says so (${restart.status})`);
+            const noKey = await post('/api/local/admin/public-address/rotate');
+            assert(noKey.status === 409 && /no live tunnel address/i.test(noKey.body?.error || ''), `New tunnel key with no address says so (${noKey.status})`);
             const old = await post('/api/local/admin/public-address/restart-sidecar');
             assert(old.status === 404 || old.status === 405, `the sidecar route is gone (${old.status})`);
         });

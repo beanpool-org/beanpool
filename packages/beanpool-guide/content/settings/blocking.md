@@ -17,12 +17,25 @@ Confirm with **Block User**.
 
 - Their posts in the Market are hidden from you.
 - They disappear from your People list and your chats, and you cannot message each other.
-- Their pins on the Map, their Pulse posts, and their messages in event chats still show.
+- Their pins on the Map and their Pulse posts still show.
 - A report goes to your community's moderators, who can look into it.
+
+## What your community does about it
+
+Your community does this for blocks it keeps for you. Today that is a block made in the web app. A block made in the phone app stays on that phone, and your community does not know about it.
+
+- Their direct messages never reach you. Your community does not deliver them to you, on any phone or computer, and you get no notification and no unread count for them.
+- If they start a new chat with you, it does not appear in your chats.
+- If you unblock them, nothing they sent while blocked arrives. Only messages they send after that reach you.
+- You get no notification when they write in a group chat, even when they mention you with @.
+- If they ask for a deal on one of your listings, the request waits in your deals with no notification.
+- They cannot make a listing addressed only to you.
 
 ## What it does not do
 
-- They are not told.
+- They are not told. To them, their messages look sent.
+- Group chats, event chats and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
+- A deal you already have with them goes on as before, with its notices and notifications.
 - They can still see your posts.
 - In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
 - In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.

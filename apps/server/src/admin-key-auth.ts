@@ -44,7 +44,7 @@ import {
 } from './engine/node-roles.js';
 import { getLocalConfig, isBreakGlassMode, updateLocalConfig } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
-import { issueCsrfToken } from './admin-auth.js';
+import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
@@ -82,11 +82,21 @@ export interface HandshakeTokenEntry {
     usedAt?: number;
 }
 
+/**
+ * 'key': a member's key sign-in (the app's link, the QR pairing). 'password': the node's admin password (and its 2FA
+ * code), exchanged once for this session (createPasswordSession), so the browser keeps no copy of the password.
+ */
+export type AdminSessionKind = 'key' | 'password';
+
 export interface AdminSession {
     sessionId: string;
+    kind: AdminSessionKind;
+    /** The signed-in member's key; '' for a password session, which is the node's owner and no member. */
     memberPubkey: string;
     role: MemberNodeRole;
     sessionEpoch: number;
+    /** A password session only: the password and second factor it was opened under (passwordCredentialStamp). */
+    credentialStamp?: string;
     createdAt: number;
     lastActiveAt: number;
     hardExpiresAt: number;
@@ -118,7 +128,7 @@ export function pruneExpiredAuthEntries(now = Date.now()): void {
     // Prune sessions that exceeded hard limit or idle limit
     for (const [sid, sess] of adminSessions) {
         if (now > sess.hardExpiresAt || now > sess.idleExpiresAt) {
-            adminSessions.delete(sid);
+            revokeAdminSession(sid);
         }
     }
 }
@@ -464,6 +474,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
     const sessionId = crypto.randomBytes(32).toString('hex');
     const session: AdminSession = {
         sessionId,
+        kind: 'key',
         memberPubkey: entry.memberPubkey,
         role: liveRole,
         sessionEpoch: entry.sessionEpoch,
@@ -474,7 +485,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
     };
     adminSessions.set(sessionId, session);
 
-    const csrfToken = issueCsrfToken();
+    const csrfToken = issueCsrfToken(sessionId);
 
     logger.info('AUTH', `Minted admin browser session for ${entry.memberPubkey} (role: ${liveRole})`);
 
@@ -524,20 +535,38 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 
     // 12h Hard Limit check
     if (now > session.hardExpiresAt) {
-        adminSessions.delete(sessionId);
+        revokeAdminSession(sessionId);
         return { valid: false, error: 'Session expired (12h hard limit reached)', expired: true, hardLimit: true };
     }
 
     // 2h Idle Limit check
     if (now > session.idleExpiresAt) {
-        adminSessions.delete(sessionId);
+        revokeAdminSession(sessionId);
         return { valid: false, error: 'Session expired (2h idle timeout)', idle: true, idleTimeout: true };
+    }
+
+    if (session.kind === 'password') {
+        // The password is owner level and opens no session in break-glass mode (checkAdminAuth). A changed password,
+        // or a second factor turned on, off or replaced, ends every session the old one opened, except the session
+        // that made the change (restampPasswordSession).
+        const ended = isBreakGlassMode()
+            ? 'Break-glass mode is on: the admin password signs in to key enrolment only'
+            : session.credentialStamp !== passwordCredentialStamp()
+                ? 'The admin password or its 2FA changed since this sign-in'
+                : null;
+        if (ended) {
+            revokeAdminSession(sessionId);
+            return { valid: false, error: ended, revoked: true };
+        }
+        session.lastActiveAt = now;
+        session.idleExpiresAt = now + SESSION_IDLE_TTL_MS;
+        return { valid: true, session };
     }
 
     // session_epoch check
     const currentEpoch = getNodeRoleSessionEpoch(session.memberPubkey);
     if (currentEpoch !== session.sessionEpoch) {
-        adminSessions.delete(sessionId);
+        revokeAdminSession(sessionId);
         return { valid: false, error: 'Session revoked via epoch bump', revoked: true };
     }
 
@@ -547,7 +576,7 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
     // A moderator whose role is taken away loses the session on the next request the same way.
     const liveRole = nodeRoleOf(session.memberPubkey);
     if (!liveRole) {
-        adminSessions.delete(sessionId);
+        revokeAdminSession(sessionId);
         return { valid: false, error: 'Member no longer holds a node role' };
     }
     session.role = liveRole;
@@ -576,6 +605,90 @@ export function revokeAllMemberSessions(memberPubkey: string): number {
 export function revokeAdminSession(sessionId: string): void {
     if (!sessionId) return;
     adminSessions.delete(sessionId);
+    revokeCsrfTokensBoundTo(sessionId);
+}
+
+// ===================== PASSWORD SESSIONS =====================
+
+/** At most this many password sessions at once; a new one ends the oldest. Each is a sign-in with the password. */
+export const MAX_PASSWORD_SESSIONS = 32;
+
+/**
+ * Which password and second factor are in force now: a password session opened under any other ends
+ * (validateAdminSession). Never leaves the process.
+ */
+function passwordCredentialStamp(): string {
+    const c = getLocalConfig();
+    const second = c.totpEnabled && c.totpSecret ? c.totpSecret : '';
+    return crypto.createHash('sha256').update(`${c.adminHash || ''}|${c.salt || ''}|${second}`).digest('hex');
+}
+
+/**
+ * Opens a session for a caller that has just proved the admin password (and, with 2FA on, a code): checkAdminAuth's
+ * password path, in POST /api/local/admin/auth/password. The browser gets it as the httpOnly admin_session cookie
+ * (setAdminSessionCookie) and keeps no copy of the password: a script on the node's origin can then use the session
+ * while it lives, but has nothing to carry away (Fable's web review, M1). Owner level, as the password is; 2h idle,
+ * 12h at most, as a key session.
+ */
+export function createPasswordSession(now = Date.now()): { sessionId: string; csrfToken: string; hardExpiresAt: number; idleExpiresAt: number } {
+    const live = [...adminSessions.values()].filter(s => s.kind === 'password').sort((a, b) => a.createdAt - b.createdAt);
+    for (const old of live.slice(0, Math.max(0, live.length - MAX_PASSWORD_SESSIONS + 1))) revokeAdminSession(old.sessionId);
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const session: AdminSession = {
+        sessionId,
+        kind: 'password',
+        memberPubkey: '',
+        role: 'owner',
+        sessionEpoch: 0,
+        credentialStamp: passwordCredentialStamp(),
+        createdAt: now,
+        lastActiveAt: now,
+        hardExpiresAt: now + SESSION_HARD_TTL_MS,
+        idleExpiresAt: now + SESSION_IDLE_TTL_MS,
+    };
+    adminSessions.set(sessionId, session);
+    logger.info('AUTH', 'Opened an admin session with the node password');
+    return { sessionId, csrfToken: issueCsrfToken(sessionId), hardExpiresAt: session.hardExpiresAt, idleExpiresAt: session.idleExpiresAt };
+}
+
+/**
+ * After a route changed the admin password or the 2FA in force: the caller's own password session (if it is one)
+ * carries on under the new ones, every other password session ends on its next request. Call it only once the
+ * change is on disk.
+ */
+export function restampPasswordSession(ctx: any): void {
+    const id = ctx?.state?.adminSessionId;
+    const session = typeof id === 'string' ? adminSessions.get(id) : undefined;
+    if (session?.kind === 'password') session.credentialStamp = passwordCredentialStamp();
+}
+
+/** Ends every password session (a test's reset, or an owner signing the password out everywhere). */
+export function revokeAllPasswordSessions(): number {
+    let n = 0;
+    for (const s of [...adminSessions.values()]) {
+        if (s.kind === 'password') { revokeAdminSession(s.sessionId); n++; }
+    }
+    return n;
+}
+
+export const ADMIN_SESSION_COOKIE = 'admin_session';
+
+/**
+ * The admin session cookie, the one way a browser holds an admin session: httpOnly (no script reads it), SameSite
+ * strict (no other site's page sends it), the whole origin (the API is under /api). Its value never appears in a
+ * response body (Fable's web review, L3).
+ */
+export function setAdminSessionCookie(ctx: any, sessionId: string): void {
+    ctx.cookies.set(ADMIN_SESSION_COOKIE, sessionId, {
+        httpOnly: true,
+        sameSite: 'strict',
+        maxAge: SESSION_HARD_TTL_MS,
+        path: '/',
+    });
+}
+
+export function clearAdminSessionCookie(ctx: any): void {
+    if (ctx?.cookies?.set) ctx.cookies.set(ADMIN_SESSION_COOKIE, '', { httpOnly: true, sameSite: 'strict', maxAge: 0, path: '/' });
 }
 
 /**
@@ -584,8 +697,8 @@ export function revokeAdminSession(sessionId: string): void {
 export function purgeMemberSessions(memberPubkey: string): void {
     if (!memberPubkey) return;
     for (const [sid, sess] of adminSessions.entries()) {
-        if (sess.memberPubkey === memberPubkey) {
-            adminSessions.delete(sid);
+        if (sess.kind === 'key' && sess.memberPubkey === memberPubkey) {
+            revokeAdminSession(sid);
         }
     }
 }

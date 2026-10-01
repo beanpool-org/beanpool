@@ -736,6 +736,35 @@ function isApiOrWsPath(requestPath: string): boolean {
 }
 
 /**
+ * The admin surface: the Settings pages and every route the admin password or an admin session opens. The admin IP
+ * allowlist guards exactly these, and a listed CORS origin gets no credentials on them (Fable's web review, L6).
+ * Matched ignoring case and after normalising, so no spelling of a path is treated more loosely than another.
+ */
+export function isAdminSurfacePath(requestPath: string): boolean {
+    const p = path.posix.normalize(requestPath.toLowerCase()).replace(/\/+$/, '') || '/';
+    return p === '/settings' ||
+        p.startsWith('/settings/') ||
+        p === '/settings-legacy' ||
+        p === '/settings.js' ||
+        p === '/api/local/admin' ||
+        p.startsWith('/api/local/admin/') ||
+        p === '/api/admin' ||
+        p.startsWith('/api/admin/') ||
+        p === '/api/local/verify-password' ||
+        p === '/api/local/dashboard' ||
+        p === '/api/local/update-identity' ||
+        p === '/api/local/change-password' ||
+        p === '/api/local/reset' ||
+        p === '/api/local/connectors' ||
+        p.startsWith('/api/local/connectors/') ||
+        p.startsWith('/api/local/federation/') ||
+        p === '/api/manager' ||
+        p.startsWith('/api/manager/') ||
+        p === '/api/pricing-guide/admin' ||
+        p.startsWith('/api/pricing-guide/admin/');
+}
+
+/**
  * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
  * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
  * toggles) compares the path as sent. Those two views must never disagree about what a request is, so a
@@ -864,36 +893,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // Charged as an unsigned request: an admin opens one now and then, and a flood of made-up tickets stops here.
             const wait = limited ? gatewayAdmitUpgrade(client, maxReqs, false).wait : 0;
             if (wait) { refuseUpgrade(socket, 429, wait); return; }
-            const auth = parsedUrl.searchParams.get('auth');
+            // A single-use ticket from POST /api/local/admin/ws-ticket (checkAdminAuth), and nothing else. The admin
+            // password in the query string (`?auth=`) is no longer taken: a URL lands in the tunnel's, proxies' and
+            // browsers' logs and history, and no client has sent one since the tickets (Fable's web review, L5).
             const ticket = parsedUrl.searchParams.get('ticket');
-            const config = getLocalConfig();
-            let authorized = false;
-
-            if (ticket && isValidWsTicket(ticket)) {
-                authorized = true;
-            } else if (auth && config.adminHash && config.salt && !twoFactorOn() && !isBreakGlassMode()) {
-                // The admin password, so under the same per-source brake as every other password check. Never under
-                // 2FA or in break-glass mode: this path takes the password alone, and every client asks for a ticket
-                // (checkAdminAuth) now.
-                const brakeKey = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
-                const admission = await acquirePasswordAttempt(brakeKey);
-                if (!admission.admitted) {
-                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${admission.retryAfter}\r\n\r\n`);
-                    socket.destroy();
-                    return;
-                }
-                let pwOk = false;
-                try {
-                    pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
-                } finally {
-                    // Under 2FA a right password alone clears nothing (password-brake.ts, checkAdminPassword).
-                    settlePasswordAttempt(brakeKey, pwOk, !twoFactorOn());
-                }
-                if (pwOk) {
-                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                    authorized = true;
-                }
-            }
+            const authorized = !!ticket && isValidWsTicket(ticket);
 
             if (!authorized) {
                 refuseUpgrade(socket, 401);
@@ -1118,9 +1122,14 @@ export async function startHttpsServer(port: number): Promise<number> {
             const isWildcardAllowed = allowedOrigins.includes('*');
 
             if (isExplicitlyAllowed) {
-                // Explicitly allowed origin: set origin & credentials
+                // Explicitly allowed origin: its own origin, and credentials (the member's cookie-free API needs none, but
+                // a site the operator lists may send them). Never on the admin surface: a listed site (a community page
+                // someone else hosts, say) must not be able to read or change the admin API with the operator's signed-in
+                // cookie (Fable's web review, L6). It may still call it with a credential it sends itself, the password
+                // in a header, as any server can.
                 ctx.set('Access-Control-Allow-Origin', requestOrigin);
-                ctx.set('Access-Control-Allow-Credentials', 'true');
+                ctx.vary('Origin');
+                if (!isAdminSurfacePath(ctx.path)) ctx.set('Access-Control-Allow-Credentials', 'true');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -1147,29 +1156,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            const normalizedPath = path.posix.normalize(ctx.path.toLowerCase()).replace(/\/+$/, '') || '/';
-            if (
-                normalizedPath === '/settings' ||
-                normalizedPath.startsWith('/settings/') ||
-                normalizedPath === '/settings-legacy' ||
-                normalizedPath === '/settings.js' ||
-                normalizedPath === '/api/local/admin' ||
-                normalizedPath.startsWith('/api/local/admin/') ||
-                normalizedPath === '/api/admin' ||
-                normalizedPath.startsWith('/api/admin/') ||
-                normalizedPath === '/api/local/verify-password' ||
-                normalizedPath === '/api/local/dashboard' ||
-                normalizedPath === '/api/local/update-identity' ||
-                normalizedPath === '/api/local/change-password' ||
-                normalizedPath === '/api/local/reset' ||
-                normalizedPath === '/api/local/connectors' ||
-                normalizedPath.startsWith('/api/local/connectors/') ||
-                normalizedPath.startsWith('/api/local/federation/') ||
-                normalizedPath === '/api/manager' ||
-                normalizedPath.startsWith('/api/manager/') ||
-                normalizedPath === '/api/pricing-guide/admin' ||
-                normalizedPath.startsWith('/api/pricing-guide/admin/')
-            ) {
+            if (isAdminSurfacePath(ctx.path)) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
                     const norm = allowedIp.trim();
                     if (realIp === norm || norm === '*') return true;
@@ -1737,7 +1724,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
                 const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
                 if (fs.existsSync(settingsIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx); // the manager: no inline script (app-document-csp.ts)
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1749,7 +1736,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');

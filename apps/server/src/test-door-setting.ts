@@ -63,7 +63,7 @@ function newId(name: string): Id {
     return { pk, priv: privateKey, name };
 }
 
-interface Res { status: number; body: any; text: string }
+interface Res { status: number; body: any; text: string; cookie: string }
 
 /** A request through the real stack, signed by `id` when given. Fresh limiter windows, so the suite's own count never decides a result. */
 async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Res> {
@@ -84,7 +84,7 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
     const text = await res.text();
     let parsed: any;
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
-    return { status: res.status, body: parsed, text };
+    return { status: res.status, body: parsed, text, cookie: res.headers.get('set-cookie') || '' };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 160)}` : '-');
 const info = async () => (await call(null, 'GET', '/api/community/info')).body;
@@ -111,7 +111,8 @@ async function keySession(id: Id): Promise<string | null> {
     const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature });
     if (verified.status !== 200) return null;
     const ex = await call(null, 'POST', '/api/local/admin/auth/exchange', { token: verified.body?.handshakeToken });
-    return ex.body?.sessionId ?? null;
+    // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+    return ex.cookie.match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
 }
 const setDoorAs = (headers: Record<string, string> | null, body: Record<string, unknown>) =>
     call(null, 'POST', '/api/local/admin/node/config', body, headers ?? {});

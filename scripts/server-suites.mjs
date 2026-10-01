@@ -125,6 +125,7 @@ export const SUITES = [
     'test-config-write-races',
     'test-admin-key-auth',
     'test-app-admin-handoff',
+    'test-web-manager-hardening',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

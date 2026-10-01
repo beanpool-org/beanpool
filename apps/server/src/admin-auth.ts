@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
@@ -39,13 +39,23 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     if (keySessionToken) {
         const sessionRes = validateAdminSession(keySessionToken);
         if (sessionRes.valid && sessionRes.session) {
-            // Attribution: every admin action performed under a key session is attributed
-            // to that member (auth_signer = their pubkey), replacing 'owner:password'
             if (!ctx.state) ctx.state = {};
-            ctx.state.actor = sessionRes.session.memberPubkey;
-            ctx.state.auth_signer = sessionRes.session.memberPubkey;
-            ctx.state.adminRole = sessionRes.session.role;
-            ctx.state.isKeySession = true;
+            // Which session this request rides: CSRF tokens are bound to it (below), and a route that changes the
+            // password or the 2FA keeps it signed in (restampPasswordSession).
+            ctx.state.adminSessionId = keySessionToken;
+            if (sessionRes.session.kind === 'password') {
+                // The admin password, exchanged once for this session (POST /api/local/admin/auth/password): to every
+                // route it is the password, owner level and attributed as the password is, with no member's key.
+                ctx.state.adminRole = 'owner';
+                ctx.state.isPasswordSession = true;
+            } else {
+                // Attribution: every admin action performed under a key session is attributed
+                // to that member (auth_signer = their pubkey), replacing 'owner:password'
+                ctx.state.actor = sessionRes.session.memberPubkey;
+                ctx.state.auth_signer = sessionRes.session.memberPubkey;
+                ctx.state.adminRole = sessionRes.session.role;
+                ctx.state.isKeySession = true;
+            }
 
             // A moderator's session reaches the moderator routes and nothing else (MODERATOR_ROUTES, below).
             // Checked here, before any route runs, so an admin route that never names a role is still closed to them.
@@ -61,13 +71,15 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             const hasCookieSession = Boolean(ctx.cookies && typeof ctx.cookies.get === 'function' && ctx.cookies.get('admin_session'));
             const csrfHeader = (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
                 ctx.request?.headers?.['x-csrf-token'] || ctx.headers?.['x-csrf-token'];
+            // A token counts only for the session it was issued to (Fable's web review, L4): a moderator's token
+            // is no use on an owner's cookie.
             if (hasCookieSession && isMutatingMethod && reqPath !== '/api/local/admin/csrf-token') {
-                if (!csrfHeader || !validateCsrfToken(ctx)) {
+                if (!csrfHeader || !validateCsrfToken(ctx, keySessionToken)) {
                     ctx.status = 403;
                     ctx.body = { error: 'Invalid or missing CSRF token' };
                     return false;
                 }
-            } else if (csrfHeader && !validateCsrfToken(ctx)) {
+            } else if (csrfHeader && !validateCsrfToken(ctx, keySessionToken)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Invalid or expired CSRF token' };
                 return false;
@@ -87,7 +99,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                 ctx.request?.body?.breakGlassCode;
 
             if (hasExplicitCreds) {
-                if (ctx.cookies?.set) ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+                clearAdminSessionCookie(ctx);
             } else {
                 ctx.status = 401;
                 ctx.body = { error: sessionRes.error || 'Invalid or expired admin session', sessionExpired: true };
@@ -96,6 +108,16 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
     }
 
+    return checkAdminPasswordAuth(ctx);
+}
+
+/**
+ * checkAdminAuth's second half: the node password (or a break-glass code, on the enrol routes only) in a header or
+ * the body, with the brake, the tarpit, break-glass mode and the 2FA code. No session is looked at: the password
+ * sign-in (POST /api/local/admin/auth/password) calls this alone, so a session cookie the browser still holds plays
+ * no part in opening a new one.
+ */
+export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
     // 2. Break-glass mode enforcement (docs/admin-surface.md §2.2, §2.4)
     // When breakGlassMode is enabled, password and break-glass credentials can ONLY reach key enrolment!
     const isBreakGlass = isBreakGlassMode();
@@ -214,7 +236,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
         ctx.request?.headers?.['x-csrf-token'] ||
         ctx.headers?.['x-csrf-token'];
-    if (csrfHeader && !validateCsrfToken(ctx)) {
+    if (csrfHeader && !validateCsrfToken(ctx, PASSWORD_CSRF_BINDING)) {
         ctx.status = 403;
         ctx.body = { error: 'Invalid or expired CSRF token' };
         return false;
@@ -471,43 +493,58 @@ export function resetAdminAuthTarpit(): void {
 // Tokens are 32 random hex bytes, expire after 4 hours, and must be echoed
 // back in the X-CSRF-Token header on all admin state-mutation requests.
 // This provides defence-in-depth against XSS-based CSRF attacks.
+//
+// Each token is bound to what it was issued to (Fable's web review, L4): an admin session's id, or
+// PASSWORD_CSRF_BINDING for a caller sending the password itself. It validates only for that: a token one session
+// fetched (a moderator's, say) is refused on another's cookie, and every token of a session goes with it
+// (revokeCsrfTokensBoundTo, from revokeAdminSession).
 
 const CSRF_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const csrfTokens = new Map<string, number>(); // token → expiry timestamp
+/** The binding of a token issued to a caller authenticated by the password itself (no session). */
+export const PASSWORD_CSRF_BINDING = 'password';
+const csrfTokens = new Map<string, { expiry: number; binding: string }>();
 
-/** Issue a new CSRF token (called after successful password authentication). */
-export function issueCsrfToken(): string {
+/** Issue a new CSRF token, for the session `binding` names (or PASSWORD_CSRF_BINDING). */
+export function issueCsrfToken(binding: string = PASSWORD_CSRF_BINDING): string {
     const token = crypto.randomBytes(32).toString('hex');
-    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    csrfTokens.set(token, { expiry: Date.now() + CSRF_TOKEN_TTL_MS, binding });
     // Prune expired tokens opportunistically (hoist now to avoid repeated calls)
     const now = Date.now();
-    for (const [t, exp] of csrfTokens) {
-        if (now > exp) csrfTokens.delete(t);
+    for (const [t, entry] of csrfTokens) {
+        if (now > entry.expiry) csrfTokens.delete(t);
     }
     return token;
 }
 
-/** Validate a CSRF token from the request's X-CSRF-Token header. */
-export function validateCsrfToken(ctx: any): boolean {
+/** Validate a CSRF token from the request's X-CSRF-Token header, for the session `binding` names. */
+export function validateCsrfToken(ctx: any, binding: string = PASSWORD_CSRF_BINDING): boolean {
     const token: string | undefined =
         (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
         ctx.request?.headers?.['x-csrf-token'] ||
         ctx.headers?.['x-csrf-token'];
     if (!token) return false;
-    const expiry = csrfTokens.get(token);
-    if (!expiry) return false;
-    if (Date.now() > expiry) {
+    const entry = csrfTokens.get(token);
+    if (!entry) return false;
+    if (Date.now() > entry.expiry) {
         csrfTokens.delete(token); // eagerly remove expired entries on encounter
         return false;
     }
+    if (entry.binding !== binding) return false;
     // Sliding window: refresh TTL on valid use
-    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    entry.expiry = Date.now() + CSRF_TOKEN_TTL_MS;
     return true;
 }
 
 /** Revoke a specific CSRF token (on logout). */
 export function revokeCsrfToken(token: string): void {
     csrfTokens.delete(token);
+}
+
+/** Revoke every CSRF token bound to `binding` (a session that ended). */
+export function revokeCsrfTokensBoundTo(binding: string): void {
+    for (const [t, entry] of csrfTokens) {
+        if (entry.binding === binding) csrfTokens.delete(t);
+    }
 }
 
 // ===================== WS TICKET STORE =====================

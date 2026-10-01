@@ -90,3 +90,7 @@ Home shows how many times the web app was opened on your server each day for the
 - Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.
 - Members' Pulse channels are fetched from the sites they link to.
 - With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare.
+
+**EXPO_ACCESS_TOKEN** is for the servers BeanPool runs itself. **On your own server, leave it empty:** your notifications go out exactly as they always have, and your server never needs anything from us to send them. Where it is set, the server sends the token with every notification. It reads it from .env only: it never saves it in its database or settings, never puts it in a backup or a standby's copy, and never writes it in the log.
+
+Your server keeps a push address for each member's phone, and that address alone is enough to send the phone a notification. So treat your backups and any standby's copy as carefully as the server itself: anyone holding one could send your members fake notices.

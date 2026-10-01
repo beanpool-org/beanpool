@@ -7,6 +7,8 @@ import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing } from './config/node-role.js';
+import { expoPushHeaders } from './config/expo-access-token.js';
+import { sanitizeMessage } from './sanitize-message.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
@@ -8479,15 +8481,16 @@ export function dispatchPushNotification(
     }
 
     for (const batch of batches) {
+        // With EXPO_ACCESS_TOKEN set, `Authorization: Bearer` it too (config/expo-access-token.ts); unset, as it always was.
         fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: expoPushHeaders(),
             body: JSON.stringify(batch),
         }).then(res => {
             if (!res.ok) console.warn(`[Push] Expo API returned ${res.status}`);
             else console.log(`[Push] Sent ${batch.length} notification(s) for category=${categoryId}`);
         }).catch(err => {
-            console.warn('[Push] Failed to send push notification:', err.message);
+            console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
     return allMessages.length;

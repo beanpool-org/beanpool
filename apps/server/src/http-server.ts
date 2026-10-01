@@ -11,10 +11,12 @@
  */
 
 import Koa from 'koa';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
+import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import QRCode from 'qrcode';
 
 /**
@@ -195,7 +197,11 @@ export async function startHttpServer(port: number): Promise<number> {
     app.use(router.allowedMethods());
 
     return new Promise<number>((resolve) => {
-        const server = app.listen(port, () => {
+        // The same header and request timeouts and connection cap as the HTTPS listener (server-limits.ts, DoS review
+        // F3): in tunnel mode every request and live socket arrives here.
+        const server = http.createServer(serverTimeoutOptions(), app.callback());
+        applyServerLimits(server);
+        server.listen(port, () => {
             const bound = (server.address() as AddressInfo).port;
             console.log(`🔓 HTTP → HTTPS redirect listening on http://0.0.0.0:${bound}`);
             resolve(bound);

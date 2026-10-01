@@ -23,6 +23,7 @@
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
+import { ONE_PASS_MAX_MEASURED } from '@beanpool/engine';
 import { getPosts, isNodeMember } from '../state-engine.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { viewerTier } from './viewer.js';
@@ -156,6 +157,8 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             const posts = getPosts({
                 types: ['offer', 'need', 'poll', 'event'], viewerPubkey: guest ? undefined : actor, limit: NEARBY_POSTS_CAP + 1,
                 near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM }, coarse: guest || undefined,
+                // A city's box can hold any number of posts: measured at most this many (DoS review F5), as the listing.
+                measureAtMost: ONE_PASS_MAX_MEASURED,
             });
             nearbyPosts = { radiusKm: NEARBY_POSTS_RADIUS_KM, count: Math.min(posts.length, NEARBY_POSTS_CAP), more: posts.length > NEARBY_POSTS_CAP };
         }

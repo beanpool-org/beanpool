@@ -151,7 +151,12 @@ import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
-import { gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
+import {
+    gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
+    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade,
+} from './gateway-rate-limit.js';
+import { wsLimits, wsHasRoom, admitWsSocket, admitLogSocket, frameAllowed } from './ws-limits.js';
+import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
@@ -310,9 +315,12 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
 ]);
 /**
- * The peer protocol's own paths, which the gateway's throttle leaves alone: the public reads another community's
+ * The peer protocol's own paths, which the gateway's usual buckets leave alone: the public reads another community's
  * server makes of this one (a harvester's counts, a take-over's health check), which may come in a burst from one
- * address. Exact paths, reads only, matched as sent. Everything else under /api/federation/ and /api/community/ is
+ * address. They have a generous bucket of their own per address instead (gateway-rate-limit.ts gatewayAdmitPeerRead,
+ * five times the usual minute), and answer from cached counts (state-engine communityCountsCached,
+ * getPublicCommunityHealth): before, they had no ceiling and ran full-table counts on every hit (DoS review F4). Exact
+ * paths, reads only, matched as sent. Everything else under /api/federation/ and /api/community/ is
  * charged like any other request: before W-main the gateway exempted both whole prefixes, so a member's own signed
  * purchase, commission, registration or area there was not limited at all (design scratch/global-node/
  * DESIGN-replica-flood-bounds-opus.md §2, §6.2). The peers' disabled verify and relay routes (federation-api.ts) are
@@ -622,28 +630,42 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
 
     // Attach message listener
     ws.on('message', (data: any) => {
+        // A socket sending more than the apps' heartbeat ever does is closed (ws-limits.ts). A frame over the cap never
+        // gets here: ws refuses it (maxPayload) and closes the socket with 1009.
+        if (!frameAllowed(ws)) {
+            try { ws.close(1008, 'Too many messages'); } catch { /* already closing */ }
+            return;
+        }
         const conn = activeConnections.get(id);
         if (conn) {
             conn.msgRecvCount++;
             conn.lastActivityAt = Date.now();
 
-            const dataStr = typeof data === 'string' ? data : data.toString();
-            let preview = dataStr.slice(0, 150);
-            if (dataStr.length > 150) preview += '...';
+            // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
+            // admin log's preview only from its first bytes, and only while someone is watching the log.
+            const bytes: Buffer = Buffer.isBuffer(data) ? data
+                : typeof data === 'string' ? Buffer.from(data)
+                    : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
+            let watching = false;
+            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (watching) {
+                let preview = bytes.subarray(0, 150).toString('utf8');
+                if (bytes.length > 150) preview += '...';
 
-            const trafficPayload = JSON.stringify({
-                type: 'ws_traffic',
-                data: {
-                    id,
-                    direction: 'in',
-                    size: dataStr.length,
-                    preview
-                }
-            });
+                const trafficPayload = JSON.stringify({
+                    type: 'ws_traffic',
+                    data: {
+                        id,
+                        direction: 'in',
+                        size: bytes.length,
+                        preview
+                    }
+                });
 
-            for (const client of logClients) {
-                if (client.readyState === 1 && client !== ws) { // OPEN
-                    try { client.send(trafficPayload); } catch {}
+                for (const client of logClients) {
+                    if (client.readyState === 1 && client !== ws) { // OPEN
+                        try { client.send(trafficPayload); } catch {}
+                    }
                 }
             }
 
@@ -659,9 +681,9 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             // client could stream multi-megabyte frames containing "wantPong" and force a
             // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
             // four other nodes. A legitimate opt-in ping is well under 256 bytes.
-            if (type === 'sync' && dataStr.length < 256 && dataStr.includes('wantPong')) {
+            if (type === 'sync' && bytes.length < 256 && bytes.includes('wantPong')) {
                 try {
-                    const msg = JSON.parse(dataStr);
+                    const msg = JSON.parse(bytes.toString('utf8'));
                     if (msg && msg.type === 'ping' && msg.wantPong === true) {
                         if (ws.readyState === 1) { // OPEN
                             try { ws.send(PONG_PAYLOAD); } catch {}
@@ -749,23 +771,69 @@ function isNonCanonicalPath(router: Router, requestPath: string): boolean {
 // tracking and heartbeat whichever port the socket arrived on.
 export type UpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
+const UPGRADE_STATUS_TEXT: Record<number, string> = { 401: 'Unauthorized', 429: 'Too Many Requests', 503: 'Service Unavailable' };
+
+/** Answer an upgrade with a plain HTTP refusal and close it. */
+function refuseUpgrade(socket: Duplex, status: 401 | 429 | 503, retryAfterSec?: number): void {
+    const retry = retryAfterSec ? `Retry-After: ${retryAfterSec}\r\n` : '';
+    try { socket.write(`HTTP/1.1 ${status} ${UPGRADE_STATUS_TEXT[status]}\r\n${retry}Connection: close\r\n\r\n`); } catch { /* gone already */ }
+    socket.destroy();
+}
+
+/** Hold a socket's place (ws-limits.ts) until its raw socket closes, whichever way: a refused handshake or the end of a
+ *  live socket. */
+function holdUntilClosed(socket: Duplex, release: () => void): void {
+    socket.once('close', release);
+    if (socket.destroyed) release();
+}
+
+/** Whether a /ws upgrade carries any of the connect token's signature parameters (verifyWsConnect). */
+function claimsWsSignature(params: URLSearchParams): boolean {
+    return params.has('pubkey') || params.has('sig') || params.has('ts') || params.has('nonce');
+}
+
 function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
     return async (req, socket, head) => {
         const reqUrl = req.url || '';
         const parsedUrl = new URL(reqUrl, 'https://localhost');
         const pathname = parsedUrl.pathname;
+        // DoS review F1: every upgrade is a request to the gateway limiter (gateway-rate-limit.ts), by the rules an HTTP
+        // request is charged by, and a /ws socket is held to the caps in ws-limits.ts.
+        const client = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
+        const gw = getGatewayConfig();
+        const limited = !!gw.rateLimiting?.enabled;
+        const maxReqs = gw.rateLimiting?.maxRequestsPerMinute ?? 120;
 
         if (pathname === '/ws') {
+            // The node's room first, before a token is verified or anything is charged.
+            if (!wsHasRoom()) { refuseUpgrade(socket, 503, 30); return; }
+            const claims = claimsWsSignature(parsedUrl.searchParams);
+            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false };
+            if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
             const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
+            if (limited) {
+                // A verified key is charged as HTTP charges it: its own bucket if it acts here, else the address's.
+                const verified = connect.kind === 'member' ? { key: connect.pubkey, acts: true }
+                    : connect.kind === 'non_member' ? { key: connect.pubkey, acts: false } : null;
+                const wait = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
+                if (wait) { refuseUpgrade(socket, 429, wait); return; }
+            }
             const refuse = WS_AUTH_MODE === 'strict'
                 ? connect.kind !== 'member'
                 : WS_AUTH_MODE === 'members' && connect.kind === 'invalid';
             if (refuse) {
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
+                refuseUpgrade(socket, 401);
                 return;
             }
+            // A member's (or a visitor's row's) socket is held to its key's cap; any other, which gets only the public
+            // doorbells (or the open feed, where the operator chose it), is a stranger's, under the tighter caps.
+            const place = admitWsSocket(client, connect.kind === 'member' ? { kind: 'keyed', key: connect.pubkey } : { kind: 'stranger' });
+            if (!place.ok) {
+                refuseUpgrade(socket, place.status, 30);
+                return;
+            }
+            holdUntilClosed(socket, place.release);
             wss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
@@ -793,6 +861,9 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 });
             });
         } else if (pathname === '/ws/logs') {
+            // Charged as an unsigned request: an admin opens one now and then, and a flood of made-up tickets stops here.
+            const wait = limited ? gatewayAdmitUpgrade(client, maxReqs, false).wait : 0;
+            if (wait) { refuseUpgrade(socket, 429, wait); return; }
             const auth = parsedUrl.searchParams.get('auth');
             const ticket = parsedUrl.searchParams.get('ticket');
             const config = getLocalConfig();
@@ -825,10 +896,12 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             }
 
             if (!authorized) {
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
+                refuseUpgrade(socket, 401);
                 return;
             }
+            const release = admitLogSocket();
+            if (!release) { refuseUpgrade(socket, 503, 30); return; }
+            holdUntilClosed(socket, release);
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
@@ -1155,12 +1228,17 @@ export async function startHttpsServer(port: number): Promise<number> {
         //    plane (its own limiter) and the peer protocol's own reads (GATEWAY_EXEMPT_PEER_READS), and nothing
         //    else under /api/federation/ or /api/community/: a purchase, a commission, a registration or an area
         //    is a member's own request and is charged like any other (W-main).
-        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isPeerProtocolRead(ctx);
+        //    The peer protocol's reads have a generous bucket of their own per address (gatewayAdmitPeerRead, DoS review
+        //    F4): exempt from the others, they had no ceiling at all.
+        const peerRead = isPeerProtocolRead(ctx);
+        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !peerRead;
         if (limited) {
             // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to the default
             const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
             const claimsSignature = !!ctx.get('X-Public-Key') && !!ctx.get('X-Signature') && !isSignatureBypassed(ctx.path);
             if (!gatewayAdmit(ctx, maxReqs, claimsSignature)) return;
+        } else if (peerRead && gwConfig.rateLimiting?.enabled) {
+            if (!gatewayAdmitPeerRead(ctx, gwConfig.rateLimiting.maxRequestsPerMinute ?? 120)) return;
         }
 
         await next();
@@ -1237,7 +1315,10 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                const routeLimit = routeBodyLimit(ctx.path.toLowerCase());
+                // A signature claim the gateway didn't charge to its address's unverified claims carries a small body
+                // at most (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
+                const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
+                const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
@@ -1383,6 +1464,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
             return;
         }
+        // The signature is good: the address's unverified claim, if it was charged one, is given back (gateway-rate-limit.ts
+        // `claim:`). What the key may do, and which bucket it is charged to, is decided from here on.
+        gatewayClaimVerified(ctx);
 
         // A closed account's key (isClosedAccountKey), which reaches a route only to delete its own account.
         let closedAccount = false;
@@ -1504,9 +1588,13 @@ export async function startHttpsServer(port: number): Promise<number> {
     // enterprise work, when the write's path names one the signer keeps (routes/money-limits-gate.ts enterpriseActingFor)
     // and its own day has room, and the signer's own otherwise; a shop's governance and settling always the signer's own
     // (gateway-rate-limit.ts ENTERPRISE_GOVERNANCE_WRITE).
+    // A verified key that isn't a member here (nor a visitor's row) is charged to its address as unsigned traffic
+    // (gateway-rate-limit.ts, global-abuse review M-4): minting a keypair for each request buys nothing.
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
+        const actor = ctx.state.actor as string | undefined;
+        const acts = !!actor && !!ctx.state.gatewaySignedClaim && (isNodeMember(actor) || isLiveVisitor(actor));
+        if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120, acts)) return;
         const enterprise = ctx.state.actor && ctx.method !== 'GET' && ctx.method !== 'HEAD' && ctx.method !== 'OPTIONS'
             ? enterpriseActingFor(ctx.state.actor as string, ctx.path) : null;
         if (!gatewayAdmitDayBudget(ctx, Date.now(), enterprise)) return;
@@ -1688,14 +1776,19 @@ export async function startHttpsServer(port: number): Promise<number> {
     const serverOptions: https.ServerOptions = {
         cert: getServerCertPem(),
         key: getServerKeyPem(),
+        // DoS review F3: the header and request timeouts (server-limits.ts).
+        ...serverTimeoutOptions(),
     };
 
     return new Promise<number>((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
+        applyServerLimits(server);
 
-        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler)
-        const wss = new WebSocketServer({ noServer: true });
-        const logsWss = new WebSocketServer({ noServer: true });
+        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler). A frame over
+        // ws-limits.ts's cap (4 KiB; ws's own default is 100 MiB) is refused by ws, which closes the socket with 1009.
+        const maxPayload = wsLimits().maxPayloadBytes;
+        const wss = new WebSocketServer({ noServer: true, maxPayload });
+        const logsWss = new WebSocketServer({ noServer: true, maxPayload });
         const handleUpgrade = createUpgradeHandler(wss, logsWss);
         _upgradeHandler = handleUpgrade;
         server.on('upgrade', handleUpgrade);

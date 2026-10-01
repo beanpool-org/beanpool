@@ -189,7 +189,34 @@ export interface PostFilter {
      * place a post better than its area. Each post carries its area as `lat`/`lng`, and `distanceKm` in whole km.
      */
     coarse?: boolean;
+    /**
+     * The most posts a read with a point measures in its one pass (postRowsNear), for a read a request from outside makes
+     * (apps/server routes/marketplace.ts sets ONE_PASS_MAX_MEASURED). Without it the one pass (a filter circles don't
+     * take, a radius, a reader far from every post, a page deeper than circles go) measures and sorts every post the
+     * filter matches: one GET from a point nobody lives near, with a radius of the whole Earth, or at a deep offset, cost
+     * a node of 100k posts 130 ms of its one thread (DoS review F5). With it, the one pass takes the most recently updated
+     * of the matching posts, this many at most, before any distance is measured, and orders those: the same page
+     * whenever fewer than this many match, and past that the nearest of the newest this many, with the pages beyond them
+     * empty. Circles are unchanged: each already reads only a box near the reader.
+     *
+     * It bounds the read's cost only when the pass has no radius and no filter beyond the defaults: then the planner walks
+     * idx_posts_updated_at and stops at the bound. With a radius (idx_posts_lat_lng) or a filter such as a category
+     * (idx_posts_category) it sorts every matching post into a temporary B-tree before the bound applies, so only the
+     * distance calls are bounded, not the scan and sort (the review of 06491de5: at 100k posts, radiusKm=20000 with a
+     * category took 79.5 ms against main's 58.0, and with sort=recent 131.7 against 104.7, growing with the posts). F5 is
+     * still open for those reads.
+     */
+    measureAtMost?: number;
 }
+
+/**
+ * The most posts one read with a point measures in a single pass when its caller bounds it (PostFilter.measureAtMost).
+ * Measured with test-distance-search-perf's world (2026-10-01, this Mac): with no radius and no filter the one pass costs
+ * about 1.3 µs a post, so about 13 ms at most, where every post of a 100k-post node was 130 ms. With a radius or a filter
+ * it bounds only the distance calls; the scan and sort before them still grow with the posts (see measureAtMost). No
+ * node today has this many listings.
+ */
+export const ONE_PASS_MAX_MEASURED = 10_000;
 
 /** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
 export const EVENT_READABLE_AFTER_END_MS = 30 * 24 * 60 * 60 * 1000;
@@ -661,6 +688,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     category: f => f.category === 'all',
     // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
     coarse: () => true,
+    // Bounds the one pass only; a circle reads a box near the reader either way.
+    measureAtMost: () => true,
     id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -737,6 +766,45 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
+    // The one pass with a bound (PostFilter.measureAtMost): the matching posts (in the radius's box, if it has one) are
+    // taken newest first, at most `cap` of them, before any is measured, and only those are measured, once each (the
+    // MATERIALIZED set, so the radius test reads the distance already worked out), kept to the radius and ordered. The
+    // inner query measures nothing. With no radius and no filter the planner walks idx_posts_updated_at and stops at
+    // `cap`; with a radius or a filter it takes the box's or the filter's index and sorts every match before the LIMIT,
+    // so only the distance calls are bounded there (F5 still open for those reads, see PostFilter.measureAtMost).
+    const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
+        const params: unknown[] = [near.lat, near.lng];
+        let inner = `
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                FROM posts p
+                LEFT JOIN members m ON p.author_pubkey = m.public_key
+                WHERE 1=1`;
+        if (withinKm !== undefined) {
+            const exact = boundingBox(near.lat, near.lng, withinKm);
+            const box = filter.coarse ? areaBox(exact) : exact;
+            inner += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
+            params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
+        }
+        inner += where + ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
+        params.push(...whereParams, cap);
+        let sql = `
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, ${km('q')} AS distance_km FROM (${inner}
+            ) q
+        )
+        SELECT p.id, p.distance_km FROM measured p`;
+        if (withinKm !== undefined) {
+            sql += ' WHERE p.distance_km <= ?';
+            params.push(withinKm);
+        }
+        sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
+        if (limit) {
+            sql += " LIMIT ? OFFSET ?";
+            params.push(limit, skip);
+        }
+        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+    };
+
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
     if (circlesMayRead(filter)) {
         const depth = offset + filter.limit!;
@@ -745,7 +813,10 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             if (inside.length === depth) { ranked = inside.slice(offset); break; }
         }
     }
-    ranked ??= rank(near.radiusKm, filter.limit, offset, false);
+    const cap = filter.measureAtMost;
+    ranked ??= cap && cap > 0
+        ? rankBounded(near.radiusKm, filter.limit, offset, Math.floor(cap))
+        : rank(near.radiusKm, filter.limit, offset, false);
 
     const full = selectInChunks(db, ranked.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));

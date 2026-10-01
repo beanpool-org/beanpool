@@ -72,6 +72,7 @@ Their profile, the words, photos and places of their posts, every chat line they
 
 - **The log.** Every line that names them, or shows the start of their key, then reads "a deleted member", and so do the old lines that **Clean Orphaned Media & Compress Logs** moved out of the log. A line is never kept past 30 days anyway.
 - **A standby** takes the delete at its next copy.
+- **Notices kept for other members.** For 7 days your server keeps the details of each push it sent to a member (who wrote, which chat, which listing). On a delete it rewrites every such notice of other members that names the member or shows the start of their key: "Wren sent you a message" becomes "A member sent you a message". The rest of those notices (the chat or listing they point to) stays for the 7 days. They are the server's own: a standby does not copy them.
 - **Snapshots** keep everything as it was when each was taken, until the snapshot is deleted: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.
 - **A backup you downloaded** is a file out of the server's reach. It keeps everything until you delete it. A fleet manager keeps one copy a day for 30 days.
 - **Deletion records.** A short record of each delete (which row went, such as which two members were friends) stays on every server for 30 days, so a standby can copy the delete.

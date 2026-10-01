@@ -69,6 +69,7 @@
             <li><strong>Deletion records.</strong> A short record of each deleted row, such as which two members were friends, stays for 30 days so that every copy of the node converges on the deletion.</li>
             <li><strong>Logs.</strong> The node's activity log keeps no line longer than 30 days. The node's console output, kept by Docker, cannot be edited after the fact: it is capped at 10 MB and drops its oldest lines as it fills, which on a quiet node can take weeks.</li>
             <li><strong>Another person's phone</strong> may keep older direct messages from you that it had already downloaded, like a screenshot.</li>
+            <li><strong>Notices kept for other members.</strong> For 7 days the node keeps the details of each notification it sent to the people you wrote to or dealt with. When you delete, your name and key are taken out of them (a notice that read &ldquo;Wren sent you a message&rdquo; reads &ldquo;A member sent you a message&rdquo;). The rest of a notice, such as which chat it was for, stays until its 7 days are up.</li>
         </ul>
 
         <h2>3. Revoking BeanPool's access from the platform's own settings</h2>

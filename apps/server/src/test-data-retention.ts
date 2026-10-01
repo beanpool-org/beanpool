@@ -315,6 +315,54 @@ async function main() {
     assert(!avatars.cache.get(wren), "and the route's memory no longer holds their picture's bytes");
     assert((await avatars.getAvatar(juniper)).status === 200, "Juniper's picture still shows");
 
+    // ── 6. A callsign that is also a JSON literal or a number ─────────────────────────────────────
+    // (review of #1404) The callsign is any trimmed text of 2 to 32 characters. `True`, `null` and `12` must not turn another
+    // member's metadata into invalid JSON or rewrite the numbers and dates of a line that has nothing to do with them.
+    console.log('\n— 6. a callsign of True, null or 12 —');
+    const OTHER_MSG = '[Connectors] Inbound handshake verified for riverbend';
+    const OTHER_META = { mutualTrust: true, peer: null, retries: 12, note: 'seen 2026-12-01T02-00-00 by Juniper Holt', list: [12, true, null] };
+    const SNAP_MSG = '[Snapshots] Created snapshot snapshot-2026-12-01T02-00-00.db (12 bytes)';
+    for (const callsign of ['True', 'null', '12']) {
+        const key = hexKey();
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
+                    VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+            .run(key, callsign, gwen, `INV-${callsign}`);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+        logger.info('P2P', `${OTHER_MSG} for ${callsign}: mutual=true`, OTHER_META);
+        const metaId = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
+        logger.info('SYS', SNAP_MSG, { bytes: 12, name: 'snapshot-2026-12-01T02-00-00.db' });
+        const snapId = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
+        logger.info('ADMIN', `[Offboard] Looked at member ${callsign}`, { member: callsign, count: 12 });
+        const ownId = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
+        const metaBefore = logLine(metaId), snapBefore = logLine(snapId);
+        assert(se.purgeMemberSelf(key).ok, `a member called "${callsign}" deletes their account`);
+        const metaAfter = logLine(metaId), snapAfter = logLine(snapId);
+        let parsed: any = null;
+        try { parsed = JSON.parse(metaAfter?.metadata ?? 'null'); } catch { /* checked below */ }
+        assert(parsed && j(parsed) === j(OTHER_META), `another line's metadata is still JSON, untouched, for "${callsign}" (${metaAfter?.metadata})`);
+        assert(j(snapAfter) === j(snapBefore), `a line with a date and a count is exactly as it was for "${callsign}" (${snapAfter?.message})`);
+        void metaBefore;
+        const own = logLine(ownId);
+        assert(callsign === '12' ? own?.metadata?.includes('"member":"12"') === true : JSON.parse(own?.metadata ?? 'null')?.member === 'a deleted member',
+            `their own line: a name with a letter is scrubbed, one with none is left as a number (${own?.metadata})`);
+        assert(callsign === '12' || (own?.message ?? '').endsWith('member a deleted member'), `the message names them by whole word only (${own?.message})`);
+    }
+    // A real name is still scrubbed structurally: inside strings, even in an array, with the JSON kept valid.
+    {
+        const key = hexKey();
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
+                    VALUES (?, 'Marlow Reed', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'INV-Marlow', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, gwen);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+        logger.info('ADMIN', '[Offboard] Looked at Marlow Reed', { who: 'Marlow Reed', nested: { list: ['x', 'Marlow Reed wrote'], n: 12, ok: true } });
+        const id = (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
+        se.purgeMemberSelf(key);
+        const l = logLine(id);
+        let p: any = null;
+        try { p = JSON.parse(l?.metadata ?? 'null'); } catch { /* checked below */ }
+        assert(p && j(p) === j({ who: 'a deleted member', nested: { list: ['x', 'a deleted member wrote'], n: 12, ok: true } }) && l?.message === '[Offboard] Looked at a deleted member',
+            `a real name is still scrubbed, in strings only, and the metadata stays JSON (${l?.metadata})`);
+    }
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

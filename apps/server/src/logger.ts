@@ -196,6 +196,55 @@ const NAME_EDGE_BEFORE = '(?<![\\p{L}\\p{N}_])';
 const NAME_EDGE_AFTER = '(?![\\p{L}\\p{N}_])';
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** A name is looked for only if it has a letter in it: one made of digits and punctuation (`12`, `-`) mostly hits dates and counts. */
+const HAS_LETTER = /\p{L}/u;
+
+/**
+ * Finds a member's name and keys in text and takes them out (what scrubMemberFromLogs does to a log line, and what the
+ * purge does to the push notices kept for other members). `text` is for free text; `json` is for a JSON document kept as
+ * text: it replaces only inside string values (a callsign `True`, `null` or `12` must not turn a bare JSON literal or number
+ * into words), and falls back to `text` only when the document does not parse. `none` is true when there is nothing to look for.
+ */
+export function makeMemberScrubber(callsign: string | null | undefined, keys: readonly string[], replacement: string = DELETED_MEMBER_IN_LOGS) {
+    const name = typeof callsign === 'string' ? callsign.trim() : '';
+    const keysLower = keys.filter((k) => typeof k === 'string' && k.length >= 8).map((k) => k.toLowerCase());
+    const names = name.length >= 2 && HAS_LETTER.test(name) ? [...new Set([name, JSON.stringify(name).slice(1, -1)])] : [];
+    const namePattern = names.length > 0
+        ? new RegExp(`${NAME_EDGE_BEFORE}(?:${names.map(escapeRegExp).join('|')})${NAME_EDGE_AFTER}`, 'giu')
+        : null;
+    const isKeyPart = (run: string) => {
+        const r = run.toLowerCase();
+        return keysLower.some((k) => k.startsWith(r) || k.endsWith(r));
+    };
+    // The name first: the words that replace it hold no hex run, and a name like "member" would otherwise be found again
+    // inside them.
+    const text = (t: string | null): string | null => {
+        if (t == null) return t;
+        let out = namePattern ? t.replace(namePattern, replacement) : t;
+        if (keysLower.length > 0) out = out.replace(HEX_RUN, (run) => (isKeyPart(run) ? replacement : run));
+        return out;
+    };
+    const walk = (v: unknown): unknown => {
+        if (typeof v === 'string') return text(v);
+        if (Array.isArray(v)) return v.map(walk);
+        if (v && typeof v === 'object') {
+            const o: Record<string, unknown> = {};
+            for (const [k, x] of Object.entries(v as Record<string, unknown>)) o[k] = walk(x);
+            return o;
+        }
+        return v;
+    };
+    const json = (t: string | null): string | null => {
+        if (t == null || t === '') return t;
+        let parsed: unknown;
+        try { parsed = JSON.parse(t); } catch { return text(t); }
+        const out = JSON.stringify(walk(parsed));
+        // Nothing found: keep the stored text exactly (JSON.stringify may spell it differently).
+        return out === JSON.stringify(parsed) ? t : out;
+    };
+    return { text, json, none: names.length === 0 && keysLower.length === 0 };
+}
+
 /**
  * Delete account (data-at-rest report F5): take a member's name and keys out of every line in system_logs, in place. Each
  * becomes DELETED_MEMBER_IN_LOGS:
@@ -211,32 +260,17 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * of the table changed.
  */
 export function scrubMemberFromLogs(callsign: string | null | undefined, keys: readonly string[]): number {
-    const name = typeof callsign === 'string' ? callsign.trim() : '';
-    const keysLower = keys.filter((k) => typeof k === 'string' && k.length >= 8).map((k) => k.toLowerCase());
-    const names = name.length >= 2 ? [...new Set([name, JSON.stringify(name).slice(1, -1)])] : [];
-    if (names.length === 0 && keysLower.length === 0) return 0;
-    const namePattern = names.length > 0
-        ? new RegExp(`${NAME_EDGE_BEFORE}(?:${names.map(escapeRegExp).join('|')})${NAME_EDGE_AFTER}`, 'giu')
-        : null;
-    const isKeyPart = (run: string) => {
-        const r = run.toLowerCase();
-        return keysLower.some((k) => k.startsWith(r) || k.endsWith(r));
-    };
-    // The name first: the words that replace it hold no hex run, and a name like "member" would otherwise be found again
-    // inside them.
-    const scrub = (text: string | null): string | null => {
-        if (text == null) return text;
-        let out = namePattern ? text.replace(namePattern, DELETED_MEMBER_IN_LOGS) : text;
-        if (keysLower.length > 0) out = out.replace(HEX_RUN, (run) => (isKeyPart(run) ? DELETED_MEMBER_IN_LOGS : run));
-        return out;
-    };
+    const scrubber = makeMemberScrubber(callsign, keys);
+    if (scrubber.none) return 0;
+    const scrub = scrubber.text;
+    const scrubJson = scrubber.json;
     const rows = db.prepare('SELECT id, message, metadata FROM system_logs').all() as
         { id: number; message: string; metadata: string | null }[];
     const update = db.prepare('UPDATE system_logs SET message = ?, metadata = ? WHERE id = ?');
     let changed = 0;
     for (const r of rows) {
         const message = scrub(r.message) ?? '';
-        const metadata = scrub(r.metadata);
+        const metadata = scrubJson(r.metadata);
         if (message !== r.message || metadata !== r.metadata) {
             update.run(message, metadata, r.id);
             changed++;
@@ -247,7 +281,7 @@ export function scrubMemberFromLogs(callsign: string | null | undefined, keys: r
         editLogArchives((archived) => archived.map((r) => {
             if (!r || typeof r !== 'object') return r;
             const message = typeof r.message === 'string' ? scrub(r.message) : r.message;
-            const metadata = typeof r.metadata === 'string' ? scrub(r.metadata) : r.metadata;
+            const metadata = typeof r.metadata === 'string' ? scrubJson(r.metadata) : r.metadata;
             return message === r.message && metadata === r.metadata ? r : { ...r, message, metadata };
         }));
     });

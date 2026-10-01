@@ -46,7 +46,7 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, type PushNoticeRow } from './engine/push-notices.js';
+import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
@@ -7388,6 +7388,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 SELECT public_key FROM invalidated_keys WHERE rekeyed_to = ? COLLATE NOCASE
                 UNION SELECT i.public_key FROM invalidated_keys i JOIN replaced r ON i.rekeyed_to = r.k COLLATE NOCASE
             ) SELECT k FROM replaced`).all(publicKey) as { k: string }[]).map((r) => r.k);
+        // Their name and keys out of the push notices kept for the people they wrote to, too (engine/push-notices.ts).
+        neutralisePushNoticesNaming(member.callsign, [publicKey, ...formerKeys], publicKey);
         scrubMemberFromLogs(member.callsign, [publicKey, ...formerKeys]);
     });
     noteTakeoverInputsChanged('member purged their account');

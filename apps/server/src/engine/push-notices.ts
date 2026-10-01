@@ -27,6 +27,7 @@ import {
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
+import { makeMemberScrubber } from '../logger.js';
 
 export const PUSH_NOTICES = { perMember: 100 } as const;
 /**
@@ -193,4 +194,36 @@ export function tidyPushNotices(now: number = nowSeconds()): number {
 /** A prune, a self-deletion or a re-key: the details kept for this key go (nobody reads them under it again). */
 export function dropPushNoticesOf(pubkey: string): void {
     db.prepare('DELETE FROM push_notices WHERE recipient = ?').run(pubkey);
+}
+
+/**
+ * A self-deletion or a prune: the notices kept for OTHER members that name this member. What a sender wrote can carry a
+ * name or a key in its title, body or data: a DM's "<name> sent you a message", a group's "<name> mentioned you" (and its
+ * group-name title), a request or an accepted offer ("<name> requested ..."), a review, a trade update, a succession
+ * notice. Rather than list the kinds, every kept row of everyone else is read: the name (whole word, any case) and the
+ * key's runs (a key, its first 8 or 12) become "a member", and the text then starts with a capital ("A member sent you a
+ * message"). The data is scrubbed as JSON, in its strings only. Call it inside the purge's transaction, with the keys a
+ * re-key replaced. Returns how many notices changed.
+ */
+export function neutralisePushNoticesNaming(callsign: string | null | undefined, keys: readonly string[], ownKey: string): number {
+    const neutral = makeMemberScrubber(callsign, keys, 'a member');
+    if (neutral.none) return 0;
+    const sentence = (t: string): string => {
+        const out = neutral.text(t) ?? t;
+        return out !== t && /^a member/.test(out) ? `A${out.slice(1)}` : out;
+    };
+    const rows = db.prepare('SELECT id, title, body, data FROM push_notices WHERE recipient != ?').all(ownKey) as
+        { id: string; title: string; body: string; data: string }[];
+    const update = db.prepare('UPDATE push_notices SET title = ?, body = ?, data = ? WHERE id = ?');
+    let changed = 0;
+    for (const r of rows) {
+        // "a member" can be longer than the name it replaces, and the table's CHECKs would refuse the row and roll the whole
+        // purge back: so the same clip as when the row was kept, and details that no longer fit are dropped.
+        const title = clip(sentence(r.title), PUSH_NOTICE_DETAIL_LIMITS.title);
+        const body = clip(sentence(r.body), PUSH_NOTICE_DETAIL_LIMITS.noticeBody);
+        let data = neutral.json(r.data) ?? r.data;
+        if (data.length > PUSH_NOTICE_DETAIL_LIMITS.data) data = '{}';
+        if (title !== r.title || body !== r.body || data !== r.data) { update.run(title, body, data, r.id); changed++; }
+    }
+    return changed;
 }

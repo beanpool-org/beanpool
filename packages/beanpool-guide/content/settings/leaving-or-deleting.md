@@ -58,6 +58,7 @@ Your community's server deletes all of the above at once. It also takes your nam
 - **A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.
 - **The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.
 - **Your trades** stay in the ledger, under "Deleted Member", so everyone's beans still add up.
+- **Notices kept for other people.** For 7 days the server keeps the details of each notification it sent to the people you wrote to or dealt with, so their phone can show them (for example, that a message came in a chat). When you delete, your name and key are taken out of those notices, so one that said "Wren sent you a message" reads "A member sent you a message". The rest of a notice, such as which chat it was for, stays until its 7 days are up.
 
 ### What stays on this phone
 

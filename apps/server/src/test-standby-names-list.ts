@@ -1,27 +1,27 @@
 /**
  * Test Suite: a standby copies the names list as it is, sealed, and a take-over keeps it working (community modes slice
- * 2; engine/names-list.ts; the four plain tables of schema.sql §22e).
+ * 2; engine/names-list.ts; the plain tables of schema.sql §22e; DESIGN-names-list-trust-fable.md §10 E5).
  *
  * Every node is its own process with its own data dir (takeover-test-harness.ts) serving its real HTTPS server; members
  * sign their own requests, and this suite plays the admins' phones with @beanpool/core. The standby pulls through its real
  * puller (services/backup-puller.ts) from the main server's real backup routes, and takes over through the real routes
  * with the recovery code, restarting itself. Nothing leaves this machine.
  *
- *  1. On the main server M, Owen's phone makes the list's key for Owen and Ada (each wrap signed by Owen, bound to the
- *     community's id), shares it with Abe, two entries are added, Ada confirms Mel against one and reads the list, and
- *     Owen asks for two admins to confirm. Each admin's phone keeps its pin (the keys it trusts).
- *  2. A standby S takes its first copy: its four tables hold exactly M's rows, sealed text and wraps, stamps included, and
- *     no byte of its database is a planted name. On S's own server the list opens for nobody (409 `standby`): a read
- *     writes the log, which is the main server's.
- *  3. On M: an entry is edited, another added and deleted, and Mel is re-keyed. Abe stops being an admin, and Owen's phone
- *     makes generation 2 (its signed wrap naming Abe as dropped), seals the entries again and shares it with Ada; the
- *     older generation's wraps are cleared, their signed headers kept. The next delta brings all of it: the edit, the
- *     delete (its tombstone), Mel's confirmation under her new key, and every signed header.
+ *  1. On the main server M, Owen's phone makes the list's first key (a statement it signs, bound to the community's id);
+ *     Owen, Ada and Abe check each other, and Owen's phone sends the others the keys; two entries are added, Ada confirms
+ *     Mel against one and reads the list, and Owen asks for two admins to confirm. Each admin's phone keeps its pin.
+ *  2. A standby S takes its first copy: its tables hold exactly M's rows, sealed text, statements and shares, stamps
+ *     included, and no byte of its database is a planted name. On S's own server the list opens for nobody (409
+ *     `standby`): a read writes the log, which is the main server's.
+ *  3. On M: an entry is edited, another added and deleted, and Mel is re-keyed. Abe stops being an admin; M marks him;
+ *     Owen's phone makes generation 2 without him and sends it to Ada. Nothing is sealed again. The next delta brings
+ *     all of it: the edit, the delete (its tombstone), Mel's confirmation under her new key, the new statement, the
+ *     shares and the mark.
  *  4. M is killed and S takes over with the recovery code. After its restart, S names the same community, every
- *     signature still checks out there, and Owen's and Ada's phones, with the pins they kept from M, take generation 2
- *     from S (Abe still dropped) and read every entry as written on M. A generation Abe signs, written into S's database,
- *     is refused. The list takes a new entry and a confirmation, the access log holds M's lines and S's, and two admins
- *     to confirm is still the community's setting.
+ *     statement checks out there, and Owen's and Ada's phones, with the pins they kept from M, are ready on S at once (Abe
+ *     still dropped) and read every entry as written on M. A statement Abe signs, written into S's database, is refused.
+ *     The list takes a new entry and a confirmation, the phones' shares carry on, the access log holds M's lines and
+ *     S's, and two admins to confirm is still the community's setting.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-names-list.ts
@@ -40,7 +40,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed ce
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Names-Main-Pw-4471!';
 const PW_STANDBY = 'Names-Standby-Pw-208!';
-const TABLES = ['names_entries', 'names_list_keys', 'confirmations', 'names_access_log'] as const;
+const TABLES = ['names_entries', 'names_generations', 'names_shares', 'names_dropped_holders', 'confirmations', 'names_access_log'] as const;
+const ORDER: Record<string, string> = { names_generations: 'n', names_shares: 'from_pubkey, to_pubkey', names_dropped_holders: 'holder_pubkey, key_id' };
 /** The planted names: the standby's database must hold none of them. */
 const PLANTED = ['Zebedee Quillfeather', 'Ottoline Brackenbury', 'Cornelius Thistlewood', 'Temporary Tamsin'];
 
@@ -100,11 +101,10 @@ async function child(): Promise<void> {
             const out: Record<string, unknown[] | null> = {};
             for (const t of TABLES) {
                 try {
-                    const order = t === 'names_list_keys' ? 'holder_pubkey, generation' : 'id';
-                    out[t] = db.prepare(`SELECT * FROM ${t} ORDER BY ${order}`).all();
+                    out[t] = db.prepare(`SELECT * FROM ${t} ORDER BY ${ORDER[t] ?? 'id'}`).all();
                 } catch { out[t] = null; }
             }
-            out.tombstones = db.prepare("SELECT table_name, row_key FROM tombstones WHERE table_name IN ('names_entries', 'names_list_keys') ORDER BY row_key").all();
+            out.tombstones = db.prepare("SELECT table_name, row_key FROM tombstones WHERE table_name LIKE 'names_%' ORDER BY row_key").all();
             out.twoAdmins = [(db.prepare("SELECT value FROM node_config WHERE key = 'names_two_admins'").get() as { value: string } | undefined)?.value ?? null];
             return out;
         },
@@ -121,21 +121,29 @@ async function child(): Promise<void> {
                 sealed: a.sealed.filter((s) => bytes.includes(s)),
             };
         },
+        'add-admin': async (a: { pubkey: string; callsign: string; invitedBy: string }) => {
+            const { db } = await import('./db/db.js');
+            const { grantNodeRole } = await import('./engine/node-roles.js');
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active')`).run(a.pubkey, a.callsign, a.invitedBy, `INV-${a.callsign}`);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pubkey);
+            grantNodeRole(a.pubkey, 'admin', 'owner:password');
+            return true;
+        },
         'drop-admin': async (a: { pubkey: string }) => {
             const { revokeNodeRole } = await import('./engine/node-roles.js');
             revokeNodeRole(a.pubkey, 'admin', 'owner:password');
             return true;
         },
-        /** A row written straight into this server's database, signed by a real admin key (`seed`), as whoever runs it can. */
-        'plant-signed': async (a: { holder: string; generation: number; signer: string; seed: string; communityId: string }) => {
+        /** A statement written straight into this server's database, really signed by `seed`'s key, as whoever runs it can. */
+        'plant-generation': async (a: { signer: string; seed: string; communityId: string }) => {
             const core = await import('@beanpool/core');
             const { db } = await import('./db/db.js');
-            const w = core.wrapNamesListKey(core.newNamesListKey(), a.holder, a.generation);
-            const digest = core.namesWrapDigest(w);
-            const sig = core.signNamesWrap({ communityId: a.communityId, generation: a.generation, holder: a.holder, wrappedBy: a.signer, wrapDigest: digest, drops: [] }, a.seed);
-            db.prepare(`INSERT INTO names_list_keys (holder_pubkey, generation, wrapped_key, wrap_iv, wrap_tag, ephemeral_pubkey, kdf_params, wrapped_by, wrap_digest, drops, signature)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)`).run(a.holder, a.generation, w.wrappedKey, w.wrapIv, w.wrapTag, w.ephemeralPubkey, w.kdfParams, a.signer, digest, sig);
-            return true;
+            const cur = db.prepare('SELECT id, n FROM names_generations ORDER BY n DESC LIMIT 1').get() as { id: string; n: number };
+            const g = core.makeNamesGeneration({ communityId: a.communityId, n: cur.n + 1, parentId: cur.id, drops: [] }, { publicKey: a.signer, privateKey: a.seed });
+            db.prepare('INSERT INTO names_generations (id, n, parent_id, maker, drops, statement, signature) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .run(g.id, g.n, g.parentId, g.maker, '', g.statement, g.signature);
+            return g.id;
         },
         rekey: async (a: { old: string; next: string; operator: string }) => {
             const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
@@ -199,37 +207,49 @@ async function main(): Promise<void> {
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const [owen, ada, abe, mel] = ['Owen', 'Ada', 'Abe', 'Mel'].map(newId);
     const keysOf = (id: Id) => ({ publicKey: id.pk, privateKey: id.seedHex });
-    /** A wrap of `key` to `holder`, signed by `signer`'s phone, for `communityId`. */
-    const wrapFor = (communityId: string, signer: Id, key: Uint8Array, holder: Id, generation: number, drops: string[] = []) =>
-        core.signedNamesWrap(core.wrapNamesListKey(key, holder.pk, generation), { communityId, generation, holder: holder.pk, signer: keysOf(signer), drops });
-
-    /** What an admin's phone does with the list on the server at `base`. */
-    const phone = (base: string) => ({
-        state: (id: Id) => signedCall(base, 'GET', '/api/names/state', id),
-        entries: (id: Id) => signedCall(base, 'GET', '/api/names/entries', id),
-        keyOf: async (id: Id, generation: number) => {
-            const s = await signedCall(base, 'GET', '/api/names/state', id);
-            const wrap = (s.body?.myKeys ?? []).find((k: any) => k.generation === generation);
-            if (!wrap) throw new Error(`${id.name} holds no wrap of generation ${generation} (${s.status} ${j(s.body)})`);
-            return core.unwrapNamesListKey(wrap, id.seedHex, id.pk, generation);
-        },
-        /** What `id`'s phone decides about the key on this server, from its pin: the walk the app runs. */
-        trace: async (id: Id, pin: any) => {
-            const s = await signedCall(base, 'GET', '/api/names/state', id);
-            if (s.status !== 200) throw new Error(`${id.name}'s state: ${s.status} ${j(s.body)}`);
-            return {
-                ...core.traceNamesTrust({ communityId: s.body.communityId, me: keysOf(id), pin, records: s.body.records, myKeys: s.body.myKeys, generation: s.body.generation }),
-                communityId: s.body.communityId as string, records: s.body.records as any[],
+    /** An admin's phone: its pin, which it keeps whichever server it talks to, and the steps the app runs on opening. */
+    class Phone {
+        pin: any = null;
+        constructor(public id: Id) {}
+        async open(base: string): Promise<{ plan: any; state: any; made: number | null; sent: string[] }> {
+            const look = async () => {
+                const st = await signedCall(base, 'GET', '/api/names/state', this.id);
+                if (st.status !== 200) throw new Error(`${this.id.name}'s state: ${st.status} ${j(st.body)}`);
+                const r = core.syncNames({ pin: this.pin, state: st.body, me: keysOf(this.id) });
+                this.pin = r.pin;
+                return { plan: r.plan, state: st.body };
             };
-        },
-        add: async (id: Id, key: Uint8Array, generation: number, name: string, note = '') => {
-            const entryId = core.newNamesEntryId();
-            const r = await signedCall(base, 'POST', '/api/names/entries', id,
-                { id: entryId, ciphertext: core.sealNamesEntry(key, entryId, generation, { name, note }), keyGeneration: generation });
-            return { ...r, entryId };
-        },
-    });
-    const opened = (key: Uint8Array, list: any) => Object.fromEntries((list?.entries ?? []).map((e: any) => [e.id, core.openNamesEntry(key, e.id, e.keyGeneration, e.ciphertext)]));
+            let r = await look();
+            let made: number | null = null;
+            if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
+                const m = core.makeNamesGenerationFor(this.pin, r.state, keysOf(this.id), r.plan.kind === 'make_new' ? r.plan.drops : []);
+                this.pin = m.pin;
+                made = (await signedCall(base, 'POST', '/api/names/generations', this.id, { statement: m.generation.statement, signature: m.generation.signature })).status;
+                r = await look();
+            }
+            const sent: string[] = [];
+            if (r.plan.kind === 'ready') {
+                for (const sh of core.namesSharesToSend(this.pin, r.state, keysOf(this.id))) {
+                    const done = await signedCall(base, 'POST', '/api/names/shares', this.id, { header: sh.header, signature: sh.signature, box: sh.box });
+                    if (done.status === 200) sent.push(sh.to);
+                }
+            }
+            return { ...r, made, sent };
+        }
+        head(): string { return this.pin.chain[this.pin.chain.length - 1].id; }
+        key(id = this.head()): Uint8Array { return core.namesRingKeys(this.pin)[id]; }
+    }
+    const meet = (a: Phone, b: Phone, communityId: string) => {
+        a.pin = core.checkNamesKeyInPerson(a.pin ?? core.emptyNamesPin(communityId, a.id.pk), b.id.pk);
+        b.pin = core.checkNamesKeyInPerson(b.pin ?? core.emptyNamesPin(communityId, b.id.pk), a.id.pk);
+    };
+    const add = async (base: string, p: Phone, name: string, note = '') => {
+        const entryId = core.newNamesEntryId();
+        const r = await signedCall(base, 'POST', '/api/names/entries', p.id, { id: entryId, ciphertext: core.sealNamesEntry(p.key(), entryId, p.head(), { name, note }), keyId: p.head() });
+        return { ...r, entryId };
+    };
+    const entriesOf = (base: string, id: Id) => signedCall(base, 'GET', '/api/names/entries', id);
+    const opened = (p: Phone, list: any) => Object.fromEntries((list?.entries ?? []).map((e: any) => [e.id, core.openNamesEntry(p.key(e.keyId), e.id, e.keyId, e.ciphertext)]));
 
     try {
         // ── 1. M ──
@@ -238,24 +258,23 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, owner: owen.pk, members: [[ada.pk, 'Ada'], [abe.pk, 'Abe'], [mel.pk, 'Mel']], admins: [ada.pk, abe.pk] });
         const mBase = `https://localhost:${await main.send('serve')}`;
-        const M = phone(mBase);
         const community = (await signedCall(mBase, 'GET', '/api/names/state', owen)).body?.communityId;
         require_(typeof community === 'string' && community.length > 0, `M names its community (${community})`);
-        const k1 = core.newNamesListKey();
-        const made = await signedCall(mBase, 'POST', '/api/names/key', owen, { generation: 1, wraps: [owen, ada].map((h) => wrapFor(community, owen, k1, h, 1)) });
-        require_(made.status === 201, `M: Owen's phone makes the list's key for Owen and Ada, signed (${made.status} ${j(made.body)})`);
-        const toAbe = await signedCall(mBase, 'POST', '/api/names/key/share', owen, { generation: 1, wraps: [wrapFor(community, owen, k1, abe, 1)] });
-        require_(toAbe.status === 200, `M: and shares it with Abe (${toAbe.status} ${j(toAbe.body)})`);
-        const owenM = await M.trace(owen, null);
-        const adaM = await M.trace(ada, null);
-        require_(owenM.keys.has(1) && adaM.keys.has(1) && adaM.firstTrust === owen.pk && owenM.pin!.trusted.includes(abe.pk),
-            "M: Owen's and Ada's phones take the key and keep their pins (Owen's trusts Abe, whom it added)");
-        const zeb = await M.add(owen, k1, 1, PLANTED[0], 'Lives by the old cannery');
-        const ott = await M.add(ada, await M.keyOf(ada, 1), 1, PLANTED[1]);
+        const [owenP, adaP, abeP] = [owen, ada, abe].map((i) => new Phone(i));
+        const first0 = await owenP.open(mBase);
+        require_(first0.made === 201 && first0.plan.kind === 'ready', `M: Owen's phone makes the list's first key, a statement it signs (${first0.made})`);
+        meet(owenP, adaP, community);
+        meet(owenP, abeP, community);
+        const sentM = await owenP.open(mBase);
+        require_(sentM.sent.length === 2, `M: Owen, Ada and Abe check each other, and Owen's phone sends both the keys (${j(sentM.sent)})`);
+        for (const p of [adaP, abeP]) require_((await p.open(mBase)).plan.kind === 'ready', `M: ${p.id.name}'s phone opens the list`);
+        const k1 = owenP.head();
+        const zeb = await add(mBase, owenP, PLANTED[0], 'Lives by the old cannery');
+        const ott = await add(mBase, adaP, PLANTED[1]);
         require_(zeb.status === 201 && ott.status === 201, `M: two entries (${zeb.status} ${ott.status})`);
         const conf = await signedCall(mBase, 'POST', '/api/names/confirmations', ada, { memberPubkey: mel.pk, entryId: ott.entryId });
         require_(conf.status === 201 && conf.body?.status === 'confirmed', `M: Ada confirms Mel (${conf.status} ${j(conf.body)})`);
-        require_((await M.entries(ada)).status === 200, 'M: Ada reads the list');
+        require_((await entriesOf(mBase, ada)).status === 200, 'M: Ada reads the list');
         const two = await signedCall(mBase, 'POST', '/api/names/settings', owen, { twoAdminsToConfirm: true });
         require_(two.status === 200 && two.body?.twoAdminsToConfirm === true, `M: Owen asks for two admins to confirm (${two.status})`);
 
@@ -271,7 +290,9 @@ async function main(): Promise<void> {
         const mRows1 = await main.send('names-rows');
         const sRows1 = await standby.send('names-rows');
         for (const t of TABLES) {
-            assert(Array.isArray(sRows1[t]) && (sRows1[t] as unknown[]).length > 0 && j(sRows1[t]) === j(mRows1[t]) && JSON.stringify(sRows1[t]) === JSON.stringify(mRows1[t]),
+            // Nobody has stopped being an admin yet: no marks to copy.
+            const some = t === 'names_dropped_holders' || (sRows1[t] as unknown[]).length > 0;
+            assert(Array.isArray(sRows1[t]) && some && JSON.stringify(sRows1[t]) === JSON.stringify(mRows1[t]),
                 `S holds exactly M's ${t}, sealed, stamps and all (${(sRows1[t] as unknown[] | null)?.length ?? 'no table'} rows)`);
         }
         const sealedBits = (sRows1.names_entries as any[]).map((r) => JSON.parse(r.ciphertext).c.slice(0, 40));
@@ -280,30 +301,25 @@ async function main(): Promise<void> {
             `S's database holds the sealed entries and no planted name (${j(s1Scan)})`);
         const sBase0 = `https://localhost:${await standby.send('serve')}`;
         const onStandby = await signedCall(sBase0, 'GET', '/api/names/state', owen);
-        const writeOnStandby = await signedCall(sBase0, 'POST', '/api/names/entries', owen, { id: core.newNamesEntryId(), ciphertext: 'x', keyGeneration: 1 });
+        const writeOnStandby = await signedCall(sBase0, 'POST', '/api/names/entries', owen, { id: core.newNamesEntryId(), ciphertext: 'x', keyId: k1 });
         assert(onStandby.status === 409 && onStandby.body?.code === 'standby' && writeOnStandby.status === 409 && writeOnStandby.body?.code === 'standby',
             `on S's own server the list opens for nobody, a read included: 409 standby (${onStandby.status} ${writeOnStandby.status})`);
 
         // ── 3. Changes on M, and a delta ──
         console.log('\n— 3. an edit, a delete and a re-key on M; the next delta —');
         const edit = await signedCall(mBase, 'PUT', `/api/names/entries/${zeb.entryId}`, ada,
-            { ciphertext: core.sealNamesEntry(k1, zeb.entryId, 1, { name: PLANTED[0], note: 'Moved to Main St' }), keyGeneration: 1 });
-        const tmp = await M.add(owen, k1, 1, PLANTED[3]);
+            { ciphertext: core.sealNamesEntry(adaP.key(), zeb.entryId, k1, { name: PLANTED[0], note: 'Moved to Main St' }), keyId: k1 });
+        const tmp = await add(mBase, owenP, PLANTED[3]);
         const del = await signedCall(mBase, 'DELETE', `/api/names/entries/${tmp.entryId}`, owen);
         const melNew = newId('Mel');
         const rekeyed = await main.send('rekey', { old: mel.pk, next: melNew.pk, operator: owen.pk });
         require_(edit.status === 200 && tmp.status === 201 && del.status === 200 && rekeyed === true, `M: edited, added and deleted, Mel re-keyed (${edit.status} ${tmp.status} ${del.status})`);
-        // Abe stops being an admin: Owen's phone makes generation 2, naming him as dropped, seals the entries again, shares it with Ada.
+        // Abe stops being an admin: M marks him; Owen's phone makes generation 2 without him and sends it to Ada.
         require_(await main.send('drop-admin', { pubkey: abe.pk }) === true, 'M: Abe stops being an admin');
-        const k2 = core.newNamesListKey();
-        const made2 = await signedCall(mBase, 'POST', '/api/names/key', owen, { generation: 2, wraps: [wrapFor(community, owen, k2, owen, 2, [abe.pk])] });
-        require_(made2.status === 201, `M: Owen's phone makes generation 2, naming Abe as dropped (${made2.status} ${j(made2.body)})`);
-        const old1 = (await M.entries(owen)).body.entries;
-        const reenc = await signedCall(mBase, 'POST', '/api/names/entries/re-encrypt', owen, {
-            generation: 2, entries: old1.map((e: any) => ({ id: e.id, ciphertext: core.sealNamesEntry(k2, e.id, 2, core.openNamesEntry(k1, e.id, 1, e.ciphertext)) })),
-        });
-        const share2 = await signedCall(mBase, 'POST', '/api/names/key/share', owen, { generation: 2, wraps: [wrapFor(community, owen, k2, ada, 2)] });
-        require_(reenc.status === 200 && reenc.body?.left === 0 && share2.status === 200, `M: seals the entries again and shares generation 2 with Ada (${reenc.status} ${share2.status})`);
+        const o2 = await owenP.open(mBase);
+        const k2 = owenP.head();
+        require_(o2.made === 201 && o2.plan.kind === 'ready' && j(o2.sent) === j([ada.pk]), `M: Owen's phone makes generation 2 without Abe and sends it to Ada (${o2.made} ${j(o2.sent)})`);
+        require_((await adaP.open(mBase)).plan.kind === 'ready' && adaP.head() === k2, "M: Ada's phone takes it");
         const delta = await standby.send('pull');
         require_(delta.ok === true, `S: the delta lands (${j(delta)})`);
         const mRows2 = await main.send('names-rows');
@@ -313,10 +329,13 @@ async function main(): Promise<void> {
             && (sRows2.tombstones as any[]).some((r) => r.table_name === 'names_entries' && r.row_key === tmp.entryId), "the deleted entry's tombstone took it off S");
         const sConf = (sRows2.confirmations as any[]).find((r) => r.id === conf.body.id);
         assert(sConf?.member_pubkey === melNew.pk && sConf?.confirmed_by === ada.pk, `Mel's confirmation names her new key on S (${j(sConf)})`);
-        const sKeys = sRows2.names_list_keys as any[];
-        assert(sKeys.length === 5 && sKeys.filter((r) => r.generation === 1).every((r) => r.wrapped_key === null && r.signature.length === 128)
-            && sKeys.find((r) => r.generation === 2 && r.holder_pubkey === owen.pk)?.drops === abe.pk,
-            `S holds every signed header: generation 1's cleared wraps, and generation 2's naming Abe as dropped (${sKeys.length} rows)`);
+        const sGens = sRows2.names_generations as any[];
+        assert(sGens.length === 2 && sGens[1].id === k2 && sGens[1].drops === abe.pk && sGens.every((g: any) => core.readNamesGeneration(g, community)?.id === g.id),
+            `S holds the key history, statement by statement: generation 2 drops Abe, and each still checks out (${sGens.length} statements)`);
+        assert((sRows2.names_dropped_holders as any[]).some((r) => r.holder_pubkey === abe.pk && r.key_id === k1) && (sRows2.names_shares as any[]).length >= 3,
+            "and the shares and the mark that froze writes until generation 2 came");
+        const sEntries = sRows2.names_entries as any[];
+        assert(sEntries.every((e) => e.key_id === k1), 'nothing was sealed again: every entry is still under key 1');
 
         // ── 4. The take-over ──
         console.log('\n— 4. M is killed; S takes over with the recovery code —');
@@ -331,39 +350,46 @@ async function main(): Promise<void> {
         nodes.push(standby);
         require_(standby.ready.role === 'primary', `S is the main server now (${standby.ready.role})`);
         const sBase = `https://localhost:${await standby.send('serve')}`;
-        const S = phone(sBase);
-        const sState = await S.state(owen);
-        require_(sState.status === 200 && sState.body.generation === 2 && sState.body.newKeyNeeded === false,
-            `Owen opens the list on S: generation 2, no new key needed (${sState.status} ${j(sState.body)})`);
+        const sState = await signedCall(sBase, 'GET', '/api/names/state', owen);
+        require_(sState.status === 200 && sState.body.current?.id === k2 && sState.body.newKeyNeeded === false,
+            `Owen opens the list on S: generation 2 is current, no new key needed (${sState.status} ${j(sState.body?.current)})`);
         assert(sState.body.settings.twoAdminsToConfirm === true, 'two admins to confirm is still the community\'s setting');
-        assert(sState.body.communityId === community && sState.body.records.length === 5 && sState.body.records.every((r: any) => core.verifyNamesWrap(r, r.signature)),
-            `S names the same community, and every wrap's signature checks out there (${sState.body.records.length} records)`);
-        const owenS = await S.trace(owen, owenM.pin);
-        const adaS = await S.trace(ada, adaM.pin);
-        assert(owenS.currentTraced && owenS.keys.has(2) && adaS.keys.has(2) && !owenS.trusted.has(abe.pk) && !adaS.trusted.has(abe.pk),
-            `Owen's and Ada's phones, with the pins they kept from M, take generation 2 from S, Abe still dropped (${j(adaS.refused)})`);
-        const owenK = owenS.keys.get(2)!;
-        const adaK = adaS.keys.get(2)!;
-        const owenReads = opened(owenK, (await S.entries(owen)).body);
-        const adaReads = opened(adaK, (await S.entries(ada)).body);
+        assert(sState.body.communityId === community && sState.body.generations.length === 2
+            && sState.body.generations.every((g: any) => core.readNamesGeneration(g, community)?.id === g.id),
+            `E5 S names the same community, and every statement checks out there (${sState.body.generations.length} statements)`);
+        const pinsBefore = JSON.stringify([owenP.pin, adaP.pin]);
+        const owenS = await owenP.open(sBase);
+        const adaS = await adaP.open(sBase);
+        assert(owenS.plan.kind === 'ready' && adaS.plan.kind === 'ready' && owenS.made === null && adaS.made === null
+            && JSON.stringify([owenP.pin.chain, adaP.pin.chain]) === JSON.stringify(JSON.parse(pinsBefore).map((p: any) => p.chain)),
+            `E5 Owen's and Ada's phones, with the pins they kept from M, are ready on S at once, their histories unchanged (${j([owenS.plan, adaS.plan])})`);
+        assert(!owenP.pin.trusted.includes(abe.pk) && !adaP.pin.trusted.includes(abe.pk), 'Abe is still dropped on both');
+        const owenReads = opened(owenP, (await entriesOf(sBase, owen)).body);
+        const adaReads = opened(adaP, (await entriesOf(sBase, ada)).body);
         assert(owenReads[zeb.entryId]?.name === PLANTED[0] && owenReads[zeb.entryId]?.note === 'Moved to Main St' && owenReads[ott.entryId]?.name === PLANTED[1]
             && Object.keys(owenReads).length === 2, `Owen's phone reads every entry as written on M, the edit included (${j(owenReads)})`);
         assert(j(adaReads) === j(owenReads), "and so does Ada's");
-        const corn = await S.add(ada, adaK, 2, PLANTED[2]);
-        assert(corn.status === 201, `the list takes a new entry on S (${corn.status} ${j(corn.body)})`);
+        const corn = await add(sBase, adaP, PLANTED[2]);
+        assert(corn.status === 201, `the list takes a new entry on S, under key 2 (${corn.status} ${j(corn.body)})`);
         const confS = await signedCall(sBase, 'POST', '/api/names/confirmations', owen, { memberPubkey: melNew.pk, entryId: corn.entryId });
         assert(confS.status === 409 && confS.body?.code === 'already_confirmed',
             `Mel, confirmed on M under her old key, is confirmed on S under her new one: one person, one entry (${confS.status} ${j(confS.body)})`);
+        // The phones' shares carry on: a new admin, checked by Owen, gets the keys from S.
+        const cy = newId('Cy');
+        require_(await standby.send('add-admin', { pubkey: cy.pk, callsign: 'Cy', invitedBy: owen.pk }) === true, 'S: Cy is made an admin');
+        const cyP = new Phone(cy);
+        meet(owenP, cyP, community);
+        const toCy = await owenP.open(sBase);
+        assert(toCy.sent.includes(cy.pk) && (await cyP.open(sBase)).plan.kind === 'ready', `E5 auto-shares continue on S: Owen's phone sends Cy the keys, and Cy's phone is ready (${j(toCy.sent)})`);
         const logS = await signedCall(sBase, 'GET', '/api/names/log?limit=200', ada);
         const actions = (logS.body?.log ?? []).map((l: any) => `${l.actorCallsign ?? l.actor}:${l.action}`);
-        assert(logS.status === 200 && actions.includes('Ada:confirm') && actions.includes('Owen:key_made') && actions.includes('Ada:add')
+        assert(logS.status === 200 && actions.includes('Ada:confirm') && actions.includes('Owen:key_made') && actions.includes('Ada:add') && actions.includes('Owen:key_shared')
             && actions.filter((a: string) => a === 'Ada:read').length >= 2, `the access log holds M's lines and S's (${actions.join(', ')})`);
-        // Abe, dropped on M, really signs a generation 3 for Owen, written into S's database: Owen's phone refuses it.
-        await standby.send('plant-signed', { holder: abe.pk, generation: 3, signer: abe.pk, seed: abe.seedHex, communityId: community });
-        await standby.send('plant-signed', { holder: owen.pk, generation: 3, signer: abe.pk, seed: abe.seedHex, communityId: community });
-        const owenVsAbe = await S.trace(owen, owenS.pin);
-        assert(!owenVsAbe.keys.has(3) && !owenVsAbe.currentTraced && owenVsAbe.refused[0]?.reason === 'untrusted',
-            `after the take-over, a generation Abe signs is still refused: his drop came across with the signatures (${j(owenVsAbe.refused)})`);
+        // Abe, dropped on M, really signs a statement off S's current one, written into S's database: Owen's phone refuses it.
+        await standby.send('plant-generation', { signer: abe.pk, seed: abe.seedHex, communityId: community });
+        const owenVsAbe = await owenP.open(sBase);
+        assert(owenVsAbe.plan.kind === 'refused' && owenVsAbe.plan.reason === 'untrusted_maker' && owenVsAbe.plan.maker === abe.pk && owenVsAbe.sent.length === 0,
+            `E5 after the take-over, a statement Abe signs is still refused: his drop is in Owen's phone's own history (${j(owenVsAbe.plan)})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

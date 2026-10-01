@@ -193,24 +193,27 @@ async function main(): Promise<void> {
             const before = await snapS();
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '400', BACKUP_RECONCILE_EVERY_MS: '4000', BACKUP_BIG_COPY_EVERY_MS: '4000' } });
             await sleep(4100); // the routine whole copy is due
+            // S's ask for page 2 is held at the proxy while M is killed and started again, then answered as M's death
+            // answered it (502). The failure, from which the interval runs, comes once M is back: started again first, under
+            // load, M took longer than the interval, and the next pull was a whole copy already.
+            px.arm({ kind: 'hold', page: 2 });
             const opened = px.opened.length;
             const pulling = standby.send('pull', {});
-            await until('two pages of the copy', () => {
-                const id = px.opened[opened];
-                return !!id && (px.copies.get(id)?.pages.size ?? 0) >= 2;
-            });
+            const asked = await until('S to ask for page 2 of the copy, held', () => px.holding() > 0);
+            require_(asked && (px.copies.get(px.opened[opened] ?? '')?.pages.size ?? 0) === 2, 'S has two pages of the copy, and asks for the third');
             await main.kill('SIGKILL');
+            main = await spawnNode(SCRIPT, dir('main'), envM);
+            nodes.push(main);
+            px.setTarget(main.base);
+            m = `https://localhost:${await main.send('serve')}`;
+            await main.send('settle-pricing');
+            px.release();
             const p4 = await pulling;
             const st4 = await standby.send('staging');
             const mid = await snapS();
             const r4 = await standby.send('record');
             assert(p4.ok === false && p4.mode === 'full' && !st4.staging && st4.building === null && snapDiff(before, mid).length === 0 && r4.lastOutcome === 'fetch-failed',
                 `S's copy stops at the page M never sent: its staging deleted, S as it was, the record "no copy came" (${JSON.stringify({ pull: p4, staging: st4, why: r4.lastWhy })}; differences ${first(snapDiff(before, mid))})`);
-            main = await spawnNode(SCRIPT, dir('main'), envM);
-            nodes.push(main);
-            px.setTarget(main.base);
-            m = `https://localhost:${await main.send('serve')}`;
-            await main.send('settle-pricing');
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             built('Bo offers eggs on M after its restart', await As(bo, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', credits: 2, priceType: 'fixed', authorPublicKey: bo.pk,

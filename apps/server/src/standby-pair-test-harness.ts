@@ -140,13 +140,18 @@ export async function until(what: string, cond: () => Promise<boolean> | boolean
 /**
  * The proxy S reaches M through: every request passed on, and each copy's pages recorded. `fault` changes the page `page`
  * of the next copy opened: held back (404), replayed from an earlier copy, changed by a byte, or (the last page) its counts
- * changed and signed again with M's key.
+ * changed and signed again with M's key; or (`hold`) S's request for it is held, unanswered, until `release`, and then
+ * answered as one to a main server that is down is (502), whatever M is by then.
  */
-type Fault = { kind: 'withhold' | 'replay' | 'tamper' | 'counts'; page: number } | null;
+type Fault = { kind: 'withhold' | 'replay' | 'tamper' | 'counts' | 'hold'; page: number } | null;
 export interface Proxy {
     url: string;
     setTarget: (base: string) => void;
     arm: (f: Fault) => void;
+    /** Requests a `hold` fault holds now. */
+    holding: () => number;
+    /** Every request held answered, as a main server that is down answers. */
+    release: () => void;
     /** Copies opened, whole or delta, and the pages served of each (by copy id: every page's text). */
     copies: Map<string, { since: string | null; pages: Map<number, string> }>;
     opened: string[];
@@ -157,6 +162,7 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
     let base = target;
     let fault: Fault = null;
     let faultCopy: string | null = null;
+    const held: (() => void)[] = [];
     const copies = new Map<string, { since: string | null; pages: Map<number, string> }>();
     const opened: string[] = [];
     const statuses: number[] = [];
@@ -176,6 +182,17 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
             let status = 502;
             let raw: Buffer = Buffer.alloc(0);
             const outHeaders: Record<string, string> = {};
+            const asked = /^\/api\/local\/admin\/sync-copy\/([^/]+)\/(\d+)$/.exec(new URL(req.url ?? '/', 'http://proxy').pathname);
+            if (fault?.kind === 'hold' && asked && req.method === 'GET' && decodeURIComponent(asked[1]) === faultCopy && Number(asked[2]) === fault.page) {
+                fault = null;
+                faultCopy = null;
+                await new Promise<void>((release) => held.push(release));
+                raw = Buffer.from(JSON.stringify({ error: 'the main server is not answering' }));
+                statuses.push(status);
+                res.writeHead(status, outHeaders);
+                res.end(raw);
+                return;
+            }
             try {
                 const up = await fetch(base + req.url, { method: req.method, headers, body: chunks.length > 0 ? Buffer.concat(chunks) : undefined });
                 status = up.status;
@@ -230,6 +247,8 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
         url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
         setTarget: (b) => { base = b; },
         arm: (f) => { fault = f; faultCopy = null; },
+        holding: () => held.length,
+        release: () => { for (const r of held.splice(0)) r(); },
         copies, opened, statuses,
         close: () => server.close(),
     };

@@ -13,7 +13,9 @@ An entry holds your name and, sometimes, a short note an admin writes, like how 
 
 ## Who can read it
 
-**Only your community's owners and admins, on their own phones.** Your name is sealed on an admin's phone before it is sent to your community's server. The server keeps scrambled text that it can't read, and neither can whoever runs it, BeanPool, a backup, or anyone who steals the database.
+**Only your community's owners and admins, on their own phones.** Your name is sealed on an admin's phone before it is sent to your community's server. The server keeps scrambled text: a backup, a copy, BeanPool, or anyone who steals the database holds nothing readable.
+
+Whoever runs the server can't simply read it either. The admins' phones take the list's key only from an admin they already trust, and refuse one the server makes up. That protection rests on the admins: a new admin's phone trusts whoever first shares the list with it, an admin can share it with the wrong person, and an admin's own phone or a PDF copy is only as safe as they keep it. A server operator working with an admin who was removed could also keep that admin reading.
 
 **Other members don't see the names.** They see your BeanPool name, as always.
 

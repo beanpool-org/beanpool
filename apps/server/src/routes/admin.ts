@@ -1085,7 +1085,7 @@ router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
 // From one account, the others that joined through the open door from the same connection within a day of it: hide all
 // their posts (and undo that), or remove them, in one action. Owners, admins and moderators, except removing, which is
 // the owners' and admins' as removing one member is. Where the door labels no joins (every local community) each route
-// is 404, before anything else, as every door route is.
+// is 404 once the caller is signed in, as every admin route asks checkAdminAuth first (test-moderator-routes).
 
 function burstsHere(ctx: any): boolean {
     if (burstCleanupOn()) return true;
@@ -1135,16 +1135,16 @@ function answerBurstRefusal(ctx: any, refusal: BurstRefusal): void {
 
 /** The digest: recent bursts of 5 or more, and the burst actions of the last 30 days. */
 router.get('/api/local/admin/bursts', async (ctx) => {
-    if (!burstsHere(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
     ctx.set('Cache-Control', 'no-store');
     ctx.body = { success: true, ...burstDigest() };
 });
 
 /** One account's burst, each account with its standing, for the moderator to look at before acting. */
 router.get('/api/local/admin/members/:pubkey/burst', async (ctx) => {
-    if (!burstsHere(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
     const anchor = burstAnchor(ctx);
     if (!anchor) return;
     const burst = readBurst(anchor)!;
@@ -1154,8 +1154,8 @@ router.get('/api/local/admin/members/:pubkey/burst', async (ctx) => {
 
 /** Hide every post of the named accounts of this burst, in one action that can be undone. Body: { members, count, includeEstablished? }. */
 router.post('/api/local/admin/members/:pubkey/burst/hide', async (ctx) => {
-    if (!burstsHere(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
     const role = burstActorRole(ctx);
     const anchor = burstAnchor(ctx);
     if (!anchor || !role) return;
@@ -1169,8 +1169,8 @@ router.post('/api/local/admin/members/:pubkey/burst/hide', async (ctx) => {
 
 /** Undo a burst hide: its posts back, but for one reports would hide now. */
 router.post('/api/local/admin/bursts/:id/undo', async (ctx) => {
-    if (!burstsHere(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
     const outcome = undoBurst(String(ctx.params.id));
     if (!outcome.ok) {
         ctx.status = outcome.status;
@@ -1188,8 +1188,8 @@ router.post('/api/local/admin/bursts/:id/undo', async (ctx) => {
  * includeEstablished? }.
  */
 router.post('/api/local/admin/members/:pubkey/burst/remove', async (ctx) => {
-    if (!burstsHere(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Removing accounts is for the owners and admins. Hide their posts, and tell them.')) return;
     const actor = resolveAdminActor(ctx);
     const role = burstActorRole(ctx);

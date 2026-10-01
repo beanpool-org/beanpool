@@ -14,8 +14,9 @@
  *
  * ## Who
  *
- * It exists where the door does (`openJoin`, the global profile's): elsewhere every route is 404. Owners, admins and
- * moderators see a burst, hide its posts and undo a hide. A moderator, whose screen is the reports and nothing else, sees
+ * It exists where the door does (`openJoin`, the global profile's): elsewhere every route answers 404 to whoever signs
+ * in to Settings, so a local community has none of it. Owners, admins and moderators see a burst, hide its posts and
+ * undo a hide. A moderator, whose screen is the reports and nothing else, sees
  * the burst of an account with an open report (about them, or one of their posts) or of one in a burst the digest lists
  * (`BURST.digestMinAccounts` or more, the first of them in the last `BURST.digestDays` days); owners and admins see any
  * account's, as they see the members. Removing is the removal there already is (state-engine adminPruneUser, the caller's

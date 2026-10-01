@@ -19,7 +19,8 @@
  *      its sign-in can't join again; the burst then lists who is left and how many were removed
  *   6. nobody else: unsigned, a member's signature, a member with no role (no session), a moderator whose role was taken
  *   7. no answer carries an address, the address hash, the connection label, or a field naming any of them
- *   8. a local node: every route answers 404, even to an owner, and nothing changes
+ *   8. a member who deletes their own account leaves every burst record, and every burst
+ *   9. a local node: every route answers 404, even to an owner, and nothing changes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-burst-cleanup.ts
  */
@@ -425,8 +426,24 @@ async function main(): Promise<void> {
     const badFields = [...fields].filter(k => BAD_FIELD.test(k));
     assert(fields.size > 10 && badFields.length === 0, `nor a field named for one (${badFields.join(', ') || `${fields.size} fields, none`})`);
 
-    // ── 8. a local node ──────────────────────────────────────────────────────────────────────────
-    console.log('\n── 8. a local node ──');
+    // ── 8. a member who deletes their own account leaves every record ────────────────────────────
+    console.log('\n── 8. a member who deletes their own account ──');
+    const fromS5 = await adm('POST', `/api/local/admin/members/${s5.pk}/burst/hide`, { members: [s7.pk], count: 1 });
+    assert(fromS5.status === 200, `setup: an action opened from Spam5 (${fromS5.status})`);
+    const recordsOf = () => (db.prepare('SELECT COUNT(*) AS c FROM burst_action_posts WHERE post_id = ?').get(p5) as { c: number }).c
+        + (db.prepare('SELECT COUNT(*) AS c FROM burst_actions WHERE anchor_pubkey = ?').get(s5.pk) as { c: number }).c;
+    assert(recordsOf() === 2, `setup: the records name Spam5's post and Spam5 (${recordsOf()})`);
+    const purge = await call('POST', s5, '/api/member/purge', {});
+    assert(purge.status === 200 && statusOf(s5) === 'pruned', `Spam5 deletes their own account (${purge.status})`);
+    assert(recordsOf() === 0, `and leaves every burst record: their post, and their key as the account an action was opened from (${recordsOf()})`);
+    const b6after = await adm('GET', `/api/local/admin/members/${s6.pk}/burst`);
+    assert(JSON.stringify(keysOf(b6after.body?.others)) === JSON.stringify([s7.pk]) && b6after.body?.removedAlready === 4,
+        `nor are they in anyone's burst any more, as removed or otherwise (${keysOf(b6after.body?.others).length} ${b6after.body?.removedAlready})`);
+    const dPurge = (await adm('GET', '/api/local/admin/bursts')).body;
+    assert(dPurge?.actions?.[0]?.id === fromS5.body?.action?.id && dPurge.actions[0].account === null, 'the digest\'s line for that action names nobody now');
+
+    // ── 9. a local node ──────────────────────────────────────────────────────────────────────────
+    console.log('\n── 9. a local node ──');
     delete process.env.NODE_PROFILE;
     const info = (await call('GET', null, '/api/community/info')).body?.features ?? {};
     assert(info.openJoin === false, `setup: the local profile, the door shut (${info.openJoin})`);

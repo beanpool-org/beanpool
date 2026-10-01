@@ -42,6 +42,7 @@ import { Platform, DeviceEventEmitter } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { isVaultKeyHex } from '@beanpool/core';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { offeredProviders, type SsoProvider } from './sso-providers';
@@ -106,6 +107,8 @@ interface NonceResponse {
     nonce?: unknown;
     expiresInSeconds?: unknown;
     providers?: unknown;
+    /** The global door's only (V5): the key vault ticket keys it takes. */
+    vault?: unknown;
 }
 
 /**
@@ -181,12 +184,30 @@ export function readNonceResponse(body: unknown): NodeNonce {
         throw new SsoSignInError('nonce', 'Your node did not send a sign-in nonce.');
     }
     // Only providers this app offers: a name it does not know is one it cannot sign in with.
-    return { nonce: b.nonce, providers: offeredProviders(b.providers) };
+    return { nonce: b.nonce, providers: offeredProviders(b.providers), vault: doorVaultKeys(b.vault) };
+}
+
+/**
+ * The key vault ticket keys a door says it takes (`POST /api/join/sso-nonce`'s `vault`, V5 design §1.3), newest
+ * first: only what are keys, 64 lower-case hex characters each, as the door's own list holds them. Null when it names
+ * none: a door from before V5 (no field), a door whose operator set none (`vault: null`), or anything that isn't a list
+ * of keys. A community's recovery nonce never carries one.
+ */
+function doorVaultKeys(value: unknown): { ticketKeys: string[] } | null {
+    const listed = (value as { ticketKeys?: unknown } | null)?.ticketKeys;
+    if (!Array.isArray(listed)) return null;
+    const ticketKeys = listed.filter(isVaultKeyHex);
+    return ticketKeys.length > 0 ? { ticketKeys } : null;
 }
 
 export interface NodeNonce {
     nonce: string;
     providers: SsoProvider[];
+    /**
+     * The vault ticket keys the global door takes, or null. Public: it says only which vault a door trusts. A vault
+     * build asks the vault for a ticket at the door only when this names a key the build pins (global-join.ts).
+     */
+    vault: { ticketKeys: string[] } | null;
 }
 
 /**

@@ -76,7 +76,7 @@ import * as WebBrowser from 'expo-web-browser';
 describe('the nonce the node sends back', () => {
     it('accepts a well-formed answer and keeps the providers it named', () => {
         expect(readNonceResponse({ nonce: 'abc123', providers: ['google', 'apple'] }))
-            .toEqual({ nonce: 'abc123', providers: ['google', 'apple'] });
+            .toStrictEqual({ nonce: 'abc123', providers: ['google', 'apple'], vault: null });
     });
 
     it('refuses a missing, empty, or non-string nonce rather than passing it on', () => {
@@ -95,9 +95,32 @@ describe('the nonce the node sends back', () => {
         expect(readNonceResponse({ nonce: 'n' }).providers).toEqual([]);
     });
 
-    it('keeps the nonce and the providers, and nothing else the answer carries', () => {
+    it('keeps the nonce, the providers and the vault keys a door takes, and nothing else the answer carries', () => {
         expect(readNonceResponse({ nonce: 'n', providers: ['google'], expiresInSeconds: 600, flow: 'node' }))
-            .toEqual({ nonce: 'n', providers: ['google'] });
+            .toStrictEqual({ nonce: 'n', providers: ['google'], vault: null });
+    });
+
+    // The global door's nonce answer says which of BeanPool's key vault ticket keys it takes (V5 design §1.3), so a
+    // vault build knows before any sheet opens whether a ticket will get it in.
+    const KEY_A = 'a1'.repeat(32);
+    const KEY_B = 'b2'.repeat(32);
+
+    it('reads the vault ticket keys a door says it takes, in its order', () => {
+        expect(readNonceResponse({ nonce: 'n', providers: ['google'], vault: { ticketKeys: [KEY_A, KEY_B] } }))
+            .toStrictEqual({ nonce: 'n', providers: ['google'], vault: { ticketKeys: [KEY_A, KEY_B] } });
+    });
+
+    it('keeps only what are keys: 64 lower-case hex characters', () => {
+        expect(readNonceResponse({ nonce: 'n', vault: { ticketKeys: [KEY_A, 'nope', 7, null, KEY_B.toUpperCase(), `${KEY_B}00`, KEY_B] } }).vault)
+            .toStrictEqual({ ticketKeys: [KEY_A, KEY_B] });
+    });
+
+    it('no vault: a door from before V5 (no field), a door with none set (null), or anything that is not a list of keys', () => {
+        for (const vault of [undefined, null, {}, [], 'yes', true, { ticketKeys: KEY_A }, { ticketKeys: [] }, { ticketKeys: ['nope', 7] }]) {
+            expect(readNonceResponse({ nonce: 'n', vault }).vault, JSON.stringify(vault)).toBeNull();
+        }
+        // A community's recovery nonce never carries one.
+        expect(readNonceResponse({ nonce: 'n', providers: ['apple', 'google'] }).vault).toBeNull();
     });
 });
 

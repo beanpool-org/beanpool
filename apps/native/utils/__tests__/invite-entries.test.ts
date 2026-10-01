@@ -85,15 +85,20 @@ describe('People → Invites goes through the helpers (source check)', () => {
     const redeemSection = src.indexOf('REDEEM INVITE SECTION');
     const noInvites = src.slice(gate, otherwise);
     const makes = src.slice(otherwise, redeemSection);
-
-    it("reads the node's switch through invitesOn", () => {
-        expect(src).toMatch(/const makesInvites = invitesOn\(nodeProfile\?\.features\);/);
+    /** The two branches exist, in this order, before the redeem section: without them every check below reads nothing. */
+    const branchesFound = () => {
         expect(gate).toBeGreaterThan(0);
         expect(otherwise).toBeGreaterThan(gate);
         expect(redeemSection).toBeGreaterThan(otherwise);
+    };
+
+    it("reads the node's switch through invitesOn", () => {
+        expect(src).toMatch(/const makesInvites = invitesOn\(nodeProfile\?\.features\);/);
+        branchesFound();
     });
 
     it('every way to make or share an invite is drawn only where the node makes them', () => {
+        branchesFound();
         for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', '📤 Share Invite', 'shareInvite(inv.code)']) {
             expect(count(entry)).toBe(1);
             expect(makes).toContain(entry);
@@ -102,6 +107,7 @@ describe('People → Invites goes through the helpers (source check)', () => {
     });
 
     it("where it makes none: the community's link, shared as communityLinkMessage says", () => {
+        branchesFound();
         expect(noInvites).toContain('onPress={shareCommunityLink}');
         expect(src).toMatch(/Share\.share\(\{ message: communityLinkMessage\(anchorUrl\) \}\)/);
     });

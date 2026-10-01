@@ -33,6 +33,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { getAppLockEnabled } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
@@ -458,7 +459,8 @@ function RootLayoutNav() {
                     }, 200);
                 };
 
-                fetch(`${targetOrigin}/api/community/membership/${identity.publicKey}`)
+                // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                fetchMembership(targetOrigin, identity)
                     .then(res => res.ok ? res.json() : null)
                     .then(data => {
                         if (!isComponentMounted.current) return;

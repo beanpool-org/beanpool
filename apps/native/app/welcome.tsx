@@ -877,7 +877,7 @@ export default function WelcomeScreen() {
                     } catch (redeemErr: any) {
                         // Refused because the node has this key already (e.g. retry): carry on. Refused because the code
                         // is spent: only when the node says this key is in, never a join it didn't take (invite-next.ts).
-                        if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity.publicKey))) {
+                        if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity))) {
                             throw redeemErr;
                         }
                     }

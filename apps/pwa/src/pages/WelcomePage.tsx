@@ -4,8 +4,8 @@
  * New users:  Enter invite code + callsign → create → show seed phrase → joined
  * Existing:   Import identity from another device
  * Recovery:   Enter 12-word phrase to recover identity
- * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in
- *             (components/WebJoin.tsx), then the same photo, 12 words and tour
+ * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in, or where the
+ *             node takes them, 12 words alone (components/WebJoin.tsx), then the same photo, 12 words and tour
  * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
@@ -26,6 +26,7 @@ import {
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
+import { AddSignIn } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
@@ -277,6 +278,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A local community (every node but the global one, an older node that says no profile included): its listings are
     // its members' (2026-09-28), so this page points a stranger to the global community to look around.
     const [localCommunity, setLocalCommunity] = useState(() => !!initialInfo && initialInfo.profile !== 'global');
+    // The open door also takes 12 words alone, beside the sign-in (two-doors design §2; the node's `features.wordsDoor`).
+    const [wordsDoor, setWordsDoor] = useState(() => initialInfo?.features?.wordsDoor === true);
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
         // The lobby read it a moment ago: asked again only on Try again.
@@ -284,7 +287,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -294,6 +297,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
     // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
+    // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
+    const [joinedByWords, setJoinedByWords] = useState(false);
     // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
     // a member's key, while a join that went out from this browser is settled first (below).
     const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
@@ -1125,6 +1130,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             return;
         }
         setJoinedByDoor(true);
+        setJoinedByWords(joined.door === 'words');
         setSignInRecovery(joined.recovery?.enrolled ? joined.recovery.provider : null);
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
@@ -1486,7 +1492,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper step={2} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={2} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 📸 Choose your look
                             </h3>
@@ -1725,7 +1731,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper step={4} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
                                 Let's look at how this community economy works.
@@ -1871,14 +1877,23 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper step={3} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={3} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                Write these 12 words down on paper and keep them safe.
-                                {signInRecovery
-                                    ? <> They bring your identity back if you lose this device.</>
-                                    : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
-                            </p>
+                            {joinedByWords && !signInRecovery ? (
+                                /* Joined with 12 words alone (two-doors design §2.5): said first and plainly, never a gate.
+                                   The tickbox below stays as it is, and adding a sign-in is offered, both skippable. */
+                                <p data-testid="backup-words-only" style={{ fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                                    These 12 words <strong>are</strong> your account. Nobody can reset them: not us, not this
+                                    community. If you lose them and this device, the account is gone for good.
+                                </p>
+                            ) : (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    Write these 12 words down on paper and keep them safe.
+                                    {signInRecovery
+                                        ? <> They bring your identity back if you lose this device.</>
+                                        : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
+                                </p>
+                            )}
                             {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
                             {signInRecovery && (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
@@ -1991,6 +2006,21 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             >
                                 Next →
                             </button>
+
+                            {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
+                                as a second. It leaves the page for the provider; App.tsx finishes it on the way back and
+                                opens Settings with the result. Skipping it changes nothing. */}
+                            {joinedByWords && !signInRecovery && pendingIdentity && (
+                                <div data-testid="backup-add-sign-in" style={{ marginTop: '0.75rem', textAlign: 'left' }}>
+                                    <AddSignIn
+                                        identity={pendingIdentity}
+                                        label="Add a sign-in as a second way back"
+                                        onLeaving={() => {
+                                            if (seedConfirmed) localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                        }}
+                                    />
+                                </div>
+                            )}
 
                             <button
                                 onClick={() => {
@@ -2315,6 +2345,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onSettled={handleSettled}
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
+                                wordsDoor={wordsDoor}
                                 onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);

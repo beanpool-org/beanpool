@@ -38,6 +38,9 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
+import { OneWayBackCard } from './components/OneWayBack';
+import { captureAuthReturn, consumeCapturedAuthReturn } from './lib/web-join';
+import { clearPendingLink, finishLink, isLinkReturn, type LinkResult } from './lib/link-signin';
 import { ModerationPauseCard } from './components/ModerationPauseCard';
 import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
@@ -138,7 +141,9 @@ export function App() {
     const [activeTab, setActiveTab] = useState<Tab>('marketplace');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed'>('menu');
+    // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
+    const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
     // "Check now" on the owners' 12-words prompt opens Settings with that card open; closing Settings resets it.
     const [ownerWordsOpen, setOwnerWordsOpen] = useState(false);
     useEffect(() => { if (!showSettings) setOwnerWordsOpen(false); }, [showSettings]);
@@ -336,6 +341,31 @@ export function App() {
             window.removeEventListener('online', handleOnline);
         };
     }, []);
+
+    /*
+     * A member back from a provider (two-doors design §2.5): a sign-in this browser left to add to an account made with
+     * 12 words. The answer is read and taken out of the address bar at once (captureAuthReturn), matched to the link this
+     * browser started for this account, and finished; Settings opens with the result. A return nobody here started for
+     * this account is dropped, and so is the link record: nothing else on a member's page takes a sign-in.
+     */
+    useEffect(() => {
+        if (!identity) return;
+        const ret = captureAuthReturn();
+        if (!ret) return;
+        consumeCapturedAuthReturn();
+        if (!isLinkReturn(ret, identity)) {
+            clearPendingLink();
+            return;
+        }
+        let cancelled = false;
+        finishLink(identity, ret).then((result) => {
+            if (cancelled) return;
+            setLinkResult(result);
+            setSettingsInitialMode('menu');
+            setShowSettings(true);
+        });
+        return () => { cancelled = true; };
+    }, [identity]);
 
     // The account's block list, which the community keeps for it (lib/blocklist): read from the node now, again when the
     // node rings, and never kept in this browser. A list an older build kept here moves up to this account, once.
@@ -793,10 +823,11 @@ export function App() {
                             <SettingsPage
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
-                                onBack={() => setShowSettings(false)}
+                                onBack={() => { setShowSettings(false); setLinkResult(null); }}
                                 themePreference={themePreference}
                                 onThemePreferenceChange={setThemePreference}
                                 initialMode={settingsInitialMode}
+                                linkResult={linkResult}
                                 openOwnerWordsCheck={ownerWordsOpen}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
                                 nodeVersion={communityHealth?.version?.trim() || undefined}
@@ -830,6 +861,14 @@ export function App() {
                                     {isGuest === false && <ModerationPauseCard refreshKey={standingKey} />}
                                     {isGuest === false && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
+                                    )}
+                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. */}
+                                    {isGuest === false && (
+                                        <OneWayBackCard
+                                            identity={identity}
+                                            placement="landing"
+                                            onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                        />
                                     )}
                                 </div>
                             )}

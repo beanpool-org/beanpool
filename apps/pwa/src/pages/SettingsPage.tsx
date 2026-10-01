@@ -30,6 +30,8 @@ import { NodeAdminLink } from '../components/NodeAdminLink';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
 import { NewAccountCard } from '../components/NewAccountCard';
+import { OneWayBackCard } from '../components/OneWayBack';
+import type { LinkResult } from '../lib/link-signin';
 import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
@@ -51,6 +53,8 @@ interface Props {
     nodeVersion?: string;
     /** Open the owners' "Check your 12 words" card (from the home prompt's "Check now"). */
     openOwnerWordsCheck?: boolean;
+    /** A sign-in that came back to be added to this account (App.tsx, lib/link-signin.ts): what came of it. */
+    linkResult?: LinkResult | null;
 }
 
 function ToggleSwitch({
@@ -94,7 +98,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion, openOwnerWordsCheck }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -624,6 +628,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <ModerationPauseCard />
                         {/* A new account only, until the node says its limits are over (G11-e). */}
                         <NewAccountCard />
+                        {/* An account made with 12 words alone, for as long as it has no sign-in: one way back, and a
+                            sign-in to add (two-doors design §2.5). With the result of one that just came back. */}
+                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}

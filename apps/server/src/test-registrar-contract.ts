@@ -19,6 +19,8 @@
  *     version the Worker lacks is 'unverifiable', and sweeps change nothing.
  *  6. The deploy workflow's checks (apps/registrar/scripts/deploy-checks.mjs) read the node's protocols right, and
  *     judge a health answer and the migrations bootstrap as they should.
+ *  7. v2, the one-use nonce: on the wire, end to end from a node sending it, and a captured v2 request replayed is
+ *     refused (no tunnel token) while today's v1 node keeps working.
  */
 
 import fs from 'node:fs';
@@ -122,13 +124,20 @@ const protoNumber = (p: string) => Number(p.slice(1));
 // A version neither side has yet (set in run(), once the Worker's table is loaded), and its tags.
 let NEXT = '';
 let NEXT_TAGS: Tags;
-// Step 1 of a format change on the Worker: it accepts NEXT too.
+// Step 1 of a format change on the Worker: it accepts NEXT too. Like v2 before it, NEXT signs a one-use nonce.
 const workerAcceptingNext = (src: string) =>
-    once(src, '\n});', `\n    ${NEXT}: Object.freeze({ request: '${NEXT_TAGS.request}', attest: '${NEXT_TAGS.attest}' }),\n});`);
+    once(src, '\n});', `\n    ${NEXT}: Object.freeze({ request: '${NEXT_TAGS.request}', attest: '${NEXT_TAGS.attest}', nonce: true }),\n});`);
 // Steps 1 and 2 on the node: it speaks NEXT and sends it.
 const nodeSendingNext = (src: string) => once(
-    once(src, '\n} as const;', `\n    ${NEXT}: { request: '${NEXT_TAGS.request}', attest: '${NEXT_TAGS.attest}' },\n} as const;`),
+    once(src, '\n} as const;', `\n    ${NEXT}: { request: '${NEXT_TAGS.request}', attest: '${NEXT_TAGS.attest}', nonce: true },\n} as const;`),
     `export const SEND_PROTO: Proto = '${node.SEND_PROTO}';`, `export const SEND_PROTO: Proto = '${NEXT}';`);
+// Step 2 for v2 (the one-use nonce): the node sends it.
+const nodeSendingV2 = (src: string) => once(src, `export const SEND_PROTO: Proto = '${node.SEND_PROTO}';`, 'export const SEND_PROTO: Proto = \'v2\';');
+// The x-bp-* headers a request under `proto` carries, sorted.
+const xbpHeaders = (n: NodeClient, proto: node.Proto) => [
+    ...(proto === n.DEFAULT_PROTO ? [] : ['x-bp-proto']), ...(n.usesNonce(proto) ? ['x-bp-nonce'] : []),
+    'x-bp-pubkey', 'x-bp-signature', 'x-bp-timestamp',
+].sort();
 // The 2026-09-24 mistake: one side edits a tag in place.
 const changeTag = (tag: string) => (src: string) => once(src, `'${tag}'`, `'${tag}-changed'`);
 
@@ -293,8 +302,8 @@ async function run() {
         const expectHeader = node.SEND_PROTO === node.DEFAULT_PROTO ? null : node.SEND_PROTO;
         assert(sent.length === 4 && sent.every((r) => r.status === 200 && r.proto === expectHeader),
             `all four signed calls went out once each, ${expectHeader ? `with x-bp-proto: ${expectHeader}` : 'with no x-bp-proto'}, and verified`, sent);
-        assert(sent.every((r) => isDeepStrictEqual(r.xbp, expectHeader ? ['x-bp-proto', 'x-bp-pubkey', 'x-bp-signature', 'x-bp-timestamp'] : ['x-bp-pubkey', 'x-bp-signature', 'x-bp-timestamp'])),
-            'and carried no other x-bp-* header', sent);
+        assert(sent.every((r) => isDeepStrictEqual(r.xbp, xbpHeaders(node, node.SEND_PROTO))),
+            `and carried no other x-bp-* header (${xbpHeaders(node, node.SEND_PROTO).join(', ')})`, sent);
         assert(warnings.length === 0, 'no protocol warning when both sides agree', warnings);
 
         // ── 4. A one-sided change fails the contract ──
@@ -332,8 +341,10 @@ async function run() {
         const fallback = await nodeNext.claimAddress('contract-next', 'tunnel', 'http://beanpool-node:8080');
         assert(fallback.status === 'live' && world.row('contract-next')?.node_pubkey === pubkey,
             `a node sending ${NEXT} to a Worker without it still claims its name`, fallback);
-        assert(isDeepStrictEqual(sent.map((r) => [r.proto, r.status]), [[NEXT, 401], [null, 200]]),
-            `by one retry: ${NEXT} → 401 (with accepted_proto), then ${node.DEFAULT_PROTO} → 200`, sent);
+        // The retry goes out under the newest protocol both sides speak.
+        const shared = Object.keys(node.PROTOCOLS).filter((p) => worker.sign.ACCEPTED_PROTOS.includes(p)).sort((a, b) => protoNumber(b) - protoNumber(a))[0];
+        assert(isDeepStrictEqual(sent.map((r) => [r.proto, r.status]), [[NEXT, 401], [shared === node.DEFAULT_PROTO ? null : shared, 200]]),
+            `by one retry: ${NEXT} → 401 (with accepted_proto), then ${shared} → 200`, sent);
         assert(warnings.length === 1 && warnings[0].includes('the address service is behind this node'), 'with one warning, not an error', warnings);
         sent.length = 0;
         const fbStatus = await nodeNext.addressStatus();
@@ -372,6 +383,51 @@ async function run() {
         assert(isDeepStrictEqual(world.events('contract-next'), taggedEvents) && world.cf.calls.length === cfCalls, 'no event logged for it, and no Cloudflare call made');
         assert(['neighbour-a', 'neighbour-b'].every((n) => !!world.row(n).last_ok_at), 'while the neighbours were marked ok (the sweeps did act)');
         for (const n of ['contract-next.beanpool.org', 'neighbour-a.beanpool.org', 'neighbour-b.beanpool.org']) nodesAt.delete(n);
+
+        // ── 7. v2: the one-use nonce (L1 of the 2026-10-01 registrar review) ──
+        console.log('— v2: a nonce inside the signed bytes, taken once by the Worker; v1 nodes keep working');
+        {
+            const body = JSON.stringify({ name: 'contract', mode: 'tunnel' });
+            const h = await node.signRequest('POST', '/api/registrar/claim', body, 'v2');
+            assert(isDeepStrictEqual(Object.keys(h), ['x-bp-pubkey', 'x-bp-timestamp', 'x-bp-signature', 'x-bp-proto', 'x-bp-nonce'])
+                && h['x-bp-proto'] === 'v2' && /^[0-9a-f]{32}$/.test(h['x-bp-nonce']),
+            'a v2 request carries x-bp-proto: v2 and a 32-hex x-bp-nonce', h);
+            assert(await verifyRaw(pubkey, `beanpool-registrar-request/v2\nPOST\n/api/registrar/claim\n${h['x-bp-timestamp']}\n${h['x-bp-nonce']}\n${body}`, h['x-bp-signature']),
+                'its signature is over tag, method, path, timestamp, nonce and body (literal format, verified independently of both sides)');
+            const h2 = await node.signRequest('POST', '/api/registrar/claim', body, 'v2');
+            assert(h2['x-bp-nonce'] !== h['x-bp-nonce'], 'every request has a nonce of its own');
+            const att = await node.buildAttestation('contract-nonce-3', 'v2');
+            assert(isDeepStrictEqual(Object.keys(att), ['pubkey', 'nonce', 'timestamp', 'signature', 'proto']) && att.proto === 'v2'
+                && await verifyRaw(pubkey, `beanpool-node-attest/v2\ncontract-nonce-3\n${att.timestamp}`, att.signature),
+            'a v2 attestation names its protocol and is signed under the v2 attest tag', att);
+        }
+        // A node sending v2, end to end against this Worker: every call once, verified, no fallback.
+        const nodeV2 = await nodeCopy(nodeSendingV2);
+        world = newWorld();
+        sent.length = 0;
+        warnings.length = 0;
+        const v2Claim = await nodeV2.claimAddress('contract-v2', 'tunnel', 'http://beanpool-node:8080');
+        assert(v2Claim.status === 'live' && typeof v2Claim.tunnelToken === 'string', 'a node sending v2 claims its name', v2Claim);
+        const v2Status = await nodeV2.addressStatus();
+        assert(v2Status.status === 'live' && v2Status.tunnelToken === v2Claim.tunnelToken, 'status: live, with its token', v2Status);
+        assert((await nodeV2.updateAddressMetadata('Contract V2')).status === 'ok', 'update: verifies');
+        assert((await nodeV2.releaseAddress()).status === 'released', 'release: verifies');
+        assert(sent.length === 4 && sent.every((r) => r.status === 200 && r.proto === 'v2' && isDeepStrictEqual(r.xbp, xbpHeaders(node, 'v2'))) && warnings.length === 0,
+            'all four went out once each, as v2 with a nonce, and verified first time (no retry, no warning)', { sent, warnings });
+        // A captured request, replayed inside its window: v2 is refused, and no token is handed out; v1 still answers.
+        await nodeV2.claimAddress('contract-v2', 'tunnel', 'http://beanpool-node:8080');
+        const send = (headers: Record<string, string>) => registrar.index.default.fetch(new Request('https://beanpool.org/api/registrar/status', { headers }), world.env);
+        const captured = await node.signRequest('GET', '/api/registrar/status', '', 'v2');
+        const firstTime = await send(captured);
+        const firstBody = await firstTime.json();
+        assert(firstTime.status === 200 && typeof firstBody.tunnelToken === 'string', 'a v2 /status, the first time: 200 with the token', firstBody);
+        const replay = await send(captured);
+        const replayBody = await replay.json();
+        assert(replay.status === 401 && isDeepStrictEqual(replayBody, { error: 'request already used' }),
+            'the same v2 /status again: 401, and no token', replayBody);
+        const oldNode = await node.signRequest('GET', '/api/registrar/status', '', 'v1');
+        const oldAnswers = [await send(oldNode), await send(oldNode)];
+        assert(oldAnswers.every((r) => r.status === 200), 'today\'s v1 node (no nonce) still verifies, as before — a repeat too, until nodes send v2');
 
         // ── 6. The deploy workflow's checks ──
         console.log('— the deploy workflow\'s checks (apps/registrar/scripts/deploy-checks.mjs)');

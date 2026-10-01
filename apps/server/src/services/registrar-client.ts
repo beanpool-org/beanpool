@@ -4,8 +4,10 @@
 // registrar can bind a <name>.beanpool.org lease to THIS node and re-verify it via /api/attest.
 // The signed-request scheme mirrors the Worker's verifier (apps/registrar/src/sign.js):
 //   headers x-bp-pubkey (raw Ed25519 pubkey hex) / x-bp-timestamp / x-bp-signature, plus x-bp-proto for any
-//   protocol but DEFAULT_PROTO
-//   message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`
+//   protocol but DEFAULT_PROTO, and x-bp-nonce (32 hex, fresh for every request) for a protocol with `nonce`
+//   message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`            (v1)
+//             `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}`  (v2)
+//   v2's nonce is taken once by the Worker, so a captured request can't be replayed while its timestamp still verifies.
 //
 // ## Domain separation — why the first line is a constant
 //
@@ -39,9 +41,14 @@
  */
 export const PROTOCOLS = {
     v1: { request: 'beanpool-registrar-request/v1', attest: 'beanpool-node-attest/v1' },
+    v2: { request: 'beanpool-registrar-request/v2', attest: 'beanpool-node-attest/v2', nonce: true },
 } as const;
 export type Proto = keyof typeof PROTOCOLS;
-/** What this node signs with. Moves only in a release after a Worker accepting it is live (step 2 above). */
+/**
+ * What this node signs with. Moves only in a release after a Worker accepting it is live (step 2 above). v2 (the
+ * one-use nonce, 2026-10-01) is at step 1: the live Worker may be one that predates even `accepted_proto` in its 401,
+ * and a node sending v2 to it could not fall back, so this stays v1 until the deploy workflow has put a v2 Worker live.
+ */
 export const SEND_PROTO: Proto = 'v1';
 /**
  * The protocol of a request without x-bp-proto, or an attestation without `proto`. v1 predates both, so the node
@@ -55,6 +62,7 @@ export const REQUEST_DOMAIN = PROTOCOLS.v1.request;
 /** Leading line of a v1 node attestation. Must match apps/registrar/src/sign.js (attestOne verifies it). */
 export const ATTEST_DOMAIN = PROTOCOLS.v1.attest;
 
+import { randomBytes } from 'node:crypto';
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 
@@ -79,12 +87,17 @@ async function signHex(message: string): Promise<string> {
     return Buffer.from(sig).toString('hex');
 }
 
-function tags(proto: Proto) {
+function tags(proto: Proto): { request: string; attest: string; nonce?: boolean } {
     if (!Object.hasOwn(PROTOCOLS, proto)) throw new Error(`Unknown registrar signing protocol: ${proto}`);
     return PROTOCOLS[proto];
 }
-export const requestMessage = (proto: Proto, method: string, path: string, ts: number | string, bodyText: string) =>
-    `${tags(proto).request}\n${method}\n${path}\n${ts}\n${bodyText}`;
+/** Does `proto` sign a one-use nonce (x-bp-nonce)? */
+export const usesNonce = (proto: Proto): boolean => tags(proto).nonce === true;
+export function requestMessage(proto: Proto, method: string, path: string, ts: number | string, bodyText: string, nonce?: string): string {
+    if (!usesNonce(proto)) return `${tags(proto).request}\n${method}\n${path}\n${ts}\n${bodyText}`;
+    if (!nonce) throw new Error(`a ${proto} request signs a nonce`);
+    return `${tags(proto).request}\n${method}\n${path}\n${ts}\n${nonce}\n${bodyText}`;
+}
 export const attestMessage = (proto: Proto, nonce: string, ts: number | string) =>
     `${tags(proto).attest}\n${nonce}\n${ts}`;
 
@@ -103,12 +116,14 @@ export async function buildAttestation(nonce: string, proto: Proto = SEND_PROTO)
 // The signature headers of a request signed under `proto`: the node's one request-signing path.
 export async function signRequest(method: string, path: string, bodyText: string, proto: Proto = SEND_PROTO): Promise<Record<string, string>> {
     const ts = Math.floor(Date.now() / 1000);
+    const nonce = usesNonce(proto) ? randomBytes(16).toString('hex') : undefined;
     const headers: Record<string, string> = {
         'x-bp-pubkey': nodePubkeyHex(),
         'x-bp-timestamp': String(ts),
-        'x-bp-signature': await signHex(requestMessage(proto, method, path, ts, bodyText)),
+        'x-bp-signature': await signHex(requestMessage(proto, method, path, ts, bodyText, nonce)),
     };
     if (proto !== DEFAULT_PROTO) headers['x-bp-proto'] = proto;
+    if (nonce) headers['x-bp-nonce'] = nonce;
     return headers;
 }
 
@@ -158,7 +173,11 @@ async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): P
 async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Promise<any> {
     const res = await signedAnswer(method, path, body);
     const data = res.data;
-    if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
+    if (!res.ok) {
+        const why = data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`);
+        // `ref`: where the address service logged what went wrong (it no longer sends Cloudflare's answer to a node).
+        throw new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why);
+    }
     return data;
 }
 

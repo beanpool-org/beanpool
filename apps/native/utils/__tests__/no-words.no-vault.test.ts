@@ -22,7 +22,9 @@ vi.mock('../../components/SsoButton', () => {
     };
 });
 
-import { KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY } from '../../components/KeeperProtectionPanel';
+import {
+    COMMUNITY_SSO_GROUP_NOTE, KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY,
+} from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
 import {
@@ -122,7 +124,11 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         const text = textOf(panel(COVERED, false));
         expect(text).toContain('Facebook Connected');
         expect(text).not.toMatch(/12 words|written down/i);
-        expect(text).toContain('It only works while your hub is running.');
+        // Was "Any single connected account, plus your community hub, restores your account on a new phone. It only works
+        // while your hub is running.": two keys, neither enough alone, when the server's operators can open the copy by
+        // themselves (honest wording, 2026-10-01). The server keeps the copy; the sign-in brings the account back through it.
+        expect(text).toContain(`${COMMUNITY_SSO_GROUP_NOTE} It only works while your community's server is running.`);
+        expect(text).not.toMatch(/hub/i);
     });
 
     // Was "reads exactly as before", pinning "It does not hand your 12 words back". A sign-in connected from a
@@ -132,7 +138,10 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         const text = textOf(panel(WORDS_ONLY, true));
         expect(text).toContain('🔑 Your 12 words are your primary recovery');
         expect(text).toContain('Your 12 words are your primary key to your account. Write them down safely.');
-        expect(text).toContain(`restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`);
+        expect(text).toContain(`${COMMUNITY_SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} It only works while your community's server is running, so keep the words written down.`);
+        expect(COMMUNITY_SSO_GROUP_NOTE).toBe(
+            "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.");
+        expect(text).not.toMatch(/hub/i);
         expect(SSO_WORDS_NOTE).toBe('A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.');
         expect(text).not.toMatch(/does not hand your 12 words back/);
         expect(text).not.toContain(NO_WORDS_WAY_BACK);
@@ -201,7 +210,21 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
     it('covered with one sign-in: the footnote no longer says the server cannot open it alone', () => {
         const text = textOf(panel(COVERED, true));
         expect(text).not.toMatch(/Neither of them can open/);
-        expect(text).toContain("Your sign-in account can't restore your account alone — it takes your community's server too.");
+        // Was "Your sign-in account can't restore your account alone — it takes your community's server too.": that read
+        // as a lock needing both, when the server's operators can open the copy alone (honest wording, 2026-10-01).
+        expect(text).toContain("Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy.");
+        expect(text).not.toMatch(/can't restore your account alone/);
+    });
+
+    it('covered with two sign-ins: the footnote names no hub, and says the server keeps the copy', () => {
+        const two = protectionFrom({
+            enrolled: ['sso'], generation: 1, skipped: [], available: 2,
+            enrolledSso: ['google', 'facebook'], threshold: 1, isSingleBlob: true,
+        });
+        expect(two.state).toBe('covered');
+        const text = textOf(panel(two, true));
+        expect(text).toContain("Protected by 2 sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.");
+        expect(text).not.toMatch(/hub/i);
     });
 });
 

@@ -117,7 +117,7 @@ Backups downloaded before this update, and every backup from a server with no re
 
 ### Backups made before the recovery seal
 
-At its first start after the update that brought the recovery seal, the server locks every member's sign-in recovery copy with recovery-seal.key, and clears the copies it had deleted out of state.db. Files made before that hold the copies as members' apps made them: anyone holding such a file can open every GitHub-linked member's copy with that member's public GitHub id.
+At its first start after the update that brought the recovery seal, the server locks every member's sign-in recovery copy with recovery-seal.key, and clears the copies it had deleted out of state.db. Files made before that hold the copies as members' apps made them: anyone holding such a file can open every GitHub-linked member's copy with that member's public GitHub id, and a Google-linked member's copy with that member's Google id, which every other app they signed in to with Google also holds.
 
 On each server, main and standby, check that the seal has finished. Docker's log shows it: docker compose logs beanpool-node | grep "Recovery seal"
 

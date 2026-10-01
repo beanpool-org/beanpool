@@ -28,12 +28,22 @@ export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could
 /**
  * The same, in a build with BeanPool's key vault (key vault design D6, Marty 2026-09-28: the honest words; D1: one
  * custodian, Marty, until the reshare to people in other countries, and the guide says so). The copy is at the vault,
- * not at any community. BeanPool can open it; the host can read the running server's memory; a court could order it;
- * anyone holding the sign-in account could get in. The guide's "Who can open the copy" (settings/recovery.md) says the
- * same at length.
+ * not at any community. BeanPool can open it (the vault checks the sign-in itself, so it learns the id that opens the
+ * copy: review FABLE-sec-crypto F1); the host can read the running server's memory; a court could order it; anyone
+ * holding the sign-in account could get in, unless a device of the member's stops the day's wait (SSO_WAIT_NOTE, in the
+ * footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
  */
 export const VAULT_COPY_OPENERS =
     "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.";
+
+/**
+ * Above the sign-in buttons, in a build without a key vault: the community's server keeps the whole copy (single blob), so
+ * the sign-in brings the account back through it. Was "Any single connected account, plus your community hub, restores
+ * your account": that read as two keys, neither enough alone, when the server's operators can open the copy by
+ * themselves (SIGN_IN_COPY_OPENERS; review FABLE-sec-sso finding 1, honest wording 2026-10-01).
+ */
+export const COMMUNITY_SSO_GROUP_NOTE =
+    "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.";
 
 /** Above the sign-in buttons, in a build with a key vault: what a linked sign-in does now that the vault keeps the copy. */
 export const SSO_GROUP_NOTE =
@@ -104,8 +114,8 @@ export function KeeperProtectionPanel({
                     {atVault
                         ? (hasWords ? `${SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} Keep the words written down as well.` : SSO_GROUP_NOTE)
                         : hasWords
-                            ? `Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`
-                            : 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It only works while your hub is running.'}
+                            ? `${COMMUNITY_SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} It only works while your community's server is running, so keep the words written down.`
+                            : `${COMMUNITY_SSO_GROUP_NOTE} It only works while your community's server is running.`}
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -218,8 +228,8 @@ export function KeeperProtectionPanel({
                             ? `Protected by ${enrolledSso.length} sign-in accounts, in every community. Any one of them brings your account back on a new phone: ${SSO_WAIT_NOTE}`
                             : `Protected by your sign-in account, in every community. It brings your account back on a new phone: ${SSO_WAIT_NOTE}`)
                         : enrolledSso.length > 1
-                            ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account, together with the hub, restores your account.`
-                            : "Your sign-in account can't restore your account alone — it takes your community's server too."}
+                            ? `Protected by ${enrolledSso.length} sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.`
+                            : "Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy."}
                 </Text>
 
                 {renderSsoProviders()}

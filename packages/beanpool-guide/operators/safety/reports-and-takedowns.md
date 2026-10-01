@@ -72,7 +72,9 @@ Reporters who joined through the open door from the same internet address within
 
 So three new accounts can hide a newcomer's spam, but not the posts of someone who has been there for months: those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits.
 
-A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once fewer than three circles count; **Remove the post** takes it down as above.
+A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**. Then a reporter also has to be **established**: past the new-account limits themselves, as well as everything above. So one report from an established member hides it, and a newcomer's report hides nothing, however long ago they joined. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's.
+
+A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above.
 
 ## Be fair
 

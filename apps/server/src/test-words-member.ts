@@ -10,8 +10,10 @@
  *      new person → 429, while a reply to someone who wrote first is never limited. A sign-in member beside them keeps
  *      the ordinary 3 posts. Four days in with 3 kept posts a 12-words member is still on probation, a sign-in member is
  *      not; eight days in, neither
- *   2. one report: an established member's single report hides a 12-words newcomer's post; the same report on a sign-in
- *      newcomer's post hides nothing (3 needed); a report from a member under 7 days old hides nothing
+ *   2. one report: an established member's single report (off probation: 10 days, 3 kept posts) hides a 12-words
+ *      newcomer's post; the same report on a sign-in newcomer's post hides nothing (3 needed); a report from a member under
+ *      7 days old hides nothing; nor does one from a member still on probation however old (a 12-words member 8 days in
+ *      with no kept posts, an invited member 10 days in with none), while an established member's on the same post does
  *   3. adding a sign-in (POST /api/join/link): unsigned → 401; a key that is no member → 403; a sign-in member → 409
  *      already_linked; a member who joined another way (the genesis owner) → 409 not_words_member; a sign-in account
  *      another member joined with → 409 already_joined, a removed member's → 403 removed, the row still `words` after
@@ -163,7 +165,9 @@ async function main(): Promise<void> {
 
     const owner = newId('Olive');
     seedGenesisMember(owner.pk, 'Olive');
+    // Established: ten days a member and 3 kept posts, so off probation (design §2.3).
     const rep = oldMember('Rep', 10, owner);
+    keptPosts(rep, 3);
     const fresh = oldMember('Fresh', 1, owner);
 
     // ── 1. the 12-words rules ────────────────────────────────────────────────────────────────────
@@ -221,6 +225,23 @@ async function main(): Promise<void> {
     assert(r2.status === 200 && hiddenAt(samPost) === null, `the same member's report on Sam's post hides nothing: a sign-in newcomer's needs 3 (${r2.status})`);
     const r3 = await report(fresh, wesPost, wes);
     assert(r3.status === 200 && hiddenAt(wesPost) === null, `a report from a member a day old hides nothing, even a 12-words newcomer's (${r3.status})`);
+    // A newcomer's report hides nothing (design §2.3, §7.3), however old the account: Sly came in by 12 words 8 days
+    // ago and never posted, so he is still on probation. Then Rep, established, reports the same post: hidden.
+    const sly = await wordsMember('Sly');
+    setJoined(sly, 8 * DAY);
+    const slyRules = await probation(sly);
+    const nia = await wordsMember('Nia');
+    const niaPost = await post(nia);
+    const niaPostId = niaPost.body?.post?.id ?? niaPost.body?.id;
+    const r5 = await report(sly, niaPostId, nia);
+    assert(slyRules?.onProbation === true && slyRules?.rules === 'words' && niaPost.status === 200 && r5.status === 200 && hiddenAt(niaPostId) === null,
+        `Sly, 8 days a 12-words member with 0 kept posts (on probation: ${slyRules?.onProbation}, ${slyRules?.rules}), reports Nia's post: it stays up (${r5.status}, ${hiddenAt(niaPostId)})`);
+    const veg = oldMember('Veg', 10, owner);
+    const r6 = await report(veg, niaPostId, nia);
+    assert(r6.status === 200 && hiddenAt(niaPostId) === null,
+        `nor an invited member 10 days in with no kept posts, still on probation (${r6.status}, ${hiddenAt(niaPostId)})`);
+    const r7 = await report(rep, niaPostId, nia);
+    assert(r7.status === 200 && !!hiddenAt(niaPostId), `then Rep, established, reports it: hidden (${r7.status}, ${hiddenAt(niaPostId)})`);
 
     // ── 3. adding a sign-in: the refusals ────────────────────────────────────────────────────────
     console.log('\n── 3. adding a sign-in: the refusals ──');

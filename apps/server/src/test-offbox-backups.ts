@@ -298,11 +298,11 @@ async function main(): Promise<void> {
     const r4 = await offbox.runOffboxBackups({ now: Date.now() + 25 * HOUR });
     assert(r4.sent.slice().sort().join() === ['env-1', idB].sort().join(), `2. past the interval both are due (${JSON.stringify(r4)})`);
     // An edit that does not send the secret keeps the stored one (the screen never has it).
-    const rename = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, id: idB, name: 'Outside store (renamed)', secretAccessKey: '' } });
+    const rename = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, id: idB, name: 'Outside store (renamed)', accessKeyId: '', secretAccessKey: '' } });
     await storeB.clearLog();
     const r5 = await offbox.runOffboxBackups({ force: true });
     assert(rename.status === 200 && r5.sent.includes(idB) && (await puts(storeB)).every((e) => e.authOk),
-        `2. renaming it without sending the secret keeps the secret: the next upload is signed right (${rename.status}, ${JSON.stringify(r5)})`);
+        `2. renaming it without sending the key id or the secret keeps both: the next upload is signed right (${rename.status}, ${JSON.stringify(r5)})`);
 
     // ── 3. A failing destination ─────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 3. failing —');

@@ -31,6 +31,7 @@ import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
+import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -1248,6 +1249,11 @@ export function ApplianceSection({
                             </div>
                         )}
                     </div>
+
+                    {/* Backups off the server (the owners' card: the node answers anyone else 403) */}
+                    <SectionErrorBoundary sectionName="Backups off the server" resetKey={activeNode.id}>
+                        <OffboxBackupsPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
 
                     {/* Standby Live Backup / Replication Configuration (Standby) vs Replication Access (Primary) */}
                     {isStandby ? (

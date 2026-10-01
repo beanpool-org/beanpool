@@ -283,7 +283,7 @@ export function readOffboxSettings(env: NodeJS.ProcessEnv = process.env): Offbox
 export type SettingsUpdate = {
     intervalHours?: unknown;
     retentionDays?: unknown;
-    /** Add one, or change one by `id`. A change with no `secretAccessKey` keeps the stored one. */
+    /** Add one, or change one by `id`. A change with no `secretAccessKey` or `accessKeyId` keeps the stored one. */
     destination?: DestinationInput & { id?: unknown };
     /** Remove one set in Settings, by id. */
     removeId?: unknown;
@@ -324,9 +324,12 @@ export function updateOffboxSettings(update: SettingsUpdate): { ok: true } | { o
         const existing = id ? next.destinations!.find((d) => d?.id === id) : null;
         if (id && !existing) return { ok: false, error: 'No destination with that id is set in Settings' };
         const merged: DestinationInput = { ...input };
-        // An unchanged secret is not sent back by the screen (it never sees it); keep the stored one.
+        // The screen never has the secret or the whole key id, so a change that leaves them empty keeps the stored ones.
         if (existing && (typeof input.secretAccessKey !== 'string' || input.secretAccessKey === '')) {
             merged.secretAccessKey = existing.secretAccessKey;
+        }
+        if (existing && (typeof input.accessKeyId !== 'string' || input.accessKeyId.trim() === '')) {
+            merged.accessKeyId = existing.accessKeyId;
         }
         const checked = checkDestination(merged, SETTINGS_NAMES);
         if (!checked.ok) return { ok: false, error: `This destination can't be used: ${checked.problems.join('; ')}` };

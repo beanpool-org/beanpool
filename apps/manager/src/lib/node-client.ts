@@ -120,6 +120,8 @@ export interface DiagnosticsResponse {
     diskHealth?: DiskHealth;
     /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */
     standbyHealth?: StandbyHealthBanner | null;
+    /** Off-box backups that need the owners (apps/server services/offbox-backups.ts): owners only, null to anyone else. */
+    offboxBackups?: { problems: string[] } | null;
 }
 
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
@@ -2036,6 +2038,128 @@ export async function getReplicationAccess(
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
+}
+
+// ======================== OFF-BOX BACKUPS ========================
+// The main server's locked backups, sent on a schedule to S3-compatible stores its owners choose (apps/server
+// services/offbox-backups.ts). Every route is an owner's. A secret is never sent back: `secretSet` says one is set.
+
+export type OffboxHealth = 'ok' | 'waiting' | 'failing' | 'stale' | 'broken';
+
+export interface OffboxDestinationStatus {
+    id: string;
+    name: string;
+    /** `env`: set in the server's .env, changed only there. */
+    source: 'env' | 'settings';
+    endpoint: string | null;
+    bucket: string | null;
+    region: string | null;
+    prefix: string | null;
+    /** Shortened by the node; never the whole key id. */
+    accessKeyId: string | null;
+    secretSet: boolean;
+    /** Why a destination can't be used, by setting name. */
+    problems: string[];
+    health: OffboxHealth;
+    lastSuccessAt: number | null;
+    lastSuccessBytes: number | null;
+    lastAttemptAt: number | null;
+    lastError: string | null;
+    failures: number;
+    nextAttemptAt: number | null;
+    lastPruneAt: number | null;
+    lastPruneError: string | null;
+}
+
+export interface OffboxStatus {
+    state: 'sending' | 'none' | 'not-locked' | 'standby' | 'replaced';
+    message: string;
+    intervalHours: number;
+    intervalFrom: 'settings' | 'env' | 'default';
+    retentionDays: number;
+    retentionFrom: 'settings' | 'env' | 'default';
+    maxRetentionDays: number;
+    maxIntervalHours: number;
+    running: boolean;
+    destinations: OffboxDestinationStatus[];
+}
+
+export interface OffboxDestinationInput {
+    /** Set to change one; absent to add one. */
+    id?: string;
+    name: string;
+    endpoint: string;
+    bucket: string;
+    region: string;
+    prefix: string;
+    accessKeyId: string;
+    /** Empty when changing one keeps the secret the node holds. */
+    secretAccessKey: string;
+}
+
+export interface OffboxSettingsUpdate {
+    intervalHours?: number | null;
+    retentionDays?: number | null;
+    destination?: OffboxDestinationInput;
+    removeId?: string;
+}
+
+export interface OffboxListedBackup {
+    key: string;
+    community: string;
+    file: string;
+    madeAt: number;
+    bytes: number;
+    /** This server's own community (a fresh server restoring a lost one lists the lost one's as not its own). */
+    ours: boolean;
+}
+
+/** POST to an off-box route; a refusal comes back as an Error carrying the node's own sentence. */
+async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adminPassword?: string, tfaToken?: string): Promise<T> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword, ...body }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => null) as { error?: string } | null;
+        throw Object.assign(new Error(err?.error || `HTTP ${res.status}: ${res.statusText}`), { status: res.status });
+    }
+    return res.json();
+}
+
+export function getOffboxStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<OffboxStatus> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/status', {}, adminPassword, tfaToken);
+}
+
+export function saveOffboxSettings(
+    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string,
+): Promise<{ success: boolean; status: OffboxStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', update, adminPassword, tfaToken);
+}
+
+/** Send one now to every destination. Answers at once; `status.running` says when it is done. */
+export function runOffboxBackupNow(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ started: boolean; status: OffboxStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/run', {}, adminPassword, tfaToken);
+}
+
+export function listOffboxBackups(
+    nodeUrl: string, destination: string, adminPassword?: string, tfaToken?: string,
+): Promise<{ destination: string; backups: OffboxListedBackup[] }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/list', { destination }, adminPassword, tfaToken);
+}
+
+/** Save one off-box backup, to restore with the Restore wizard. */
+export function downloadOffboxBackup(
+    nodeUrl: string, destination: string, backup: OffboxListedBackup, adminPassword?: string, tfaToken?: string,
+): Promise<DownloadNotice> {
+    return downloadAdminFile(
+        resolveNodeApiUrl(nodeUrl, '/api/local/admin/offbox-backups/download'),
+        { destination, key: backup.key },
+        adminPassword,
+        backup.file,
+        tfaToken,
+    );
 }
 
 // ======================== ESCROW DISPUTES ========================

@@ -99,8 +99,15 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('conversations', 'created_by');
     move('conversation_participants', 'public_key');
 
-    // (i) messages
+    // (i) messages, and what the member sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts;
+    // never copied, so on a standby there are none). A conversation of theirs that would name the same two people as one
+    // already there (it can't, as the new key is new) is left to go with the old key.
     move('messages', 'author_pubkey');
+    move('withheld_lines', 'author_pubkey');
+    move('withheld_overlays', 'author_pubkey');
+    db.prepare('UPDATE OR IGNORE withheld_conversations SET owner_pubkey = ? WHERE owner_pubkey = ?').run(newKey, oldKey);
+    db.prepare('UPDATE OR IGNORE withheld_conversations SET other_pubkey = ? WHERE other_pubkey = ?').run(newKey, oldKey);
+    db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ? OR other_pubkey = ?').run(oldKey, oldKey);
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');

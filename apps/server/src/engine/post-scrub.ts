@@ -89,7 +89,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
            AND EXISTS (SELECT 1 FROM json_each(?) WHERE instr(thumbnail_url, '/api/marketplace/posts/' || value || '/photos/') > 0)`)
         .run(at, JSON.stringify(ids));
 
-    if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomed));
+    if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
     afterTransactionCommit(dropSearchLeftovers);
     return ids;
 }

@@ -249,7 +249,9 @@ async function main(): Promise<void> {
     assert(beforeBytes.equals(makePhoto('photo-0')), 'the bytes served are the photo');
     const beforeType = beforeRes.headers.get('content-type');
     const beforeCache = beforeRes.headers.get('cache-control');
-    assert(beforeCache === 'public, max-age=31536000, immutable', 'the immutable cache header is what it always was');
+    // A local community's photo is keyed, so members' only: the member's own cache keeps it as long, no shared cache does
+    // (routes/marketplace.ts; it was `public` until review FABLE-sec-images, MEDIUM). Evacuation must not change it (3b).
+    assert(beforeCache === 'private, max-age=31536000, immutable', `the immutable cache header is a member's (${beforeCache})`);
 
     // ── 5a. the sync export, before evacuation ─────────────────────────────────────────────────
     const exportBefore = await exportSyncState('test-node');

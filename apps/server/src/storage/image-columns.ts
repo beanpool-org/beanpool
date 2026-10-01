@@ -318,14 +318,20 @@ export function storeAttachmentColumns(store: ImageStore, key: string, data: str
 }
 
 /**
- * Delete objects whose rows have already gone — always from an `afterTransactionCommit` hook.
+ * Delete objects whose rows have already gone — always from an `afterTransactionCommit` hook, with the database the
+ * rows went from (`handle`).
  *
  * Never throws. It runs after the transaction that removed the rows has committed, where there is nothing
  * left to roll back and no caller to return an error to; a file that will not unlink is a warning and an
  * orphan for the storage-health sweep, not a failed delete for the member who asked for one. The order —
  * row first, object second — is what makes a lingering file unservable: every serving path reads the row.
+ *
+ * An object any row still names is kept ({@link storageKeyStillReferenced}): the rows a caller removed are gone by now,
+ * so a row that names the key is another listing's or message's, and its photo is not this delete's to take. Keys are
+ * per post and per message (storage/image-store.ts idSegment), so that is never the case today; this is what keeps a
+ * writer that one day shares a key from deleting someone else's photo (scratch/reviews/FABLE-sec-images.md, HIGH).
  */
-export function deleteStoredObjects(keys: Iterable<string>, store?: ImageStore): number {
+export function deleteStoredObjects(handle: ReadableDb, keys: Iterable<string>, store?: ImageStore): number {
     let removed = 0;
     let s: ImageStore;
     try {
@@ -336,6 +342,7 @@ export function deleteStoredObjects(keys: Iterable<string>, store?: ImageStore):
     }
     for (const key of keys) {
         if (!key) continue;
+        if (storageKeyStillReferenced(handle, key)) continue;
         try {
             if (s.delete(key)) removed++;
         } catch (e) {
@@ -343,6 +350,22 @@ export function deleteStoredObjects(keys: Iterable<string>, store?: ImageStore):
         }
     }
     return removed;
+}
+
+/**
+ * Whether a row in `handle` still names `key` (any of {@link STORAGE_KEY_TABLES}). Without regard to case: on a disk that
+ * folds it (a Docker Desktop bind mount of /data on macOS or Windows) two keys that differ only in case are one file.
+ * A question it cannot answer is a yes: an object kept by mistake is an orphan the storage-health sweep collects, one
+ * deleted by mistake is a member's photo gone.
+ */
+export function storageKeyStillReferenced(handle: ReadableDb, key: string): boolean {
+    try {
+        return STORAGE_KEY_TABLES.some((table) =>
+            handle.prepare(`SELECT 1 FROM ${table} WHERE storage_key = ? COLLATE NOCASE LIMIT 1`).all(key).length > 0);
+    } catch (e) {
+        console.warn(`[ImageStore] Could not tell whether a row still names ${key}; keeping it:`, e);
+        return true;
+    }
 }
 
 // ── Which objects a database says it holds ─────────────────────────────────────────────────────

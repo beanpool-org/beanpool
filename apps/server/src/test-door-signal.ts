@@ -15,8 +15,9 @@
  *      2, the 1,000th 2
  *   5. no refusal below the ceiling: every count from the 1st to the 500th 12-words join in the hour is under it, and the
  *      500th joins for real; the 501st → 429 network_busy with Retry-After (when the hour's oldest leaves it) and the
- *      sentence that names the sign-in door, the work route says so first, and a sign-in join from that address still
- *      joins; the day's 2,000 the same, naming the day
+ *      sentence that names the sign-in door, the work route says so first (without counting a failed join: only the
+ *      refused join is counted), and a sign-in join from that address still joins; the day's 2,000 the same, naming the
+ *      day
  *   6. a removed newcomer's network (§2.4): a 12-words member a moderator removes minutes after joining keeps their row's
  *      address hash for 7 days from the join; a 12-words join from that network is asked level 4 meanwhile, a sign-in
  *      join no more than before; the sweep a day on keeps it, a week on clears it. Removed more than a day after joining,
@@ -47,6 +48,7 @@ import {
     DOOR_NUMBERS, REMOVED_NEWCOMER_KEEP_MS, _resetWordsJoinsForTests, doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin,
 } from './engine/door-signal.js';
 import { solveOffLoop } from './door-work-test-solver.js';
+import { getFunnel } from './engine/funnel.js';
 import { limiterKeyForIp } from './client-ip.js';
 
 let BASE = '';
@@ -121,6 +123,8 @@ async function joinBySignIn(ip: string, sub: string, callsign: string, id: Id = 
     return call('POST', id, '/api/join', ip, { callsign, provider: 'google', idToken: mint(sub, n.body?.nonce), nonce: n.body?.nonce, work });
 }
 
+/** Today's `open_join_failed` / `network_busy_words` in the onboarding funnel. */
+const busyCount = () => getFunnel(1).filter(r => r.event === 'open_join_failed' && r.variant === 'network_busy_words').reduce((n, r) => n + r.count, 0);
 const hashOf = (ip: string) => openJoinAddressHash(limiterKeyForIp(ip));
 /** `count` joins from `ip` at `at`, as rows: alternately a sign-in's and a 12-words member's unless `provider` says. */
 function addJoins(ip: string, count: number, at = new Date(), provider?: 'google' | 'words'): void {
@@ -243,11 +247,15 @@ async function main(): Promise<void> {
     const fiveHundredth = await joinByWords(CAMPUS, 'Five Hundred');
     assert(fiveHundredth.res.status === 200 && fiveHundredth.level === 4 && joinsFrom(CAMPUS, 3600_000, 'words') === N.wordsPerHour,
         `the ${ord(N.wordsPerHour)} joins for real, at level ${fiveHundredth.level} (${fiveHundredth.res.status})`);
+    const busyBefore = busyCount();
     const busyWork = await askWork('words', CAMPUS);
+    const busyAfterWork = busyCount();
     const over = await call('POST', newId(), '/api/join', CAMPUS, { door: 'words', callsign: 'Over', work: { challenge: 'x', counters: [] } });
     const retry = Number(over.headers.get('retry-after'));
     assert(busyWork.status === 429 && busyWork.body?.code === 'network_busy' && busyWork.body?.door === 'words',
         `the work route says so first, before any work is done (${show(busyWork)})`);
+    assert(busyAfterWork === busyBefore && busyCount() === busyBefore + 1,
+        `the work route writes nothing, not even to the join funnel; the refused join is counted there once (network_busy_words ${busyBefore} → ${busyAfterWork} → ${busyCount()})`);
     assert(over.status === 429 && over.body?.code === 'network_busy' && over.body?.window === 'hour' && retry >= 590 && retry <= 601 && over.body?.retryAfterSeconds === retry
         && /12-words accounts were made from your network in the last hour\. Sign in to join now, or try again in about 10 minutes\./.test(over.body?.error),
         `the ${ord(N.wordsPerHour + 1)} → 429 network_busy, Retry-After ${retry} s (when the hour's oldest leaves it), naming the sign-in door (${show(over)})`);

@@ -17,8 +17,9 @@
  *   3. adding a sign-in (POST /api/join/link): unsigned → 401; a key that is no member → 403; a sign-in member → 409
  *      already_linked; a member who joined another way (the genesis owner) → 409 not_words_member; a sign-in account
  *      another member joined with → 409 already_joined, a removed member's → 403 removed, the row still `words` after
- *      each; the link nonce is bound to adding a sign-in for this key: a recovery nonce is refused there and a link nonce
- *      on the recovery route, without spending it; a vault ticket where the door takes none → 401 ticket_unsupported
+ *      each, and neither counted as a failed join in the funnel; the link nonce is bound to adding a sign-in for this
+ *      key: a recovery nonce is refused there and a link nonce on the recovery route, without spending it; a vault
+ *      ticket where the door takes none → 401 ticket_unsupported
  *   4. the link: 200 with the recovery copy stored from the same sign-in; the row is that provider's, its hash the
  *      node's for that account, `joined_at` kept and `updated_at` stamped, `invited_by` still open:words; the member is
  *      on the ordinary rules at once, counted from the original join (off probation four days in with 3 kept posts); the
@@ -45,6 +46,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { openJoinHash } from './engine/open-join.js';
 import { nodeSha256 } from './services/door-work.js';
 import { lockedDm } from './dm-test-payload.js';
+import { getFunnel } from './engine/funnel.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -150,6 +152,8 @@ const report = (reporter: Id, postId: string, author: Id) =>
 const hiddenAt = (postId: string) => (db.prepare('SELECT hidden_by_reports_at FROM posts WHERE id = ?').get(postId) as any)?.hidden_by_reports_at ?? null;
 const probation = async (id: Id) => (await call('GET', id, '/api/community/me')).body?.probation;
 const joinRow = (pk: string) => db.prepare('SELECT * FROM open_joins WHERE member_pubkey = ?').get(pk) as any;
+/** Today's `open_join_failed`, every reason, in the onboarding funnel. */
+const failedJoins = () => getFunnel(1).filter(r => r.event === 'open_join_failed').reduce((n, r) => n + r.count, 0);
 const setJoined = (id: Id, ms: number) => db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(ms), id.pk);
 
 async function main(): Promise<void> {
@@ -257,6 +261,7 @@ async function main(): Promise<void> {
     assert(samLink.status === 409 && samLink.body?.code === 'already_linked', `a sign-in member → 409 already_linked (${show(samLink)})`);
     const ownerLink = await linkNonce(owner);
     assert(ownerLink.status === 409 && ownerLink.body?.code === 'not_words_member', `a member who joined another way (the genesis owner) → 409 not_words_member (${show(ownerLink)})`);
+    const failedBefore = failedJoins();
     const wesNonce1 = (await linkNonce(wes)).body?.nonce as string;
     const takenBySam = await link(wes, 'sam-google-sub', wesNonce1);
     assert(takenBySam.status === 409 && takenBySam.body?.code === 'already_joined' && joinRow(wes.pk)?.provider === 'words',
@@ -265,6 +270,7 @@ async function main(): Promise<void> {
     const robs = await link(wes, 'rob-google-sub', wesNonce2);
     assert(robs.status === 403 && robs.body?.code === 'removed' && joinRow(wes.pk)?.provider === 'words',
         `the Google account of Rob, whom the community removed → 403 removed: it lifts no new account (${show(robs)})`);
+    assert(failedJoins() === failedBefore, `neither link refusal is counted as a failed join in the onboarding funnel (open_join_failed ${failedBefore} → ${failedJoins()})`);
     const recoveryNonce = (await call('POST', wes, '/api/recovery/sso-nonce', {})).body?.nonce as string;
     const withRecoveryNonce = await link(wes, 'wes-google-sub', recoveryNonce);
     assert(withRecoveryNonce.status === 401 && withRecoveryNonce.body?.code === 'sign_in' && joinRow(wes.pk)?.provider === 'words',

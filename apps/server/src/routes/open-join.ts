@@ -271,9 +271,10 @@ function inAbout(seconds: number): string {
 /**
  * A ceiling for this network (engine/door-signal.ts): 429 with `Retry-After`. The 12-words door says the sign-in door is
  * open. The sign-in door's sentence names no time, because today's apps add "(Try again in N minutes.)" from the header.
+ * `count` false leaves the join funnel alone: the work route is no join, and writes nothing.
  */
-function networkBusy(ctx: any, ceiling: DoorCeiling): void {
-    recordFunnelEvent('open_join_failed', ceiling.door === 'words' ? 'network_busy_words' : 'network_busy');
+function networkBusy(ctx: any, ceiling: DoorCeiling, count = true): void {
+    if (count) recordFunnelEvent('open_join_failed', ceiling.door === 'words' ? 'network_busy_words' : 'network_busy');
     ctx.status = 429;
     ctx.set('Retry-After', String(ceiling.retryAfterSeconds));
     const span = ceiling.window === 'day' ? 'today' : 'in the last hour';
@@ -304,9 +305,10 @@ function refuseWork(ctx: any, code: DoorWorkRefusal): void {
     ctx.body = { error: WORK_REFUSALS[code], code };
 }
 
-function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider | null, ceiling?: DoorCeiling): void {
-    if (reason === 'network_busy' && ceiling) return networkBusy(ctx, ceiling);
-    recordFunnelEvent('open_join_failed', reason);
+/** `count` false leaves the join funnel alone: adding a sign-in (`/api/join/link`) is no join. */
+function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider | null, ceiling?: DoorCeiling, count = true): void {
+    if (reason === 'network_busy' && ceiling) return networkBusy(ctx, ceiling, count);
+    if (count) recordFunnelEvent('open_join_failed', reason);
     const label = provider ? ssoProviderLabel(provider) : 'sign-in';
     switch (reason) {
         case 'already_member':
@@ -535,11 +537,12 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         if (!isDoorWorkDoor(door)) return badRequest(ctx, "'door' must be 'words' or 'sign-in'.");
         if (door === 'words' && !wordsDoorOpen()) return signInRequired(ctx);
         // No sweep here: the signal reads only the last hour and day, which a day-old hash is outside of, and the joins
-        // clear them. This route is asked more often than any join, so it writes nothing.
+        // clear them. This route is asked more often than any join, so it writes nothing, not even to the join funnel
+        // at a ceiling: a work fetch is no join, and the join the app may try next is counted there.
         const ipHash = openJoinAddressHash(clientLimiterKey(ctx));
         // Told here, before the phone does any work it could not use.
         const ceiling = doorCeilingReached(door, ipHash);
-        if (ceiling) return networkBusy(ctx, ceiling);
+        if (ceiling) return networkBusy(ctx, ceiling, false);
         const { level } = doorLevel(door, ipHash);
         ctx.status = 200;
         // Turnstile (design §5) is not built: no discount is offered, and none is needed.
@@ -755,7 +758,8 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         }
         if (!outcome.ok) {
             if (outcome.reason === 'already_joined' || outcome.reason === 'removed') {
-                refuse(ctx, outcome.reason, identity.provider);
+                // The join's own answers, but no join was refused: the funnel is left alone, as the sign-in check above.
+                refuse(ctx, outcome.reason, identity.provider, undefined, false);
                 return;
             }
             const refusal = LINK_REFUSALS[outcome.reason];

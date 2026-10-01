@@ -25,6 +25,8 @@
  *      on the ordinary rules at once, counted from the original join (off probation four days in with 3 kept posts); the
  *      sign-in account is theirs now (a new key joining with it → 409 already_joined); a second link → 409
  *      already_linked; one report no longer hides their post
+ *   5. deleting the account while the link waits on a slow key set: the link is refused (not 200), no hash is written, and
+ *      that Google account can still join afresh; the control (link, then delete) frees it
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-words-member.ts
  */
@@ -249,6 +251,30 @@ async function main(): Promise<void> {
     const r7 = await report(rep, niaPostId, nia);
     assert(r7.status === 200 && !!hiddenAt(niaPostId), `then Rep, established, reports it: hidden (${r7.status}, ${hiddenAt(niaPostId)})`);
 
+    // Established (design §2.3, both doors): the bar is on the REPORTER, whoever wrote the post. Three 12-words accounts
+    // 8 days old, still on probation (no kept posts), report a sign-in newcomer's first post: it stays up, and its author
+    // keeps the probation count they had. Three established, independent members still hide it.
+    const ringers = [await wordsMember('Ringer1'), await wordsMember('Ringer2'), await wordsMember('Ringer3')];
+    for (const r of ringers) setJoined(r, 8 * DAY);
+    // Every join here is from this machine, so they share a connection label: three addresses, as a real ring would have.
+    ringers.forEach((r, i) => db.prepare('UPDATE open_joins SET join_cohort = ? WHERE member_pubkey = ?').run(`ring-net-${i}`, r.pk));
+    const ringerRules = await Promise.all(ringers.map(probation));
+    const newt = await signInMember('Newt', 'newt-google-sub');
+    const newtPost = await post(newt);
+    const newtPostId = newtPost.body?.post?.id ?? newtPost.body?.id;
+    const newtBefore = await probation(newt);
+    const ringStatus: number[] = [];
+    for (const r of ringers) ringStatus.push((await report(r, newtPostId, newt)).status);
+    const newtAfter = await probation(newt);
+    assert(ringerRules.every(x => x?.onProbation === true && x?.rules === 'words') && newtPost.status === 200 && ringStatus.every(x => x === 200)
+        && hiddenAt(newtPostId) === null && newtAfter?.onProbation === newtBefore?.onProbation && newtAfter?.keptPosts === newtBefore?.keptPosts,
+        `three 12-words accounts 8 days old, still on probation, report a sign-in newcomer's first post: it stays up and Newt's probation is unchanged (${ringStatus.join(',')}, hidden ${hiddenAt(newtPostId)}, kept ${newtBefore?.keptPosts} -> ${newtAfter?.keptPosts})`);
+    const established = [1, 2, 3].map(i => { const e = oldMember(`Estab${i}`, 10, newId(`Inviter${i}`)); keptPosts(e, 3); return e; });
+    const estStatus: number[] = [];
+    for (const e of established) estStatus.push((await report(e, newtPostId, newt)).status);
+    assert(estStatus.every(x => x === 200) && !!hiddenAt(newtPostId),
+        `three established, independent reporters still hide it (${estStatus.join(',')}, ${hiddenAt(newtPostId)})`);
+
     // ── 3. adding a sign-in: the refusals ────────────────────────────────────────────────────────
     console.log('\n── 3. adding a sign-in: the refusals ──');
     const rob = await signInMember('Rob', 'rob-google-sub');
@@ -313,6 +339,52 @@ async function main(): Promise<void> {
     const wesNewPostId = wesNewPost.body?.post?.id ?? wesNewPost.body?.id;
     const r4 = await report(rep, wesNewPostId, wes);
     assert(wesNewPost.status === 200 && r4.status === 200 && hiddenAt(wesNewPostId) === null, 'and one report no longer hides his post');
+
+    // ── 5. deleting the account while the link waits on the sign-in check ─────────────────────────
+    console.log('\n── 5. a member deletes their account while their own link is in flight ──');
+    // The link's sign-in check waits on a cold key set (1.5 s, answered locally: no provider is contacted); the member
+    // deletes their account meanwhile. The link must be refused with nothing written, and that Google account stays free.
+    const realFetch = globalThis.fetch;
+    const slowKeys = (ms: number) => {
+        globalThis.fetch = (async (input: any, init?: any) => {
+            if (String(input).startsWith('https://www.googleapis.com/')) {
+                await new Promise(r => setTimeout(r, ms));
+                return new Response(JSON.stringify({ keys: [{ ...google.publicKey.export({ format: 'jwk' }), kid: GOOGLE_KID, alg: 'RS256', use: 'sig' }] }),
+                    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'max-age=3600' } });
+            }
+            return realFetch(input, init);
+        }) as typeof fetch;
+    };
+    const coldKeys = () => _resetJwksCacheForTests('google', null);
+    const warmKeys = () => _resetJwksCacheForTests('google', { keys: [{ ...google.publicKey.export({ format: 'jwk' }), kid: GOOGLE_KID, alg: 'RS256', use: 'sig' } as any], expiresAt: Date.now() + 3600_000 });
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+    const racer = await wordsMember('Racer');
+    const racerNonce = (await call('POST', racer, '/api/join/link/sso-nonce', {})).body?.nonce as string;
+    coldKeys(); slowKeys(1500);
+    let raced: Res, purged: Res;
+    try {
+        const pending = call('POST', racer, '/api/join/link', { provider: 'google', idToken: mint('racer-google-sub', racerNonce), nonce: racerNonce });
+        await sleep(400);
+        purged = await call('POST', racer, '/api/member/purge', {});
+        raced = await pending;
+    } finally { globalThis.fetch = realFetch; warmKeys(); }
+    const racerRow = joinRow(racer.pk);
+    assert(purged.status === 200 && raced.status !== 200 && racerRow?.provider === 'words' && racerRow?.join_hash !== openJoinHash('google', 'racer-google-sub'),
+        `the link that was waiting is refused, and no Google hash is written onto the deleted member's row (purge ${purged.status}; link ${show(raced)}; row ${racerRow?.provider})`);
+    const heir = newId('Heir');
+    const heirNonce = (await call('POST', heir, '/api/join/sso-nonce', {})).body?.nonce as string;
+    const heirJoin = await call('POST', heir, '/api/join', { callsign: 'Heir', provider: 'google', idToken: mint('racer-google-sub', heirNonce), nonce: heirNonce });
+    assert(heirJoin.status === 200, `that Google account can still join afresh (${show(heirJoin)})`);
+    // The control: link first, then delete, still frees the account.
+    const ctl = await wordsMember('Control');
+    const ctlNonce = (await call('POST', ctl, '/api/join/link/sso-nonce', {})).body?.nonce as string;
+    const ctlLink = await link(ctl, 'control-google-sub', ctlNonce);
+    const ctlPurge = await call('POST', ctl, '/api/member/purge', {});
+    const heir2 = newId('Heir2');
+    const heir2Nonce = (await call('POST', heir2, '/api/join/sso-nonce', {})).body?.nonce as string;
+    const heir2Join = await call('POST', heir2, '/api/join', { callsign: 'Heir2', provider: 'google', idToken: mint('control-google-sub', heir2Nonce), nonce: heir2Nonce });
+    assert(ctlLink.status === 200 && ctlPurge.status === 200 && heir2Join.status === 200,
+        `control: link, then delete, frees the sign-in account (${ctlLink.status}, ${ctlPurge.status}, ${heir2Join.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

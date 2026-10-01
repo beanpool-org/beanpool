@@ -491,6 +491,7 @@ async function verifyDoorSignIn(
 }
 
 const LINK_REFUSALS: Record<Exclude<OpenJoinLinkRefusal, 'already_joined' | 'removed'>, { status: number; error: string }> = {
+    not_a_member: { status: 403, error: 'Only an active member of this community can add a sign-in here.' },
     not_words_member: { status: 409, error: 'This account wasn\'t made with 12 words here, so there is no sign-in to add to it.' },
     already_linked: { status: 409, error: 'This account already has a sign-in.' },
 };

@@ -69,6 +69,8 @@ function member(name: string, daysAgo: number, invitedBy?: Id): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), (invitedBy ?? owner).pk);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    // The 150-day members are the established reporters (off probation: a reporter on it counts for nothing, design 2.3).
+    if (daysAgo >= 150) for (let i = 0; i < 3; i++) oldPost(id, `${name} established ${i}`);
     return id;
 }
 

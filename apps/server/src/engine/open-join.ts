@@ -255,18 +255,23 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
     })();
 }
 
-export type OpenJoinLinkRefusal = 'not_words_member' | 'already_linked' | 'already_joined' | 'removed';
+export type OpenJoinLinkRefusal = 'not_a_member' | 'not_words_member' | 'already_linked' | 'already_joined' | 'removed';
 
 /**
  * A 12-words member adds a sign-in (design §2.5): their `open_joins` row becomes that sign-in account's, in one
  * transaction with the checks that decide, after the sign-in was verified. Refused when the sign-in account is already
  * someone's here (`already_joined`), or was a member the community removed (`removed`: a removed person can't lift a
- * new account with their old sign-in), and when this member came in some other way (`not_words_member`: no row, an
+ * new account with their old sign-in), when the member is no longer active (`not_a_member`: they deleted their account
+ * while the sign-in was being checked), and when this member came in some other way (`not_words_member`: no row, an
  * invite) or already has one (`already_linked`). `joined_at` stays: probation counts from the original join.
  */
 export function linkOpenJoin(input: { publicKey: string; provider: SsoProvider; joinHash: string }): { ok: true } | { ok: false; reason: OpenJoinLinkRefusal } {
     const publicKey = input.publicKey.toLowerCase();
     return db.transaction((): { ok: true } | { ok: false; reason: OpenJoinLinkRefusal } => {
+        // Still active, read here and not before the sign-in await: a member who deleted their account meanwhile
+        // (purgeMemberSelf) must not get a hash written onto the dead row, which would lock that sign-in account for good.
+        const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string } | undefined;
+        if (!member || member.status !== 'active') return { ok: false, reason: 'not_a_member' };
         const row = db.prepare('SELECT provider FROM open_joins WHERE member_pubkey = ?').get(publicKey) as { provider: string } | undefined;
         if (!row) return { ok: false, reason: 'not_words_member' };
         if (row.provider !== WORDS_PROVIDER) return { ok: false, reason: 'already_linked' };

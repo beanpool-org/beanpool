@@ -242,8 +242,8 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         if (weeks + STANDING.maxKeptPosts + STANDING.maxTradePartners < needed) continue;
         if (weeks + keptPostPoints(r.reporter, null) + tradePartnerPoints(r.reporter) < needed) continue;
         if (keptReportsTooMany(r.reporter, now)) continue;
-        // One circle hides a 12-words newcomer's post, so only an established reporter counts there: off probation.
-        if (wordsNewcomer && probationState(r.reporter, now).onProbation) continue;
+        // Only an established reporter counts, whoever wrote the post (design 2.3, both doors): off probation.
+        if (probationState(r.reporter, now).onProbation) continue;
         counting.push(r.reporter);
     }
     // One circle per connected group: reporters sharing a door label or an invite tree, transitively.

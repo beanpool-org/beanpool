@@ -253,6 +253,19 @@ describe('TakeoverPanel', () => {
                 says: [/2 account balance\(s\) are not a number, so the ledger can't add up\. Check it before members trade\./],
                 never: [/does NOT add up/, /not the main server's/],
             },
+            // A balance of Infinity, as a real take-over sends it (test-takeover-infinite-balance): JSON wrote the drift as
+            // null. Said as the balance that isn't a number and the copy; never "difference null", and nothing throws.
+            {
+                audit: { ok: false, drift: null, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: false, here: { accounts: 1, holdings: 5 }, lastCopy: { accounts: 2, holdings: 10, generatedAt: '2026-10-02T00:00:00.000Z' } } },
+                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger is not the main server's as this server last copied it: here 1 account\(s\) holding 5\.00 Beans, the main server's 2 account\(s\) holding 10\.00 Beans\. Check it before members trade\./],
+                never: [/null/, /NaN/, /Infinity/],
+            },
+            // A drift that isn't a number with no count of bad balances (or a holdings figure that isn't one): plain words.
+            {
+                audit: { ok: false, drift: null, strandedEscrows: null, addsUp: false, copy: { match: false, here: { accounts: 1, holdings: null as unknown as number }, lastCopy } },
+                says: [/The ledger does NOT add up \(the difference is not a number\)\. The ledger is not the main server's as this server last copied it: here 1 account\(s\) holding an amount that is not a number, the main server's 7 account\(s\) holding 76\.71 Beans\. Check it before members trade\./],
+                never: [/null/, /NaN/],
+            },
             // Both: each said.
             {
                 audit: { ok: false, drift: -3, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },

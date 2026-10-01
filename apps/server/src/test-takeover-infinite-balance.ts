@@ -1,0 +1,201 @@
+/**
+ * A take-over whose ledger holds an infinite balance still finishes, and says the ledger doesn't add up (review of #1445,
+ * BLOCKING 1, 2026-10-02).
+ *
+ * The take-over's audit record lives in local-config.json and is read back from the file. One balance of 9e999 (SQLite's
+ * REAL Infinity) makes the sum and the drift Infinity, which JSON writes as null. The audit's words then called
+ * `null.toFixed(4)`: every start logged "Boot check failed … reading 'toFixed'", the take-over stayed at `restarting`,
+ * and the announcement, the reseal, the tunnel and done never ran. The record was already written, so mending the
+ * balance didn't help either.
+ *
+ * Every node is its own process (takeover-test-harness.ts): the main server, a standby that copies it, the main server
+ * killed, the recovery code typed on the standby over the real admin routes, the real restart. While the standby is down
+ * for that restart, one of its own `accounts` rows is set to 9e999. Then:
+ *   1. it starts as the main server with no boot-check failure, and the take-over completes, every step done;
+ *   2. the progress route (what Settings reads) and the journal say the ledger does NOT add up, name the balance that
+ *      isn't a number, and give the difference as "not a number", never "null" or "NaN";
+ *   3. a second start is quiet and the take-over stays complete.
+ *
+ *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-takeover-infinite-balance.ts
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
+import { spawnNode, post, runNodeChild, inspectNode, type NodeProc } from './takeover-test-harness.js';
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const PW_MAIN = 'Main-Server-Pw-5531!';
+const PW_STANDBY = 'Standby-Own-Pw-8820!';
+
+// ── The node processes' commands ───────────────────────────────────────────────────────────
+
+async function child(): Promise<void> {
+    await runNodeChild({
+        'setup-primary': async (a: { ownerSeedHex: string; replicationToken: string }) => {
+            const { ed25519 } = await import('@noble/curves/ed25519.js');
+            const se = await import('./state-engine.js');
+            const { db } = await import('./db/db.js');
+            const { setReplicationToken } = await import('./config/local-config.js');
+            const { makeRecoveryCode, flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            const anna = Buffer.from(ed25519.getPublicKey(Buffer.from(a.ownerSeedHex, 'hex'))).toString('hex');
+            se.seedGenesisMember(anna, 'Anna');
+            const ben = crypto.randomBytes(32).toString('hex');
+            db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
+                .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
+            // A real grant, so the copy has a ledger with Beans in it.
+            const paid = !!se.payFromCommons(ben, 5, 'a commons grant', { allowDeficit: true });
+            se.updateNodeConfig({ publicAddress: { name: 'primary', mode: 'direct', hostname: 'primary.beanpool.org', status: 'live' } } as any);
+            setReplicationToken(a.replicationToken);
+            const made = await makeRecoveryCode();
+            const st = await flushTakeoverChecks();
+            return { code: made.code, envelopeId: st.envelopeId, anna, ben, paid, audit: se.runLedgerAudit() };
+        },
+        'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
+            const { addConnector } = await import('./connector-manager.js');
+            const { updateLocalConfig } = await import('./config/local-config.js');
+            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
+            return true;
+        },
+        pull: async () => {
+            const { requestResync, pullTakeoverEnvelopeNow } = await import('./services/backup-puller.js');
+            const resync = await requestResync();
+            const envelope = await pullTakeoverEnvelopeNow();
+            return { resync, envelope };
+        },
+        inspect: (a: { ownerSeedHex?: string }) => inspectNode(a),
+        'ledger-audit': async () => {
+            const se = await import('./state-engine.js');
+            const r = se.runLedgerAudit();
+            // As the route answers it: JSON, where Infinity is null.
+            return JSON.parse(JSON.stringify(r));
+        },
+    });
+}
+
+// ── The orchestrator ───────────────────────────────────────────────────────────────────────
+
+let testsRun = 0;
+let testsPassed = 0;
+function assert(cond: unknown, msg: string): void {
+    testsRun++;
+    if (cond) {
+        testsPassed++;
+        console.log(`✓ ${msg}`);
+    } else {
+        console.error(`✗ ${msg}`);
+        throw new Error(`Assertion failed: ${msg}`);
+    }
+}
+
+async function main(): Promise<void> {
+    const root = process.env.BEANPOOL_DATA_DIR;
+    if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+    const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
+    const nodes: NodeProc[] = [];
+    const ownerSeedHex = crypto.randomBytes(32).toString('hex');
+    const replicationToken = crypto.randomBytes(32).toString('hex');
+    const pw = (p: string) => ({ 'X-Admin-Password': p });
+
+    try {
+        console.log('\n— 1. a main server and a standby that copies it —');
+        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
+        nodes.push(main);
+        const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
+        assert(/^BPRC-1 /.test(setup.code) && setup.envelopeId && setup.paid && setup.audit?.ok === true,
+            `the main server has a recovery code, a take-over envelope and a ledger that adds up (${JSON.stringify(setup.audit)})`);
+        fs.mkdirSync(dirs.standby, { recursive: true });
+        fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
+        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        nodes.push(standby);
+        await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
+        const pulled = await standby.send('pull');
+        assert(pulled.resync.ok && pulled.envelope === 'stored', `the standby copied the database and holds the envelope (${JSON.stringify(pulled.resync)})`);
+
+        console.log('\n— 2. the main server dies; the standby takes over with the code —');
+        await main.kill('SIGKILL');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        assert(opened.status === 200 && opened.body?.preview?.sessionId, `the code opens the keys (${opened.status})`);
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        assert(confirmed.status === 200 && /^[0-9a-f]{64}$/.test(confirmed.body?.progressToken),
+            `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
+        const progressToken = confirmed.body.progressToken;
+        const exitCode = await standby.exited;
+        assert(exitCode === 0, `the standby restarts itself (exit ${exitCode})`);
+
+        // While it is down for that restart, one of its own balances becomes 9e999: SQLite stores REAL Infinity.
+        const sdb = new Database(path.join(dirs.standby, 'state.db'));
+        sdb.prepare('UPDATE accounts SET balance = 9e999 WHERE public_key = ?').run(setup.ben);
+        const stored = sdb.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(setup.ben) as { balance: number; t: string };
+        sdb.pragma('wal_checkpoint(TRUNCATE)');
+        sdb.close();
+        assert(stored.balance === Infinity && stored.t === 'real', `Ben's balance on the standby is now Infinity (${stored.balance}, ${stored.t})`);
+
+        console.log('\n— 3. it starts as the main server, and the take-over finishes —');
+        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        nodes.push(standby);
+        assert(standby.ready.role === 'primary', `it is the main server (${standby.ready.role})`);
+        const firstStart = standby.output();
+        assert(!/Boot check failed/.test(firstStart) && !/toFixed/.test(firstStart),
+            `no boot check failed (${(firstStart.match(/.*Boot check failed.*/) ?? ['none'])[0].slice(0, 200)})`);
+        assert(standby.ready.auditRan === true, 'the audit ran at this start');
+
+        const prog = await post(standby.base, '/api/local/admin/takeover/progress', {}, { 'X-Takeover-Progress': progressToken });
+        const stepsDone = (prog.body?.steps ?? []).filter((s: any) => !s.done).map((s: any) => s.step);
+        assert(prog.status === 200 && prog.body?.state === 'complete' && stepsDone.length === 0,
+            `the take-over is complete, every step done: audit, announcement, reseal, tunnel, done (${prog.body?.state}; not done: ${JSON.stringify(stepsDone)})`);
+
+        console.log('\n— 4. and it says the ledger does NOT add up, in plain words —');
+        const audit = prog.body?.result?.audit;
+        assert(audit && audit.ok === false && audit.addsUp === false && audit.badBalances === 1,
+            `the progress Settings reads: not ok, doesn't add up, one balance that isn't a number (${JSON.stringify(audit && { ok: audit.ok, addsUp: audit.addsUp, badBalances: audit.badBalances, drift: audit.drift })})`);
+        assert(audit.drift === null, `the difference that isn't a number goes out as null, never a made-up number (${audit.drift})`);
+        assert(audit.copy && audit.copy.match === false, `and the ledger is not the main server's as last copied (${JSON.stringify(audit.copy)})`);
+        const auditStep = (prog.body?.steps ?? []).find((s: any) => s.step === 'audit');
+        const words = String(auditStep?.detail);
+        assert(/the ledger does NOT add up \(drift not a number, 0 stranded escrow\(s\), 1 balance\(s\) that are not a finite number\)/.test(words)
+            && /check before members trade/.test(words) && !/null|NaN|Infinity/.test(words),
+            `the audit step's words say so, with "not a number" for the difference (${words})`);
+
+        const inspected = await standby.send('inspect', {});
+        const record = inspected.lastPromotionAudit;
+        assert(record && record.ok === false && record.badBalances === 1 && record.drift === null && inspected.promotionAuditPending === false,
+            `the audit record in local-config.json: not ok, one bad balance, drift null, nothing pending (${JSON.stringify(record && { ok: record.ok, drift: record.drift, sum: record.sumBalances, bad: record.badBalances })})`);
+        const journal = JSON.parse(fs.readFileSync(path.join(dirs.standby, 'takeover-journal.json'), 'utf-8'));
+        assert(journal.state === 'complete' && journal.result?.audit?.addsUp === false && journal.result?.audit?.badBalances === 1
+            && /does NOT add up/.test(String(journal.steps?.audit?.detail)),
+            `the journal on disk says the same (${journal.state}, ${journal.steps?.audit?.detail})`);
+        assert(journal.result?.announcement && journal.result?.reseal !== null && journal.steps?.tunnel && journal.steps?.done,
+            'the announcement went out, the keys were locked again on this server, and the tunnel step ran');
+        const live = await standby.send('ledger-audit');
+        assert(live.ok === false && live.badBalances === 1, `the live ledger audit on the new main server agrees (${JSON.stringify(live)})`);
+
+        console.log('\n— 5. a second start is quiet, and the take-over stays complete —');
+        await standby.kill('SIGTERM');
+        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        nodes.push(standby);
+        const second = standby.output();
+        const again = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
+        assert(!/Boot check failed/.test(second) && standby.ready.role === 'primary' && again.status === 200 && again.body?.state === 'complete',
+            `the second start: no boot check failed, still the main server, still complete (${again.status} ${again.body?.state})`);
+
+        console.log(`\n${testsPassed}/${testsRun} checks passed.`);
+    } catch (e: any) {
+        console.error(`❌ ${e?.message || e}`);
+        for (const n of nodes) console.error(`--- node output (tail) ---\n${n.output().slice(-2500)}`);
+        process.exitCode = 1;
+    } finally {
+        for (const n of nodes) await n.kill('SIGKILL').catch(() => {});
+    }
+    process.exit(process.exitCode ?? 0);
+}
+
+if (process.argv.includes('--child')) {
+    child().catch((e) => { console.error(e); process.exit(1); });
+} else {
+    main().catch((e) => { console.error(e); process.exit(1); });
+}

@@ -156,6 +156,7 @@ export const SUITES = [
     'test-takeover-crash-then-fails',
     'test-takeover-by-phone',
     'test-takeover-keeps-app-addresses',
+    'test-takeover-infinite-balance',
     'test-takeover-split-brain',
     'test-takeover-two-standbys',
     'test-sync-reads-carry-epoch',

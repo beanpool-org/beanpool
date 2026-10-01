@@ -96,8 +96,10 @@ export interface LocalConfig {
     // What that audit found, so Settings can show it after the restart. `copy`: whether the ledger is the main server's as
     // this server last copied it (accounts holding Beans and what they hold, here and in that copy; null when this server
     // has no record of one). `ok` needs both.
+    // `sumBalances` and `drift` are null when they aren't a finite number (a balance of Infinity makes both Infinity, which
+    // JSON writes as null): every reader takes null, and anything else that isn't a finite number, as "not a number".
     lastPromotionAudit?: {
-        at: string; ok: boolean; sumBalances: number; drift: number; strandedEscrows: number;
+        at: string; ok: boolean; sumBalances: number | null; drift: number | null; strandedEscrows: number;
         // Balances that are not a finite number (engine audit.ts BROKEN_BALANCE_SQL). Absent from a record written before.
         badBalances?: number;
         copy?: { match: boolean; here: { accounts: number; holdings: number }; lastCopy: { accounts: number; holdings: number; generatedAt: string | null } | null };

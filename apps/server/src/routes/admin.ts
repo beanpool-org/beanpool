@@ -584,6 +584,17 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
     const sanitizedReason = String(reason).replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ').trim().slice(0, 500);
     try {
         const result = runLedgerAudit();
+        // A ledger holding a balance that isn't a finite number has no sum to set a baseline at: one of 9e999 makes the
+        // sum Infinity, which this wrote as the baseline and answered "ok". Those rows are mended first (#1445 review).
+        if (result.badBalances > 0 || !Number.isFinite(result.sumBalances)) {
+            ctx.status = 409;
+            ctx.body = {
+                success: false,
+                error: `${result.badBalances} account balance(s) are not a number, so the ledger has no total to set a new baseline at. `
+                    + 'Nothing was changed. Mend those balances first.',
+            };
+            return;
+        }
         const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
         const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.

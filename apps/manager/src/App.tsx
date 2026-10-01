@@ -239,7 +239,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     const [auditState, setAuditState] = useState<{
         running: boolean;
-        result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null;
+        result: { ok: boolean; drift: number | null; sumBalances?: number | null; baseline?: number; strandedEscrows?: number } | null;
     }>({ running: false, result: null });
 
     const handleRunLedgerAudit = async () => {
@@ -258,7 +258,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     running: false,
                     result: {
                         ok: data.ok,
-                        drift: data.drift ?? 0,
+                        // A drift of Infinity arrives as null (JSON): kept as null, said as "not a number", never 0.
+                        drift: typeof data.drift === 'number' ? data.drift : null,
                         sumBalances: data.sumBalances,
                         baseline: data.baseline,
                         strandedEscrows: data.strandedEscrows,

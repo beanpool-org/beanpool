@@ -5,6 +5,7 @@
  * Two stand-in buckets on loopback (fake-s3-test-harness.ts, which checks every signature), one set in .env and one in
  * Settings. No real store, no BeanPool server, nothing off this machine. Over the real HTTPS server and its middleware:
  *
+ *  0. Nothing configured: a check does nothing and writes nothing. A file a cut-off run left is removed at start.
  *  1. No recovery code: nothing goes off the box (no PUT anywhere), and the Backup tab's status and the owner's health
  *     say why in words. Retention still prunes: a backup older than 30 days goes, a newer one, another community's and a
  *     file of another name stay.
@@ -244,6 +245,20 @@ async function main(): Promise<void> {
     const objects = async (store: typeof storeA) => [...(await store.objects()).keys()].sort();
     const puts = async (store: typeof storeA) => (await store.log()).filter((e) => e.method === 'PUT');
     const folderA = `${community}/`;
+
+    // ── 0. Nothing configured: nothing done, nothing written; a cut-off run's leftover goes at start ────────────────
+    console.log('\n— 0. nothing configured —');
+    const envA = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('BACKUP_OFFBOX_1_')));
+    for (const k of Object.keys(envA)) delete process.env[k];
+    const r0 = await offbox.runOffboxBackups({ force: true });
+    assert(r0.skipped === 'none' && !fs.existsSync(path.join(dataDir!, offbox.OFFBOX_STATE_FILE)) && (await storeA.log()).length === 0,
+        `0. with no destination a check does nothing, writes no file and asks no store anything (${JSON.stringify(r0)})`);
+    Object.assign(process.env, envA);
+    const leftover = path.join(dataDir!, '.offbox-0123456789ab.bpsealed');
+    fs.writeFileSync(leftover, 'a locked backup a crash left half made');
+    offbox.initOffboxBackups();
+    offbox.stopOffboxBackups();
+    assert(!fs.existsSync(leftover), '0. a file a cut-off run left in the data folder is removed at start');
 
     // ── 1. No recovery code: nothing goes off the box; retention still runs ─────────────────────────────────────────
     console.log('\n— 1. no recovery code —');

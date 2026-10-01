@@ -82,7 +82,7 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
                 return;
             }
             ctx.set('Cache-Control', 'no-store');
-            ctx.body = { destination: listed.destination.id, backups: listed.backups };
+            ctx.body = { destination: listed.destinationId, backups: listed.backups };
         } catch (e) {
             storeError(ctx, e);
         }

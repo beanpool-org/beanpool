@@ -559,8 +559,9 @@ async function runInner(opts: { force: boolean; now: number }): Promise<RunResul
     const state = readState();
     const result: RunResult = { sent: [], failed: [], pruned: 0, skipped: null };
     const stand = standing(settings);
-    // A standby, and a replaced main server, leave the stores alone altogether.
-    if (!stand.sends && (stand.why === 'standby' || stand.why === 'replaced')) {
+    // A standby, and a replaced main server, leave the stores alone altogether; a server with no destination has
+    // nothing to do, and writes nothing (this runs every five minutes on every server).
+    if (!stand.sends && (stand.why === 'standby' || stand.why === 'replaced' || settings.destinations.length === 0)) {
         result.skipped = stand.why;
         return result;
     }
@@ -628,15 +629,20 @@ async function runInner(opts: { force: boolean; now: number }): Promise<RunResul
 
     // Retention, on every destination this server can reach: after a run that sent, and hourly besides — also while
     // nothing may be sent, because the promise to a deleted member does not wait for a recovery code.
+    let pruned = false;
     if (community) {
         for (const d of settings.destinations) {
             const st = destState(state, d);
             if (!opts.force && !result.sent.includes(d.id) && st.lastPruneAt !== null && opts.now - st.lastPruneAt < PRUNE_EVERY_MS) continue;
             result.pruned += await prune(d, st, settings.retentionDays, community, opts.now);
+            pruned = true;
         }
     }
-    state.lastRunAt = opts.now;
-    writeState(state);
+    // Only when something was tried: most checks find nothing due, and need not touch the disk.
+    if (due.length > 0 || pruned) {
+        state.lastRunAt = opts.now;
+        writeState(state);
+    }
     return result;
 }
 
@@ -662,9 +668,22 @@ export function offboxRunning(): boolean {
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let firstTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Remove the files a run that was cut off (a crash, a restart mid-upload) left in the data folder: each is a locked
+ * backup in the making, and nothing else would ever remove it. Only at start, when no run can be using one.
+ */
+function removeLeftovers(): void {
+    try {
+        for (const f of fs.readdirSync(dataDir())) {
+            if (/^\.offbox-[0-9a-f]{12}\.bpsealed$/.test(f)) fs.rmSync(path.join(dataDir(), f), { force: true });
+        }
+    } catch { /* no data folder yet */ }
+}
+
 /** Start the checks: the first a couple of minutes after boot, then every five minutes. Every role: each tick reads it. */
 export function initOffboxBackups(): void {
     stopOffboxBackups();
+    removeLeftovers();
     const settings = readOffboxSettings();
     if (settings.destinations.length || settings.broken.length) {
         logger.info('SYS', `[Off-box] ${settings.destinations.length} destination(s), every ${settings.intervalHours} h, kept ${settings.retentionDays} days`
@@ -819,7 +838,7 @@ function destinationById(id: unknown): OffboxDestination | null {
  * The backups a destination holds, newest first: every community's under its folder (a fresh server restoring a lost
  * one has a community id of its own until the restore). Only names this feature makes. Throws {@link OffboxS3Error}.
  */
-export async function listOffboxBackups(id: unknown): Promise<{ destination: OffboxDestination; backups: ListedBackup[] } | null> {
+export async function listOffboxBackups(id: unknown): Promise<{ destinationId: string; backups: ListedBackup[] } | null> {
     const d = destinationById(id);
     if (!d) return null;
     const own = communityFolder();
@@ -831,7 +850,8 @@ export async function listOffboxBackups(id: unknown): Promise<{ destination: Off
         backups.push({ key: o.key, community: parsed.community, file: parsed.file, madeAt: parsed.madeAt, bytes: o.bytes, ours: parsed.community === own });
     }
     backups.sort((a, b) => b.madeAt - a.madeAt);
-    return { destination: d, backups };
+    // The id, never the destination: it holds the secret, and nothing that leaves this module may.
+    return { destinationId: d.id, backups };
 }
 
 /** One backup from a destination as a stream, for the owner to save and restore. Null when the key is not one of ours. */
@@ -841,5 +861,5 @@ export async function openOffboxBackup(id: unknown, key: unknown) {
     const parsed = parseBackupKey(d.prefix, key);
     if (!parsed) return null;
     const opened = await clientFor(d).openRead(key);
-    return opened ? { ...opened, file: parsed.file, destination: d } : null;
+    return opened ? { ...opened, file: parsed.file } : null;
 }

@@ -370,6 +370,7 @@ async function main(): Promise<void> {
     const wrongBodyNonce = await ticketJoin(ivy, ivyTicket, { sub: 'ivy-google-sub', bodyNonce: await doorNonce(ivy) });
     assert(wrongBodyNonce.status === 400 && wrongBodyNonce.body?.code === 'bad_request',
         `a body nonce that is not the ticket's hash → 400 bad_request (got ${said(wrongBodyNonce)})`);
+    assert(funnelCount('open_join_failed', 'ticket_nonce') === 1, 'counted as open_join_failed:ticket_nonce, as the refusals around it are');
     const ivyJoin = await ticketJoin(ivy, ivyTicket, { sub: 'ivy-google-sub', callsign: 'Ivy' });
     assert(ivyJoin.status === 200, `...which spent nothing: the same ticket and token then join (got ${said(ivyJoin)})`);
 

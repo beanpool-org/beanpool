@@ -76,6 +76,7 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     ticket_key: 'Key vault ticket made for another key',
     ticket_purpose: 'Key vault ticket made for something else',
     ticket_used: 'Key vault ticket already used',
+    ticket_nonce: "Key vault ticket sent with a sign-in that wasn't for it",
 };
 
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };

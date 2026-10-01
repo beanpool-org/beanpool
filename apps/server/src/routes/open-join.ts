@@ -258,7 +258,7 @@ function refuseTicket(ctx: any, code: TicketRefusal): void {
 
 /**
  * One line for an operator when a refusal may be this server's doing: its clock (every fresh ticket then looks expired
- * or from the future; the line says by how much), or its pinned keys (a vault that moved to a key .env doesn't list).
+ * or from the future; the line says by how much), or its pinned keys (the vault signs with a key .env doesn't list).
  * Nothing of the joiner. The auth limiter bounds how often anyone can make it write one.
  */
 function noteTicketRefusal(reason: VaultTicketRefusal, raw: unknown, now: number): void {
@@ -401,7 +401,11 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         if (body.vaultTicket !== undefined && body.vaultTicket !== null) {
             ticket = acceptVaultTicket(ctx, body.vaultTicket, actor);
             if (!ticket) return;
-            if (nonce !== ticket.nonce) return badRequest(ctx, 'The nonce is not this ticket\'s: a join with a key vault ticket carries the ticket\'s nonce.');
+            if (nonce !== ticket.nonce) {
+                // Counted like the refusals around it: the attempt above was.
+                recordFunnelEvent('open_join_failed', 'ticket_nonce');
+                return badRequest(ctx, 'The nonce is not this ticket\'s: a join with a key vault ticket carries the ticket\'s nonce.');
+            }
         }
 
         let identity: SsoIdentity;

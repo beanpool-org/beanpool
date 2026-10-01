@@ -16,7 +16,7 @@
  *      nearly empty Market, global only), and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
  *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory, knocks) reaches the code, bad ones
- *      are ignored with a log line, and a switch this build doesn't have yet (ssoRequiredForJoin=false, a door without
+ *      are ignored with a log line, and a switch this build doesn't have yet (none since the 12-words door; was ssoRequiredForJoin=false, a door without
  *      a sign-in) stays pinned, so the API never advertises it
  *   6. the two operator escape hatches that would undo the visitors' view: with `guestListingsOnly` on, a main server
  *      refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false (each alone, and both), says which and
@@ -74,11 +74,11 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
 // cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
-// off on the lobby, whose door is the only way in (test-invites-off). The PR that builds one of these changes its line
-// here, with the test that proves it.
+// off on the lobby, whose door is the only way in (test-invites-off). The 12-words door: open beside the sign-in on the
+// lobby only (test-door-work). The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, door: 'open' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, door: 'open' },
 };
 
 async function main() {
@@ -127,7 +127,8 @@ async function main() {
     assert(local.publishToDirectory && !global.publishToDirectory, 'listed in the directory: local as the operator decides; the lobby never');
     assert(!local.probation && !local.autoHideReports && !local.autoMute, 'local: no probation, auto-hide or auto-mute');
     assert(global.probation && global.autoHideReports && global.autoMute, 'global: probation, auto-hide and auto-mute on');
-    assert(local.ssoRequiredForJoin && global.ssoRequiredForJoin, 'the open door needs a sign-in (D1 = a)');
+    assert(local.ssoRequiredForJoin && !global.ssoRequiredForJoin,
+        'a sign-in is optional at the lobby\'s door, with the 12-words door beside it (the two-doors design, 2026-10-01); required wherever else a door is opened');
     assert(!local.guestListingsOnly && global.guestListingsOnly, 'a visitor sees the listings, not the people: global only (G9a)');
     assert(local.exampleListings === false && global.exampleListings === true,
         'example cards on a nearly empty Market: global only (Marty, 2026-09-27)');
@@ -256,9 +257,13 @@ async function main() {
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.directoryMirror`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.publishToDirectory`);
     setOverride('ssoRequiredForJoin', 'false');
-    assert(getProfileSwitches().ssoRequiredForJoin === true,
-        'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');
+    assert(getProfileSwitches().ssoRequiredForJoin === false,
+        'the door without a sign-in is built (the 12-words door), so nodeProfile.ssoRequiredForJoin=false reaches the code');
+    assert(getProfileSwitches().openJoin === true && (await getInfo()).body.features.wordsDoor === true,
+        'with the door opened here (nodeProfile.openJoin=true above), /api/community/info offers the 12-words door');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
+    assert((await getInfo()).body.features.wordsDoor === false,
+        'and without the override, a local community\'s open door needs a sign-in, so it offers none');
 
     process.env.NODE_PROFILE = 'global';
     setOverride('probation', 'false');
@@ -272,9 +277,9 @@ async function main() {
     const overridesLine = reported.logs.find(l => l.includes('Node profile: global')) ?? '';
     assert(/overrides: .*openJoin=true/.test(overridesLine) && /probation=false/.test(overridesLine) && /knocks=true/.test(overridesLine),
         `the boot log reports every override in effect (got ${JSON.stringify(overridesLine)})`);
-    const notBuilt = reported.logs.find(l => l.includes('Not built yet, so these overrides do nothing')) ?? '';
-    assert(notBuilt.includes('ssoRequiredForJoin=false') && !notBuilt.includes('knocks'),
-        `the boot log says which overrides ask for something this build does not have yet, and knocks (built in G6) is not one (${notBuilt})`);
+    const notBuilt = reported.logs.find(l => l.includes('Not built yet')) ?? '';
+    assert(notBuilt === '',
+        `every switch is built now, so the boot log names none as not built, ssoRequiredForJoin=false included (${notBuilt})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
     // A knock is answered with an invite, so on global, whose invites are off, the operator's knocks=true alone leaves knocks

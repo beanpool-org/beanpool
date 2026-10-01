@@ -76,6 +76,7 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
     { method: 'POST', path: '/api/member/purge', why: 'deleting its own row, as a member deletes their account; the route acts for the signer alone' },
     // The join doors, signed by the key that joins; each makes its row a member's.
     { method: 'POST', path: '/api/join', why: 'the open door' },
+    { method: 'POST', path: '/api/join/work', why: "the open door's work, which a 12-words join (and a busy sign-in) carries" },
     { method: 'POST', path: '/api/join/sso-nonce', why: "the open door's sign-in" },
     { method: 'POST', path: '/api/join/knock', why: 'a knock (its status is a public read)' },
     // What anyone may do, signed or not.

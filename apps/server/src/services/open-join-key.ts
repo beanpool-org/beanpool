@@ -165,14 +165,18 @@ export function noteMainServerOpenJoinKeyId(id: unknown): void {
     if (isOpenJoinKeyId(id) && id !== recordedOpenJoinKeyId()) recordKeyId(id);
 }
 
-/** Whether any open-door record here could match a sign-in: a released one's hash matches nothing (releaseOpenJoin). */
+/**
+ * Whether any open-door record here could match a sign-in: a released one's hash matches nothing (releaseOpenJoin), and
+ * nor does a 12-words member's (`words:`, random, made with no key: engine/open-join.ts wordsJoinHash). So a node whose
+ * only records are 12-words joins adopts or makes a key as one with none does.
+ */
 function holdsLiveJoins(): boolean {
-    return !!db.prepare("SELECT 1 FROM open_joins WHERE join_hash NOT LIKE 'released:%' LIMIT 1").get();
+    return !!db.prepare("SELECT 1 FROM open_joins WHERE join_hash NOT LIKE 'released:%' AND join_hash NOT LIKE 'words:%' LIMIT 1").get();
 }
 
 /** How many open-door records here could match a sign-in, for what a boot, a restore or a take-over says. */
 export function liveOpenJoinRecords(): number {
-    return (db.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%'").get() as { n: number }).n;
+    return (db.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%' AND join_hash NOT LIKE 'words:%'").get() as { n: number }).n;
 }
 
 export type OpenJoinKeyState =

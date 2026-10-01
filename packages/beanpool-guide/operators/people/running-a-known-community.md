@@ -27,34 +27,38 @@ What your server does keep in the clear: that an entry exists, which admin made 
 
 ### Whoever runs your server
 
-Whoever runs the server (the operator, or anyone with access to the machine) can change what it stores and what it tells the phones. They can also make any key an admin: the owner password reaches that. So the admins' phones don't take the server's word for who may give them the list's key:
+Whoever runs the server (the operator, or anyone with access to the machine) can change what it stores and what it tells the phones. With the owner password alone they can make any key an admin, and move any member's account to a new key: the re-key you use when someone loses their phone. So the admins' phones don't take the server's word for who gets the list's key, or who it comes from:
 
 - Every key the list is sealed under is signed by the admin who made it, and every share of it is signed by the admin who gave it.
-- Each admin's phone remembers which admins it trusts for your community. It takes a new key only from an admin it trusts, or from one that an admin it trusts added with a signed share.
+- Each admin's phone remembers which admins' phone keys it trusts for your community. It takes a new key only from an admin it trusts, or from one that an admin it trusts added with a signed share.
+- **Sharing is checked in person.** The app offers **Share** only for an admin whose phone key your phone already trusts. For anyone else it shows **Check @name in person** instead. Meet them: they open the names list on their phone, which shows their phone's key as a QR code and a 20-digit code. You scan the QR code, or compare the code and type it in. Only if it matches the key the server lists for them does your phone trust that key and offer Share. The name on the screen comes from the server, which can put an admin's name on a key of its own. The check is what tells you.
+- **When an admin's phone key changes** (they replace a lost phone, or someone moves their account to another key), each admin's phone that trusted them stops trusting the old key, trusts the new one only once checked, and says so: "@Ada's phone key changed: check it with @Ada in person before sharing."
 - When the server offers a key that no admin the phone trusts made, the phone refuses it and says so. It reads nothing and seals nothing under that key, and changes nothing on the server.
+- Each phone remembers the newest key it took, and which admins were dropped. If the server offers an older key (put back to an older copy, whose key an admin who has left may still hold), the phone refuses it. It can make a new key instead, numbered past the one it took.
 
 What this doesn't protect against, plainly:
 
-- **The first time a phone opens the list.** A new admin's phone, or one where the app was reinstalled, trusts the admin whose key it is given first. A server changed by whoever runs it could hand a new admin's phone a key of its own first, and would then read what that admin adds; the other admins' phones refuse that key. When the app says it now trusts someone, check that it's the admin who shared the list with you.
-- **Sharing.** Making someone an admin doesn't give them the list, but an admin tapping **Share** does. Share only with people you know are your admins.
-- **Trusting by hand.** If the app refuses a new key from an admin it doesn't know, it offers to trust them anyway. Do that only when that admin told you themselves that they made the list a new key.
-- **A removed admin working with whoever runs the server.** The phones learn that an admin was removed from the signed new key made after they go. A server can hide that, and the removed admin could then keep reading.
-- **An admin's own phone, a PDF an admin exports, and what an admin writes in a note.** Treat those like a paper list.
+- **The first time a phone opens the list.** A new admin's phone, or one where the app was reinstalled, trusts the admin whose key it is given first. The app then shows that admin's code. Compare it in person with the code on their phone ("Your code"). If it doesn't match, add no names, and tell your other admins: the server gave this phone a key of its own.
+- **A check made with the wrong person.** Checking in person is only as good as the people doing it. Scan or compare only with the admin in front of you. If you check someone who isn't that admin, your phone trusts their key.
+- **A removed admin working with whoever runs the server.** A phone learns that an admin was removed from the signed new key made after they go, and remembers it. A server can hide that from a phone that never saw it (a new admin's, say), and the removed admin could then read what that phone adds.
+- **An admin's own phone, a PDF an admin exports, and what an admin writes in a note.** Treat those like a paper list. Someone who gets into an admin's phone has the key.
 
 Members don't see the names. Showing real names to members, as some LETS directories do, isn't available yet.
 
 ## Before you start
 
-The names list opens in the app, not in Settings: on an owner's or admin's phone, open **Settings**, then **Community admin**, then **Names list**. It needs an admin who signs in with their own key. An owner who only uses the admin password runs the server but can't read the list.
+The names list opens in the app, not in Settings: on an owner's or admin's phone, open **Settings**, then **Community admin**, then **Names list**. It needs an admin who signs in with their own key. The admin password opens no name, through the app or the server. It does let whoever holds it make admins and re-key accounts, which is why sharing is checked in person.
 
 Keep a paper copy, or a PDF, somewhere safe. If every admin who holds the list's key loses their phone at once, that copy is how you type the list in again.
 
 ## The list's key
 
 - **The first admin to open the list** makes its key, on their phone.
-- **An admin you add later** sees the list waiting. An admin who already holds the key sees "waiting for the list's key" for them and taps **Share** to give it to them. The app asks first. Your server never decides who reads the names: making someone an admin doesn't hand them the list until an admin who holds it chooses to share it. The new admin's phone then trusts the admin who shared it, and says so.
-- **If the app refuses the list's key**, it says who the key claims to come from and why. Ask an admin your phone trusts to open the list. Nothing was read or written under the refused key.
-- **When someone stops being an admin** (their role is taken away or changed to moderator, they are suspended or removed, they delete their account, or they replace a lost phone with a new key), the server stops giving them the list at once. If they held the list's key, nothing more can be written until the list has a new key. The next time an admin who holds the key opens the list, their phone makes a new one and seals every entry again under it. The other admins then show as waiting, and that admin shares the new key with each of them, a tap each. The person who left keeps whatever they already saw, as with a paper list, but can't read anything written after.
+- **An admin you add later** sees the list waiting, with their phone's key as a QR code and a code. An admin who already holds the key sees them waiting for the list's key. Meet them: tap **Check @name in person**, then scan their QR code or compare the code. When it matches, tap **Share**. The app asks first. Making someone an admin doesn't hand them the list: an admin who holds it has to check them and share it. The new admin's phone then trusts the admin who shared it, and shows that admin's code to compare.
+- **If the app refuses the list's key**, it says who the key claims to come from and why. Ask an admin your phone trusts to open the list. Nothing was read or written under the refused key. If the key was made by an admin your phone never saw added (after the last key was lost), you can check them in person and then trust their key.
+- **If the app says the server offers an older key** than your phone took, nothing was read or written under it. You can make a new key on your phone; then share it as above.
+- **When someone stops being an admin** (their role is taken away or changed to moderator, they are suspended or removed, they delete their account, or they replace a lost phone with a new key), the server stops giving them the list at once. If they held the list's key, nothing more can be written until the list has a new key. The next time an admin who holds the key opens the list, their phone makes a new one and seals every entry again under it. The other admins then show as waiting. That admin taps **Share** for each admin their phone already trusts, and checks anyone else in person first: a new admin, or an admin whose phone key changed. The person who left keeps whatever they already saw, as with a paper list, but can't read anything written after.
+- **When someone replaces a lost phone**, the owner moves their account to the new phone's key. Every admin's phone then says their phone key changed. Check the new phone in person before sharing the list with it.
 - **If nobody who is an admin now holds the key** (the only admins who did have left or lost their phones), any admin can **start a new key**. The entries written before can't be opened by anyone here any more. They stay, marked locked, until an admin types each one again from your paper copy, or deletes it.
 
 ## Adding a name and confirming a member

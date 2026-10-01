@@ -330,3 +330,26 @@ describe("welcome.tsx: the global door's sign-in with the phone's own key", () =
         expect(signIn).toBeGreaterThan(asked);
     });
 });
+
+describe('join-global.tsx: the global door for an account the phone already has', () => {
+    it("always asks the lock before the sign-in starts (its key is always the phone's own); a check that does not pass starts nothing", () => {
+        const s = read('app/join-global.tsx');
+        expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
+        const body = slice(s, 'async function handleSignIn(provider: SsoProvider) {', '\n    }\n');
+        const key = body.indexOf('const account = await accountKeyForDoor();');
+        const asked = body.indexOf(`if (!(await authenticateUser('${REASON}'))) return;`);
+        const signIn = body.indexOf('await signInAtDoor(');
+        expect(key).toBeGreaterThan(-1);
+        expect(asked).toBeGreaterThan(key);
+        expect(signIn).toBeGreaterThan(asked);
+    });
+
+    it('its join is sent only with a sign-in that step made (after its check)', () => {
+        const s = read('app/join-global.tsx');
+        const join = slice(s, 'async function handleJoin() {', '\n    }\n');
+        expect(join).toMatch(/if \(!key \|\| !signin\) \{/);
+        expect(join.indexOf('if (!key || !signin)')).toBeLessThan(join.indexOf('await submitJoin('));
+        expect(s.match(/setSignin\((?!null\))/g)).toEqual(['setSignin(']);
+        expect(slice(s, 'async function handleSignIn(provider: SsoProvider) {', '\n    }\n')).toContain('setSignin(result.signin);');
+    });
+});

@@ -23,9 +23,12 @@ import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/ta
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
 import {
-    GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket,
-    adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
+    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
+    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
+import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
@@ -196,6 +199,13 @@ export default function PeopleScreen() {
     const makesInvites = invitesOn(nodeProfile?.features);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
+    // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
+    // once the global community has said its door is open. Only there: the door is the global community's alone, so a phone
+    // anywhere else never asks it.
+    const guestAtGlobal = guestNoInvites && isGlobalCommunity(anchorUrl);
+    const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
+    const accountClosed = useAccountClosedAtGlobal(identity?.publicKey);
+    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed });
     // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
     // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
     // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
@@ -947,10 +957,22 @@ export default function PeopleScreen() {
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
-                                {guestNoInvites
-                                    ? GUEST_NO_INVITES_TEXT
+                                {guestDoor
+                                    ? GUEST_DOOR_TEXT
+                                    : guestNoInvites
+                                    ? guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)
                                     : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
+                            {guestDoor && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Join the global community with a sign-in"
+                                    style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
+                                    onPress={() => router.push('/join-global')}
+                                >
+                                    <Text style={styles.btnGenerateText}>{GUEST_DOOR_BUTTON}</Text>
+                                </Pressable>
+                            )}
                         </View>
                     ) : (
                         <>

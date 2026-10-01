@@ -15,7 +15,7 @@
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getCommunityMe } from '../lib/api';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
@@ -179,6 +179,9 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
+    // A sign-in that just came back: its result is the first thing read on the page that opened for it.
+    const resultRef = useRef<HTMLParagraphElement | null>(null);
+    useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
     const shown = !!standing?.words && (placement === 'settings' || landingDue(schedule, standing));
 
@@ -190,7 +193,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     return (
         <>
             {result && (
-                <p role="status" data-testid="link-result"
+                <p role="status" data-testid="link-result" ref={resultRef}
                     className={`w-full p-3 rounded-xl text-sm m-0 break-words ${result.kind === 'failed'
                         ? 'bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300'
                         : 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-nature-800 dark:text-nature-100'}`}>

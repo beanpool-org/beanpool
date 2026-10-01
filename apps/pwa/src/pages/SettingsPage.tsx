@@ -626,11 +626,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <RecoveryAlertBanner identity={identity} />
                         {/* A paused member only, until a moderator lifts it (G3). */}
                         <ModerationPauseCard />
-                        {/* A new account only, until the node says its limits are over (G11-e). */}
-                        <NewAccountCard />
                         {/* An account made with 12 words alone, for as long as it has no sign-in: one way back, and a
                             sign-in to add (two-doors design §2.5). With the result of one that just came back. */}
                         <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} />
+                        {/* A new account only, until the node says its limits are over (G11-e). */}
+                        <NewAccountCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}

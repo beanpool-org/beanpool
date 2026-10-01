@@ -34,7 +34,7 @@ import {
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { decisionsOn } from '../decisions-engine.js';
 import {
-    getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
+    getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
@@ -684,10 +684,9 @@ router.post('/api/local/admin/ws-connections', async (ctx) => {
     };
 });
 
+// Not with the replication token: it lets a standby copy this server and does nothing else (routes/backup.ts).
 router.post('/api/local/admin/logs', async (ctx) => {
-    const token = ctx.request.header['x-replication-token'] || (ctx as any).requestBody?.token;
-    const isTokenValid = token && (await verifyReplicationToken(String(token)));
-    if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
     const { level, category, searchQuery } = body;
     const parsedLimit = parseInt(String(body.limit), 10);

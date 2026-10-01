@@ -614,7 +614,7 @@ async function main(): Promise<void> {
     execFileSync('tar', ['-czf', oldTar, '-C', oldStyle, '.']);
     const { checkBackupArchive } = await import('./services/sealed-backup.js');
     let preChangeOk = true;
-    try { checkBackupArchive(oldTar, { requireStateDb: true }); } catch { preChangeOk = false; }
+    try { await checkBackupArchive(oldTar, { requireStateDb: true }); } catch { preChangeOk = false; }
     assert(preChangeOk, 'a pre-change backup (state.db and node_config.json only) still passes the archive checks');
     const preChangeMembers = execFileSync('tar', ['-tzf', oldTar], { encoding: 'utf8' });
     assert(!preChangeMembers.includes('images/'), 'and it carries no images/ member, as it did not before this change');

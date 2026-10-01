@@ -17,6 +17,10 @@ import { IN_BUCKET_MEMBER, MISSING_MEMBER, readInBucketMember } from '../service
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import { assertSafeKey } from '../storage/image-store.js';
 import type { RouteDeps } from './types.js';
+import { requireAdminRole } from '../admin-auth.js';
+
+/** The harvested backups are whole databases of the nodes they came from: an owner's to download, like /backup. */
+const DOWNLOAD_OWNER_ONLY = 'Only an owner of this node can download a backup';
 
 const execFileAsync = promisify(execFile);
 
@@ -332,6 +336,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // a restorable tar.gz of state.db AND the images it references. Whichever is newer.
     router.get('/api/manager/backups/download-db', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], DOWNLOAD_OWNER_ONLY)) return;
         const slug = resolveNodeSlug(ctx);
         if (!slug) return;
         const newest = listSealedBackups(slug).find(f => !f.identity);
@@ -382,6 +387,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Download one held backup: a locked file from sealed/, or a readable daily copy from history/.
     router.get('/api/manager/backups/download-history', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], DOWNLOAD_OWNER_ONLY)) return;
         const nodeId = String(ctx.query.nodeId || '');
         const filename = String(ctx.query.filename || '');
 

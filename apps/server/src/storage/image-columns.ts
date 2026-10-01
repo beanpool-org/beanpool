@@ -353,15 +353,19 @@ export function deleteStoredObjects(handle: ReadableDb, keys: Iterable<string>, 
 }
 
 /**
- * Whether a row in `handle` still names `key` (any of {@link STORAGE_KEY_TABLES}). Without regard to case: on a disk that
+ * Whether a row in `handle` still names `key` (any of {@link STORAGE_KEY_TABLES}, or of {@link OPTIONAL_STORAGE_KEY_TABLES}
+ * that it has). Without regard to case: on a disk that
  * folds it (a Docker Desktop bind mount of /data on macOS or Windows) two keys that differ only in case are one file.
  * A question it cannot answer is a yes: an object kept by mistake is an orphan the storage-health sweep collects, one
  * deleted by mistake is a member's photo gone.
  */
 export function storageKeyStillReferenced(handle: ReadableDb, key: string): boolean {
+    const names = (table: string) => handle.prepare(`SELECT 1 FROM ${table} WHERE storage_key = ? COLLATE NOCASE LIMIT 1`).all(key).length > 0;
     try {
-        return STORAGE_KEY_TABLES.some((table) =>
-            handle.prepare(`SELECT 1 FROM ${table} WHERE storage_key = ? COLLATE NOCASE LIMIT 1`).all(key).length > 0);
+        if (STORAGE_KEY_TABLES.some(names)) return true;
+        // One a database may not have (OPTIONAL_STORAGE_KEY_TABLES) names nothing there; one it has is asked as the rest.
+        const present = tablesIn(handle);
+        return OPTIONAL_STORAGE_KEY_TABLES.some((table) => present.has(table) && names(table));
     } catch (e) {
         console.warn(`[ImageStore] Could not tell whether a row still names ${key}; keeping it:`, e);
         return true;
@@ -375,6 +379,19 @@ export function storageKeyStillReferenced(handle: ReadableDb, key: string): bool
  * nothing that walks the store silently forgets about it.
  */
 export const STORAGE_KEY_TABLES = ['post_photos', 'message_attachments'] as const;
+
+/**
+ * Tables that point a row at a store object too, but which a database need not have (one from before them, or a
+ * suite's own): one it doesn't have names nothing. A line kept for its sender alone, because the person it was sent to
+ * had blocked them, keeps its photo in the store as a chat photo does (engine/withheld-lines.ts); it is local to this
+ * server, never in a copy, but in its backups and snapshots, which are this database's file.
+ */
+export const OPTIONAL_STORAGE_KEY_TABLES = ['withheld_lines'] as const;
+
+/** The tables a database has. */
+function tablesIn(handle: ReadableDb): Set<string> {
+    return new Set((handle.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map((r) => r.name));
+}
 
 /** The little of better-sqlite3 this needs, so the storage layer does not take a dependency on it. */
 export interface ReadableDb {
@@ -423,7 +440,7 @@ export function referencedStorageKeys(handle: ReadableDb): string[] {
             .map((r) => r.name),
     );
     const keys = new Set<string>();
-    for (const table of STORAGE_KEY_TABLES) {
+    for (const table of [...STORAGE_KEY_TABLES, ...OPTIONAL_STORAGE_KEY_TABLES]) {
         if (!present.has(table)) continue;
         if (!hasStorageKeyColumn(handle, table)) continue;
         for (const row of handle.prepare(`SELECT storage_key FROM ${table} WHERE storage_key IS NOT NULL`).all() as { storage_key: string }[]) {

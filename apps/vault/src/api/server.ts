@@ -1320,21 +1320,22 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 : `${why}. Getting back in with a sign-in, and connecting one, are paused, and no backup is taken, until it opens. The 12 words work as always.`,
         });
 
-        const backupBase = lastBackupOkAt ?? openSince;
+        // No backup is taken while locked: once open again, the hourly job has its two hours before that is news.
+        const backupBase = lastBackupOkAt === null && openSince === null ? null : Math.max(lastBackupOkAt ?? 0, openSince ?? 0);
         const backupStale = open && backupBase !== null && now - backupBase > BACKUP_STALE_MS;
         const backupFailing = backupFailuresInARow >= BACKUP_FAILURES_ALERT;
         conditions.push({
-            key: 'backup', active: backupFailing || backupStale, since: backupBase ?? undefined,
+            key: 'backup', active: backupFailing || backupStale, since: lastBackupOkAt ?? backupBase ?? undefined,
             detail: backupFailing ? `${backupFailuresInARow} backups in a row failed (${backupError ?? 'failed'}).`
                 : backupStale ? (lastBackupOkAt ? `the newest backup is from ${minute(lastBackupOkAt)}, over two hours ago.` : 'no backup has been made since the vault opened, over two hours ago.')
                     : `backups work again${lastBackupOkAt ? ` (the newest at ${minute(lastBackupOkAt)})` : ''}.`,
         });
 
-        const offsiteBase = offsiteStatus.lastOkAt ?? (openSince === null ? null : Math.max(openSince, offsiteSince));
+        const offsiteBase = openSince === null ? offsiteStatus.lastOkAt : Math.max(offsiteStatus.lastOkAt ?? 0, openSince, offsiteSince);
         const offsiteStale = !!offsite && open && offsiteBase !== null && now - offsiteBase > BACKUP_STALE_MS;
         const offsiteFailing = !!offsite && offsiteStatus.failuresInARow >= BACKUP_FAILURES_ALERT;
         conditions.push({
-            key: 'offsite', active: offsiteFailing || offsiteStale, since: offsiteBase ?? undefined,
+            key: 'offsite', active: offsiteFailing || offsiteStale, since: offsiteStatus.lastOkAt ?? offsiteBase ?? undefined,
             detail: !offsite ? 'no off-box store is set now.'
                 : offsiteFailing ? `${offsiteStatus.failuresInARow} off-box copies in a row failed (${offsiteStatus.error ?? 'failed'}): the backups are on the vault's own disk only.`
                     : offsiteStale ? 'no backup has gone off the box for over two hours: the newest are on the vault\'s own disk only.'

@@ -145,7 +145,10 @@ function parseOffsite(v: unknown): OffsiteS3 | null {
     const bucket = str(o, 'bucket', 'offsite', { max: 63 });
     if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) fail('offsite.bucket must be an S3 bucket name (3-63 lower-case letters, digits, dots, hyphens).');
     const prefix = o.prefix === undefined || o.prefix === null ? '' : str(o, 'prefix', 'offsite', { max: 200 });
-    if (prefix && !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\/$/.test(prefix)) fail('offsite.prefix must be like "vault/" or "a/b/" (letters, digits, . _ -, ending in /).');
+    // No '.' or '..' segment: a URL would fold `/bucket/../x/` into another bucket's path.
+    if (prefix && (!/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\/$/.test(prefix) || prefix.split('/').some(seg => seg === '.' || seg === '..'))) {
+        fail('offsite.prefix must be like "vault/" or "a/b/" (letters, digits, . _ -, ending in /; no "." or ".." part).');
+    }
     const region = o.region === undefined ? 'auto' : str(o, 'region', 'offsite', { max: 64 });
     if (!/^[a-z0-9-]+$/.test(region)) fail('offsite.region must be like "auto" or "eu-central-1".');
     if (o.pathStyle !== undefined && typeof o.pathStyle !== 'boolean') fail('offsite.pathStyle must be true or false.');

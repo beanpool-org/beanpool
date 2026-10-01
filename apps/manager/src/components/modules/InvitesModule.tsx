@@ -207,17 +207,18 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div class="no-print" style="margin-bottom: 25px; text-align: center; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 12px;">
                             <h1 style="font-size: 20px; margin: 0 0 6px 0; color: #065f46;">🌱 Sovereign Printable QR Invites (${generatedTokens.length} Cards)</h1>
                             <p style="font-size: 12px; color: #047857; margin: 0 0 12px 0;">Print-friendly sheet of large QR codes carrying join URL and code for face-to-face onboarding.</p>
-                            <button onclick="window.print()" style="background: #059669; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">🖨️ Print Now</button>
+                            <button type="button" id="print-now" style="background: #059669; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">🖨️ Print Now</button>
                         </div>
                         ${cardsHtml}
                     </div>
-                    <script>
-                        setTimeout(() => { window.print(); }, 400);
-                    </script>
                 </body>
             </html>
         `);
         printWindow.document.close();
+        // No script or inline handler in the page itself: it inherits Settings' policy, which runs neither
+        // (app-document-csp.ts). The button and the print dialog are wired from here instead.
+        printWindow.document.getElementById('print-now')?.addEventListener('click', () => printWindow.print());
+        printWindow.setTimeout(() => printWindow.print(), 400);
     };
 
     return (

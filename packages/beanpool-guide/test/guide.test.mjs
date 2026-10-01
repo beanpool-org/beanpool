@@ -63,6 +63,18 @@ test('the manual: every section has pages, every page has Related pages that exi
     }
 });
 
+test("front matter: a title and a summary no longer than the apps' validateGuide takes (120 and 300 characters)", () => {
+    // The apps refuse a whole manual for one page over these (packages/beanpool-core member-guide.ts validate), so the
+    // build refuses the page first: a summary of 331 characters once made the operator manual in Settings null (#1427).
+    const page = (title, summary) => `---\nslug: a\ntitle: ${title}\nsummary: ${summary}\nrelated: b\n---\n\nText\n`;
+    assert.equal(parseGuideMarkdown(page('T'.repeat(120), 'S'.repeat(300)), 'x.md').summary.length, 300);
+    assert.throws(() => parseGuideMarkdown(page('T', 'S'.repeat(301)), 'x.md'), /summary is 301 characters; the apps take 300 at most/);
+    assert.throws(() => parseGuideMarkdown(page('T'.repeat(121), 'S'), 'x.md'), /title is 121 characters; the apps take 120 at most/);
+    for (const g of [...sourceGuides().guide.guides, ...sourceGuides().manual.guides]) {
+        assert.ok(g.summary.length <= 300 && g.title.length <= 120, `${g.slug}: title ${g.title.length}, summary ${g.summary.length} characters`);
+    }
+});
+
 test('front matter: related must name real pages, video must be a video id', () => {
     const fm = extra => `---\nslug: a\ntitle: T\nsummary: S\n${extra}---\n\nText\n`;
     assert.deepEqual(parseGuideMarkdown(fm('related: b, c\n'), 'x.md').related, ['b', 'c']);

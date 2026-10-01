@@ -31,6 +31,7 @@ import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
+import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -426,11 +427,11 @@ export function ApplianceSection({
                 }),
             });
             if (res.ok) {
-                setPwdStatus({ text: 'Password updated successfully! Please re-login with the new password.', isError: false });
+                // This sign-in carries on; every other one made with the old password has ended (the node's doing).
+                setPwdStatus({ text: 'Password updated successfully! Other sign-ins with the old password have ended.', isError: false });
                 setCurrentPassword('');
                 setNewPassword('');
                 setConfirmPassword('');
-                sessionStorage.setItem('bp-admin-token', newPassword);
             } else {
                 const err = await res.json().catch(() => ({}));
                 setPwdStatus({ text: err.error || 'Failed to change password', isError: true });
@@ -505,11 +506,7 @@ export function ApplianceSection({
                 setTfaMessage('2FA successfully enabled!');
                 setTotpVerifyCode('');
                 const token = data.tfaSessionToken || data.sessionToken;
-                if (token) {
-                    setTfaSessionToken(activeNode.id, token);
-                    sessionStorage.setItem('bp_tfa_session_local-node', token);
-                    sessionStorage.setItem('bp-2fa-session', token);
-                }
+                if (token) setTfaSessionToken(activeNode.id, token);
                 await load2faStatus();
             } else {
                 alert(data.error || 'Invalid 2FA code. Please try again.');
@@ -537,8 +534,6 @@ export function ApplianceSection({
                 setTfaMessage('2FA disabled.');
                 setTotpDisableCode('');
                 setTfaSessionToken(activeNode.id, undefined);
-                sessionStorage.removeItem('bp_tfa_session_local-node');
-                sessionStorage.removeItem('bp-2fa-session');
                 await load2faStatus();
             } else {
                 const err = await res.json().catch(() => ({}));
@@ -1248,6 +1243,11 @@ export function ApplianceSection({
                             </div>
                         )}
                     </div>
+
+                    {/* Backups off the server (the owners' card: the node answers anyone else 403) */}
+                    <SectionErrorBoundary sectionName="Backups off the server" resetKey={activeNode.id}>
+                        <OffboxBackupsPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
 
                     {/* Standby Live Backup / Replication Configuration (Standby) vs Replication Access (Primary) */}
                     {isStandby ? (

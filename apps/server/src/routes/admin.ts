@@ -49,7 +49,7 @@ import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
@@ -70,6 +70,10 @@ import {
     revokeAllMemberSessions,
     revokeAdminSession,
     enrolAdminOwnerKey,
+    createPasswordSession,
+    setAdminSessionCookie,
+    clearAdminSessionCookie,
+    ADMIN_SESSION_COOKIE,
 } from '../admin-key-auth.js';
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 import {
@@ -82,6 +86,7 @@ import {
 } from '../engine/member-wizards.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
+import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
@@ -106,7 +111,9 @@ router.post('/api/local/admin/ws-ticket', async (ctx) => {
 
 router.post('/api/local/admin/csrf-token', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const token = issueCsrfToken();
+    // For the session this request rides, and no other (admin-auth.ts, CSRF TOKEN STORE); a password caller's token is
+    // for password callers.
+    const token = issueCsrfToken((ctx.state as any)?.adminSessionId || PASSWORD_CSRF_BINDING);
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
 });
@@ -218,23 +225,61 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
         return;
     }
 
-    ctx.cookies.set('admin_session', res.sessionId, {
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 12 * 3600 * 1000,
-        path: '/',
-    });
+    // The session's id goes in the httpOnly cookie and nowhere else: in the body, a script on the page could read it
+    // and use it from anywhere, without the cookie or a CSRF token (Fable's web review, L3).
+    setAdminSessionCookie(ctx, res.sessionId!);
     if (res.csrfToken) {
         ctx.set('X-CSRF-Token', res.csrfToken);
     }
+    ctx.set('Cache-Control', 'no-store');
     ctx.body = {
         success: true,
-        sessionId: res.sessionId,
         csrfToken: res.csrfToken,
         memberPubkey: res.memberPubkey,
         role: res.role,
         hardExpiresAt: res.hardExpiresAt,
         idleExpiresAt: res.idleExpiresAt,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/password — Settings' password sign-in. Body: { password, totpCode? }.
+ *
+ * The password (and, with 2FA on, a code) is checked once, exactly as checkAdminAuth checks it on any route (the brake,
+ * the tarpit, break-glass mode, which refuses it here), and exchanged for an admin session: the httpOnly, SameSite
+ * strict admin_session cookie and a CSRF token bound to it, as a key sign-in gets. The browser keeps no copy of the
+ * password, in web storage or anywhere else (Fable's web review, M1): the members' web app shares this origin, so
+ * anything stored there is one script away. A session the browser already held is ended. Answers the role (owner),
+ * the CSRF token and the session's limits; never the session's id.
+ */
+router.post('/api/local/admin/auth/password', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (typeof body.password !== 'string' || !body.password.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'Enter the admin password' };
+        return;
+    }
+    if (!(await checkAdminPasswordAuth(ctx as any))) return;
+    // checkAdminAuth hands a header client a 2FA session for its next requests (X-Admin-2FA-Session); this sign-in's
+    // next requests ride the cookie, so it is not handed out.
+    const tfa = (ctx.state as any)?.tfaSessionToken;
+    if (tfa) {
+        revoke2faSession(tfa);
+        delete (ctx.state as any).tfaSessionToken;
+    }
+    const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
+    if (held) revokeAdminSession(held);
+    const session = createPasswordSession();
+    setAdminSessionCookie(ctx, session.sessionId);
+    ctx.set('X-CSRF-Token', session.csrfToken);
+    logger.security('AUTH', 'Successful administrative login.');
+    ctx.body = {
+        success: true,
+        role: 'owner',
+        csrfToken: session.csrfToken,
+        hardExpiresAt: session.hardExpiresAt,
+        idleExpiresAt: session.idleExpiresAt,
     };
 });
 
@@ -307,7 +352,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     }
 
     const newEpoch = revokeAllMemberSessions(targetPubkey);
-    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    clearAdminSessionCookie(ctx);
     ctx.status = 200;
     ctx.body = {
         success: true,
@@ -330,6 +375,18 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
 
     if (sessionToken) {
         const res = validateAdminSession(sessionToken);
+        if (res.valid && res.session?.kind === 'password') {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: false,
+                isPasswordSession: true,
+                memberPubkey: null,
+                role: 'owner',
+                hardExpiresAt: res.session.hardExpiresAt,
+                idleExpiresAt: res.session.idleExpiresAt,
+            };
+            return;
+        }
         if (res.valid && res.session) {
             ctx.body = {
                 authenticated: true,
@@ -383,7 +440,7 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
     if (sessionToken) {
         revokeAdminSession(sessionToken);
     }
-    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    clearAdminSessionCookie(ctx);
     ctx.body = { success: true };
 });
 
@@ -828,6 +885,9 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or
             // was, until another took it over).
             standbyHealth: ctx.state?.adminRole === 'owner' && watchesStandbys() ? getStandbyHealthBanner() : null,
+            // Off-box backups (services/offbox-backups.ts) when they need the owners: failing, stale, a destination that
+            // can't be used, or none sent for want of a recovery code. In words; nothing about any member. Owners only.
+            offboxBackups: ctx.state?.adminRole === 'owner' ? getOffboxHealth() : null,
             diskHealth: getCachedDiskHealth(),
             // Stray rejected promises the process-level net caught and kept serving through. The error
             // text only — no request body, no parameter, no key — and already redacted on the way in.

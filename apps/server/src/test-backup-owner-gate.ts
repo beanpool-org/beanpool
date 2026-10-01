@@ -6,9 +6,9 @@
  *  1. An admin's key session is refused (403, in words), with nothing changed, on the restore (the live database's roles
  *     and members as they were, no upload left), /backup, the snapshot download, the replication token's generate, mode
  *     and clear (the standby's token still works), replication-config/save, a snapshot delete (the file still there), a
- *     change to the snapshot settings, the manager's two backup downloads, and a copy through the admin-password path
- *     (an admin's session wins over any X-Admin-Password header). A moderator's session too. An owner's key session and
- *     the node password get each of them.
+ *     change to the snapshot settings, the manager's two backup downloads, a copy through the admin-password path
+ *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
+ *     list, download). A moderator's session too. An owner's key session and the node password get each of them.
  *  2. The replication token alone, on every /api/local/admin/* and /api/manager/* route the node serves: it gets what
  *     no credential gets, and never a database, except on the standby's own routes (the copy routes, replication-access
  *     and the take-over envelope), where it is taken. With backups readable (no recovery code) and locked (one).
@@ -273,6 +273,12 @@ async function main(): Promise<void> {
         { what: "the manager's download-db", method: 'GET', route: '/api/manager/backups/download-db?nodeId=local', unchanged: () => null },
         { what: "the manager's download-history", method: 'GET', route: '/api/manager/backups/download-history?nodeId=local&filename=beanpool-2026-01-01.db', unchanged: () => null },
         { what: 'a copy through the admin-password path', method: 'GET', route: '/api/local/admin/sync-snapshot', headers: { 'x-admin-password': 'anything at all' }, unchanged: () => null },
+        { what: 'the off-box backups status', method: 'POST', route: '/api/local/admin/offbox-backups/status', unchanged: () => null },
+        { what: 'an off-box backups settings change', method: 'POST', route: '/api/local/admin/offbox-backups/settings', body: JSON.stringify({ retentionDays: 1 }),
+            unchanged: () => fs.existsSync(path.join(dataDir!, 'offbox-backups.json')) ? 'the off-box settings were written' : null },
+        { what: 'an off-box backup sent now', method: 'POST', route: '/api/local/admin/offbox-backups/run', unchanged: () => null },
+        { what: 'an off-box destination listing', method: 'POST', route: '/api/local/admin/offbox-backups/list', body: JSON.stringify({ destination: 'env-1' }), unchanged: () => null },
+        { what: 'an off-box backup download', method: 'GET', route: '/api/local/admin/offbox-backups/download?destination=env-1&key=x', unchanged: () => null },
     ];
     assert(fs.existsSync(path.join(dataDir!, 'snapshots', snapA.name)), `setup: a snapshot to download and delete (${snapA.name})`);
     for (const c of cases) {
@@ -301,6 +307,8 @@ async function main(): Promise<void> {
         assert(copy.status !== 401 && copy.status !== 403, `1. a copy through the admin-password path: ${who} passes the gate (${copy.status})`);
         const mdb = await call('GET', '/api/manager/backups/download-db?nodeId=local', creds);
         assert(mdb.status !== 401 && mdb.status !== 403, `1. the manager's download-db: ${who} passes the gate (${mdb.status})`);
+        const offbox = await call('POST', '/api/local/admin/offbox-backups/status', creds);
+        assert(offbox.status === 200 && offbox.json?.state === 'none', `1. the off-box backups status: ${who} reads it (${offbox.status})`);
         const cfg = await call('POST', '/api/local/admin/snapshots/config', creds, JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
         assert(cfg.status === 200, `1. a snapshot settings change: ${who} makes it (${cfg.status})`);
         const save = await call('POST', '/api/local/admin/replication-config/save', creds, JSON.stringify({ primaryUrl: '' }));

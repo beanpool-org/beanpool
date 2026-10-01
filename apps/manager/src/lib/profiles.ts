@@ -4,12 +4,34 @@ export interface NodeProfile {
     id: string;
     name: string;
     url: string;
+    /** Fleet mode only, and in memory only (heldCredentials): never written to localStorage. */
     adminPassword?: string;
+    /** Same: memory only. */
     replicationToken?: string;
     isPrimary?: boolean;
 }
 
 const PROFILES_KEY = 'bp_fleet_profiles';
+
+/**
+ * A profile's credentials, by profile id, for this page's lifetime. The profile list itself is kept in localStorage,
+ * which on a node is the members' web app's origin too: a password stored there is one script away from that app
+ * (Fable's web review, M1). So the list is saved without them, and anything an older build saved is taken out
+ * on load (loadNodeProfiles saves the list back). A reload asks for them again.
+ */
+const heldCredentials = new Map<string, { adminPassword?: string; replicationToken?: string }>();
+
+function withoutCredentials(p: NodeProfile): NodeProfile {
+    const copy = { ...p };
+    delete copy.adminPassword;
+    delete copy.replicationToken;
+    return copy;
+}
+
+function withHeldCredentials(p: NodeProfile): NodeProfile {
+    const held = heldCredentials.get(p.id);
+    return held ? { ...p, ...held } : p;
+}
 
 export function loadNodeProfiles(): NodeProfile[] {
     const localUrl = normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin);
@@ -27,13 +49,13 @@ export function loadNodeProfiles(): NodeProfile[] {
         }
     ];
 
-    let profilesToUse = defaultProfiles;
+    let profilesToUse = defaultProfiles.map(withHeldCredentials);
     try {
         const raw = localStorage.getItem(PROFILES_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                profilesToUse = parsed.map((p: NodeProfile) => ({ ...p, url: normalizeNodeUrl(p.url) }));
+                profilesToUse = parsed.map((p: NodeProfile) => withHeldCredentials({ ...withoutCredentials(p), url: normalizeNodeUrl(p.url) }));
             }
         }
     } catch { /* ignore */ }
@@ -70,7 +92,11 @@ export function saveActiveProfileId(id: string): void {
 }
 
 export function saveNodeProfiles(profiles: NodeProfile[]): void {
-    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+    for (const p of profiles) {
+        if (p.adminPassword || p.replicationToken) heldCredentials.set(p.id, { adminPassword: p.adminPassword, replicationToken: p.replicationToken });
+        else heldCredentials.delete(p.id);
+    }
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles.map(withoutCredentials)));
 }
 
 export function updateNodeProfile(id: string, updates: Partial<NodeProfile>): NodeProfile[] {
@@ -93,5 +119,6 @@ export function addNodeProfile(profile: Omit<NodeProfile, 'id'>): NodeProfile {
 
 export function removeNodeProfile(id: string): void {
     const profiles = loadNodeProfiles().filter(p => p.id !== id);
+    heldCredentials.delete(id);
     saveNodeProfiles(profiles);
 }

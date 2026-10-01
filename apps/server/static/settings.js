@@ -1,8 +1,15 @@
+        /* global window, document, navigator, console, fetch, alert, confirm, prompt, atob, Blob, URL, WebSocket, localStorage, sessionStorage, setTimeout, clearTimeout, setInterval, clearInterval, L -- a classic script in the browser; L is unpkg's Leaflet */
         const esc = s => String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
         const API = '/api/local';
-        let authToken = sessionStorage.getItem('bp-admin-token') || null;
-        let tfaSessionToken = sessionStorage.getItem('bp-2fa-session') || null;
+        // The admin password and its 2FA session are held in this page's memory only, never in web storage: the members'
+        // web app shares this origin, so anything stored here is one script away from it (Fable's web review, M1). A
+        // reload asks for the password again. Anything an older page stored is removed now.
+        let authToken = null;
+        let tfaSessionToken = null;
+        try {
+            for (const key of ['bp-admin-token', 'bp-2fa-session', 'bp-csrf-token']) sessionStorage.removeItem(key);
+        } catch (e) { /* storage unavailable: nothing is kept there either */ }
 
         /** Returns standard admin headers including 2FA session token if available. */
         function adminHeaders(extra) {
@@ -500,12 +507,10 @@
                     return;
                 }
                 authToken = password;
-                sessionStorage.setItem('bp-admin-token', password);
-                // Store 2FA session token so subsequent API calls can skip TOTP re-entry
+                // Keep the 2FA session token (in memory) so subsequent API calls can skip TOTP re-entry
                 const loginData = await res.json();
                 if (loginData.tfaSessionToken) {
                     tfaSessionToken = loginData.tfaSessionToken;
-                    sessionStorage.setItem('bp-2fa-session', tfaSessionToken);
                 }
                 initLogsWs();
                 let dashboardData = null;
@@ -571,7 +576,7 @@
             };
 
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                const password = authToken || '';
                 if (!password) { setFallbackUI(); return; }
                 const res = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
                 let data;
@@ -679,7 +684,6 @@
                 // Keep the 2FA session the node hands back: every admin call asks for it from now on.
                 if (data.tfaSessionToken) {
                     tfaSessionToken = data.tfaSessionToken;
-                    sessionStorage.setItem('bp-2fa-session', tfaSessionToken);
                 }
                 document.getElementById('totp-box-setup')?.classList.add('hidden');
                 
@@ -736,7 +740,6 @@
                     return;
                 }
                 tfaSessionToken = null;
-                sessionStorage.removeItem('bp-2fa-session');
                 showStatus('totp-disable-status', '2FA disabled', 'success');
                 setTimeout(() => load2faStatus(), 1000);
             } catch (e) {
@@ -1134,8 +1137,6 @@
                 });
                 if (res.ok) {
                     authToken = np;
-                    sessionStorage.setItem('bp-admin-token', np);
-                    sessionStorage.removeItem('bp-csrf-token'); // Invalidate stale CSRF token
                     
                     const pwdStatusEl = document.getElementById('pwd-status');
                     if (pwdStatusEl && !pwdStatusEl.hasAttribute('role')) {
@@ -4038,7 +4039,7 @@
                 return;
             }
 
-            const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+            const password = authToken || '';
             if (!password) return;
 
             isInitializingLogsWs = true;
@@ -4226,7 +4227,7 @@
 
         function logout() {
             authToken = null;
-            sessionStorage.removeItem('bp-admin-token');
+            tfaSessionToken = null;
             sessionStorage.removeItem('bp-settings-tab');
 
             if (logsWs) {
@@ -4249,51 +4250,14 @@
         }
 
         document.getElementById('logout-btn').addEventListener('click', logout);
+        // Wired once, here: it used to be wired only by the auto-login from a stored password, which is gone.
+        document.getElementById('save-gateway-btn')?.addEventListener('click', saveGatewayConfig);
 
         // ======================== INIT ========================
         async function init() {
             loadVersionInfo();
 
-            const storedToken = sessionStorage.getItem('bp-admin-token');
-            if (storedToken) {
-                try {
-                    const verifyRes = await fetch(`${API}/verify-password`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: storedToken })
-                    });
-                    if (verifyRes.ok) {
-                        authToken = storedToken;
-                        initLogsWs();
-                        let dashboardData = null;
-                        const dashRes = await fetch(`${API}/dashboard`);
-                        if (dashRes.ok) {
-                            dashboardData = await dashRes.json();
-                            hydrateSettings(dashboardData);
-                        }
-                        showView('settings');
-                        loadHealthDashboard();
-                        loadThresholds();
-                        loadCommunityInfo();
-                        loadAdminData();
-                        loadGatewayConfig();
-                        const gwSaveBtn = document.getElementById('save-gateway-btn');
-                        if (gwSaveBtn) gwSaveBtn.addEventListener('click', saveGatewayConfig);
-                        switchTab(sessionStorage.getItem('bp-settings-tab') || 'identity');
-                        setTimeout(() => {
-                            initMap(
-                                parseFloat(document.getElementById('cfg-lat').value) || null,
-                                parseFloat(document.getElementById('cfg-lng').value) || null
-                            );
-                            if (dashboardData && dashboardData.connectors) plotSisterNodes(dashboardData.connectors);
-                            maybeAutoCheck();
-                        }, 150);
-                        return; // Auto-login successful
-                    }
-                } catch (e) {
-                    console.error('Auto-login verification failed:', e);
-                }
-            }
+            // No auto-login: the password is never stored, so a reload signs in again (see authToken, at the top).
 
             try {
                 const res = await fetch(`${API}/status`);

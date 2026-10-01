@@ -120,6 +120,8 @@ export interface DiagnosticsResponse {
     diskHealth?: DiskHealth;
     /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */
     standbyHealth?: StandbyHealthBanner | null;
+    /** Off-box backups that need the owners (apps/server services/offbox-backups.ts): owners only, null to anyone else. */
+    offboxBackups?: { problems: string[] } | null;
 }
 
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
@@ -335,9 +337,10 @@ export async function loginToNode(
 }
 
 /**
- * CSRF token for a key sign-in (lib/key-session.ts). The key session rides in an httpOnly cookie that the
- * browser attaches by itself, so the node refuses cookie-authenticated changes without this header. Held in
- * memory only; a reload fetches a new one. Null under password sign-in, which sends no header at all.
+ * CSRF token for the session cookie (lib/key-session.ts): a key sign-in's, or the password sign-in's. The session
+ * rides in an httpOnly cookie that the browser attaches by itself, so the node refuses cookie-authenticated changes
+ * without this header, and takes it only from the session it was issued to. Held in memory only; a reload fetches a
+ * new one. Null in fleet mode, whose profiles send their password in a header instead.
  */
 let keySessionCsrfToken: string | null = null;
 
@@ -363,40 +366,24 @@ export function isTotpRequired(responseBody: unknown): boolean {
 }
 
 /**
- * 2FA session token storage — sessionStorage so it lives for the browser
- * session (survives page reloads within the same tab) but is cleared when
- * the tab closes, unlike localStorage which persists to disk indefinitely.
- *
- * This is a security tradeoff: the token is a TOTP bypass, so keeping it
- * off disk limits the XSS exposure window to the current session only.
+ * 2FA session tokens of the fleet manager's password profiles, held in this page's memory only. They used to be in
+ * sessionStorage, which on a node is the members' web app's origin too: a script there could take one with the
+ * password and skip 2FA (Fable's web review, M1). A reload asks for a code again. Single-node Settings needs none:
+ * its session is the node's httpOnly cookie, which a code opened once.
  */
-const TFA_SESSION_KEY_PREFIX = 'bp_tfa_session_';
+const tfaSessionTokens = new Map<string, string>();
 
 export function getTfaSessionToken(profileId: string): string | undefined {
-    try {
-        return sessionStorage.getItem(TFA_SESSION_KEY_PREFIX + profileId) || undefined;
-    } catch { return undefined; }
+    return tfaSessionTokens.get(profileId);
 }
 
 export function setTfaSessionToken(profileId: string, token: string | undefined): void {
-    try {
-        if (token) {
-            sessionStorage.setItem(TFA_SESSION_KEY_PREFIX + profileId, token);
-        } else {
-            sessionStorage.removeItem(TFA_SESSION_KEY_PREFIX + profileId);
-        }
-    } catch { /* sessionStorage unavailable */ }
+    if (token) tfaSessionTokens.set(profileId, token);
+    else tfaSessionTokens.delete(profileId);
 }
 
 export function clearAllTfaSessionTokens(): void {
-    try {
-        for (let i = sessionStorage.length - 1; i >= 0; i--) {
-            const key = sessionStorage.key(i);
-            if (key?.startsWith(TFA_SESSION_KEY_PREFIX)) {
-                sessionStorage.removeItem(key);
-            }
-        }
-    } catch { /* sessionStorage unavailable */ }
+    tfaSessionTokens.clear();
 }
 
 // ======================== END 2FA HELPERS ========================
@@ -2164,6 +2151,128 @@ export async function getReplicationAccess(
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
+}
+
+// ======================== OFF-BOX BACKUPS ========================
+// The main server's locked backups, sent on a schedule to S3-compatible stores its owners choose (apps/server
+// services/offbox-backups.ts). Every route is an owner's. A secret is never sent back: `secretSet` says one is set.
+
+export type OffboxHealth = 'ok' | 'waiting' | 'failing' | 'stale' | 'broken';
+
+export interface OffboxDestinationStatus {
+    id: string;
+    name: string;
+    /** `env`: set in the server's .env, changed only there. */
+    source: 'env' | 'settings';
+    endpoint: string | null;
+    bucket: string | null;
+    region: string | null;
+    prefix: string | null;
+    /** Shortened by the node; never the whole key id. */
+    accessKeyId: string | null;
+    secretSet: boolean;
+    /** Why a destination can't be used, by setting name. */
+    problems: string[];
+    health: OffboxHealth;
+    lastSuccessAt: number | null;
+    lastSuccessBytes: number | null;
+    lastAttemptAt: number | null;
+    lastError: string | null;
+    failures: number;
+    nextAttemptAt: number | null;
+    lastPruneAt: number | null;
+    lastPruneError: string | null;
+}
+
+export interface OffboxStatus {
+    state: 'sending' | 'none' | 'not-locked' | 'standby' | 'replaced';
+    message: string;
+    intervalHours: number;
+    intervalFrom: 'settings' | 'env' | 'default';
+    retentionDays: number;
+    retentionFrom: 'settings' | 'env' | 'default';
+    maxRetentionDays: number;
+    maxIntervalHours: number;
+    running: boolean;
+    destinations: OffboxDestinationStatus[];
+}
+
+export interface OffboxDestinationInput {
+    /** Set to change one; absent to add one. */
+    id?: string;
+    name: string;
+    endpoint: string;
+    bucket: string;
+    region: string;
+    prefix: string;
+    accessKeyId: string;
+    /** Empty when changing one keeps the secret the node holds. */
+    secretAccessKey: string;
+}
+
+export interface OffboxSettingsUpdate {
+    intervalHours?: number | null;
+    retentionDays?: number | null;
+    destination?: OffboxDestinationInput;
+    removeId?: string;
+}
+
+export interface OffboxListedBackup {
+    key: string;
+    community: string;
+    file: string;
+    madeAt: number;
+    bytes: number;
+    /** This server's own community (a fresh server restoring a lost one lists the lost one's as not its own). */
+    ours: boolean;
+}
+
+/** POST to an off-box route; a refusal comes back as an Error carrying the node's own sentence. */
+async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adminPassword?: string, tfaToken?: string): Promise<T> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword, ...body }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => null) as { error?: string } | null;
+        throw Object.assign(new Error(err?.error || `HTTP ${res.status}: ${res.statusText}`), { status: res.status });
+    }
+    return res.json();
+}
+
+export function getOffboxStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<OffboxStatus> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/status', {}, adminPassword, tfaToken);
+}
+
+export function saveOffboxSettings(
+    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string,
+): Promise<{ success: boolean; status: OffboxStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', update, adminPassword, tfaToken);
+}
+
+/** Send one now to every destination. Answers at once; `status.running` says when it is done. */
+export function runOffboxBackupNow(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ started: boolean; status: OffboxStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/run', {}, adminPassword, tfaToken);
+}
+
+export function listOffboxBackups(
+    nodeUrl: string, destination: string, adminPassword?: string, tfaToken?: string,
+): Promise<{ destination: string; backups: OffboxListedBackup[] }> {
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/list', { destination }, adminPassword, tfaToken);
+}
+
+/** Save one off-box backup, to restore with the Restore wizard. */
+export function downloadOffboxBackup(
+    nodeUrl: string, destination: string, backup: OffboxListedBackup, adminPassword?: string, tfaToken?: string,
+): Promise<DownloadNotice> {
+    return downloadAdminFile(
+        resolveNodeApiUrl(nodeUrl, '/api/local/admin/offbox-backups/download'),
+        { destination, key: backup.key },
+        adminPassword,
+        backup.file,
+        tfaToken,
+    );
 }
 
 // ======================== ESCROW DISPUTES ========================

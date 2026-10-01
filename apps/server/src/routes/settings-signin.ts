@@ -15,6 +15,7 @@
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
+import { setAdminSessionCookie } from '../admin-key-auth.js';
 import {
     createPairing,
     describePairing,
@@ -69,12 +70,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
                 ctx.body = { status: 'waiting', expiresAt: res.expiresAt, ...(res.notice ? { notice: res.notice } : {}) };
                 return;
             case 'signed-in':
-                ctx.cookies.set('admin_session', res.sessionId, {
-                    httpOnly: true,
-                    sameSite: 'lax',
-                    maxAge: 12 * 3600 * 1000,
-                    path: '/',
-                });
+                setAdminSessionCookie(ctx, res.sessionId);
                 ctx.cookies.set(bindingCookieName(id), '', { maxAge: 0, path: COOKIE_PATH });
                 if (res.csrfToken) ctx.set('X-CSRF-Token', res.csrfToken);
                 ctx.body = {

@@ -162,7 +162,8 @@ Only an owner restores a backup: signed in to Settings with an owner's key, or w
 Before anything is replaced, the server reads the file and refuses the whole of it, changing nothing, when:
 
 - it holds anything but plain files and folders (a link of either kind, say), or a name that points outside where it unpacks;
-- it unpacks to more than 4 GB, or to more than the room the server's disk has left (it always keeps 256 MB free), or holds more than 250,000 files: "Backup archive too large";
+- it unpacks to more than 4 GB, or to more than the room the server's disk has left (it always keeps 256 MB free): "Backup archive too large";
+- it holds more than 250,000 files and folders: "Backup archive refused: it holds more than 250000 files and folders";
 - its database is not a SQLite database, or fails SQLite's integrity check;
 - its database carries a trigger or view this server's own database does not have: "it was changed after the backup was made, or made by a newer version of BeanPool". Update this server first, or restore another file. A trigger this version has, whose text in the backup differs, is left out of the restored database, and the restart makes it again as this version has it.
 

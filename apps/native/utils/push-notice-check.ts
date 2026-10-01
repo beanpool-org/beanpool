@@ -24,7 +24,9 @@
  *
  * - While a community this phone keeps and sent its token to has pinned no key, an unsigned push is shown with fixed
  *   words ({@link UNSIGNED_NOTICE_WORDS}, or its kind's when it names one) instead of its own, and a tap on it opens the
- *   app where it was: no navigation, and no warning (it may well be that community's).
+ *   app where it was: no navigation, and no warning (it may well be that community's). So is a signed notice from a
+ *   community the phone pinned no key for: that community may sign by now, and the phone learns its key only from its
+ *   next registration answer there.
  * - Once every such community has pinned a key, an unsigned push comes from none of them: dropped while open, and a tap
  *   on it gets the warning.
  * - A community the phone has forgotten has no pin: its signed notices do nothing, and a tap on one gets the warning.
@@ -281,16 +283,21 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
         const notice = signedNotice(n.data);
         if (notice) {
             const checked = await checkSigned(notice, ctx);
-            if (!checked.ok) return drop(checked.reason);
-            if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
-            const words = pushNoticeWords(checked.kind);
-            if (n.title === words.title && n.body === words.body) return { kind: 'show' };
-            // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
-            return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
+            if (checked.ok) {
+                if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
+                const words = pushNoticeWords(checked.kind);
+                if (n.title === words.title && n.body === words.body) return { kind: 'show' };
+                // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
+                return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
+            }
+            // Signed by no community this phone pinned: from one it sent its token to but hasn't learnt the key of yet,
+            // perhaps, so it goes as an unsigned push would below. Any other refusal is final.
+            if (checked.reason !== 'other-community') return drop(checked.reason);
+        } else if (isVaultNotice(n.data) && await vaultHasToken(ctx)) {
+            return { kind: 'show' };
         }
-        if (isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'show' };
         const pins = await readPushPins(ctx.storage);
-        if (pins.unpinnedRegistered.length === 0) return drop('unsigned');
+        if (pins.unpinnedRegistered.length === 0) return drop(notice ? 'other-community' : 'unsigned');
         const named = asObject(n.data)?.k;
         const words = isPushNoticeKind(named) ? pushNoticeWords(named) : UNSIGNED_NOTICE_WORDS;
         return { kind: 'replace', title: words.title, body: words.body, data: { ...LOCAL_NOTICE_DATA } };
@@ -317,22 +324,24 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
         const notice = signedNotice(n.data);
         if (notice) {
             const checked = await checkSigned(notice, ctx);
-            if (!checked.ok) {
-                // Signed by its community for this account, only late (or the phone's clock is off): not a forgery.
-                if (checked.reason === 'too-old' || checked.reason === 'from-the-future') return { kind: 'nothing', reason: checked.reason };
-                return refuse(checked.reason);
+            if (checked.ok) {
+                if (!(await noteOnce(ctx.storage, 'tapped', checked.id, checked.sentAt, nowSeconds(ctx)))) return { kind: 'nothing', reason: 'repeated' };
+                return {
+                    kind: 'open', community: checked.pin.community, id: checked.id, noticeKind: checked.kind,
+                    active: checked.pin.community === checked.pins.anchor,
+                };
             }
-            if (!(await noteOnce(ctx.storage, 'tapped', checked.id, checked.sentAt, nowSeconds(ctx)))) return { kind: 'nothing', reason: 'repeated' };
-            return {
-                kind: 'open', community: checked.pin.community, id: checked.id, noticeKind: checked.kind,
-                active: checked.pin.community === checked.pins.anchor,
-            };
+            // Signed by its community for this account, only late (or the phone's clock is off): not a forgery.
+            if (checked.reason === 'too-old' || checked.reason === 'from-the-future') return { kind: 'nothing', reason: checked.reason };
+            // Signed by no community this phone pinned: as an unsigned push, below (checkWhileOpen). Any other is refused.
+            if (checked.reason !== 'other-community') return refuse(checked.reason);
         }
         // The app's own notices carry no target: it opens where it was.
         if (!n.remote) return { kind: 'nothing', reason: 'local' };
-        if (isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
+        if (!notice && isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
+        const reason: DropReason = notice ? 'other-community' : 'unsigned';
         const pins = await readPushPins(ctx.storage);
-        return pins.unpinnedRegistered.length > 0 ? { kind: 'nothing', reason: 'unsigned' } : refuse('unsigned');
+        return pins.unpinnedRegistered.length > 0 ? { kind: 'nothing', reason } : refuse(reason);
     } catch (e) {
         console.warn('[Push] Could not check a tapped notification', e);
         return { kind: 'nothing', reason: 'unreadable' };

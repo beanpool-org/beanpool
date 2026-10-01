@@ -546,6 +546,19 @@ describe('a community whose server sends no pushKey: its pushes show with fixed 
         expect(takeNoticeWarning()).toBe(false);
     });
 
+    it('a signed notice from it before the phone has learnt its key (it signs by now): fixed words, nowhere, no warning', async () => {
+        // Oldtown's server was updated, but this phone hasn't registered there since, so it has no pin for it yet.
+        const updated = new Community(OLDTOWN);
+        const data = updated.notice('trade.update', kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
+        expect(await open(push(data))).toEqual({ kind: 'replace', ...pushNoticeWords('trade.update'), data: { ...LOCAL_NOTICE_DATA } });
+        expect(await tap(push(data))).toEqual({ kind: 'nothing', reason: 'other-community' });
+        expect(navigated).toEqual([]);
+        expect(sent).toEqual([]);
+        expect(takeNoticeWarning()).toBe(false);
+        // A forgery of a pinned community's notice is still refused: its tag names Mullum, whose key it fails.
+        expect(await open(push({ ...data, c: mullum.tag }))).toEqual({ kind: 'drop', reason: 'bad-signature' });
+    });
+
     it('signed notices from the communities that sign are still checked as ever', async () => {
         expect(await open(push(mullum.notice('chat.message', lee.publicKey)))).toEqual({ kind: 'drop', reason: 'bad-signature' });
         expect((await tap(push(mullum.notice('chat.message', lee.publicKey)))).kind).toBe('warn');

@@ -254,36 +254,67 @@ export function whenLocalAuthPromptsClose(): Promise<void> {
     return new Promise(resolve => promptCloseWaiters.push(resolve));
 }
 
+/** App Lock's setting as last read or saved on this run (appLockLocks, getAppLockEnabled, setAppLockEnabled): null before. */
+let appLockLastKnown: boolean | null = null;
+
+/** App Lock's setting as stored: true for on. Throws when it can't be read. */
+async function readAppLockSetting(): Promise<boolean> {
+    const val = isWeb ? localStorage.getItem(APP_LOCK_KEY) : await SecureStore.getItemAsync(APP_LOCK_KEY);
+    if (val !== null) {
+        return val === 'true';
+    }
+
+    // Fallback / auto-migrate legacy preference stored in AsyncStorage. A move that fails keeps the value it read: it is
+    // the setting, wherever it is kept.
+    const legacyVal = await AsyncStorage.getItem(APP_LOCK_KEY);
+    if (legacyVal === null) return false;
+    try {
+        if (isWeb) {
+            localStorage.setItem(APP_LOCK_KEY, legacyVal);
+        } else {
+            await SecureStore.setItemAsync(APP_LOCK_KEY, legacyVal);
+        }
+        await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
+    } catch (e) {
+        console.warn('[AppLock] The setting could not be moved to secure storage', e);
+    }
+    return legacyVal === 'true';
+}
+
 /**
- * Check if app launch security lock is enabled.
+ * Whether App Lock is on, for Settings' switch: false when the setting can't be read. The launch lock and the return
+ * lock ask {@link appLockLocks} instead.
  */
 export async function getAppLockEnabled(): Promise<boolean> {
     try {
-        let val: string | null = null;
-        if (isWeb) {
-            val = localStorage.getItem(APP_LOCK_KEY);
-        } else {
-            val = await SecureStore.getItemAsync(APP_LOCK_KEY);
-        }
-        if (val !== null) {
-            return val === 'true';
-        }
-
-        // Fallback / auto-migrate legacy preference stored in AsyncStorage
-        const legacyVal = await AsyncStorage.getItem(APP_LOCK_KEY);
-        if (legacyVal !== null) {
-            if (isWeb) {
-                localStorage.setItem(APP_LOCK_KEY, legacyVal);
-            } else {
-                await SecureStore.setItemAsync(APP_LOCK_KEY, legacyVal);
-            }
-            await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
-            return legacyVal === 'true';
-        }
-        return false;
+        return (appLockLastKnown = await readAppLockSetting());
     } catch {
         return false;
     }
+}
+
+/**
+ * Whether App Lock locks the app: its setting is on, or can't be read. Asked by the launch lock (app/_layout.tsx) and the
+ * return lock (return-lock.ts). A setting that couldn't be read used to read as off, so a keychain that was briefly
+ * unavailable (seen after a restart on some phones) opened the app unlocked for that launch, with no message
+ * (FABLE-sec-native LOW-2, 2026-10-01). Locking then never locks anyone out: Unlock App asks the phone's own lock, and a
+ * phone with no screen lock passes it unasked (authenticateForAppLock).
+ */
+export async function appLockLocks(): Promise<boolean> {
+    try {
+        return (appLockLastKnown = await readAppLockSetting());
+    } catch {
+        return (appLockLastKnown = true);
+    }
+}
+
+/**
+ * Whether App Lock locked (or its setting couldn't be read) when it was last read or saved on this run, without reading
+ * it again: for the moment the app leaves the front, which can't wait for a read (return-lock.ts's cover). False before
+ * the first read, which the launch lock makes as the app opens.
+ */
+export function appLockWasOn(): boolean {
+    return appLockLastKnown === true;
 }
 
 /**
@@ -297,6 +328,7 @@ export async function setAppLockEnabled(enabled: boolean): Promise<void> {
         } else {
             await SecureStore.setItemAsync(APP_LOCK_KEY, strVal);
         }
+        appLockLastKnown = enabled;
         await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
     } catch (e) {
         console.error('Failed to save app lock preference:', e);

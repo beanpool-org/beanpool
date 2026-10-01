@@ -10,6 +10,7 @@ vi.mock('expo-crypto', () => ({
 }));
 
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(),
     setItemAsync: vi.fn(),
     deleteItemAsync: vi.fn(),
@@ -127,7 +128,9 @@ describe('pulse-oauth utility (native)', () => {
             );
             expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
                 'pulse_oauth_token_chan_123',
-                expect.stringContaining('new_access_token')
+                expect.stringContaining('new_access_token'),
+                // This phone only (pulse-token-store.ts).
+                { keychainAccessible: 6 }
             );
         });
 

@@ -143,11 +143,20 @@ export function standingOf(pubkey: string, now: number = Date.now(), opts: { cou
 
 export interface StandingParts { weeks: number; keptPosts: number; dealPartners: number; total: number }
 
-/** `standingOf`, with what it is made of, for the moderators' screens (engine/burst-cleanup.ts). */
-export function standingParts(pubkey: string, now: number = Date.now()): StandingParts {
+/**
+ * `standingOf`, with what it is made of, for the moderators' screens (engine/burst-cleanup.ts). `hiddenCountsAsKept`: a
+ * post hidden for review still counts as kept, as `countingPost` does for the one post a hide weighs, so hiding a
+ * member's posts never lowers the bar that guards them.
+ */
+export function standingParts(pubkey: string, now: number = Date.now(), opts: { hiddenCountsAsKept?: boolean } = {}): StandingParts {
     const row = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(pubkey) as { joined_at: string | null } | undefined;
     if (!row) return { weeks: 0, keptPosts: 0, dealPartners: 0, total: 0 };
-    const weeks = weekPoints(row.joined_at, now), keptPosts = keptPostPoints(pubkey, null), dealPartners = tradePartnerPoints(pubkey);
+    const keptPosts = opts.hiddenCountsAsKept
+        ? (db.prepare(`SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
+              WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL LIMIT ?)`)
+            .get(pubkey, STANDING.maxKeptPosts) as { c: number }).c
+        : keptPostPoints(pubkey, null);
+    const weeks = weekPoints(row.joined_at, now), dealPartners = tradePartnerPoints(pubkey);
     return { weeks, keptPosts, dealPartners, total: weeks + keptPosts + dealPartners };
 }
 

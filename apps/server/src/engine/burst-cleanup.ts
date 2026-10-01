@@ -30,8 +30,9 @@
  * burst and still here; none may hold a node role (which also keeps out whoever is acting: they hold one, or act with the
  * password and are no account). An established account (standing `BURST.establishedStanding` or more:
  * engine/auto-moderation.ts standingParts) is named only with `includeEstablished`, which the screens send only after
- * saying so. A refusal does nothing at all. An account that joined after the list was read is never reached: it was not
- * named.
+ * saying so. Its standing counts a post hidden for review as kept, so a hide never makes an established account
+ * removable without that. A refusal does nothing at all. An account that joined after the list was read is never
+ * reached: it was not named.
  *
  * ## A hide, and its undo
  *
@@ -64,7 +65,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export const BURST = {
-    /** Standing (points: engine/auto-moderation.ts) from which an account is established: a month as a member, or a week and kept posts. */
+    /**
+     * Standing (points: engine/auto-moderation.ts, a post hidden for review counted as kept) from which an account is
+     * established: a month as a member, or a week and kept posts.
+     */
     establishedStanding: 4,
     /** The digest lists a burst of at least this many accounts... */
     digestMinAccounts: 5,
@@ -149,7 +153,8 @@ function holdsRole(pubkey: string): boolean {
 
 function describe(row: JoinRow, now: number): BurstAccount {
     const pk = row.member_pubkey;
-    const parts = standingParts(pk, now);
+    // A post hidden for review counts as kept here: hiding an account's posts must not lower the bar that guards it.
+    const parts = standingParts(pk, now, { hiddenCountsAsKept: true });
     const posts = db.prepare(`
         SELECT COALESCE(SUM(CASE WHEN hidden_by_reports_at IS NULL THEN 1 ELSE 0 END), 0) AS up,
                COALESCE(SUM(CASE WHEN hidden_by_reports_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS hidden

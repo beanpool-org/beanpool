@@ -14,7 +14,8 @@
  *      moderators, and each author is told once; the undo brings back exactly what the hide hid, never a post reports
  *      had hidden before it, nor one reports from enough independent people would hide now; a second undo is refused
  *   4. the guard: an action names exactly the accounts and how many; a wrong count, one not in the burst, a duplicate,
- *      a role holder, none or too many is refused with nothing done; an established account only with includeEstablished
+ *      a role holder, none or too many is refused with nothing done; an established account (by weeks, or by a week and
+ *      posts that stayed up) only with includeEstablished, and hiding its posts first doesn't lower that bar
  *   5. remove-all: owners and admins only, never a moderator; each account is removed as one removal removes it, and
  *      its sign-in can't join again; the burst then lists who is left and how many were removed
  *   6. nobody else: unsigned, a member's signature, a member with no role (no session), a moderator whose role was taken
@@ -35,7 +36,7 @@ delete process.env.APPLE_SERVICES_ID;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, createPost } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db } from './db/db.js';
@@ -353,6 +354,27 @@ async function main(): Promise<void> {
         `said in so many words, it goes ahead (${h2.status} ${h2.body?.action?.posts})`);
     const u3 = await mod('POST', `/api/local/admin/bursts/${h2.body?.action?.id}/undo`, {});
     assert(u3.status === 200 && !hiddenAt(p5) && !hiddenAt(p6), `and is undone (${u3.status})`);
+    // Spam7 is established by its posts: a week as a member and 3 that stayed up. Hiding them must not lower the bar.
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(8 * DAY), s7.pk);
+    const p7 = [1, 2, 3].map(i => {
+        const p = createPost('offer', 'other', `Spam7 kept ${i}`, 'kept', 0, 'fixed', s7.pk)!;
+        db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(ago(2 * DAY), p.id);
+        return p.id;
+    });
+    const before7 = postsState();
+    const est7 = await mod('POST', `/api/local/admin/members/${s1.pk}/burst/hide`, { members: [s7.pk], count: 1 });
+    assert(est7.status === 409 && est7.body?.code === 'established' && postsState() === before7,
+        `an account established by a week and 3 posts that stayed up is held back too (${est7.status} ${est7.body?.code ?? ''})`);
+    const h7 = await mod('POST', `/api/local/admin/members/${s1.pk}/burst/hide`, { members: [s7.pk], count: 1, includeEstablished: true });
+    assert(h7.status === 200 && p7.every(p => !!hiddenAt(p)), `said so, its 3 posts are hidden (${h7.status})`);
+    const a7 = ((await mod('GET', `/api/local/admin/members/${s1.pk}/burst`)).body?.others ?? []).find((a: any) => a.publicKey === s7.pk);
+    assert(a7?.established === true && a7?.standing === 4 && a7?.standingParts?.keptPosts === 3,
+        `with its posts hidden it is still established: a post hidden for review still counts as kept here (${a7?.standing})`);
+    const rm7 = await adm('POST', `/api/local/admin/members/${s1.pk}/burst/remove`, { members: [s7.pk], count: 1 });
+    assert(rm7.status === 409 && rm7.body?.code === 'established' && statusOf(s7) === 'active',
+        `so hiding first never makes it removable without saying so (${rm7.status} ${rm7.body?.code ?? ''})`);
+    const u7 = await mod('POST', `/api/local/admin/bursts/${h7.body?.action?.id}/undo`, {});
+    assert(u7.status === 200 && p7.every(p => !hiddenAt(p)), `and that hide is undone (${u7.status})`);
 
     // ── 5. remove-all ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. remove-all ──');
@@ -428,7 +450,7 @@ async function main(): Promise<void> {
 
     // ── 8. a member who deletes their own account leaves every record ────────────────────────────
     console.log('\n── 8. a member who deletes their own account ──');
-    const fromS5 = await adm('POST', `/api/local/admin/members/${s5.pk}/burst/hide`, { members: [s7.pk], count: 1 });
+    const fromS5 = await adm('POST', `/api/local/admin/members/${s5.pk}/burst/hide`, { members: [s7.pk], count: 1, includeEstablished: true });
     assert(fromS5.status === 200, `setup: an action opened from Spam5 (${fromS5.status})`);
     const recordsOf = () => (db.prepare('SELECT COUNT(*) AS c FROM burst_action_posts WHERE post_id = ?').get(p5) as { c: number }).c
         + (db.prepare('SELECT COUNT(*) AS c FROM burst_actions WHERE anchor_pubkey = ?').get(s5.pk) as { c: number }).c;

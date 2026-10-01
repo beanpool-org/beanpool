@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { VaultWatcher, WATCH_DOWN_MS } from '../custodian/watch.js';
-import { doGenesis, get, startVault, type VaultUnderTest } from './harness.js';
+import { doGenesis, get, startVault, unlockWith, type VaultUnderTest } from './harness.js';
 import { StubWebhook } from './stubs.js';
 
 /**
@@ -110,5 +110,29 @@ describe('the watcher', () => {
         await v.api.checkAlerts();
         expect((await watcher.check()).problems).toEqual([]);
         expect(h.posts.at(-1)?.body).toMatch(/RESOLVED \(backups failing/);
+    });
+
+    it('an unlock hours after the API started is not a backup failure: staleness counts from when the vault opened', async () => {
+        const v = await startVault();
+        open.push(v);
+        const g = await doGenesis(v);
+        const h = await hook();
+        const watcher = new VaultWatcher({ url: v.baseUrl, ticketKey: g.ticketKey, channels: { email: null, webhook: { url: h.url, format: 'json' } }, clock: v.clock.now });
+        await v.api.checkAlerts();
+        await v.api.runBackup();
+        v.clock.advance(10 * MIN);
+        await v.restartKeyholder();
+        for (let i = 0; i < 18; i++) {
+            v.clock.advance(10 * MIN);
+            await v.api.checkAlerts();
+        }
+        await unlockWith(v, g.shares, [0, 1]);
+        await v.api.checkAlerts();
+        expect((await watcher.check()).problems).toEqual([]);
+        expect(h.posts).toEqual([]);
+        // Still true after it has been open two hours with no backup taken: then it is news.
+        v.clock.advance(3 * 60 * MIN);
+        await v.api.checkAlerts();
+        expect((await watcher.check()).problems.map(p => p.key)).toEqual(['backup']);
     });
 });

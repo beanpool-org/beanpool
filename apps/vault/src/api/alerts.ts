@@ -13,8 +13,8 @@ import { sendMail, SmtpError } from './smtp.js';
  * names no member, key, sign-in, address or token: the vault keeps none it could name. The same alert book serves the
  * watcher outside the vault (custodian/watch.ts), which sees what the vault can't say about itself: that it is gone.
  *
- * A channel that fails is tried again every five minutes; what waits for it is kept (up to 50 events) and goes in one
- * message. With no channel set, nothing is sent and the report says so.
+ * Each channel has its own waiting list: one that fails is tried again every five minutes, with everything it
+ * missed (up to 50 events), in one message, while the other channels go on as usual. With no channel set, nothing is sent and the report says so.
  */
 
 export const ALERT_REMIND_MS = 24 * 60 * 60 * 1000;
@@ -85,7 +85,10 @@ export interface ChannelStatus {
     error: string | null;
 }
 
-/** Sends one message to every configured channel. */
+export type ChannelName = 'email' | 'webhook';
+const CHANNEL_NAMES: ChannelName[] = ['email', 'webhook'];
+
+/** Sends one message to a channel; each channel's result is kept in `status`. */
 export class AlertChannelSender {
     readonly status: Record<'email' | 'webhook', ChannelStatus> = {
         email: { lastOkAt: null, failedInARow: 0, error: null },
@@ -94,14 +97,11 @@ export class AlertChannelSender {
 
     constructor(private readonly opts: { fetch?: FetchLike; heloName: string; smtpTls?: tls.ConnectionOptions; clock?: () => number }) {}
 
-    /** True when at least one channel took it. Each channel's result goes into `status`. */
-    async send(channels: AlertChannels, m: AlertMessage): Promise<boolean> {
+    /** True when the channel `which` took it (false when it isn't set). The result goes into `status`. */
+    async sendTo(which: ChannelName, channels: AlertChannels, m: AlertMessage): Promise<boolean> {
         const now = this.opts.clock?.() ?? Date.now();
-        const results = await Promise.all([
-            channels.email ? this.mail(channels, m, now).then(() => this.ok('email', now), e => this.failed('email', e)) : null,
-            channels.webhook ? this.hook(channels, m).then(() => this.ok('webhook', now), e => this.failed('webhook', e)) : null,
-        ]);
-        return results.some(r => r === true);
+        if (which === 'email') return channels.email ? this.mail(channels, m, now).then(() => this.ok('email', now), e => this.failed('email', e)) : false;
+        return channels.webhook ? this.hook(channels, m).then(() => this.ok('webhook', now), e => this.failed('webhook', e)) : false;
     }
 
     private ok(which: 'email' | 'webhook', now: number): true {
@@ -175,8 +175,11 @@ export interface AlertBookStatus {
  */
 export class AlertBook {
     private readonly raised = new Map<AlertKey, Raised>();
-    private waiting: AlertEvent[] = [];
-    private nextTryAt = 0;
+    /** Each channel's own waiting list and next try: a channel that fails keeps what it missed while the others go on. */
+    private readonly lists: Record<ChannelName, { waiting: AlertEvent[]; nextTryAt: number }> = {
+        email: { waiting: [], nextTryAt: 0 },
+        webhook: { waiting: [], nextTryAt: 0 },
+    };
     private lastSentAt: number | null = null;
     private dropped = 0;
     private sending: Promise<void> | null = null;
@@ -194,10 +197,13 @@ export class AlertBook {
         const now = this.opts.clock();
         const remind = this.opts.remindMs ?? ALERT_REMIND_MS;
         const push = (e: AlertEvent) => {
-            this.waiting.push(e);
-            if (this.waiting.length > MAX_WAITING) {
-                this.waiting.shift();
-                this.dropped++;
+            for (const name of CHANNEL_NAMES) {
+                const list = this.lists[name].waiting;
+                list.push(e);
+                if (list.length > MAX_WAITING) {
+                    list.shift();
+                    this.dropped++;
+                }
             }
         };
         for (const c of conditions) {
@@ -220,23 +226,30 @@ export class AlertBook {
         await this.flush();
     }
 
-    /** Sends what waits, if a channel is set and a try is due. One send at a time. */
+    /**
+     * Sends what waits, to each channel that is set and due. One send at a time. A channel not set has nothing kept for it
+     * while another is set; with none set, everything is kept for the first that is.
+     */
     async flush(): Promise<void> {
         if (this.sending) return this.sending;
-        const now = this.opts.clock();
         const channels = this.opts.channels();
-        if (!this.waiting.length || !channels || now < this.nextTryAt) return;
-        const events = this.waiting;
-        this.sending = (async () => {
-            const delivered = await this.opts.sender.send(channels, composeAlert(this.opts.vaultName, events));
+        const set = channels ? CHANNEL_NAMES.filter(n => channels[n]) : [];
+        if (channels && set.length) for (const n of CHANNEL_NAMES) if (!channels[n]) this.lists[n].waiting = [];
+        const now = this.opts.clock();
+        const due = set.filter(n => this.lists[n].waiting.length && now >= this.lists[n].nextTryAt);
+        if (!channels || !due.length) return;
+        this.sending = Promise.all(due.map(async name => {
+            const events = this.lists[name].waiting;
+            const delivered = await this.opts.sender.sendTo(name, channels, composeAlert(this.opts.vaultName, events));
+            const list = this.lists[name];
             if (delivered) {
-                this.waiting = this.waiting.filter(e => !events.includes(e));
+                list.waiting = list.waiting.filter(e => !events.includes(e));
+                list.nextTryAt = 0;
                 this.lastSentAt = this.opts.clock();
-                this.nextTryAt = 0;
             } else {
-                this.nextTryAt = this.opts.clock() + (this.opts.retryMs ?? ALERT_RETRY_MS);
+                list.nextTryAt = this.opts.clock() + (this.opts.retryMs ?? ALERT_RETRY_MS);
             }
-        })().finally(() => {
+        })).then(() => undefined).finally(() => {
             this.sending = null;
         });
         return this.sending;
@@ -251,7 +264,7 @@ export class AlertBook {
         const s = this.opts.sender.status;
         return {
             channels: [channels?.email ? 'email' : null, channels?.webhook ? 'webhook' : null].filter((x): x is string => !!x),
-            active: this.active(), lastSentAt: this.lastSentAt, waiting: this.waiting.length, dropped: this.dropped,
+            active: this.active(), lastSentAt: this.lastSentAt, waiting: Math.max(this.lists.email.waiting.length, this.lists.webhook.waiting.length), dropped: this.dropped,
             email: channels?.email ? { ...s.email } : null, webhook: channels?.webhook ? { ...s.webhook } : null,
         };
     }

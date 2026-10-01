@@ -380,7 +380,9 @@ async function watch(): Promise<void> {
         process.exit(problems.length ? 1 : 0);
     }
     if (!channels) console.error('warning: no --alerts file: problems are printed here and told to no one.');
-    const every = Math.max(10, Number(arg('--every') ?? 60)) * 1000;
+    const everyArg = Number(arg('--every') ?? 60);
+    if (!Number.isFinite(everyArg) || everyArg < 10) stop('--every is a number of seconds, 10 or more (for example --every 60).');
+    const every = everyArg * 1000;
     let said = '';
     for (;;) {
         const look = await watcher.check().catch(e => ({ at: Date.now(), reachable: false, state: null, reportOk: false, problems: [{ key: 'unreachable', detail: (e as Error).message }] }));

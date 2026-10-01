@@ -203,6 +203,15 @@ describe('vault-custodian', () => {
     });
 });
 
+describe('vault-custodian watch', () => {
+    it('--every that is not a number of seconds (10 or more) is refused before any look, never a 1 ms poll', async () => {
+        for (const bad of ['60s', 'abc', '', '5', '-1', 'Infinity']) {
+            const r = await cli(['watch', '--url', 'http://127.0.0.1:9', '--ticket-key', 'a'.repeat(64), '--every', bad]);
+            expect({ bad, code: r.code, says: /--every is a number of seconds/.test(r.out) }).toEqual({ bad, code: 2, says: true });
+        }
+    });
+});
+
 describe('vault-custodian release', () => {
     it('propose, then two custodians sign, verify says the vault would take it; a non-signer and a stale proposal are refused', async () => {
         const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));

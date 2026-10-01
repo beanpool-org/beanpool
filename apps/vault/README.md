@@ -389,6 +389,10 @@ alerts need it then). **Its host can read it**, as it can read the vault's memor
 backups, the mail password only that mailbox. To remove a part, two custodians send the file without it; `{"v": 1}`
 removes all.
 
+**When the store is changed or removed, empty the old bucket** (or give it a 30-day expiry rule). The vault prunes
+only the store in force, so the old bucket keeps its last backups for good, including copies members have since
+disconnected: the "within 30 days" promise no longer holds there. They stay sealed (`M` is needed), but delete them.
+
 ## Backups off the box (design §4)
 
 Every hour, while open, the vault seals a backup (`src/shared/backup-format.ts`), writes it to its own store, and then

@@ -30,6 +30,7 @@ import {
 import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import {
+    canonicalSettings,
     parseSettings,
     parseSettingsFile,
     SETTINGS_MAX_BYTES,
@@ -313,8 +314,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     }
 
     function useSettings(f: SettingsFile | null): void {
+        const before = settings?.settings.offsite ?? null;
         settings = f;
         const o = f?.settings.offsite ?? null;
+        // Only a changed store starts afresh: new alert channels alone say nothing about how the copies are going.
+        const same = canonicalSettings({ v: 1, offsite: before, alerts: null }) === canonicalSettings({ v: 1, offsite: o, alerts: null });
+        if (same && offsite) return;
         offsite = o ? new S3Store(o, { fetch: opts.outboundFetch, clock }) : null;
         offsiteSince = clock();
         offsiteStatus.failuresInARow = 0;
@@ -337,6 +342,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let lockedSince: number | null = null;
     /** Since when it has been open, as this process saw it; null while locked. */
     let openSince: number | null = null;
+    /** Whether this process has ever seen its keyholder locked or open: after that, `fresh` means its state was lost. */
+    let keyholderSeen = false;
     /** The last finished day whose signed report was made, and why the last one wasn't. */
     let lastReportDay: string | null = null;
     let reportFailure: string | null = null;
@@ -1009,6 +1016,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
             api: about().api, update: about().update, nextRestart: about().nextRestart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
+            // Since when it has been open, as this API saw it (the watcher counts a backup's age from the later of this and the newest).
+            openSince: openSince ?? now,
         });
     }
 
@@ -1300,19 +1309,22 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const now = clock();
         const status = await keyholderStatus();
         const open = status.state === 'open' && !status.restorePending && dataReady();
+        if (status.reachable && (status.state === 'locked' || status.state === 'open')) keyholderSeen = true;
+        const freshVault = status.state === 'fresh' && status.reachable;
         if (open) {
             lockedSince = null;
             openSince ??= now;
             if (db) await rollReport(now);
         } else {
             openSince = null;
-            if (status.state === 'fresh' && status.reachable) lockedSince = null;
+            if (freshVault && !keyholderSeen) lockedSince = null;
             else lockedSince ??= now;
         }
         const conditions: Condition[] = [];
 
         const why = !status.reachable ? 'its keyholder does not answer'
             : status.state === 'locked' ? 'its keyholder is locked (it restarted): two custodians must unlock it'
+                : status.state === 'fresh' ? 'its keyholder has lost its state (it came back fresh): custodians must restore it from a backup'
                 : status.restorePending ? 'a restore from backup is still to finish' : 'its data partition is not open yet';
         conditions.push({
             key: 'locked', active: lockedSince !== null && now - lockedSince >= LOCKED_ALERT_MS, since: lockedSince ?? undefined,
@@ -1344,7 +1356,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
         const midnight = Date.parse(`${dayOf(now)}T00:00:00Z`);
         const yesterday = dayOf(now - DAY_MS);
-        const reportMissing = startedAt < midnight && now - midnight >= REPORT_GRACE_MS && (lastReportDay === null || lastReportDay < yesterday);
+        const reportMissing = !freshVault && startedAt < midnight && now - midnight >= REPORT_GRACE_MS && (lastReportDay === null || lastReportDay < yesterday);
         conditions.push({
             key: 'report', active: reportMissing, since: midnight,
             detail: reportMissing ? `no signed daily report for ${yesterday}: ${reportFailure ?? 'the vault was not open to make it'}.`

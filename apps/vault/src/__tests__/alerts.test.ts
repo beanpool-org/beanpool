@@ -270,6 +270,16 @@ describe('what an alert says, and what it never does', () => {
 });
 
 describe('the mail client', () => {
+    it('STARTTLS reply injection: plaintext sent after the 220 is never read as the server\'s replies; nothing counts as delivered', async () => {
+        const evil = await new StubSmtp('starttls', cert).start();
+        servers.push(evil);
+        evil.injectAfterStarttls = ['250-fake', '250 AUTH PLAIN', '235 ok', '250 ok', '250 ok', '354 go', '250 queued', '221 bye'];
+        const e = await sendMail(evil.channel() as never, { subject: 's', text: 't', date: Date.now() }, { heloName: 'vault.test', tlsOptions: { ca: cert.cert } }).then(() => null, err => err as Error);
+        expect((e as { short?: string } | null)?.short).toBe('STARTTLS: data after 220');
+        expect(evil.mails).toEqual([]);
+        expect(evil.transcript.some(l => /^(AUTH|MAIL|RCPT|DATA)/i.test(l))).toBe(false);
+    });
+
     it('never in the clear: a server that offers no STARTTLS gets no password, and no message', async () => {
         const plain = await new StubSmtp('plain', cert).start();
         servers.push(plain);
@@ -284,6 +294,90 @@ describe('the mail client', () => {
         servers.push(smtp);
         const e = await sendMail(smtp.channel() as never, { subject: 's', text: 't', date: Date.now() }, { heloName: 'vault.test' }).catch(err => err as Error);
         expect((e as { short?: string }).short).toBe('TLS connection failed');
+        expect(smtp.mails).toEqual([]);
+    });
+});
+
+describe('review fixes (#1414)', () => {
+    const DAY = 24 * HOUR;
+    const eventsOf = (hook: StubWebhook) => hook.posts.flatMap(p => (JSON.parse(p.body) as { events: { condition: string; state: string; detail: string }[] }).events);
+
+    it('a channel that fails while the other works keeps what it missed, and gets it when it recovers', async () => {
+        const { v, g, smtp, hook } = await rig();
+        smtp.failWith = 554;
+        await v.restartKeyholder();
+        await v.api.checkAlerts();
+        await tick(v, LOCKED_ALERT_MS);
+        expect(hook.posts).toHaveLength(1);
+        expect(smtp.mails).toHaveLength(0);
+        // The mail server is fixed; the vault opens again, and the webhook goes on being told.
+        smtp.failWith = null;
+        await unlockWith(v, g.shares, [0, 1]);
+        await tick(v, 15 * MIN);
+        expect(eventsOf(hook).map(e => `${e.condition} ${e.state}`)).toEqual(['locked raised', 'locked cleared']);
+        expect(smtp.mails).toHaveLength(1);
+        expect(smtp.mails[0].data).toMatch(/- LOCKED since[\s\S]*- RESOLVED \(locked/);
+        expect((await reportOf(v)).alerts).toMatchObject({ waiting: 0, email: { failedInARow: 0 }, webhook: { failedInARow: 0 } });
+    });
+
+    it('a settings change that leaves the off-box store alone keeps its failure state: no false RESOLVED', async () => {
+        const stub = await new StubS3().start();
+        servers.push(stub);
+        const { v, smtp, hook, told } = await rig({ offsite: stub });
+        stub.failWith = 403;
+        for (let i = 0; i < 2; i++) {
+            await v.api.runBackup().catch(() => undefined);
+            v.clock.advance(HOUR);
+            await v.api.checkAlerts();
+        }
+        expect(told().join('\n')).toMatch(/OFF-BOX BACKUPS FAILING/);
+        const before = told().length;
+        const changed = { v: 1, offsite: stub.settings(), alerts: { email: smtp.channel(), webhook: { url: hook.url, format: 'text' } } };
+        for (const i of [0, 1]) expect(((await sendSettings(v.baseUrl, v.custodians[i], changed, v.call())) as Reply).status).toBe(200);
+        await v.api.idle();
+        await tick(v, 2 * MIN);
+        expect(told().slice(before).join('\n')).not.toMatch(/RESOLVED/);
+        expect((await reportOf(v)).offsite).toMatchObject({ failuresInARow: 2 });
+        // Changing the store itself does start afresh.
+        const other = await new StubS3().start();
+        servers.push(other);
+        for (const i of [0, 1]) await sendSettings(v.baseUrl, v.custodians[i], { ...changed, offsite: other.settings() }, v.call());
+        await v.api.idle();
+        await tick(v, 2 * MIN);
+        expect((await reportOf(v)).offsite).toMatchObject({ failuresInARow: 0 });
+    });
+
+    it('a keyholder that came back fresh after this API saw it open or locked is raised as locked, in its own words', async () => {
+        const { v, smtp } = await rig();
+        await v.api.checkAlerts();
+        // Open, then its state is lost and it restarts fresh with no lock in between.
+        rmSync(v.stateDir, { recursive: true, force: true });
+        await v.restartKeyholder();
+        await tick(v, LOCKED_ALERT_MS + MIN);
+        expect(smtp.mails).toHaveLength(1);
+        expect(smtp.mails[0].data).toMatch(/LOCKED since[^\n]*: its keyholder has lost its state \(it came back fresh\)/);
+        expect(smtp.mails[0].data).not.toMatch(/RESOLVED/);
+
+        // Locked first, then lost: still not "it is open again".
+        const b = await rig();
+        await b.v.restartKeyholder();
+        await b.v.api.checkAlerts();
+        await tick(b.v, LOCKED_ALERT_MS);
+        rmSync(b.v.stateDir, { recursive: true, force: true });
+        await b.v.restartKeyholder();
+        await tick(b.v, 2 * MIN);
+        expect(b.smtp.mails).toHaveLength(1);
+        expect(b.smtp.mails[0].data).toMatch(/LOCKED since/);
+        expect(b.smtp.mails[0].data).not.toMatch(/RESOLVED/);
+    });
+
+    it('a fresh vault that has never been set up gets no daily report-missing alert', async () => {
+        const smtp = await new StubSmtp('starttls', cert).start();
+        servers.push(smtp);
+        const v = await startVault({ smtpTls: { ca: cert.cert } });
+        open.push(v);
+        for (const i of [0, 1]) await sendSettings(v.baseUrl, v.custodians[i], { v: 1, alerts: { email: smtp.channel() } }, v.call());
+        await tick(v, 3 * DAY, HOUR);
         expect(smtp.mails).toEqual([]);
     });
 });

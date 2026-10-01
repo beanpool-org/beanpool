@@ -156,6 +156,8 @@ export class StubSmtp {
     readonly transcript: string[] = [];
     /** Refuse every message with this code (a server that won't take it), when set. */
     failWith: number | null = null;
+    /** Lines sent in the clear in the same write as the STARTTLS 220 (an on-path attacker's injected replies), when set. */
+    injectAfterStarttls: string[] | null = null;
     port = 0;
     private server: net.Server | tls.Server | null = null;
     private readonly sockets = new Set<net.Socket>();
@@ -214,7 +216,7 @@ export class StubSmtp {
                 return s.write(`${caps.join('\r\n')}\r\n`);
             }
             if (cmd === 'STARTTLS' && !isTls && this.mode === 'starttls') {
-                say('220 go ahead');
+                say(['220 go ahead', ...(this.injectAfterStarttls ?? [])].join('\r\n'));
                 s.removeAllListeners('data');
                 const upgraded = new tls.TLSSocket(s, { isServer: true, key: this.cert.key, cert: this.cert.cert });
                 upgraded.on('error', () => undefined);

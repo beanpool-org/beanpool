@@ -49,6 +49,8 @@ interface SignedReport {
     v?: number;
     at?: number;
     uptimeSeconds?: number;
+    /** When the vault opened, as its API saw it: no backup is taken while it is locked, so staleness counts from here. */
+    openSince?: number;
     backups?: { lastOkAt?: number | null; failuresInARow?: number };
     offsite?: { lastOkAt?: number | null; failuresInARow?: number; error?: string | null } | null;
     alerts?: { active?: string[] };
@@ -168,11 +170,12 @@ export class VaultWatcher {
                 detail: reportWhy ? `${reportWhy}.` : relayed.has('report') ? 'its own signed report says a day\'s report was not made.' : 'its signed report is back.',
             });
             if (report) {
-                const uptime = (report.uptimeSeconds ?? 0) * 1000;
+                // As the vault's own check does: from the later of when it opened and the newest backup (none is taken while it is locked).
+                const openedAt = typeof report.openSince === 'number' ? report.openSince : now - (report.uptimeSeconds ?? 0) * 1000;
                 const lastBackup = report.backups?.lastOkAt ?? null;
-                const backupOld = uptime > STALE_MS && (lastBackup === null || now - lastBackup > STALE_MS);
+                const backupOld = now - Math.max(openedAt, lastBackup ?? 0) > STALE_MS;
                 const off = report.offsite ?? null;
-                const offsiteOld = !!off && uptime > STALE_MS && (off.lastOkAt === null || off.lastOkAt === undefined || now - off.lastOkAt > STALE_MS);
+                const offsiteOld = !!off && now - Math.max(openedAt, off.lastOkAt ?? 0) > STALE_MS;
                 const backupBad = relayed.has('backup') || backupOld;
                 const offsiteBad = relayed.has('offsite') || offsiteOld;
                 conditions.push(

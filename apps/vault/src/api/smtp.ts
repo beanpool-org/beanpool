@@ -47,6 +47,7 @@ class Conversation {
     listen(socket: net.Socket | tls.TLSSocket): void {
         this.socket = socket;
         this.buffer = '';
+        this.lines = [];
         socket.setEncoding('latin1');
         socket.on('data', (chunk: string) => {
             this.buffer += chunk;
@@ -71,8 +72,16 @@ class Conversation {
         });
     }
 
-    /** Stops listening on the plain socket before it is wrapped in TLS. */
+    /**
+     * Stops listening on the plain socket before it is wrapped in TLS. Anything the server sent after its 220 and before
+     * the handshake is not a reply over TLS (RFC 3207 section 4.2: "STARTTLS command injection"): a server that sent it
+     * is refused, and nothing it said is ever read as an answer.
+     */
     release(): net.Socket {
+        if (this.buffer.length || this.lines.length) {
+            this.socket.destroy();
+            throw new SmtpError('STARTTLS: data after 220');
+        }
         this.socket.removeAllListeners('data');
         this.socket.removeAllListeners('error');
         this.socket.removeAllListeners('close');

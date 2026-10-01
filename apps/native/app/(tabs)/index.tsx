@@ -8,7 +8,7 @@ import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyE
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { membersOnlyHere } from '../../utils/members-only-listings';
-import { GLOBAL_NODE_URL } from '../../utils/node-profile';
+import { GLOBAL_NODE_URL, pollsInformal } from '../../utils/node-profile';
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -1341,6 +1341,7 @@ export default function MarketScreen() {
                     post={item}
                     currentPubkey={identity?.publicKey}
                     onVoteSuccess={() => loadPosts()}
+                    informal={pollsInformal(nodeProfile)}
                 />
             );
         }

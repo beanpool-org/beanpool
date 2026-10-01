@@ -1293,9 +1293,27 @@ END`;
     // invite_links table nothing ever read or wrote. The upgrade adds the column, stamps each row it holds once on a main
     // server (a standby's rows are its main server's), makes both triggers, and drops invite_links. A standby seeds no
     // pricing guide of its own at boot.
+    // Such a node also held each phone's push token in the clear (push_tokens.token, push_token_leaves.token): its two push
+    // tables are planted as they were, and the boot here runs the lock that follows initSchema in initStateEngine
+    // (services/push-token-seal.ts), which on a main server locks the row (stamped, as the rest) and on a standby drops it.
     console.log('\n--- 23. The devices tables gain their watermark, and invite_links goes ---');
     {
         const G4 = ['push_tokens', 'push_token_leaves', 'chat_mutes', 'thread_read_cursors', 'event_reminders_sent', 'activity_feed', 'pricing_reports'];
+        const OLD_PUSH_DDL: Record<string, string> = {
+            push_tokens: `CREATE TABLE push_tokens (public_key TEXT NOT NULL REFERENCES members(public_key), token TEXT NOT NULL,
+                platform TEXT DEFAULT 'ios', created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), registered_at INTEGER,
+                PRIMARY KEY (public_key, token))`,
+            push_token_leaves: `CREATE TABLE push_token_leaves (public_key TEXT NOT NULL, token TEXT NOT NULL, left_at INTEGER NOT NULL,
+                applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), PRIMARY KEY (public_key, token))`,
+        };
+        const bootSealing = `
+            import { initSchema } from ${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))};
+            import { getNodeRole } from ${JSON.stringify(path.join(__dirname, 'config', 'node-role.ts'))};
+            import { installPushTokenSealAtBoot } from ${JSON.stringify(path.join(__dirname, 'services', 'push-token-seal.ts'))};
+            initSchema();
+            installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
+            console.log('BOOT_OK');
+        `;
         const triggersOn = (d: Database.Database, t: string) =>
             (d.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? ORDER BY name`).all(t) as any[]).map((r) => r.name);
         const plant = (dir: string) => {
@@ -1305,7 +1323,7 @@ END`;
             assert(G4.every((t) => columns(d, t).includes('updated_at') && triggersOn(d, t).length === 2)
                 && !d.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'invite_links'`).get(),
                 'a fresh install has the column and both triggers on each, and no invite_links');
-            for (const t of G4) d.exec(`DROP TABLE ${t}; ${legacyDdl(t, ['updated_at'])}`);
+            for (const t of G4) d.exec(`DROP TABLE ${t}; ${OLD_PUSH_DDL[t] ?? legacyDdl(t, ['updated_at'])}`);
             d.exec(`CREATE TABLE invite_links (hash_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at DATETIME)`);
             d.prepare(`INSERT INTO push_tokens (public_key, token, platform, created_at) VALUES ('k', 'ExponentPushToken[old]', 'ios', '2025-01-01T00:00:00.000Z')`).run();
             d.prepare(`INSERT INTO chat_mutes (conversation_id, member_pubkey, muted_until, created_at) VALUES ('c', 'k', NULL, '2025-01-01T00:00:00.000Z')`).run();
@@ -1319,7 +1337,10 @@ END`;
             const out = {
                 shaped: G4.every((t) => columns(d, t).includes('updated_at') && triggersOn(d, t).length === 2),
                 inviteLinks: !!d.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'invite_links'`).get(),
-                token: (d.prepare(`SELECT updated_at AS u FROM push_tokens WHERE token = 'ExponentPushToken[old]'`).get() as any)?.u ?? null,
+                // The planted phone, by its key: its row names the token by id now. 'id-new' is the row planted below.
+                token: (d.prepare(`SELECT updated_at AS u FROM push_tokens WHERE public_key = 'k' AND token_id != 'id-new'`).get() as any)?.u ?? null,
+                inClear: !!d.prepare(`SELECT 1 FROM sqlite_master WHERE name IN ('push_tokens_plain', 'push_token_leaves_plain')`).get()
+                    || columns(d, 'push_tokens').includes('token'),
                 mute: (d.prepare(`SELECT updated_at AS u FROM chat_mutes WHERE conversation_id = 'c'`).get() as any)?.u ?? null,
                 line: (d.prepare(`SELECT updated_at AS u FROM activity_feed WHERE actor_pubkey = 'k'`).get() as any)?.u ?? null,
                 guide: (d.prepare('SELECT COUNT(*) AS n FROM pricing_guide_items').get() as any).n as number,
@@ -1329,30 +1350,31 @@ END`;
         };
         const mainDir = tmp('legacy-devices');
         plant(mainDir);
-        const booted = bootInto(mainDir);
+        const booted = bootInto(mainDir, {}, bootSealing);
         assert(booted.ok, 'a main server from before the column boots');
         if (!booted.ok) console.error(booted.output.split('\n').slice(-20).join('\n'));
         const onMain = look(mainDir);
-        assert(onMain.shaped && !onMain.inviteLinks && !!onMain.token && !!onMain.mute && !!onMain.line && onMain.guide > 0,
-            `each table has the column and both triggers, every row it held is stamped, invite_links is gone, and its guide is seeded (${JSON.stringify(onMain)})`);
+        assert(onMain.shaped && !onMain.inviteLinks && !!onMain.token && !!onMain.mute && !!onMain.line && onMain.guide > 0 && !onMain.inClear,
+            `each table has the column and both triggers, every row it held is stamped (the phone's locked), invite_links is gone, and its guide is seeded (${JSON.stringify(onMain)})`);
         const w = new Database(path.join(mainDir, 'state.db'));
         w.pragma('foreign_keys = OFF'); // as db.ts runs it
         w.prepare(`UPDATE chat_mutes SET updated_at = '2025-01-02T00:00:00.000Z' WHERE conversation_id = 'c'`).run();
         w.prepare(`UPDATE chat_mutes SET muted_until = '2030-01-01T00:00:00.000Z' WHERE conversation_id = 'c'`).run();
-        w.prepare(`INSERT INTO push_tokens (public_key, token, platform, updated_at) VALUES ('k', 'ExponentPushToken[new]', 'ios', NULL)`).run();
+        w.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, updated_at) VALUES ('k', 'id-new', 'box', 'ios', NULL)`).run();
         const moved = (w.prepare(`SELECT updated_at AS u FROM chat_mutes WHERE conversation_id = 'c'`).get() as any).u as string;
-        const stampedNew = (w.prepare(`SELECT updated_at AS u FROM push_tokens WHERE token = 'ExponentPushToken[new]'`).get() as any).u as string | null;
+        const stampedNew = (w.prepare(`SELECT updated_at AS u FROM push_tokens WHERE token_id = 'id-new'`).get() as any).u as string | null;
         w.close();
         assert(moved > '2025-01-02T00:00:00.000Z' && !!stampedNew, 'a write moves the stamp, and a row inserted with none is stamped');
-        assert(bootInto(mainDir).ok && look(mainDir).shaped, 'booting it again is a no-op');
+        assert(bootInto(mainDir, {}, bootSealing).ok && look(mainDir).shaped, 'booting it again is a no-op');
         fs.rmSync(mainDir, { recursive: true, force: true });
 
         const standbyDir = tmp('legacy-devices-standby');
         plant(standbyDir);
-        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the column boots');
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }, bootSealing).ok, 'a standby from before the column boots');
         const onStandby = look(standbyDir);
-        assert(onStandby.shaped && !onStandby.inviteLinks && onStandby.token === null && onStandby.mute === null && onStandby.line === null && onStandby.guide === 0,
-            `and has the columns and triggers, stamps no row itself and seeds no pricing guide: its rows are its main server's, which its next copy brings (${JSON.stringify(onStandby)})`);
+        assert(onStandby.shaped && !onStandby.inviteLinks && onStandby.token === null && onStandby.mute === null && onStandby.line === null && onStandby.guide === 0
+            && !onStandby.inClear,
+            `and has the columns and triggers, stamps no row itself, keeps no phone in the clear (no key to lock it) and seeds no pricing guide: its rows are its main server's, which its next copy brings (${JSON.stringify(onStandby)})`);
         fs.rmSync(standbyDir, { recursive: true, force: true });
     }
 

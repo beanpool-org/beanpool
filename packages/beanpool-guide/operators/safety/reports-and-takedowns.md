@@ -57,6 +57,23 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 
 **Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
 
+## On the global community: posts hidden by reports
+
+On the global community, reports can hide a post before anyone looks at it. On a local community they never do: every report waits for you.
+
+A post is hidden when reporters from **three independent circles** count towards it. A reporter counts when all of these hold:
+
+- they were a member for at least **7 days** when they reported it;
+- their **standing** is at least **half the author's**, rounded up. Standing is points: 1 for each full week as a member (up to 26), 1 for each post of theirs that is up and not hidden (up to 3), and 1 for each person they have finished a deal with (up to 3). Trust badges play no part;
+- no moderator has already dismissed their report on this post;
+- moderators have not kept **3 or more** posts they reported in the last **30 days** (dismissed their report on a post that is still up).
+
+Reporters who joined through the open door from the same internet address within **24 hours** of each other are one circle, and so are reporters who came in on invites traced back to the same member. The trace stops at an owner, admin or moderator, who let each of those people in themselves.
+
+So three new accounts can hide a newcomer's spam, but not the posts of someone who has been there for months: those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits.
+
+A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once fewer than three circles count; **Remove the post** takes it down as above.
+
 ## Be fair
 
 - Read the post and talk to the person before you act, unless there is danger.

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import type { NodeProfile } from '../../lib/profiles';
+import { setTfaSessionToken } from '../../lib/node-client';
 
 const mockActiveNode: NodeProfile = {
     id: 'local-node',
@@ -168,7 +169,8 @@ describe('PeerConnectorsPanel Component', () => {
 
     // Peer-link changes are held to 2FA on the node now, like every admin route: they must carry the 2FA session.
     it('sends the 2FA session when connecting a peer', async () => {
-        sessionStorage.setItem(`bp_tfa_session_${mockActiveNode.id}`, 'tfa-peer-token');
+        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
+        setTfaSessionToken(mockActiveNode.id, 'tfa-peer-token');
         const connectHeaders: Record<string, string>[] = [];
         vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
             const strUrl = String(url);
@@ -197,7 +199,7 @@ describe('PeerConnectorsPanel Component', () => {
             expect(connectHeaders[0]['X-Admin-2FA-Session']).toBe('tfa-peer-token');
             expect(connectHeaders[0]['X-Admin-Password']).toBe(mockActiveNode.adminPassword);
         } finally {
-            sessionStorage.removeItem(`bp_tfa_session_${mockActiveNode.id}`);
+            setTfaSessionToken(mockActiveNode.id, undefined);
         }
     });
 

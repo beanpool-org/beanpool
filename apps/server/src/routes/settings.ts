@@ -16,7 +16,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
-import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
+import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
@@ -39,6 +39,11 @@ const resolveServerPath = (subpath: string): string => {
     return path.join(SERVER_ROOT, subpath);
 };
 const PUBLIC_DIR = resolveServerPath('public');
+
+/** Text into the HTML of the sign-in error pages below. Every value is a fixed server string today; escaped anyway. */
+function escapeHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 export function createSettingsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -116,26 +121,24 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
         return next();
     }
-    // The Settings UI and its sign-in pages run inline scripts (app-document-csp.ts).
-    useDocumentPolicy(ctx);
+    // The manager (the React Settings) and these error pages run no inline script: the web app's strict policy
+    // (app-document-csp.ts, Fable's web review M2). Only the old static settings.html, served below when no manager
+    // build is there, keeps the older one.
+    useAppDocumentPolicy(ctx);
 
-    // 1. Deep-link Handshake Token Exchange (phone button flow)
+    // 1. Deep-link Handshake Token Exchange (an older phone app's Manage button): a page in the phone's in-app
+    //    browser, so the phone hand-off's short idle limit (admin-key-auth.ts PHONE_HANDOFF_IDLE_TTL_MS).
     const token = ctx.query.token as string | undefined;
     if (token) {
-        const exchangeRes = consumeHandshakeToken(token);
+        const exchangeRes = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         if (exchangeRes.ok && exchangeRes.sessionId) {
-            ctx.cookies.set('admin_session', exchangeRes.sessionId, {
-                httpOnly: true,
-                sameSite: 'lax',
-                maxAge: 12 * 3600 * 1000,
-                path: '/',
-            });
+            setAdminSessionCookie(ctx, exchangeRes.sessionId);
             ctx.redirect('/settings');
             return;
         } else {
             ctx.status = exchangeRes.replay ? 401 : (exchangeRes.expired ? 401 : 400);
             ctx.type = 'text/html';
-            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${exchangeRes.error || 'The authentication token is invalid or has expired.'}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
+            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${escapeHtml(exchangeRes.error || 'The authentication token is invalid or has expired.')}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
             return;
         }
     }
@@ -157,7 +160,7 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
             const isExpired = sessionRes?.expired || sessionRes?.idleTimeout || sessionRes?.hardLimit;
             const heading = isExpired ? 'Admin Session Expired' : 'Break-Glass Mode Active';
             const message = isExpired
-                ? (sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
+                ? escapeHtml(sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
                 : 'Settings access is restricted to enrolled key sessions. Password access is disabled except for key enrolment.';
             ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${heading} — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">${isExpired ? "⏱️" : "🔒"}</span> ${heading}</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${message}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Sign In with Key</a></main></body></html>`;
             return;
@@ -168,6 +171,8 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     const publicPath = resolveServerPath('public/settings.html');
     const staticPath = resolveServerPath('static/settings.html');
     const resolvedPath = fs.existsSync(managerPath) ? managerPath : (fs.existsSync(publicPath) ? publicPath : staticPath);
+    // The old page runs inline handlers and unpkg's Leaflet.
+    if (resolvedPath !== managerPath) useDocumentPolicy(ctx);
 
     if (fs.existsSync(resolvedPath)) {
         ctx.type = 'html';
@@ -662,6 +667,8 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
+    // Every password session opened without this authenticator ends; the one that turned it on carries on.
+    restampPasswordSession(ctx);
     const tfaSessionToken = issue2faSessionToken();
     ctx.set('X-Admin-2FA-Session', tfaSessionToken);
     console.log(alreadyOn
@@ -696,6 +703,7 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
+    restampPasswordSession(ctx);
     console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
     ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };
 });

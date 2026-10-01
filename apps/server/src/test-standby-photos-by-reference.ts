@@ -42,7 +42,7 @@
  *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
  *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
  * 10. A take-over confirmed while a delta fetches its objects, or a whole copy of one page does (M at its real page bounds),
- *     stops the fetch: no object request reaches the old main server after the confirm, with the restart switched off,
+ *     stops the fetch: no object request is sent to the old main server after the confirm, with the restart switched off,
  *     and nothing of the pull is imported (review of #1370, backup-puller.ts:872). (Before: every remaining object asked
  *     for; only a staged copy stopped.) The confirm comes while every request the fetch can have out is held at the proxy,
  *     so none is on its way then.
@@ -719,15 +719,15 @@ async function main(): Promise<void> {
             await main.send('token-only', { on: true });
         });
 
-        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: nothing more reaches the old main server', async () => {
+        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: no object request is sent to the old main server after it', async () => {
             const pw = { 'X-Admin-Password': PW_STANDBY };
             /**
              * M gains photos `node` lacks; `node` pulls at a pace (`whole`: the routine whole copy); once it has fetched 10 of
-             * their objects, its take-over is confirmed, with the restart switched off. The object requests that reach M
+             * their objects, its take-over is confirmed, with the restart switched off. The object requests sent to M
              * after the confirm, and how the pull ended.
              *
              * The confirm comes while every request the fetch can have out is held at the proxy, unanswered: nothing of it is
-             * on its way then, so a request that reaches M after the confirm was sent after it. Counted as the confirm's answer
+             * on its way then, so a request the proxy counts after the confirm was sent after it. Counted as the confirm's answer
              * came instead, a request already sent before it, that the proxy counted a moment later, was one "after" it (a
              * loaded run of this suite: 1).
              */
@@ -758,7 +758,7 @@ async function main(): Promise<void> {
             require_(!!standbyA && !!standbyB, 'steps 8 and 9 left two standbys holding copies of M');
             const d = await takeOverDuring(standbyA!, false, 100);
             assert(d.pull.ok === false && d.pull.mode === 'delta' && /take-over was confirmed/.test(d.pull.error ?? '') && d.after === 0 && d.rows === 0,
-                `a delta's fetch stops at the confirm: ${d.after} object request(s) reached the old main server after it, and none of its rows landed `
+                `a delta's fetch stops at the confirm: ${d.after} object request(s) were sent to the old main server after it, and none of its rows landed `
                 + `(${JSON.stringify({ ...d.pull, fetched: d.fetched, rows: d.rows })}; before: every remaining object the pull named, and the pull said nothing of the take-over)`);
             // M at its real page bounds: its whole copy is one page, imported over the copy the standby holds.
             await main.send('set-env', { vars: { SYNC_PAGE_BYTES: null, SYNC_PAGE_ROWS: null } });

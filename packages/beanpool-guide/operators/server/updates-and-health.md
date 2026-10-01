@@ -13,7 +13,7 @@ Your server runs a ready-made image, beanpool-node, from ghcr.io/beanpool-org. I
 - on the server, in the folder with docker-compose.yml, run: docker compose pull
 - then run: docker compose up -d
 
-Members stay signed in to their apps. Anyone signed in to Settings from the app, or with a two-factor code, signs in again: those sign-ins are kept in memory.
+Members stay signed in to their apps. Anyone signed in to Settings signs in again, with the password or from the app: those sign-ins are kept in memory.
 
 The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one.
 

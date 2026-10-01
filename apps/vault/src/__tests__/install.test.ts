@@ -330,6 +330,27 @@ describe('the monthly restart removes what the API left on the state partition, 
         expect((JSON.parse(readFileSync(resultFile, 'utf8')) as { cleanup: string }).cleanup).toMatch(/, 3 in restore$/);
     });
 
+    it('settings/: the custodians\' settings file stays; a partial write, a directory, a link, and a file past the cap go', () => {
+        const { d, outside } = planted();
+        const settings = path.join(path.dirname(d.releases), 'settings');
+        mkdirSync(path.join(settings, 'a-dir'), { recursive: true });
+        writeFileSync(path.join(settings, 'settings.json'), '{"v":1}');
+        writeFileSync(path.join(settings, 'settings.json.4242.part'), 'x');
+        symlinkSync(path.join(outside, 'precious'), path.join(settings, 'link'));
+        const said = clearApiDirs({ ...d, settings }, () => undefined);
+        expect(readdirSync(settings)).toEqual(['settings.json']);
+        expect(said).toMatch(/, 3 in settings that are not the settings file$/);
+        expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the API\'s');
+
+        writeFileSync(path.join(settings, 'settings.json'), Buffer.alloc(64 * 1024 + 1, 0x20));
+        clearApiDirs({ ...d, settings }, () => undefined);
+        expect(readdirSync(settings)).toEqual([]);
+        symlinkSync(path.join(outside, 'precious'), path.join(settings, 'settings.json'));
+        clearApiDirs({ ...d, settings }, () => undefined);
+        expect(readdirSync(settings)).toEqual([]);
+        expect(existsSync(path.join(outside, 'precious'))).toBe(true);
+    });
+
     it('a restore pending (the keyholder\'s marker): its file and its partial stay whatever their size, and nothing else in restore/ (verify 4, NB-1)', async () => {
         const t = setUp();
         const { d } = planted();

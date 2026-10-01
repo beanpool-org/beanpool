@@ -29,6 +29,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import { initStateEngine } from './state-engine.js';
 import { setNodeRole } from './engine/sync.js';
@@ -403,8 +404,7 @@ async function main(): Promise<void> {
         return realFetch(url, init);
     };
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-            .run(goer, 'ExponentPushToken[goer]');
+        putPushTokenRow(goer, 'ExponentPushToken[goer]', 'android');
 
         const wired = newEvent(140 * DAY, 'Wired up');
         rsvpAt(wired.id, goer, 'going', 0);

@@ -104,6 +104,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
+    const { putPushTokenRow, pushTokenId } = await import('./services/push-token-seal.js');
     // Absent on a tree without them: the checks that need them fail, and the rest still run.
     const notices: any = await import('./engine/push-notices.js').catch(() => null);
 
@@ -158,13 +159,21 @@ async function main() {
     const ann = member('AnnSecretname'), bob = member('BobSecretname'), cat = member('CatSecretname');
     const stranger = newId('NobodyHere');
     const phone = { ann: tokenOf('ann'), annOld: tokenOf('annold'), bob: tokenOf('bob'), cat: tokenOf('cat') };
-    const register = (who: Id, token: string) => db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(who.pk, token);
+    const register = (who: Id, token: string) => putPushTokenRow(who.pk, token, 'android');
     register(bob, phone.bob);
     register(cat, phone.cat);
     const toWhom = new Map<string, Id>([[phone.ann, ann], [phone.annOld, ann], [phone.bob, bob], [phone.cat, cat]]);
 
     /** What left, as text: everything a lock screen, Expo, Apple and Google got. */
-    const visible = (msgs: any[]) => JSON.stringify(msgs.map(m => ({ title: m.title, body: m.body, data: m.data, subtitle: m.subtitle })));
+    // The notice's own opaque fields (c, i, s: hex; t: seconds) are left out of the text search: random hex and a timestamp
+    // hold a string like '1234' now and then, which made this check flaky. They are held to strict shapes instead
+    // (opaqueFieldsOk), so no secret can ride in them either.
+    const visible = (msgs: any[]) => JSON.stringify(msgs.map(m => {
+        const { c, i, s, t, ...rest } = m?.data ?? {};
+        return { title: m.title, body: m.body, data: rest, subtitle: m.subtitle };
+    }));
+    const opaqueFieldsOk = (m: any): boolean => /^[0-9a-f]{16}$/.test(m?.data?.c ?? '') && /^[0-9a-f]{32}$/.test(m?.data?.i ?? '')
+        && /^[0-9a-f]{128}$/.test(m?.data?.s ?? '') && Number.isSafeInteger(m?.data?.t);
     /** The message shows only its kind's words, and its data is the notice and nothing else. */
     const onlyItsWords = (m: any): boolean => isPushNoticeKind(m?.data?.k) && m.title === 'BeanPool' && m.body === pushNoticeWords(m.data.k).body
         && JSON.stringify(Object.keys(m.data).filter(k => k !== 'kind').sort()) === JSON.stringify(NOTICE_KEYS)
@@ -192,7 +201,7 @@ async function main() {
         const offKinds: string[] = [], leaked: string[] = [], unkept: string[] = [];
         for (const kind of kinds) {
             const msgs = await caught(() => se.dispatchPushNotification([bob.pk], 'SYSTEM', detailTitle, detailBody, detailData, 'marketplace', kind));
-            if (msgs.length !== 1 || !onlyItsWords(msgs[0]) || msgs[0].data.k !== kind) offKinds.push(kind);
+            if (msgs.length !== 1 || !onlyItsWords(msgs[0]) || !opaqueFieldsOk(msgs[0]) || msgs[0].data.k !== kind) offKinds.push(kind);
             const text = visible(msgs);
             const found = secrets.filter(s => text.includes(s));
             if (found.length) leaked.push(`${kind}: ${found.join(', ')}`);
@@ -394,8 +403,11 @@ async function main() {
 
         // ── 5. Expo's tickets ──────────────────────────────────────────────────────────────────────────────
         console.log("\n--- 5. Expo's tickets ---");
-        const rowsNow = () => (db.prepare('SELECT public_key, token FROM push_tokens ORDER BY public_key, token').all() as { public_key: string; token: string }[])
-            .map(r => `${toWhom.get(r.token)?.name ?? r.public_key.slice(0, 8)}:${r.token}`);
+        // A row names its phone by the token's id (services/push-token-seal.ts): each id read back to the token it is.
+        const byId = new Map([...toWhom.keys()].map(t => [pushTokenId(t), t]));
+        const rowsNow = () => (db.prepare('SELECT public_key, token_id FROM push_tokens ORDER BY public_key, token_id').all() as { public_key: string; token_id: string }[])
+            .map(r => byId.get(r.token_id) ?? r.token_id)
+            .map(t => `${toWhom.get(t)?.name ?? '?'}:${t}`);
         const before = rowsNow();
         expo = 'tickets';
         dead = new Set([phone.annOld]);
@@ -405,7 +417,7 @@ async function main() {
         assert(before.length - after.length === 1 && !after.some(r => r.endsWith(phone.annOld))
             && after.some(r => r.endsWith(phone.ann)) && after.some(r => r.endsWith(phone.bob)),
             `the phone Expo says is gone is removed, and only it: Ann's other phone and Bob's stay (${before.length} → ${after.length})`);
-        const tomb = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'push_tokens' AND row_key = ?").get(`${ann.pk}|${phone.annOld}`);
+        const tomb = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'push_tokens' AND row_key = ?").get(`${ann.pk}|${pushTokenId(phone.annOld)}`);
         assert(!!tomb, 'with its tombstone, so a standby drops it too');
 
         dead = new Set();

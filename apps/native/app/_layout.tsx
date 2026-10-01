@@ -5,7 +5,7 @@ import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } f
 export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
+import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { requestSync } from '../services/pillar-sync';
@@ -32,9 +32,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PatternBackground from '../components/PatternBackground';
 import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { getAppLockEnabled } from '../utils/LocalAuth';
+import { appLockLocks } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
+import { setAppCovered, setAppLocked, setAppLockLaunchDecided, setAppUnlockAction, useAppLockScreen, whenAppShows } from '../utils/app-lock-screen';
+import { AppLockSurface, installLockCovers } from '../components/AppLock';
+import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { appVersionHeaderValue } from '../utils/force-update';
+import ForceUpdateBlock from '../components/ForceUpdateBlock';
+import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -50,7 +56,9 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Forward-compatible read signing (SRV-2/SRV-4): sign GET requests to the anchor
 // node so read-auth can be enforced server-side later without another app-store
 // release. Installed at module load, before any component renders or fetches.
-installNodeRequestSigning();
+// Every request to the anchor also names this build (X-BeanPool-App), so the community
+// can count who runs what before it raises its floor (utils/force-update.ts).
+installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
 
 // Cap OS font scaling app-wide so enlarged system fonts (common on low-end
 // devices in our target markets) can't shatter row layouts.
@@ -98,6 +106,10 @@ Object.defineProperty(RN, 'TextInput', {
     }
 });
 
+// App Lock's lock screen inside every pop-up (Modal), each of which is its own window above this layout, and every
+// Alert's buttons waiting for the unlock: components/AppLock.tsx. Same mechanism as Text above.
+installLockCovers(RN);
+
 // The wallpaper is drawn INSIDE every pushed screen, not only behind the navigator.
 //
 // It started out behind the navigator alone, with each screen left transparent so it could
@@ -114,13 +126,19 @@ Object.defineProperty(RN, 'TextInput', {
 // Keep the branch keyed on something FIXED per route. The two arms return different trees, so a
 // route that changed its presentation while mounted (a setOptions call on a later render) would
 // remount and lose its state. Nothing does that today.
+//
+// Every screen draws App Lock's lock screen inside itself too (components/AppLock.tsx): on an
+// iPhone a sheet, and any screen pushed from one, is presented above this layout's own, so the
+// lock screen drawn around the navigator below never covered it.
 function patternScreenLayout({ options, children }: { options: { presentation?: string }; children: ReactNode }): ReactElement {
-    if (options.presentation && options.presentation !== 'card') return children as ReactElement;
+    if (options.presentation && options.presentation !== 'card') return <AppLockSurface>{children}</AppLockSurface>;
     return (
-        <View style={{ flex: 1 }}>
-            <PatternBackground />
-            {children}
-        </View>
+        <AppLockSurface>
+            <View style={{ flex: 1 }}>
+                <PatternBackground />
+                {children}
+            </View>
+        </AppLockSurface>
     );
 }
 
@@ -134,8 +152,11 @@ function RootLayoutNav() {
     const isComponentMounted = useRef(true);
     const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
+    const recoveryPromptWait = useRef<(() => void) | null>(null); // it waits for the app to show (whenAppShows)
 
-    const [isLocked, setIsLocked] = useState(false);
+    // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
+    // draws them inside itself, not only this layout.
+    const lockScreen = useAppLockScreen();
     const [appLockChecked, setAppLockChecked] = useState(false);
 
     // null = not yet loaded; true = a join wizard was interrupted after the
@@ -156,30 +177,55 @@ function RootLayoutNav() {
     const triggerUnlock = async () => {
         const success = await unlockWithPhoneLock('Unlock BeanPool');
         if (success) {
-            setIsLocked(false);
+            setAppLocked(false);
         }
     };
+
+    // Unlock App, on whichever screen or pop-up the member sees the lock screen.
+    useEffect(() => {
+        setAppUnlockAction(() => { triggerUnlock(); });
+        return () => setAppUnlockAction(null);
+    }, []);
+
+    // With no account on the phone there is nothing to lock.
+    useEffect(() => {
+        if (!identity) setAppLocked(false);
+    }, [identity]);
+
+    // While the lock screen shows: the keyboard goes, so nothing typed lands in a field under it, and Android's back button
+    // moves nothing behind it. Registered as it goes up, so it is asked before the navigator's own. An iPhone's in-app
+    // browser (node Settings from Manage) sits above anything the app draws, so it is closed as the lock screen goes up;
+    // never for the cover, so a short switch away keeps it open (utils/app-lock-browser.ts).
+    useEffect(() => {
+        if (lockScreen !== 'lock') return;
+        closeInAppBrowserForLock();
+        Keyboard.dismiss();
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+        return () => sub.remove();
+    }, [lockScreen]);
 
     // Check on startup
     useEffect(() => {
         async function checkAppLock() {
-            const enabled = await getAppLockEnabled();
+            const enabled = await appLockLocks();
             if (enabled && identity) {
-                setIsLocked(true);
+                setAppLocked(true);
                 const success = await unlockWithPhoneLock('Unlock BeanPool');
                 if (success) {
-                    setIsLocked(false);
+                    setAppLocked(false);
                 }
             }
             setAppLockChecked(true);
+            setAppLockLaunchDecided();
         }
         checkAppLock();
     }, [identity]);
 
     // Check when returning to foreground (15 seconds away). Time the phone's own lock prompt was open is not time away, so
-    // a slow prompt is never followed by a second one: utils/return-lock.ts.
+    // a slow prompt is never followed by a second one: utils/return-lock.ts. It covers the app as it leaves, too, so the
+    // app switcher shows nothing of the member's.
     useEffect(() => {
-        if (!returnLock.current) returnLock.current = createReturnLock(setIsLocked);
+        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);
         const onChange = returnLock.current;
         const sub = AppState.addEventListener('change', (next) => {
             onChange(next, !!identity);
@@ -318,6 +364,8 @@ function RootLayoutNav() {
                                     closeDB()
                                         .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
                                         .then(() => initDB())
+                                        // The update screen's block was the community left's (utils/community-switch.ts).
+                                        .then(() => { communitySwitched(); })
                                         .then(async () => {
                                             if (!isComponentMounted.current) return;
                                             
@@ -407,6 +455,8 @@ function RootLayoutNav() {
                                                         try {
                                                             await clearDB();
                                                             await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                            // No community on the phone: the update screen's block comes down.
+                                                            communitySwitched();
                                                             const { removeSavedNode } = await import('../utils/nodes');
                                                             await removeSavedNode(targetOrigin);
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
@@ -519,7 +569,11 @@ function RootLayoutNav() {
 
         // Reset the one-shot recovery prompt whenever we're no longer in a
         // 'recovering' state, so a future genuine recovery alert can prompt again.
-        if (recognition !== 'recovering') recoveryNavPrompted.current = false;
+        if (recognition !== 'recovering') {
+            recoveryNavPrompted.current = false;
+            recoveryPromptWait.current?.();
+            recoveryPromptWait.current = null;
+        }
 
         if (recognition === 'recovering') {
             // NAT-20: the node's `isRecovering` claim is UNSIGNED — a malicious node
@@ -528,16 +582,25 @@ function RootLayoutNav() {
             // never reaches here (they go to /welcome above), so this is really an
             // "someone is recovering your account" alert, not a recovery flow. So
             // confirm once instead of force-navigating.
-            if (root !== 'recover-identity' && !recoveryNavPrompted.current) {
-                recoveryNavPrompted.current = true;
-                Alert.alert(
-                    'Account recovery reported',
-                    'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
-                    [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
-                    ],
-                );
+            //
+            // Marked, and shown, only once the app itself shows (utils/app-lock-screen.ts `whenAppShows`): this is asked
+            // at launch and on return, as App Lock's lock screen goes up, and an Alert behind it has a Review that does
+            // nothing and would never come back this run.
+            if (root !== 'recover-identity' && !recoveryNavPrompted.current && !recoveryPromptWait.current) {
+                const cancel = whenAppShows(() => {
+                    recoveryPromptWait.current = null;
+                    if (!isComponentMounted.current) return;
+                    recoveryNavPrompted.current = true;
+                    Alert.alert(
+                        'Account recovery reported',
+                        'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
+                        ],
+                    );
+                });
+                recoveryPromptWait.current = recoveryNavPrompted.current ? null : cancel;
             }
             return;
         }
@@ -610,21 +673,27 @@ function RootLayoutNav() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         let current = true;
+        const waits = new Set<() => void>();
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
-                // Marked only here, as the alert goes up: an answer for a layout that has gone keeps its hold's alert.
-                if (!current || takeHoldsToShow(holds).length === 0) return;
-                // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer one
-                // was cut mid-word (measured on the emulator). The body says what happened.
-                Alert.alert(
-                    'Is this you?',
-                    'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
-                    + 'you can let it through now. If not, stop it.',
-                    [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
-                    ],
-                );
+                if (!current || holds.length === 0) return;
+                // Marked only as the alert goes up, and that only once the app itself shows (utils/app-lock-screen.ts
+                // `whenAppShows`): an answer for a layout that has gone keeps its hold's alert, and one that arrives
+                // while App Lock's lock screen is up waits for the unlock, so its Review button works.
+                waits.add(whenAppShows(() => {
+                    if (!current || takeHoldsToShow(holds).length === 0) return;
+                    // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer
+                    // one was cut mid-word (measured on the emulator). The body says what happened.
+                    Alert.alert(
+                        'Is this you?',
+                        'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
+                        + 'you can let it through now. If not, stop it.',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
+                        ],
+                    );
+                }));
             }).catch(() => {});
         };
         look();
@@ -634,6 +703,7 @@ function RootLayoutNav() {
         return () => {
             current = false;
             sub.remove();
+            waits.forEach((cancel) => cancel());
         };
     }, [identity?.publicKey]);
 
@@ -663,6 +733,9 @@ function RootLayoutNav() {
                 UNDERNEATH the contentStyle below -- so with that opaque this value no longer
                 decides anything. Left transparent so nothing here can reintroduce a colour of
                 its own behind a screen. */}
+            {/* App Lock's lock screen over the navigator; each screen and pop-up draws its own as well
+                (components/AppLock.tsx). */}
+            <AppLockSurface>
             <NavThemeProvider value={navTheme}>
             <Stack
                 // Opaque, so a screen can no longer be seen through during a push. In practice
@@ -697,72 +770,10 @@ function RootLayoutNav() {
                 <Stack.Screen name="pulse" />
             </Stack>
             </NavThemeProvider>
-
-            {/* A tapped notification the phone can't trust: one calm line (utils/push-notice-check.ts). */}
+            {/* A tapped notification the phone can't trust: one calm line (utils/push-notice-check.ts). Inside the
+                lock surface, so App Lock's lock screen and cover are drawn over it too. */}
             <PushNoticeWarning />
-
-            {isLocked && identity && (
-                <View style={[StyleSheet.absoluteFill, {
-                    backgroundColor: isDark ? '#0a0a0a' : '#FAF9F6',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 24,
-                    zIndex: 99999
-                }]}>
-                    <StatusBar style={isDark ? 'light' : 'dark'} />
-                    <View style={{
-                        backgroundColor: isDark ? '#141414' : '#FFFFFF',
-                        padding: 32,
-                        borderRadius: 24,
-                        alignItems: 'center',
-                        borderWidth: 1,
-                        borderColor: isDark ? '#2e2e2e' : '#EBEBE6',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 12,
-                        elevation: 5,
-                        width: '100%',
-                        maxWidth: 320
-                    }}>
-                        <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-                        <Text style={{
-                            fontSize: 22,
-                            fontWeight: 'bold',
-                            color: isDark ? '#ffffff' : '#1C1D1A',
-                            marginBottom: 8,
-                            textAlign: 'center'
-                        }}>
-                            BeanPool Secure
-                        </Text>
-                        <Text style={{
-                            fontSize: 14,
-                            color: isDark ? '#a0a0a0' : '#646660',
-                            marginBottom: 32,
-                            textAlign: 'center',
-                            lineHeight: 20
-                        }}>
-                            Unlock with your device security to access your wallet.
-                        </Text>
-                        <Pressable
-                            style={{
-                                backgroundColor: '#10b981',
-                                paddingVertical: 14,
-                                paddingHorizontal: 28,
-                                borderRadius: 12,
-                                width: '100%',
-                                alignItems: 'center'
-                            }}
-                            onPress={triggerUnlock}
-                            accessibilityRole="button"
-                        >
-                            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
-                                Unlock App
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
+            </AppLockSurface>
         </View>
     );
 }
@@ -870,6 +881,12 @@ export default function RootLayout() {
                     <IdentityProvider>
                         <NodeStatusProvider>
                             <RootLayoutNav />
+                            {/* "Update required", over everything and outside the sign-in: only at a safe moment (a
+                                cold start, back after 5 minutes away, a switch of community), never mid-use
+                                (utils/force-update.ts). Inside the identity for the member's 12 words and leaving the
+                                community, which it does itself; inside the node status only to re-check the community
+                                it switches TO. It shows with or without an account. */}
+                            <ForceUpdateBlock />
                         </NodeStatusProvider>
                     </IdentityProvider>
                 </ThemeProvider>

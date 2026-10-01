@@ -35,6 +35,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
@@ -164,6 +165,29 @@ export async function unregisterPushToken(
 }
 
 /**
+ * The full-screen "Update required"'s "Leave this community" while other communities keep the key
+ * (utils/update-block-escape.ts `leaveFromUpdateBlock`): `community` alone is asked to drop this phone's push token
+ * for `account`, by the signed DELETE without a leave's stamp (the account stays on the phone, so no leave statement is
+ * written: its next sign-in would take one back). Best effort and never awaited by the leave: the community is the one
+ * that put the block up, and may be hostile or down. True only when it answered that it took it, or when this phone
+ * holds no token (nothing was sent there). Never throws; gives up at `timeoutMs`.
+ */
+export async function stopPushAlertsAt(
+    account: LeavingAccount, community: string, timeoutMs: number = UNREGISTER_TIMEOUT_MS,
+): Promise<boolean> {
+    const base = communityAddress(community);
+    if (!base || !account.publicKey || !account.privateKey) return false;
+    let token: string | null = null;
+    try {
+        token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);
+    } catch {
+        return false;
+    }
+    if (!token) return true;
+    return unregisterAt(base, JSON.stringify({ publicKey: account.publicKey, token }), account, timeoutMs);
+}
+
+/**
  * Stop the push alerts of the account leaving this phone, on the communities the phone sent its token to (see the file
  * comment), then forget that record: the next account starts its own. Never throws.
  */
@@ -218,6 +242,9 @@ export async function signOutOfThisPhone(account: LeavingAccount | null): Promis
     await clearDB();
     await releaseAccountFromPhone(account);
     await wipeIdentity();
+    // No community and no account on the phone now: the update screen's block, if one was up, comes down
+    // (utils/community-switch.ts).
+    communitySwitched();
 }
 
 /**
@@ -228,4 +255,5 @@ export async function signOutOfThisPhone(account: LeavingAccount | null): Promis
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);
     await wipeIdentity();
+    communitySwitched();
 }

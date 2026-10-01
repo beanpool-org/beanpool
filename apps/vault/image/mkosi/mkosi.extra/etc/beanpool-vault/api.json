@@ -8,6 +8,7 @@
   "trustProxy": true,
   "backupDir": "/var/lib/beanpool-vault/backups",
   "backupMaxBytes": 1073741824,
+  "settingsFile": "/var/lib/beanpool-vault/settings/settings.json",
   "releasesDir": "/var/lib/beanpool-vault/releases",
   "stagedDir": "/var/lib/beanpool-vault/staged",
   "installResultFile": "/var/lib/beanpool-vault/install-result.json",

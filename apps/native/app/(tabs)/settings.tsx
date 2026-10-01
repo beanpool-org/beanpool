@@ -30,6 +30,7 @@ import { fetchMembership } from '../../utils/membership-probe';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { communitySwitched } from '../../utils/community-switch';
 import Constants from 'expo-constants';
 import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
@@ -1201,6 +1202,8 @@ export default function SettingsScreen() {
             // The database is successfully suspended to Cold Storage.
             await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
             await initDB();
+            // The update screen's block was the community left's (utils/community-switch.ts).
+            communitySwitched();
             
             // Hard bounce the Application State Tree via the Welcome resolver
             router.replace('/welcome');
@@ -1393,6 +1396,9 @@ export default function SettingsScreen() {
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
+            // A switch too: the update screen asks the community now in use at once, whatever fails below
+            // (utils/community-switch.ts).
+            communitySwitched();
             // Inject alias to native node matrix
             const { addSavedNode, markGuestNode, clearGuestNode } = await import('../../utils/nodes');
             await addSavedNode(finalAnchorUrl, newNodeAlias.trim() || undefined);

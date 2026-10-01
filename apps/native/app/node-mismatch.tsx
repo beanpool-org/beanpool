@@ -21,6 +21,7 @@ import {
     type KeptCommunity,
 } from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
+import { communitySwitched } from '../utils/community-switch';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -94,6 +95,8 @@ export default function NodeMismatchScreen() {
             await closeDB();
             await AsyncStorage.setItem('beanpool_anchor_url', url);
             await initDB();
+            // The update screen asks the community now in use (utils/community-switch.ts).
+            communitySwitched();
 
             const result = await recheck();
             const { isGuestNode } = await import('../utils/nodes');

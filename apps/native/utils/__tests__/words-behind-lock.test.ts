@@ -355,7 +355,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     }
 
     it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
-        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|leaveFromUpdateBlock\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
         const doors: Record<string, number> = {
             // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
             'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
@@ -383,6 +383,10 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             'components/SsoEnrolSheet.tsx:connectAndDeposit(': 1,
             // "Yes, it's me" on a key vault hold: it lets the account through to another device now (below).
             'components/RecoveryAlertBanner.tsx:approveVaultHold(': 1,
+            // The full-screen "Update required": See my 12 words, and the words before leaving the last community; its
+            // Leave this community, after authenticateUser or after those words (force-update-escape.test.ts).
+            'components/ForceUpdateBlock.tsx:readWordsBehindLock(': 2,
+            'components/ForceUpdateBlock.tsx:leaveFromUpdateBlock(': 1,
         };
         const found: Record<string, number> = {};
         for (const { rel, src } of screens()) {

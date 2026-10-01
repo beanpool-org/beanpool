@@ -43,6 +43,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import Koa from 'koa';
 import { db, initSchema } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import {
     initStateEngine,
     transfer,
@@ -207,7 +208,7 @@ async function main() {
     db.prepare("INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment) VALUES (?, ?, ?, 'seller', 5, 'Best honey')").run(ratingId, oldAliceKey, bobKey);
 
     // 6. Push tokens: Alice registered a push token on her old (lost) phone
-    db.prepare("INSERT INTO push_tokens (token, public_key, platform) VALUES ('lost_phone_apns_token_xyz', ?, 'ios')").run(oldAliceKey);
+    putPushTokenRow(oldAliceKey, 'lost_phone_apns_token_xyz', 'ios');
 
     // 7. Member preferences: Alice set dark mode
     db.prepare("INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'theme', 'dark')").run(oldAliceKey);
@@ -735,7 +736,7 @@ async function main() {
     // Member 6: Push Token Purge on Prune
     const pushMemberKey = generateValidPubkey();
     makeMember('push_member', pushMemberKey);
-    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'token_123', 'ios')").run(pushMemberKey);
+    putPushTokenRow(pushMemberKey, 'token_123', 'ios');
     assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 1, 'Push token created');
     db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('push-member-watch', ?, 52.5, 13.4, 50, ?)").run(pushMemberKey, new Date().toISOString());
     executeOffboard(pushMemberKey, { resolution: 'prune_zero_balance' }, operatorPubkey);

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 91,
-  "hash": "e540dca6005b7409feb1136ce565730368bb8f3f9a30d23973215a6d3ce5d689",
+  "version": 92,
+  "hash": "bfbd5325259a96d0b8bd50f90d325610c5aea0a78cacb9653935140e6f3356f6",
   "sections": [
     {
       "id": "setup",
@@ -236,7 +236,7 @@
           "items": [
             "The password counts as an **owner**. Whoever has it can do everything an owner can.",
             "Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.",
-            "Your browser keeps the password for this tab only. Close the tab and you sign in again.",
+            "Your browser keeps no copy of the password. The server checks it once and gives this browser a sign-in that only the server can read. It ends when you press **Log Out**, after **2 hours** without use, after **12 hours** at most, and when the server restarts. Changing the password, or turning two-factor sign-in on or off, ends every other password sign-in; the browser that made the change stays signed in. Then you type the password again.",
             "Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds."
           ]
         },
@@ -1210,6 +1210,39 @@
         },
         {
           "type": "h2",
+          "text": "On the global community: posts hidden by reports"
+        },
+        {
+          "type": "p",
+          "text": "On the global community, reports can hide a post before anyone looks at it. On a local community they never do: every report waits for you."
+        },
+        {
+          "type": "p",
+          "text": "A post is hidden when reporters from **three independent circles** count towards it. A reporter counts when all of these hold:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "they were a member for at least **7 days** when they reported it;",
+            "their **standing** is at least **half the author's**, rounded up. Standing is points: 1 for each full week as a member (up to 26), 1 for each post of theirs that is up and not hidden (up to 3), and 1 for each person they have finished a deal with (up to 3). Trust badges play no part;",
+            "no moderator has already dismissed their report on this post;",
+            "moderators have not kept **3 or more** posts they reported in the last **30 days** (dismissed their report on a post that is still up)."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Reporters who joined through the open door from the same internet address within **24 hours** of each other are one circle, and so are reporters who came in on invites traced back to the same member. The trace stops at an owner, admin or moderator, who let each of those people in themselves."
+        },
+        {
+          "type": "p",
+          "text": "So three new accounts can hide a newcomer's spam, but not the posts of someone who has been there for months: those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits."
+        },
+        {
+          "type": "p",
+          "text": "A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once fewer than three circles count; **Remove the post** takes it down as above."
+        },
+        {
+          "type": "h2",
           "text": "Be fair"
         },
         {
@@ -2142,7 +2175,7 @@
         },
         {
           "type": "p",
-          "text": "Members stay signed in to their apps. Anyone signed in to Settings from the app, or with a two-factor code, signs in again: those sign-ins are kept in memory."
+          "text": "Members stay signed in to their apps. Anyone signed in to Settings signs in again, with the password or from the app: those sign-ins are kept in memory."
         },
         {
           "type": "p",
@@ -2213,6 +2246,10 @@
           "text": "The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now."
         },
         {
+          "type": "p",
+          "text": "To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out."
+        },
+        {
           "type": "h2",
           "text": "Checking from outside"
         },
@@ -2223,7 +2260,7 @@
         {
           "type": "ul",
           "items": [
-            "your address followed by **/api/version**: the version, and whether an update is available;",
+            "your address followed by **/api/version**: the version, and whether an update is available (unless you turned the update check off);",
             "your address followed by **/api/community/health**: the community's name, version and activity, and the watchdog's last report if you run one."
           ]
         },
@@ -2671,6 +2708,10 @@
         },
         {
           "type": "p",
+          "text": "It also notes which members joined through the open door from the same internet connection within a day of each other: a random label they share, never the address. Only the hiding of reported posts reads it, so that their reports count as one (see Reports and takedowns). It is in the database, so anyone who can read the database can see who joined together, as people in one household or at one meetup often do. A standby copies it, and it goes when the member deletes their own account."
+        },
+        {
+          "type": "p",
           "text": "GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas)."
         },
         {
@@ -2786,7 +2827,7 @@
           "type": "ul",
           "items": [
             "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
-            "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
+            "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."

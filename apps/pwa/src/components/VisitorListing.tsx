@@ -92,13 +92,15 @@ interface DetailProps {
     distanceKm: number | null;
     onBack: () => void;
     onJoin: () => void;
+    /** A poll's card says it decides nothing (lib/informal-polls.ts). */
+    pollsInformal?: boolean;
 }
 
 /**
  * The visitor's detail sheet: the listing's photos (a row that swipes), its words and category, the rough distance,
  * an event's time with its place held back, and one full-width button to join. No chat, no accept, no profile link.
  */
-export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: DetailProps) {
+export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false }: DetailProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
     const photos = post.photos ?? [];
@@ -116,7 +118,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: D
             </button>
 
             {post.type === 'poll' ? (
-                <PollCard post={post} visitor />
+                <PollCard post={post} visitor informal={pollsInformal} />
             ) : (
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm overflow-hidden mb-4">
                     <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b" style={{ backgroundColor: `${typeColor}15`, borderBottomColor: `${typeColor}30` }}>

@@ -85,7 +85,7 @@ extra="${work}/mkosi.extra"
 mkdir -p "${extra}/opt/node/bin" "${extra}/usr/lib/beanpool-vault" "${extra}/etc/beanpool-vault"
 tar -xJf "${node_txz}" -C "${extra}/opt/node/bin" --strip-components=2 "node-v${NODE_VERSION}-linux-x64/bin/node"
 tar -xJf "${node_txz}" -C "${extra}/opt/node" --strip-components=1 "node-v${NODE_VERSION}-linux-x64/LICENSE"
-for f in vault-keyholder.mjs vault-api.mjs vault-launcher.mjs vault-install.mjs; do
+for f in vault-keyholder.mjs vault-api.mjs vault-launcher.mjs vault-install.mjs vault-egress.mjs; do
     cp "${out}/bundles/${f}" "${extra}/usr/lib/beanpool-vault/${f}"
 done
 node -e '

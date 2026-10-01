@@ -342,7 +342,9 @@ git tag -a v1.0.38 -m "Short description of what's new"
 git push --tags
 ```
 
-**What happens automatically:**
+**What happens next:** the push starts a run, but the build, the `:latest` push and the Release wait for Marty's approval. Open the run page on GitHub and choose **Review deployments**; until then the run shows as pending, not stuck.
+
+**Once approved:**
 
 1. **GitHub Actions** detects the `v*` tag push
 2. **Builds** the Docker image with `APP_VERSION=1.0.38` baked in as a build arg

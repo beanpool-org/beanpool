@@ -3,7 +3,7 @@
  * no screenshots while they show, one plain line on a phone with no screen lock, and one next to Copy saying the copy
  * clears in a minute.
  */
-import React, { useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Text, type StyleProp, type TextStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { COPY_CLEARS_LINE } from '../utils/words-clipboard';
@@ -19,6 +19,37 @@ import { NO_SCREEN_LOCK_LINE, holdNoScreenCapture, useNoScreenLock } from '../ut
  * this, so nothing is lost while they are away.
  */
 export function NoScreenCapture({ children, fallback = null }: { children: React.ReactNode; fallback?: React.ReactNode }): React.JSX.Element {
+    return useContext(OutsideScreens)
+        ? <HeldWhileMounted fallback={fallback}>{children}</HeldWhileMounted>
+        : <HeldWhileFocused fallback={fallback}>{children}</HeldWhileFocused>;
+}
+
+/**
+ * Drawn above the screens rather than in one (the full-screen "Update required", components/ForceUpdateBlock.tsx): no
+ * screen's focus to follow, so inside this, {@link NoScreenCapture} holds the block for as long as the words are
+ * mounted, with the same order (the block first, the words after; the words gone before it is let go).
+ */
+export function WordsOutsideScreens({ children }: { children: React.ReactNode }): React.JSX.Element {
+    return <OutsideScreens.Provider value={true}>{children}</OutsideScreens.Provider>;
+}
+
+const OutsideScreens = createContext(false);
+
+function HeldWhileMounted({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }): React.JSX.Element {
+    const [inForce, setInForce] = useState(false);
+    useEffect(() => {
+        const hold = holdNoScreenCapture();
+        let current = true;
+        void hold.answered.then(() => { if (current) setInForce(true); });
+        return () => {
+            current = false;
+            hold.release();
+        };
+    }, []);
+    return <>{inForce ? children : fallback}</>;
+}
+
+function HeldWhileFocused({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }): React.JSX.Element {
     const focused = useIsFocused();
     const [inForce, setInForce] = useState(false);
     useEffect(() => {

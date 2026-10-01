@@ -1,9 +1,11 @@
 # The only resolver on the machine (127.0.0.1): it answers for the few names the vault may reach, and puts each
-# answer's addresses into the firewall's allowed set (etc/nftables.conf), so HTTPS out goes only there.
+# answer's addresses into the firewall's allowed set (etc/nftables.conf), so HTTPS out goes only there. The names of
+# the custodians' backup store and alert channels come from root's egress step (beanpool-vault-egress.service).
 [Unit]
 Description=BeanPool key vault: DNS for the allowed destinations
-After=nftables.service network.target
+After=nftables.service network.target beanpool-vault-egress.service
 Requires=nftables.service
+Wants=beanpool-vault-egress.service
 Before=beanpool-vault-api.service caddy.service
 
 [Service]

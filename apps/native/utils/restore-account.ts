@@ -28,6 +28,7 @@ import {
 import { clearPendingOnboarding } from './onboarding-state';
 import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
+import { communitySwitched } from './community-switch';
 
 /**
  * Asked before a restore writes another account over the one this phone holds: the "Replace this phone's account?"
@@ -124,6 +125,8 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
             await wipeIdentityScopedStorage(AsyncStorage);
         }
         await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
+        // The update screen asks the community now in use (utils/community-switch.ts).
+        communitySwitched();
         await importIdentity(identity);
     } catch (e) {
         if (!replacesAnother) throw e;

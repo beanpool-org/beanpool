@@ -44,6 +44,7 @@ import { signInReplacedNote } from './no-words-copy';
 import { SSO_PROVIDER_NAMES } from './sso-providers';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import type { JoinDeps } from './join-another-community';
+import { communitySwitched } from './community-switch';
 
 /**
  * The key the door's sign-in and join are signed by: the account this phone holds, as it is. Null when the phone
@@ -164,6 +165,8 @@ export async function enterGlobalCommunity(injected?: EnterDeps): Promise<void> 
     await deps.closeDB();
     await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
     await deps.initDB();
+    // The update screen asks the community now in use (utils/community-switch.ts).
+    communitySwitched();
     deps.requestSync().catch(() => {});
 }
 

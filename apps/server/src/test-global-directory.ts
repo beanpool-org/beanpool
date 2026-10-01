@@ -111,6 +111,7 @@ const { initTls } = await import('./services/tls.js');
 const { initStateEngine, seedGenesisMember, createPost, setNodeRole, adminPruneUser } = await import('./state-engine.js');
 const { startHttpsServer } = await import('./https-server.js');
 const { db } = await import('./db/db.js');
+const { putPushTokenRow } = await import('./services/push-token-seal.js');
 const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 const { startP2P } = await import('./p2p.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
@@ -254,7 +255,7 @@ async function main(): Promise<void> {
     const poster = member('Pat');
     const stranger = newId('Stranger');
     const pushToken = (id: Id) => `ExponentPushToken[g5-${id.name}]`;
-    for (const id of [wes, wanda, theo]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
+    for (const id of [wes, wanda, theo]) putPushTokenRow(id.pk, pushToken(id), 'android');
     const pushesTo = (id: Id) => pushed.filter(m => m.to === pushToken(id));
 
     // ── 1. local profile ────────────────────────────────────────────────────────────────────────────────────────
@@ -528,7 +529,7 @@ async function main(): Promise<void> {
     for (const s of [sWes, sTheo, sPat]) s.ws.close();
 
     const fay = member('Fay');
-    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(fay.pk, pushToken(fay));
+    putPushTokenRow(fay.pk, pushToken(fay), 'android');
     const setF = await call('POST', fay, '/api/global/watches', { lat: -1.29, lng: 36.82, radiusKm: 200 });
     pushed.length = 0;
     serve([...V2, SUFFOLK, MITTE, BRUNSWICK, ...FLOOD]);
@@ -593,7 +594,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE place_watches SET created_at = ? WHERE pubkey = ?').run(daysAgo(9), olga.pk);
     db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-lima'").run(daysAgo(8));
     db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-callao'").run(daysAgo(6));
-    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(olga.pk, pushToken(olga));
+    putPushTokenRow(olga.pk, pushToken(olga), 'android');
     pushed.length = 0;
     const rE = await runMirror();
     await settle();

@@ -3,9 +3,10 @@ import path from 'node:path';
 import { BACKUP_NAME_RE, backupBytes, backupsPastBudget, compareBackupNames } from '../shared/backup-format.js';
 
 /**
- * Where backups go (key vault design §4): object storage at a second provider in another country. Every file is
- * sealed and signed before it gets here (shared/backup-format.ts), so the store is trusted with nothing but keeping
- * the bytes. The real store's client and credentials come later; this interface is all the vault needs of it.
+ * Where backups go (key vault design §4): the vault's own directory, and object storage at a second provider in
+ * another country (s3-store.ts, set by two custodians: shared/settings.ts). Every file is sealed and signed before it
+ * gets here (shared/backup-format.ts), so a store is trusted with nothing but keeping the bytes. This interface is all
+ * the vault needs of either.
  */
 export interface BackupStore {
     put(name: string, bytes: Uint8Array): Promise<void>;
@@ -28,8 +29,8 @@ function checkName(name: string): string {
 }
 
 /**
- * A directory as a backup store: for tests, for a rehearsal with a disk as the "other provider", and on the image until
- * the store's client exists (the state partition, `/var/lib/beanpool-vault/backups`). There it shares the partition
+ * A directory as a backup store: the vault's own copy of its backups (on the image, the state partition,
+ * `/var/lib/beanpool-vault/backups`; each is copied off the box too once a store is set), and tests. It shares the partition
  * with a new image waiting for the monthly restart, so `maxBytes` bounds it (backupsPastBudget, the rule root's monthly
  * step applies too): a backup larger than the whole budget is refused (BackupTooLarge) and nothing is removed for it,
  * so the last good one stays; after each backup written, anything named later goes, then the oldest until the rest

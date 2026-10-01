@@ -9,7 +9,12 @@
  * origin — and a CSRF token, which has to go on every request because the cookie is ambient.
  *
  * A reload keeps working without a new link: the cookie is still there, so `/auth/session` says so and a
- * fresh CSRF token is fetched. Nothing here stores a password, and the password login stays exactly as it was.
+ * fresh CSRF token is fetched.
+ *
+ * The password sign-in (signInWithPassword, below) ends the same way: the node checks the password (and its 2FA code)
+ * once and answers the same kind of cookie and CSRF token. The password is never kept: not in web storage, not in
+ * memory after the call. The members' web app shares this origin, so anything stored here is one script away from
+ * it (Fable's web review, M1); an httpOnly cookie is not.
  */
 
 export type KeySessionRole = 'owner' | 'admin' | 'moderator';
@@ -54,6 +59,8 @@ export function parseHandoffFragment(hash: string): { token: string | null; sect
 
 export type KeySessionStart =
     | { kind: 'session'; session: KeySession; csrfToken: string; section: HandoffSection | null }
+    /** An earlier password sign-in whose cookie is still live: the node's owner, no member. */
+    | { kind: 'password'; csrfToken: string; section: HandoffSection | null }
     | { kind: 'none'; section: HandoffSection | null }
     | { kind: 'failed'; message: string; section: HandoffSection | null };
 
@@ -96,22 +103,69 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
         }
     }
 
-    // No link: an earlier key sign-in may still hold a live cookie.
+    // No link: an earlier sign-in (a key's or the password's) may still hold a live cookie.
     try {
         const res = await fetch('/api/local/admin/auth/session', { credentials: 'same-origin', cache: 'no-store' });
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
         const role = asRole(body.role);
-        if (body.authenticated === true && body.isKeySession === true && role && typeof body.memberPubkey === 'string') {
+        const isKey = body.isKeySession === true && role && typeof body.memberPubkey === 'string';
+        const isPassword = body.isPasswordSession === true && role === 'owner';
+        if (body.authenticated === true && (isKey || isPassword)) {
             const csrfRes = await fetch('/api/local/admin/csrf-token', { method: 'POST', credentials: 'same-origin' });
             const csrfBody = await csrfRes.json().catch(() => ({})) as Record<string, unknown>;
             if (csrfRes.ok && typeof csrfBody.csrfToken === 'string') {
-                return { kind: 'session', session: { memberPubkey: body.memberPubkey, role }, csrfToken: csrfBody.csrfToken, section };
+                if (isPassword) return { kind: 'password', csrfToken: csrfBody.csrfToken, section };
+                return { kind: 'session', session: { memberPubkey: body.memberPubkey as string, role: role! }, csrfToken: csrfBody.csrfToken, section };
             }
         }
     } catch { /* fall through to the password login */ }
     return { kind: 'none', section };
 }
 
+export type PasswordSignIn =
+    | { ok: true; csrfToken: string }
+    | { ok: false; error: string; totpRequired: boolean };
+
+/**
+ * The password sign-in: POST /api/local/admin/auth/password with the password (and the 2FA code, once the node asks
+ * for one). On success the node has set the httpOnly admin_session cookie; this returns its CSRF token. Nothing is
+ * stored: the caller drops the password as soon as this returns.
+ */
+export async function signInWithPassword(url: string, password: string, totpCode?: string): Promise<PasswordSignIn> {
+    const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, ...(totpCode ? { totpCode } : {}) }),
+    });
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (res.ok && typeof body.csrfToken === 'string') return { ok: true, csrfToken: body.csrfToken };
+    return {
+        ok: false,
+        totpRequired: body.totpRequired === true,
+        error: typeof body.error === 'string' && body.error ? body.error : `Authentication failed (${res.status})`,
+    };
+}
+
+/**
+ * Leftovers of the old password sign-in, which kept the password and its 2FA session in this origin's web storage.
+ * Removed on every load, so a browser that signed in before this build holds none of them after its next visit.
+ */
+const OLD_SECRET_KEYS = ['bp-admin-token', 'bp-2fa-session', 'bp-csrf-token'];
+const OLD_SECRET_PREFIX = 'bp_tfa_session_';
+
+export function forgetStoredAdminSecrets(store: Pick<Storage, 'length' | 'key' | 'removeItem'> | undefined = typeof window !== 'undefined' ? window.sessionStorage : undefined): void {
+    if (!store) return;
+    try {
+        for (let i = store.length - 1; i >= 0; i--) {
+            const key = store.key(i);
+            if (key && (OLD_SECRET_KEYS.includes(key) || key.startsWith(OLD_SECRET_PREFIX))) store.removeItem(key);
+        }
+    } catch { /* storage unavailable: nothing was kept there either */ }
+}
+
+/** Sign-out, for a key session and a password session alike: the node ends the session and clears the cookie. */
 export async function endKeySession(csrfToken: string | null): Promise<void> {
     try {
         await fetch('/api/local/admin/auth/logout', {

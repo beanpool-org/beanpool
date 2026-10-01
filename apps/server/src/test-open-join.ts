@@ -426,15 +426,15 @@ async function main(): Promise<void> {
     const NUMBERS = DOOR_NUMBERS.global;
 
     // No work at the sign-in door at ordinary rates: today's apps send none, and need none.
-    addFakes(NUMBERS.signInWorkFrom - 1 - recentFromHere(), new Date());
+    addFakes(NUMBERS.signInWorkFrom - 2 - recentFromHere(), new Date());
     const gil = newId();
     const quiet = await call(gil, '/api/join/work', { door: 'sign-in' });
     assert(quiet.status === 200 && quiet.body?.work === null && quiet.body?.turnstile === null,
-        `${NUMBERS.signInWorkFrom - 1} joins from one address in the hour: the sign-in door asks no work (got ${quiet.status} ${JSON.stringify(quiet.body)})`);
+        `the ${NUMBERS.signInWorkFrom - 1}th join from one address in the hour: the sign-in door asks no work (got ${quiet.status} ${JSON.stringify(quiet.body)})`);
     addFakes(1, new Date());
     const busy = await call(gil, '/api/join/work', { door: 'sign-in' });
     assert(busy.status === 200 && busy.body?.work?.level === 0 && typeof busy.body?.work?.challenge === 'string',
-        `at ${NUMBERS.signInWorkFrom} an hour it asks some, at level 0 (got ${busy.status} ${JSON.stringify(busy.body)})`);
+        `the ${NUMBERS.signInWorkFrom}th asks some, at level 0 (got ${busy.status} ${JSON.stringify(busy.body)})`);
     const gilNonce = await joinNonce(gil);
     const gilToken = mint('google', { sub: 'gil-google-sub', nonce: gilNonce });
     const gilBare = await join(gil, { callsign: 'Gil', provider: 'google', idToken: gilToken, nonce: gilNonce });

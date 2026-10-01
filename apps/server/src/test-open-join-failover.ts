@@ -15,15 +15,18 @@
  *     delta export after another join carries only that row, which key, and no key in any encoding.
  *  3. A copy of that standby promoted by hand (NODE_ROLE=primary), as the recovery seal's key is: it holds no key, says
  *     so at boot, and fails closed. Ada's sign-in account from a new key, and a new account too, are refused 503
- *     door_key_missing, with no member added. With the main server's key file put back by hand, Ada is 409
+ *     door_key_missing, with no member added. The 12-words door needs no key: Vic joins there by 12 words, and adding a
+ *     sign-in is refused 503 door_key_missing. With the main server's key file put back by hand, Ada is 409
  *     already_joined and the new account joins.
- *  4. The take-over, from the bundle alone: the standby copies the main server again, then Dan joins it, the main
+ *  4. The take-over, from the bundle alone: Wes joins the main server by 12 words and the standby copies it again
+ *     (Wes's `words` row with it), then Dan joins it, the main
  *     server re-seals and the standby pulls only the envelope. The standby's copy of the door's rows is then wiped (a
  *     standby that copied before the rows travelled; it still knows which key made them), and the main server dies. The
  *     take-over's open-door step brings the key and the rows back from the keys: the promoted server's key file is the
  *     main server's, byte for byte,
- *     0600; Ada and Ben are refused 409 with no member added, and Dan (whom this standby never copied, so has no
- *     identity here) can join again rather than be locked out. The key is in neither the journal nor the step's detail.
+ *     0600; Wes's `words` row is back from the bundle; Ada and Ben are refused 409 with no member added, and Dan (whom
+ *     this standby never copied, so has no identity here) can join again rather than be locked out. The key is in neither
+ *     the journal nor the step's detail.
  *
  * And the key vault's ticket keys (V5, services/vault-ticket-keys.ts), env config on each server and nothing else: the
  * main server and its standby have the BEANPOOL_VAULT_TICKET_KEYS line, the hand-promoted copy has not. The take-over
@@ -40,7 +43,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { newVaultTicket, signVaultTicket, vaultTicketNonce } from '@beanpool/core';
+import { newVaultTicket, signVaultTicket, solveDoorWorkSync, vaultTicketNonce } from '@beanpool/core';
 import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeover-test-harness.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -264,6 +267,14 @@ async function join(port: number, id: Id, sub: string, callsign: string): Promis
     return signedPost(port, id, '/api/join', { callsign, provider: 'google', idToken: mintGoogle(sub, n.body.nonce), nonce: n.body.nonce });
 }
 
+/** Join through the 12-words door at `port` as `id`: the door's work, solved here, and the name. */
+async function wordsJoin(port: number, id: Id, callsign: string): Promise<{ status: number; body: any }> {
+    const w = await signedPost(port, id, '/api/join/work', { door: 'words' });
+    if (w.status !== 200 || !w.body?.work) return w;
+    const work = { challenge: w.body.work.challenge, counters: solveDoorWorkSync(w.body.work.challenge) };
+    return signedPost(port, id, '/api/join', { door: 'words', callsign, work });
+}
+
 // The key vault's ticket key (made here; only its public half goes in a server's env).
 const vaultSeed = new Uint8Array(crypto.randomBytes(32));
 const VAULT_KEY = Buffer.from(ed25519.getPublicKey(vaultSeed)).toString('hex');
@@ -374,6 +385,15 @@ async function main(): Promise<void> {
         const shutOut = await join(probeHttps, newId(), 'cara-google-sub', 'Cara');
         assert(shutOut.status === 503 && shutOut.body?.code === 'door_key_missing', `and a new Google account too: the door fails closed (${shutOut.status})`);
         assert((await probe.send('door')).members === probeBefore.members, 'no member was added');
+        // The 12-words door compares no sign-in, so it needs no key: it stays open where the sign-in door is shut.
+        const vic = newId();
+        const vicJoin = await wordsJoin(probeHttps, vic, 'Vic');
+        const vicRow = (await probe.send('door')).rows.find((r: any) => r.member === vic.pk);
+        assert(vicJoin.status === 200 && vicJoin.body?.door === 'words' && typeof vicRow?.hash === 'string' && vicRow.hash.startsWith('words:'),
+            `without the key, Vic still joins by 12 words, a \`words\` row with no sign-in behind it (${vicJoin.status} ${vicJoin.body?.code ?? ''})`);
+        const vicLink = await signedPost(probeHttps, vic, '/api/join/link/sso-nonce', {});
+        assert(vicLink.status === 503 && vicLink.body?.code === 'door_key_missing',
+            `and adding a sign-in there is refused, 503 door_key_missing: it would need the key (${vicLink.status} ${vicLink.body?.code})`);
         fs.copyFileSync(path.join(dirs.main, KEY_FILE), path.join(dirs.probe, KEY_FILE));
         const adaWithKey = await join(probeHttps, newId(), 'ada-google-sub', 'Ada two');
         assert(adaWithKey.status === 409 && adaWithKey.body?.code === 'already_joined',
@@ -390,13 +410,20 @@ async function main(): Promise<void> {
 
         // ── 4. The take-over, from the bundle alone ──
         console.log('\n— 4. the take-over, with the standby\'s own copy of the door\'s record wiped —');
+        const wes = newId();
+        const wesJoin = await wordsJoin(mainHttps, wes, 'Wes');
+        assert(wesJoin.status === 200 && wesJoin.body?.door === 'words', `Wes joins the main server by 12 words (${wesJoin.status} ${wesJoin.body?.code ?? ''})`);
         const recopied = await standby.send('pull', {});
-        require_(recopied.resync?.ok, `the standby copies the main server again, Eve included (${JSON.stringify(recopied.resync)})`);
+        require_(recopied.resync?.ok, `the standby copies the main server again, Eve and Wes included (${JSON.stringify(recopied.resync)})`);
+        const wesCopied = (await standby.send('door')).rows.find((r: any) => r.member === wes.pk);
+        assert(typeof wesCopied?.hash === 'string' && wesCopied.hash.startsWith('words:') && !wesCopied.ipHash,
+            'the standby\'s copy holds Wes\'s `words` row, with no address hash');
         const dan = newId();
         const danJoin = await join(mainHttps, dan, 'dan-google-sub', 'Dan');
         assert(danJoin.status === 200, `Dan joins the main server after the standby's last copy (${danJoin.status})`);
         const sealed2 = await main.send('reseal');
-        assert(sealed2.members?.includes(dan.pk) && sealed2.total === 4, `the main server re-seals: the bundle has Dan's row (${sealed2.total} in all)`);
+        assert(sealed2.members?.includes(dan.pk) && sealed2.members?.includes(wes.pk) && sealed2.total === 5,
+            `the main server re-seals: the bundle has Dan's row and Wes's (${sealed2.total} in all)`);
         const envOnly = await standby.send('pull', { envelopeOnly: true });
         assert(envOnly.envelope === 'stored', `the standby pulls only the new envelope (${JSON.stringify(envOnly)})`);
         await standby.send('forget-door');
@@ -417,15 +444,17 @@ async function main(): Promise<void> {
 
         const progress = await standby.send('progress');
         assert(progress.state === 'complete' && progress.step?.done, `the take-over completed, open-door step included (${progress.state})`);
-        assert(/3 sign-in account\(s\) on record here \(the main server had 4 when it sealed\)/.test(progress.step?.detail ?? '')
+        assert(/4 sign-in account\(s\) on record here \(the main server had 5 when it sealed\)/.test(progress.step?.detail ?? '')
             && /1 for members this standby never copied/.test(progress.step?.detail ?? '') && /the key for the open door's hashes brought from the keys/.test(progress.step?.detail ?? ''),
             `the step says what it brought back (${progress.step?.detail})`);
         assert(!progress.keyInJournal && !progress.keyInProgress, 'the key is in neither the journal nor the progress the Settings screen reads');
         const after = await standby.send('door');
         assert(after.keyFp === mainDoor.keyFp && after.keyMode === '600' && after.keyId === mainDoor.keyId && !after.legacyRow,
             'the promoted server\'s data/open-join.key is the main server\'s, byte for byte, 0600, recorded as the key its records were made with');
-        assert(JSON.stringify(after.rows.map((r: any) => r.member).sort()) === JSON.stringify([ada.pk, ben.pk, eve.pk].sort()),
-            'Ada, Ben and Eve\'s join records are back; Dan\'s is not, as Dan is no member here');
+        assert(JSON.stringify(after.rows.map((r: any) => r.member).sort()) === JSON.stringify([ada.pk, ben.pk, eve.pk, wes.pk].sort()),
+            'Ada, Ben, Eve and Wes\'s join records are back; Dan\'s is not, as Dan is no member here');
+        assert(after.rows.find((r: any) => r.member === wes.pk)?.hash === wesCopied?.hash,
+            'Wes\'s is the `words` row, from the keys: a 12-words member is still one after a take-over');
 
         const standbyHttps = (await standby.send('serve', { jwk: googleJwk })).port as number;
         const membersAfter = after.members as number;

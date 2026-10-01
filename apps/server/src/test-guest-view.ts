@@ -1212,7 +1212,7 @@ async function main(): Promise<void> {
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
-            'POST /api/join/sso-nonce',
+            'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',

@@ -40,11 +40,11 @@ const DAY_MS = 24 * HOUR_MS;
 export const WORDS_PROVIDER = 'words';
 
 export interface DoorNumbers {
-    /** Joins from one address in the last hour (both doors) at which each network step starts: 0 below the first. */
+    /** The Nth join from one address in an hour (both doors, this one included) at which each network step starts. */
     networkSteps: number[];
-    /** 12-words joins on the whole node in the last 10 minutes at which each node step starts. */
+    /** The Nth 12-words join on the whole node in 10 minutes (this one included) at which each node step starts. */
     nodeSteps: number[];
-    /** The sign-in door asks no work below this many joins an hour from the address (today's flow, untouched). */
+    /** The sign-in door asks no work of an address's joins in an hour before this one (today's flow, untouched). */
     signInWorkFrom: number;
     /** From there, the sign-in door's level is the network steps less this many: a provider account is its cost. */
     signInDiscount: number;
@@ -198,16 +198,21 @@ export interface DoorLevel {
     joinsThisHour: number;
 }
 
-/** What a join from this address asks for now, and why (design §4.2). */
+/**
+ * What a join from this address asks for now, and why (design §4.2). The join being asked for counts: the 10th join
+ * from an address in an hour is the first at network step 1 ("the first 9 do level 0, the next 20 level 1"), and the
+ * 30th the first the sign-in door asks work of.
+ */
 export function doorLevel(door: DoorWorkDoor, ipHash: string, now = Date.now(), numbers: DoorNumbers = doorNumbers()): DoorLevel {
     const joins = addressJoins(ipHash, now);
-    const networkSteps = stepsReached(joins.hour, numbers.networkSteps);
+    const nth = joins.hour + 1;
+    const networkSteps = stepsReached(nth, numbers.networkSteps);
     if (door === 'sign-in') {
         // No node steps and no memory of removals: a provider account is the cost there.
-        const level = joins.hour < numbers.signInWorkFrom ? null : clamp(networkSteps - numbers.signInDiscount);
+        const level = nth < numbers.signInWorkFrom ? null : clamp(networkSteps - numbers.signInDiscount);
         return { level, networkSteps, nodeSteps: 0, removedNetwork: false, joinsThisHour: joins.hour };
     }
-    const nodeSteps = stepsReached(wordsJoinsLately(now), numbers.nodeSteps);
+    const nodeSteps = stepsReached(wordsJoinsLately(now) + 1, numbers.nodeSteps);
     const removedNetwork = removedLatelyFrom(ipHash, now);
     let level = networkSteps + nodeSteps;
     if (removedNetwork) level = Math.max(level, numbers.removedNetworkLevel);

@@ -197,7 +197,8 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
 function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; theirsFirst: string | null }> {
     const rows = db.prepare(
         `SELECT other.public_key AS other, c.created_by, c.created_at,
-                (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key) AS mine_first,
+                (SELECT MIN(t) FROM (SELECT m.timestamp AS t FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key
+                                     UNION ALL SELECT w.timestamp FROM withheld_lines w WHERE w.conversation_id = mine.conversation_id AND w.author_pubkey = mine.public_key)) AS mine_first,
                 (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = other.public_key) AS theirs_first,
                 EXISTS (SELECT 1 FROM marketplace_transactions t
                          WHERE (t.buyer_pubkey = mine.public_key AND t.seller_pubkey = other.public_key)
@@ -207,6 +208,17 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
            JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key
           WHERE mine.public_key = ?`
     ).all(pubkey) as { other: string; created_by: string | null; created_at: string | null; mine_first: string | null; theirs_first: string | null; traded: number }[];
+    // A conversation the member opened with someone who has blocked them (engine/withheld-lines.ts) is one they reached all
+    // the same, at its opening and at their first line in it: it counts as an opened one does, so their count moves as it does
+    // for any chat and shows nothing of the block (#1403 re-review).
+    const kept = db.prepare(
+        `SELECT c.other_pubkey AS other, c.created_at,
+                (SELECT MIN(w.timestamp) FROM withheld_lines w WHERE w.conversation_id = c.id AND w.author_pubkey = c.owner_pubkey) AS mine_first,
+                EXISTS (SELECT 1 FROM marketplace_transactions t
+                         WHERE (t.buyer_pubkey = c.owner_pubkey AND t.seller_pubkey = c.other_pubkey)
+                            OR (t.buyer_pubkey = c.other_pubkey AND t.seller_pubkey = c.owner_pubkey)) AS traded
+           FROM withheld_conversations c WHERE c.owner_pubkey = ?`
+    ).all(pubkey) as { other: string; created_at: string | null; mine_first: string | null; traded: number }[];
     const earliest = (a: string | null, b: string | null) => (!a ? b : !b ? a : a < b ? a : b);
     const byOther = new Map<string, { mineFirst: string | null; theirsFirst: string | null }>();
     for (const r of rows) {
@@ -215,6 +227,13 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
         byOther.set(r.other, {
             mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.created_by === pubkey ? opened : null)),
             theirsFirst: earliest(had?.theirsFirst ?? null, earliest(r.theirs_first, r.created_by === r.other ? opened : null)),
+        });
+    }
+    for (const r of kept) {
+        const had = byOther.get(r.other);
+        byOther.set(r.other, {
+            mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.traded ? null : r.created_at)),
+            theirsFirst: had?.theirsFirst ?? null,
         });
     }
     return byOther;

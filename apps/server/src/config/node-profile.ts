@@ -124,6 +124,13 @@ export interface ProfileSwitches {
      *  (Marty, 2026-09-27): anyone may join it with one sign-in and no invite, so one person with several accounts
      *  could swing a vote, and it is moderated without votes. Polls are posts, not Decisions, and are not this. */
     decisions: boolean;
+    /** Every member's socket hears `member_joined` when someone joins, the doorbell on which each of their apps reads
+     *  the member list again (engine/members.ts announceJoin). Off (the global node, DESIGN-global-two-doors-fable
+     *  §6.5): only the joiner's own sockets hear it, which it makes member sockets, and the members' version still
+     *  moves, so anyone's next read of the members or the feed has the newcomer. A lobby of strangers needs no live
+     *  news of each join, and at its numbers (5 joins a second, 5,000 sockets) it was 25,000 frames a second, each
+     *  sending a phone back for the list. */
+    announceJoins: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -152,6 +159,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         guestListingsOnly: false,
         exampleListings: false,
         decisions: true,
+        announceJoins: true,
     },
     global: {
         openJoin: true,
@@ -180,6 +188,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         // Groups findable, no formal votes (Marty, 2026-09-27): one sign-in each, so no vote is safe from one person
         // with several accounts. Reported posts are hidden, repeat offenders muted, and the team moderates.
         decisions: false,
+        // Nobody in a lobby of strangers needs each join live, and every member's app read the list again for it.
+        announceJoins: false,
     },
 };
 
@@ -207,7 +217,8 @@ export interface NodeFeatures {
     distanceSearch: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
-    /** A post reported by 3 established members is hidden until a moderator looks. */
+    /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
+     *  until a moderator looks (engine/auto-moderation.ts). */
     autoHideReports: boolean;
     /** 3 posts removed by a moderator in 30 days stop a member posting and messaging until a moderator lifts it. */
     autoMute: boolean;

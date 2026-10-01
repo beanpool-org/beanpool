@@ -43,10 +43,12 @@ Now and then the admins clear out old listings to keep the Market tidy. If some 
 
 The global community at global.beanpool.org is open to anyone who signs in, so it looks after itself a little more:
 
-- **A post reported by three members** who have been there at least a week is hidden at once, until a moderator looks at it. Its author can still see it, and gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.
+- **A post reported by three members who don't know each other** is hidden at once, until a moderator looks at it. Each of them must have been a member for at least a week, and be at least half as established there as the person who posted it. Time as a member counts most, then posts that stayed up and people they have finished a deal with. Trust badges don't count. People who joined from the same internet connection within a day of each other count as one, and so do people who came in on invites from the same person. Someone who reported three posts in a month that the moderators then kept doesn't count for a while. Otherwise the reports wait for the moderators, as they do everywhere. So a few new accounts can't hide the posts of someone who has been there for months.
+- **A hidden post** can still be seen by its author, who gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.
 - **New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.
 - **If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.
 - **There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.
+- **Polls there are informal.** Each one says "An informal poll; it decides nothing". Anyone can join with a sign-in, so one person with several accounts could tip the count.
 
 None of this happens in your own local community: there, every report waits for the moderators.
 

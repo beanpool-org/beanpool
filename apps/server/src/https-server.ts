@@ -153,7 +153,8 @@ import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
-    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade,
+    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
+    type GatewayCharge,
 } from './gateway-rate-limit.js';
 import { wsLimits, wsHasRoom, admitWsSocket, admitLogSocket, frameAllowed } from './ws-limits.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
@@ -162,7 +163,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -736,6 +737,39 @@ function isApiOrWsPath(requestPath: string): boolean {
 }
 
 /**
+ * The admin surface: the Settings pages and every route the admin password or an admin session opens. The admin IP
+ * allowlist guards exactly these, and a listed CORS origin gets no credentials on them (Fable's web review, L6).
+ * Matched ignoring case and after normalising, so no spelling of a path is treated more loosely than another.
+ */
+export function isAdminSurfacePath(requestPath: string): boolean {
+    const p = path.posix.normalize(requestPath.toLowerCase()).replace(/\/+$/, '') || '/';
+    return p === '/settings' ||
+        p.startsWith('/settings/') ||
+        p === '/settings-legacy' ||
+        p === '/settings.js' ||
+        p === '/api/local/admin' ||
+        p.startsWith('/api/local/admin/') ||
+        p === '/api/admin' ||
+        p.startsWith('/api/admin/') ||
+        p === '/api/local/verify-password' ||
+        p === '/api/local/dashboard' ||
+        p === '/api/local/update-identity' ||
+        p === '/api/local/change-password' ||
+        p === '/api/local/reset' ||
+        p === '/api/local/connectors' ||
+        p.startsWith('/api/local/connectors/') ||
+        p.startsWith('/api/local/federation/') ||
+        p === '/api/manager' ||
+        p.startsWith('/api/manager/') ||
+        p === '/api/pricing-guide/admin' ||
+        p.startsWith('/api/pricing-guide/admin/') ||
+        // The price-report queue (routes/pricing-guide.ts, checkAdminAuth): reporters' keys and comments. Not the
+        // singular /api/pricing-guide/report, a member's own report.
+        p === '/api/pricing-guide/reports' ||
+        p.startsWith('/api/pricing-guide/reports/');
+}
+
+/**
  * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
  * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
  * toggles) compares the path as sent. Those two views must never disagree about what a request is, so a
@@ -780,6 +814,33 @@ function refuseUpgrade(socket: Duplex, status: 401 | 429 | 503, retryAfterSec?: 
     socket.destroy();
 }
 
+/** How long a socket let in only to be told "no room" may take to answer the close before it is dropped. */
+const NO_ROOM_CLOSE_GRACE_MS = 5_000;
+
+/**
+ * A /ws socket over a cap (ws-limits.ts). Where the caps say `noRoomClose` (the global node) and its address has room
+ * for one more such answer this minute (gateway-rate-limit.ts gatewayNoRoomUpgrade, which gives back what the upgrade
+ * was charged), the upgrade completes and closes at once with the "no room" close and its wait, which the apps read
+ * (@beanpool/core wsNoRoomRetrySec): it is never added to the feed, holds no place, and is dropped if it doesn't answer
+ * the close. Otherwise (a client that did not send `nr=1`, or a node without the close) the old refusal: `status` before the upgrade, as charged.
+ */
+function refuseSocketForRoom(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer, client: string,
+    maxReqs: number, charges: ReadonlyArray<GatewayCharge | null>, status: 429 | 503, understandsNoRoom: boolean): void {
+    // Only a client that says it reads the close (`nr=1` on its connect URL) gets it: an app built before it resets its
+    // backoff and syncs on every socket that opens, so against the close it would retry every few seconds.
+    if (!understandsNoRoom || !wsLimits().noRoomClose || !gatewayNoRoomUpgrade(client, maxReqs, charges)) {
+        refuseUpgrade(socket, status, 30);
+        return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws: any) => {
+        const drop = setTimeout(() => { try { ws.terminate(); } catch { /* gone already */ } }, NO_ROOM_CLOSE_GRACE_MS);
+        drop.unref?.();
+        ws.on('close', () => clearTimeout(drop));
+        ws.on('error', () => { /* a client that vanished: the close above still ends it */ });
+        ws.close(WS_NO_ROOM_CLOSE_CODE, wsNoRoomReason(WS_NO_ROOM_RETRY_SEC));
+    });
+}
+
 /** Hold a socket's place (ws-limits.ts) until its raw socket closes, whichever way: a refused handshake or the end of a
  *  live socket. */
 function holdUntilClosed(socket: Duplex, release: () => void): void {
@@ -806,18 +867,20 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 
         if (pathname === '/ws') {
             // The node's room first, before a token is verified or anything is charged.
-            if (!wsHasRoom()) { refuseUpgrade(socket, 503, 30); return; }
+            if (!wsHasRoom()) { refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [], 503, parsedUrl.searchParams.get('nr') === '1'); return; }
             const claims = claimsWsSignature(parsedUrl.searchParams);
-            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false };
+            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false, charge: null };
             if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
             const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
+            let settled: GatewayCharge | null = null;
             if (limited) {
                 // A verified key is charged as HTTP charges it: its own bucket if it acts here, else the address's.
                 const verified = connect.kind === 'member' ? { key: connect.pubkey, acts: true }
                     : connect.kind === 'non_member' ? { key: connect.pubkey, acts: false } : null;
-                const wait = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
+                const { wait, charge } = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
                 if (wait) { refuseUpgrade(socket, 429, wait); return; }
+                settled = charge;
             }
             const refuse = WS_AUTH_MODE === 'strict'
                 ? connect.kind !== 'member'
@@ -830,7 +893,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // doorbells (or the open feed, where the operator chose it), is a stranger's, under the tighter caps.
             const place = admitWsSocket(client, connect.kind === 'member' ? { kind: 'keyed', key: connect.pubkey } : { kind: 'stranger' });
             if (!place.ok) {
-                refuseUpgrade(socket, place.status, 30);
+                refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [admitted.charge, settled], place.status, parsedUrl.searchParams.get('nr') === '1');
                 return;
             }
             holdUntilClosed(socket, place.release);
@@ -864,36 +927,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // Charged as an unsigned request: an admin opens one now and then, and a flood of made-up tickets stops here.
             const wait = limited ? gatewayAdmitUpgrade(client, maxReqs, false).wait : 0;
             if (wait) { refuseUpgrade(socket, 429, wait); return; }
-            const auth = parsedUrl.searchParams.get('auth');
+            // A single-use ticket from POST /api/local/admin/ws-ticket (checkAdminAuth), and nothing else. The admin
+            // password in the query string (`?auth=`) is no longer taken: a URL lands in the tunnel's, proxies' and
+            // browsers' logs and history, and no client has sent one since the tickets (Fable's web review, L5).
             const ticket = parsedUrl.searchParams.get('ticket');
-            const config = getLocalConfig();
-            let authorized = false;
-
-            if (ticket && isValidWsTicket(ticket)) {
-                authorized = true;
-            } else if (auth && config.adminHash && config.salt && !twoFactorOn() && !isBreakGlassMode()) {
-                // The admin password, so under the same per-source brake as every other password check. Never under
-                // 2FA or in break-glass mode: this path takes the password alone, and every client asks for a ticket
-                // (checkAdminAuth) now.
-                const brakeKey = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
-                const admission = await acquirePasswordAttempt(brakeKey);
-                if (!admission.admitted) {
-                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${admission.retryAfter}\r\n\r\n`);
-                    socket.destroy();
-                    return;
-                }
-                let pwOk = false;
-                try {
-                    pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
-                } finally {
-                    // Under 2FA a right password alone clears nothing (password-brake.ts, checkAdminPassword).
-                    settlePasswordAttempt(brakeKey, pwOk, !twoFactorOn());
-                }
-                if (pwOk) {
-                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                    authorized = true;
-                }
-            }
+            const authorized = !!ticket && isValidWsTicket(ticket);
 
             if (!authorized) {
                 refuseUpgrade(socket, 401);
@@ -1118,9 +1156,14 @@ export async function startHttpsServer(port: number): Promise<number> {
             const isWildcardAllowed = allowedOrigins.includes('*');
 
             if (isExplicitlyAllowed) {
-                // Explicitly allowed origin: set origin & credentials
+                // Explicitly allowed origin: its own origin, and credentials (the member's cookie-free API needs none, but
+                // a site the operator lists may send them). Never on the admin surface: a listed site (a community page
+                // someone else hosts, say) must not be able to read or change the admin API with the operator's signed-in
+                // cookie (Fable's web review, L6). It may still call it with a credential it sends itself, the password
+                // in a header, as any server can.
                 ctx.set('Access-Control-Allow-Origin', requestOrigin);
-                ctx.set('Access-Control-Allow-Credentials', 'true');
+                ctx.vary('Origin');
+                if (!isAdminSurfacePath(ctx.path)) ctx.set('Access-Control-Allow-Credentials', 'true');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -1147,29 +1190,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            const normalizedPath = path.posix.normalize(ctx.path.toLowerCase()).replace(/\/+$/, '') || '/';
-            if (
-                normalizedPath === '/settings' ||
-                normalizedPath.startsWith('/settings/') ||
-                normalizedPath === '/settings-legacy' ||
-                normalizedPath === '/settings.js' ||
-                normalizedPath === '/api/local/admin' ||
-                normalizedPath.startsWith('/api/local/admin/') ||
-                normalizedPath === '/api/admin' ||
-                normalizedPath.startsWith('/api/admin/') ||
-                normalizedPath === '/api/local/verify-password' ||
-                normalizedPath === '/api/local/dashboard' ||
-                normalizedPath === '/api/local/update-identity' ||
-                normalizedPath === '/api/local/change-password' ||
-                normalizedPath === '/api/local/reset' ||
-                normalizedPath === '/api/local/connectors' ||
-                normalizedPath.startsWith('/api/local/connectors/') ||
-                normalizedPath.startsWith('/api/local/federation/') ||
-                normalizedPath === '/api/manager' ||
-                normalizedPath.startsWith('/api/manager/') ||
-                normalizedPath === '/api/pricing-guide/admin' ||
-                normalizedPath.startsWith('/api/pricing-guide/admin/')
-            ) {
+            if (isAdminSurfacePath(ctx.path)) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
                     const norm = allowedIp.trim();
                     if (realIp === norm || norm === '*') return true;
@@ -1318,8 +1339,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                // A signature claim the gateway didn't charge to its address's unverified claims carries a small body
-                // at most (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
+                // A signature claim the gateway let in as small carries a small body at most (gateway-rate-limit.ts
+                // CLAIM_SMALL_BODY_BYTES), whatever its length said. One it let in as possibly large is charged to its
+                // address's unverified claims once more than that has been read, never for what it only declared.
                 const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
                 const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
@@ -1328,8 +1350,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.body = { error: 'Request body too large' };
                     return;
                 }
+                const pastSmall = ctx.state.gatewayLargeClaim ? () => gatewayChargeLargeClaim(ctx) : undefined;
                 try {
-                    const body = await readBody(ctx.req, routeLimit);
+                    const body = await readBody(ctx.req, routeLimit, pastSmall);
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
@@ -1355,6 +1378,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                         ctx.body = { error: 'Request body too large' };
                         return;
                     }
+                    if (e instanceof BodyRefusedError) return; // gatewayChargeLargeClaim answered 429
                     (ctx as any).requestBody = {};
                     (ctx.request as any).body = {};
                 }
@@ -1737,7 +1761,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
                 const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
                 if (fs.existsSync(settingsIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx); // the manager: no inline script (app-document-csp.ts)
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1749,7 +1773,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1849,8 +1873,14 @@ function routeBodyLimit(path: string): number {
 }
 
 class BodyTooLargeError extends Error { constructor() { super('Request body too large'); this.name = 'BodyTooLargeError'; } }
+/** `pastSmall` refused the body: the response is already set. */
+class BodyRefusedError extends Error { constructor() { super('Request body refused'); this.name = 'BodyRefusedError'; } }
 
-function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES): Promise<string> {
+/**
+ * `pastSmall`, when given, is asked once, as the body read passes CLAIM_SMALL_BODY_BYTES (a signature claim the gateway
+ * charges only then, gatewayChargeLargeClaim); false stops the read as BodyRefusedError.
+ */
+function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES, pastSmall?: () => boolean): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -1858,6 +1888,15 @@ function readBody(req: import('node:http').IncomingMessage, maxBytes: number = M
         req.on('data', (chunk: Buffer) => {
             if (aborted) return; // already over limit — discard without buffering
             total += chunk.length;
+            if (pastSmall && total > CLAIM_SMALL_BODY_BYTES) {
+                const go = pastSmall();
+                pastSmall = undefined;
+                if (!go) {
+                    aborted = true;
+                    reject(new BodyRefusedError()); // as for an over-limit body, stop buffering without destroying the socket
+                    return;
+                }
+            }
             if (total > maxBytes) {
                 aborted = true;
                 reject(new BodyTooLargeError()); // stop buffering; do NOT destroy the

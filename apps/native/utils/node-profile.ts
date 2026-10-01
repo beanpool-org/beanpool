@@ -232,3 +232,16 @@ export function decisionsOn(features: NodeFeatures | null | undefined): boolean 
 export function invitesOn(features: NodeFeatures | null | undefined): boolean {
     return features?.invites !== false;
 }
+
+/** What a poll card says on the worldwide community, above how its ballot works. */
+export const INFORMAL_POLL_NOTE = 'An informal poll; it decides nothing';
+
+/**
+ * Whether this node's polls are labelled informal: the worldwide community's are. Anyone may join it with a sign-in, so
+ * one person with several accounts can tip a poll's count (FABLE-sec-global-abuse LOW-7), and nothing there is decided
+ * by a vote (Decisions are off). Polls decide nothing anywhere; there each one says so. A node not known yet, or one
+ * that doesn't say, is a local community, as every node before the profile was.
+ */
+export function pollsInformal(profile: NodeProfile | null | undefined): boolean {
+    return profile?.profile === 'global';
+}

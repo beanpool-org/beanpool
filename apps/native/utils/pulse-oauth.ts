@@ -12,7 +12,6 @@
  */
 
 import { Platform, DeviceEventEmitter } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as Crypto from 'expo-crypto';
@@ -20,8 +19,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { encodeBase64 } from './crypto';
 import { signedPost, anchorUrl } from './node-post';
 import type { BeanPoolIdentity } from './identity';
-
-const isWeb = Platform.OS === 'web';
+import { deletePulseToken, readPulseToken, writePulseToken } from './pulse-token-store';
 
 export interface PulseOAuthToken {
     platform: 'tiktok' | 'instagram';
@@ -61,23 +59,13 @@ export class PulseOAuthError extends Error {
     }
 }
 
-/** SecureStore token key prefix per channel */
-function tokenKey(channelId: string): string {
-    return `pulse_oauth_token_${channelId}`;
-}
-
 /**
  * Read stored OAuth credential for a channel from device secure storage.
- * The node NEVER holds or sees these tokens.
+ * The node NEVER holds or sees these tokens. Kept this-phone-only, and gone with the account (utils/pulse-token-store.ts).
  */
 export async function getStoredOAuthToken(channelId: string): Promise<PulseOAuthToken | null> {
     try {
-        let raw: string | null = null;
-        if (isWeb) {
-            raw = localStorage.getItem(tokenKey(channelId));
-        } else {
-            raw = await SecureStore.getItemAsync(tokenKey(channelId));
-        }
+        const raw = await readPulseToken(channelId);
         if (!raw) return null;
         return JSON.parse(raw);
     } catch (e) {
@@ -90,23 +78,14 @@ export async function getStoredOAuthToken(channelId: string): Promise<PulseOAuth
  * Save OAuth credential for a channel into device secure storage.
  */
 export async function saveStoredOAuthToken(token: PulseOAuthToken): Promise<void> {
-    const raw = JSON.stringify(token);
-    if (isWeb) {
-        localStorage.setItem(tokenKey(token.channelId), raw);
-    } else {
-        await SecureStore.setItemAsync(tokenKey(token.channelId), raw);
-    }
+    await writePulseToken(token.channelId, JSON.stringify(token));
 }
 
 /**
  * Delete stored OAuth credential for a channel from device secure storage.
  */
 export async function deleteStoredOAuthToken(channelId: string): Promise<void> {
-    if (isWeb) {
-        localStorage.removeItem(tokenKey(channelId));
-    } else {
-        await SecureStore.deleteItemAsync(tokenKey(channelId));
-    }
+    await deletePulseToken(channelId);
 }
 
 /**

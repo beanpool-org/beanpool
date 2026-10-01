@@ -4,6 +4,7 @@ import path from 'node:path';
 import { BACKUP_NAME_RE, backupsPastBudget, latestBackupName, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { PARTITION_MAX_BYTES, UKI_MAX_BYTES } from '../shared/release-feed.js';
 import { compareVersions, resolveChain, type ReleaseFiles, type TrustedRelease } from '../shared/release.js';
+import { SETTINGS_FILE_NAME, SETTINGS_MAX_BYTES } from '../shared/settings.js';
 import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, veritysetupVerify, type InstallRecord, type VerifyRoot } from '../shared/staged-image.js';
 
 /**
@@ -39,7 +40,8 @@ import { freeBytes, isNoRoom, mib, STAGED_RELEASE_MAX_BYTES, stagedNames, verity
  * back never costs the newest backup: ROOT_CLOCK_MARGIN_MS).
  * `restore/` is emptied unless the keyholder's marker says a restore from backup is pending (only a restore a fresh keyholder accepts
  * makes one): then its file and its partial file stay, whatever their size (the API finishes the restore
- * from either after the unlock, and nothing else could). The inbox keeps nothing but the regular files a staged image
+ * from either after the unlock, and nothing else could). `settings/` keeps only the custodians' settings file (a
+ * regular file within SETTINGS_MAX_BYTES). The inbox keeps nothing but the regular files a staged image
  * is made of (a directory named like a boot file among them). The API's private /var/tmp
  * goes with its unit's stop. If the API can't be stopped, its directories are left as they are, root only unlinks the
  * inbox's files (never walking into a directory there), and the journal and the record say so.
@@ -81,6 +83,11 @@ export interface ApiDirs {
     backupMaxBytes: number;
     /** The keyholder's marker of a pending restore from backup (RESTORE_MARKER_NAME in its stateDir): root reads it. */
     restoreMarker: string;
+    /**
+     * Where the API keeps the custodians' settings (the directory of api.json's settingsFile): only the settings file
+     * stays, a regular file no larger than SETTINGS_MAX_BYTES; anything else goes.
+     */
+    settings?: string;
 }
 
 /** What root's copies leave free at least, for the journal and the vault's own files. */
@@ -202,6 +209,23 @@ export function clearApiDirs(dirs: ApiDirs, log: (line: string) => void, now = D
         if (removeWhole(p)) restore++;
     }
     if (restore) said.push(`${restore} in restore`);
+
+    // The custodians' settings: the one file the API writes there (a link, a directory, a partial write or one past the
+    // cap goes; the API reads none of those either).
+    if (dirs.settings) {
+        let settings = 0;
+        for (const name of names(dirs.settings)) {
+            const p = path.join(dirs.settings, name);
+            try {
+                const st = lstatSync(p);
+                if (name === SETTINGS_FILE_NAME && st.isFile() && st.size <= SETTINGS_MAX_BYTES) continue;
+            } catch {
+                continue;
+            }
+            if (removeWhole(p)) settings++;
+        }
+        if (settings) said.push(`${settings} in settings that ${settings === 1 ? 'is' : 'are'} not the settings file`);
+    }
     if (!said.length) return null;
     const line = `removed what the API left on the state partition: ${said.join(', ')}`;
     log(line);

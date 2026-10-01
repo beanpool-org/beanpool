@@ -1544,7 +1544,8 @@ describe("app/_layout.tsx listens with it", () => {
     it('every AppState change goes to the return lock, with whether there is an account', () => {
         const s = layout();
         expect(s).toContain("import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';");
-        expect(s).toContain('if (!returnLock.current) returnLock.current = createReturnLock(setIsLocked);');
+        // The lock screen and the cover are the app-wide value every screen and pop-up draws (utils/app-lock-screen.ts).
+        expect(s).toContain('if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);');
         expect(s).toMatch(/AppState\.addEventListener\('change', \(next\) => \{\s*onChange\(next, !!identity\);\s*\}\);/);
     });
 

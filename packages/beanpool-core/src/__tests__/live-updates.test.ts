@@ -8,6 +8,13 @@ import {
     RECONNECT_CAP_MS,
     RECONNECT_MIN_SPREAD_MS,
     RECONNECT_SYNC_SPREAD_MS,
+    WS_NO_ROOM_CLOSE_CODE,
+    WS_NO_ROOM_RETRY_SEC,
+    WS_NO_ROOM_MIN_SEC,
+    WS_NO_ROOM_CAP_MS,
+    wsNoRoomReason,
+    wsNoRoomRetrySec,
+    wsNoRoomDelayMs,
 } from '../live-updates.js';
 
 // The shape the node's `new_post` / `post_updated` broadcasts carry to a member socket: `publicBroadcastPost` of a
@@ -191,5 +198,57 @@ describe('reconnectSyncDelayMs: the catch-up sync after a reconnect is spread to
         }
         expect(reconnectSyncDelayMs(() => 0)).toBe(0);
         expect(reconnectSyncDelayMs(() => 1 - Number.EPSILON)).toBeGreaterThan(2900);
+    });
+});
+
+describe('the "no room" close: a node with no place for a socket says when to come back', () => {
+    it('the reason a node sends reads back as its seconds; any other close is no "no room"', () => {
+        expect(WS_NO_ROOM_CLOSE_CODE).toBe(4429);
+        expect(wsNoRoomReason(300)).toBe('retry=300');
+        expect(wsNoRoomRetrySec(WS_NO_ROOM_CLOSE_CODE, wsNoRoomReason(300))).toBe(300);
+        expect(wsNoRoomRetrySec(WS_NO_ROOM_CLOSE_CODE, wsNoRoomReason(42.4))).toBe(42);
+        expect(wsNoRoomRetrySec(1000, 'retry=300')).toBeNull();
+        expect(wsNoRoomRetrySec(1006, '')).toBeNull();
+        expect(wsNoRoomRetrySec(undefined, undefined)).toBeNull();
+        expect(new TextEncoder().encode(wsNoRoomReason(999_999)).length).toBeLessThanOrEqual(123);
+    });
+
+    it('a "no room" close with a reason that cannot be read asks for the default 5 minutes', () => {
+        expect(WS_NO_ROOM_RETRY_SEC).toBe(300);
+        for (const reason of ['', 'retry=', 'retry=abc', 'retry=-5', 'come back later', 'retry=1234567', undefined, null, 7]) {
+            expect(wsNoRoomRetrySec(WS_NO_ROOM_CLOSE_CODE, reason)).toBe(300);
+        }
+    });
+
+    it('the first wait is what the node asked, plus up to half again', () => {
+        expect(wsNoRoomDelayMs(1, 300, () => 0)).toBe(300_000);
+        expect(wsNoRoomDelayMs(1, 300, () => 0.9999)).toBeLessThan(450_000);
+        expect(wsNoRoomDelayMs(1, 300, () => 0.9999)).toBeGreaterThan(449_000);
+        for (let i = 0; i < 10_000; i++) {
+            const d = wsNoRoomDelayMs(1, 300);
+            expect(d).toBeGreaterThanOrEqual(300_000);
+            expect(d).toBeLessThan(450_000);
+        }
+    });
+
+    it('each refusal in a row doubles it, never past 30 minutes before the spread', () => {
+        expect(wsNoRoomDelayMs(2, 300, () => 0)).toBe(600_000);
+        expect(wsNoRoomDelayMs(3, 300, () => 0)).toBe(1_200_000);
+        expect(wsNoRoomDelayMs(4, 300, () => 0)).toBe(WS_NO_ROOM_CAP_MS);
+        expect(wsNoRoomDelayMs(1e9, 300, () => 0)).toBe(WS_NO_ROOM_CAP_MS);
+        expect(wsNoRoomDelayMs(1e9, 300, () => 0.9999)).toBeLessThan(WS_NO_ROOM_CAP_MS * 1.5);
+    });
+
+    it('a node asking for almost nothing is waited on for 30 s at least; nonsense counts as a first refusal', () => {
+        expect(wsNoRoomDelayMs(1, 0, () => 0)).toBe(WS_NO_ROOM_MIN_SEC * 1000);
+        expect(wsNoRoomDelayMs(1, -10, () => 0)).toBe(30_000);
+        expect(wsNoRoomDelayMs(1, NaN, () => 0)).toBe(300_000);
+        expect(wsNoRoomDelayMs(0, 300, () => 0)).toBe(300_000);
+        expect(wsNoRoomDelayMs(NaN, 300, () => 0)).toBe(300_000);
+        expect(wsNoRoomDelayMs(-3, 300, () => 0)).toBe(300_000);
+    });
+
+    it('is always far longer than an ordinary reconnect, which a dropped socket keeps', () => {
+        for (let i = 0; i < 1000; i++) expect(wsNoRoomDelayMs(1, WS_NO_ROOM_RETRY_SEC)).toBeGreaterThan(RECONNECT_CAP_MS);
     });
 });

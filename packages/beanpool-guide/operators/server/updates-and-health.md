@@ -13,7 +13,7 @@ Your server runs a ready-made image, beanpool-node, from ghcr.io/beanpool-org. I
 - on the server, in the folder with docker-compose.yml, run: docker compose pull
 - then run: docker compose up -d
 
-Members stay signed in to their apps. Anyone signed in to Settings from the app, or with a two-factor code, signs in again: those sign-ins are kept in memory.
+Members stay signed in to their apps. Anyone signed in to Settings signs in again, with the password or from the app: those sign-ins are kept in memory.
 
 The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one.
 
@@ -51,11 +51,13 @@ deploy.sh replaces everything in the server folder except the data folder and .e
 
 The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now.
 
+To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
+
 ## Checking from outside
 
 These addresses answer without signing in, so a monitoring service or a phone browser can check them:
 
-- your address followed by **/api/version**: the version, and whether an update is available;
+- your address followed by **/api/version**: the version, and whether an update is available (unless you turned the update check off);
 - your address followed by **/api/community/health**: the community's name, version and activity, and the watchdog's last report if you run one.
 
 If neither answers, the server is down or unreachable. See Troubleshooting.

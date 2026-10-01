@@ -9,10 +9,10 @@
  * provider is contacted: each node's Google JWKS cache is primed with a test key.
  *
  *  1. A global main server. Ada and Ben join through the door. Its sealed take-over bundle carries the key (the
- *     `open-join.key` file, byte for byte) and the rows, and nothing else of the door's: no address hash, and no key in
- *     the door's record; the envelope on disk holds neither in the clear.
- *  2. Its standby copies it (a force-resync): every row and which key made them, and no key and no address hash. A
- *     delta export after another join carries only that row, which key, and no key in any encoding.
+ *     `open-join.key` file, byte for byte) and the rows, their connection label included, and nothing else of the
+ *     door's: no address hash, and no key in the door's record; the envelope on disk holds neither in the clear.
+ *  2. Its standby copies it (a force-resync): every row with its label and which key made them, and no key and no
+ *     address hash. A delta export after another join carries only that row, which key, and no key in any encoding.
  *  3. A copy of that standby promoted by hand (NODE_ROLE=primary), as the recovery seal's key is: it holds no key, says
  *     so at boot, and fails closed. Ada's sign-in account from a new key, and a new account too, are refused 503
  *     door_key_missing, with no member added. The 12-words door needs no key: Vic joins there by 12 words, and adding a
@@ -88,7 +88,7 @@ async function child(): Promise<void> {
         const file = path.join(process.env.BEANPOOL_DATA_DIR!, KEY_FILE);
         const key = fs.existsSync(file) ? fs.readFileSync(file).toString('base64') : null;
         const keyMode = fs.existsSync(file) ? (fs.statSync(file).mode & 0o777).toString(8) : null;
-        const rows = db.prepare('SELECT member_pubkey, join_hash, ip_hash FROM open_joins ORDER BY member_pubkey').all() as any[];
+        const rows = db.prepare('SELECT member_pubkey, join_hash, ip_hash, join_cohort FROM open_joins ORDER BY member_pubkey').all() as any[];
         const members = (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n;
         return { key, keyMode, keyId: config('openJoinKeyId'), legacyRow: config('openJoinSalt') !== null, rows, members };
     };
@@ -157,7 +157,7 @@ async function child(): Promise<void> {
             const { key, keyMode, keyId, legacyRow, rows, members } = await doorRecord();
             return {
                 keyFp: fingerprint(key), keyMode, keyId, legacyRow, members,
-                rows: rows.map((r) => ({ member: r.member_pubkey, hash: r.join_hash, ipHash: !!r.ip_hash })),
+                rows: rows.map((r) => ({ member: r.member_pubkey, hash: r.join_hash, ipHash: !!r.ip_hash, cohort: r.join_cohort ?? null })),
             };
         },
         'export-delta': async (a: { since: string; vaultKey?: string }) => {
@@ -328,7 +328,7 @@ async function main(): Promise<void> {
 
         const sealed1 = await main.send('reseal', { vaultKey: VAULT_KEY });
         assert(JSON.stringify(sealed1.recordKeys) === JSON.stringify(['joins', 'total'])
-            && JSON.stringify(sealed1.joinFields) === JSON.stringify(['joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt']),
+            && JSON.stringify(sealed1.joinFields) === JSON.stringify(['joinCohort', 'joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt']),
             `the take-over bundle carries the door's rows, and only these fields (${JSON.stringify(sealed1.recordKeys)} ${JSON.stringify(sealed1.joinFields)})`);
         assert(sealed1.keySealed && !sealed1.keyInRecord && sealed1.total === 2 && JSON.stringify(sealed1.members) === JSON.stringify([ada.pk, ben.pk].sort()),
             'it holds both joins, and the key as the bundled file open-join.key, byte for byte, never in the door\'s record');
@@ -354,6 +354,9 @@ async function main(): Promise<void> {
         assert(JSON.stringify(copied.rows.map((r: any) => [r.member, r.hash])) === JSON.stringify(mainDoor.rows.map((r: any) => [r.member, r.hash])),
             'and every join record, the same hashes');
         assert(copied.rows.every((r: any) => !r.ipHash), 'and no address hash: the limiter\'s, not the standby\'s');
+        assert(!!mainDoor.rows[0]?.cohort && mainDoor.rows.every((r: any) => r.cohort === mainDoor.rows[0].cohort)
+            && JSON.stringify(copied.rows.map((r: any) => r.cohort)) === JSON.stringify(mainDoor.rows.map((r: any) => r.cohort)),
+            'and the label the door gave Ada and Ben for joining from one connection within a day, the same one (auto-hide counts them as one)');
 
         const since = await main.send('now');
         const eve = newId();

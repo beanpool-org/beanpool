@@ -39,3 +39,4 @@ export * from './request-signing.js';
 export * from './push-notice.js';
 export * from './vault-wire.js';
 export * from './door-work.js';
+export * from './blocked-beans-note.js';

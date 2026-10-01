@@ -9,6 +9,8 @@
  * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
  *   (`pollOpenVote`), members also get a collapsible list of who voted for what. The card says which.
  * - Author "Close Poll" action for early closure.
+ * - On the global community (`informal`), "An informal poll; it decides nothing", for members and visitors alike: anyone
+ *   may join there with a sign-in, so a count can be tipped by one person with several accounts (lib/informal-polls.ts).
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,6 +18,7 @@ import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
 import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
 
 interface PollCardProps {
     post: MarketplacePost;
@@ -29,9 +32,11 @@ interface PollCardProps {
      * sends none), no voting, and no voter list.
      */
     visitor?: boolean;
+    /** The global community's polls (lib/informal-polls.ts): the card says it decides nothing. */
+    informal?: boolean;
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false }: PollCardProps) {
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -285,6 +290,13 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     );
                 })}
             </div>
+
+            {/* On the global community: a show of opinion, never a decision. Said to visitors too, before they join to vote. */}
+            {informal && (
+            <p className="mb-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300" data-testid="poll-informal-note">
+                <span aria-hidden="true">💬 </span>{INFORMAL_POLL_NOTE}
+            </p>
+            )}
 
             {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
             {!visitor && (openVote ? (

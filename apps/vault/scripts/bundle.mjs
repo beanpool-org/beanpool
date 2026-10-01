@@ -7,7 +7,7 @@
  *   node scripts/bundle.mjs --custodian-keys <file> --out <dir>
  *
  * `<file>` is `{"genesisCustodians": ["<hex>", "<hex>", "<hex>"]}` (public keys only). It writes vault-keyholder.mjs,
- * vault-api.mjs, vault-launcher.mjs, vault-install.mjs and vault-custodian.mjs, and bundles.json with each file's
+ * vault-api.mjs, vault-launcher.mjs, vault-install.mjs, vault-custodian.mjs and vault-egress.mjs, and bundles.json with each file's
  * SHA-256. The workspace packages it imports (@beanpool/core, @beanpool/signin) must be built first
  * (`pnpm --filter ... build`).
  */
@@ -26,6 +26,7 @@ export const PROGRAMS = {
     'vault-launcher.mjs': 'src/launcher/main.ts',
     'vault-install.mjs': 'src/install/main.ts',
     'vault-custodian.mjs': 'src/custodian/cli.ts',
+    'vault-egress.mjs': 'src/egress/main.ts',
 };
 
 const KEY_RE = /^[0-9a-f]{64}$/;

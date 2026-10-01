@@ -24,10 +24,10 @@
  *     inbox) or by writing to them, when neither has reached the other before. A reply to someone who wrote or
  *     opened first is never limited, and neither is anyone they have reached before. A trade's conversation is
  *     nobody's opening (`dmContacts`).
- *   - 1 knock (asking a community to let them in): `knockRefusal`, for a node that keeps its members' knocks. G6 keeps
- *     none on the global node: the app knocks on the community itself (routes/knocks.ts), which can't see how new the
- *     applicant's global account is. There the limits are the community's own (engine/knocks.ts): one open knock per
- *     key and 3 an address a day.
+ *   - 3 / 3 knocks (asking a community to let them in; Marty, 2026-10-01, from 1; the same for both doors):
+ *     `knockRefusal`, for a node that keeps its members' knocks. G6 keeps none on the global node: the app knocks on the community itself (routes/knocks.ts),
+ *     which can't see how new the applicant's global account is. There the limits are the community's own
+ *     (engine/knocks.ts): one open knock per key and 3 an address a day.
  *
  * Over a limit: `ProbationLimitError`, which the routes answer 429 with a plain message naming the limit and when
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
@@ -60,7 +60,7 @@ export const PROBATION = {
     posts: 3,
     photos: 5,
     newDmRecipients: 10,
-    knocks: 1,
+    knocks: 3,
 } as const satisfies ProbationRules;
 
 /** A member who came in with 12 words and has added no sign-in (the header). */
@@ -71,7 +71,8 @@ export const WORDS_PROBATION = {
     posts: 2,
     photos: 4,
     newDmRecipients: 3,
-    knocks: 1,
+    // Knocking on a local community is the same for both doors (design §2.3).
+    knocks: PROBATION.knocks,
 } as const satisfies ProbationRules;
 
 export type ProbationRuleSet = 'ordinary' | 'words';
@@ -119,7 +120,12 @@ function joinedAtMs(pubkey: string): number | null {
     return Number.isFinite(ms) ? ms : null;
 }
 
-/** The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. */
+/**
+ * The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. A post hidden by
+ * reports stops counting until a moderator keeps it, so reports can hold a newcomer on probation; they can't push an
+ * established member back onto it, because reports from members with less than half their standing never hide their
+ * posts (engine/auto-moderation.ts).
+ */
 export function keptPostCount(pubkey: string): number {
     const row = db.prepare(
         `SELECT COUNT(*) AS c FROM posts
@@ -166,6 +172,8 @@ function inAbout(resetsAtMs: number, now: number): string {
     return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
 }
 
+const communities = (n: number) => (n === 1 ? '1 community' : `${n} communities`);
+
 function why(rules: ProbationRules): string {
     return rules === WORDS_PROBATION
         ? 'Accounts made with 12 words have these limits for their first 7 days, and until 3 of their posts have stayed up. Adding a sign-in lifts them to the usual new-account limits.'
@@ -179,7 +187,7 @@ function refusal(rules: ProbationRules, limit: ProbationLimit, resetsAtMs: numbe
         posts: `While your account is new you can make ${rules.posts} posts in any 24 hours. You can post again ${when}. ${WHY}`,
         photos: `While your account is new you can add ${rules.photos} photos to posts in any 24 hours. You can add more ${when}. ${WHY}`,
         new_dm_recipients: `While your account is new you can message ${rules.newDmRecipients} new people in any 24 hours. You can message someone new again ${when}. Replying to someone who wrote to you first is not limited. ${WHY}`,
-        knocks: `While your account is new you can ask ${rules.knocks} community in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
+        knocks: `While your account is new you can ask ${communities(rules.knocks)} in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
     }[limit];
     return new ProbationLimitError(limit, iso(resetsAtMs), message);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseHandoffFragment, startKeySession, sectionTarget } from './key-session';
+import { parseHandoffFragment, startKeySession, sectionTarget, signInWithPassword, forgetStoredAdminSecrets } from './key-session';
 import { buildAdminHeaders, setKeySessionCsrfToken } from './node-client';
 
 const TOKEN = 'a'.repeat(64);
@@ -81,6 +81,58 @@ describe('startKeySession', () => {
         const res = await startKeySession(win);
         expect(res).toEqual({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf2', section: null });
         expect(replaceState).not.toHaveBeenCalled();
+    });
+
+    it('a reload with a live PASSWORD session resumes it as one (owner, no member), with a fresh CSRF token', async () => {
+        const fetchMock = vi.fn(async (url: string) => url.endsWith('/auth/session')
+            ? reply(200, { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null })
+            : reply(200, { csrfToken: 'csrf-pw' }));
+        vi.stubGlobal('fetch', fetchMock);
+        expect(await startKeySession(fakeWindow('').win)).toEqual({ kind: 'password', csrfToken: 'csrf-pw', section: null });
+        // A password session is only ever the owner's: any other role in the answer is not taken as one.
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/session')
+            ? reply(200, { authenticated: true, isPasswordSession: true, role: 'moderator', memberPubkey: null })
+            : reply(200, { csrfToken: 'csrf-x' })));
+        expect((await startKeySession(fakeWindow('').win)).kind).toBe('none');
+    });
+});
+
+describe('signInWithPassword', () => {
+    it('posts the password once, in the body, for the session cookie, and hands back only the CSRF token', async () => {
+        const fetchMock = vi.fn(async () => reply(200, { success: true, role: 'owner', csrfToken: 'csrf-signin' }));
+        vi.stubGlobal('fetch', fetchMock);
+        const res = await signInWithPassword('/api/local/admin/auth/password', 'hunter2', '123456');
+        expect(res).toEqual({ ok: true, csrfToken: 'csrf-signin' });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(url).toBe('/api/local/admin/auth/password');
+        expect(init.method).toBe('POST');
+        expect(init.credentials).toBe('same-origin');
+        expect(JSON.parse(String(init.body))).toEqual({ password: 'hunter2', totpCode: '123456' });
+        expect(JSON.stringify(init.headers)).not.toContain('hunter2');
+        expect(JSON.stringify(res)).not.toContain('hunter2');
+    });
+
+    it('says when the node wants a 2FA code, and passes its error on', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => reply(401, { error: '2FA code required', totpRequired: true })));
+        expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: true, error: '2FA code required' });
+        vi.stubGlobal('fetch', vi.fn(async () => reply(403, { error: 'Break-glass mode active', breakGlassMode: true })));
+        expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: false, error: 'Break-glass mode active' });
+    });
+});
+
+describe('forgetStoredAdminSecrets', () => {
+    it('removes what older builds stored (the password, its 2FA sessions) and nothing else', () => {
+        sessionStorage.clear();
+        sessionStorage.setItem('bp-admin-token', 'old-password');
+        sessionStorage.setItem('bp-2fa-session', 'old-2fa');
+        sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa');
+        sessionStorage.setItem('bp_tfa_session_node-7', 'old-2fa-7');
+        sessionStorage.setItem('bp-csrf-token', 'old-csrf');
+        sessionStorage.setItem('bp-settings-tab', 'identity');
+        forgetStoredAdminSecrets();
+        expect(Object.keys({ ...sessionStorage })).toEqual(['bp-settings-tab']);
+        expect(sessionStorage.getItem('bp-settings-tab')).toBe('identity');
     });
 });
 

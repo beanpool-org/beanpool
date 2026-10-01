@@ -45,6 +45,7 @@ describe('ApplianceSection Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
+        nodeClient.clearAllTfaSessionTokens();
         vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue(mockSnapshots);
         vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({
             enabled: true,
@@ -862,7 +863,11 @@ describe('ApplianceSection Component', () => {
         });
 
         expect(setTokenSpy).toHaveBeenCalledWith(mockProfile.id, 'mock-tfa-session-token-12345');
-        expect(sessionStorage.getItem('bp-2fa-session')).toBe('mock-tfa-session-token-12345');
+        // Held in memory, and never written to the origin's web storage (Fable's web review, M1). Until 2026-10-01 this
+        // asserted it WAS in sessionStorage.
+        expect(nodeClient.getTfaSessionToken(mockProfile.id)).toBe('mock-tfa-session-token-12345');
+        expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
+        expect(sessionStorage.getItem(`bp_tfa_session_${mockProfile.id}`)).toBeNull();
     });
 
     it('remounts NodeIdentityPanel when activeNode changes in identity subtab', async () => {

@@ -35,6 +35,8 @@ Whoever holds the database and that key can open a member's copy, though, with t
 
 On the global community, the server also keeps a scrambled reference to each Google or Apple account someone joined with, so that one account makes one member. It is scrambled with data/open-join.key, which is never in the database either. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk can't be used to find out which member signed in with a given account. Whoever holds the database and that key can: whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup.
 
+It also notes which members joined through the open door from the same internet connection within a day of each other: a random label they share, never the address. Only the hiding of reported posts reads it, so that their reports count as one (see Reports and takedowns). It is in the database, so anyone who can read the database can see who joined together, as people in one household or at one meetup often do. A standby copies it, and it goes when the member deletes their own account.
+
 GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas).
 
 ## What someone who is not a member can read
@@ -98,7 +100,7 @@ Home shows how many times the web app was opened on your server each day for the
 ## What your server sends elsewhere
 
 - The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).
-- GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.
+- GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it.
 - Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words ("You have a new message.", "Your community has a notice for you."), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.
 - Members' Pulse channels are fetched from the sites they link to.
 - With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare.

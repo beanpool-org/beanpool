@@ -439,6 +439,10 @@ async function main(): Promise<void> {
         assert(rowsDiff(after.rows, sAfter.rows).length === 0, `S's lines are M's, every column: her tombstones, never her words (${first(rowsDiff(after.rows, sAfter.rows))})`);
         assert(leaks(JSON.stringify(sAfter.rows)).length === 0 && !fx.rheaSecrets.some((s: string) => JSON.stringify(sAfter.rows).includes(s)),
             'no row on S holds her words or her DM ciphertext');
+        const sFiles = await standby.send('files', { needles });
+        // Not an empty WAL: the puller writes its own records after the import (its audit row, its status).
+        assert(sFiles.inDb.length + sFiles.inWal.length === 0,
+            `and S's files hold none of them either: its WAL is emptied once the pull has blanked them (found ${first([...sFiles.inDb, ...sFiles.inWal])}; ${sFiles.walBytes} WAL bytes written since)`);
 
         // ── 6. A new standby copies M afterwards ──
         console.log('\n— 6. a new standby S2 copies M afterwards —');

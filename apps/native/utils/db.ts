@@ -3227,11 +3227,6 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
 // then on, and an open chat's page can carry their tombstones on every poll: a pass already done is not run again.
 const deletedAccountsBlanked = new Set<string>();
 
-/** Tests only: forget which deleted accounts were blanked, as an app restart does. */
-export function resetDeletedAccountsBlankedForTests(): void {
-    deletedAccountsBlanked.clear();
-}
-
 /**
  * Every line on this phone by an account its owner deleted reads "This message was deleted", and the copies of their photos
  * this phone decrypted go (Marty, 2026-10-01: "Yes, blank lines and photos").

@@ -19,7 +19,8 @@
 //
 // A SUSPENDED CONVENOR (FABLE-sec-roles, 2026-10-01): while a convenor's account is suspended, every convenor power
 // rests — they keep the role, and the lead if they hold it, and it all comes back the moment the suspension ends.
-// Each mutator below asks assertConvenorPowersActive after its role test, and a suspended member joins no group.
+// Each mutator below asks assertConvenorPowersActive after its role test, and a suspended member joins no group
+// (not by joining, and not by a convenor approving their request).
 // Nothing about who is a convenor or who leads changes: the role tests still read group_members alone, so a
 // suspension never moves a group's lead (docs/the-commons.md, "A suspended lead is still the lead").
 // Every route goes through this file, so there is one place the rules live.
@@ -511,6 +512,9 @@ export const CONVENOR_POWERS_PAUSED =
 /** What a suspended member is told when they try to join a group or accept an invitation. */
 export const GROUP_JOIN_PAUSED = 'Your account is suspended. You can join groups again when the suspension ends.';
 
+/** What a convenor is told when the person they would let in is suspended: the request waits. */
+export const GROUP_ADMIT_PAUSED = "This member's account is suspended. Their request can be approved when the suspension ends.";
+
 /**
  * Refuse a convenor power to a suspended account (isSuspendedAccount), in words that say why. Ask it AFTER the role
  * test, so someone who is no convenor at all still hears that. The `UNAUTHORIZED:` prefix is what the group routes
@@ -862,6 +866,8 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
     if (target.status === 'active') {
         return target;
     }
+    // A suspended member joins no group (joinGroup), and a convenor's approval would be the same door.
+    if (isSuspendedAccount(db, targetPubkey)) throw new Error(GROUP_ADMIT_PAUSED);
 
     const now = membershipWriteAt(db, groupId, targetPubkey);
     // The membership begins now, not when the request was made (joined_at, role_since: db/schema.sql).
@@ -892,6 +898,8 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
             return existing;
         }
         if (existing.status === 'pending_approval') {
+            // An approval, as approveGroupMember's: a suspended member joins no group.
+            if (isSuspendedAccount(db, targetPubkey)) throw new Error(GROUP_ADMIT_PAUSED);
             // Direct approve: status and role move in one UPDATE, so with role = 'convenor' this single write
             // makes an active convenor out of a pending request. Pin the lead before it, for the same reason
             // setMemberRole does — otherwise the convenor approving an older request loses the lead to them.

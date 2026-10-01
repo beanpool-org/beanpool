@@ -10,8 +10,8 @@
  * 1. Suspended (an admin's emergency suspension, the real path): every convenor action is refused 403 in words that
  *    say why — remove, promote, invite, approve, edit the group or its join policy, remove a group post (both
  *    routes), remove a chat message, edit or cancel someone else's group event and remove a line from its chat, list
- *    the group's requests, hand the lead over — and none of them writes anything. They also join no group. Their
- *    convenor role, and their group's lead, stay theirs.
+ *    the group's requests, hand the lead over — and none of them writes anything. They also join no group, and no
+ *    convenor approves a suspended member in. Their convenor role, and their group's lead, stay theirs.
  * 2. The group a suspended lead runs alone still works for its members: they chat, newcomers join the open group,
  *    and the 30-day-silence vote opens and runs, because nothing a suspended account signs counts as the lead coming
  *    back.
@@ -281,6 +281,23 @@ async function main(): Promise<void> {
     assert(r.status === 200 && membership(gc.id, susp.pk)?.status === 'active', `joining an open group works again (${show(r)})`);
     r = await call('POST', `${B}/lead`, susp, { targetPubkey: friend.pk });
     assert(r.status === 200 && getGroupLead(gb.id) === friend.pk, `handing the lead over works again (${show(r)})`);
+
+    // ── 3b. Nor does a convenor's approval let a suspended member in ──────────────────────────────────────────────
+    console.log('\n— A suspended member is not approved into a group either —');
+    const waiter = makeMember('WaiterSC');
+    const gd = createGroup({ name: 'Asking Circle SC', joinPolicy: 'request_to_join', createdBy: lead.pk } as any);
+    const D = `/api/groups/${encodeURIComponent(gd.id)}`;
+    joinGroup(gd.id, waiter.pk);
+    const waiterSuspension = adminEmergencySuspend(waiter.pk, admin.pk, 'Suspended while their request waited');
+    assert(waiterSuspension.success === true, `WaiterSC is suspended while their request waits (${waiterSuspension.error ?? 'ok'})`);
+    r = await call('POST', `${D}/members`, lead, { targetPubkey: waiter.pk, action: 'approve' });
+    assert(r.status === 400 && SUSPENDED_WORDS.test(r.error ?? ''), `the lead approving their request → refused, says suspended (${show(r)})`);
+    r = await call('POST', `${D}/members`, lead, { targetPubkey: waiter.pk, role: 'member' });
+    assert(r.status === 400 && SUSPENDED_WORDS.test(r.error ?? ''), `nor let in by an invitation to someone who asked (${show(r)})`);
+    assert(membership(gd.id, waiter.pk)?.status === 'pending_approval', 'and the request still waits');
+    assert(adminLiftSuspension(waiter.pk, admin.pk).success === true, 'their suspension is lifted');
+    r = await call('POST', `${D}/members`, lead, { targetPubkey: waiter.pk, action: 'approve' });
+    assert(r.status === 200 && membership(gd.id, waiter.pk)?.status === 'active', `and the lead approves them (${show(r)})`);
 
     // ── 4. A community Decision can't suspend or remove a node owner or admin (§3.8) ─────────────────────────────
     console.log('\n— Decisions and node owners and admins —');

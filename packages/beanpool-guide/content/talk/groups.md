@@ -81,7 +81,7 @@ The global community has no **Commons** tab. There, tap **Talk**, then **Groups*
 
 If a convenor removed you from a group, you cannot join it again by yourself.
 
-While your account is suspended, you cannot join a group, ask to join one, or accept an invitation. The groups you are already in stay yours. When the suspension ends, you can join again.
+While your account is suspended, you cannot join a group, ask to join one, or accept an invitation, and a convenor cannot approve a request you made before. The groups you are already in stay yours. When the suspension ends, you can join again.
 
 ## Joining by invitation
 

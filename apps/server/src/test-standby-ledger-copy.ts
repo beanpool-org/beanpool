@@ -552,6 +552,12 @@ async function main(): Promise<void> {
             built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
+        // The members are backdated before any trade. A community of members who joined minutes ago and trade only with each other is what
+        // the wash-trading check (engine/trust.ts runWashTradingAnalysis: insular cluster, half or more under 14 days old) flags, and a flagged
+        // member's trades earn no credit, so their first direct send is refused ("only after your first completed trade"). That check is
+        // memoised for 10 s, so the suite passed whenever the memo still predated its first trade and failed when a slow run let it expire.
+        // The check is right; these fixture members are older than a fortnight, as the members of a real community who trade are.
+        require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip].map((w) => w.pk), days: 20 }) === 6, 'M: the six members joined twenty days ago');
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
         })).post;

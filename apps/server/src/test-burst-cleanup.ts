@@ -21,7 +21,13 @@
  *   6. nobody else: unsigned, a member's signature, a member with no role (no session), a moderator whose role was taken
  *   7. no answer carries an address, the address hash, the connection label, or a field naming any of them
  *   8. a member who deletes their own account leaves every burst record, and every burst
- *   9. a local node: every route answers 404, even to an owner, and nothing changes
+ *   9. a report on a post is about the post's author, whoever the reporter names: it is filed so, the reports list
+ *      names the author, and a post report that names another member opens that member's group to nobody
+ *  10. a moderator's own report opens nobody's group to them; another member's report does
+ *  11. a member suspended from a report, or by an admin's status, shows as suspended
+ *  12. an undo weighs each post as if the whole hide were undone, so it never keeps hidden what reports would not hide
+ *  13. a hide and its undo ring each open socket once, not once per post
+ *  14. a local node: every route answers 404, even to an owner, and nothing changes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-burst-cleanup.ts
  */
@@ -35,6 +41,7 @@ delete process.env.FACEBOOK_CLIENT_IDS;
 delete process.env.APPLE_SERVICES_ID;
 
 import crypto from 'node:crypto';
+import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, createPost } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -128,6 +135,41 @@ const keysOf = (list: any[] | undefined) => (Array.isArray(list) ? list.map((a: 
 /** Every post, its hidden stamp and status, to show an action changed nothing. */
 const postsState = () => JSON.stringify(db.prepare('SELECT id, hidden_by_reports_at, status, active FROM posts ORDER BY id').all());
 const membersState = () => JSON.stringify(db.prepare('SELECT public_key, status FROM members ORDER BY public_key').all());
+
+/**
+ * A member who joined through the door `daysAgo` days ago with this connection label, written straight in: a burst of
+ * its own without a second address to join from.
+ */
+function doorRow(name: string, label: string, daysAgo = 0): Id {
+    const id = newId(name);
+    const at = ago(daysAgo * DAY + 60_000);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+                VALUES (?, ?, ?, 'open:google', 'OPEN', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, at);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, join_cohort) VALUES (?, ?, ?, ?, ?)')
+        .run(id.pk, 'google', crypto.randomBytes(32).toString('hex'), at, label);
+    return id;
+}
+
+// ── sockets, for the doorbells ──────────────────────────────────────────────────────────────────
+type Sock = { ws: WebSocket; events: any[] };
+/** A member's signed socket, or a stranger's unsigned one (null). */
+function socket(id: Id | null): Promise<Sock> {
+    let url = `${BASE.replace('https', 'wss')}/ws`;
+    if (id) {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    }
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const s: Sock = { ws, events: [] };
+        ws.on('message', (d) => { try { s.events.push(JSON.parse(d.toString())); } catch { /* not JSON */ } });
+        ws.on('open', () => resolve(s));
+        ws.on('error', reject);
+    });
+}
 
 // ── the open door's sign-in, with test keys ─────────────────────────────────────────────────────
 const GOOGLE_KID = 'test-burst-cleanup-google';
@@ -464,8 +506,101 @@ async function main(): Promise<void> {
     const dPurge = (await adm('GET', '/api/local/admin/bursts')).body;
     assert(dPurge?.actions?.[0]?.id === fromS5.body?.action?.id && dPurge.actions[0].account === null, 'the digest\'s line for that action names nobody now');
 
-    // ── 9. a local node ──────────────────────────────────────────────────────────────────────────
-    console.log('\n── 9. a local node ──');
+    // ── 9. a report on a post is about the post's author ─────────────────────────────────────────
+    console.log('\n── 9. a report on a post is about its author, whoever it names ──');
+    const lA = `label-a-${crypto.randomUUID()}`, lV = `label-v-${crypto.randomUUID()}`;
+    const aa6 = doorRow('A6', lA), aa7 = doorRow('A7', lA);
+    const v3 = doorRow('V3', lV), v4 = doorRow('V4', lV);
+    const pA6 = createPost('offer', 'other', 'A6 watches', 'cheap', 0, 'fixed', aa6.pk)!.id;
+    const namesV3 = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: v3.pk, targetPostId: pA6, reason: 'spam' });
+    const storedTarget = (db.prepare('SELECT target_pubkey FROM abuse_reports WHERE id = ?').get(namesV3.body?.report?.id) as any)?.target_pubkey;
+    assert(namesV3.status === 200 && namesV3.body?.report?.targetPubkey === aa6.pk && storedTarget === aa6.pk,
+        `a report on A6's post that names V3 is filed about A6, the post's author (${namesV3.status} ${storedTarget === v3.pk ? 'V3' : storedTarget === aa6.pk ? 'A6' : storedTarget})`);
+    // One filed before that rule, naming V3 on A6's post, as a crafted client could.
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, 'spam', ?)`)
+        .run(crypto.randomUUID(), ivy.pk, v3.pk, pA6, new Date().toISOString());
+    const onA6 = ((await mod('GET', '/api/local/admin/reports?status=open&limit=200')).body?.reports ?? []).filter((r: any) => r.postId === pA6);
+    assert(onA6.length === 2 && onA6.every((r: any) => r.postAuthorPubkey === aa6.pk),
+        `the reports list names the post's author on both, the account "Who joined with them" opens (${JSON.stringify(onA6.map((r: any) => [r.targetPubkey === v3.pk ? 'V3' : 'A6', r.postAuthorPubkey === aa6.pk ? 'A6' : r.postAuthorPubkey]))})`);
+    const mV3 = await mod('GET', `/api/local/admin/members/${v3.pk}/burst`);
+    assert(mV3.status === 403 && mV3.body?.code === 'not_reported' && !keysOf(mV3.body?.others).includes(v4.pk),
+        `neither opens V3's group to a moderator: a post report counts against the post's author only (${mV3.status} ${mV3.body?.code ?? ''})`);
+    const mA6 = await mod('GET', `/api/local/admin/members/${aa6.pk}/burst`);
+    assert(mA6.status === 200 && JSON.stringify(keysOf(mA6.body?.others)) === JSON.stringify([aa7.pk]), `A6's group opens: A7 (${mA6.status})`);
+
+    // ── 10. a moderator's own report opens nobody's group ────────────────────────────────────────
+    console.log('\n── 10. a moderator\'s own report opens nobody\'s group ──');
+    const lB = `label-b-${crypto.randomUUID()}`;
+    const bb1 = doorRow('B1', lB), bb2 = doorRow('B2', lB);
+    const m0 = await mod('GET', `/api/local/admin/members/${bb1.pk}/burst`);
+    assert(m0.status === 403 && m0.body?.code === 'not_reported', `a moderator is refused B1's group, nothing reported (${m0.status} ${m0.body?.code ?? ''})`);
+    const byMo = await call('POST', mo, '/api/reports', { reporterPubkey: mo.pk, targetPubkey: bb1.pk, reason: 'spam' });
+    assert(byMo.status === 200, `setup: the moderator reports B1 from their member key (${byMo.status})`);
+    const m1 = await mod('GET', `/api/local/admin/members/${bb1.pk}/burst`);
+    assert(m1.status === 403 && m1.body?.code === 'not_reported' && !keysOf(m1.body?.others).includes(bb2.pk),
+        `their own report doesn't open it: still 403 not_reported (${m1.status} ${m1.body?.code ?? ''})`);
+    const byPat = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: bb1.pk, reason: 'spam' });
+    assert(byPat.status === 200, `setup: Pat reports B1 (${byPat.status})`);
+    const m2 = await mod('GET', `/api/local/admin/members/${bb1.pk}/burst`);
+    assert(m2.status === 200 && JSON.stringify(keysOf(m2.body?.others)) === JSON.stringify([bb2.pk]),
+        `another member's report does: B2 (${m2.status})`);
+
+    // ── 11. statuses ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── 11. a member suspended from a report shows as suspended ──');
+    const onB2 = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: bb2.pk, reason: 'spam' });
+    const susp = await adm('POST', `/api/local/admin/reports/${onB2.body?.report?.id}/action`, { suspendUser: true });
+    assert(susp.status === 200 && statusOf(bb2) === 'suspended', `setup: an admin suspends B2 from a report (${susp.status} ${statusOf(bb2)})`);
+    const sB2 = ((await adm('GET', `/api/local/admin/members/${bb1.pk}/burst`)).body?.others ?? []).find((a: any) => a.publicKey === bb2.pk);
+    assert(sB2?.status === 'suspended', `B1's group lists B2 as suspended (${sB2?.status})`);
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(bb2.pk);
+    const dB2 = ((await adm('GET', `/api/local/admin/members/${bb1.pk}/burst`)).body?.others ?? []).find((a: any) => a.publicKey === bb2.pk);
+    assert(dB2?.status === 'suspended', `and one suspended by an admin's status ('disabled') too (${dB2?.status})`);
+
+    // ── 12. an undo weighs each post with the whole hide undone ──────────────────────────────────
+    console.log('\n── 12. an undo weighs each post with the whole hide undone ──');
+    const c1 = doorRow('C1', `label-c-${crypto.randomUUID()}`);
+    const twin = member('Twin', 0);
+    const cPosts = [1, 2, 3].map(i => createPost('offer', 'other', `C1 thing ${i}`, 'thing', 0, 'fixed', c1.pk)!.id);
+    const tPosts = [1, 2, 3].map(i => createPost('offer', 'other', `Twin thing ${i}`, 'thing', 0, 'fixed', twin.pk)!.id);
+    const hC = await adm('POST', `/api/local/admin/members/${c1.pk}/burst/hide`, { members: [c1.pk], count: 1 });
+    assert(hC.status === 200 && hC.body?.action?.posts === 3 && cPosts.every(p => !!hiddenAt(p)), `setup: C1's 3 posts hidden in one action (${hC.status})`);
+    // Three reporters in three circles (each invited by the owner), a week and a day a member: standing 1 each.
+    const rs = [1, 2, 3].map(i => member(`Rep${i}`, 8));
+    for (const r of rs) {
+        for (const p of cPosts) if ((await report(r, p, c1)).status !== 200) throw new Error('report refused');
+        for (const p of tPosts) if ((await report(r, p, twin)).status !== 200) throw new Error('report refused');
+    }
+    assert(tPosts.every(p => !hiddenAt(p)),
+        'setup: the same reports on a twin\'s 3 posts, never hidden, hide 0 of 3 (its standing is 3, so each needs reporters of 2)');
+    const uC = await adm('POST', `/api/local/admin/bursts/${hC.body?.action?.id}/undo`, {});
+    assert(uC.status === 200 && uC.body?.restored === 3 && uC.body?.keptHidden === 0 && cPosts.every(p => !hiddenAt(p)),
+        `the undo brings all 3 back: weighed with the hide undone, reports would hide none of them (${uC.status} ${JSON.stringify(uC.body)})`);
+
+    // ── 13. one doorbell per action, not one per post ────────────────────────────────────────────
+    console.log('\n── 13. one doorbell per action, not one per post ──');
+    const lD = `label-d-${crypto.randomUUID()}`;
+    const dd = [1, 2, 3].map(i => doorRow(`D${i}`, lD));
+    for (const d of dd) for (let i = 1; i <= 20; i++) createPost('offer', 'other', `${d.name} item ${i}`, 'item', 0, 'fixed', d.pk);
+    const socks = [await socket(pat), await socket(null)];
+    const settle = () => new Promise(r => setTimeout(r, 300));
+    await settle();
+    const listingFrames = (s: Sock) => s.events.filter(e => e?.type === 'post_updated' || e?.type === 'post_removed' || e?.type === 'new_post');
+    for (const s of socks) s.events.length = 0;
+    const hD = await adm('POST', `/api/local/admin/members/${dd[0].pk}/burst/hide`, { members: dd.map(d => d.pk), count: 3 });
+    await settle();
+    const onHide = socks.map(s => listingFrames(s).length);
+    assert(hD.status === 200 && hD.body?.action?.posts === 60 && onHide[0] >= 1 && onHide.every(n => n <= 2),
+        `a hide of 60 posts rings each open socket at most twice, not once per post (member ${onHide[0]}, guest ${onHide[1]})`);
+    for (const s of socks) s.events.length = 0;
+    const uD = await adm('POST', `/api/local/admin/bursts/${hD.body?.action?.id}/undo`, {});
+    await settle();
+    const onUndo = socks.map(s => listingFrames(s).length);
+    assert(uD.status === 200 && uD.body?.restored === 60 && onUndo[0] >= 1 && onUndo.every(n => n <= 2),
+        `and its undo the same (member ${onUndo[0]}, guest ${onUndo[1]})`);
+    for (const s of socks) s.ws.close();
+
+    // ── 14. a local node ─────────────────────────────────────────────────────────────────────────
+    console.log('\n── 14. a local node ──');
     delete process.env.NODE_PROFILE;
     const info = (await call('GET', null, '/api/community/info')).body?.features ?? {};
     assert(info.openJoin === false, `setup: the local profile, the door shut (${info.openJoin})`);

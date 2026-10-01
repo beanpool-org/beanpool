@@ -17,7 +17,8 @@
  * It exists where the door does (`openJoin`, the global profile's): elsewhere every route answers 404 to whoever signs
  * in to Settings, so a local community has none of it. Owners, admins and moderators see a burst, hide its posts and
  * undo a hide. A moderator, whose screen is the reports and nothing else, sees
- * the burst of an account with an open report (about them, or one of their posts) or of one in a burst the digest lists
+ * the burst of an account with an open report filed by someone else (about them, or one of their posts: a report on a
+ * post is about its author, never the member a reporter named) or of one in a burst the digest lists
  * (`BURST.digestMinAccounts` or more, the first of them in the last `BURST.digestDays` days); owners and admins see any
  * account's, as they see the members. Removing is the removal there already is (state-engine adminPruneUser, the caller's
  * `prune`), with its rules: owners and admins only, as for one member; the removed key is refused from then on, and the
@@ -40,9 +41,9 @@
  * not already hidden or cancelled: the hidden-for-review state reports put a post in, so everything that keeps such a post
  * from everyone but its author and the moderators applies (the listings, search, the map, the feed, a standby's copy),
  * and a moderator can still restore or remove each one as it is. Each author is told once, without why or by whom. The
- * action is recorded (`burst_actions`, `burst_action_posts`). Its undo un-hides each of its posts that still carries its
- * stamp, unless reports from enough independent circles would hide it now (engine/auto-moderation.ts hideTally), and
- * tells each author once. A post restored, removed or re-hidden on its own meanwhile is left as it is. The record is this
+ * action is recorded (`burst_actions`, `burst_action_posts`), and every socket hears one doorbell for it, never one per
+ * post. Its undo un-hides each of its posts that still carries its stamp, unless reports from enough independent circles
+ * would hide it now, weighed with the whole hide undone (engine/auto-moderation.ts hideTally), and tells each author once. A post restored, removed or re-hidden on its own meanwhile is left as it is. The record is this
  * server's (a standby never copies it): after a take-over the posts stay hidden, and are restored one at a time. Records
  * go after `BURST.keepActionsDays` days, and a member who deletes their own account, and so their label, leaves them
  * (`forgetBurstActionsOf`).
@@ -121,7 +122,9 @@ export interface Burst {
 
 interface JoinRow { member_pubkey: string; joined_at: string; callsign: string | null; status: string | null }
 
-const statusWord = (s: string | null): BurstAccount['status'] => (s === 'pruned' ? 'removed' : s === 'disabled' ? 'suspended' : 'active');
+/** An admin's suspension writes 'disabled', a report's (state-engine actionReport) 'suspended': both are suspended. */
+const statusWord = (s: string | null): BurstAccount['status'] =>
+    (s === 'pruned' ? 'removed' : s === 'disabled' || s === 'suspended' ? 'suspended' : 'active');
 
 function labelOf(pubkey: string): string | null {
     return (db.prepare('SELECT join_cohort FROM open_joins WHERE member_pubkey = ?').get(pubkey) as { join_cohort: string | null } | undefined)?.join_cohort ?? null;
@@ -138,12 +141,20 @@ function burstRows(label: string): JoinRow[] {
 
 const OPEN_REPORT = "(ar.status = 'pending' OR ar.status IS NULL)";
 
-function openReportsOn(pubkey: string): number {
+/**
+ * Open reports about this member: about them (no post), or about a post they wrote. A report on someone else's post
+ * that names them is not one: a report on a post is about its author, whatever key the reporter sent (POST /api/reports
+ * sets it from the post now; one filed before may name anyone). `notBy`: leave out the reports this key filed, so a
+ * moderator's own report never opens a group to them.
+ */
+function openReportsOn(pubkey: string, notBy: string | null = null): number {
     return (db.prepare(`
         SELECT COUNT(*) AS c FROM abuse_reports ar
          WHERE ${OPEN_REPORT}
-           AND (ar.target_pubkey = ? OR ar.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?))
-    `).get(pubkey, pubkey) as { c: number }).c;
+           AND ar.reporter_pubkey IS NOT ?
+           AND ((ar.target_post_id IS NULL AND ar.target_pubkey = ?)
+                OR ar.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?))
+    `).get(notBy, pubkey, pubkey) as { c: number }).c;
 }
 
 function holdsRole(pubkey: string): boolean {
@@ -217,11 +228,13 @@ function listedInDigest(rows: { joined_at: string }[], now: number): boolean {
 }
 
 /**
- * Whether a moderator may open this account's burst: one with an open report about them or one of their posts, or one in
- * a burst the digest lists. Owners and admins may open any.
+ * Whether a moderator may open this account's burst: one with an open report about them or one of their posts, filed by
+ * someone other than this moderator (`actor`, their member key), or one in a burst the digest lists. Owners and admins
+ * may open any. A moderator with a second account can still file one: this limit leaves a record (the report names its
+ * reporter), it is not a wall.
  */
-export function moderatorMayOpen(pubkey: string, now: number = Date.now()): boolean {
-    if (openReportsOn(pubkey) > 0) return true;
+export function moderatorMayOpen(pubkey: string, actor: string | null, now: number = Date.now()): boolean {
+    if (openReportsOn(pubkey, actor) > 0) return true;
     const label = labelOf(pubkey);
     return !!label && listedInDigest(burstRows(label), now);
 }
@@ -282,14 +295,18 @@ function pruneOldActions(now: number): void {
     })();
 }
 
-/** Hidden or visible again: every copy anyone holds has to change (as engine/auto-moderation.ts announces one post). */
-function announce(cb: ModerationNoticeCallbacks, postIds: string[]): void {
-    if (postIds.length === 0) return;
+/**
+ * Hidden (`post_removed`) or visible again (`post_updated`): every copy anyone holds has to change. One bare doorbell
+ * for the whole action, to every socket, never one per post (state-engine ringListingDoorbell's rule, which can't be used
+ * as is: it skips the member-feed sockets). Each app reads the listings again on it (a frame with no id or post is no
+ * listing, @beanpool/core livePostChange), and its catch-up sync gets what it may see: the author and the moderators the
+ * posts, everyone else their absence. The versions move first, so that read is never answered 304.
+ */
+function announce(cb: ModerationNoticeCallbacks, type: 'post_removed' | 'post_updated', posts: number): void {
+    if (posts === 0) return;
     bumpPostsVersion();
     bumpActivityVersion();
-    for (const id of postIds) {
-        try { cb.broadcast({ type: 'post_updated', id }); } catch (e: any) { console.warn('[Burst] Doorbell failed:', e?.message || e); }
-    }
+    try { cb.broadcast({ type }); } catch (e: any) { console.warn('[Burst] Doorbell failed:', e?.message || e); }
 }
 
 /**
@@ -316,7 +333,7 @@ export function hideBurstPosts(cb: ModerationNoticeCallbacks, anchor: string, ke
         db.prepare('INSERT INTO burst_actions (id, kind, at, by_role, anchor_pubkey, accounts, posts) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .run(id, 'hide', at, byRole, anchor, keys.length, hidden.length);
     })();
-    announce(cb, hidden.map(h => h.id));
+    announce(cb, 'post_removed', hidden.length);
     const perAuthor = new Map<string, number>();
     for (const h of hidden) perAuthor.set(h.author, (perAuthor.get(h.author) ?? 0) + 1);
     for (const [author, n] of perAuthor) notifyPostsHiddenForReview(cb, author, n);
@@ -331,6 +348,11 @@ export type UndoOutcome =
 /**
  * Undo a hide: un-hide each post it hid that still carries its stamp, unless reports from enough independent circles
  * would hide it now, and tell each author once. A post restored, removed or hidden again on its own since is left alone.
+ *
+ * "Would hide it now" is weighed as if the whole hide were undone: an author's other posts this action hid count as
+ * kept in their standing (engine/auto-moderation.ts hideTally), as they did before the hide and will once it is undone.
+ * So every one of its posts is un-hidden first, each is weighed, and only those reports would hide go back, with the
+ * action's stamp, as they were: all in one transaction, so nobody ever reads them in between.
  */
 export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, now: number = Date.now()): UndoOutcome {
     pruneOldActions(now);
@@ -351,16 +373,22 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
                                     LEFT JOIN members m ON m.public_key = p.author_pubkey
                                    WHERE bp.action_id = ? AND p.hidden_by_reports_at = ?`)
             .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; author_status: string | null }[];
-        const unhide = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ? WHERE id = ? AND hidden_by_reports_at = ?');
-        for (const p of posts) {
-            if (reportsHide && hideTally(p.id, now).circles.length >= AUTO_HIDE.circles) { keptHidden++; continue; }
-            if (unhide.run(at, p.id, action.at).changes === 0) continue;
+        // Every post of the action un-hidden first (updated_at untouched: one that goes back below is as it was)...
+        const unhide = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ? AND hidden_by_reports_at = ?');
+        const mine = posts.filter(p => unhide.run(p.id, action.at).changes > 0);
+        // ...then each weighed with all of them back, before any goes back: the order they are weighed in changes nothing.
+        const stays = new Set(reportsHide ? mine.filter(p => hideTally(p.id, now).circles.length >= AUTO_HIDE.circles).map(p => p.id) : []);
+        const rehide = db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        const touched = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
+        for (const p of mine) {
+            if (stays.has(p.id)) { rehide.run(action.at, p.id); keptHidden++; continue; }
+            touched.run(at, p.id);
             back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.author_pubkey, live: p.active === 1 && p.status !== 'cancelled' });
         }
         return true;
     })();
     if (!done) return { ok: false, status: 409, code: 'already_undone', error: 'This hide was already undone.' };
-    announce(cb, back.map(b => b.id));
+    announce(cb, 'post_updated', back.length);
     const perAuthor = new Map<string, number>();
     for (const b of back) if (b.author && b.live) perAuthor.set(b.author, (perAuthor.get(b.author) ?? 0) + 1);
     for (const [author, n] of perAuthor) notifyPostsBack(cb, author, n);

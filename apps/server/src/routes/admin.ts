@@ -1162,7 +1162,7 @@ function burstActorRole(ctx: any): BurstActorRole | null {
 
 /**
  * The account a burst is opened from, from the path: null after answering 400 (no key), 404 (no member here) or 403 (a
- * moderator, for an account with no open report and in no burst the digest lists).
+ * moderator, for an account with no open report by someone else and in no burst the digest lists).
  */
 function burstAnchor(ctx: any): string | null {
     const key = burstKey(ctx.params.pubkey);
@@ -1176,7 +1176,9 @@ function burstAnchor(ctx: any): string | null {
         ctx.body = { success: false, error: 'No member here has that key', code: 'not_found' };
         return null;
     }
-    if (burstActorRole(ctx) === 'moderator' && !moderatorMayOpen(key)) {
+    // A moderator's own report doesn't count: a moderator is always a key session, so `actor` is their member key.
+    const actor = typeof ctx.state?.actor === 'string' ? ctx.state.actor : null;
+    if (burstActorRole(ctx) === 'moderator' && !moderatorMayOpen(key, actor)) {
         ctx.status = 403;
         ctx.body = {
             success: false,

@@ -123,7 +123,7 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(Buffer.from(keys.get(2)!).equals(Buffer.from(key))).toBe(true);
     });
 
-    it('after an admin goes, the holder makes a new key for the admins who held the old one, never a newcomer', async () => {
+    it('after an admin goes, the holder makes a new key for itself alone; every other admin waits for a Share tap', async () => {
         const [owen, ada, cy] = [await admin('Owen'), await admin('Ada'), await admin('Cy')];
         const k1 = newNamesListKey();
         const st = stateOf(owen, {
@@ -131,21 +131,29 @@ describe('the key: made, opened, and passed on only by a tap', () => {
             myKeys: [{ generation: 1, wrappedBy: owen.publicKey, ...wrapNamesListKey(k1, owen.publicKey, 1) }],
             admins: [
                 { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: true },
+                // The node says Ada held the old key. It may be lying (its own key, named an admin): the phone wraps nothing to her.
                 { pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: true },
                 { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false },
             ],
         });
         const plan = keyPlan(st, owen.publicKey, myListKeys(st, owen));
-        expect(plan).toEqual({ kind: 'make_new', wrapTo: [owen.publicKey, ada.publicKey] });
+        expect(plan).toEqual({ kind: 'make_new' });
         answer = () => ({ status: 201, body: { generation: 2 } });
         await installKeyFor(COMMUNITY, owen, st, plan);
         const body = JSON.parse(sent[0].body);
         expect(body.generation).toBe(2);
-        expect(body.wraps.map((w: any) => w.holder).sort()).toEqual([owen.publicKey, ada.publicKey].sort());
-        expect(waitingAdmins(st, owen.publicKey)).toEqual([]);
+        expect(body.wraps.map((w: any) => w.holder)).toEqual([owen.publicKey]);
+        // Once the new key is in, Ada and Cy are both waiting, each for a tap.
+        const after = { ...st, generation: 2, newKeyNeeded: false, admins: st.admins.map((a) => ({ ...a, holdsKey: a.pubkey === owen.publicKey })) };
+        expect(waitingAdmins(after, owen.publicKey).map((a) => a.callsign)).toEqual(['Ada', 'Cy']);
         // Ada, who doesn't hold the current key, waits and is told who can make it.
         const adaPlan = keyPlan({ ...st, myKeys: [] }, ada.publicKey, new Map());
         expect(adaPlan).toMatchObject({ kind: 'wait', newKeyNeeded: true });
+        // Nothing in the module wraps the key to anyone the node names, but by a share.
+        const src = fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8');
+        expect(src.match(/wrapsFor\(/g)?.length).toBe(3);
+        expect(src).toContain('wrapsFor(key, generation, [identity.publicKey])');
+        expect(src).toContain('wrapsFor(key, state.generation, [admin.pubkey])');
     });
 
     it('nobody holding the key: start again (the screen asks first); an admin who waits is told who to ask', async () => {

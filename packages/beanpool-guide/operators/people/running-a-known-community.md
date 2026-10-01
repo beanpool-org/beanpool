@@ -28,6 +28,8 @@ What your server does keep in the clear: that an entry exists, which admin made 
 
 What sealing doesn't protect: an admin's own phone, a PDF an admin exports, and what an admin chooses to write in a note. Treat those like a paper list.
 
+Who is an owner or admin is your server's word. The app shows whom you are about to share the key with, and asks first, but a server changed by whoever runs it could name the wrong person, or hide that an admin has left. Share the key only with people you know are your admins.
+
 Members don't see the names. Showing real names to members, as some LETS directories do, isn't available yet.
 
 ## Before you start
@@ -40,7 +42,7 @@ Keep a paper copy, or a PDF, somewhere safe. If every admin who holds the list's
 
 - **The first admin to open the list** makes its key, on their phone.
 - **An admin you add later** sees the list waiting. An admin who already holds the key sees "waiting for the list's key" for them and taps **Share** to give it to them. The app asks first. Your server never decides who reads the names: making someone an admin doesn't hand them the list until an admin who holds it chooses to share it.
-- **When someone stops being an admin** (their role is taken away or changed to moderator, they are suspended or removed, they delete their account, or they replace a lost phone with a new key), the server stops giving them the list at once. If they held the list's key, nothing more can be written until the list has a new key. The next time an admin who holds the key opens the list, their phone makes a new one, for the admins who held the old one, and seals every entry again under it. The person who left keeps whatever they already saw, as with a paper list, but can't read anything written after.
+- **When someone stops being an admin** (their role is taken away or changed to moderator, they are suspended or removed, they delete their account, or they replace a lost phone with a new key), the server stops giving them the list at once. If they held the list's key, nothing more can be written until the list has a new key. The next time an admin who holds the key opens the list, their phone makes a new one and seals every entry again under it. The other admins then show as waiting, and that admin shares the new key with each of them, a tap each. The person who left keeps whatever they already saw, as with a paper list, but can't read anything written after.
 - **If nobody who is an admin now holds the key** (the only admins who did have left or lost their phones), any admin can **start a new key**. The entries written before can't be opened by anyone here any more. They stay, marked locked, until an admin types each one again from your paper copy, or deletes it.
 
 ## Adding a name and confirming a member

@@ -7,9 +7,9 @@
  * each admin's own key, and only an admin's phone opens them. Everything here is signed with the member's own key.
  *
  * What this module decides, so the screen (app/names-list.tsx) only draws it:
- *   - the key: open this admin's own wraps; make the first key, a new one after an admin goes (wrapped to the admins
- *     who held the old one, never to anyone new), or start again when nobody here holds it; or say who to ask
- *     ({@link keyPlan});
+ *   - the key: open this admin's own wraps; make the first key, or a new one after an admin goes, for this admin alone
+ *     (every other admin then gets it by a Share tap: the phone never wraps the key to anyone because the node says
+ *     so); start again when nobody here holds it; or say who to ask ({@link keyPlan});
  *   - the entries: open each with the key of its generation, or say why it can't be ({@link openEntries}); seal the older
  *     ones again under a new key ({@link reEncryptBatches});
  *   - sharing: an admin made since waits until an admin who holds the key taps "Share" for them — never automatic, so
@@ -177,8 +177,11 @@ export type KeyPlan =
     | { kind: 'ready' }
     /** The list has no key yet: this phone makes it, for this admin alone. */
     | { kind: 'make_first' }
-    /** An admin went: this phone makes the next key, for the admins who held the last one (never anyone new). */
-    | { kind: 'make_new'; wrapTo: string[] }
+    /**
+     * An admin went: this phone makes the next key, for this admin alone. The others wait for a Share tap, as a new admin
+     * does: who held the last key is the node's word, and a node that named its own key there must get nothing.
+     */
+    | { kind: 'make_new' }
     /** Nobody who is an admin now holds the key: a new one, and the entries sealed under the old one stay locked. Asks first. */
     | { kind: 'start_again' }
     /** Another admin holds the key (or must make the new one): ask them. */
@@ -191,9 +194,7 @@ export function keyPlan(state: NamesState, myPubkey: string, keys: Map<number, U
     const holders = state.admins.filter((a) => a.holdsKey);
     const iHold = keys.has(state.generation) && holders.some((h) => h.pubkey === myPubkey);
     if (state.newKeyNeeded) {
-        return iHold
-            ? { kind: 'make_new', wrapTo: holders.map((h) => h.pubkey) }
-            : { kind: 'wait', holders, newKeyNeeded: true };
+        return iHold ? { kind: 'make_new' } : { kind: 'wait', holders, newKeyNeeded: true };
     }
     return iHold ? { kind: 'ready' } : { kind: 'wait', holders, newKeyNeeded: false };
 }
@@ -204,23 +205,20 @@ export function wrapsFor(key: Uint8Array, generation: number, holders: string[])
 }
 
 /**
- * Makes the key the plan asks for (not for `ready` or `wait`), and sends it. The new key is kept for this screen only:
- * the phone opens its own wrap again from the node, as any other admin's does.
+ * Makes the key the plan asks for (not for `ready` or `wait`), wrapped to this admin alone, and sends it. The new key is
+ * kept for this screen only: the phone opens its own wrap again from the node, as any other admin's does.
  */
 export async function installKeyFor(
     anchor: string, identity: BeanPoolIdentity, state: NamesState, plan: KeyPlan,
 ): Promise<NamesResult<{ generation: number; key: Uint8Array }>> {
     if (plan.kind === 'ready' || plan.kind === 'wait') return { ok: false, status: 0, code: 'no_plan', message: 'Nothing to make.' };
     const generation = state.generation + 1;
-    const holders = plan.kind === 'make_new'
-        ? [identity.publicKey, ...plan.wrapTo.filter((h) => h !== identity.publicKey)]
-        : [identity.publicKey];
     const key = newNamesListKey();
-    const sent = await call<{ generation: number }>(anchor, identity, 'POST', `${NAMES_PATH}/key`, { generation, wraps: wrapsFor(key, generation, holders) });
+    const sent = await call<{ generation: number }>(anchor, identity, 'POST', `${NAMES_PATH}/key`, { generation, wraps: wrapsFor(key, generation, [identity.publicKey]) });
     return sent.ok ? { ok: true, value: { generation, key } } : sent;
 }
 
-/** The admins who don't hold the key yet (made since, or left out of a new one): this admin may share it with them. */
+/** The admins who don't hold the key yet (made since, or since a new key): this admin may share it with them, a tap each. */
 export function waitingAdmins(state: NamesState, myPubkey: string): NamesAdminRow[] {
     if (state.generation === 0 || state.newKeyNeeded) return [];
     return state.admins.filter((a) => !a.holdsKey && a.pubkey !== myPubkey);
@@ -435,7 +433,8 @@ export const NAMES_COPY = {
     who: 'Only this community’s owners and admins can read these names, on their own phones. The community’s server keeps them scrambled: it, BeanPool and anyone who copies it can’t read them.',
     notShownToMembers: 'Members don’t see these names. Showing real names to members isn’t available yet.',
     makingKey: 'Setting up the list’s key on this phone…',
-    newKeyMade: 'Someone stopped being an admin, so this phone made the list a new key. They can’t read anything written from now on.',
+    newKeyMade: 'Someone stopped being an admin, so this phone made the list a new key. They can’t read anything written from now on. '
+        + 'Share the new key with each of the other admins below.',
     startAgainTitle: 'Start the list again?',
     startAgain: 'Nobody who is an admin now holds the list’s key: the admins who did have left or lost their phones. You can start a new key, '
         + 'but the entries written before can’t be opened by anyone here any more. They stay, locked, until an admin types each one again '

@@ -264,7 +264,7 @@ async function child(): Promise<void> {
             takePushes();
             const counts: Record<string, number> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Devices', 'A push of each category', {}, category);
+                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Devices', 'A push of each category', {}, category, 'community.notice');
             }
             return { counts, handed: takePushes().length };
         },
@@ -385,7 +385,7 @@ async function child(): Promise<void> {
             takePushes();
             const answers: Record<string, unknown> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category);
+                answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category, 'community.notice');
             }
             answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
             answers.adminBroadcastAnnouncement = se.adminBroadcastAnnouncement('On a standby', 'Never sent', 'info') ?? 'no answer';

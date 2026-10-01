@@ -432,7 +432,7 @@ async function main(): Promise<void> {
     for (const id of [viewer, ava]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
     const badgeOf = (id: Id): number | undefined => {
         pushed.length = 0;
-        dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat');
+        dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat', 'chat.message');
         return pushed.find(m => m.to === pushToken(id))?.badge;
     };
     const avaChats = async () => (await call('GET', ava, `/api/messages/conversations/${ava.pk}`)).body ?? {};

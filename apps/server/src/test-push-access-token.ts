@@ -126,7 +126,7 @@ async function main() {
     };
     const pushTo = async (who: string[]) => {
         sent.length = 0;
-        const n = se.dispatchPushNotification(who, actor, 'A test notice', 'A line of text', { screen: 'chat' }, 'chat');
+        const n = se.dispatchPushNotification(who, actor, 'A test notice', 'A line of text', { screen: 'chat' }, 'chat', 'chat.message');
         await flush();
         return n;
     };

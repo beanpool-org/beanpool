@@ -37,6 +37,7 @@ import {
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
+import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
@@ -1645,7 +1646,10 @@ router.post('/api/push-tokens', async (ctx) => {
             console.warn('[Place watches] Telling a watcher at their token registration failed:', e?.message || e);
         }
     }
-    ctx.body = { success };
+    // The key this community signs its notices with (@beanpool/core push-notice.ts): the app pins it, from this answer to
+    // its own signed request over TLS. Left out while this server has no node key yet.
+    const pushKey = success ? pushKeyHex() : null;
+    ctx.body = pushKey ? { success, pushKey } : { success };
 });
 
 /**

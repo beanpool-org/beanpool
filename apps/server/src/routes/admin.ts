@@ -29,7 +29,7 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
-    restoreHiddenPost, liftModerationMute,
+    restoreHiddenPost, liftModerationMute, pushServiceRefusals,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { decisionsOn } from '../decisions-engine.js';
@@ -827,6 +827,9 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // Whether this server's pushes go with an Expo access token (config/expo-access-token.ts): 'set', 'not set',
             // or 'unusable' (set, but nothing a header can carry). Never the token.
             pushAccessToken: expoAccessTokenStatus(),
+            // What Expo refused since this server started, by Expo's code (`UNAUTHORIZED`: it wants an access token this
+            // server doesn't send), with a count and when: state-engine.ts readExpoAnswer. Empty on a healthy node.
+            pushRefusals: pushServiceRefusals(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,

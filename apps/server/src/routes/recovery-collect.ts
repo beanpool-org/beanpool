@@ -96,6 +96,7 @@ function notifySeedReleased(collection: Collection, provider: SsoProvider): void
             + `your community's admin now to move your account to a new key, and secure your ${label} account.`,
             { screen: 'settings', collectionId: collection.id, kind: 'recovery_released' },
             'recovery',
+            'account.restored',
         );
     } catch (e) {
         console.error('[recovery] could not notify about a released fragment:', (e as Error).message);
@@ -195,6 +196,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
                 + 'open BeanPool and stop it.',
                 { screen: 'settings', collectionId: collection.id, kind: 'recovery_started' },
                 'recovery',
+                'account.recovery-started',
             );
         } catch (e) {
             console.error('[recovery] could not notify about a new collection:', (e as Error).message);

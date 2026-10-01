@@ -66,6 +66,7 @@
 import crypto from 'node:crypto';
 import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { EARTH_RADIUS_KM, haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
+import type { PushNoticeKind } from '@beanpool/core';
 import { roundToArea } from './member-area.js';
 import { firstSightings, type DirectoryRow, type FirstSighting } from './directory-cache.js';
 
@@ -233,7 +234,7 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
 /** Returns how many open sockets it was written to. */
 type BroadcastFn = (event: any, recipients?: string[]) => number;
 /** Returns how many notifications it handed to the push service. */
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery') => number;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => number;
 
 export interface PlaceWatchNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -444,7 +445,7 @@ function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet
             console.warn('[Place watches] Live notice failed:', e?.message || e);
         }
         try {
-            sent = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace') > 0 || sent;
+            sent = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace', 'community.near') > 0 || sent;
         } catch (e: any) {
             console.warn('[Place watches] Push failed:', e?.message || e);
         }

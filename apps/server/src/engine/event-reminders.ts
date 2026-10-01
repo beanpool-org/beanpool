@@ -42,6 +42,7 @@
  */
 
 import { postPhotoUrl } from '@beanpool/engine';
+import type { PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 import { postInSightSql } from './post-sight.js';
@@ -74,6 +75,7 @@ type PushFn = (
     body: string,
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
+    kind: PushNoticeKind,
 ) => void;
 
 export const BAD_OFFSETS_MESSAGE =
@@ -396,6 +398,7 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
                 reminderPushBody(b.offsetMin),
                 { screen: 'post', postId: b.postId },
                 REMINDER_PUSH_CATEGORY,
+                'event.reminder',
             );
         } catch (e) {
             // Same rule as every other event push: a delivery failure never becomes a node failure. The

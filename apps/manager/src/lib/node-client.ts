@@ -678,6 +678,55 @@ export async function fetchWebVisits(
     return res.json();
 }
 
+/** One phone platform's floor and the app versions its members run (server routes/admin.ts GET /api/local/admin/app-versions). */
+export interface AppPlatformVersions {
+    /** The floor as set (MIN_APP_VERSION_<PLATFORM>, else MIN_APP_VERSION, else the default). */
+    floor: string;
+    /** The newest build the node has seen in that store, or null. */
+    store: string | null;
+    /** The floor apps are held to: `floor` once the store has it, else null. */
+    enforced: string | null;
+    /** The store has a build, but below the floor: the floor waits for it. */
+    held: boolean;
+    /** The grace date (ISO), or null: the block applies already. */
+    from: string | null;
+    /** The grace date was set but is not a date: the block is off. */
+    fromInvalid: boolean;
+    /** An app below `enforced` stops at its next safe moment. */
+    blocking: boolean;
+    /** Members per app version, newest first. */
+    versions: Array<{ version: string; members: number }>;
+}
+
+export interface AppVersionsResponse {
+    /** Counted from (ISO): the later of the server's start and `windowDays` ago. */
+    since: string;
+    windowDays: number;
+    minAppVersion: string;
+    minAppVersionFrom: string | null;
+    storeCheckedAt: string | null;
+    platforms: { android: AppPlatformVersions; ios: AppPlatformVersions };
+}
+
+/** The phone app's floors and the versions members run, as counts (nobody named): the manager's Home card. */
+export async function fetchAppVersions(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AppVersionsResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/app-versions');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        if (res.status === 401) {
+            throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
+        }
+        if (res.status === 404) {
+            throw new Error("This node's build doesn't count app versions yet. Update it to see them.");
+        }
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<GatewayConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
     const res = await fetch(endpoint, {

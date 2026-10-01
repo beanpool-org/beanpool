@@ -4,6 +4,7 @@ import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } fro
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
 import { WebVisitsCard } from './WebVisitsCard';
+import { AppVersionsCard } from './AppVersionsCard';
 import type { NodeProfile } from '../../lib/profiles';
 
 interface HomeScreenProps {
@@ -420,6 +421,9 @@ export function HomeScreen({
 
             {/* Web app visits a day, counted by the node itself */}
             {activeNode && <WebVisitsCard node={activeNode} />}
+
+            {/* The phone app's versions and floors: whom raising a floor would stop */}
+            {activeNode && <AppVersionsCard node={activeNode} />}
 
             {/* 4. Quick actions — Invite a member · Create an enterprise · Run ledger audit · Download backup */}
             <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-6 shadow-lg">

@@ -36,7 +36,7 @@ import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
-import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
+import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
@@ -47,12 +47,13 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, type PushNoticeRow } from './engine/push-notices.js';
+import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
+import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges } from './engine/stranded-pledges.js';
@@ -7200,7 +7201,10 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
  *    longest-serving active keeper, or the enterprise pauses with nobody left. Closes the keeper changes naming them.
- * Once it has committed, empties the WAL, which still holds what the transaction replaced (db/wal-truncate.ts).
+ * 8. Takes their name and key out of this server's log (system_logs): each reads "a deleted member" (logger.ts).
+ * Once it has committed, empties the WAL, which still holds what the transaction replaced (db/wal-truncate.ts), and
+ * deletes the objects of the photos it removed. Their profile picture was a value in their row, never a stored object,
+ * so it went with the row. Snapshots and backups made before keep all of it until they go (services/snapshot-scheduler.ts).
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
@@ -7396,8 +7400,22 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
+        // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
+        // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.
+        const formerKeys = (db.prepare(`
+            WITH RECURSIVE replaced(k) AS (
+                SELECT public_key FROM invalidated_keys WHERE rekeyed_to = ? COLLATE NOCASE
+                UNION SELECT i.public_key FROM invalidated_keys i JOIN replaced r ON i.rekeyed_to = r.k COLLATE NOCASE
+            ) SELECT k FROM replaced`).all(publicKey) as { k: string }[]).map((r) => r.k);
+        // Their name and keys out of the push notices kept for the people they wrote to, too (engine/push-notices.ts).
+        neutralisePushNoticesNaming(member.callsign, [publicKey, ...formerKeys], publicKey);
+        scrubMemberFromLogs(member.callsign, [publicKey, ...formerKeys]);
     });
     noteTakeoverInputsChanged('member purged their account');
+    // Their picture's bytes as the avatar route last decoded them, held in memory: never served again (the route checks
+    // the row), but nor kept until the cache happens to drop them (data-at-rest report F6).
+    getAvatarService().delete(publicKey);
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });

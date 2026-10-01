@@ -38,7 +38,7 @@ This cannot be undone, even with your 12 words.
 - If you are below zero, the Commons covers the debt.
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
-- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted: the backup keeps them until it is replaced. In a chat with a person, older messages already on the other person's phone may stay there, like a screenshot or a backup.
+- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
 - Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.
 - A poll you asked is closed. It keeps its question and its votes.
 - The block list your community kept for you goes too.
@@ -47,6 +47,18 @@ This cannot be undone, even with your 12 words.
 - Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
+
+### What stays a while
+
+Your community's server deletes all of the above at once. It also takes your name and key out of its log. Some copies hold on for a while:
+
+- **A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.
+- **Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.
+- **Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.
+- **A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.
+- **The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.
+- **Your trades** stay in the ledger, under "Deleted Member", so everyone's beans still add up.
+- **Notices kept for other people.** For 7 days the server keeps the details of each notification it sent to the people you wrote to or dealt with, so their phone can show them (for example, that a message came in a chat). When you delete, your name and key are taken out of those notices, so one that said "Wren sent you a message" reads "A member sent you a message". The rest of a notice, such as which chat it was for, stays until its 7 days are up.
 
 ### What stays on this phone
 

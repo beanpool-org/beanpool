@@ -16,6 +16,7 @@ import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHidd
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
+import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -380,8 +381,17 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
+    // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
+    // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
+    // Only people already listed above as in the caller's chats.
+    const others = new Set<string>();
+    for (const c of convs) for (const p of c.participants) if (p !== publicKey) others.add(p);
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
-    ctx.body = { conversations, totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0) };
+    ctx.body = {
+        conversations,
+        totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0),
+        deletedAccounts: accountsDeletedAmong(others),
+    };
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {

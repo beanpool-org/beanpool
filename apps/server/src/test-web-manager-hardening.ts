@@ -14,7 +14,8 @@
  *   3. L4: a CSRF token counts only for the session it was issued to: a moderator's on an owner's cookie, another
  *      password session's, or one issued to a password caller, is refused; a session's tokens go with it.
  *   4. L5: /ws/logs takes a ticket only; the admin password in its query string (`?auth=`) is refused, 2FA off too.
- *   5. L6: an origin listed in corsAllowedOrigins gets credentialed CORS on the member API, never on the admin surface.
+ *   5. L6: an origin listed in corsAllowedOrigins gets credentialed CORS on the member API, never on the admin surface
+ *      (the price-report queue included, which the admin IP allowlist also guards).
  *   6. M2: Settings (the manager) is served under the web app's strict policy, every way it is reached; the old
  *      static page at /settings-legacy keeps its own.
  *
@@ -313,6 +314,23 @@ async function main(): Promise<void> {
             const r = await call('OPTIONS', adminPath, { headers: { Origin: LISTED, 'Access-Control-Request-Method': 'POST' } });
             assert(r.headers.get('access-control-allow-credentials') === null, `OPTIONS ${adminPath}: no credentials (${r.headers.get('access-control-allow-credentials')})`);
         }
+        // The price-report queue is admin too (checkAdminAuth): a read with the session, and its status change's preflight.
+        const reportsRead = await call('GET', '/api/pricing-guide/reports', { headers: { Origin: LISTED, ...asCookie(o.sessionId) } });
+        assert(reportsRead.status === 200 && reportsRead.headers.get('access-control-allow-credentials') === null,
+            `GET /api/pricing-guide/reports from the listed origin: no credentials (${reportsRead.status}, ACAC ${reportsRead.headers.get('access-control-allow-credentials')})`);
+        for (const reportsPath of ['/api/pricing-guide/reports', '/api/pricing-guide/reports/x/status', '/API/pricing-guide/Reports/x/status']) {
+            const r = await call('OPTIONS', reportsPath, { headers: { Origin: LISTED, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'x-csrf-token' } });
+            assert(r.headers.get('access-control-allow-credentials') === null, `OPTIONS ${reportsPath}: no credentials (${r.status}, ACAC ${r.headers.get('access-control-allow-credentials')})`);
+        }
+        // The admin IP allowlist guards the same list: an allowlist without this address closes the queue too.
+        updateGatewayConfig({ corsAllowedOrigins: [LISTED], adminIpAllowlist: ['203.0.113.7'] });
+        const reportsBlocked = await call('GET', '/api/pricing-guide/reports', { headers: asCookie(o.sessionId) });
+        updateGatewayConfig({ corsAllowedOrigins: [LISTED], adminIpAllowlist: [] });
+        assert(reportsBlocked.status === 403 && /allowlist/i.test(reportsBlocked.text),
+            `with an admin IP allowlist that leaves this address out, GET /api/pricing-guide/reports → 403 (${show(reportsBlocked)})`);
+        // A member's own price report (singular) is the member API, not the queue.
+        const ownReport = await call('OPTIONS', '/api/pricing-guide/report', { headers: { Origin: LISTED, 'Access-Control-Request-Method': 'POST' } });
+        assert(ownReport.headers.get('access-control-allow-credentials') === 'true', `OPTIONS /api/pricing-guide/report (a member's own report) keeps credentials (${ownReport.headers.get('access-control-allow-credentials')})`);
         const memberRead = await call('GET', '/api/community/info', { headers: { Origin: LISTED } });
         assert(memberRead.headers.get('access-control-allow-origin') === LISTED && memberRead.headers.get('access-control-allow-credentials') === 'true',
             `the member API still answers the listed origin with credentials (ACAC ${memberRead.headers.get('access-control-allow-credentials')})`);

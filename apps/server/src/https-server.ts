@@ -761,7 +761,11 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p === '/api/manager' ||
         p.startsWith('/api/manager/') ||
         p === '/api/pricing-guide/admin' ||
-        p.startsWith('/api/pricing-guide/admin/');
+        p.startsWith('/api/pricing-guide/admin/') ||
+        // The price-report queue (routes/pricing-guide.ts, checkAdminAuth): reporters' keys and comments. Not the
+        // singular /api/pricing-guide/report, a member's own report.
+        p === '/api/pricing-guide/reports' ||
+        p.startsWith('/api/pricing-guide/reports/');
 }
 
 /**

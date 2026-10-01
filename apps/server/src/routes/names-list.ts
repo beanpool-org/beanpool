@@ -3,14 +3,14 @@
  * what is logged: engine/names-list.ts. Every route is signed with the admin's own key, through the real signature
  * middleware; none takes a key from the body or the query to act as.
  *
- *   GET    /api/names/state                         → the key (this admin's own wraps), who holds it, who waits, settings
+ *   GET    /api/names/state                         → the key history, every share header (the box of one to this admin),
+ *                                                     the admins and the key ids each holds, the write freeze, settings
  *   GET    /api/names/entries[?for=export]          → every entry, sealed, and every confirmation (logged: read | export)
- *   POST   /api/names/entries                       { id, ciphertext, keyGeneration } → 201 { id }
- *   PUT    /api/names/entries/:id                   { ciphertext, keyGeneration }     → { id }
+ *   POST   /api/names/entries                       { id, ciphertext, keyId } → 201 { id }
+ *   PUT    /api/names/entries/:id                   { ciphertext, keyId }     → { id }
  *   DELETE /api/names/entries/:id                   → { id } (409 entry_confirmed while a member is confirmed against it)
- *   POST   /api/names/entries/re-encrypt            { generation, entries: [{ id, ciphertext }] } → { done, left }
- *   POST   /api/names/key                           { generation, wraps: [{ holder, wrappedKey, wrapIv, wrapTag, ephemeralPubkey, kdfParams }] }
- *   POST   /api/names/key/share                     { generation, wraps } → { shared }
+ *   POST   /api/names/generations                   { statement, signature, replay? } → 201 { id, n } | 200 { id, n, code: exists }
+ *   POST   /api/names/shares                        { header, signature, box } → { to }
  *   POST   /api/names/confirmations                 { memberPubkey, entryId } → 201 { id, status }
  *   POST   /api/names/confirmations/:id/second      → { id, status }
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
@@ -20,16 +20,16 @@
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here 403
  * `not_member`; a member, a moderator or a visitor 403 `admins_only`; the global node 404 `feature_off` (it keeps no
  * names list: nobody there is confirmed by name, design §5); a standby 409 `standby`, reads included, since a read
- * writes the access log, which is the main server's. Every admin's request first drops holders who are no admin now
- * (reconcileHolders).
+ * writes the access log, which is the main server's. Every admin's request first marks holders of the current key who
+ * are no admin now (reconcileHolders).
  */
 import Router from '@koa/router';
 import { getMember, isVisitorKey } from '../state-engine.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
-    NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry, reEncrypt,
-    installKey, shareKey, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
+    NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
+    addGeneration, addShare, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 
@@ -54,7 +54,7 @@ function wholeQuery(raw: unknown, fallback: number, max: number): number | null 
 
 /**
  * The signing admin, in the member table's spelling, once every refusal above has been written; null when one was.
- * Drops the holders who are no admin now before the handler runs.
+ * Marks the holders of the current key who are no admin now before the handler runs.
  */
 function admin(ctx: any): string | null {
     ctx.set('Cache-Control', 'no-store');
@@ -88,8 +88,9 @@ async function asAdmin(ctx: any, fn: (actor: string, body: Record<string, unknow
     if (!actor) return;
     const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
     try {
-        const out = fn(actor, body);
+        // Set first: a handler may answer with another success status of its own.
         ctx.status = status;
+        const out = fn(actor, body);
         ctx.body = out;
     } catch (e) {
         respond(ctx, e);
@@ -108,13 +109,17 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }));
 
     router.post('/api/names/entries', (ctx) => asAdmin(ctx, (actor, body) => addEntry(actor, body), 201));
-    // Before /:id, so `re-encrypt` is never read as an entry id.
-    router.post('/api/names/entries/re-encrypt', (ctx) => asAdmin(ctx, (actor, body) => reEncrypt(actor, body)));
     router.put('/api/names/entries/:id', (ctx) => asAdmin(ctx, (actor, body) => editEntry(actor, ctx.params.id, body)));
     router.delete('/api/names/entries/:id', (ctx) => asAdmin(ctx, (actor) => deleteEntry(actor, ctx.params.id)));
 
-    router.post('/api/names/key', (ctx) => asAdmin(ctx, (actor, body) => installKey(actor, body), 201));
-    router.post('/api/names/key/share', (ctx) => asAdmin(ctx, (actor, body) => shareKey(actor, body)));
+    // A statement this server has already (a retry, or a replay after a rollback) is 200 `exists`, not a refusal.
+    router.post('/api/names/generations', (ctx) => asAdmin(ctx, (actor, body) => {
+        const out = addGeneration(actor, body);
+        if (!out.exists) return { id: out.id, n: out.n };
+        ctx.status = 200;
+        return { id: out.id, n: out.n, code: 'exists' };
+    }, 201));
+    router.post('/api/names/shares', (ctx) => asAdmin(ctx, (actor, body) => addShare(actor, body)));
 
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
     router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id)));

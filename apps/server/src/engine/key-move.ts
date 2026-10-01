@@ -234,10 +234,12 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('enterprise_keeper_changes', 'resolved_by');
 
     // (z3) the names list (engine/names-list.ts): a member's confirmation moves with them (design §4.1, "Re-key"), and so do
-    // the admins named on entries, confirmations and the access log. Not a wrap of the list's key: it opens only for the
-    // old key, so the main server drops it at its next names-list request (reconcileHolders), and the list takes a new
-    // key, since a lost phone may still hold the old one. Nor who signed a wrap (`names_list_keys.wrapped_by`): the
-    // signature beside it is the old key's, and the phones check it against that key (@beanpool/core names-list-trust.ts).
+    // the admins named on entries, confirmations and the access log. Not the key history or a share
+    // (`names_generations.maker`, `names_shares` from and to): each is signed by, or sealed to, the old key, and the
+    // phones check it against that key (@beanpool/core names-list-trust.ts). The old key stops being an admin here, so the
+    // main server marks it as no longer holding the current key at its next names-list request (reconcileHolders), and
+    // the list takes a new key without it, since a lost phone may still hold the old one. The new key is checked in
+    // person once before any phone sends it the keys.
     move('confirmations', 'member_pubkey');
     move('confirmations', 'confirmed_by');
     move('confirmations', 'seconded_by');

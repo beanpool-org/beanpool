@@ -391,12 +391,14 @@ export const TABLES: Record<string, TableEntry> = {
     federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
 
     // ── The names list (community modes slice 2, engine/names-list.ts), on the generic path ──
-    // Sealed entries and the list key wrapped to each admin: a standby holds what the main server holds, scrambled text
-    // it can't open, and a server that takes over serves it to the same admins' phones. A delete writes a tombstone.
-    names_entries: plain('id ciphertext key_generation created_by created_at updated_by updated_at'),
-    // Each wrap's signed header (wrap_digest, drops, signature) comes too: after a take-over the admins' phones check the
-    // same signatures on the server that took over.
-    names_list_keys: plain('holder_pubkey generation wrapped_key wrap_iv wrap_tag ephemeral_pubkey kdf_params wrapped_by wrap_digest drops signature created_at dropped_at updated_at'),
+    // Sealed entries, the signed key history, the sealed shares: a standby holds what the main server holds, text it can't
+    // open, and a server that takes over serves it to the same admins' phones, whose pins carry on unchanged (the
+    // statements carry the community's id, so they check out anywhere). A delete writes a tombstone.
+    names_entries: plain('id ciphertext key_id created_by created_at updated_by updated_at'),
+    names_generations: plain('id n parent_id maker drops statement signature created_at updated_at'),
+    names_shares: plain('from_pubkey to_pubkey head_id key_ids trusts sealed_ring ring_iv ring_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
+    names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.
     confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.

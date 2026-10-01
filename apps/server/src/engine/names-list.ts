@@ -1,8 +1,9 @@
 /**
  * The names list (community modes slice 2; scratch/global-node/DESIGN-community-modes-fable.md §4.1, §4.3, §7.1, §7.4,
  * §8 item 2; Marty's answers 2026-10-01): the community's admins keep a list of who its members are, by real name, and
- * confirm a member against an entry. Kept on the node ENCRYPTED to the admins' keys: this server holds sealed text and
- * keys it can't open (schema.sql §22e; @beanpool/core names-list-crypto.ts), and the names open on an admin's phone.
+ * confirm a member against an entry. Kept on the node ENCRYPTED on the admins' phones: this server holds sealed text,
+ * signed statements and sealed boxes it can't open (schema.sql §22e; @beanpool/core names-list-crypto.ts), and the
+ * names open on an admin's phone.
  *
  * ## Who
  *
@@ -11,35 +12,32 @@
  * only: the owner password reads no name through this server's routes (design §4.3). It is not what keeps the names from
  * whoever runs the server, who can make any key an admin and re-key any account: the admins' phones are (below).
  *
- * ## The list key, its generations, and what happens when an admin goes
+ * ## The key history, the shares, and what happens when an admin goes
  *
- * The first admin to open the list makes its key on their phone (generation 1) and wraps it to themselves; every write
- * is sealed under the current generation. An admin made since (by an owner) waits until an admin who holds the key
- * shares it with them, a tap on that admin's phone ({@link shareKey}). The phone offers that tap only for a key it
- * trusts: one its admin checked in person (a QR code or a code shown on the other admin's phone), or one a trusted
- * admin's signed share added; never for a key this server names by a callsign alone, since a re-key here can put an
- * admin's callsign on any key (PR #1411's second deciding review; @beanpool/core names-list-trust.ts).
+ * The trust model is scratch/global-node/DESIGN-names-list-trust-fable.md, and it lives on the admins' phones
+ * (@beanpool/core names-list-trust.ts). This server keeps what they send and checks only what keeps the list tidy and
+ * live (design §5); none of it is the defence, because whoever runs this server can change any row:
  *
- * Every wrap is SIGNED by the admin who made it (@beanpool/core names-list-trust.ts), over this community's id, the
- * generation, the holder, a digest of the wrap and, for a new generation, the admins its maker dropped. This server
- * refuses a wrap whose signature isn't the requester's, keeps the signature, and lists every wrap's signed header to
- * every admin ({@link namesState} `records`). It is not what keeps the names safe from this server: an admin's phone
- * uses a wrap only where a key it already trusts signed it, so a row written straight into this database (by whoever
- * runs it, or anyone with the machine) opens nothing, and a key made an admin here (`node_roles`, which the owner
- * password reaches) is trusted by no phone until a trusted admin's signed share adds it.
- *
- * An admin who stops being one (their role revoked or changed to moderator, suspended, removed, their account deleted,
- * or their key replaced after a lost phone) is DROPPED before anything else is done here ({@link reconcileHolders}, at
- * the start of every names-list request on a main server): their wrap is cleared, and, if they held the current key,
- * the list needs a new one. Until an admin who holds it makes one ({@link installKey}: a new generation, wrapped to
- * that admin and to whichever other admins they choose), every write is refused (409 `new_key_first`), so nothing is
- * written after an admin's removal under a key they may still have. The phone that makes the new key then seals the
- * older entries again under it ({@link reEncrypt}), a batch at a time; an older generation's wraps are cleared once no
- * entry is sealed under it (their signed headers stay). A removed admin keeps whatever they already saw, as with paper.
- *
- * If nobody who is still an admin holds the current key (the only key-holder lost their phone), any admin may start a
- * new key; the entries sealed under the old one can't be opened by anyone here any more and are shown as locked: an
- * admin re-types one from the community's paper copy (an edit) or deletes it.
+ * - **The key history** (`names_generations`, {@link addGeneration}): one statement per generation, signed by its maker
+ *   (maker, parent, drops), its id the SHA-256 of the signed bytes. A statement lands only off the current one (the
+ *   highest number), signed for this community by the maker it names. A statement the requester makes itself, while
+ *   some admin holds the current key, must come from such a holder (409 `ask_for_share`); when nobody does, any admin
+ *   may make one. A statement put back after a rollback (`replay`) may be anyone's. This server never decides who is
+ *   dropped: the phones do. The key itself never reaches it.
+ * - **Shares** (`names_shares`, {@link addShare}): an admin's phone sends another admin every key it holds, in one box
+ *   sealed to that admin's account key, under a header it signs (its head, the ids in the box, every key it trusts). The
+ *   newest per pair. Each is logged (`key_shared`): the phones send them without a tap, to the admins they trust.
+ * - **Who holds a key**, as far as this server can tell: whoever made it, and whoever a share to or from names it with.
+ *   A liveness hint for the phones, never a reason to trust anyone.
+ * - **An admin who stops being one** (their role revoked or changed to moderator, suspended, removed, their account
+ *   deleted, or their key replaced after a lost phone) is marked as no longer holding the current key, before anything
+ *   else is done here ({@link reconcileHolders}, at the start of every names-list request on a main server), and logged
+ *   once. While a holder of the current key is marked, nothing is written (409 `new_key_first`) until an admin who
+ *   holds it opens the list: their phone makes the next generation, dropping that admin, and sends it to the admins it
+ *   trusts. Nothing is sealed again: what was written before stays under its own key, and a removed admin keeps whatever
+ *   they already saw, as with paper.
+ * - When nobody who is an admin now holds the current key, any admin's phone may make a new one; what was sealed under
+ *   the old key stays locked until a holder comes back, or an admin types it again from the paper copy.
  *
  * ## Confirming
  *
@@ -58,7 +56,7 @@
  *
  * ## Main server only
  *
- * A standby copies all four tables as plain rows (engine/replication-manifest.ts) and serves none of this: a read writes
+ * A standby copies every table as plain rows (engine/replication-manifest.ts) and serves none of this: a read writes
  * the log, which is the main server's. A take-over needs nothing more: the rows are there, and the same admins' phones
  * open them.
  */
@@ -67,8 +65,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import {
-    isNamesEntryCiphertext, isNamesEntryId, isWrappedNamesKey, NAMES_LIMITS, isNamesCommunityId, namesWrapDigest, normaliseNamesDrops,
-    verifyNamesWrap, type WrappedNamesKey, type NamesKeyRecord,
+    isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
 } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -77,7 +74,7 @@ import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.j
 export const NAMES_TWO_ADMINS_KEY = 'names_two_admins';
 
 export type NamesAction = 'read' | 'export' | 'add' | 'edit' | 'delete' | 'confirm' | 'second' | 'revoke'
-    | 'key_made' | 'key_changed' | 'key_shared' | 're_encrypt' | 'holder_dropped' | 'settings';
+    | 'key_made' | 'key_changed' | 'key_shared' | 'holder_dropped' | 'settings';
 
 /** The log's actor for what the node did itself. */
 export const NODE_ACTOR = 'node';
@@ -95,10 +92,10 @@ export const NAMES_MESSAGES = {
     ownerOnly: 'Only an owner can change how the names list works.',
     newKeyFirst: 'Someone stopped being an admin, so the names list needs a new key before anything more is written. '
         + 'Open the names list on the phone of an admin who holds its key: it makes one.',
-    noKey: 'You don’t hold the names list’s key yet. Ask an admin who holds it to open the names list: their phone shares it with you.',
-    askForShare: 'Another admin holds the names list’s key. Ask them to open the names list: their phone shares it with you.',
-    staleGeneration: 'The names list has a newer key than this phone used. Open the list again and try once more.',
-    dropsChanged: 'Who holds the names list’s key changed since your phone looked. Open the list again and try once more.',
+    noKey: 'You don’t hold the names list’s key yet. An admin who holds it sends it the next time they open the names list, once your phones have checked each other.',
+    askForShare: 'Another admin holds the names list’s key, so they make the next one. Their phone sends it to yours the next time they open the names list.',
+    stale: 'The names list’s key history moved on since this phone looked. Open the list again.',
+    staleKey: 'The names list has a newer key than this phone used. Open the list again and try once more.',
     notBuilt: 'Showing real names to members isn’t built yet. Only the community’s admins can read the names list.',
 } as const;
 
@@ -161,13 +158,13 @@ export function readNamesLog(limit: number, offset: number): { log: NamesLogLine
     return { log: rows, total };
 }
 
-// ── The key ──────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── The key history ──────────────────────────────────────────────────────────────────────────────────────────────
 
 let communityIdCache: string | null = null;
 
 /**
- * This community's id (genesis.json `communityId`, the same on a standby and after a take-over): what every wrap's
- * signature is bound to, so a wrap signed for one community never counts in another.
+ * This community's id (genesis.json `communityId`, the same on a standby and after a take-over): what every statement
+ * and share header is bound to, so one signed for one community never counts in another.
  */
 export function namesCommunityId(): string {
     if (communityIdCache) return communityIdCache;
@@ -182,199 +179,156 @@ export function namesCommunityId(): string {
     throw new NamesListError(503, 'no_community_id', 'This server has no community id yet (its genesis.json), so the names list’s keys can’t be checked. Restart the server.');
 }
 
-/** The current generation: the newest a wrap or an entry names, or 0 before the list has a key. */
-export function currentGeneration(): number {
-    const row = db.prepare(
-        `SELECT MAX(g) AS g FROM (SELECT MAX(generation) AS g FROM names_list_keys UNION ALL SELECT MAX(key_generation) FROM names_entries)`,
-    ).get() as { g: number | null };
-    return row.g ?? 0;
+interface GenerationRow { id: string; n: number; parent_id: string | null; maker: string; drops: string; statement: string; signature: string; created_at: string }
+
+/** The current generation: the one with the highest number, or null before the list has one. */
+export function currentGeneration(): GenerationRow | null {
+    return (db.prepare('SELECT * FROM names_generations ORDER BY n DESC LIMIT 1').get() as GenerationRow | undefined) ?? null;
 }
 
-/** Whether a holder of the current key was dropped since it was made: the next write needs a new key. */
-export function newKeyNeeded(generation = currentGeneration()): boolean {
-    if (generation === 0) return false;
-    return !!db.prepare('SELECT 1 FROM names_list_keys WHERE generation = ? AND dropped_at IS NOT NULL LIMIT 1').get(generation);
+function generationRow(id: unknown): GenerationRow | undefined {
+    return typeof id === 'string' ? db.prepare('SELECT * FROM names_generations WHERE id = ?').get(id) as GenerationRow | undefined : undefined;
 }
 
-/** Who holds a live wrap of `generation`. */
-function holdersOf(generation: number): Set<string> {
-    const rows = db.prepare('SELECT holder_pubkey FROM names_list_keys WHERE generation = ? AND dropped_at IS NULL').all(generation) as { holder_pubkey: string }[];
-    return new Set(rows.map((r) => r.holder_pubkey));
+const idsOf = (s: string | null) => (s ? s.split(',').filter(Boolean) : []);
+
+/**
+ * Who holds key `keyId`, as far as this server can tell: whoever made it, and whoever a share to or from names it with,
+ * less a holder marked as no longer holding it ({@link reconcileHolders}). A hint for the phones, never trust.
+ */
+function holdersOf(keyId: string): Set<string> {
+    const out = new Set<string>();
+    const g = generationRow(keyId);
+    if (g) out.add(g.maker);
+    const rows = db.prepare(`SELECT from_pubkey, to_pubkey FROM names_shares WHERE instr(',' || key_ids || ',', ',' || ? || ',') > 0`).all(keyId) as { from_pubkey: string; to_pubkey: string }[];
+    for (const r of rows) {
+        out.add(r.from_pubkey);
+        out.add(r.to_pubkey);
+    }
+    for (const r of db.prepare('SELECT holder_pubkey FROM names_dropped_holders WHERE key_id = ?').all(keyId) as { holder_pubkey: string }[]) out.delete(r.holder_pubkey);
+    return out;
 }
 
-function holds(actor: string, generation: number): boolean {
-    return !!db.prepare('SELECT 1 FROM names_list_keys WHERE holder_pubkey = ? AND generation = ? AND dropped_at IS NULL').get(actor, generation);
+/** The key ids `pubkey` holds, as far as this server can tell (see {@link holdersOf}). */
+function keyIdsHeldBy(pubkey: string): string[] {
+    const ids = new Set<string>();
+    for (const r of db.prepare('SELECT id FROM names_generations WHERE maker = ?').all(pubkey) as { id: string }[]) ids.add(r.id);
+    for (const r of db.prepare('SELECT key_ids FROM names_shares WHERE from_pubkey = ? OR to_pubkey = ?').all(pubkey, pubkey) as { key_ids: string }[]) {
+        for (const id of idsOf(r.key_ids)) ids.add(id);
+    }
+    for (const r of db.prepare('SELECT key_id FROM names_dropped_holders WHERE holder_pubkey = ?').all(pubkey) as { key_id: string }[]) ids.delete(r.key_id);
+    return [...ids].sort();
 }
 
-/** The wrap itself cleared; the signed header (wrapped_by, wrap_digest, drops, signature) stays, for the phones' trace. */
-const CLEAR_WRAP = `wrapped_key = NULL, wrap_iv = NULL, wrap_tag = NULL, ephemeral_pubkey = NULL, kdf_params = NULL,
-    dropped_at = COALESCE(dropped_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
-const DROP_HOLDER_SQL = `UPDATE names_list_keys SET ${CLEAR_WRAP} WHERE holder_pubkey = ? AND dropped_at IS NULL`;
+/** Whether a holder of the current key stopped being an admin since it was made: nothing is written until a new one. */
+export function newKeyNeeded(current = currentGeneration()): boolean {
+    if (!current) return false;
+    return !!db.prepare('SELECT 1 FROM names_dropped_holders WHERE key_id = ? LIMIT 1').get(current.id);
+}
 
-/** The holders dropped from `generation`: whom the maker of the next one must name as dropped, in its signed wrap. */
-export function droppedHoldersOf(generation: number): string[] {
-    return (db.prepare('SELECT holder_pubkey FROM names_list_keys WHERE generation = ? AND dropped_at IS NOT NULL ORDER BY holder_pubkey')
-        .all(generation) as { holder_pubkey: string }[]).map((r) => r.holder_pubkey);
+/** The holders of key `keyId` marked as no longer holding it. */
+export function droppedHoldersOf(keyId: string): string[] {
+    return (db.prepare('SELECT holder_pubkey FROM names_dropped_holders WHERE key_id = ? ORDER BY holder_pubkey').all(keyId) as { holder_pubkey: string }[])
+        .map((r) => r.holder_pubkey);
+}
+
+function markDropped(pubkey: string, keyId: string): boolean {
+    const done = db.prepare('INSERT OR IGNORE INTO names_dropped_holders (holder_pubkey, key_id) VALUES (?, ?)').run(pubkey, keyId).changes > 0;
+    if (done) log(NODE_ACTOR, 'holder_dropped', null, pubkey);
+    return done;
 }
 
 /**
- * Drops every holder who is no owner or admin here now (see the header): their wraps cleared, a new key needed where
- * they held the current one, and a log line each. On a main server, at the start of every names-list request, so
- * nothing is read or written here before it. A standby writes none of these rows and does nothing. Returns who went.
+ * Marks every holder of the current key who is no owner or admin here now (see the header): the write freeze, and a
+ * log line each, once. On a main server, at the start of every names-list request, so nothing is read or written here
+ * before it. A standby writes none of these rows and does nothing. Returns who went.
  */
 export function reconcileHolders(): string[] {
     if (getNodeRole() === 'backup') return [];
-    const stale = db.prepare(
-        `SELECT DISTINCT k.holder_pubkey AS pubkey FROM names_list_keys k
-         WHERE k.dropped_at IS NULL AND NOT EXISTS (
-             SELECT 1 FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.member_pubkey = k.holder_pubkey AND (nr.role = 'owner' OR nr.role = 'admin') AND ${NODE_ROLE_ACTS})`,
-    ).all() as { pubkey: string }[];
-    if (stale.length === 0) return [];
-    db.transaction(() => {
-        for (const { pubkey } of stale) {
-            db.prepare(DROP_HOLDER_SQL).run(pubkey);
-            log(NODE_ACTOR, 'holder_dropped', null, pubkey);
-        }
-    })();
-    return stale.map((s) => s.pubkey);
+    const current = currentGeneration();
+    if (!current) return [];
+    const admins = new Set(namesAdmins().map((a) => a.pubkey));
+    const gone = [...holdersOf(current.id)].filter((k) => !admins.has(k)).sort();
+    if (gone.length === 0) return [];
+    db.transaction(() => { for (const k of gone) markDropped(k, current.id); })();
+    return gone;
+}
+
+function refuse(code: string, message: string): never {
+    throw new NamesListError(400, code, message);
 }
 
 /**
- * The spent wraps, cleared (their signed headers stay): an older generation's once no entry is sealed under it. A dropped
- * row below the current generation was cleared when it was dropped.
+ * A statement of the list's key history (see the header): `{ statement, signature, replay? }`. `exists` when this server
+ * has it already (a retry, or a replay). Never decides who is dropped, and never leaps: a statement numbered past the
+ * next is refused like any other that isn't off the current one (409 `stale`).
  */
-function tidyGenerations(generation: number): void {
-    db.prepare(`UPDATE names_list_keys SET ${CLEAR_WRAP} WHERE generation < ? AND wrapped_key IS NOT NULL
-                AND NOT EXISTS (SELECT 1 FROM names_entries e WHERE e.key_generation = names_list_keys.generation)`).run(generation);
-}
-
-export interface WrapIn extends WrappedNamesKey {
-    holder: string;
-    wrapDigest: string;
-    drops: string[];
-    signature: string;
-}
-
-/**
- * The wraps in a request, each checked as the phones check it: in the list's form, and signed by the requester (`actor`)
- * for this community, this generation and its holder. A wrap that isn't is refused before anything is kept.
- */
-function readWraps(raw: unknown, what: string, actor: string, generation: number): WrapIn[] {
-    if (!Array.isArray(raw) || raw.length === 0) throw new NamesListError(400, 'bad_wraps', `${what} needs at least one wrapped key.`);
-    if (raw.length > 50) throw new NamesListError(400, 'bad_wraps', 'At most 50 wrapped keys at once.');
+export function addGeneration(actor: string, body: { statement?: unknown; signature?: unknown; replay?: unknown }): { id: string; n: number; exists: boolean } {
+    assertPlainTablesWritable();
     const communityId = namesCommunityId();
-    const seen = new Set<string>();
-    return raw.map((w) => {
-        const holder = typeof (w as { holder?: unknown })?.holder === 'string' ? (w as { holder: string }).holder.toLowerCase() : '';
-        if (!/^[0-9a-f]{64}$/.test(holder) || !isWrappedNamesKey(w)) throw new NamesListError(400, 'bad_wraps', 'A wrapped key is not in the names list’s form.');
-        if (seen.has(holder)) throw new NamesListError(400, 'bad_wraps', 'Each admin gets one wrapped key.');
-        seen.add(holder);
-        let drops: string[];
-        try { drops = normaliseNamesDrops((w as { drops?: unknown }).drops); } catch (e) { throw new NamesListError(400, 'bad_wraps', (e as Error).message); }
-        const wrap = { wrappedKey: w.wrappedKey, wrapIv: w.wrapIv, wrapTag: w.wrapTag, ephemeralPubkey: w.ephemeralPubkey, kdfParams: w.kdfParams };
-        const wrapDigest = namesWrapDigest(wrap);
-        const sig = (w as { signature?: unknown }).signature;
-        const signature = typeof sig === 'string' ? sig.toLowerCase() : '';
-        if (!verifyNamesWrap({ communityId, generation, holder, wrappedBy: actor, wrapDigest, drops }, signature)) {
-            throw new NamesListError(400, 'bad_signature', 'Every wrapped key is signed by the admin who sends it, for this community, this key and this admin. This one isn’t.');
-        }
-        return { holder, ...wrap, wrapDigest, drops, signature };
-    });
-}
-
-function writeWraps(wraps: WrapIn[], generation: number, by: string): void {
-    const insert = db.prepare(
-        `INSERT INTO names_list_keys (holder_pubkey, generation, wrapped_key, wrap_iv, wrap_tag, ephemeral_pubkey, kdf_params, wrapped_by, wrap_digest, drops, signature)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    for (const w of wraps) {
-        insert.run(w.holder, generation, w.wrappedKey, w.wrapIv, w.wrapTag, w.ephemeralPubkey, w.kdfParams, by, w.wrapDigest, w.drops.join(' '), w.signature);
+    const statement = typeof body.statement === 'string' ? body.statement : '';
+    const shape = readNamesGeneration({ statement, signature: '' }, undefined, new Set([namesStatementId(statement)]));
+    if (!shape) refuse('bad_statement', 'A key statement is not in the names list’s form.');
+    if (shape.communityId !== communityId) refuse('bad_statement', 'That key statement is for another community.');
+    const g = readNamesGeneration({ statement, signature: body.signature }, communityId);
+    if (!g) refuse('bad_signature', 'Every key statement is signed by the admin it names as its maker. This one isn’t.');
+    const existing = generationRow(g.id);
+    if (existing) return { id: existing.id, n: existing.n, exists: true };
+    const current = currentGeneration();
+    if ((g.parentId ?? null) !== (current?.id ?? null) || g.n !== (current ? current.n + 1 : 1)) throw new NamesListError(409, 'stale', NAMES_MESSAGES.stale);
+    if (g.maker === actor && body.replay !== true && current) {
+        const admins = new Set(namesAdmins().map((a) => a.pubkey));
+        const holders = [...holdersOf(current.id)].filter((k) => admins.has(k));
+        if (holders.length > 0 && !holders.includes(actor)) throw new NamesListError(409, 'ask_for_share', NAMES_MESSAGES.askForShare);
     }
+    db.transaction(() => {
+        db.prepare('INSERT INTO names_generations (id, n, parent_id, maker, drops, statement, signature) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(g.id, g.n, g.parentId, g.maker, g.drops.join(','), g.statement, g.signature);
+        log(actor, current ? 'key_changed' : 'key_made');
+    })();
+    return { id: g.id, n: g.n, exists: false };
 }
-
-function assertWholeNumber(v: unknown, field: string): number {
-    if (!Number.isSafeInteger(v) || (v as number) < 1) throw new NamesListError(400, 'bad_generation', `'${field}' must be a whole number from 1.`);
-    return v as number;
-}
-
-/** How far past the current generation a new key may be numbered (see {@link installKey}). */
-export const NAMES_GENERATION_LEAP = 1000;
 
 /**
- * The list's first key, or a new one (see the header). `generation` must be newer than the current one: usually the next,
- * but a phone that already took a newer generation than this server now has (a server put back to an older copy) numbers
- * its key past what it took, so it never goes back (@beanpool/core names-list-trust.ts `newest`), at most
- * {@link NAMES_GENERATION_LEAP} ahead. The maker must be among the holders, and every holder must be an owner or admin
- * here. Where an admin still holds the current key, only such an admin may make the next: anyone else is asked to wait
- * for a share. The maker's own wrap names, signed, every holder dropped from the current generation (the reason for a
- * new key), so every phone stops trusting them, except the maker itself (an admin who was the only holder, out and made
- * an admin again, starts a new key); no other wrap names any.
+ * A share (see the header): `{ header, signature, box }`, signed by the requester, to another owner or admin here, with a
+ * head and key ids this server has statements for, and the box its header names. Replaces the requester's last share to
+ * that admin, and is logged.
  */
-export function installKey(actor: string, body: { generation?: unknown; wraps?: unknown }): { generation: number } {
+export function addShare(actor: string, body: { header?: unknown; signature?: unknown; box?: unknown }): { to: string } {
     assertPlainTablesWritable();
-    const current = currentGeneration();
-    const generation = assertWholeNumber(body.generation, 'generation');
-    if (generation <= current || generation > current + NAMES_GENERATION_LEAP) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
-    const wraps = readWraps(body.wraps, 'A new key', actor, generation);
-    const admins = new Set(namesAdmins().map((a) => a.pubkey));
-    const own = wraps.find((w) => w.holder === actor);
-    if (!own) throw new NamesListError(400, 'bad_wraps', 'Whoever makes the key holds it too: wrap it to yourself.');
-    if (wraps.some((w) => !admins.has(w.holder))) throw new NamesListError(400, 'not_admin', 'The key is only for the community’s owners and admins.');
-    if (current > 0) {
-        const holders = holdersOf(current);
-        if (holders.size > 0 && !holders.has(actor)) throw new NamesListError(409, 'ask_for_share', NAMES_MESSAGES.askForShare);
-    }
-    if (wraps.some((w) => w !== own && w.drops.length > 0)) throw new NamesListError(400, 'bad_wraps', 'Only the maker’s own wrap names who was dropped.');
-    // Its maker is never among those it must name: a maker naming itself drops nobody (the phones' walk ignores it).
-    const mustDrop = current > 0 ? droppedHoldersOf(current).filter((k) => k !== actor) : [];
-    if (mustDrop.some((k) => !own.drops.includes(k))) {
-        throw new NamesListError(409, 'drops_changed', NAMES_MESSAGES.dropsChanged);
-    }
+    const communityId = namesCommunityId();
+    const s = readNamesShare({ header: body.header, signature: body.signature, box: body.box }, communityId);
+    if (!s || s.from !== actor) refuse('bad_signature', 'Every share is signed by the admin who sends it, for this community. This one isn’t.');
+    if (!s.box) refuse('bad_box', 'A share carries the box its header names.');
+    if (s.to === actor) refuse('bad_share', 'A share goes to another admin.');
+    if (!isNamesAdmin(s.to)) throw new NamesListError(400, 'not_admin', 'The keys are only for the community’s owners and admins.');
+    if (!generationRow(s.headId) || s.keyIds.some((id) => !generationRow(id))) refuse('unknown_key', 'A share names only keys this server has a statement for.');
+    const box = s.box;
     db.transaction(() => {
-        writeWraps(wraps, generation, actor);
-        tidyGenerations(generation);
-        log(actor, current === 0 ? 'key_made' : 'key_changed');
-        for (const w of wraps) if (w.holder !== actor) log(actor, 'key_shared', null, w.holder);
+        db.prepare(
+            `INSERT INTO names_shares (from_pubkey, to_pubkey, head_id, key_ids, trusts, sealed_ring, ring_iv, ring_tag, ephemeral_pubkey, kdf_params, box_digest, header, signature)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(from_pubkey, to_pubkey) DO UPDATE SET head_id = excluded.head_id, key_ids = excluded.key_ids, trusts = excluded.trusts,
+                 sealed_ring = excluded.sealed_ring, ring_iv = excluded.ring_iv, ring_tag = excluded.ring_tag, ephemeral_pubkey = excluded.ephemeral_pubkey,
+                 kdf_params = excluded.kdf_params, box_digest = excluded.box_digest, header = excluded.header, signature = excluded.signature,
+                 created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+        ).run(s.from, s.to, s.headId, s.keyIds.join(','), s.trusts.join(','), box.sealedRing, box.ringIv, box.ringTag, box.ephemeralPubkey, box.kdfParams,
+            s.boxDigest, s.header, s.signature);
+        log(actor, 'key_shared', null, s.to);
     })();
-    return { generation };
-}
-
-/** Shares the current key with admins who don't hold it yet (an admin made since, or one a new key left out). */
-export function shareKey(actor: string, body: { generation?: unknown; wraps?: unknown }): { shared: string[] } {
-    assertPlainTablesWritable();
-    const current = currentGeneration();
-    const generation = assertWholeNumber(body.generation, 'generation');
-    if (generation !== current) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
-    if (newKeyNeeded(current)) throw new NamesListError(409, 'new_key_first', NAMES_MESSAGES.newKeyFirst);
-    if (!holds(actor, current)) throw new NamesListError(403, 'no_key', NAMES_MESSAGES.noKey);
-    const wraps = readWraps(body.wraps, 'Sharing the key', actor, current);
-    const admins = new Set(namesAdmins().map((a) => a.pubkey));
-    const holders = holdersOf(current);
-    for (const w of wraps) {
-        if (w.drops.length > 0) throw new NamesListError(400, 'bad_wraps', 'A share names nobody as dropped: only a new key does.');
-        if (!admins.has(w.holder)) throw new NamesListError(400, 'not_admin', 'The key is only for the community’s owners and admins.');
-        if (holders.has(w.holder)) throw new NamesListError(409, 'already_holds', 'That admin holds the key already.');
-    }
-    db.transaction(() => {
-        // A holder dropped from an older generation and an admin again: a fresh row of this one.
-        writeWraps(wraps, current, actor);
-        for (const w of wraps) log(actor, 'key_shared', null, w.holder);
-    })();
-    return { shared: wraps.map((w) => w.holder) };
+    return { to: s.to };
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Throws unless a write may be sealed under `keyGeneration` by `actor` now. */
-function assertMayWrite(actor: string, keyGeneration: unknown): number {
+/** Throws unless a write may be sealed under `keyId` by `actor` now: no freeze, the current key, and a holder of it. */
+function assertMayWrite(actor: string, keyId: unknown): string {
     const current = currentGeneration();
-    if (current === 0) throw new NamesListError(409, 'no_list_key', 'The names list has no key yet. Open it on your phone: it makes one.');
+    if (!current) throw new NamesListError(409, 'no_list_key', 'The names list has no key yet. Open it on your phone: it makes one.');
     if (newKeyNeeded(current)) throw new NamesListError(409, 'new_key_first', NAMES_MESSAGES.newKeyFirst);
-    const generation = assertWholeNumber(keyGeneration, 'keyGeneration');
-    if (generation !== current) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
-    if (!holds(actor, current)) throw new NamesListError(403, 'no_key', NAMES_MESSAGES.noKey);
-    return current;
+    if (keyId !== current.id) throw new NamesListError(409, 'stale_key', NAMES_MESSAGES.staleKey);
+    if (!holdersOf(current.id).has(actor)) throw new NamesListError(403, 'no_key', NAMES_MESSAGES.noKey);
+    return current.id;
 }
 
 function assertCiphertext(v: unknown): string {
@@ -384,7 +338,7 @@ function assertCiphertext(v: unknown): string {
     return v;
 }
 
-interface EntryRow { id: string; ciphertext: string; key_generation: number; created_by: string; created_at: string; updated_by: string | null; updated_at: string }
+interface EntryRow { id: string; ciphertext: string; key_id: string; created_by: string; created_at: string; updated_by: string | null; updated_at: string }
 
 function entryRow(id: string): EntryRow | undefined {
     return db.prepare('SELECT * FROM names_entries WHERE id = ?').get(id) as EntryRow | undefined;
@@ -397,9 +351,9 @@ function requireEntry(id: unknown): EntryRow {
     return row;
 }
 
-export function addEntry(actor: string, body: { id?: unknown; ciphertext?: unknown; keyGeneration?: unknown }): { id: string } {
+export function addEntry(actor: string, body: { id?: unknown; ciphertext?: unknown; keyId?: unknown }): { id: string } {
     assertPlainTablesWritable();
-    const generation = assertMayWrite(actor, body.keyGeneration);
+    const keyId = assertMayWrite(actor, body.keyId);
     if (!isNamesEntryId(body.id)) throw new NamesListError(400, 'bad_entry_id', 'An entry id is 32 hexadecimal characters.');
     const ciphertext = assertCiphertext(body.ciphertext);
     const id = body.id;
@@ -407,22 +361,21 @@ export function addEntry(actor: string, body: { id?: unknown; ciphertext?: unkno
     const count = (db.prepare('SELECT COUNT(*) AS c FROM names_entries').get() as { c: number }).c;
     if (count >= NAMES_LIMITS.entries) throw new NamesListError(409, 'list_full', `The names list holds at most ${NAMES_LIMITS.entries} entries.`);
     db.transaction(() => {
-        db.prepare('INSERT INTO names_entries (id, ciphertext, key_generation, created_by, updated_by) VALUES (?, ?, ?, ?, ?)')
-            .run(id, ciphertext, generation, actor, actor);
+        db.prepare('INSERT INTO names_entries (id, ciphertext, key_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?)')
+            .run(id, ciphertext, keyId, actor, actor);
         log(actor, 'add', id);
     })();
     return { id };
 }
 
 /** An edit, sealed under the current key. A locked entry (sealed under a key nobody here holds) may be typed again this way. */
-export function editEntry(actor: string, id: unknown, body: { ciphertext?: unknown; keyGeneration?: unknown }): { id: string } {
+export function editEntry(actor: string, id: unknown, body: { ciphertext?: unknown; keyId?: unknown }): { id: string } {
     assertPlainTablesWritable();
-    const generation = assertMayWrite(actor, body.keyGeneration);
+    const keyId = assertMayWrite(actor, body.keyId);
     const row = requireEntry(id);
     const ciphertext = assertCiphertext(body.ciphertext);
     db.transaction(() => {
-        db.prepare('UPDATE names_entries SET ciphertext = ?, key_generation = ?, updated_by = ? WHERE id = ?').run(ciphertext, generation, actor, row.id);
-        tidyGenerations(generation);
+        db.prepare('UPDATE names_entries SET ciphertext = ?, key_id = ?, updated_by = ? WHERE id = ?').run(ciphertext, keyId, actor, row.id);
         log(actor, 'edit', row.id);
     })();
     return { id: row.id };
@@ -437,39 +390,9 @@ export function deleteEntry(actor: string, id: unknown): { id: string } {
     }
     db.transaction(() => {
         deletePlainRows('names_entries', 'id = ?', row.id);
-        tidyGenerations(currentGeneration());
         log(actor, 'delete', row.id);
     })();
     return { id: row.id };
-}
-
-/** Seals older entries again under the current key, a batch at a time, after a new key. The phone opened each one. */
-export function reEncrypt(actor: string, body: { generation?: unknown; entries?: unknown }): { done: number; left: number } {
-    assertPlainTablesWritable();
-    const generation = assertWholeNumber(body.generation, 'generation');
-    const current = currentGeneration();
-    if (generation !== current) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
-    if (newKeyNeeded(current)) throw new NamesListError(409, 'new_key_first', NAMES_MESSAGES.newKeyFirst);
-    if (!holds(actor, current)) throw new NamesListError(403, 'no_key', NAMES_MESSAGES.noKey);
-    const raw = body.entries;
-    if (!Array.isArray(raw) || raw.length === 0 || raw.length > NAMES_LIMITS.batch) {
-        throw new NamesListError(400, 'bad_batch', `Send between 1 and ${NAMES_LIMITS.batch} entries at a time.`);
-    }
-    const batch = raw.map((e) => {
-        const row = requireEntry((e as { id?: unknown })?.id);
-        if (row.key_generation >= current) throw new NamesListError(409, 'already_current', 'That entry is sealed under the current key already.');
-        if (!holds(actor, row.key_generation)) throw new NamesListError(403, 'no_key', 'You don’t hold the key that entry was sealed under.');
-        return { id: row.id, ciphertext: assertCiphertext((e as { ciphertext?: unknown }).ciphertext) };
-    });
-    if (new Set(batch.map((b) => b.id)).size !== batch.length) throw new NamesListError(400, 'bad_batch', 'Each entry once.');
-    db.transaction(() => {
-        const update = db.prepare('UPDATE names_entries SET ciphertext = ?, key_generation = ?, updated_by = ? WHERE id = ?');
-        for (const b of batch) update.run(b.ciphertext, current, actor, b.id);
-        tidyGenerations(current);
-        log(actor, 're_encrypt');
-    })();
-    const left = (db.prepare('SELECT COUNT(*) AS c FROM names_entries WHERE key_generation < ?').get(current) as { c: number }).c;
-    return { done: batch.length, left };
 }
 
 // ── Confirmations ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -518,7 +441,7 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
     if (!/^[0-9a-f]{64}$/.test(member)) throw new NamesListError(400, 'bad_member', "'memberPubkey' is a member's key, 64 hexadecimal characters.");
     const entry = requireEntry(body.entryId);
     assertConfirmable(member);
-    if (!holds(actor, entry.key_generation)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
+    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
     const admins = namesAdmins();
     if (member === actor && admins.length > 1) {
         throw new NamesListError(403, 'self_confirm', 'Another admin confirms you. An admin confirms themselves only where they are the community’s only admin.');
@@ -547,7 +470,7 @@ export function secondConfirmation(actor: string, id: unknown): { id: string; st
     if (row.confirmed_by === actor) throw new NamesListError(403, 'same_admin', 'A second admin, not the one who confirmed, confirms it again.');
     if (row.member_pubkey === actor) throw new NamesListError(403, 'self_confirm', 'Another admin confirms you.');
     const entry = entryRow(row.entry_id);
-    if (!entry || !holds(actor, entry.key_generation)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
+    if (!entry || !holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
     db.transaction(() => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
@@ -569,71 +492,72 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
 
 /**
  * A member leaving: their live confirmation is revoked (`removed` by the community or an admin, `account_deleted` by
- * themselves), and any wrap of the list key they held is dropped (a new key is then needed where it was the current
- * one). Called inside adminPruneUser's and purgeMemberSelf's transactions (state-engine.ts), on a main server.
+ * themselves), and, where they held the current key, they are marked as no longer holding it (a new key is then needed
+ * before anything is written). Called inside adminPruneUser's and purgeMemberSelf's transactions (state-engine.ts), on a
+ * main server.
  */
 export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account_deleted'): void {
     db.prepare(`UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = ?
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
-    if (db.prepare(DROP_HOLDER_SQL).run(pubkey).changes > 0) log(NODE_ACTOR, 'holder_dropped', null, pubkey);
+    const current = currentGeneration();
+    if (current && holdersOf(current.id).has(pubkey)) markDropped(pubkey, current.id);
 }
 
 // ── Reading ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface NamesKeyOut extends WrappedNamesKey {
-    generation: number;
-    wrappedBy: string;
-    signature: string;
-    drops: string[];
+interface ShareRow {
+    from_pubkey: string; to_pubkey: string; head_id: string; key_ids: string; trusts: string; sealed_ring: string; ring_iv: string; ring_tag: string;
+    ephemeral_pubkey: string; kdf_params: string; box_digest: string; header: string; signature: string; created_at: string;
 }
 
-const dropsOf = (s: string | null) => (s ? s.split(' ').filter(Boolean) : []);
-
 /**
- * What the list screen needs first: the key (this admin's own wraps only), every wrap's signed header (`records`, which
- * the phone walks to decide whom it trusts), the community's id the signatures are bound to, who holds the key, who was
- * dropped from it, who waits, the settings. Not logged: no entry.
+ * What the list screen needs first (design §5): the community's id the statements are bound to, the current
+ * generation, every statement and every share header (the box only of a share to this admin), the admins with the key
+ * ids each holds as far as this server can tell, who holds the current key, the write freeze, the settings and counts.
+ * Not logged: no entry.
  */
 export function namesState(actor: string) {
     const communityId = namesCommunityId();
-    const generation = currentGeneration();
-    const holders = holdersOf(generation);
+    const current = currentGeneration();
     const admins = namesAdmins();
-    const myKeys = (db.prepare(
-        `SELECT generation, wrapped_key, wrap_iv, wrap_tag, ephemeral_pubkey, kdf_params, wrapped_by, drops, signature FROM names_list_keys
-         WHERE holder_pubkey = ? AND dropped_at IS NULL ORDER BY generation DESC`,
-    ).all(actor) as { generation: number; wrapped_key: string; wrap_iv: string; wrap_tag: string; ephemeral_pubkey: string; kdf_params: string; wrapped_by: string; drops: string; signature: string }[])
-        .map((r): NamesKeyOut => ({
-            generation: r.generation, wrappedKey: r.wrapped_key, wrapIv: r.wrap_iv, wrapTag: r.wrap_tag,
-            ephemeralPubkey: r.ephemeral_pubkey, kdfParams: r.kdf_params, wrappedBy: r.wrapped_by, signature: r.signature, drops: dropsOf(r.drops),
-        }));
-    const records = (db.prepare(
-        'SELECT holder_pubkey, generation, wrapped_by, wrap_digest, drops, signature FROM names_list_keys ORDER BY generation ASC, created_at ASC, holder_pubkey ASC',
-    ).all() as { holder_pubkey: string; generation: number; wrapped_by: string; wrap_digest: string; drops: string; signature: string }[])
-        .map((r): NamesKeyRecord => ({
-            communityId, generation: r.generation, holder: r.holder_pubkey, wrappedBy: r.wrapped_by, wrapDigest: r.wrap_digest,
-            drops: dropsOf(r.drops), signature: r.signature,
-        }));
+    const holders = current ? holdersOf(current.id) : new Set<string>();
+    const adminKeys = new Set(admins.map((a) => a.pubkey));
+    const generations = (db.prepare('SELECT * FROM names_generations ORDER BY n ASC').all() as GenerationRow[]).map((g) => ({
+        statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parent_id, maker: g.maker, drops: idsOf(g.drops), createdAt: g.created_at,
+    }));
+    const shares = (db.prepare('SELECT * FROM names_shares ORDER BY created_at ASC, from_pubkey ASC, to_pubkey ASC').all() as ShareRow[]).map((r) => ({
+        header: r.header, signature: r.signature, from: r.from_pubkey, to: r.to_pubkey, headId: r.head_id, keyIds: idsOf(r.key_ids), trusts: idsOf(r.trusts),
+        boxDigest: r.box_digest, createdAt: r.created_at,
+        ...(r.to_pubkey === actor
+            ? { box: { sealedRing: r.sealed_ring, ringIv: r.ring_iv, ringTag: r.ring_tag, ephemeralPubkey: r.ephemeral_pubkey, kdfParams: r.kdf_params } }
+            : {}),
+    }));
+    const byKey = Object.fromEntries((db.prepare('SELECT key_id AS k, COUNT(*) AS c FROM names_entries GROUP BY key_id').all() as { k: string; c: number }[]).map((r) => [r.k, r.c]));
+    const heldByAdmin = new Map(admins.map((a) => [a.pubkey, keyIdsHeldBy(a.pubkey)] as const));
+    const heldByAny = new Set([...heldByAdmin.values()].flat());
     const counts = db.prepare(
         `SELECT (SELECT COUNT(*) FROM names_entries) AS entries,
-                (SELECT COUNT(*) FROM names_entries WHERE key_generation < ?) AS olderKey,
-                (SELECT COUNT(*) FROM names_entries e WHERE NOT EXISTS (
-                    SELECT 1 FROM names_list_keys k WHERE k.generation = e.key_generation AND k.dropped_at IS NULL)) AS locked,
                 (SELECT COUNT(*) FROM confirmations WHERE revoked_at IS NULL AND (needs_second = 0 OR seconded_at IS NOT NULL)) AS confirmed,
                 (SELECT COUNT(*) FROM confirmations WHERE revoked_at IS NULL AND needs_second = 1 AND seconded_at IS NULL) AS awaitingSecond`,
-    ).get(generation) as { entries: number; olderKey: number; locked: number; confirmed: number; awaitingSecond: number };
+    ).get() as { entries: number; confirmed: number; awaitingSecond: number };
+    const holdersOfCurrent = [...holders].filter((k) => adminKeys.has(k)).sort();
     return {
         communityId,
-        generation,
-        newKeyNeeded: newKeyNeeded(generation),
-        droppedHolders: generation > 0 ? droppedHoldersOf(generation) : [],
-        // Nobody who is an admin now holds the current key: any admin may start a new one.
-        nobodyHoldsKey: generation > 0 && holders.size === 0,
-        myKeys,
-        records,
-        admins: admins.map((a) => ({ ...a, holdsKey: holders.has(a.pubkey) })),
+        current: current ? { id: current.id, n: current.n } : null,
+        generations,
+        shares,
+        admins: admins.map((a) => ({ ...a, keyIds: heldByAdmin.get(a.pubkey) ?? [], holdsCurrent: holders.has(a.pubkey) })),
+        holdersOfCurrent,
+        droppedHolders: current ? droppedHoldersOf(current.id) : [],
+        // Nobody who is an admin now holds the current key: any admin's phone may make a new one.
+        nobodyHoldsKey: !!current && holdersOfCurrent.length === 0,
+        newKeyNeeded: newKeyNeeded(current),
         settings: { twoAdminsToConfirm: twoAdminsToConfirm(), namesShownToMembers: false },
-        counts,
+        counts: {
+            ...counts, byKey,
+            // Entries sealed under a key no admin here holds, as far as this server can tell.
+            locked: Object.entries(byKey).filter(([k]) => !heldByAny.has(k)).reduce((n, [, c]) => n + c, 0),
+        },
         me: { pubkey: actor, role: admins.find((a) => a.pubkey === actor)?.role ?? null, owner: isNodeOwner(actor) },
         limits: NAMES_LIMITS,
     };
@@ -642,7 +566,7 @@ export function namesState(actor: string) {
 /** Every entry, sealed, and every confirmation: one read of the list, logged as a read or an export. */
 export function readEntries(actor: string, purpose: 'read' | 'export') {
     const entries = (db.prepare('SELECT * FROM names_entries ORDER BY created_at ASC, id ASC').all() as EntryRow[]).map((r) => ({
-        id: r.id, ciphertext: r.ciphertext, keyGeneration: r.key_generation, createdBy: r.created_by, createdAt: r.created_at,
+        id: r.id, ciphertext: r.ciphertext, keyId: r.key_id, createdBy: r.created_by, createdAt: r.created_at,
         updatedBy: r.updated_by, updatedAt: r.updated_at,
     }));
     const confirmations = (db.prepare(
@@ -654,7 +578,7 @@ export function readEntries(actor: string, purpose: 'read' | 'export') {
         revokedBy: r.revoked_by, revokedAt: r.revoked_at, revokeReason: r.revoke_reason, status: confirmationStatus(r),
     }));
     log(actor, purpose);
-    return { generation: currentGeneration(), entries, confirmations };
+    return { current: currentGeneration()?.id ?? null, entries, confirmations };
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────────────────────────────────

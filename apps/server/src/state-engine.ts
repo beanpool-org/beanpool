@@ -7237,7 +7237,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
-        // Their confirmation against the names list is revoked, and a wrap of its key they held is dropped (engine/names-list.ts).
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         dropNamesListHoldOf(publicKey, 'removed');
     });
     // Both announcements happen only once the transaction has committed.
@@ -7480,7 +7480,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
-        // Their confirmation against the names list is revoked, and a wrap of its key they held is dropped (engine/names-list.ts).
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
         dropNamesListHoldOf(publicKey, 'account_deleted');
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"

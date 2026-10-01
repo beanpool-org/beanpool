@@ -1,26 +1,30 @@
 /**
  * The names list's encryption (community modes slice 2; scratch/global-node/DESIGN-community-modes-fable.md §4.3 option
- * B, Marty's answer 3 of 2026-10-01): a community's real-names list kept on its node, readable only on its admins'
- * phones. The server, BeanPool and a thief with the database, a backup or a standby's copy hold scrambled text.
+ * B, Marty's answer 3 of 2026-10-01; the trust model is scratch/global-node/DESIGN-names-list-trust-fable.md): a
+ * community's real-names list kept on its node, readable only on its admins' phones. The server, BeanPool and a thief
+ * with the database, a backup or a standby's copy hold scrambled text.
  *
  * ## The pieces
  *
- * - **The list key**: 32 random bytes, made on an admin's phone and never sent anywhere in the clear.
- * - **A wrap**: the list key sealed to one admin's account key, with the member scheme the keeper-recovery code already
- *   uses (keeper-crypto.ts {@link sealToMemberKey}: X25519 ECDH into XChaCha20-Poly1305), under the names list's own
- *   labels. The node keeps one wrap per admin and generation (`names_list_keys`) and hands each admin only their own.
- * - **An entry**: a name and a note, sealed under the list key with XChaCha20-Poly1305 and a random 24-byte nonce. The
- *   node keeps the sealed text (`names_entries.ciphertext`) and nothing else of it.
- * - **The generation**: which list key an entry or a wrap belongs to. A new key (when an admin stops being one) is the
- *   next generation, so a removed admin, who may keep the key they had, can't open what is written after.
+ * - **A list key**: 32 random bytes, made on an admin's phone with a new generation of the list
+ *   (names-list-trust.ts), and never sent anywhere in the clear. Each generation has its own key, named by the
+ *   generation's id (the SHA-256 of its signed statement).
+ * - **An entry**: a name and a note, sealed under one generation's key with XChaCha20-Poly1305 and a random 24-byte
+ *   nonce. The node keeps the sealed text (`names_entries.ciphertext`) and the id of the key it was sealed under, and
+ *   nothing else of it. An entry is sealed when it is written or edited, and never again: a new key carries nothing over.
+ * - **A ring box** ({@link sealNamesRing}): every list key an admin's phone holds, sealed to another admin's account key
+ *   with the member scheme the keeper-recovery code already uses (keeper-crypto.ts {@link sealToMemberKey}: X25519 ECDH
+ *   into XChaCha20-Poly1305), under the names list's own labels. It is how one admin gives another the list: the whole
+ *   ring in one box, under a header the giver signs (names-list-trust.ts).
+ * - **A pin blob** ({@link sealNamesPinBlob}): the phone's own record of whom it trusts and the keys it holds, sealed
+ *   under a key the phone keeps in its secure store, so the keys never sit in plain app storage.
  *
  * ## What each box is bound to
  *
- * - A wrap's associated data names its generation and its holder's key. A node that serves an old generation's wrap as
- *   the current one, which would have an admin's phone write new entries under a key a removed admin still has, is
- *   caught: the box doesn't open.
- * - An entry's associated data names its id and its generation. A node that swaps two entries' boxes, so an admin
- *   confirms one person against another's name, is caught the same way.
+ * - A ring box's associated data names the community, the giver, the recipient and the giver's head generation. A box
+ *   made for one admin doesn't open as another's, or as a share from someone else.
+ * - An entry's associated data names its id and the id of its key. A node that swaps two entries' boxes, so an admin
+ *   confirms one person against another's name, or relabels the key an entry names, is caught: the box doesn't open.
  *
  * ## Length
  *
@@ -33,19 +37,20 @@
 
 import { Buffer } from 'buffer';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { KeeperCryptoError, openWithMemberKey, sealToMemberKey, type MemberKeyDomain, type SealedShare } from './keeper-crypto.js';
 import { assertRecoveryCsprngAvailable } from './recovery-split.js';
 
-/** The scheme name a wrap carries in its `kdfParams`. */
-export const NAMES_KEY_ALG = 'x25519-xc20p-names-key-v1';
+/** The scheme name a ring box carries in its `kdfParams`. */
+export const NAMES_RING_ALG = 'x25519-xc20p-names-ring-v2';
 /** The version an entry's sealed text carries (`v`). */
-export const NAMES_ENTRY_VERSION = 1;
+export const NAMES_ENTRY_VERSION = 2;
 
 /**
  * The sizes everything is held to, on the phone and on the node alike. A name and a note only: no address, no date of
- * birth, no ID number (design §4.3, data minimisation). The node keeps at most `entries` entries; a re-encryption after
- * a new key is sent `batch` at a time.
+ * birth, no ID number (design §4.3, data minimisation). The node keeps at most `entries` entries; a ring box carries at
+ * most `ringKeys` keys.
  */
 export const NAMES_LIMITS = {
     nameChars: 100,
@@ -53,7 +58,7 @@ export const NAMES_LIMITS = {
     /** The longest sealed text a node stores: the longest name and note, four bytes a character, padded and in base64. */
     ciphertextChars: 4096,
     entries: 2000,
-    batch: 100,
+    ringKeys: 1000,
 } as const;
 
 const KEY_LEN = 32;
@@ -62,10 +67,12 @@ const TAG_LEN = 16;
 /** The sealed text's plaintext is padded to a multiple of this many bytes. */
 export const ENTRY_PAD = 64;
 
-const KEY_INFO = 'beanpool-names-key';
-const ENTRY_AAD = 'beanpool-names-entry-v1';
+const RING_INFO = 'beanpool-names-ring';
+const RING_AAD = 'beanpool-names-ring-v2';
+const ENTRY_AAD = 'beanpool-names-entry-v2';
+const PIN_AAD = 'beanpool-names-pin-v1';
 
-/** Raised when a wrap or an entry can't be made or opened. The apps own the sentence an admin sees. */
+/** Raised when a box or an entry can't be made or opened. The apps own the sentence an admin sees. */
 export class NamesListCryptoError extends Error {
     constructor(message: string) {
         super(message);
@@ -73,11 +80,11 @@ export class NamesListCryptoError extends Error {
     }
 }
 
-/** A wrap as the node stores and returns it (names_list_keys): every field base64 but `kdfParams`, compact JSON. */
-export interface WrappedNamesKey {
-    wrappedKey: string;
-    wrapIv: string;
-    wrapTag: string;
+/** A ring box as the node stores and returns it (names_shares): every field base64 but `kdfParams`, compact JSON. */
+export interface NamesRingBox {
+    sealedRing: string;
+    ringIv: string;
+    ringTag: string;
     ephemeralPubkey: string;
     kdfParams: string;
 }
@@ -89,20 +96,12 @@ export interface NamesEntryText {
 }
 
 const HEX_KEY = /^[0-9a-f]{64}$/;
+const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-function holderHex(publicKey: string): string {
+function hexKey(publicKey: unknown, what: string): string {
     const hex = typeof publicKey === 'string' ? publicKey.toLowerCase() : '';
-    if (!HEX_KEY.test(hex)) throw new NamesListCryptoError('An admin key must be 64 hexadecimal characters.');
+    if (!HEX_KEY.test(hex)) throw new NamesListCryptoError(`${what} must be 64 hexadecimal characters.`);
     return hex;
-}
-
-function wholeGeneration(generation: number): number {
-    if (!Number.isSafeInteger(generation) || generation < 1) throw new NamesListCryptoError('A list key generation is a whole number from 1.');
-    return generation;
-}
-
-function keyDomain(generation: number, holder: string): MemberKeyDomain {
-    return { alg: NAMES_KEY_ALG, info: KEY_INFO, aad: `beanpool-names-key-v1|${wholeGeneration(generation)}|${holderHex(holder)}` };
 }
 
 function requireListKey(listKey: Uint8Array): Uint8Array {
@@ -127,44 +126,110 @@ export function isNamesEntryId(id: unknown): id is string {
     return typeof id === 'string' && /^[0-9a-f]{32}$/.test(id);
 }
 
-/** Wraps the list key of `generation` to one admin's account key (hex). */
-export function wrapNamesListKey(listKey: Uint8Array, holderPublicKey: string, generation: number): WrappedNamesKey {
-    const sealed = sealToMemberKey(requireListKey(listKey), holderHex(holderPublicKey), keyDomain(generation, holderPublicKey));
+/** Whether `id` is a generation's id: the SHA-256 of its statement, 64 lower-case hexadecimal characters. */
+export function isNamesKeyId(id: unknown): id is string {
+    return typeof id === 'string' && HEX_KEY.test(id);
+}
+
+// ── The ring box ─────────────────────────────────────────────────────────────────────────────
+
+/** Who a ring box is from and to, and the giver's head when it was made: all of it bound into the box. */
+export interface NamesRingContext {
+    communityId: string;
+    from: string;
+    to: string;
+    headId: string;
+}
+
+function ringDomain(ctx: NamesRingContext): MemberKeyDomain {
+    if (typeof ctx.communityId !== 'string' || !/^[0-9A-Za-z_-]{1,64}$/.test(ctx.communityId)) throw new NamesListCryptoError('A community id is needed to seal the keys.');
+    const from = hexKey(ctx.from, 'The giver');
+    const to = hexKey(ctx.to, 'The recipient');
+    if (!isNamesKeyId(ctx.headId)) throw new NamesListCryptoError('The giver’s head is a generation id.');
+    return { alg: NAMES_RING_ALG, info: RING_INFO, aad: `${RING_AAD}|${ctx.communityId}|${from}|${to}|${ctx.headId}` };
+}
+
+/**
+ * Seals every key in `ring` (generation id → 32-byte key) to `ctx.to`'s account key, in one box. Takes any number of
+ * keys up to {@link NAMES_LIMITS.ringKeys}.
+ */
+export function sealNamesRing(ring: Record<string, Uint8Array>, ctx: NamesRingContext): NamesRingBox {
+    const keys: Record<string, string> = {};
+    const ids = Object.keys(ring).sort();
+    if (ids.length === 0 || ids.length > NAMES_LIMITS.ringKeys) throw new NamesListCryptoError(`A ring holds from 1 to ${NAMES_LIMITS.ringKeys} keys.`);
+    for (const id of ids) {
+        if (!isNamesKeyId(id)) throw new NamesListCryptoError('A ring is keyed by generation ids.');
+        keys[id] = bytesToHex(requireListKey(ring[id]));
+    }
+    const body = utf8ToBytes(JSON.stringify({ keys }));
+    const sealed = sealToMemberKey(body, hexKey(ctx.to, 'The recipient'), ringDomain(ctx));
     return {
-        wrappedKey: sealed.encryptedShare,
-        wrapIv: sealed.shareIv,
-        wrapTag: sealed.shareTag,
+        sealedRing: sealed.encryptedShare,
+        ringIv: sealed.shareIv,
+        ringTag: sealed.shareTag,
         ephemeralPubkey: sealed.ephemeralPubkey as string,
         kdfParams: sealed.kdfParams,
     };
 }
 
 /**
- * Opens this admin's own wrap with their identity key (PKCS8 or raw seed). `holderPublicKey` and `generation` are what
- * the phone expects the wrap to be: its own key, and the generation it asked for. A wrap made for anyone else, or for
- * another generation, doesn't open.
+ * Opens a ring box with the recipient's own identity key (PKCS8 or raw seed), for the context the phone expects: its
+ * own key as `to`, and the giver and head the signed header names. A box made for anyone else, or under another header,
+ * doesn't open. Returns the keys by generation id. Throws {@link NamesListCryptoError}.
  */
-export function unwrapNamesListKey(wrapped: WrappedNamesKey, privateKey: string | Uint8Array, holderPublicKey: string, generation: number): Uint8Array {
+export function openNamesRing(box: NamesRingBox, privateKey: string | Uint8Array, ctx: NamesRingContext): Record<string, Uint8Array> {
     const sealed: SealedShare = {
-        encryptedShare: wrapped.wrappedKey,
-        shareIv: wrapped.wrapIv,
-        shareTag: wrapped.wrapTag,
-        ephemeralPubkey: wrapped.ephemeralPubkey,
-        kdfParams: wrapped.kdfParams,
+        encryptedShare: box.sealedRing, shareIv: box.ringIv, shareTag: box.ringTag, ephemeralPubkey: box.ephemeralPubkey, kdfParams: box.kdfParams,
     };
+    let plain: Uint8Array;
     try {
-        const key = openWithMemberKey(sealed, privateKey, keyDomain(generation, holderPublicKey));
-        return requireListKey(key);
+        plain = openWithMemberKey(sealed, privateKey, ringDomain(ctx));
     } catch (e) {
         if (e instanceof NamesListCryptoError) throw e;
-        if (e instanceof KeeperCryptoError) throw new NamesListCryptoError(`The names list's key did not open: ${e.message}`);
+        if (e instanceof KeeperCryptoError) throw new NamesListCryptoError(`The names list’s keys did not open: ${e.message}`);
         throw e;
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(Buffer.from(plain).toString('utf8')); } catch { throw new NamesListCryptoError('A ring box opened but is not readable.'); }
+    const p = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, unknown>;
+    const raw = (p.keys && typeof p.keys === 'object' ? p.keys : null) as Record<string, unknown> | null;
+    if (!raw) throw new NamesListCryptoError('A ring box opened but holds no keys.');
+    const keys: Record<string, Uint8Array> = {};
+    for (const [id, hex] of Object.entries(raw).slice(0, NAMES_LIMITS.ringKeys)) {
+        if (!isNamesKeyId(id) || typeof hex !== 'string' || !HEX_KEY.test(hex)) continue;
+        keys[id] = new Uint8Array(Buffer.from(hex, 'hex'));
+    }
+    return keys;
+}
+
+/** The digest a share's signed header names for its box: SHA-256 over its five fields, in order, each on its own line. */
+export function namesBoxDigest(box: NamesRingBox): string {
+    const text = [box.sealedRing, box.ringIv, box.ringTag, box.ephemeralPubkey, box.kdfParams].join('\n');
+    return bytesToHex(sha256(utf8ToBytes(text)));
+}
+
+/** Whether `b` has a ring box's shape: base64 fields of the right widths and a `kdfParams` naming {@link NAMES_RING_ALG}. */
+export function isNamesRingBox(b: unknown): b is NamesRingBox {
+    if (!b || typeof b !== 'object') return false;
+    const r = b as Record<string, unknown>;
+    const b64 = (v: unknown, bytes?: number) => typeof v === 'string' && v.length > 0 && v.length <= 400_000 && B64.test(v)
+        && (bytes === undefined || Buffer.from(v, 'base64').length === bytes);
+    if (!b64(r.sealedRing) || !b64(r.ringIv, NONCE_LEN) || !b64(r.ringTag, TAG_LEN) || !b64(r.ephemeralPubkey, KEY_LEN)) return false;
+    if (typeof r.kdfParams !== 'string' || r.kdfParams.length > 200) return false;
+    try {
+        const k = JSON.parse(r.kdfParams) as Record<string, unknown>;
+        return !!k && k.alg === NAMES_RING_ALG;
+    } catch {
+        return false;
     }
 }
 
-function entryAad(entryId: string, generation: number): Uint8Array {
+// ── Entries ──────────────────────────────────────────────────────────────────────────────────
+
+function entryAad(entryId: string, keyId: string): Uint8Array {
     if (!isNamesEntryId(entryId)) throw new NamesListCryptoError('An entry id is 32 hexadecimal characters.');
-    return utf8ToBytes(`${ENTRY_AAD}|${entryId}|${wholeGeneration(generation)}`);
+    if (!isNamesKeyId(keyId)) throw new NamesListCryptoError('A key id is 64 hexadecimal characters.');
+    return utf8ToBytes(`${ENTRY_AAD}|${entryId}|${keyId}`);
 }
 
 /** Control characters but a line break and a tab, and lone surrogates (JSON would write each as six bytes). */
@@ -184,8 +249,8 @@ export function normaliseNamesEntryText(raw: { name?: unknown; note?: unknown })
     return { ok: true, value: { name, note } };
 }
 
-/** Seals an entry's name and note under the list key of `generation`, bound to its id. Returns the text the node stores. */
-export function sealNamesEntry(listKey: Uint8Array, entryId: string, generation: number, text: NamesEntryText): string {
+/** Seals an entry's name and note under the list key whose generation id is `keyId`, bound to the entry's id and that key id. */
+export function sealNamesEntry(listKey: Uint8Array, entryId: string, keyId: string, text: NamesEntryText): string {
     const checked = normaliseNamesEntryText(text);
     if (!checked.ok) throw new NamesListCryptoError(checked.error);
     assertRecoveryCsprngAvailable();
@@ -194,7 +259,7 @@ export function sealNamesEntry(listKey: Uint8Array, entryId: string, generation:
     const padded = new Uint8Array(Math.ceil((body.length + 1) / ENTRY_PAD) * ENTRY_PAD).fill(0x20);
     padded.set(body);
     const nonce = randomBytes(NONCE_LEN);
-    const sealed = xchacha20poly1305(requireListKey(listKey), nonce, entryAad(entryId, generation)).encrypt(padded);
+    const sealed = xchacha20poly1305(requireListKey(listKey), nonce, entryAad(entryId, keyId)).encrypt(padded);
     return JSON.stringify({ v: NAMES_ENTRY_VERSION, n: Buffer.from(nonce).toString('base64'), c: Buffer.from(sealed).toString('base64') });
 }
 
@@ -207,8 +272,7 @@ function readSealedEntry(ciphertext: unknown): SealedEntry | null {
     if (!parsed || typeof parsed !== 'object') return null;
     const p = parsed as Record<string, unknown>;
     if (Object.keys(p).length !== 3 || p.v !== NAMES_ENTRY_VERSION || typeof p.n !== 'string' || typeof p.c !== 'string') return null;
-    const b64 = /^[A-Za-z0-9+/]+={0,2}$/;
-    if (!b64.test(p.n) || !b64.test(p.c)) return null;
+    if (!B64.test(p.n) || !B64.test(p.c)) return null;
     if (Buffer.from(p.n, 'base64').length !== NONCE_LEN) return null;
     const sealedLen = Buffer.from(p.c, 'base64').length;
     // At least one padded block and its tag, and always whole blocks.
@@ -217,7 +281,7 @@ function readSealedEntry(ciphertext: unknown): SealedEntry | null {
 }
 
 /**
- * Whether `ciphertext` has the shape {@link sealNamesEntry} makes: `{"v":1,"n":<24-byte nonce>,"c":<whole padded blocks
+ * Whether `ciphertext` has the shape {@link sealNamesEntry} makes: `{"v":2,"n":<24-byte nonce>,"c":<whole padded blocks
  * and a tag>}`, in base64, within the size limit. The node takes nothing else, so a phone that sent a name in the clear
  * by mistake is refused rather than stored.
  */
@@ -225,13 +289,13 @@ export function isNamesEntryCiphertext(ciphertext: unknown): ciphertext is strin
     return readSealedEntry(ciphertext) !== null;
 }
 
-/** Opens an entry with the list key of `generation`. A wrong key, id or generation, or an altered box, doesn't open. */
-export function openNamesEntry(listKey: Uint8Array, entryId: string, generation: number, ciphertext: string): NamesEntryText {
+/** Opens an entry with the list key whose id is `keyId`. A wrong key, entry id or key id, or an altered box, doesn't open. */
+export function openNamesEntry(listKey: Uint8Array, entryId: string, keyId: string, ciphertext: string): NamesEntryText {
     const sealed = readSealedEntry(ciphertext);
     if (!sealed) throw new NamesListCryptoError('An entry is not in the names list’s sealed form.');
     let plain: Uint8Array;
     try {
-        plain = xchacha20poly1305(requireListKey(listKey), new Uint8Array(Buffer.from(sealed.n, 'base64')), entryAad(entryId, generation))
+        plain = xchacha20poly1305(requireListKey(listKey), new Uint8Array(Buffer.from(sealed.n, 'base64')), entryAad(entryId, keyId))
             .decrypt(new Uint8Array(Buffer.from(sealed.c, 'base64')));
     } catch (e) {
         if (e instanceof NamesListCryptoError) throw e;
@@ -244,17 +308,29 @@ export function openNamesEntry(listKey: Uint8Array, entryId: string, generation:
     return { name: p.n, note: p.t };
 }
 
-/** Whether `w` has a wrap's shape: base64 fields of the right widths and a `kdfParams` naming {@link NAMES_KEY_ALG}. */
-export function isWrappedNamesKey(w: unknown): w is WrappedNamesKey {
-    if (!w || typeof w !== 'object') return false;
-    const r = w as Record<string, unknown>;
-    const b64 = (v: unknown, bytes: number) => typeof v === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(v) && Buffer.from(v, 'base64').length === bytes;
-    if (!b64(r.wrappedKey, KEY_LEN) || !b64(r.wrapIv, NONCE_LEN) || !b64(r.wrapTag, TAG_LEN) || !b64(r.ephemeralPubkey, KEY_LEN)) return false;
-    if (typeof r.kdfParams !== 'string' || r.kdfParams.length > 200) return false;
+// ── The pin at rest ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Seals the phone's pin (its JSON) under `key`, a 32-byte secret the phone keeps in its secure store, bound to `label`
+ * (where the blob is kept: this member's key and the community's address). The blob goes in ordinary app storage,
+ * which on Android caps nothing but holds nothing readable.
+ */
+export function sealNamesPinBlob(json: string, key: Uint8Array, label: string): string {
+    assertRecoveryCsprngAvailable();
+    const nonce = randomBytes(NONCE_LEN);
+    const sealed = xchacha20poly1305(requireListKey(key), nonce, utf8ToBytes(`${PIN_AAD}|${label}`)).encrypt(utf8ToBytes(json));
+    return JSON.stringify({ v: 1, n: Buffer.from(nonce).toString('base64'), c: Buffer.from(sealed).toString('base64') });
+}
+
+/** Opens {@link sealNamesPinBlob}'s blob; null when it doesn't open (another key, another label, or altered). */
+export function openNamesPinBlob(blob: string, key: Uint8Array, label: string): string | null {
     try {
-        const k = JSON.parse(r.kdfParams) as Record<string, unknown>;
-        return !!k && k.alg === NAMES_KEY_ALG;
+        const p = JSON.parse(blob) as Record<string, unknown>;
+        if (p.v !== 1 || typeof p.n !== 'string' || typeof p.c !== 'string') return null;
+        const plain = xchacha20poly1305(requireListKey(key), new Uint8Array(Buffer.from(p.n, 'base64')), utf8ToBytes(`${PIN_AAD}|${label}`))
+            .decrypt(new Uint8Array(Buffer.from(p.c, 'base64')));
+        return Buffer.from(plain).toString('utf8');
     } catch {
-        return false;
+        return null;
     }
 }

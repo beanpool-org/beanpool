@@ -26,7 +26,10 @@ export interface TakeoverStepView {
 
 export interface TakeoverProgressData {
     role: 'primary' | 'backup';
-    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed';
+    /** 'failed' with `rolledBack`: it stopped, and the server is the standby it was. 'rolling-back': being put back. */
+    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
+    /** When a take-over that stopped was rolled back, and what was put back. Absent on older servers, which left it failed. */
+    rolledBack?: { at: string; detail: string } | null;
     startedAt: string | null;
     completedAt: string | null;
     authorisedBy: string | null;
@@ -50,8 +53,14 @@ export interface TakeoverProgressData {
     missing: string[];
     afterwards: string[];
     codeUsed: { codeId: number; at: string; message: string } | null;
-    /** Split-brain guard (slice 8): another server took over this one's identity; it is read-only. Absent on older servers. */
-    replaced?: { epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string; message: string } | null;
+    /**
+     * Split-brain guard (slice 8): another server took over this one's identity; it is read-only. Absent on older servers.
+     * `conflict`: another standby took over with the same keys, before this one did (both at one epoch).
+     */
+    replaced?: {
+        epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string; message: string;
+        conflict?: boolean; ownSince?: string | null;
+    } | null;
 }
 
 export interface TakeoverPreview {
@@ -319,6 +328,13 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             } else {
                 setError(typeof data.error === 'string' ? data.error : `The standby answered HTTP ${res.status}.`);
                 if (data.sessionGone) { setPreview(null); setStage('code'); }
+                // Stopped and rolled back, or another server took over with these keys: this session is over, and the server
+                // is the standby it was. The error says why; the progress below shows the steps.
+                else if (typeof data.rolledBack === 'boolean' || data.alreadyTakenOver) {
+                    setPreview(null);
+                    setStage('explain');
+                    void loadProgress();
+                }
             }
         } catch (err: unknown) {
             setError(`The standby did not answer: ${err instanceof Error ? err.message : String(err)}`);
@@ -347,11 +363,20 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             {progress?.replaced && (
                 <div role="alert" id="takeover-replaced" className="p-3 rounded-xl border bg-red-950/70 border-red-800 text-red-200 text-sm space-y-1" style={WRAP}>
                     <p className="m-0 font-bold">🛑 {progress.replaced.message}</p>
-                    <p className="m-0">
-                        Another server took over this community (identity epoch {progress.replaced.epoch}; this server is at {progress.replaced.ownEpoch}),
-                        and this server&apos;s web address now leads there. Members&apos; changes are refused here. Don&apos;t run this server as the
-                        main server again: to use this machine, set it up from scratch as a standby of the new main server.
-                    </p>
+                    {progress.replaced.conflict ? (
+                        <p className="m-0">
+                            Two standbys took over this community with the same locked keys, and the other one did it first. It answers at
+                            this community&apos;s web address too. Members&apos; changes are refused here, so they go to the other server. Stop
+                            this server, and don&apos;t run it as the main server again: to use this machine, set it up from scratch as a standby of
+                            the other one.
+                        </p>
+                    ) : (
+                        <p className="m-0">
+                            Another server took over this community (identity epoch {progress.replaced.epoch}; this server is at {progress.replaced.ownEpoch}),
+                            and this server&apos;s web address now leads there. Members&apos; changes are refused here. Don&apos;t run this server as the
+                            main server again: to use this machine, set it up from scratch as a standby of the new main server.
+                        </p>
+                    )}
                     <p className="m-0 text-xs text-red-300">Seen {when(progress.replaced.detectedAt)} at {progress.replaced.url}</p>
                 </div>
             )}
@@ -367,7 +392,16 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                 <div id="takeover-progress" className="space-y-3">
                     <p className="text-sm font-bold m-0" style={WRAP}>
                         {state === 'complete' && <span className="text-emerald-300">✅ This server is now the community&apos;s main server.</span>}
-                        {state === 'failed' && <span className="text-red-300">The take-over stopped. It is tried again from the same step when the server restarts.</span>}
+                        {state === 'failed' && progress.rolledBack && (
+                            <span className="text-red-300">
+                                The take-over stopped, and nothing of it was kept: this server is the standby it was, and goes on copying the main
+                                server. Fix what stopped it, then take over again.
+                            </span>
+                        )}
+                        {state === 'failed' && !progress.rolledBack && <span className="text-red-300">The take-over stopped. It is tried again from the same step when the server restarts.</span>}
+                        {state === 'rolling-back' && (
+                            <span className="text-red-300">The take-over stopped. This server is putting itself back as the standby it was; if that does not finish, restart it.</span>
+                        )}
                         {(state === 'running' || state === 'restarting') && !unreachable && <span className="text-amber-200">Taking over…</span>}
                         {(state === 'running' || state === 'restarting') && unreachable && (
                             <span className="text-amber-200">The server is restarting. This page checks again every few seconds.</span>
@@ -420,7 +454,8 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                 </div>
             )}
 
-            {isStandby && state === 'none' && (
+            {/* A take-over that stopped and was rolled back is over: another can start. */}
+            {isStandby && (state === 'none' || (state === 'failed' && !!progress?.rolledBack)) && (
                 <button type="button" id="takeover-start-btn" className={`${BTN} bg-red-900/70 hover:bg-red-800 border border-red-700 text-red-100 w-full sm:w-auto`}
                     onClick={() => { setError(null); setStage('explain'); }}>
                     Take over as the main server

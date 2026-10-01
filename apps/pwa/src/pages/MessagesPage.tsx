@@ -14,8 +14,11 @@ import {
     getEventChat,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
-import { decodePlaintext, decryptDM, isEncryptedNonce, type DMKeyContext } from '../lib/e2e-crypto';
-import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine } from '../lib/dm-lock';
+import {
+    decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, newDmMessageId, isEncryptedNonce,
+    DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
+} from '../lib/e2e-crypto';
+import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, type DmLineSeal } from '../lib/dm-lock';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
@@ -114,42 +117,29 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     return txt;
 }
 
-/** Lazily fetch + decrypt an encrypted image attachment, then render it. */
-function ChatImageBubble({ messageId, conversationId, peerPubHex, myPrivHex, originalConversationId, originalConversationIds }:
-    { messageId: string; conversationId: string; peerPubHex: string; myPrivHex: string; originalConversationId?: string; originalConversationIds?: string[] }) {
+/**
+ * Lazily fetch + decrypt an encrypted image attachment, then render it. The photo opens only as part of its message:
+ * bound to the author and id the node shows the message under, and in the format its words opened in
+ * (`bodyFormat`, from the thread check), so no other line's photo, and no old-format picture, can stand in for it.
+ * Words that didn't open (`bodyFormat` null) leave the photo locked too.
+ */
+function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex }:
+    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 2 | 3 | null; peerPubHex: string; myPrivHex: string }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
         let active = true;
         (async () => {
             try {
+                if (!bodyFormat) throw new Error('not verified');
                 const att = await getMessageAttachmentApi(messageId);
-                let dataUri: string | null = null;
-                try {
-                    dataUri = decryptDM(att.data, att.nonce, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex, conversationId });
-                } catch (err) {
-                    let decrypted = false;
-                    if (originalConversationId) {
-                        try {
-                            dataUri = decryptDM(att.data, att.nonce, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex, conversationId: originalConversationId });
-                            decrypted = true;
-                        } catch (e) {}
-                    } else if (Array.isArray(originalConversationIds)) {
-                        for (const legacyId of originalConversationIds) {
-                            try {
-                                dataUri = decryptDM(att.data, att.nonce, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex, conversationId: legacyId });
-                                decrypted = true;
-                                break;
-                            } catch (e) {}
-                        }
-                    }
-                    if (!decrypted) throw err;
-                }
+                const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex },
+                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }, [bodyFormat]).text;
                 if (active) setUri(dataUri);
             } catch { if (active) setFailed(true); }
         })();
         return () => { active = false; };
-    }, [messageId, conversationId, peerPubHex, myPrivHex, originalConversationId, originalConversationIds]);
+    }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex]);
     if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>🔒 Image unavailable</span>;
     if (!uri) return <span style={{ opacity: 0.6 }}>Loading image…</span>;
     return <img src={uri} alt="" style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />;
@@ -202,6 +192,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    // Every encrypted line of the open DM, opened bound to the author and id the node shows it under and checked against
+    // the thread in the order it is shown (e2e-crypto checkDmThread): a line that doesn't open is never shown as anyone's
+    // words, and one the node moved, reordered or sent again in the old format is marked.
+    const lineViews = useMemo(() => {
+        const ctx = dmKeyContext(activeConv, identity);
+        if (!ctx) return null;
+        return checkDmThread(messages.map(m => ({ id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, metadata: m.metadata })),
+            ctx, ctx.conversationId);
+    }, [messages, activeConv, identity]);
     const userTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -598,12 +597,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * A line as it goes to the node: readable in a group chat, locked in a DM. A DM that can't be locked gets one more
      * try with the node's copy of the conversation, then throws DmNotLockedError — never a readable fallback.
      */
-    async function payloadFor(text: string, conv: Conversation): Promise<{ ciphertext: string; nonce: string }> {
+    async function payloadFor(text: string, conv: Conversation, line: DmLineSeal): Promise<{ ciphertext: string; nonce: string }> {
         try {
-            return payloadForChat(text, conv, identity);
+            return payloadForChat(text, conv, identity, line);
         } catch (e) {
             if (!isDmNotLocked(e)) throw e;
-            return payloadForChat(text, await freshConversation(conv), identity);
+            return payloadForChat(text, await freshConversation(conv), identity, line);
         }
     }
 
@@ -613,8 +612,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         const wasEditing = editingMessage;
         try {
-            // Nothing is sent, and the draft stays, when a DM can't be locked (caught below).
-            const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv);
+            // Nothing is sent, and the draft stays, when a DM can't be locked (caught below). A DM line is sealed to its
+            // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
+            // node has given us, or for an edit the one its line was written after.
+            const line: DmLineSeal = wasEditing
+                ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null }
+                : { messageId: newDmMessageId(), after: dmAfterReference(messages) };
+            const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv, line);
 
             if (wasEditing) {
                 const prevMessages = messages;
@@ -642,7 +646,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
                 // 1. Store locally (Server will handle Libp2p federation relay automatically)
-                await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata);
+                await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
 
                 setDraft('');
                 setReplyToMessage(null);
@@ -671,14 +675,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
-            const encImg = lockForDm(dataUri, conv, identity);       // big blob -> lazy attachment
-            const encCap = lockForDm(caption, conv, identity);        // caption (often empty) -> message body
+            // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.
+            const messageId = newDmMessageId();
+            const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment' });       // big blob -> lazy attachment
+            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(messages) });   // caption (often empty) -> message body
             let metadata: string | undefined = undefined;
             if (replyToMessage) {
                 metadata = JSON.stringify({ replyToId: replyToMessage.id });
             }
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
-                { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata);
+                { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             setReplyToMessage(null);
             setChatRefusal(null);
             await loadMessages(activeConv.id);
@@ -787,7 +793,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
-    const UNREADABLE_BODIES = ['[Encrypted — update your app to read]', '[Unable to decrypt this message]'];
+    const UNREADABLE_BODIES = ['[Encrypted — update your app to read]', '[Unable to decrypt this message]', DM_LINE_NOT_VERIFIED_TEXT];
 
     function decryptMessage(msg: ApiMessage): string {
         try {
@@ -795,28 +801,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (isEncryptedNonce(msg.nonce)) {
                 const ctx = dmCtxFor(activeConv);
                 if (!ctx) return '[Encrypted — update your app to read]';
+                const view = lineViews?.get(msg.id);
+                if (view) return view.text ?? DM_LINE_NOT_VERIFIED_TEXT;
+                // A line outside the loaded thread (a quoted one): opened on its own, bound the same way.
                 try {
-                    return decryptDM(msg.ciphertext, msg.nonce, ctx);
-                } catch (err) {
-                    if (msg.metadata) {
-                        try {
-                            const meta = JSON.parse(msg.metadata);
-                            if (meta) {
-                                if (meta.originalConversationId) {
-                                    const legacyCtx = { ...ctx, conversationId: meta.originalConversationId };
-                                    return decryptDM(msg.ciphertext, msg.nonce, legacyCtx);
-                                } else if (Array.isArray(meta.originalConversationIds)) {
-                                    for (const legacyId of meta.originalConversationIds) {
-                                        try {
-                                            const legacyCtx = { ...ctx, conversationId: legacyId };
-                                            return decryptDM(msg.ciphertext, msg.nonce, legacyCtx);
-                                        } catch (e) {}
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    throw err;
+                    return openDmLine({ ciphertext: msg.ciphertext, nonce: msg.nonce }, ctx,
+                        { conversationId: ctx.conversationId, senderPubHex: msg.authorPubkey, messageId: msg.id, part: 'body', metadata: msg.metadata }).text;
+                } catch {
+                    return DM_LINE_NOT_VERIFIED_TEXT;
                 }
             }
             return decodePlaintext(msg.ciphertext, msg.nonce);
@@ -1448,21 +1440,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {msg.type === 'image' ? (() => {
                                             const ctx = dmCtxFor(activeConv);
                                             if (!ctx) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>🔒 Image</span>;
-                                            let originalConversationId: string | undefined = undefined;
-                                            let originalConversationIds: string[] | undefined = undefined;
-                                            if (msg.metadata) {
-                                                try {
-                                                    const meta = JSON.parse(msg.metadata);
-                                                    if (meta) {
-                                                        if (meta.originalConversationId) {
-                                                            originalConversationId = meta.originalConversationId;
-                                                        }
-                                                        if (Array.isArray(meta.originalConversationIds)) {
-                                                            originalConversationIds = meta.originalConversationIds;
-                                                        }
-                                                    }
-                                                } catch (e) {}
-                                            }
                                             // An image message's body is its caption, which is
                                             // usually empty. The phone already shows it; show it
                                             // here too, or a caption typed on the web would be
@@ -1474,10 +1451,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     <ChatImageBubble
                                                         messageId={msg.id}
                                                         conversationId={ctx.conversationId}
+                                                        authorPubkey={msg.authorPubkey}
+                                                        metadata={msg.metadata}
+                                                        bodyFormat={lineViews?.get(msg.id)?.format ?? null}
                                                         peerPubHex={ctx.peerEdPubHex}
                                                         myPrivHex={ctx.myEdPrivHex}
-                                                        originalConversationId={originalConversationId}
-                                                        originalConversationIds={originalConversationIds}
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -1488,6 +1466,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             );
                                         })() : decryptMessage(msg)}
                                     </div>
+                                    {(() => {
+                                        // A line the node moved, reordered or sent again in the old format (checkDmThread).
+                                        const note = dmLineMarkText(lineViews?.get(msg.id)?.mark);
+                                        return note ? (
+                                            <div data-testid="dm-line-note" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
+                                                ⚠️ {note}
+                                            </div>
+                                        ) : null;
+                                    })()}
                                     <span style={{
                                         float: 'right',
                                         fontSize: '0.75rem',

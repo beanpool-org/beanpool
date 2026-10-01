@@ -5,7 +5,7 @@ import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, type Conversation, type ApiMessage } from '../lib/api';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
-import { encryptDM, encodePlaintext } from '../lib/e2e-crypto';
+import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
 import { dmNotLockedLine } from '../lib/dm-lock';
 
 // Polyfill scrollIntoView for jsdom
@@ -43,9 +43,14 @@ vi.mock('../lib/avatar', () => ({
 vi.mock('../lib/e2e-crypto', () => ({
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
-    decryptDM: vi.fn((c: string) => c),
-    encryptDM: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
+    sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    checkDmThread: vi.fn(() => new Map()),
+    dmAfterReference: vi.fn(() => null),
+    dmLineMarkText: vi.fn(() => null),
+    newDmMessageId: vi.fn(() => crypto.randomUUID()),
     isEncryptedNonce: vi.fn(() => false),
+    DM_LINE_NOT_VERIFIED_TEXT: "🔒 This message couldn't be verified, so it isn't shown.",
 }));
 
 vi.mock('../components/ReportModal', () => ({
@@ -653,12 +658,17 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        // The picture and its caption are sealed to the same new message id, each as its own part, and the id goes too.
+        const [picture, caption] = vi.mocked(sealDmLine).mock.calls.map(c => c[2]);
+        expect(picture).toMatchObject({ senderPubHex: 'my-pubkey', part: 'attachment' });
+        expect(caption).toMatchObject({ senderPubHex: 'my-pubkey', part: 'body', messageId: picture.messageId });
         expect(sendMessageApi).toHaveBeenCalledWith(
             'conv-1', 'my-pubkey',
             'the back fence', '00000',        // the caption, encrypted into the message body
             'image',
             { data: 'data:image/jpeg;base64,resized', nonce: '00000', mime: 'image/jpeg' },
             undefined,
+            picture.messageId,
         );
 
         // Sent: the preview closes and the draft is cleared, as an ordinary send does.
@@ -949,11 +959,11 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             conversation: mockConversationDetails[convId],
             messages: mockMessagesByConv[convId] || [],
         }));
-        vi.mocked(encryptDM).mockImplementation((text: string) => ({ ciphertext: `locked:${text}`, nonce: LOCKED_NONCE }));
+        vi.mocked(sealDmLine).mockImplementation((text: string) => ({ ciphertext: `locked:${text}`, nonce: LOCKED_NONCE }));
     });
 
     afterEach(() => {
-        vi.mocked(encryptDM).mockImplementation((text: string) => ({ ciphertext: text, nonce: '00000' }));
+        vi.mocked(sealDmLine).mockImplementation((text: string) => ({ ciphertext: text, nonce: '00000' }));
     });
 
     async function openDm() {
@@ -993,7 +1003,11 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         await pressEnter(composer);
 
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
-        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, undefined);
+        // Sealed as me, to a new message id, and that id goes to the node with it: the node stores the line under it.
+        const sealedTo = vi.mocked(sealDmLine).mock.calls.at(-1)![2];
+        expect(sealedTo.senderPubHex).toBe('my-pubkey');
+        expect(sealedTo.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, undefined, sealedTo.messageId);
         expect(encodePlaintext).not.toHaveBeenCalled();
         await waitFor(() => expect(said()).toBeNull());
         expect(composer.value).toBe('');
@@ -1002,7 +1016,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
     it('the encryption throws: nothing is sent, and the same line', async () => {
         mockConversations = [dmWith(['my-pubkey', 'peer-pubkey'])];
         mockConversationDetails = { 'conv-1': mockConversations[0] };
-        vi.mocked(encryptDM).mockImplementation(() => { throw new Error('bad point'); });
+        vi.mocked(sealDmLine).mockImplementation(() => { throw new Error('bad point'); });
         const composer = await openDm();
         fireEvent.change(composer, { target: { value: 'hello' } });
         await pressEnter(composer);
@@ -1036,6 +1050,8 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         await pressEnter(composer);
         await waitFor(() => expect(editMessageApi).toHaveBeenCalledTimes(1));
         expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE);
+        // An edit is sealed to its own line's id.
+        expect(vi.mocked(sealDmLine).mock.calls.at(-1)![2]).toMatchObject({ senderPubHex: 'my-pubkey', messageId: 'msg-mine' });
         expect(encodePlaintext).not.toHaveBeenCalled();
     });
 
@@ -1055,7 +1071,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
 
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
         expect(encodePlaintext).toHaveBeenCalledWith('swap day on Saturday');
-        expect(encryptDM).not.toHaveBeenCalled();
+        expect(sealDmLine).not.toHaveBeenCalled();
     });
 });
 

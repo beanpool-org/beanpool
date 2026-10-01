@@ -42,7 +42,7 @@ If you close the page halfway, open it again within 10 minutes and it carries on
 
 If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in.
 
-**Too many new accounts from this network:** the global community takes only a few new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
+**Too many new accounts from this network:** the global community takes only so many new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
 
 ## A new account's limits
 

@@ -63,6 +63,9 @@ echo "new code" > "$APP/NEW-CODE"
 # test is a build node (no registry lookup, compose up --build); BeanPool-Fake matches none of the per-node port edits.
 echo "1:test:server.invalid:test.server.invalid:bpfake:$DIR" > "$APP/deploy-targets.conf"
 : > "$APP/.deploy-package.tar.gz"   # GNU tar: "file changed as we read it" when gzip creates it mid-read
+# deploy.sh packs only what git tracks (scripts/test-deploy-package.sh). -f: a global gitignore must not drop one.
+git -C "$APP" -c init.defaultBranch=main init -q
+git -C "$APP" add -f deploy.sh scripts/deploy-lib.sh docker-compose.yml NEW-CODE deploy-targets.conf
 
 cat > "$BIN/ssh" << 'STUB'
 #!/bin/bash

@@ -18,6 +18,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # disk_preflight / docker_free_kb (shipped to each host) and wait_node_healthy (run here).
 source "$SCRIPT_DIR/scripts/deploy-lib.sh"
 
+# The package is the files git tracks in this folder (below), so this folder must be the top of a git checkout. Checked
+# here, before the registry lookup and before any server is contacted.
+# Ask git itself: --show-prefix is empty only at the top of a work tree (it is not fooled by a path typed in another letter case).
+if ! GIT_PREFIX=$(git -C "$SCRIPT_DIR" rev-parse --show-prefix 2>/dev/null) || [ -n "$GIT_PREFIX" ]; then
+  echo "🛑 FATAL: $SCRIPT_DIR is not the top of a git checkout."
+  echo "   deploy.sh sends only the files git tracks, so run it from the top folder of a git clone of the repository."
+  echo "   A downloaded ZIP or release archive won't work, and a new file must be git added before it ships."
+  echo "   Nothing was packaged and no server was contacted."
+  exit 1
+fi
+
 # Free space a node needs on its host's docker filesystem before we touch it: the new image plus 2 GB of
 # headroom for the node's own data, WAL and logs. The image is 1.21 GB, so a pull needs 3.5 GB. A source
 # build also holds the builder stage's cache until the post-deploy builder prune — measured at 2.2 GB on
@@ -145,16 +156,38 @@ if [ "$NEEDS_REGISTRY_IMAGE" = "1" ]; then
 fi
 
 # Package docker-compose.yml + data-preserving deploy config
+# Only the files git tracks here go, as they are on disk now: an uncommitted edit to a tracked file still ships (a build node
+# builds exactly this package), a tracked file deleted here does not, and a file git does not track never does. Until
+# 2026-10-01 this was the whole folder minus the excludes below, which sent .claude/ (settings, board answers), scratchpad/
+# and any stray log or key to every server (scratch/reviews/FABLE-sec-infra.md M2). The excludes stay, as a second filter
+# on the tracked files; bsdtar (this Mac) and GNU tar both apply them to listed names, a folder name at any depth included.
+# --no-recursion: a tracked path that is a folder on disk now ships as the bare folder, never with what is inside it.
 PKG_PATH="$SCRIPT_DIR/.deploy-package.tar.gz"
-echo "📦 Packaging deploy config..."
-tar -czf "$PKG_PATH" \
+PKG_FILES=$(mktemp "${TMPDIR:-/tmp}/beanpool-deploy-files.XXXXXX")
+echo "📦 Packaging deploy config (the files git tracks in $SCRIPT_DIR)..."
+git -C "$SCRIPT_DIR" ls-files -z > "$PKG_FILES"
+(
+  cd "$SCRIPT_DIR"
+  while IFS= read -r -d '' F; do
+    if [ -e "$F" ] || [ -L "$F" ]; then printf '%s\0' "$F"; fi
+  done < "$PKG_FILES" | tar -czf "$PKG_PATH" \
     --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='.turbo' \
     --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
     --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
     --exclude='.deploy-package.tar.gz' \
     --exclude='ios' --exclude='.expo' --exclude='scratch' \
-    -C "$SCRIPT_DIR" .
-echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
+    --no-recursion --null -T -
+)
+rm -f "$PKG_FILES"
+PKG_COUNT=$(tar -tzf "$PKG_PATH" | grep -cv '/$' || true)
+if [ "$PKG_COUNT" -eq 0 ]; then
+  echo "🛑 FATAL: the package is empty: git tracks nothing in $SCRIPT_DIR that the excludes let through. Nothing was sent to a node."
+  exit 1
+fi
+echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1), $PKG_COUNT files. Top level (files per folder):"
+tar -tzf "$PKG_PATH" | sed 's#/.*#/#' | sort | uniq -c \
+  | awk '{ n = $1; sub(/^ *[0-9]+ /, ""); printf "%s%s", (NR > 1 ? "  " : ""), (/\/$/ ? $0 " (" n ")" : $0) } END { print "" }' \
+  | fold -s -w 110 | sed 's/^/   /'
 
 # A pull-mode node takes the GHCR image; a build-mode node builds from the tarball on its host.
 is_build_node() {
@@ -474,7 +507,7 @@ for NODE in "${TARGETS[@]}"; do
     # host's own tunnel (qld, vic, global), and the sidecar only ran the fleet token, whose tunnel no longer exists. The
     # down with the tunnel profile above still stops a sidecar an earlier deploy started.
     # Build on the target host by default, which is why every name below is listed: the running image is then
-    # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
+    # guaranteed to be the code in the tarball we just uploaded, uncommitted edits to tracked files included.
     #
     # DEPLOY_PULL=1 takes the published GHCR image instead. That drops the guarantee — you get whatever CI last
     # pushed (by default :latest, which only updates on release; pass DEPLOY_TAG=<sha> for main builds), NOT your

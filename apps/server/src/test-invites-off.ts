@@ -262,7 +262,8 @@ async function main(): Promise<void> {
 
     // Underneath the routes.
     const knockId = crypto.randomUUID();
-    db.prepare("INSERT INTO join_requests (id, pubkey, callsign, message, status) VALUES (?, ?, 'Kit', 'Hello', 'pending')").run(knockId, knocker.pk);
+    const planted = newId('Pia');
+    db.prepare("INSERT INTO join_requests (id, pubkey, callsign, message, status) VALUES (?, ?, 'Pia', 'Hello', 'pending')").run(knockId, planted.pk);
     const codesBefore = codeCount();
     assert(engineRefuses(() => generateInvite(nia.pk)), 'the engine: generateInvite throws FeatureOffError(invites)');
     assert(engineRefuses(() => adminGenerateInvite(marty.pk, 'elder', undefined, 'owner:password')), 'the engine: adminGenerateInvite throws it');

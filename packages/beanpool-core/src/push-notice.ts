@@ -32,6 +32,14 @@
  * runs, so a forger holding a phone's push token can always put words on its lock screen. The check makes a forged
  * notice do nothing: the app follows a tap only for a notice its own community signed for this member, and says so
  * otherwise. A notice with no signature (a server with no node key yet) is treated as not signed.
+ *
+ * ## Server rule: formats above 1
+ *
+ * A server sends a notice format above 1 (`bp` above {@link PUSH_NOTICE_VERSION}) only to a phone whose push registration
+ * declared that it reads that format. An app treats any `bp` it doesn't know as unsigned (it can't rebuild the bytes, and
+ * an exemption from the warning would be one every forger takes by writing `bp: 2`), so a phone that did not declare the
+ * format must never be sent it. The app in the field declares nothing: it always gets format 1, and its warning never
+ * fires on a genuine notice.
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';

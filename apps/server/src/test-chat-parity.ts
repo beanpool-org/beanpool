@@ -78,6 +78,8 @@ const ageOut = (id: string) =>
 
 const broadcasts: { event: any; recipients?: string[] }[] = [];
 const pushes: { targets: string[]; actor: string; title: string; body: string; data: any }[] = [];
+/** A line's push goes once its send has answered (engine/messaging.ts, group-thread.ts: setImmediate): wait for it. */
+const pushesSent = () => new Promise<void>(r => setImmediate(r));
 const cb = {
     broadcast: (event: any, recipients?: string[]) => { broadcasts.push({ event, recipients }); },
     dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: any) => {
@@ -423,22 +425,26 @@ async function main(): Promise<void> {
     const quiet = createConversation('dm', [alice, erin], alice)!;
     pushes.length = 0;
     dmLine(quiet.id, alice);
+    await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(erin), 'an unmuted DM pushes the other person');
     // The mute is set through the ROUTE (the phone's only way in) and honoured where pushes are decided.
     const muted = await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: '8h' });
     assert(muted.body?.success === true && !!muted.body.mute?.mutedUntil, 'the other person mutes the DM for 8 hours through /api/messages/mute');
     pushes.length = 0;
     dmLine(quiet.id, alice);
+    await pushesSent();
     assert(pushes.length === 0, 'and the next DM pushes nobody');
     db.prepare('UPDATE chat_mutes SET muted_until = ? WHERE conversation_id = ? AND member_pubkey = ?')
         .run(new Date(Date.now() - 1000).toISOString(), quiet.id, erin);
     pushes.length = 0;
     dmLine(quiet.id, alice);
+    await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(erin), 'an expired mute is no mute');
     const off = await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: 'always' });
     assert(off.body?.mute?.always === true, "'always' is accepted for a DM");
     pushes.length = 0;
     dmLine(quiet.id, alice);
+    await pushesSent();
     assert(pushes.length === 0, "'always' silences it for good");
     assert((await mpost('/api/messages/mute', erin, { conversationId: quiet.id, duration: 'off' })).body?.mute === null,
         "'off' unmutes the DM again");
@@ -469,15 +475,20 @@ async function main(): Promise<void> {
     // ── 9. None of this pushes ──────────────────────────────────────────────────────────────
     console.log('\n--- 9. Edits, reactions and deletes are silent ---');
     const loud = postGroupThreadMessage(cb, crew.id, bob, 'plain line');
+    await pushesSent();
     pushes.length = 0;
     editEngine(cb, loud.id, bob, b64('Hey @Alice, look at this'), 'plaintext-v1');
+    await pushesSent();
     assert(pushes.length === 0, 'an edit pushes nobody — and an edited text raises no new @mention notification');
     assert(!metaOf(loud.id).mentions, 'nor does it add a mention to the message');
     reactEngine(cb, loud.id, alice, '👍');
+    await pushesSent();
     assert(pushes.length === 0, 'a reaction pushes nobody');
     deleteEngine(cb, loud.id, bob);
+    await pushesSent();
     assert(pushes.length === 0, 'a delete pushes nobody');
     const stillLoud = postGroupThreadMessage(cb, crew.id, bob, 'and a NEW message still pushes');
+    await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(alice) && !!stillLoud, 'while a new message still does');
 
     // ── 10. A hidden group stays hidden, and the room writes are throttled ──────────────────

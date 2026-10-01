@@ -17,6 +17,9 @@
  *   7. knocks on probation: 3 in any 24 hours, the 4th refused, and /api/community/me says 3
  *   8. the door's connection label: a standby's copy carries it (never the address hash), a standby merging a newer
  *      row takes it, and a member who deletes their own account takes theirs with them
+ *   9. a deep invite tree is still one circle (no depth cut-off), and 300 reports from a 300-deep chain are cheap
+ *  10. the connection label is bounded: it lapses 24 hours after its cohort's FIRST join, so joins 20 hours apart
+ *      share a label only while within a day of the first
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-report-rings.ts
  */
@@ -41,6 +44,7 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { _resetJwksCacheForTests } from './sso.js';
 import { knockRefusal } from './engine/probation.js';
 import { writeOpenJoinRecord } from './engine/open-join.js';
+import { hideTally } from './engine/auto-moderation.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -326,6 +330,55 @@ async function main(): Promise<void> {
     assert(merged.written === 1 && day2Label() === 'label-from-the-main-server', 'a standby merging a newer row takes its label');
     const purged = await call('POST', day2, '/api/member/purge', {});
     assert(purged.status === 200 && day2Label() === null, `a member who deletes their own account takes their label with them (${purged.status})`);
+
+    // ── 9. a deep invite tree is one circle, and weighing it is cheap ───────────────────────────
+    console.log('\n── 9. a deep invite chain ──');
+    const chain = (n: number, tag: string): Id[] => {
+        const out: Id[] = [];
+        for (let i = 0; i < n; i++) out.push(member(`${tag}${i}`, 150, out[i - 1]));
+        return out;
+    };
+    const deep = chain(70, 'Deep');
+    const deepReporters = [66, 67, 68].map(i => deep[i]);
+    for (const r of deepReporters) for (let i = 0; i < 3; i++) oldPost(r, `${r.name} kept ${i}`);
+    const dale = member('Dale', 60);
+    for (let i = 0; i < 3; i++) oldPost(dale, `Dale kept ${i}`);
+    const dalePost = oldPost(dale, 'Dale listing');
+    await reportAll(deepReporters, dalePost, dale);
+    const deepTally = hideTally(dalePost);
+    assert(deepTally.circles.length === 1 && deepTally.circles[0].length === 3,
+        `reporters at depths 66, 67 and 68 of one 70-deep chain are 1 circle (${deepTally.circles.length})`);
+    assert(hiddenAt(dalePost) === null, 'and they do not hide the post');
+    const long = chain(300, 'Long');
+    const dina = member('Dina', 60);
+    for (let i = 0; i < 3; i++) oldPost(dina, `Dina kept ${i}`);
+    const dinaPost = oldPost(dina, 'Dina listing');
+    const ins = db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status, created_at)
+                            VALUES (?, ?, ?, ?, 'spam', 'pending', ?)`);
+    for (const r of long) ins.run(`long-${r.pk}`, r.pk, dina.pk, dinaPost, ago(1000));
+    const t0 = performance.now();
+    const longTally = hideTally(dinaPost);
+    const ms = performance.now() - t0;
+    console.log(`   (one weighing of 300 reports from a 300-deep chain: ${ms.toFixed(1)} ms)`);
+    assert(longTally.circles.length === 1 && longTally.circles[0].length === 300, `300 reporters from one 300-deep chain are 1 circle (${longTally.circles.length})`);
+    assert(ms < 100, `weighing them takes well under the 204 ms it took before (${ms.toFixed(1)} ms)`);
+
+    // ── 10. the connection label lapses a day after its cohort's first join ─────────────────────
+    console.log('\n── 10. the label is bounded ──');
+    db.prepare('UPDATE open_joins SET joined_at = ?').run(ago(10 * DAY));
+    const labelOf = (id: Id) => (db.prepare('SELECT join_cohort FROM open_joins WHERE member_pubkey = ?').get(id.pk) as any)?.join_cohort as string;
+    const chained: Id[] = [];
+    for (let i = 0; i < 4; i++) {
+        // Every join here is from this machine: before each one, move the earlier ones back 20 hours more.
+        chained.forEach((c, k) => db.prepare('UPDATE open_joins SET joined_at = ? WHERE member_pubkey = ?').run(ago((chained.length - k) * 20 * HOUR), c.pk));
+        chained.push(await doorJoin(`Chain${i + 1}`));
+    }
+    chained.forEach((c, k) => db.prepare('UPDATE open_joins SET joined_at = ? WHERE member_pubkey = ?').run(ago((3 - k) * 20 * HOUR), c.pk));
+    const [c1, c2, c3, c4] = chained.map(labelOf);
+    assert(!!c1 && c1 === c2, 'a join 20 hours after the first shares its label');
+    assert(c3 !== c1 && !!c3, 'a join 40 hours after the first does not, though only 20 hours after the previous one');
+    assert(c4 === c3, 'and the one after it, within a day of that new cohort\'s first, shares the new label');
+    assert(c1 !== c4, 'the first and fourth joins, 60 hours apart, do not share a label');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

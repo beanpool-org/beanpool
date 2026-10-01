@@ -143,17 +143,26 @@ export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' |
 }
 
 /**
- * The label for a join from this address now (`open_joins.join_cohort`): the label of the earliest join from the same
- * address in the last JOIN_COHORT_HOURS, so a chain of joins a day apart or less shares one, or a new random one.
- * Reads `ip_hash`, which is there for a day only, so the window can't be longer than that.
+ * The label for a join from this address now (`open_joins.join_cohort`): the label of the latest join from the same
+ * address in the last JOIN_COHORT_HOURS, unless that label's cohort began (its FIRST join) that long ago or more:
+ * then it has lapsed and this join starts a new random one. So a label spans at most JOIN_COHORT_HOURS from the first
+ * join, however steadily joins keep coming. The cohort's start is read from its own rows (the earliest `joined_at`
+ * with the label), so nothing but the keyed label is stored. Reads `ip_hash`, which is there for a day only, so the
+ * window can't be longer than that.
  */
 export function joinCohortFor(ipHash: string, now = Date.now()): string {
+    const windowMs = Math.min(JOIN_COHORT_HOURS * HOUR_MS, DAY_MS);
+    const cutoff = new Date(now - windowMs).toISOString();
     const row = db.prepare(`
         SELECT join_cohort FROM open_joins
         WHERE ip_hash = ? AND joined_at >= ? AND join_cohort IS NOT NULL
-        ORDER BY joined_at ASC LIMIT 1
-    `).get(ipHash, new Date(now - Math.min(JOIN_COHORT_HOURS * HOUR_MS, DAY_MS)).toISOString()) as { join_cohort: string } | undefined;
-    return row?.join_cohort ?? crypto.randomUUID();
+        ORDER BY joined_at DESC LIMIT 1
+    `).get(ipHash, cutoff) as { join_cohort: string } | undefined;
+    if (row) {
+        const start = db.prepare('SELECT MIN(joined_at) AS s FROM open_joins WHERE join_cohort = ?').get(row.join_cohort) as { s: string | null };
+        if (start.s && start.s >= cutoff) return row.join_cohort;
+    }
+    return crypto.randomUUID();
 }
 
 /**

@@ -159,18 +159,26 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
  * (the open door, the genesis), whose inviter holds a node role, or whose inviter is not a member here. A member
  * nobody here invited is their own top.
  */
-export function inviteTreeTop(pubkey: string): string {
+export function inviteTreeTop(pubkey: string, memo?: Map<string, string>): string {
+    const known = memo?.get(pubkey);
+    if (known) return known;
     const invitedBy = db.prepare('SELECT invited_by FROM members WHERE public_key = ?');
     const isMember = db.prepare("SELECT 1 FROM members WHERE public_key = ? AND COALESCE(is_treasury, 0) = 0");
     const seen = new Set<string>([pubkey]);
+    const path: string[] = [pubkey];
     let top = pubkey;
-    // Bounded: a tree deeper than this is cut off there, and a loop (which no invite makes) ends at once.
-    for (let depth = 0; depth < 64; depth++) {
+    // To the real top, however deep: a loop (which no invite makes) ends at `seen`; a walk meeting a member whose top
+    // is already known stops there. Every member passed gets the same top, so a tree costs one walk per call.
+    for (;;) {
         const inviter = (invitedBy.get(top) as { invited_by: string | null } | undefined)?.invited_by;
         if (!inviter || !isMemberKeySpelling(inviter) || seen.has(inviter) || !isMember.get(inviter) || nodeRoleOf(inviter)) break;
+        const inviterTop = memo?.get(inviter);
+        if (inviterTop) { top = inviterTop; break; }
         seen.add(inviter);
+        path.push(inviter);
         top = inviter;
     }
+    if (memo) for (const k of path) memo.set(k, top);
     return top;
 }
 
@@ -234,8 +242,9 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         const ra = find(a), rb = find(b);
         if (ra !== rb) parent.set(rb, ra);
     };
+    const tops = new Map<string, string>();
     for (const r of counting) {
-        link(`r:${r}`, `i:${inviteTreeTop(r)}`);
+        link(`r:${r}`, `i:${inviteTreeTop(r, tops)}`);
         const cohort = joinCohortOf(r);
         if (cohort) link(`r:${r}`, `c:${cohort}`);
     }

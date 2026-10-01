@@ -206,7 +206,8 @@ export interface NodeFeatures {
     distanceSearch: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
-    /** A post reported by 3 established members is hidden until a moderator looks. */
+    /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
+     *  until a moderator looks (engine/auto-moderation.ts). */
     autoHideReports: boolean;
     /** 3 posts removed by a moderator in 30 days stop a member posting and messaging until a moderator lifts it. */
     autoMute: boolean;

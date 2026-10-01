@@ -25,8 +25,8 @@
  *   T10 the door's own path is untouched: a ticket's nonce without the ticket → 401 sign_in, and the ticket still works
  *   T11 the advertised keys follow the env per request: two keys listed in order, a ticket by the second joins; cut to
  *       one, the other's tickets are refused, no restart; malformed or more than two → none; the boot line says each
- *   T12 refused before the sign-in, the ticket unspent: door_key_missing (503) and the address limit (429), no provider
- *       asked; the local profile → 404
+ *   T12 refused before the sign-in, the ticket unspent: door_key_missing (503) and the address's ceiling (429
+ *       network_busy), no provider asked; the local profile → 404
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join-vault-ticket.ts
  */
@@ -52,7 +52,8 @@ import * as sso from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
-import { OPEN_JOIN_LIMITS, openJoinHash } from './engine/open-join.js';
+import { openJoinHash } from './engine/open-join.js';
+import { DOOR_NUMBERS } from './engine/door-signal.js';
 
 let BASE = '';
 
@@ -134,7 +135,7 @@ async function call(id: Id, route: string, body: unknown): Promise<{ status: num
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
     if (!holdJoinLimit) {
-        // Every join here comes from one address; this suite tests the ticket, not the 5-an-hour limit (T12 does that).
+        // Every join here comes from one address; this suite tests the ticket, not the door's signal (T12 tests its ceiling).
         const dayAgo = new Date(Date.now() - 25 * 3600_000).toISOString();
         db.prepare('UPDATE open_joins SET joined_at = ? WHERE joined_at > ?').run(dayAgo, dayAgo);
     }
@@ -458,20 +459,22 @@ async function main(): Promise<void> {
         .get(ipHash, new Date(Date.now() - 3600_000).toISOString()) as any).n as number;
     const fakes: string[] = [];
     const insertFake = db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)');
-    for (let i = recentFromHere(); i < OPEN_JOIN_LIMITS.perHour; i++) {
-        const pk = crypto.randomBytes(32).toString('hex');
-        fakes.push(pk);
-        insertFake.run(pk, 'google', crypto.randomBytes(32).toString('base64url'), new Date().toISOString(), ipHash);
-    }
+    db.transaction(() => {
+        for (let i = recentFromHere(); i < DOOR_NUMBERS.global.signInPerHour; i++) {
+            const pk = crypto.randomBytes(32).toString('hex');
+            fakes.push(pk);
+            insertFake.run(pk, 'google', crypto.randomBytes(32).toString('base64url'), new Date().toISOString(), ipHash);
+        }
+    })();
     const oli = newId();
     const oliTicket = ticketFor(oli.pk);
     forgetProviderKeys();
     const fetchesAtLimit = providerFetches;
     const limited = await ticketJoin(oli, oliTicket, { sub: 'oli-google-sub', callsign: 'Oli' });
-    assert(limited.status === 429 && limited.body?.code === 'rate_limited',
-        `the ${OPEN_JOIN_LIMITS.perHour + 1}th join from one address in an hour, with a ticket → 429 (got ${said(limited)})`);
+    assert(limited.status === 429 && limited.body?.code === 'network_busy',
+        `the ${DOOR_NUMBERS.global.signInPerHour + 1}th sign-in join from one address in an hour, with a ticket → 429 network_busy (got ${said(limited)})`);
     assert(providerFetches === fetchesAtLimit, 'before the sign-in is checked: no provider asked');
-    for (const pk of fakes) db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(pk);
+    db.transaction(() => { for (const pk of fakes) db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(pk); })();
     holdJoinLimit = false;
     const oliJoin = await ticketJoin(oli, oliTicket, { sub: 'oli-google-sub', callsign: 'Oli' });
     assert(oliJoin.status === 200, `under the limit again: the same ticket joins (got ${said(oliJoin)})`);

@@ -98,14 +98,16 @@ describe('moderator Settings (App)', () => {
         expect(screen.queryByText(/Prune Stale Posts/i)).toBeNull();
         expect(screen.queryByText(/Action Required/i)).toBeNull();
 
-        // Once signed in, it never asks the node for anything but the reports. (The page's first polls go out as it
-        // loads, before the sign-in finishes, with no session at all, as they do for everyone; the node refuses them.)
+        // Once signed in, it never asks the node for anything but the reports, and the digest of accounts that joined
+        // together, a moderator route (admin-auth.ts MODERATOR_ROUTES; on a local community the node answers 404 and the
+        // screen shows nothing of it). (The page's first polls go out as it loads, before the sign-in finishes, with no
+        // session at all, as they do for everyone; the node refuses them.)
         const signedInAt = calls.length;
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); });
         await act(async () => { await new Promise(r => setTimeout(r, 50)); });
         const asked = calls.slice(signedInAt).map(c => new URL(c.url, 'http://x').pathname);
         expect(asked).toContain('/api/local/admin/reports');
-        const outside = asked.filter(p => !['/api/local/admin/auth/exchange', '/api/local/community-info', '/api/local/admin/reports'].includes(p));
+        const outside = asked.filter(p => !['/api/local/admin/auth/exchange', '/api/local/community-info', '/api/local/admin/reports', '/api/local/admin/bursts'].includes(p));
         expect(outside).toEqual([]);
     });
 

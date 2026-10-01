@@ -64,7 +64,7 @@ import {
     StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY, keepFetchedObjects, releaseFetchedObjects,
 } from './stager.js';
 import { COPY_MAX_MS } from '../engine/copy-pages.js';
-import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere } from '../db/swap-at-boot.js';
+import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere, takeoverUnderWay } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
@@ -711,6 +711,8 @@ export function keepMainServerRecords(payload: SyncPayload, whole: boolean): voi
 async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null): Promise<{ ok: boolean; error?: string; staged?: boolean; restarting?: boolean }> {
     if (inFlight) return { ok: false, error: 'A pull is already in progress.' };
     if (swapReady) return { ok: false, error: 'A whole copy is ready to be swapped in: this standby is restarting.' };
+    const held = heldByTakeover();
+    if (held) return { ok: false, error: held };
 
     const config = getLocalConfig();
     const primaryUrl = config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL;
@@ -1725,6 +1727,9 @@ export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boole
     // Before nextMode, which spends the once-a-process asks: a pull already running (an operator's resync) must not use one up.
     if (inFlight) return Promise.resolve({ ok: false, error: 'A pull is already in progress.' });
     if (swapReady) return Promise.resolve({ ok: false, error: 'A whole copy is ready to be swapped in: this standby is restarting.' });
+    // Before nextMode too: a pull that will not run spends none of its asks.
+    const held = heldByTakeover();
+    if (held) return Promise.resolve({ ok: false, error: held });
     restoreFromDatabase();
     const next = nextMode();
     if (next === 'wait') {
@@ -1859,6 +1864,55 @@ export function forgetPullCursor(): void {
     lastImportedCursor = null;
 }
 
+/** Where this standby's copies had reached (its saved cursor), for a take-over to keep beside its own files. */
+export function savedPullCursor(): string | null {
+    try { return getSyncCursor(BACKUP_CURSOR_PEER); } catch { return null; }
+}
+
+/** A take-over rolled back (services/takeover.ts): the cursor its `pull-config` step forgot, put back as it was. */
+export function putPullCursorBack(cursor: string | null): void {
+    if (cursor) {
+        setSyncCursor(BACKUP_CURSOR_PEER, cursor);
+        lastImportedCursor = cursor;
+    } else {
+        forgetPullCursor();
+    }
+}
+
+/**
+ * Why no copy is made now, or null: a take-over journal under way on this server (db/swap-at-boot.ts takeoverUnderWay).
+ * A whole copy made meanwhile would be thrown away at the restart that swaps it in, and the next one too, each after a
+ * restart and a whole copy built by the main server (F2 of the 2026-10-01 standby review). In practice only a take-over
+ * whose roll-back did not finish: the next start finishes it, and copying goes on. Said in the log once a process.
+ */
+let heldLogged = false;
+function takeoverHold(): string | null {
+    return takeoverUnderWay()
+        ? 'A take-over is under way on this server, or one that stopped is not yet rolled back: it copies nothing from the '
+            + 'main server until that ends (see Take over as the main server; a restart finishes a roll-back).'
+        : null;
+}
+function heldByTakeover(): string | null {
+    const why = takeoverHold();
+    if (!why) {
+        heldLogged = false;
+        return null;
+    }
+    if (!heldLogged) {
+        heldLogged = true;
+        logger.warn('P2P', `[Backup] ${why}`);
+    }
+    return why;
+}
+
+/**
+ * A take-over rolled back in this process (services/takeover.ts): its `pull-config` step may have stopped the puller, and
+ * this server is a standby again. Starts it as at boot, only if it was stopped (a running one has its own loop).
+ */
+export function restartBackupPullerIfStopped(): void {
+    if (stopped) initBackupPuller();
+}
+
 /** Stop the puller (used on promotion / shutdown). */
 export function stopBackupPuller(): void {
     stopped = true;
@@ -1875,6 +1929,8 @@ export function getBackupStatus(): {
     lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null;
     lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number; lastPullMode: PullMode | null;
     wholeRetryAt: number | null; resyncRetryAt: number | null; lastWholePages: number; swapReady: boolean;
+    /** Why no copy is made now: a take-over journal under way here (heldByTakeover); null when copies go on. */
+    heldByTakeover: string | null;
 } {
     restoreCadence();
     const now = Date.now();
@@ -1882,6 +1938,7 @@ export function getBackupStatus(): {
         // How many pages the last whole copy took, and a whole copy made ready to swap in at the restart under way.
         lastWholePages,
         swapReady,
+        heldByTakeover: getNodeRole() === 'backup' ? takeoverHold() : null,
         lastSuccessAt,
         consecutiveFailures,
         lastPullMode,

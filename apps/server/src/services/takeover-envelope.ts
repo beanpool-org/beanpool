@@ -166,6 +166,11 @@ export function peerIdOfKeyFile(keyBytes: Buffer): string {
     return loadNodeIdentity(keyBytes).peerId;
 }
 
+/** The identity a libp2p_key file's bytes hold (a take-over bundle's, before it is written). Throws as peerIdOfKeyFile. */
+export function nodeIdentityOfKeyFile(keyBytes: Buffer): NodeIdentity {
+    return loadNodeIdentity(keyBytes);
+}
+
 function readPublicAddress(): unknown {
     const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
     if (!row?.value) return null;

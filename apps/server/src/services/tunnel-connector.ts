@@ -18,6 +18,9 @@
 // - A dead tunnel ("Unauthorized" for 2 min) asks the registrar: a new token is run at once; the same token (or none)
 //   means the tunnel is gone at Cloudflare though the name is live, so the saved name is claimed again, which is a heal
 //   that re-makes the tunnel. At most once per 30 min, never two at once.
+// - A name the registrar paused (its sweep saw another node's key, or something that is no BeanPool node, answer at it;
+//   the pause removes the tunnel) is asked back with a heal, never a claim: on the agent's next tick, or once the dead
+//   tunnel is noticed. The registrar routes it again once this server proves its key. Nobody has to do anything.
 // - A tunnel whose ingress still names the old compose service (http://beanpool-node:8080) is moved to this server's
 //   loopback once, by the same heal, when it first connects. docker-compose.yml pins beanpool-node to 127.0.0.1 so the old
 //   origin reaches this server meanwhile, never another community's on beanpool-shared.
@@ -29,7 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { addressStatus, claimAddress } from './registrar-client.js';
+import { addressStatus, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
 
@@ -490,6 +493,8 @@ async function healDeadTunnel(): Promise<void> {
             await reclaimSaved(pa, 'Cloudflare refuses the tunnel although the address service has the name live');
             return;
         }
+        // Paused by the registrar's sweep (it removes the tunnel too): this server takes it back by proving its key.
+        if (healable(st, pa)) { await healPaused(pa, st); return; }
         // Any other answer is written on the name it concerns; the agent, the name watch and Settings act on it.
         recordRegistrarAnswer(st, 'status');
         say('warn', `Cloudflare refuses the tunnel, and the address service answers "${st?.status ?? 'nothing'}" for ${pa.hostname || pa.name}; Settings shows it`);
@@ -498,6 +503,53 @@ async function healDeadTunnel(): Promise<void> {
     } finally {
         registrarBusy = false;
     }
+}
+
+// ── A paused name: this server takes it back ─────────────────────────────────────────────────
+
+/**
+ * Is the registrar's `st` a pause of this server's own tunnel name (the one saved in its settings) that its heal lifts?
+ * Every pause but the admin's: the sweep's (another node's key, or something that is no BeanPool node, answered at the
+ * name: 'impostor', 'content-swap'), a take-back not yet proved ('unverified'), the 2026-09-24 incident's. The admin's
+ * pause is the BeanPool project's to lift; a blocked or released name is never taken back by a heal.
+ */
+function healable(st: any, pa: any): boolean {
+    return st?.status === 'paused' && st.reason !== 'admin' && !!pa?.name && (!st.name || st.name === pa.name);
+}
+
+/**
+ * The heal (never a claim): the registrar routes the name again only once this server proves its key, on a fresh tunnel
+ * whose token only this signed request gets, or through an attestation at the name. A live answer is saved and run; any
+ * other is written on the name, and the next tick asks again. Never throws.
+ */
+async function healPaused(pa: any, st: any): Promise<void> {
+    say('info', `the address service paused ${pa.hostname || pa.name} (${st.reason || 'no reason given'}): asking for it back, which proves this server's key`);
+    try {
+        const res = await healAddress(pa.name, LOOPBACK_ORIGIN);
+        if (res?.status === 'live') {
+            const { changed: _changed, attest: _attest, ...answer } = res;
+            await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+            say('info', `${pa.hostname || pa.name} is live again${res.tunnelToken ? ', on a fresh tunnel' : ''}`);
+            return;
+        }
+        recordRegistrarAnswer({ name: pa.name, hostname: pa.hostname, ...res }, 'status');
+        say('warn', `${pa.hostname || pa.name} stays paused: ${res?.why || res?.reason || res?.status || 'no answer'}; this server asks again in a few minutes`);
+    } catch (e: any) {
+        say('warn', `could not ask for ${pa.hostname || pa.name} back: ${e?.message || e}; this server asks again in a few minutes`);
+    }
+}
+
+/**
+ * The public-address agent's tick (every 5 min): if the registrar's status `st` is a pause of this server's own tunnel
+ * name that its heal lifts, heal it. True when it was one (healed or not). Not two at once with the dead-tunnel heal.
+ */
+export async function healPausedAddress(st: any): Promise<boolean> {
+    const pa = savedTunnelAddress();
+    if (!healable(st, pa) || getNodeRole() !== 'primary') return false;
+    if (registrarBusy) return true;
+    registrarBusy = true;
+    try { await healPaused(pa, st); } finally { registrarBusy = false; }
+    return true;
 }
 
 function maybeMoveOrigin(): void {

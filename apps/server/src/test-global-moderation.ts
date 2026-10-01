@@ -106,6 +106,13 @@ function member(name: string, daysAgo: number): Id {
     return id;
 }
 
+/** A member who is off probation too (3 posts that stayed up): a reporter on probation counts for nothing, design 2.3. */
+function establishedMember(name: string, daysAgo: number): Id {
+    const id = member(name, daysAgo);
+    for (let i = 0; i < 3; i++) oldPost(id, `${name} kept ${i}`);
+    return id;
+}
+
 interface Res { status: number; body: any; headers: Headers }
 async function call(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', id: Id | null, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     resetGatewayRateLimit();
@@ -214,6 +221,8 @@ async function main(): Promise<void> {
     // Established reporters (two months and more: each at least half as established as any author below, so they count
     // towards a hide; engine/auto-moderation.ts), and new ones.
     const R = [1, 2, 3, 4, 5, 6].map(i => member(`Rep${i}`, 60 + i));
+    // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
+    for (const r of R) for (let i = 0; i < 3; i++) oldPost(r, `${r.name} kept ${i}`);
     const N = [1, 2, 3].map(i => member(`New${i}`, 1));
 
     // ── 1. local profile ─────────────────────────────────────────────────────────────────────────
@@ -348,7 +357,7 @@ async function main(): Promise<void> {
 
     // A hidden poll or event is not there for anyone but its author to vote in or RSVP to either: the answer would
     // hand the whole post back. Reporters of their own, so the ones above stay under the hourly report limit.
-    const S = [1, 2, 3].map(i => member(`Sam${i}`, 60));
+    const S = [1, 2, 3].map(i => establishedMember(`Sam${i}`, 60));
     const poll = createPost('poll', 'other', `Hidden poll ${word}`, `Which ${word}?`, 0, 'fixed', ava.pk, undefined, undefined, [], false, undefined, false,
         { pollOptions: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] })!.id;
     for (const r of S) await report(r, poll, ava);
@@ -407,7 +416,7 @@ async function main(): Promise<void> {
     assert(vicBack.status === 200 && vicLineBack.status === 201, `and its chat is open again to the people Going (${vicBack.status}, ${vicLineBack.status})`);
 
     // A hidden event's unread lines leave the unread badge with its chat: totalUnread counts only the chats listed.
-    const T = [1, 2, 3].map(i => member(`Tia${i}`, 60)); // reporters of their own, under the hourly report limit
+    const T = [1, 2, 3].map(i => establishedMember(`Tia${i}`, 60)); // reporters of their own, under the hourly report limit
     const meetup = createPost('event', 'other', 'Hidden meetup', 'Another event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
@@ -514,7 +523,7 @@ async function main(): Promise<void> {
     // counts towards the 3, so it would stop the hide as a dismissal does, and its reporter would hear nothing. A Pulse
     // removal takes nothing off a post, so it doesn't count as one. Taking the post down stays theirs to do (it only
     // counts against them), and another moderator can close the report.
-    const Q = [1, 2, 3].map(i => member(`Uma${i}`, 60)); // reporters of their own, under the hourly report limit
+    const Q = [1, 2, 3].map(i => establishedMember(`Uma${i}`, 60)); // reporters of their own, under the hourly report limit
     const openOn = (postId: string) => db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).all(postId) as { id: string }[];
     const reportStatus = (reportId: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(reportId) as any)?.status;
     for (const [whose, author] of [['their own post', mo], ['a post by an enterprise they keep', coop]] as const) {
@@ -770,7 +779,7 @@ async function main(): Promise<void> {
 
     // 7a. Acting on a hidden post.
     console.log('\n── 7a. a deal on a hidden post ──');
-    const U = [1, 2, 3].map(i => member(`Una${i}`, 60)); // reporters of their own, under the hourly report limit
+    const U = [1, 2, 3].map(i => establishedMember(`Una${i}`, 60)); // reporters of their own, under the hourly report limit
     const hide = async (postId: string, author: Id) => { for (const r of U) await report(r, postId, author); };
     const [bob, cat, dan] = ['Bob', 'Cat', 'Dan'].map(name => member(name, 40));
     for (const m of [bob, cat, dan]) {

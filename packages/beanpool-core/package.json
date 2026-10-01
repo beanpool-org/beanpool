@@ -34,6 +34,11 @@
       "types": "./dist/dm-line-vectors.d.ts",
       "import": "./dist/dm-line-vectors.js",
       "default": "./dist/dm-line-vectors.js"
+    },
+    "./door-work-vectors": {
+      "types": "./dist/door-work-vectors.d.ts",
+      "import": "./dist/door-work-vectors.js",
+      "default": "./dist/door-work-vectors.js"
     }
   },
   "scripts": {

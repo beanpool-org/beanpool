@@ -142,6 +142,7 @@ export const SUITES = [
     'test-offbox-backups',
     'test-takeover-envelope',
     'test-owner-words-check',
+    'test-owner-lock-open-check',
     'test-backup-topology',
     'test-standby-token-only',
     'test-standby-envelopes',

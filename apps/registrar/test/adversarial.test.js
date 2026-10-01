@@ -164,28 +164,34 @@ test('Adversarial /i/:code - Valid invites & node name lookup', async () => {
     assert.ok(htmlNode.includes('beanpool://join?node=byron.beanpool.org&code=BYRON'));
 });
 
-test('Adversarial /i/:code - Query parameter ?n= override and edge cases', async () => {
+// Until the 2026-10-01 review (M2) this test asserted that `?n=` sent the app to ANY host — sub.example.com, an
+// unclaimed perth.beanpool.org, a sanitised https://evil.com — under a beanpool.org page: the open redirect itself. It now
+// asserts the fix: `?n=` names only a name this registrar holds live.
+test('Adversarial /i/:code - Query parameter ?n= names only a live name of this registrar', async () => {
     const env = mockEnv();
+    const { pubHex } = await generateKeypair();
+    await db.insertAllocation(env, {
+        name: 'byron', node_pubkey: pubHex, hostname: 'byron.beanpool.org', mode: 'tunnel', status: 'live',
+        requested_at: Math.floor(Date.now() / 1000),
+    });
 
-    // Query n with hostname
-    const res1 = await worker.fetch(new Request('https://beanpool.org/i/anycode?n=sub.example.com', { method: 'GET' }), env);
-    assert.equal(res1.status, 200);
-    const html1 = await res1.text();
-    assert.ok(html1.includes('beanpool://join?node=sub.example.com&code=anycode'));
-    assert.ok(html1.includes('Community node: sub.example.com'));
+    // Another host, a name nobody holds, a scheme: refused, never linked.
+    for (const n of ['sub.example.com', 'perth', 'https://evil.com', 'byron.example.com', 'byron-beanpool.org']) {
+        const res = await worker.fetch(new Request(`https://beanpool.org/i/anycode?n=${encodeURIComponent(n)}`, { method: 'GET' }), env);
+        assert.equal(res.status, 404, n);
+        const html = await res.text();
+        assert.ok(html.includes('Invite code not found'), n);
+        assert.ok(!html.includes('beanpool://join'), n);
+    }
 
-    // Query n without dot (appends base domain)
-    const res2 = await worker.fetch(new Request('https://beanpool.org/i/anycode?n=perth', { method: 'GET' }), env);
-    assert.equal(res2.status, 200);
-    const html2 = await res2.text();
-    assert.ok(html2.includes('beanpool://join?node=perth.beanpool.org&code=anycode'));
-
-    // Query n with path/scheme (sanitized by regex replace /[^a-z0-9.\-]/gi)
-    const res3 = await worker.fetch(new Request('https://beanpool.org/i/testcode?n=https://evil.com', { method: 'GET' }), env);
-    assert.equal(res3.status, 200);
-    const html3 = await res3.text();
-    assert.ok(html3.includes('beanpool://join?node=httpsevil.com&code=testcode'));
-
+    // A live name, by its label or its hostname.
+    for (const n of ['byron', 'byron.beanpool.org']) {
+        const res = await worker.fetch(new Request(`https://beanpool.org/i/anycode?n=${n}`, { method: 'GET' }), env);
+        assert.equal(res.status, 200, n);
+        const html = await res.text();
+        assert.ok(html.includes('beanpool://join?node=byron.beanpool.org&code=anycode'), n);
+        assert.ok(html.includes('Community node: byron.beanpool.org'), n);
+    }
 });
 
 test('Adversarial /i/:code - Unmapped code and revoked allocation lookup', async () => {
@@ -224,9 +230,15 @@ test('Adversarial /i/:code - Unmapped code and revoked allocation lookup', async
 
 test('Adversarial /i/:code - Malformed code, URL encoding, and HTML escaping', async () => {
     const env = mockEnv();
+    // `?n=` must name a live name of this registrar (M2): one is held, so the page renders the code.
+    const { pubHex } = await generateKeypair();
+    await db.insertAllocation(env, {
+        name: 'safenode', node_pubkey: pubHex, hostname: 'safenode.beanpool.org', mode: 'tunnel', status: 'live',
+        requested_at: Math.floor(Date.now() / 1000),
+    });
 
     // URL encoded spaces and quotes
-    const resEnc = await worker.fetch(new Request('https://beanpool.org/i/%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E?n=safe.node.org', { method: 'GET' }), env);
+    const resEnc = await worker.fetch(new Request('https://beanpool.org/i/%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E?n=safenode', { method: 'GET' }), env);
     assert.equal(resEnc.status, 200);
     const htmlEnc = await resEnc.text();
     // Verify script tags are encoded and inside href attribute safely

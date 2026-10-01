@@ -6132,12 +6132,16 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
 
     const rows = db.prepare(querySql).all(...queryParams) as any[];
     const reports = rows.map(r => ({ 
-        id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
+        // Who the report is about: on a post its author, read from the post (as actionReport acts on), never the key the
+        // reporter wrote beside it, so every screen that names or freezes the target names the right member.
+        id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
         targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        targetCallsign: r.post_row_id
+            ? (r.post_author_callsign || (r.post_author_pubkey ? `@${r.post_author_pubkey.substring(0, 8)}` : 'Unknown Member'))
+            : (r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
         postTitle: r.post_title || null,
         title: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
@@ -6262,6 +6266,22 @@ export function undoBurst(actionId: string): UndoOutcome {
     return undoBurstHide(moderationNoticeCb, actionId);
 }
 
+/**
+ * Who a report is about, as every moderator's action on it must read it. A report on a post is about the post's author,
+ * read from the post here, whatever key the reporter wrote beside it: POST /api/reports writes the author since #1431
+ * and refuses a post id that isn't here, but a row filed before, or copied in from another server, may name anyone,
+ * and a post's id is its author's choice, so a post can arrive later under an id a report named first. Otherwise (a
+ * member, a Pulse item, whose owner the route sets, or an enterprise, whose key the phone sends in both fields) the key
+ * the report names. Null when it names nobody.
+ */
+function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null }): string | null {
+    const postAuthor = report.target_post_id
+        ? (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(report.target_post_id) as { author_pubkey: string | null } | undefined)
+        : undefined;
+    if (postAuthor) return postAuthor.author_pubkey || null;
+    return report.target_pubkey || null;
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
@@ -6301,18 +6321,21 @@ export function actionReport(
             scrubPulseItems({ id: report.target_pulse_item_id });
         }
 
-        // A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended' would give its key back
-        // everything a suspended member may still sign, a way back with no vote. Its report is still actioned.
-        if (suspendUser && report.target_pubkey && !isClosedAccountKey(report.target_pubkey)) {
+        // The member the report is about: a post's author, read from the post, never the key the reporter wrote
+        // (reportSubjectOf). A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended'
+        // would give its key back everything a suspended member may still sign, a way back with no vote. Its report is
+        // still actioned.
+        const subject = reportSubjectOf(report);
+        if (suspendUser && subject && !isClosedAccountKey(subject)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
-            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
-            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
+            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
+            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
-            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
             bumpMembersVersion();
             bumpPostsVersion();
-            suspended = report.target_pubkey;
+            suspended = subject;
         }
         return true;
     })();

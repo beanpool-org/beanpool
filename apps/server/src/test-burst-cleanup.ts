@@ -27,7 +27,14 @@
  *  11. a member suspended from a report, or by an admin's status, shows as suspended
  *  12. an undo weighs each post as if the whole hide were undone, so it never keeps hidden what reports would not hide
  *  13. a hide and its undo ring each open socket once, not once per post
- *  14. a local node: every route answers 404, even to an owner, and nothing changes
+ *  14. a report on a post id nobody has posted is refused; one that got in anyway (filed before that rule, or copied
+ *      from another server) and whose post appears later under that id, naming another member, is about the post's
+ *      author: the list names the author, a freeze and "action + suspendUser" act on the author, never the one named.
+ *      An enterprise's report (its key in both fields) is still taken
+ *  15. an undo weighs the posts again until nothing changes, so it ends as reports would leave them, as a twin never
+ *      hidden by a moderator is; a post that goes back keeps its updated_at, and the author's phone is sent only what
+ *      came back
+ *  16. a local node: every route answers 404, even to an owner, and nothing changes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-burst-cleanup.ts
  */
@@ -47,6 +54,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, crea
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db } from './db/db.js';
+import { hideTally } from './engine/auto-moderation.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
@@ -599,8 +607,85 @@ async function main(): Promise<void> {
         `and its undo the same (member ${onUndo[0]}, guest ${onUndo[1]})`);
     for (const s of socks) s.ws.close();
 
-    // ── 14. a local node ─────────────────────────────────────────────────────────────────────────
-    console.log('\n── 14. a local node ──');
+    // ── 14. a report filed on a post id before the post exists ──────────────────────────────────
+    console.log('\n── 14. a report filed before its post, naming someone else ──');
+    // A post's id is its author's choice, so a report can name an id before anyone posts under it. Sam posts under it
+    // later; the reporter named Vic.
+    const sam = member('Sam', 30), vic = member('Vic', 30);
+    const chosenId = crypto.randomUUID();
+    const onChosen = () => (db.prepare('SELECT COUNT(*) AS c FROM abuse_reports WHERE target_post_id = ?').get(chosenId) as { c: number }).c;
+    const early = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: vic.pk, targetPostId: chosenId, reason: 'spam' });
+    assert(early.status === 404 && early.body?.error === 'not_found' && onChosen() === 0,
+        `a report on a post id nobody has posted here is refused, and nothing is filed (${early.status} ${early.body?.error ?? ''}, ${onChosen()} row)`);
+    const samPost = await call('POST', sam, '/api/marketplace/posts', { id: chosenId, type: 'offer', category: 'other', title: 'Sam watches', description: 'Sam watches, cheap', credits: 0, authorPublicKey: sam.pk });
+    assert(samPost.status === 200 && samPost.body?.post?.id === chosenId, `setup: Sam posts under that id (${samPost.status} ${samPost.body?.post?.id === chosenId})`);
+    // One that got in anyway: filed before this rule, or copied in from another server's rows.
+    const earlyRow = crypto.randomUUID();
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, 'spam', ?)`)
+        .run(earlyRow, ivy.pk, vic.pk, chosenId, new Date().toISOString());
+    const listed = ((await own('GET', '/api/local/admin/reports?status=open&limit=200')).body?.reports ?? []).find((r: any) => r.id === earlyRow);
+    const who = (k: unknown) => k === sam.pk ? 'Sam' : k === vic.pk ? 'Vic' : String(k);
+    assert(listed?.postId === chosenId && listed?.targetPubkey === sam.pk && listed?.targetCallsign === 'Sam' && listed?.postAuthorPubkey === sam.pk,
+        `the reports list names Sam, the post's author, as its target, not Vic (${who(listed?.targetPubkey)} ${listed?.targetCallsign})`);
+    // The freeze in Inspect & Action acts on the report's target as the list gives it.
+    const frozen = (id: Id) => (db.prepare('SELECT credit_frozen FROM members WHERE public_key = ?').get(id.pk) as any)?.credit_frozen === 1;
+    const fz = await own('POST', `/api/local/admin/users/${encodeURIComponent(String(listed?.targetPubkey))}/freeze`, { freeze: true });
+    assert(fz.status === 200 && frozen(sam) && !frozen(vic), `a freeze from that report freezes Sam, never Vic (${fz.status} Sam ${frozen(sam)}, Vic ${frozen(vic)})`);
+    await own('POST', `/api/local/admin/users/${sam.pk}/freeze`, { freeze: false });
+    await own('POST', `/api/local/admin/users/${vic.pk}/freeze`, { freeze: false });
+    const act = await own('POST', `/api/local/admin/reports/${earlyRow}/action`, { suspendUser: true });
+    assert(act.status === 200 && statusOf(sam) === 'suspended' && statusOf(vic) === 'active',
+        `"action + suspendUser" on it suspends Sam, the post's author; Vic is untouched (${act.status} Sam ${statusOf(sam)}, Vic ${statusOf(vic)})`);
+    // The phone app's report of an enterprise sends the enterprise's key as the post id too: still taken, about the account.
+    const fund = member('Fund', 30);
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(fund.pk);
+    const onFund = await call('POST', ivy, '/api/reports', { reporterPubkey: ivy.pk, targetPubkey: fund.pk, targetPostId: fund.pk, reason: 'scam' });
+    const fundListed = ((await own('GET', '/api/local/admin/reports?status=open&limit=200')).body?.reports ?? []).find((r: any) => r.id === onFund.body?.report?.id);
+    assert(onFund.status === 200 && fundListed?.targetPubkey === fund.pk && !fundListed?.postId,
+        `a report of an enterprise, its key in both fields, is still taken and is about the enterprise (${onFund.status} ${fundListed?.targetPubkey === fund.pk})`);
+
+    // ── 15. an undo weighs again until nothing changes; a post that goes back is as it was ───────
+    console.log('\n── 15. an undo weighs again until nothing changes ──');
+    // E1 and a twin each have 3 posts: standing 3, so reporters need 2. A is reported by three of standing 2, each their
+    // own circle, B by three of standing 1. With A hidden their standing is 2, and reporters need only 1.
+    const e1 = doorRow('E1', `label-e-${crypto.randomUUID()}`);
+    const twin2 = member('Twin2', 0);
+    const ePosts = [1, 2, 3].map(i => createPost('offer', 'other', `E1 thing ${i}`, 'thing', 0, 'fixed', e1.pk)!.id);
+    const t2Posts = [1, 2, 3].map(i => createPost('offer', 'other', `Twin2 thing ${i}`, 'thing', 0, 'fixed', twin2.pk)!.id);
+    const updatedAt = (postId: string) => (db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(postId) as any)?.updated_at as string;
+    const hE = await adm('POST', `/api/local/admin/members/${e1.pk}/burst/hide`, { members: [e1.pk], count: 1 });
+    assert(hE.status === 200 && hE.body?.action?.posts === 3 && ePosts.every(p => !!hiddenAt(p)), `setup: E1's 3 posts hidden in one action (${hE.status})`);
+    const stampsAfterHide = ePosts.map(updatedAt);
+    const twoes = [1, 2, 3].map(i => member(`Two${i}`, 15));
+    const ones = [1, 2, 3].map(i => member(`One${i}`, 8));
+    for (const r of twoes) for (const [p, a] of [[ePosts[0], e1], [t2Posts[0], twin2]] as const) {
+        if ((await report(r, p, a)).status !== 200) throw new Error('report refused');
+    }
+    for (const r of ones) for (const [p, a] of [[ePosts[1], e1], [t2Posts[1], twin2]] as const) {
+        if ((await report(r, p, a)).status !== 200) throw new Error('report refused');
+    }
+    assert(!!hiddenAt(t2Posts[0]) && !!hiddenAt(t2Posts[1]) && !hiddenAt(t2Posts[2]),
+        'setup: the same reports on the twin, never hidden by a moderator, hide its A and then its B; C stays up');
+    await new Promise(r => setTimeout(r, 20));
+    const cursor = new Date().toISOString();
+    await new Promise(r => setTimeout(r, 20));
+    const uE = await adm('POST', `/api/local/admin/bursts/${hE.body?.action?.id}/undo`, {});
+    assert(uE.status === 200 && uE.body?.restored === 1 && uE.body?.keptHidden === 2,
+        `the undo keeps A and B hidden and brings C back, as the twin is (${uE.status} ${JSON.stringify(uE.body)})`);
+    assert(!!hiddenAt(ePosts[0]) && !!hiddenAt(ePosts[1]) && !hiddenAt(ePosts[2]), 'A and B are hidden, C is up');
+    const tallies = ePosts.map(p => hideTally(p).circles.length);
+    assert(tallies[0] >= 3 && tallies[1] >= 3 && tallies[2] < 3,
+        `and right after, reports would hide exactly the two it kept hidden (circles ${tallies.join(', ')})`);
+    assert(updatedAt(ePosts[0]) === stampsAfterHide[0] && updatedAt(ePosts[1]) === stampsAfterHide[1],
+        `the two that go back keep the updated_at they had: nothing about them changed (${[0, 1].map(i => updatedAt(ePosts[i]) === stampsAfterHide[i]).join(', ')})`);
+    assert(updatedAt(ePosts[2]) > cursor, 'the one that came back has a new one');
+    const delta = await call('GET', e1, `/api/marketplace/posts?updatedAfter=${encodeURIComponent(cursor)}&author=${e1.pk}`);
+    const deltaIds = Array.isArray(delta.body) ? delta.body.map((p: any) => p.id) : [];
+    assert(delta.status === 200 && deltaIds.includes(ePosts[2]) && !deltaIds.includes(ePosts[0]) && !deltaIds.includes(ePosts[1]),
+        `E1's phone, syncing from before the undo, is sent C alone (${delta.status} ${deltaIds.filter((x: string) => ePosts.includes(x)).length} of theirs)`);
+
+    // ── 16. a local node ─────────────────────────────────────────────────────────────────────────
+    console.log('\n── 16. a local node ──');
     delete process.env.NODE_PROFILE;
     const info = (await call('GET', null, '/api/community/info')).body?.features ?? {};
     assert(info.openJoin === false, `setup: the local profile, the door shut (${info.openJoin})`);

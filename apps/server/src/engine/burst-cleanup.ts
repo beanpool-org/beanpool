@@ -351,8 +351,11 @@ export type UndoOutcome =
  *
  * "Would hide it now" is weighed as if the whole hide were undone: an author's other posts this action hid count as
  * kept in their standing (engine/auto-moderation.ts hideTally), as they did before the hide and will once it is undone.
- * So every one of its posts is un-hidden first, each is weighed, and only those reports would hide go back, with the
- * action's stamp, as they were: all in one transaction, so nobody ever reads them in between.
+ * So every one of its posts is un-hidden first, each is weighed, and those reports would hide go back, with the
+ * action's stamp, as they were. A post going back lowers its author's standing, so the bar for their other posts: the
+ * ones coming back are weighed again, and again, until no more go back. That ends, since each round only hides more,
+ * and it leaves every post as hideTally would weigh it right after. All in one transaction, so nobody ever reads them in
+ * between, and a post that goes back gets its own `updated_at` back too: it ends exactly as it was before the undo.
  */
 export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, now: number = Date.now()): UndoOutcome {
     pruneOldActions(now);
@@ -368,20 +371,31 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
     const done = db.transaction((): boolean => {
         // Claimed first, so two undos at once can't both run.
         if (db.prepare('UPDATE burst_actions SET undone_at = ? WHERE id = ? AND undone_at IS NULL').run(at, actionId).changes === 0) return false;
-        const posts = db.prepare(`SELECT p.id, p.author_pubkey, p.active, p.status, m.status AS author_status
+        const posts = db.prepare(`SELECT p.id, p.author_pubkey, p.active, p.status, p.updated_at, m.status AS author_status
                                     FROM burst_action_posts bp JOIN posts p ON p.id = bp.post_id
                                     LEFT JOIN members m ON m.public_key = p.author_pubkey
                                    WHERE bp.action_id = ? AND p.hidden_by_reports_at = ?`)
-            .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; author_status: string | null }[];
-        // Every post of the action un-hidden first (updated_at untouched: one that goes back below is as it was)...
+            .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; updated_at: string | null; author_status: string | null }[];
+        // Every post of the action un-hidden first. This write moves updated_at (schema.sql posts_touch_updated_at): the
+        // posts that come back keep a new one below, the ones that go back get their old one back.
         const unhide = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ? AND hidden_by_reports_at = ?');
         const mine = posts.filter(p => unhide.run(p.id, action.at).changes > 0);
-        // ...then each weighed with all of them back, before any goes back: the order they are weighed in changes nothing.
-        const stays = new Set(reportsHide ? mine.filter(p => hideTally(p.id, now).circles.length >= AUTO_HIDE.circles).map(p => p.id) : []);
-        const rehide = db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        // A post going back has the action's stamp and its own updated_at again, as it was before the undo: nothing about
+        // it changed, so no phone, standby or board is sent it again or sees it lifted to the top of a feed sorted by
+        // updated_at. Written explicitly, so the touch trigger (which fires only when updated_at is not written) leaves it.
+        const rehide = db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        const stays = new Set<string>();
+        // ...then each weighed with all of them back, before any goes back: the order within a round changes nothing.
+        // Those reports would hide go back, and the rest are weighed again with them hidden, until a round adds none.
+        let round = reportsHide ? mine : [];
+        while (round.length > 0) {
+            const hides = round.filter(p => hideTally(p.id, now).circles.length >= AUTO_HIDE.circles);
+            for (const p of hides) { rehide.run(action.at, p.updated_at, p.id); stays.add(p.id); keptHidden++; }
+            round = hides.length > 0 ? mine.filter(p => !stays.has(p.id)) : [];
+        }
         const touched = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
         for (const p of mine) {
-            if (stays.has(p.id)) { rehide.run(action.at, p.id); keptHidden++; continue; }
+            if (stays.has(p.id)) continue;
             touched.run(at, p.id);
             back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.author_pubkey, live: p.active === 1 && p.status !== 'cancelled' });
         }

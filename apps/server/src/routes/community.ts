@@ -1950,12 +1950,28 @@ router.post('/api/reports', async (ctx) => {
             return;
         }
         targetPubkey = owner;
-    } else {
-        // A report on a post is about its author, whatever targetPubkey the client sent: the moderators' screens open
-        // that member's group from it (engine/burst-cleanup.ts), so a reporter must not be able to pair a post with
-        // someone else. Every app sends the author already.
+    } else if (targetPostId !== undefined && targetPostId !== null && targetPostId !== '') {
+        if (typeof targetPostId !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPostId must be a string' };
+            return;
+        }
+        // A report on a post is about its author, whatever targetPubkey the client sent: the moderators act on that
+        // member from it (a suspension, a freeze, "Who joined with them"), so a reporter must not be able to pair a
+        // post with someone else. Every app sends the author already.
         const author = getReportablePostAuthor(targetPostId);
-        if (author) targetPubkey = author;
+        if (author) {
+            targetPubkey = author;
+        } else if (targetPostId !== targetPubkey) {
+            // No post here has this id. Refused, not kept to be pointed at whichever post takes the id later: a post's id
+            // is the author's choice (POST /api/marketplace/posts), so a report filed first would wait for a post nobody
+            // had seen, count towards hiding it, and name whoever the reporter chose. Nobody can have seen a post that
+            // isn't here. The one report that carries no post's id there is the phone app's report of an enterprise,
+            // which sends the enterprise's key as both (treasury-detail.tsx): that stays a report about the account.
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'That post is not here any more.' };
+            return;
+        }
     }
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;

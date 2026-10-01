@@ -76,6 +76,7 @@ import {
 } from '../engine/member-wizards.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
+import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
@@ -820,6 +821,9 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or
             // was, until another took it over).
             standbyHealth: ctx.state?.adminRole === 'owner' && watchesStandbys() ? getStandbyHealthBanner() : null,
+            // Off-box backups (services/offbox-backups.ts) when they need the owners: failing, stale, a destination that
+            // can't be used, or none sent for want of a recovery code. In words; nothing about any member. Owners only.
+            offboxBackups: ctx.state?.adminRole === 'owner' ? getOffboxHealth() : null,
             diskHealth: getCachedDiskHealth(),
             // Stray rejected promises the process-level net caught and kept serving through. The error
             // text only — no request body, no parameter, no key — and already redacted on the way in.

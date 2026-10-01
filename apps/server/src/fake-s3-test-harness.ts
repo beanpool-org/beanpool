@@ -158,7 +158,10 @@ function handle(req, res, body) {
         }
         if (req.method === 'GET' || req.method === 'HEAD') {
             if (!o) return answer(404, { 'content-type': 'application/xml' }, errorXml('NoSuchKey', 'no such key'));
-            return answer(200, { 'content-type': o.mime, 'content-length': String(o.bytes.length), 'last-modified': new Date(o.mtimeMs).toUTCString() }, o.bytes);
+            const head = { 'content-type': o.mime, 'content-length': String(o.bytes.length), 'last-modified': new Date(o.mtimeMs).toUTCString() };
+            // A real bucket gives an object's x-amz-meta-* back with it.
+            if (o.meta) head['x-amz-meta-sha256'] = o.meta;
+            return answer(200, head, o.bytes);
         }
         if (req.method === 'DELETE') {
             objects.delete(key);
@@ -178,7 +181,7 @@ parentPort.on('message', (msg) => {
         case 'log': return reply(log.slice());
         case 'clearLog': log.length = 0; return reply(true);
         case 'setMtime': { const o = objects.get(msg.key); if (o) o.mtimeMs = msg.mtimeMs; return reply(!!o); }
-        case 'seed': objects.set(msg.key, { bytes: Buffer.from(msg.bytes), mime: msg.mime || 'application/octet-stream', mtimeMs: msg.mtimeMs || Date.now(), meta: null }); return reply(true);
+        case 'seed': objects.set(msg.key, { bytes: Buffer.from(msg.bytes), mime: msg.mime || 'application/octet-stream', mtimeMs: msg.mtimeMs || Date.now(), meta: msg.meta || null }); return reply(true);
         case 'remove': return reply(objects.delete(msg.key));
         case 'close': server.close(); server.closeAllConnections && server.closeAllConnections(); return reply(true);
     }
@@ -241,7 +244,8 @@ export interface FakeS3 {
     log(): Promise<FakeS3LogEntry[]>;
     clearLog(): Promise<void>;
     setMtime(key: string, mtimeMs: number): Promise<boolean>;
-    seed(key: string, bytes: Buffer, mime?: string, mtimeMs?: number): Promise<void>;
+    /** `meta`: the `x-amz-meta-sha256` the object is held with, as an uploader would have sent it. */
+    seed(key: string, bytes: Buffer, mime?: string, mtimeMs?: number, meta?: string): Promise<void>;
     /** Remove an object behind the store's back — a lost object, as far as the node can tell. */
     remove(key: string): Promise<boolean>;
     stop(): Promise<void>;
@@ -298,7 +302,7 @@ export async function startFakeS3(opts: { bucket?: string; region?: string; maxK
         log: () => ask<FakeS3LogEntry[]>('log'),
         clearLog: async () => { await ask('clearLog'); },
         setMtime: (key, mtimeMs) => ask<boolean>('setMtime', { key, mtimeMs }),
-        seed: async (key, bytes, mime, mtimeMs) => { await ask('seed', { key, bytes: new Uint8Array(bytes), mime, mtimeMs }); },
+        seed: async (key, bytes, mime, mtimeMs, meta) => { await ask('seed', { key, bytes: new Uint8Array(bytes), mime, mtimeMs, meta }); },
         remove: (key) => ask<boolean>('remove', { key }),
         stop: async () => { await ask('close'); await worker.terminate(); },
     };

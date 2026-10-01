@@ -102,6 +102,7 @@ import { createSettingsRoutes } from './routes/settings.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
+import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -1649,6 +1650,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createCommunityRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
+        createOffboxBackupRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),

@@ -594,6 +594,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     pricing_data_source: { kind: 'community-settings', reason: "the pricing guide's source" },
     pricing_show_seasonality: { kind: 'community-settings', reason: "the pricing guide's seasonality display" },
     autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
+    door: { kind: 'community-settings', reason: 'who may invite: any member, or only admins (config/door.ts)' },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

@@ -15,6 +15,7 @@ import {
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
+import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
@@ -205,6 +206,7 @@ import {
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
     checkInvite as checkInviteEngine,
+    verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
     getInviteTree as getInviteTreeEngine,
     getProfile as getProfileEngine,
@@ -1512,8 +1514,18 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
     return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign, joinerSigned);
 }
 
+/**
+ * The pre-flight before a join: what the redeem would say, without spending anything. Where only admins invite (the
+ * door, config/door.ts), a ticket a member made is `admins_only`, as redeemOfflineTicket refuses it.
+ */
 export function checkInvite(codeOrTicket: string): InviteCheckResult {
-    return checkInviteEngine(db, codeOrTicket, ticketBinding);
+    const result = checkInviteEngine(db, codeOrTicket, ticketBinding);
+    const raw = codeOrTicket.trim();
+    if (result.valid && raw.startsWith('BP-')) {
+        const ticket = verifyOfflineTicketEngine(db, raw.substring(3), ticketBinding);
+        if (ticket.ok && !mayInviteHere(ticket.inviterPubkey)) return { valid: false, reason: 'admins_only' };
+    }
+    return result;
 }
 
 export function getInvitesByMember(pubkey: string): InviteCode[] {
@@ -5638,7 +5650,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures };
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
 
 interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
 
@@ -5685,7 +5697,8 @@ function communityInfoWith(counts: CommunityCounts, publicKey?: string): Communi
     return {
         memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
-        profile: getNodeProfile(), features: getNodeFeatures(),
+        // `door` (config/door.ts) last, so older apps ignore it: who may invite here.
+        profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor() },
     };
 }
 

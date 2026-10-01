@@ -28,6 +28,7 @@ import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
+import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -757,7 +758,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ? 'This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.'
                     : check.reason === 'expired'
                         ? 'This invite has expired — invites last 30 days. Ask whoever invited you for a fresh one.'
-                        : "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.");
+                        : check.reason === 'admins_only'
+                            ? MEMBER_TICKET_REFUSED_TEXT
+                            : "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.");
                 setLoading(false);
                 return;
             }

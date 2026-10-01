@@ -306,3 +306,25 @@ describe('buildSettingsHandoffUrl', () => {
         expect(buildSettingsHandoffUrl('https://test.beanpool.org/', 't', 'disputes')).toBe('https://test.beanpool.org/settings#handoff=t&section=disputes&from=app');
     });
 });
+
+
+describe('the last role the node gave, kept on the phone', () => {
+    it('is stored per node and key, read back after a restart, and says nothing when nothing was kept', async () => {
+        const store = new Map<string, string>();
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default as any;
+        AsyncStorage.setItem.mockImplementation(async (k: string, v: string) => { store.set(k, v); });
+        AsyncStorage.getItem.mockImplementation(async (k: string) => store.get(k) ?? null);
+        const { persistNodeRole, readPersistedNodeRole } = await import('../node-admin');
+        expect(await readPersistedNodeRole('https://a.test', 'k1')).toBeUndefined();
+        await persistNodeRole('https://a.test/', 'k1', 'admin');
+        expect(await readPersistedNodeRole('https://a.test', 'k1')).toBe('admin');
+        expect(await readPersistedNodeRole('https://b.test', 'k1')).toBeUndefined();
+        expect(await readPersistedNodeRole('https://a.test', 'k2')).toBeUndefined();
+        await persistNodeRole('https://a.test', 'k1', null);
+        expect(await readPersistedNodeRole('https://a.test', 'k1')).toBeNull();
+        store.set([...store.keys()][0], 'Steward');
+        expect(await readPersistedNodeRole('https://a.test', 'k1')).toBeUndefined();
+        AsyncStorage.setItem.mockImplementation(async () => { throw new Error('disk'); });
+        await expect(persistNodeRole('https://a.test', 'k1', 'owner')).resolves.toBeUndefined();
+    });
+});

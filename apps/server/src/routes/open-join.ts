@@ -1,8 +1,8 @@
 /**
  * The open door (global profile, design §2.2): join with a one-time sign-in instead of an invite.
  *
- *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, clientIds }   (the same shape as /api/recovery/sso-nonce)
- *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares } }
+ *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, clientIds, vault }   (the recovery nonce's shape, and `vault`)
+ *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares }, vaultTicket? }
  *
  * Both answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
  * profile.ts): off on every local node, on by default on the global one, and never on a node whose ledger has moved,
@@ -52,6 +52,27 @@
  * node from the verified `sub` (engine/keeper-deposit.ts). If storing the split fails the join still stands (never
  * a hard gate, and the 12 words are the key): the answer says so, and the app enrols the ordinary way.
  *
+ * ## Or a key vault ticket instead of the door's nonce (key vault V5)
+ *
+ * A phone built with BeanPool's key vault asks the vault for a deposit ticket naming the joining key and binds the
+ * sign-in to it: the token's nonce is the ticket's hash (@beanpool/core `vaultTicketNonce`), so the one token joins here
+ * and deposits the member's copy at the vault (scratch/global-node/DESIGN-v5-global-door-vault-fable.md). The join then
+ * carries `vaultTicket`, and the ticket, not a nonce this door issued, decides the nonce. Everything the door checks
+ * before a sign-in still comes first (the door open, signed, the key's spelling, the limiters, the body, already a
+ * member, a replaced key, the door's key, the address limits). Then the ticket is checked offline, with no provider and
+ * no vault asked: signed by one of the vault's public ticket keys the operator pinned in .env (services/vault-ticket-
+ * keys.ts, never from the network), unexpired, for a deposit, naming the key that signed this request, and not used
+ * here before. Each refusal is a 401 with its code (`ticket_unsupported` when no key is pinned, `ticket_malformed`,
+ * `ticket_signature`, `ticket_expired`, `ticket_key`, `ticket_purpose`, `ticket_used`), so a phone falls back to the
+ * door's own nonce. The body's `nonce` must be the ticket's (400 otherwise: one request, one path), and the sign-in is
+ * checked by the same verifier, consuming the ticket instead of a nonce (sso.ts). From there the join is the same:
+ * one `join_hash` per sign-in account from the verified `sub`, whichever path verified it. Nothing of the ticket is
+ * kept. The nonce answer's `vault` lists the keys the door takes (`{ ticketKeys }`, or null), so a phone knows before
+ * it opens a sign-in sheet; it says only which vault this door trusts, which is public.
+ *
+ * Global is BeanPool's own node, so its door may trust BeanPool's vault. Any other door leaves the keys unset and runs
+ * exactly as before, needing nothing of ours.
+ *
  * ## Limits
  *
  * The auth limiter (15 a minute per address) on the nonce and the join; the gateway limiter in front of everything,
@@ -61,12 +82,22 @@
  */
 
 import Router from '@koa/router';
+import {
+    checkVaultTicket,
+    parseVaultTicket,
+    vaultTicketNonce,
+    VAULT_TICKET_CLOCK_SKEW_MS,
+    VAULT_TICKET_TTL_MS,
+    type VaultTicketRefusal,
+} from '@beanpool/core';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { alreadyJoined, broadcast } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import {
     issueNonce,
     verifySignIn,
+    verifySignInWithVaultTicket,
+    vaultTicketUsed,
     signInCredentialFrom,
     getConfiguredAudiences,
     isSsoProvider,
@@ -77,6 +108,7 @@ import {
     webClientIds,
     type SsoIdentity,
     type SsoProvider,
+    type VaultTicketSignIn,
 } from '../sso.js';
 import { recordFunnelEvent } from '../engine/funnel.js';
 import {
@@ -91,6 +123,7 @@ import {
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
 import { OpenJoinKeyMissing, openJoinKeyState } from '../services/open-join-key.js';
+import { vaultTicketKeys, VAULT_TICKET_KEYS_ENV } from '../services/vault-ticket-keys.js';
 import { checkSsoKeeperShares, storeVerifiedSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
 import { RecoveryShareError, type KeeperShareInput } from '../engine/recovery-shares.js';
 import { BadRequest, parseShares, ssoDepositBody } from './keepers.js';
@@ -194,6 +227,83 @@ function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider, window
     }
 }
 
+// ── key vault tickets (the header's "Or a key vault ticket") ──────────────────────────────────────
+
+type TicketRefusal = 'ticket_unsupported' | 'ticket_malformed' | 'ticket_signature' | 'ticket_expired' | 'ticket_key' | 'ticket_purpose' | 'ticket_used';
+
+const TICKET_REFUSALS: Record<TicketRefusal, string> = {
+    ticket_unsupported: 'This community doesn\'t take key vault tickets. Please sign in again.',
+    ticket_malformed: 'That is not a key vault ticket. Please sign in again.',
+    ticket_signature: 'That ticket is not signed by a key vault this community trusts. Please sign in again.',
+    ticket_expired: 'That ticket has expired. Please sign in again.',
+    ticket_key: 'That ticket was issued to another key. Please sign in again.',
+    ticket_purpose: 'That ticket was issued for something else. Please sign in again.',
+    ticket_used: 'That ticket was already used. Please sign in again.',
+};
+
+const TICKET_CHECK_CODES: Record<VaultTicketRefusal, TicketRefusal> = {
+    malformed: 'ticket_malformed',
+    signature: 'ticket_signature',
+    expired: 'ticket_expired',
+    wrong_key: 'ticket_key',
+    wrong_purpose: 'ticket_purpose',
+};
+
+/** 401, so every phone reads it as "sign in again"; a phone that knows the codes signs in with the door's own nonce. */
+function refuseTicket(ctx: any, code: TicketRefusal): void {
+    recordFunnelEvent('open_join_failed', code);
+    ctx.status = 401;
+    ctx.body = { error: TICKET_REFUSALS[code], code };
+}
+
+/**
+ * One line for an operator when a refusal may be this server's doing: its clock (every fresh ticket then looks expired
+ * or from the future; the line says by how much), or its pinned keys (the vault signs with a key .env doesn't list).
+ * Nothing of the joiner. The auth limiter bounds how often anyone can make it write one.
+ */
+function noteTicketRefusal(reason: VaultTicketRefusal, raw: unknown, now: number): void {
+    if (reason === 'signature') {
+        console.warn(`[OpenJoin] key vault ticket refused: signed by none of the keys in ${VAULT_TICKET_KEYS_ENV}. `
+            + 'If every ticket is refused so, the vault signs with a key this server does not list.');
+        return;
+    }
+    if (reason !== 'expired' && reason !== 'malformed') return;
+    const exp = parseVaultTicket(raw)?.payload.exp;
+    if (exp === undefined) return; // not a ticket at all: nothing about this server
+    const seconds = (ms: number) => Math.round(ms / 1000);
+    if (reason === 'expired') {
+        console.warn(`[OpenJoin] key vault ticket refused: it expired ${seconds(now - exp)} s ago by this server's clock. `
+            + 'If every ticket is refused so, check this server\'s clock.');
+    } else {
+        console.warn(`[OpenJoin] key vault ticket refused: it was issued ${seconds(exp - VAULT_TICKET_TTL_MS - now)} s ahead of this server's clock `
+            + `(more than ${seconds(VAULT_TICKET_CLOCK_SKEW_MS)} s). If every ticket is refused so, check this server's clock.`);
+    }
+}
+
+/**
+ * The ticket a join carries, checked for the key that signed it (`actor`), or null once the refusal is written. Offline:
+ * no provider and no vault is asked, and nothing is written but the funnel's count.
+ */
+function acceptVaultTicket(ctx: any, raw: unknown, actor: string): VaultTicketSignIn | null {
+    const ticketKeys = vaultTicketKeys();
+    if (!ticketKeys.length) { refuseTicket(ctx, 'ticket_unsupported'); return null; }
+    const now = Date.now();
+    const check = checkVaultTicket(raw, { ticketKeys, now, key: actor, purpose: 'deposit' });
+    if (!check.ok) {
+        noteTicketRefusal(check.reason, raw, now);
+        refuseTicket(ctx, TICKET_CHECK_CODES[check.reason]);
+        return null;
+    }
+    if (vaultTicketUsed(check.ticket.n)) { refuseTicket(ctx, 'ticket_used'); return null; }
+    return { nonce: vaultTicketNonce(raw as string), n: check.ticket.n, exp: check.ticket.exp };
+}
+
+/** The keys the nonce answer advertises (the header), or null when the door takes no tickets. */
+function vaultAnswer(): { ticketKeys: string[] } | null {
+    const ticketKeys = vaultTicketKeys();
+    return ticketKeys.length ? { ticketKeys } : null;
+}
+
 export function createOpenJoinRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
@@ -235,6 +345,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             providers: SSO_PROVIDERS,
             // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
             clientIds: webClientIds(),
+            // The key vault ticket keys this door takes, so a phone binds its sign-in to a ticket only where it is taken.
+            vault: vaultAnswer(),
         };
     });
 
@@ -284,18 +396,28 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         const window = openJoinLimitReached(ipHash);
         if (window) return refuse(ctx, 'rate_limited', provider, window);
 
+        // A key vault ticket decides the nonce (the header). Absent (or null), the door's own nonce, exactly as before.
+        let ticket: VaultTicketSignIn | null = null;
+        if (body.vaultTicket !== undefined && body.vaultTicket !== null) {
+            ticket = acceptVaultTicket(ctx, body.vaultTicket, actor);
+            if (!ticket) return;
+            if (nonce !== ticket.nonce) {
+                // Counted like the refusals around it: the attempt above was.
+                recordFunnelEvent('open_join_failed', 'ticket_nonce');
+                return badRequest(ctx, 'The nonce is not this ticket\'s: a join with a key vault ticket carries the ticket\'s nonce.');
+            }
+        }
+
         let identity: SsoIdentity;
         try {
-            identity = await verifySignIn(
-                provider,
-                credential,
-                getConfiguredAudiences(provider),
-                nonce,
-                joinNonceSubject(actor),
-            );
+            identity = ticket
+                ? await verifySignInWithVaultTicket(provider, credential, getConfiguredAudiences(provider), ticket, joinNonceSubject(actor))
+                : await verifySignIn(provider, credential, getConfiguredAudiences(provider), nonce, joinNonceSubject(actor));
         } catch (e) {
             // An SsoProviderUnavailableError is also an SsoVerificationError, so it is ruled out explicitly.
             if (e instanceof SsoVerificationError && !(e instanceof SsoProviderUnavailableError)) {
+                // The same ticket submitted twice at once: the other request used it while this one was checked.
+                if (ticket && vaultTicketUsed(ticket.n)) return refuseTicket(ctx, 'ticket_used');
                 recordFunnelEvent('open_join_failed', 'sign_in');
                 ctx.status = 401;
                 ctx.body = { error: e.message, code: 'sign_in' };

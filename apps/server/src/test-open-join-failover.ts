@@ -25,6 +25,12 @@
  *     0600; Ada and Ben are refused 409 with no member added, and Dan (whom this standby never copied, so has no
  *     identity here) can join again rather than be locked out. The key is in neither the journal nor the step's detail.
  *
+ * And the key vault's ticket keys (V5, services/vault-ticket-keys.ts), env config on each server and nothing else: the
+ * main server and its standby have the BEANPOOL_VAULT_TICKET_KEYS line, the hand-promoted copy has not. The take-over
+ * bundle, the envelope on disk and a delta export carry no new entry and no ticket key; the copy without the line
+ * answers `vault: null` and takes a join with the door's own nonce; the server promoted by the take-over, with the line
+ * in its own .env, takes a ticket join.
+ *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join-failover.ts
  */
@@ -33,6 +39,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { newVaultTicket, signVaultTicket, vaultTicketNonce } from '@beanpool/core';
 import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeover-test-harness.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -116,8 +124,8 @@ async function child(): Promise<void> {
             return { resync, envelope };
         },
         // Seal now, and look at what was sealed: the bundle's door record, and the envelope file as it sits on disk.
-        reseal: async () => {
-            const { flushTakeoverChecks, readSealingInputs, TAKEOVER_ENVELOPE_FILE } = await import('./services/takeover-envelope.js');
+        reseal: async (a: { vaultKey?: string } = {}) => {
+            const { flushTakeoverChecks, readSealingInputs, TAKEOVER_ENVELOPE_FILE, BUNDLED_FILES } = await import('./services/takeover-envelope.js');
             const status = await flushTakeoverChecks();
             const inputs = readSealingInputs();
             const record = inputs.ok ? inputs.bundle.openJoins ?? null : null;
@@ -136,6 +144,10 @@ async function child(): Promise<void> {
                 addressHashesHere: rows.filter((r) => r.ip_hash).length,
                 keyInClear: holdsKey(onDisk, key),
                 joinHashInClear: rows.some((r) => onDisk.includes(r.join_hash)),
+                bundledFiles: inputs.ok ? Object.keys(inputs.bundle.files).sort() : null,
+                declaredFiles: [...BUNDLED_FILES].sort(),
+                vaultKeyInBundle: !!a.vaultKey && holdsKey(bundleText, Buffer.from(a.vaultKey, 'hex').toString('base64')),
+                vaultKeyInClear: !!a.vaultKey && holdsKey(onDisk, Buffer.from(a.vaultKey, 'hex').toString('base64')),
             };
         },
         door: async () => {
@@ -145,7 +157,7 @@ async function child(): Promise<void> {
                 rows: rows.map((r) => ({ member: r.member_pubkey, hash: r.join_hash, ipHash: !!r.ip_hash })),
             };
         },
-        'export-delta': async (a: { since: string }) => {
+        'export-delta': async (a: { since: string; vaultKey?: string }) => {
             const { exportSyncState } = await import('./state-engine.js');
             const payload = await exportSyncState('test', a.since);
             const { key } = await doorRecord();
@@ -155,6 +167,8 @@ async function child(): Promise<void> {
                 keyId: payload.openJoinKeyId ?? null,
                 carriesSalt: 'openJoinSalt' in payload,
                 keyInPayload: holdsKey(JSON.stringify(payload), key),
+                vaultEntries: Object.keys(payload).filter((k) => /vault/i.test(k)),
+                vaultKeyInPayload: !!a.vaultKey && holdsKey(JSON.stringify(payload), Buffer.from(a.vaultKey, 'hex').toString('base64')),
             };
         },
         now: async () => new Date().toISOString(),
@@ -250,6 +264,24 @@ async function join(port: number, id: Id, sub: string, callsign: string): Promis
     return signedPost(port, id, '/api/join', { callsign, provider: 'google', idToken: mintGoogle(sub, n.body.nonce), nonce: n.body.nonce });
 }
 
+// The key vault's ticket key (made here; only its public half goes in a server's env).
+const vaultSeed = new Uint8Array(crypto.randomBytes(32));
+const VAULT_KEY = Buffer.from(ed25519.getPublicKey(vaultSeed)).toString('hex');
+const VAULT_ENV = { BEANPOOL_VAULT_TICKET_KEYS: VAULT_KEY };
+
+/** Join through the door at `port` as `id` with a key vault deposit ticket instead of the door's nonce. */
+async function ticketJoin(port: number, id: Id, sub: string, callsign: string): Promise<{ status: number; body: any }> {
+    const ticket = signVaultTicket(newVaultTicket(id.pk, 'deposit', Date.now()), vaultSeed);
+    const nonce = vaultTicketNonce(ticket);
+    return signedPost(port, id, '/api/join', { callsign, provider: 'google', idToken: mintGoogle(sub, nonce), nonce, vaultTicket: ticket });
+}
+
+/** What the door at `port` says it takes, in its nonce answer to a new key: `{ ticketKeys }`, null, or the HTTP status. */
+async function doorVault(port: number): Promise<unknown> {
+    const n = await signedPost(port, newId(), '/api/join/sso-nonce', {});
+    return n.status === 200 ? n.body?.vault : `HTTP ${n.status}`;
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -266,10 +298,15 @@ async function main(): Promise<void> {
     try {
         // ── 1. A global main server, two joins through the door ──
         console.log('\n— 1. a global main server; Ada and Ben join through the door —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...GLOBAL });
+        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...GLOBAL, ...VAULT_ENV });
         nodes.push(main);
         const { code } = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         const mainHttps = (await main.send('serve', { jwk: googleJwk })).port as number;
+        const vaultLine = main.output().split('\n').filter((l) => l.includes('Open door: takes key vault tickets signed by one key'));
+        assert(vaultLine.length === 1 && vaultLine[0].includes(VAULT_KEY.slice(0, 8)),
+            `its boot says, once, which key vault tickets its door takes (${vaultLine[0] ?? 'no line'})`);
+        assert(JSON.stringify(await doorVault(mainHttps)) === JSON.stringify({ ticketKeys: [VAULT_KEY] }),
+            'and its nonce answer lists that key');
         const adaJoin = await join(mainHttps, ada, 'ada-google-sub', 'Ada');
         const benJoin = await join(mainHttps, ben, 'ben-google-sub', 'Ben');
         require_(adaJoin.status === 200 && benJoin.status === 200, `Ada and Ben join over HTTPS (${adaJoin.status} ${adaJoin.body?.code ?? ''}, ${benJoin.status} ${benJoin.body?.code ?? ''})`);
@@ -278,7 +315,7 @@ async function main(): Promise<void> {
             && mainDoor.rows.length === 2 && mainDoor.rows.every((r: any) => r.ipHash),
             'the main server holds two join records, each with its address hash, and the key they are hashed with in data/open-join.key (0600), not in its database');
 
-        const sealed1 = await main.send('reseal');
+        const sealed1 = await main.send('reseal', { vaultKey: VAULT_KEY });
         assert(JSON.stringify(sealed1.recordKeys) === JSON.stringify(['joins', 'total'])
             && JSON.stringify(sealed1.joinFields) === JSON.stringify(['joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt']),
             `the take-over bundle carries the door's rows, and only these fields (${JSON.stringify(sealed1.recordKeys)} ${JSON.stringify(sealed1.joinFields)})`);
@@ -286,12 +323,16 @@ async function main(): Promise<void> {
             'it holds both joins, and the key as the bundled file open-join.key, byte for byte, never in the door\'s record');
         assert(sealed1.addressHashesHere === 2 && !sealed1.addressHashInBundle, 'no address hash is in the bundle, though the main server holds two');
         assert(!sealed1.keyInClear && !sealed1.joinHashInClear, 'the envelope on disk holds neither the key nor a join hash in the clear');
+        assert(JSON.stringify(sealed1.bundledFiles) === JSON.stringify(sealed1.declaredFiles) && !sealed1.bundledFiles.some((f: string) => /vault|ticket/i.test(f)),
+            `the bundle's files are BUNDLED_FILES, none of them the key vault's (${JSON.stringify(sealed1.bundledFiles)})`);
+        assert(!sealed1.vaultKeyInBundle && !sealed1.vaultKeyInClear, 'and the vault\'s ticket key is nowhere in the bundle or the envelope on disk, in any encoding');
 
         // ── 2. The standby copies it ──
         console.log('\n— 2. its standby copies it —');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
+        // The standby has the same line in its own .env as the main server: nothing carries it across.
+        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull', {});
@@ -307,11 +348,13 @@ async function main(): Promise<void> {
         const eve = newId();
         const eveJoin = await join(mainHttps, eve, 'eve-google-sub', 'Eve');
         assert(eveJoin.status === 200, `Eve joins (${eveJoin.status})`);
-        const delta = await main.send('export-delta', { since });
+        const delta = await main.send('export-delta', { since, vaultKey: VAULT_KEY });
         assert(JSON.stringify(delta.members) === JSON.stringify([eve.pk]) && delta.keyId === mainDoor.keyId,
             `a delta export since then carries Eve's row alone, and which key made it (${JSON.stringify(delta.members.map((m: string) => m.slice(0, 8)))})`);
         assert(!delta.carriesSalt && !delta.keyInPayload, 'and not the key, in any encoding');
         assert(!delta.fields.includes('ipHash') && !delta.fields.includes('ip_hash'), 'and no address hash');
+        assert(delta.vaultEntries.length === 0 && !delta.vaultKeyInPayload,
+            `and no entry for the key vault, nor its ticket key in any encoding (${JSON.stringify(delta.vaultEntries)})`);
 
         // ── 3. A copy of the standby promoted by hand ──
         console.log('\n— 3. a copy of the standby promoted by hand —');
@@ -335,8 +378,14 @@ async function main(): Promise<void> {
         const adaWithKey = await join(probeHttps, newId(), 'ada-google-sub', 'Ada two');
         assert(adaWithKey.status === 409 && adaWithKey.body?.code === 'already_joined',
             `with the main server's key file put back by hand: Ada is 409 already_joined (${adaWithKey.status} ${adaWithKey.body?.code})`);
+        // This copy was started without the BEANPOOL_VAULT_TICKET_KEYS line: its door takes no tickets, and says so.
+        const probeVault = await doorVault(probeHttps);
+        assert(probeVault === null, `without the line in its .env, its nonce answer says vault: null (${JSON.stringify(probeVault)})`);
+        const ticketHere = await ticketJoin(probeHttps, newId(), 'cara-google-sub', 'Cara');
+        assert(ticketHere.status === 401 && ticketHere.body?.code === 'ticket_unsupported',
+            `a ticket join there → 401 ticket_unsupported, so a phone uses the door's nonce (${ticketHere.status} ${ticketHere.body?.code})`);
         const newcomer = await join(probeHttps, newId(), 'cara-google-sub', 'Cara');
-        assert(newcomer.status === 200, `and a new Google account joins (${newcomer.status})`);
+        assert(newcomer.status === 200, `and a new Google account joins with the door's own nonce (${newcomer.status})`);
         await probe.kill();
 
         // ── 4. The take-over, from the bundle alone ──
@@ -362,7 +411,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
+        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL, ...VAULT_ENV });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
 
@@ -389,6 +438,14 @@ async function main(): Promise<void> {
         const danAfter = await join(standbyHttps, dan, 'dan-google-sub', 'Dan');
         assert(danAfter.status === 200 && danAfter.body?.member?.publicKey === dan.pk,
             `Dan, whom the standby never copied, joins again with the same key rather than being locked out (${danAfter.status} ${danAfter.body?.code ?? ''})`);
+        // The promoted server has the line in its own .env: its door takes the vault's tickets, as the main server's did.
+        assert(JSON.stringify(await doorVault(standbyHttps)) === JSON.stringify({ ticketKeys: [VAULT_KEY] }), 'the promoted server\'s nonce answer lists the vault\'s key');
+        const gil = newId();
+        const gilJoin = await ticketJoin(standbyHttps, gil, 'gil-google-sub', 'Gil');
+        assert(gilJoin.status === 200 && gilJoin.body?.member?.publicKey === gil.pk, `and a join with a key vault ticket is taken there (${gilJoin.status} ${gilJoin.body?.code ?? ''})`);
+        const adaByTicket = await ticketJoin(standbyHttps, newId(), 'ada-google-sub', 'Ada four');
+        assert(adaByTicket.status === 409 && adaByTicket.body?.code === 'already_joined',
+            `while Ada's account, which joined the old main server with the door's nonce, is 409 already_joined with a ticket too (${adaByTicket.status} ${adaByTicket.body?.code})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

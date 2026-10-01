@@ -68,6 +68,15 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     sign_in_unavailable: "Couldn't reach the sign-in provider",
     join_failed: "The join couldn't be saved",
     door_key_missing: "This server can't check sign-ins: its open-door key is missing",
+    // A sign-in tied to a key vault ticket (the global community's door, BEANPOOL_VAULT_TICKET_KEYS).
+    ticket_unsupported: 'Key vault ticket, but this server takes none',
+    ticket_malformed: "Key vault ticket unreadable, or dated ahead of this server's clock",
+    ticket_signature: 'Key vault ticket not signed by a key this server lists',
+    ticket_expired: 'Key vault ticket had expired',
+    ticket_key: 'Key vault ticket made for another key',
+    ticket_purpose: 'Key vault ticket made for something else',
+    ticket_used: 'Key vault ticket already used',
+    ticket_nonce: "Key vault ticket sent with a sign-in that wasn't for it",
 };
 
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };

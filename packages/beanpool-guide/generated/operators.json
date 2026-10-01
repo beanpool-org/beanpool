@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 86,
-  "hash": "1041a714dd219b5c61de28e6ee67df3b3e1e54c4e19761cb78518bba307b00b2",
+  "version": 87,
+  "hash": "458363da01c9c486c06c04fdddf282ea3aa240551a7a0ad2183317ca5fb918ea",
   "sections": [
     {
       "id": "setup",
@@ -726,7 +726,9 @@
             "lift a suspension, or give back a role that a suspension took away;",
             "end the waiting time early when an owner or admin is being removed;",
             "sign other people out of Settings;",
-            "switch break-glass mode on or off, and be issued a break-glass code."
+            "switch break-glass mode on or off, and be issued a break-glass code;",
+            "restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;",
+            "make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from."
           ]
         },
         {
@@ -739,7 +741,7 @@
         },
         {
           "type": "p",
-          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner."
+          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner."
         },
         {
           "type": "h2",
@@ -1687,13 +1689,17 @@
         },
         {
           "type": "p",
+          "text": "A backup file holds the whole community, so downloading one is an owner's: an owner signed in with their key, or anyone with the admin password, which counts as an owner. So are downloading a snapshot, deleting one, and changing when snapshots are taken and how many are kept. An admin sees the status and the list of snapshots, and can take a snapshot or check one for damage; asked for anything else here, the server answers \"Only an owner of this node can …\"."
+        },
+        {
+          "type": "p",
           "text": "**Download Sovereign Database**:"
         },
         {
           "type": "ul",
           "items": [
-            "**With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, recovery-seal.key, open-join.key, the scrambled admin password, two-factor sign-in). One file brings back the whole community, members' sign-in recovery copies included. It is locked to the recovery code and to the community's owners. Nobody else can open it, including an admin who downloads it or anyone who finds the file. Every download is locked, whoever asks.",
-            "**Without a recovery code**: a **.tar.gz** file, not locked, exactly as before this update: a clean copy of the database and the settings. It does **not** hold the server's keys, and not recovery-seal.key or open-join.key. Restored onto this same server, with its data folder still in place, members' sign-in recovery copies open as before. Restored onto any other server, the copies locked with it don't open: members' 12 words still work, and each member can connect their sign-in again. On the global community, that other server also refuses anyone joining with a sign-in until this community's open-join.key is back in its data folder, because without it it can't tell a returning account from a new one. So make a recovery code first. Until then the only copy of the keys is the data folder itself, so copy that folder too (see What matters)."
+            "**With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, recovery-seal.key, open-join.key, the scrambled admin password, two-factor sign-in). One file brings back the whole community, members' sign-in recovery copies included. It is locked to the recovery code and to the community's owners. Nobody else can open it, including anyone who finds the file. Every download is locked.",
+            "**Without a recovery code**: a **.tar.gz** file, not locked: a clean copy of the database and the settings. It does **not** hold the server's keys, and not recovery-seal.key or open-join.key. Its settings leave out the scrambled admin password, two-factor sign-in and the replication token. Restored onto this same server, with its data folder still in place, members' sign-in recovery copies open as before. Restored onto any other server, the copies locked with it don't open: members' 12 words still work, and each member can connect their sign-in again. On the global community, that other server also refuses anyone joining with a sign-in until this community's open-join.key is back in its data folder, because without it it can't tell a returning account from a new one. So make a recovery code first. Until then the only copy of the keys is the data folder itself, so copy that folder too (see What matters)."
           ]
         },
         {
@@ -1704,7 +1710,7 @@
           "type": "ul",
           "items": [
             "With a recovery code, a downloaded snapshot is a locked backup like the one above, holding the snapshot as its database and the server's keys and settings as they are now. The file's name starts with the snapshot's name and ends in .bpsealed.",
-            "Without a recovery code, a downloaded snapshot is the snapshot's .db file itself, not locked, as before.",
+            "Without a recovery code, a downloaded snapshot is a .tar.gz of the snapshot and the photos it kept, not locked, like the backup above.",
             "The snapshots in data/snapshots are never locked: they sit next to the live database, so locking them would protect nothing. They are on the same disk as the server, so they do not survive a lost disk. Download one off the server now and then."
           ]
         },
@@ -1761,7 +1767,7 @@
         },
         {
           "type": "p",
-          "text": "Backups downloaded before this update, and every backup from a server with no recovery code, are **.tar.gz** files (or, for a snapshot, a .db file) and are not locked. They hold the settings, including the scrambled admin password and the two-factor secret. Make a recovery code first. Then find the unlocked ones and delete them: Downloads, other computers, Time Machine, cloud drives, email. Deleting a file does not always wipe it from an SSD. Treat anything that was in one as possibly seen by someone else: change the admin password and set up two-factor sign-in again when you can."
+          "text": "Backups downloaded before this update, and every backup from a server with no recovery code, are **.tar.gz** files (or, for a snapshot, a .db file) and are not locked. Those from before this update hold the settings, including the scrambled admin password and the two-factor secret; a backup made now leaves them out, but still holds the whole database. Make a recovery code first. Then find the unlocked ones and delete them: Downloads, other computers, Time Machine, cloud drives, email. Deleting a file does not always wipe it from an SSD. Treat anything that was in one as possibly seen by someone else: change the admin password and set up two-factor sign-in again when you can."
         },
         {
           "type": "h3",
@@ -1847,7 +1853,21 @@
         },
         {
           "type": "p",
-          "text": "A backup is restored onto a server with that server's admin password. It replaces the database and restarts the server."
+          "text": "Only an owner restores a backup: signed in to Settings with an owner's key, or with that server's admin password. An admin is refused (\"Only an owner of this node can restore a backup\"). It replaces the database and restarts the server."
+        },
+        {
+          "type": "p",
+          "text": "Before anything is replaced, the server reads the file and refuses the whole of it, changing nothing, when:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "it holds anything but plain files and folders (a link of either kind, say), or a name that points outside where it unpacks;",
+            "it unpacks to more than 4 GB, or to more than the room the server's disk has left (it always keeps 256 MB free): \"Backup archive too large\";",
+            "it holds more than 250,000 files and folders: \"Backup archive refused: it holds more than 250000 files and folders\";",
+            "its database is not a SQLite database, or fails SQLite's integrity check;",
+            "its database carries a trigger or view this server's own database does not have: \"it was changed after the backup was made, or made by a newer version of BeanPool\". Update this server first, or restore another file. A trigger this version has, whose text in the backup differs, is left out of the restored database, and the restart makes it again as this version has it."
+          ]
         },
         {
           "type": "ul",
@@ -1874,9 +1894,9 @@
         {
           "type": "ul",
           "items": [
-            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.",
-            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
-            "The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. So does the global community's open-join.key: the standby copies the scrambled references to who joined with which sign-in account, and which key made them, never the key. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy. When a member deletes their account, the standby wipes the words, photos and places of their posts at its next copy too.",
+            "On your server, an owner makes a replication token under **Replication Access** (under Backups & Restore). It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in. Making, replacing or removing it, and Require token, are an owner's (or the admin password's); an admin sees Replication Access but cannot change it.",
+            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). Saving it there is an owner's too, on the standby. A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
+            "The token copies the whole database and fetches the locked take-over keys, and does nothing else: it cannot download a backup, and the server refuses it everywhere but the standby's own copying. It never gets your server's keys unlocked: nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. So does the global community's open-join.key: the standby copies the scrambled references to who joined with which sign-in account, and which key made them, never the key. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy. When a member deletes their account, the standby wipes the words, photos and places of their posts at its next copy too.",
             "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
             "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
             "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
@@ -2560,7 +2580,7 @@
         },
         {
           "type": "p",
-          "text": "So others can read how each member voted. Whoever runs the machine can copy the files. While the server has no recovery code, every owner and admin can download a backup from Settings that is not locked. With a recovery code, whoever holds the code can open a backup, and an admin can download one but cannot open it. Tell your members this plainly, make a recovery code (see Backups and replicas), and let only people the community trusts hold it."
+          "text": "So others can read how each member voted. Whoever runs the machine can copy the files. Only an owner (or whoever has the admin password) can download a backup from Settings; an admin cannot. While the server has no recovery code, that backup is not locked. With a recovery code, it opens only with the code or an owner's phone. Tell your members this plainly, make a recovery code (see Backups and replicas), and let only people the community trusts hold it."
         },
         {
           "type": "h2",

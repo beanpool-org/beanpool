@@ -2,9 +2,15 @@
 //
 // Signed-request scheme (node → registrar):
 //   headers: x-bp-pubkey (64 hex), x-bp-timestamp (unix seconds), x-bp-signature (128 hex),
-//            x-bp-proto (the signing protocol; absent = DEFAULT_PROTO)
-//   signed message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`
+//            x-bp-proto (the signing protocol; absent = DEFAULT_PROTO),
+//            x-bp-nonce (32 hex; a protocol with `nonce`, v2 on)
+//   signed message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`            (v1)
+//                    `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}`  (v2)
 // The node signs with its identity key; the registrar binds the claim to that pubkey.
+//
+// Replays: a captured v1 request verifies again for as long as its timestamp is inside CLOCK_SKEW_S. A v2 request
+// signs a one-use nonce, which the Worker records (request_nonces, migration 0006) and refuses a second time. v1 stays
+// accepted until every node sends v2 (the steps below), so a node that hasn't updated keeps working meanwhile.
 //
 // The leading domain tag is what stops the public /api/attest oracle from being used to forge a
 // signed request: the attestation is signed under an `attest` tag, this verifier only ever rebuilds a
@@ -12,7 +18,7 @@
 // (apps/server/src/services/registrar-client.ts); apps/server/src/test-registrar-contract.ts signs with the
 // node's code and verifies with this file, and fails when the two disagree.
 
-const CLOCK_SKEW_S = 300;
+export const CLOCK_SKEW_S = 300;
 
 // The signing protocols this Worker accepts (design §5.1: scratch/registrar/DESIGN-2026-09-24-fable.md). A format
 // change adds v(n+1) here AND to the node's PROTOCOLS in one PR; nodes start sending it (SEND_PROTO) in a later
@@ -20,8 +26,11 @@ const CLOCK_SKEW_S = 300;
 // two versions whenever a change is in flight, and it never matters which one deploys first. On 2026-09-24 the
 // node changed its tag alone (#542), every signed request 401'd and names were freed: never again.
 // Every tag is distinct from every other, request tags from attest tags above all (the contract test checks it).
+// `nonce`: the request signs an x-bp-nonce, and the Worker takes each one once (L1 of the 2026-10-01 registrar review: a
+// captured request no longer replays inside the clock window).
 export const PROTOCOLS = Object.freeze({
     v1: Object.freeze({ request: 'beanpool-registrar-request/v1', attest: 'beanpool-node-attest/v1' }),
+    v2: Object.freeze({ request: 'beanpool-registrar-request/v2', attest: 'beanpool-node-attest/v2', nonce: true }),
 });
 /** What a request without x-bp-proto, or an attest without `proto`, speaks. Must match the node's DEFAULT_PROTO. */
 export const DEFAULT_PROTO = 'v1';
@@ -38,12 +47,24 @@ export function protoOf(named) {
     return typeof named === 'string' && Object.hasOwn(PROTOCOLS, named) ? named : null;
 }
 
-export const requestMessage = (proto, method, pathname, ts, bodyText) =>
-    `${PROTOCOLS[proto].request}\n${method}\n${pathname}\n${ts}\n${bodyText || ''}`;
+/** Does `proto` sign a one-use nonce (x-bp-nonce)? */
+export const usesNonce = (proto) => PROTOCOLS[proto]?.nonce === true;
+const NONCE_RE = /^[0-9a-f]{32}$/;
+
+export const requestMessage = (proto, method, pathname, ts, bodyText, nonce) => usesNonce(proto)
+    ? `${PROTOCOLS[proto].request}\n${method}\n${pathname}\n${ts}\n${nonce}\n${bodyText || ''}`
+    : `${PROTOCOLS[proto].request}\n${method}\n${pathname}\n${ts}\n${bodyText || ''}`;
 export const attestMessage = (proto, nonce, ts) => `${PROTOCOLS[proto].attest}\n${nonce}\n${ts}`;
 
 // The protocol of a request verifySignedRequest accepted (its x-bp-proto, or the default).
 export const requestProto = (request) => protoOf(request.headers.get('x-bp-proto'));
+
+// The nonce a request verifySignedRequest accepted signed, and its timestamp: { nonce, ts }, or null under a protocol
+// that signs none (v1). The Worker takes it once (index.js `signer`): a second request carrying it is a replay.
+export function requestNonce(request) {
+    if (!usesNonce(requestProto(request))) return null;
+    return { nonce: request.headers.get('x-bp-nonce'), ts: parseInt(request.headers.get('x-bp-timestamp'), 10) };
+}
 
 function hexToBytes(hex) {
     if (typeof hex !== 'string' || hex.length % 2) return null;
@@ -79,7 +100,9 @@ export async function verifySignedRequest(request, bodyText) {
     if (!/^\d+$/.test(ts)) return null;
     const now = Math.floor(Date.now() / 1000);
     if (Math.abs(now - parseInt(ts, 10)) > CLOCK_SKEW_S) return null;
+    const nonce = request.headers.get('x-bp-nonce') || '';
+    if (usesNonce(proto) && !NONCE_RE.test(nonce)) return null;
     const url = new URL(request.url);
-    const message = requestMessage(proto, request.method, url.pathname, ts, bodyText);
+    const message = requestMessage(proto, request.method, url.pathname, ts, bodyText, nonce);
     return (await verifyEd25519(pubkey, message, sig)) ? pubkey.toLowerCase() : null;
 }

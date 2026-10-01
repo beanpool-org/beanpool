@@ -14,7 +14,7 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519, requestProto, protoOf, attestMessage, ACCEPTED_PROTOS } from './sign.js';
+import { verifySignedRequest, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
@@ -24,6 +24,47 @@ const json = (obj, status = 200) =>
 // speak retry once under one it does (design §3.3, §5.1).
 const badSignature = () => json({ error: 'bad signature', accepted_proto: ACCEPTED_PROTOS }, 401);
 const nowS = () => Math.floor(Date.now() / 1000);
+
+// The protocols this Worker can serve right now: all of them while D1 has the nonce table (migration 0006), and without
+// it only those that sign no nonce. Checked against D1 at most once a minute per isolate: /health and the 401s answer it.
+const nonceTable = new WeakMap();   // env.DB -> { at, ok }
+async function nonceTableExists(env) {
+    if (!env.DB) return true;   // no database to ask (a unit test of /health): nothing to say against v2
+    const seen = nonceTable.get(env.DB);
+    if (seen && Date.now() - seen.at < 60_000) return seen.ok;
+    let ok = true;
+    try { await env.DB.prepare('SELECT 1 FROM request_nonces LIMIT 0').run(); } catch { ok = false; }
+    nonceTable.set(env.DB, { at: Date.now(), ok });
+    return ok;
+}
+const protosWithoutNonce = () => ACCEPTED_PROTOS.filter((p) => !PROTOCOLS[p].nonce);
+const acceptedProtos = async (env) => ((await nonceTableExists(env)) ? ACCEPTED_PROTOS : protosWithoutNonce());
+
+// The key that signed a request, or the Response refusing it: a bad signature, or — under a protocol that signs a
+// nonce (v2) — a nonce this key has sent before: a request the Worker already took, replayed. The nonce is taken
+// before the request does anything. A v1 request signs none, and still verifies until its timestamp is too old
+// (sign.js): v1 is accepted until every node sends v2.
+async function signer(request, env, bodyText) {
+    const pubkey = await verifySignedRequest(request, bodyText);
+    if (!pubkey) return badSignature();
+    const n = requestNonce(request);
+    if (n) {
+        let taken;
+        try { taken = await db.takeNonce(env, pubkey, n.nonce, n.ts); }
+        catch (e) {
+            // A Worker deployed before migration 0006 has no nonce table. The v2 request can't be recorded, so it is
+            // not served; the node reads the accepted_proto, signs the same request under v1 (no nonce), and works.
+            console.error('[NONCE_TABLE]', e.message || e);
+            return json({ error: 'bad signature', accepted_proto: protosWithoutNonce() }, 401);
+        }
+        if (!taken) return json({ error: 'request already used' }, 401);
+    }
+    return pubkey;
+}
+
+// Why a request failed stays in the Worker's log, under a short reference the answer carries: a Cloudflare error
+// names the account and the zone, and its body is Cloudflare's (L4 of the 2026-10-01 review).
+const errorRef = () => crypto.randomUUID().slice(0, 8);
 const DEFAULT_ORIGIN = 'http://beanpool-node:8080';
 const key16 = (pubkey) => `${String(pubkey).slice(0, 16)}…`;
 
@@ -209,13 +250,15 @@ async function tunnelTokenOrNothing(env, a) {
     try { return await cf.getTunnelToken(env, a.tunnel_id); } catch { return undefined; /* the node asks /status again */ }
 }
 
-const provisionFailed = (e) => {
+// A keyholder is told that it failed, and a reference to the log line; only the admin is told Cloudflare's answer.
+const provisionFailed = (e, { admin = false } = {}) => {
     if (e?.cleaningUp) {
         console.warn('[PROVISION_WAIT]', e.message);
-        return json({ error: 'cleaning up this name\'s earlier routing at Cloudflare; try again shortly', detail: String(e.message) }, 503);
+        return json({ error: 'cleaning up this name\'s earlier routing at Cloudflare; try again shortly' }, 503);
     }
-    console.error('[PROVISION_FAIL]', e.stack || e.message || e);
-    return json({ error: 'provisioning failed', detail: String(e.message || e) }, 502);
+    const ref = errorRef();
+    console.error('[PROVISION_FAIL]', ref, e.stack || e.message || e);
+    return json({ error: 'provisioning failed', ref, ...(admin ? { detail: String(e.message || e) } : {}) }, 502);
 };
 
 // --- Owed deletions ---
@@ -446,6 +489,82 @@ function bodyFields(b) {
     return f;
 }
 
+// --- What a keyholder may set (L3 of the 2026-10-01 review) ---
+// Display text — a community's name, its operator's contact: any script (communities are worldwide), but no control
+// characters, no line or paragraph separators and no bidi overrides, which would let a row disguise itself on the admin
+// page. An email address is at most 254 characters.
+const TEXT_MAX = { community_name: 120, communityName: 120, contact: 254 };
+const BAD_TEXT = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069]/u;
+// Where a tunnel sends a name's traffic, as Cloudflare's ingress takes it: http(s)://host[:port], and nothing more.
+// Nodes send http://127.0.0.1:<port> (once http://beanpool-node:8080).
+const ORIGIN_MAX = 200;
+const ORIGIN_RE = /^https?:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\[[0-9a-f:.]+\])(?::\d{1,5})?\/?$/i;
+// A direct name's address goes into an A record: IPv4.
+const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+const isSet = (v) => v !== undefined && v !== null && v !== '';
+
+function validOrigin(v) {
+    if (typeof v !== 'string' || v.length > ORIGIN_MAX || !ORIGIN_RE.test(v)) return false;
+    try { new URL(v); return true; } catch { return false; }   // a port over 65535, a malformed IPv6 address
+}
+
+// What is wrong with the display labels (community name, contact) a claim, heal or update body sets, or null. A label
+// absent or null is not set.
+function labelProblem(b) {
+    for (const [key, max] of Object.entries(TEXT_MAX)) {
+        const v = b[key];
+        if (v === undefined || v === null) continue;
+        if (typeof v !== 'string') return `${key} must be text`;
+        const t = v.trim();   // what is stored
+        if ([...t].length > max) return `${key} is longer than ${max} characters`;
+        if (BAD_TEXT.test(t)) return `${key} contains an invisible formatting or control character`;
+    }
+    return null;
+}
+// What is wrong with the fields that decide routing, or null.
+function routeProblem(b) {
+    if (isSet(b.origin) && !validOrigin(b.origin)) return `origin must be http(s)://host[:port], at most ${ORIGIN_MAX} characters`;
+    if (isSet(b.public_ip) && !(typeof b.public_ip === 'string' && IPV4_RE.test(b.public_ip))) return 'public_ip must be an IPv4 address';
+    return null;
+}
+// What is wrong with the fields a claim, heal or update body sets, or null. Answered with a 400 before the request
+// writes anything.
+function fieldProblem(b) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    return labelProblem(b) || routeProblem(b);
+}
+// For a request by the key that already holds the name: routing outranks a label, so a label that fails its checks is
+// dropped from the body and logged here, never a reason to refuse a claim or heal (a node whose community name carries
+// a character it can't see would otherwise stay dark through every tick). Returns the problem with the routing
+// fields, which are still refused, or null; `b` is changed in place.
+function dropBadLabels(b, who) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    for (const key of Object.keys(TEXT_MAX)) {
+        const problem = labelProblem({ [key]: b[key] });
+        if (!problem) continue;
+        console.warn('[LABEL_DROPPED]', who, problem);
+        delete b[key];
+    }
+    return routeProblem(b);
+}
+const badField = (problem) => json({ error: problem }, 400);
+
+// --- Names per key (M1 of the 2026-10-01 review) ---
+// How many names one node key may hold at once (db.countHeldBy: live, pending, paused or blocked, and its own releases
+// still inside their hold), CLAIM_LIMIT_PER_KEY, 3 unless set. A node uses one name, and its release is held for it
+// RELEASE_COOLOFF_S so it can take it back: a node that renames twice inside that hold holds three. And three per key
+// keeps one key to three Cloudflare tunnels: the account's ~1,000 would take hundreds of keys, not one script with one
+// key (claims from many keys are for a per-IP budget at Cloudflare, not this). Only a new name counts against it: a
+// name its key holds is healed and taken back whatever the count, and a key over the limit keeps every name it has.
+export function claimLimit(env) {
+    const n = parseInt(env.CLAIM_LIMIT_PER_KEY, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 3;
+}
+const overLimit = (held, limit) => json({
+    error: `this node key already holds ${held} name${held === 1 ? '' : 's'}, and one key may hold ${limit}: release one first (a release counts until its hold ends)`,
+    limit, held,
+}, 403);
+
 const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0 };
 
 // Routing back on for the owner's name that is not live — a pause its heal lifts, or its own release taken back —
@@ -553,10 +672,20 @@ async function takeName(env, existing, pubkey, b, now) {
     const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
     const takeBack = sameKey && approved;
     const decided = { decided_at: now, decided_by: tier === 'auto' ? 'auto' : (existing?.decided_by || 'admin') };
+    // A new name for this key counts against its limit (claimLimit). Its own release taken back inside the hold is
+    // already counted; one past the hold isn't (it was free to anyone), so it counts as a new name does.
+    const limit = claimLimit(env);
+    const since = now - releaseCooloffS(env);
+    const counted = sameKey && holdsName(env, existing, now);
+    if (!counted) {
+        const held = await db.countHeldBy(env, pubkey, since);
+        if (held >= limit) return overLimit(held, limit);
+    }
+    const set = bodyFields(b);
     const fields = {
         node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: takeBack ? 'paused' : 'pending',
-        community_name: b.community_name || b.communityName || null,
-        origin: b.origin || null, public_ip: b.public_ip || null, contact: b.contact || null,
+        community_name: set.community_name ?? null,
+        origin: set.origin ?? null, public_ip: set.public_ip ?? null, contact: set.contact ?? null,
         attest_fails: 0, requested_at: now,
         decided_at: takeBack ? decided.decided_at : null, decided_by: takeBack ? decided.decided_by : null,
         pause_reason: takeBack ? 'unverified' : null, paused_at: takeBack ? now : null,
@@ -564,9 +693,20 @@ async function takeName(env, existing, pubkey, b, now) {
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
     };
+    // Another claim by the same key may have landed between the count and this write: counted again once the name is
+    // won, and over the limit, this claim gives it back before it reaches Cloudflare (so racing claims may all be
+    // refused, but never all kept) — while the row is still as it wrote it. If a decision landed on it meanwhile (the
+    // admin's), the claim carries on, as any claim whose row changed does: it answers the row as it now is.
+    const overAfter = async () => {
+        if (counted) return 0;
+        const held = await db.countHeldBy(env, pubkey, since);
+        return held > limit ? held : 0;
+    };
     if (!existing) {
         try { await db.insertAllocation(env, { name, ...fields }); }
         catch { return json({ error: 'name taken' }, 409); } // UNIQUE race
+        const over = await overAfter();
+        if (over && await db.deleteIfUnchanged(env, name, { name, ...fields })) return overLimit(over - 1, limit);
         await db.updateAllocation(env, name, { last_contact_at: now });
         await logEvent(env, name, 'claimed', `claimed by key ${key16(pubkey)} (${mode}, tier ${tier})`);
     } else {
@@ -575,6 +715,12 @@ async function takeName(env, existing, pubkey, b, now) {
         if (sameKey && existing.tunnel_id) fields.tunnel_id = (await deprovision(env, { tunnel_id: existing.tunnel_id })).tunnel_id;
         Object.assign(fields, decision(existing));   // a new tenure counts as a decision; `a` below carries it
         if (!(await db.replaceAllocation(env, name, existing, fields))) return json({ error: 'name taken' }, 409); // raced
+        const over = await overAfter();
+        if (over) {
+            const was = { ...existing };   // the row exactly as it was, the old holder's ids included
+            delete was.name;
+            if (await db.updateIfUnchanged(env, name, { ...existing, ...fields }, was)) return overLimit(over - 1, limit);
+        }
         // Another key taking a freed name: whatever the old holder left at Cloudflare goes — once this claim has won.
         // What Cloudflare refuses to delete is owed, never dropped: no row will record it again.
         if (!sameKey) {
@@ -631,15 +777,21 @@ async function claimReply(env, out) {
 }
 
 async function handleClaim(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
 
     const name = String(b.name || '').toLowerCase();
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const existing = await db.getAllocation(env, name);
+    // A new claim with a label that fails its checks is refused; the key's own name drops the label instead.
+    if (isOwnRow(existing, pubkey)) dropBadLabels(b, `${name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
 
     // The claimant's own name: a heal (or taking back its own release). Ownership outranks a policy row added
     // after the claim; only the admin's block stops it — and the admin's release of it, through its hold.
@@ -659,12 +811,17 @@ async function handleClaim(request, env, bodyText) {
 // POST /api/registrar/heal — the owner re-asserts its name (design §2.2). Answers a fresh tunnelToken only when the
 // tunnel had to be re-made (a node that already runs the old one keeps running it), and `changed`.
 async function handleHeal(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const cur = b.name ? await db.getAllocation(env, String(b.name).toLowerCase()) : await db.getOwnAllocation(env, pubkey);
+    if (isOwnRow(cur, pubkey)) dropBadLabels(b, `${cur.name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
     if (blockedOut(env, cur, pubkey, now)) return json({ error: 'name blocked' }, 403);
     if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to heal', status: 'none' }, 404);
     if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
@@ -681,9 +838,11 @@ async function handleHeal(request, env, bodyText) {
     return json(body);
 }
 
+// Answers a live tunnel name's token: only to its key, and under v2 only to a request nobody sent before (signer), so a
+// captured /status can't be replayed for it.
 async function handleStatus(request, env) {
-    const pubkey = await verifySignedRequest(request, '');
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, '');
+    if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
@@ -719,12 +878,12 @@ async function handleStatus(request, env) {
 // /api/attest answers anyone); a gated claim's key still waiting for approval is not, and is named here all the same,
 // as L3's "another key holds it" needs it.
 // Signed like /status. A POST, so the name is inside the signed bytes (the signature covers the path, not the query).
-// Read-only: it writes nothing — not even the contact every other signed request records (the node's own /status
-// does that) — and asks nothing of Cloudflare or of any node. An older Worker answers 404: a node that gets that
-// learns nothing, and drops nothing.
+// Read-only: it writes nothing but a v2 request's nonce (signer) — not even the contact every other signed request
+// records (the node's own /status does that) — and asks nothing of Cloudflare or of any node. An older Worker answers
+// 404: a node that gets that learns nothing, and drops nothing.
 async function handleHolder(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}') || {}; } catch { return json({ error: 'bad json' }, 400); }
     const name = typeof b.name === 'string' ? b.name.toLowerCase() : '';
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
@@ -743,12 +902,16 @@ async function handleHolder(request, env, bodyText) {
 }
 
 async function handleUpdate(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
     const a = await db.getAllocationByPubkey(env, pubkey);
     if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    // An update of the key's own name: a bad label is dropped, not a reason to refuse (the rest still applies).
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const problem = dropBadLabels(b, `${a.name} ${key16(pubkey)}`);
+    if (problem) return badField(problem);
     const updates = {};
     const commVal = b.community_name !== undefined ? b.community_name : b.communityName;
     if (commVal !== undefined) {
@@ -802,8 +965,8 @@ async function onFreshRow(read, act) {
 
 // POST /api/registrar/release (and /offline, its old name) — signed by the owner.
 async function handleRelease(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b = {}; try { b = JSON.parse(bodyText || '{}') || {}; } catch { /* /offline has always taken any body */ }
     const now = nowS();
     await db.touchContact(env, pubkey, now, requestProto(request));
@@ -883,7 +1046,7 @@ async function adminResume(env, a, was, now) {
         cur.tunnel_id = left;
     }
     let ids;
-    try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
+    try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
     const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, a.name, cur, made, { withIds: true }))) return adminMissed(env, a.name, ids);
     const res = { ...cur, ...made };
@@ -903,7 +1066,7 @@ async function adminResume(env, a, was, now) {
 // Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
-    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
+    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
     const live = { ...recorded(ids, a), ...LIVE, ...extra };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
@@ -973,13 +1136,21 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
 // a released, abandoned or blocked name's do not.
 const routesInvites = (alloc) => !!alloc && (alloc.status === 'live' || alloc.status === 'paused');
 
+// `?n=` names the node to join, as a label or a hostname. Only a name this registrar holds live is answered, and only
+// at its own hostname; anything else is refused (null), never sent on: beanpool.org must not vouch for a host it doesn't
+// route (M2 of the 2026-10-01 review — `?n=` sent the app's join flow to any server, under a beanpool.org link).
+async function liveHostname(env, queryN) {
+    const base = `.${env.BASE_DOMAIN || 'beanpool.org'}`;
+    const label = queryN.endsWith(base) ? queryN.slice(0, -base.length) : queryN;
+    if (!NAME_RE.test(label) || !env.DB) return null;
+    try {
+        const alloc = await db.getAllocation(env, label);
+        return alloc?.status === 'live' && alloc.hostname === `${label}${base}` ? alloc.hostname : null;
+    } catch { return null; }
+}
+
 async function resolveNodeHostname(env, code, queryN) {
-    if (queryN) {
-        const cleanN = queryN.trim().toLowerCase();
-        if (cleanN) {
-            return cleanN.includes('.') ? cleanN : `${cleanN}.${env.BASE_DOMAIN || 'beanpool.org'}`;
-        }
-    }
+    if (queryN) return liveHostname(env, queryN);
     if (!code) return null;
 
     if (env.DB) {
@@ -1006,7 +1177,7 @@ async function resolveNodeHostname(env, code, queryN) {
 
 async function handleSwitchboard(url, env) {
     const code = decodeURIComponent(url.pathname.replace(/^\/i\//, '')).trim();
-    const queryN = (url.searchParams.get('n') || '').replace(/[^a-z0-9.\-]/gi, '');
+    const queryN = (url.searchParams.get('n') || '').trim().toLowerCase();
 
     const hostname = await resolveNodeHostname(env, code, queryN);
     if (!hostname) {
@@ -1175,6 +1346,7 @@ export async function attestSweep(env) {
 //     so a live name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a
 //     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
+//   - Request nonces whose timestamp can no longer verify (twice the clock window, sign.js) are dropped.
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
@@ -1187,6 +1359,7 @@ async function upkeep(env, results, batch) {
             try { await settleOwed(env, t); } catch (e) { console.error('[TEARDOWN_RETRY]', t.name, t.kind, t.cf_id, e.message || e); }
         }
     } catch (e) { console.error('[TEARDOWN_RETRY]', e.message || e); }
+    try { await db.pruneNonces(env, nowS() - 2 * CLOCK_SKEW_S); } catch (e) { console.error('[NONCE_PRUNE]', e.message || e); }
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?
@@ -1223,7 +1396,7 @@ export default {
             // commit: the git SHA this Worker was deployed from (`wrangler deploy --var GIT_SHA:…`, the deploy workflow);
             // null for a deploy that didn't say. The workflow fails unless it is the commit it deployed.
             if (method === 'GET' && p === '/api/registrar/health')
-                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: ACCEPTED_PROTOS });
+                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());
@@ -1265,7 +1438,9 @@ export default {
 
             return json({ error: 'not found' }, 404);
         } catch (e) {
-            return json({ error: 'internal', detail: String(e.message || e) }, 500);
+            const ref = errorRef();
+            console.error('[INTERNAL]', ref, method, p, e.stack || e.message || e);
+            return json({ error: 'internal', ref }, 500);
         }
     },
 

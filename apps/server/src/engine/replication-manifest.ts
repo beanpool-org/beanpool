@@ -439,6 +439,11 @@ export const TABLES: Record<string, TableEntry> = {
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
     photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
     message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },
+    // A direct line to someone who had blocked its sender, and a conversation such a sender opened, kept for the sender
+    // alone (engine/withheld-lines.ts). Never in a copy: no standby can then deliver one to the person who blocked them.
+    withheld_lines: { kind: 'local', reason: 'lines kept for their sender alone, because the person they were sent to had blocked them: never in a copy, so no standby can deliver one (engine/withheld-lines.ts)' },
+    withheld_conversations: { kind: 'local', reason: 'conversations kept for their opener alone, because the other had blocked them: never in a copy (engine/withheld-lines.ts)' },
+    withheld_overlays: { kind: 'local', reason: "a blocked member's reaction or edit on a line, kept for them alone and laid over their own reads: never in a copy (engine/withheld-lines.ts)" },
 };
 
 /**

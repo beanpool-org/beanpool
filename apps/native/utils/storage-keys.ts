@@ -42,6 +42,14 @@ export function blockedUsersStoreKey(publicKey: string): string {
 export const SAVED_NODES_STORE_KEY = 'beanpool_saved_nodes';
 
 /**
+ * The key each community signs its push notices with, pinned from the answer to this phone's push registration there
+ * (utils/push-pins.ts): an object, community address → key. Kept apart from {@link SAVED_NODES_STORE_KEY} so that no
+ * writer of the saved list can overwrite a pin, nor a pin write bring back a community the member forgot; a pin counts
+ * only while the phone keeps its community (push-pins.ts `readPushPins`).
+ */
+export const PUSH_PINS_STORE_KEY = 'beanpool_push_pins';
+
+/**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not
  * AsyncStorage). The account unregisters it on its communities as it leaves the phone (utils/account-leaves-phone.ts).
  */

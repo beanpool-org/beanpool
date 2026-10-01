@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 90,
-  "hash": "952b370a0b7b1b69e69ac33f77964d372a82f067c163c193e2080af21057a6d5",
+  "version": 91,
+  "hash": "e540dca6005b7409feb1136ce565730368bb8f3f9a30d23973215a6d3ce5d689",
   "sections": [
     {
       "id": "setup",
@@ -1647,7 +1647,7 @@
             "**open-join.key**: on the global community, the key behind its record of who joined with which sign-in account. The server keeps a scrambled reference to each Google or Apple account that joined, so that one account makes one member; this key does the scrambling. A main server makes it the first time it needs it; a standby has none of its own. It is never in state.db, so a copy of the database alone can't tell anyone which sign-in account is which member. Lose it and the server can't tell a returning account from a new one, so **joining with a sign-in is refused** until the key is back (\"This community can't check sign-ins right now\"); members already in are not affected. A server that took over or was restored may also hold files named **open-join-retired-** and a number: keys it replaced. Keep them. Servers updated to this version move the key out of state.db into this file at their first start, and say so once in the log: \"Open door: moved the key for the door's hashes out of the database\";",
             "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
             "**takeover-envelope.json**: the server's keys and sign-in settings, locked so that only the community's owners can open them (any one of them alone), or a printed recovery code once one is made. The server makes it and keeps it up to date whenever an owner is added or removed, or those settings change. With no owner and no recovery code there is nobody to lock it to, so the file isn't there. It is a locked copy for taking over on another server later; the server still runs from the files above;",
-            "**snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again."
+            "**snapshots**, **logs** and **cache**: the automatic snapshots (none kept past 14 days), old log lines that **Clean Orphaned Media & Compress Logs** moved out of the log (none kept past 30 days), and pictures fetched for the Pulse, which can be fetched again."
           ]
         },
         {
@@ -1768,7 +1768,14 @@
         },
         {
           "type": "p",
-          "text": "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one."
+          "text": "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can keep up to **14**, and the server refuses more. Whatever you choose, no snapshot is kept once it is **14 days** old: each server checks every hour, and at every start. You can take one now, download one or delete one."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Only the main server takes snapshots. A standby takes none, whatever its own setting says: its database is a copy of yours. Snapshots a standby took before this update are deleted once they are 14 days old. A standby that takes over starts taking them, on the community's schedule.",
+            "A snapshot is the whole database as it was, with the photos it needs. When a member deletes their account, the snapshots taken before still hold their profile, posts, messages and photos until each one is deleted: with the defaults that is up to **7 days**, and never more than **14**. The server never edits a snapshot."
+          ]
         },
         {
           "type": "ul",
@@ -2714,9 +2721,29 @@
         {
           "type": "ul",
           "items": [
-            "The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written.",
+            "The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written. The log keeps its newest 2,500 lines, and none older than 30 days.",
             "The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.",
             "Reports, and the people they are about."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "When a member deletes their account"
+        },
+        {
+          "type": "p",
+          "text": "Their profile, the words, photos and places of their posts, every chat line they wrote and the photos they sent, and their sign-in recovery copies go from your server at once. Their trades stay in the ledger, under \"Deleted Member\". The members' guide tells them what goes, and what stays a while:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The log.** Every line that names them, or shows the start of their key, then reads \"a deleted member\", and so do the old lines that **Clean Orphaned Media & Compress Logs** moved out of the log. A line is never kept past 30 days anyway.",
+            "**A standby** takes the delete at its next copy.",
+            "**Notices kept for other members.** For 7 days your server keeps the details of each push it sent to a member (who wrote, which chat, which listing). On a delete it rewrites every such notice of other members that names the member or shows the start of their key: \"Wren sent you a message\" becomes \"A member sent you a message\". The rest of those notices (the chat or listing they point to) stays for the 7 days. They are the server's own: a standby does not copy them.",
+            "**Snapshots** keep everything as it was when each was taken, until the snapshot is deleted: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.",
+            "**A backup you downloaded** is a file out of the server's reach. It keeps everything until you delete it. A fleet manager keeps one copy a day for 30 days.",
+            "**Deletion records.** A short record of each delete (which row went, such as which two members were friends) stays on every server for 30 days, so a standby can copy the delete.",
+            "**Docker's own log** of the server holds the same lines as the log, with their name, and nothing can change it afterwards. It is two files of 5 MB at most, and the oldest lines go as it fills, which on a quiet server can take weeks. It goes with the container: an update that replaces the container starts a new one, and so does: docker compose up -d --force-recreate"
           ]
         },
         {
@@ -2760,7 +2787,7 @@
           "items": [
             "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
-            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to.",
+            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."
           ]

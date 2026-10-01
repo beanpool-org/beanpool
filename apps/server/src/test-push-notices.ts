@@ -165,7 +165,15 @@ async function main() {
     const toWhom = new Map<string, Id>([[phone.ann, ann], [phone.annOld, ann], [phone.bob, bob], [phone.cat, cat]]);
 
     /** What left, as text: everything a lock screen, Expo, Apple and Google got. */
-    const visible = (msgs: any[]) => JSON.stringify(msgs.map(m => ({ title: m.title, body: m.body, data: m.data, subtitle: m.subtitle })));
+    // The notice's own opaque fields (c, i, s: hex; t: seconds) are left out of the text search: random hex and a timestamp
+    // hold a string like '1234' now and then, which made this check flaky. They are held to strict shapes instead
+    // (opaqueFieldsOk), so no secret can ride in them either.
+    const visible = (msgs: any[]) => JSON.stringify(msgs.map(m => {
+        const { c, i, s, t, ...rest } = m?.data ?? {};
+        return { title: m.title, body: m.body, data: rest, subtitle: m.subtitle };
+    }));
+    const opaqueFieldsOk = (m: any): boolean => /^[0-9a-f]{16}$/.test(m?.data?.c ?? '') && /^[0-9a-f]{32}$/.test(m?.data?.i ?? '')
+        && /^[0-9a-f]{128}$/.test(m?.data?.s ?? '') && Number.isSafeInteger(m?.data?.t);
     /** The message shows only its kind's words, and its data is the notice and nothing else. */
     const onlyItsWords = (m: any): boolean => isPushNoticeKind(m?.data?.k) && m.title === 'BeanPool' && m.body === pushNoticeWords(m.data.k).body
         && JSON.stringify(Object.keys(m.data).filter(k => k !== 'kind').sort()) === JSON.stringify(NOTICE_KEYS)
@@ -193,7 +201,7 @@ async function main() {
         const offKinds: string[] = [], leaked: string[] = [], unkept: string[] = [];
         for (const kind of kinds) {
             const msgs = await caught(() => se.dispatchPushNotification([bob.pk], 'SYSTEM', detailTitle, detailBody, detailData, 'marketplace', kind));
-            if (msgs.length !== 1 || !onlyItsWords(msgs[0]) || msgs[0].data.k !== kind) offKinds.push(kind);
+            if (msgs.length !== 1 || !onlyItsWords(msgs[0]) || !opaqueFieldsOk(msgs[0]) || msgs[0].data.k !== kind) offKinds.push(kind);
             const text = visible(msgs);
             const found = secrets.filter(s => text.includes(s));
             if (found.length) leaked.push(`${kind}: ${found.join(', ')}`);

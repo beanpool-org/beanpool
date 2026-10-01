@@ -21,7 +21,9 @@
  *  5. A page replayed from another copy, a page changed, a page held back (M answers 404 for it), and a last page whose
  *     counts differ (signed with M's key): each refused, S unchanged, no staging left, the why in S's record.
  *  6. A balance planted on S: a whole copy that is no seed is refused by the conservation guard at the closing check, S
- *     unchanged; the plant gone, the next lands.
+ *     unchanged; the plant gone, the next lands. Between them, a whole copy started the moment the last one was stopped,
+ *     before S has seen that one's stager exit: its staging is its own, and its first page reaches its stager. (Before: the
+ *     stopped copy's exit deleted it, and the copy failed at its first page, ENOENT: CI runs 36794955035, 36808165404.)
  *  7. A listing photo M can't read from its own store: the copy leaves it out and names it, the closing check counts like
  *     with like (the opening page counts it, the last page's rows sent don't), and S keeps its own row through the swap.
  *  8. A delta of 3 pages, with a member re-keyed and a friendship of the old key deleted first: taken as one payload, in
@@ -66,9 +68,9 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
 import {
-    PW_STANDBY, PAGE_BYTES, PAGE_ROWS, CAP, COPY_IDLE_MS, type Id,
+    PW_STANDBY, PAGE_BYTES, PAGE_ROWS, CAP, type Id,
     assert, require_, step, newId, api, built, sleep, until, alive, snapDiff, first, counts, TINY_PNG,
-    newPair, startMain, startStandby, pairHelpers, closePair, auditCommand,
+    newPair, startMain, startStandby, pairHelpers, closeLeftCopy, closePair, auditCommand,
 } from './standby-pair-test-harness.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -178,10 +180,10 @@ async function main(): Promise<void> {
             const after = await snapS();
             assert(stagerGone && !st3b.staging && snapDiff(before, after).length === 0,
                 `S starts again with no staging, its stager gone, and its copy as it was, row for row (differences ${first(snapDiff(before, after))}; ${JSON.stringify(st3b)})`);
-            // M still serves the copy S left: busy until it idles out.
+            // M still serves the copy S left: busy until it idles out, two minutes on, as closeLeftCopy closes it here.
             const busy = await standby.send('pull', { whole: true });
             assert(busy.ok === false && /HTTP 409/.test(busy.error ?? ''), `M answers the next whole copy "busy" while the one S left is open (${JSON.stringify(busy)})`);
-            await sleep(COPY_IDLE_MS + 500);
+            require_(await closeLeftCopy(pair, main), 'M was still serving the copy S left, and closes it');
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             const p3 = await wholeCopy();
             assert(p3.ok === true && p3.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p3)})`);
@@ -191,24 +193,27 @@ async function main(): Promise<void> {
             const before = await snapS();
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '400', BACKUP_RECONCILE_EVERY_MS: '4000', BACKUP_BIG_COPY_EVERY_MS: '4000' } });
             await sleep(4100); // the routine whole copy is due
+            // S's ask for page 2 is held at the proxy while M is killed and started again, then answered as M's death
+            // answered it (502). The failure, from which the interval runs, comes once M is back: started again first, under
+            // load, M took longer than the interval, and the next pull was a whole copy already.
+            px.arm({ kind: 'hold', page: 2 });
             const opened = px.opened.length;
             const pulling = standby.send('pull', {});
-            await until('two pages of the copy', () => {
-                const id = px.opened[opened];
-                return !!id && (px.copies.get(id)?.pages.size ?? 0) >= 2;
-            });
+            const asked = await until('S to ask for page 2 of the copy, held', () => px.holding() > 0);
+            require_(asked && (px.copies.get(px.opened[opened] ?? '')?.pages.size ?? 0) === 2, 'S has two pages of the copy, and asks for the third');
             await main.kill('SIGKILL');
+            main = await spawnNode(SCRIPT, dir('main'), envM);
+            nodes.push(main);
+            px.setTarget(main.base);
+            m = `https://localhost:${await main.send('serve')}`;
+            await main.send('settle-pricing');
+            px.release();
             const p4 = await pulling;
             const st4 = await standby.send('staging');
             const mid = await snapS();
             const r4 = await standby.send('record');
             assert(p4.ok === false && p4.mode === 'full' && !st4.staging && st4.building === null && snapDiff(before, mid).length === 0 && r4.lastOutcome === 'fetch-failed',
                 `S's copy stops at the page M never sent: its staging deleted, S as it was, the record "no copy came" (${JSON.stringify({ pull: p4, staging: st4, why: r4.lastWhy })}; differences ${first(snapDiff(before, mid))})`);
-            main = await spawnNode(SCRIPT, dir('main'), envM);
-            nodes.push(main);
-            px.setTarget(main.base);
-            m = `https://localhost:${await main.send('serve')}`;
-            await main.send('settle-pricing');
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             built('Bo offers eggs on M after its restart', await As(bo, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', credits: 2, priceType: 'fixed', authorPublicKey: bo.pk,
@@ -261,6 +266,13 @@ async function main(): Promise<void> {
             assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '') && served >= 2
                 && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0 && Math.abs(after.ledgerSum - before.ledgerSum) < 1e-9 && !st6.staging,
                 `the routine whole copy, all ${served} pages of it built, is refused at the closing check against S's live ledger; S's ledger as it was, the plant included (${JSON.stringify({ pull: p6, why: r6.lastWhy })}; total ${after.ledgerSum}; before: one payload refused by the import's own guard)`);
+            // The next pull's copy can make its staging before S has seen the refused one's stager exit (CI runs 36794955035
+            // and 36808165404: the copy after a refused one failed at its first page, ENOENT). Here, always.
+            const again = await standby.send('restage-at-once');
+            assert(again.started === true && again.there && again.pages && /no copy's opening page/.test(again.page0 ?? '') && !again.left,
+                `a whole copy started the moment the last one was stopped, before that one's stager is seen gone: its staging is its own once that `
+                + `stager has exited, and its first page reaches its stager; stopped in turn, it goes (${JSON.stringify(again)}; before: the stopped `
+                + 'copy\'s exit deleted the next one\'s staging, which failed at its first page, ENOENT)');
             await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
             const p6b = await wholeCopy();
             assert(p6b.ok === true && p6b.staged === true && (await exactNow()).length === 0, `the plant gone, the next lands (${JSON.stringify(p6b)})`);
@@ -381,7 +393,7 @@ async function main(): Promise<void> {
         const newStandby = async (name: string, opts: { maxFileBytes?: number } = {}) => {
             standby = await startStandby(pair, name, main, opts);
             standbyDir = dir(name);
-            await sleep(COPY_IDLE_MS + 500); // a copy the standby before it left open on M closes first
+            await closeLeftCopy(pair, main); // a copy the standby before it left open on M closes first
             const p = await pullAndSwap(false);
             require_(p.ok === true && p.staged === true && (await exactNow()).length === 0, `a new standby's first copy lands (${JSON.stringify(p)})`);
             return name;
@@ -485,8 +497,9 @@ async function main(): Promise<void> {
                 `the pull fails ${secs.toFixed(1)} s after the kill, at page 2 (${JSON.stringify(p14)}): its staging deleted, S as it was, the record "refused" `
                 + `(differences ${first(snapDiff(before, after))}; ${JSON.stringify(st14b)}; before: it waited PAGE_TIMEOUT_MS, 15 minutes)`);
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
-            // S's close of the copy it left waits out its page gap; M has closed it, or idled it out, by then.
-            await sleep(COPY_IDLE_MS + 500);
+            // S's close of the copy it left waits out its page gap.
+            const left = px.opened[opened] ?? '';
+            require_(await until('S to close the copy it left', () => px.closed.includes(left)), `S closes the copy it left on M (${left.slice(0, 8)})`);
             const p14b = await wholeCopy();
             assert(p14b.ok === true && p14b.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p14b)})`);
         });
@@ -666,6 +679,32 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
     },
 };
 
+/**
+ * Step 6's whole copy started the moment the last one stopped (services/stager.ts). On a busy machine the next pull's copy
+ * can make its staging before this process has seen the stopped one's stager exit (CI runs 36794955035, 36808165404); here
+ * the next starts in the same turn as the stop, before that exit can be seen at all. Once it has been, and what it set off
+ * has run: whether the next copy's staging is there, and what its first page met.
+ */
+const stagerCommands: Record<string, () => Promise<unknown>> = {
+    'restage-at-once': async () => {
+        const { StagedCopy, stagingDir } = await import('./services/stager.js');
+        const stopped = await StagedCopy.start('restage-stopped');
+        stopped.abort('the suite stopped it');
+        const starting = StagedCopy.start('restage-next').then((c) => c, (e: Error) => e);
+        const exit = await stopped.stopped();
+        await new Promise((r) => setImmediate(r));
+        const next = await starting;
+        if (next instanceof Error) return { exit, started: next.message };
+        const staging = { there: fs.existsSync(stagingDir()), pages: fs.existsSync(path.join(next.dir, 'pages')) };
+        // No copy's opening page: its stager reads it and refuses it, saying so.
+        const page0 = await next.page(0, JSON.stringify({ n: 0 })).then(() => 'taken', (e: Error) => e.message);
+        next.abort('the suite is done with it');
+        await next.stopped();
+        await new Promise((r) => setImmediate(r));
+        return { exit, started: true, ...staging, page0, left: fs.existsSync(stagingDir()) };
+    },
+};
+
 /** Step 16's look at the room a whole copy needs (services/stager.ts roomForStaging), and the disk's free space as it sees it. */
 const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
     room: async () => (await import('./services/stager.js')).roomForStaging(),
@@ -676,7 +715,7 @@ const roomCommands: Record<string, (args: any) => Promise<unknown>> = {
 };
 
 if (process.argv.includes('--child')) {
-    runPagedCopyChild({ ...auditCommand, ...photoCommands, ...roomCommands }).catch((e) => { console.error(e); process.exit(1); });
+    runPagedCopyChild({ ...auditCommand, ...photoCommands, ...stagerCommands, ...roomCommands }).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });
 }

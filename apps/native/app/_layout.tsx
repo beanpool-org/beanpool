@@ -36,6 +36,7 @@ import { appLockLocks } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { setAppCovered, setAppLocked, setAppUnlockAction, useAppLockScreen } from '../utils/app-lock-screen';
 import { AppLockSurface, installLockCovers } from '../components/AppLock';
+import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
@@ -186,9 +187,12 @@ function RootLayoutNav() {
     }, [identity]);
 
     // While the lock screen shows: the keyboard goes, so nothing typed lands in a field under it, and Android's back button
-    // moves nothing behind it. Registered as it goes up, so it is asked before the navigator's own.
+    // moves nothing behind it. Registered as it goes up, so it is asked before the navigator's own. An iPhone's in-app
+    // browser (node Settings from Manage) sits above anything the app draws, so it is closed as the lock screen goes up;
+    // never for the cover, so a short switch away keeps it open (utils/app-lock-browser.ts).
     useEffect(() => {
         if (lockScreen !== 'lock') return;
+        closeInAppBrowserForLock();
         Keyboard.dismiss();
         const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
         return () => sub.remove();

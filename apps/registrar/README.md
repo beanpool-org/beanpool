@@ -4,7 +4,8 @@ Cloudflare Worker that leases `<name>.beanpool.org` to community nodes and keeps
 Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
-  name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `GET /api/registrar/status` ·
+  name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `POST /api/registrar/rotate` (a fresh
+  tunnel, below) · `GET /api/registrar/status` ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works) ·
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
@@ -19,13 +20,20 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
   (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
-  never evidence). Phase 2 runs only if the sweep is believable: a configured `CANARY_NAME` attested
-  `ok`, impostors ≤ max(2, 10% of live) and not every live name, unverifiable ≤ half of live. Otherwise
-  it acts on no row and logs `[ATTEST_SWEEP] suspended:…`. `ATTEST_FAIL_LIMIT` consecutive impostor
-  verdicts **pause** the name (tunnel and DNS deleted, the name kept for its key); an `ok` or
-  `unverifiable` verdict in an applied sweep ends the run (a suspended sweep changes nothing). Every
-  sweep writes one `sweep_log` row, including a count of content-swaps (a 2xx that is no attest at all),
-  which are counted only, never acted on yet. Then, applied or suspended alike, **upkeep** (not a verdict: it
+  never evidence on its own). A **content swap** is an unverifiable reply that is a 2xx but no attest at all (a page,
+  or JSON with no signature): something other than a BeanPool node answers at the name — a stranger's server at a
+  direct name's old IP address, or a connector running on a copy of the tunnel's token. A BeanPool node never answers
+  one. While a run (below) is open on a name, an `ok` is asked again, up to three answers in all: two connectors on
+  one tunnel share its visitors, and the owner's answer must not hide the other one. This holds only for a wrong key or a page: a second connector that answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, never opens a run, and is not detected (New tunnel key cuts it off). Phase 2 runs only if the sweep
+  is believable: a configured `CANARY_NAME` attested `ok`, impostors and content swaps together ≤ max(2, 10% of
+  live) and not every live name, unverifiable ≤ half of live. Otherwise it acts on no row and logs
+  `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: `ATTEST_FAIL_LIMIT` (2)
+  impostor verdicts, or `SWAP_FAIL_LIMIT` (12, about an hour; design D2 = b) sweeps of foreign answers (an
+  impostor or a content swap; a swap counts only in a sweep that saw the verifier work: the canary `ok`, or with
+  no canary some name `ok`), **pause** the name, `pause_reason` `impostor` or `content-swap` (tunnel and DNS
+  deleted, the name kept for its key, its node's heal resumes it). An `ok` (three, while a run is open) or any
+  other `unverifiable` verdict in an applied sweep ends the runs (a suspended sweep changes nothing). Every sweep
+  writes one `sweep_log` row, including the count of content swaps. Then, applied or suspended alike, **upkeep** (not a verdict: it
   never takes routing away from a live name or routes one that isn't live): a live name whose attest reached no
   node at all (unreachable, Cloudflare's 530, or its 52x for a proxied address) is checked at Cloudflare, and if its
   record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
@@ -79,7 +87,7 @@ or — a later PR — after a long, warned abandonment. States (`name_allocation
 |---|---|---|---|
 | `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
 | `live` | yes | no | claim / approve / heal / resume |
-| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
+| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), sweep content swap (`content-swap`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal (or rotate), except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
 | `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`; the admin's of a name it had blocked or paused, `admin-held-all`, which its own key can't claim either) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time (not after `admin-held-all`: it waits out the hold like anyone, then claims as a new claimant); others once free |
 | `blocked` | no | never | admin block (the kill switch) · admin resume or release (held 30 days from every key, this one included, unless "free now"); the owner can't heal or release it |
 | `abandoned` | no | yes | a later PR |
@@ -93,6 +101,21 @@ own release is routed by the same rule: the take-back first deletes a tunnel its
 normally comes back on a fresh one; a tunnel Cloudflare still won't delete, or a direct address, routes only
 after the re-attest, and otherwise the name stays paused for its key, which its next heal re-attests. `status`
 reports the owner's row in any state with `reason` and `since` (and `held_until` for a release).
+
+**Rotate** — `POST /api/registrar/rotate {name?, origin?}`, signed by the name's key (M3 of the 2026-10-01 review):
+its own tunnel name, live or paused by anything but the admin, onto a fresh tunnel. The old tunnel is deleted at
+Cloudflare first, so every connector running on a copy of its token (a standby given
+away, a token shown on a screen) is cut off (a copied data folder or backup is not: it holds the node key, and `/status` hands that key the new token on its own); then the owner's heal makes the new one, re-points the record at it (the
+record is kept, never deleted: a resolver that saw the name missing would remember that for up to half an hour) and
+answers with its `tunnelToken`. `origin` moves the tunnel's destination at the same time. Row first: the old tunnel
+leaves the row (a decision) before Cloudflare deletes it, so a request that read the row earlier misses its write. If
+Cloudflare won't delete it, it goes back on the row and the answer is **503**, nothing changed (its token still works).
+If the new tunnel fails, the old one is gone all the same, and the node's next heal makes it. Refused: another key or no
+name (404), blocked or paused by the admin (403), released (409: a take-back is on a fresh tunnel anyway), awaiting
+approval (409), a direct name (400: it has no token; a heal with its new `public_ip` re-points it), and a second rotate
+of a name within 5 minutes of its last (429 with `retry_after`: each one deletes and makes a tunnel, on the Cloudflare API
+budget every community's claims and heals share; a heal is never held back). The node's Settings offer it as **New
+tunnel key**.
 
 **The admin's release** (decision D-C, Marty 2026-09-28) holds the name 30 days for its key, as the owner's own
 release does: another key's claim is refused, and the key's node takes it back with its next claim (a misclick
@@ -163,6 +186,9 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    Then `--file migrations/0006_request_nonces.sql` (one table, `request_nonces`: the one-use nonces of v2 signed
    requests, kept ~10 minutes). Before the Worker; a rerun changes nothing. A Worker without the table answers every
    v2 request 500 (v1 requests never touch it).
+   Then `--file migrations/0007_content_swap.sql` (one column, `swap_fails`: the sweeps in a row in which something
+   other than a name's own node answered at it, design D2). Before the Worker: every write that routes a name again
+   resets it, so a Worker without the column fails those. A rerun stops at the ALTER.
 3. Deploy the Worker.
 
 Or let the deploy workflow apply them (below), once the live database is bootstrapped.
@@ -356,7 +382,11 @@ but the owner is routed, a paused, blocked, released or pending name routes noth
 its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
 `FUZZ_CASE='…'` replays one case and prints its trace. `test/review-2026-10-01.test.js` covers the 2026-10-01 review's
 fixes: the switchboard's `?n=`, the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
-v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder.
+v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder. `test/m3-2026-10-02.test.js`
+covers its M3: a content swap paused after 12 applied sweeps in a row and not before, what ends a run and what a
+suspended sweep leaves alone, the mass breaker counting swaps, two connectors on one tunnel (another key, or a page,
+every other answer), a direct name's address passed to a stranger, and rotate (its refusals, Cloudflare refusing or
+failing it, and the admin's pause landing during it).
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

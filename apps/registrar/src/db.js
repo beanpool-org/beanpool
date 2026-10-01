@@ -141,6 +141,10 @@ export const insertInvite = (env, code, nodeName, createdAt = Math.floor(Date.no
 export const insertEvent = (env, name, event, detail = null, at = Math.floor(Date.now() / 1000)) =>
     env.DB.prepare('INSERT INTO name_events (name, at, event, detail) VALUES (?,?,?,?)').bind(name, at, event, detail).run();
 
+// When `name` last had `event` (unix s), or null.
+export const lastEventAt = async (env, name, event) =>
+    (await env.DB.prepare('SELECT MAX(at) AS at FROM name_events WHERE name=? AND event=?').bind(name, event).first())?.at ?? null;
+
 export const listEvents = async (env, name, limit = 200) =>
     (name
         ? await env.DB.prepare('SELECT * FROM name_events WHERE name=? ORDER BY at DESC, id DESC LIMIT ?').bind(name, limit).all()

@@ -33,6 +33,15 @@
  * hidden post, until a moderator keeps it or takes it down. A report that doesn't count still reaches the queue, as
  * every report does. A report of a member, a Pulse item or an enterprise never hides anything.
  *
+ * ONE circle is enough for a post by a member who came in with 12 words and is still on probation
+ * (engine/probation.ts isWordsNewcomer; the two-doors design §2.3): their account cost nothing to make, so what protects
+ * the lobby is how cheaply a real member clears their spam. A sign-in member's post still needs 3 circles, and so does
+ * theirs once probation ends or they add a sign-in.
+ *
+ * On every post, whoever wrote it (design §2.3, both doors), a reporter counts only when they are ESTABLISHED as well:
+ * off probation themselves (engine/probation.ts probationState), on top of every rule above. So a newcomer's report
+ * hides nothing, however old the account: a 12-words account that waited a week without posting is still on probation.
+ *
  * A moderator undoes it by restoring the post (`restoreHiddenPost`: every open report on it is dismissed, its
  * reporters are told it was kept), or by dismissing reports one at a time until what hid it no longer adds up
  * (`recheckHiddenPost`, weighed again as above). Removing it works as it always has.
@@ -52,6 +61,7 @@
 import { isMemberKeySpelling } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { isWordsNewcomer, probationState } from './probation.js';
 import { bumpActivityVersion, bumpMembersVersion, bumpPostsVersion } from './versions.js';
 import { nodeRoleOf } from './node-roles.js';
 import {
@@ -64,6 +74,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const AUTO_HIDE = {
     /** Independent circles of reporters who count, to hide a post. */
     circles: 3,
+    /** ...or this many, for a post by a member who came in with 12 words and is still on probation (the header). */
+    wordsNewcomerCircles: 1,
     /** A reporter was a member for at least this long when they reported it. */
     reporterMinAgeDays: 7,
     /** A reporter's standing is at least this share of the author's, rounded up. */
@@ -141,6 +153,25 @@ export function standingOf(pubkey: string, now: number = Date.now(), opts: { cou
     return weekPoints(row.joined_at, now) + keptPostPoints(pubkey, opts.countingPost ?? null) + tradePartnerPoints(pubkey);
 }
 
+export interface StandingParts { weeks: number; keptPosts: number; dealPartners: number; total: number }
+
+/**
+ * `standingOf`, with what it is made of, for the moderators' screens (engine/burst-cleanup.ts). `hiddenCountsAsKept`: a
+ * post hidden for review still counts as kept, as `countingPost` does for the one post a hide weighs, so hiding a
+ * member's posts never lowers the bar that guards them.
+ */
+export function standingParts(pubkey: string, now: number = Date.now(), opts: { hiddenCountsAsKept?: boolean } = {}): StandingParts {
+    const row = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(pubkey) as { joined_at: string | null } | undefined;
+    if (!row) return { weeks: 0, keptPosts: 0, dealPartners: 0, total: 0 };
+    const keptPosts = opts.hiddenCountsAsKept
+        ? (db.prepare(`SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
+              WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL LIMIT ?)`)
+            .get(pubkey, STANDING.maxKeptPosts) as { c: number }).c
+        : keptPostPoints(pubkey, null);
+    const weeks = weekPoints(row.joined_at, now), dealPartners = tradePartnerPoints(pubkey);
+    return { weeks, keptPosts, dealPartners, total: weeks + keptPosts + dealPartners };
+}
+
 /** Whether a moderator kept enough of what this member reported lately that their reports no longer count. */
 function keptReportsTooMany(pubkey: string, now: number): boolean {
     const since = iso(now - AUTO_HIDE.keptReportsWindowDays * DAY_MS);
@@ -195,12 +226,16 @@ export interface HideTally {
     needed: number;
     /** The reporters who count, grouped into independent circles. */
     circles: string[][];
+    /** How many circles hide it: 1 for a 12-words newcomer's post (only established reporters count then), else 3. */
+    circlesNeeded: number;
 }
 
 /** Who counts towards hiding this post, and in how many independent circles (the file header has the rule). */
 export function hideTally(postId: string, now: number = Date.now()): HideTally {
     const post = postRow(postId);
-    if (!post) return { authorStanding: 0, needed: 0, circles: [] };
+    if (!post) return { authorStanding: 0, needed: 0, circles: [], circlesNeeded: AUTO_HIDE.circles };
+    const wordsNewcomer = !!post.author_pubkey && isWordsNewcomer(post.author_pubkey, now);
+    const circlesNeeded = wordsNewcomer ? AUTO_HIDE.wordsNewcomerCircles : AUTO_HIDE.circles;
     const authorStanding = post.author_pubkey ? standingOf(post.author_pubkey, now, { countingPost: postId }) : 0;
     const needed = Math.max(1, Math.ceil(authorStanding * AUTO_HIDE.reporterShareOfAuthor));
     const rows = db.prepare(
@@ -227,6 +262,8 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         if (weeks + STANDING.maxKeptPosts + STANDING.maxTradePartners < needed) continue;
         if (weeks + keptPostPoints(r.reporter, null) + tradePartnerPoints(r.reporter) < needed) continue;
         if (keptReportsTooMany(r.reporter, now)) continue;
+        // Only an established reporter counts, whoever wrote the post (design 2.3, both doors): off probation.
+        if (probationState(r.reporter, now).onProbation) continue;
         counting.push(r.reporter);
     }
     // One circle per connected group: reporters sharing a door label or an invite tree, transitively.
@@ -253,7 +290,7 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         const root = find(`r:${r}`);
         byRoot.set(root, [...(byRoot.get(root) ?? []), r]);
     }
-    return { authorStanding, needed, circles: [...byRoot.values()] };
+    return { authorStanding, needed, circles: [...byRoot.values()], circlesNeeded };
 }
 
 /** Hidden or visible again: every copy anyone holds has to change, and the feed's post_created lines follow it. */
@@ -274,7 +311,7 @@ export function evaluateAutoHide(cb: ModerationNoticeCallbacks, postId: string |
     const post = postRow(postId);
     if (!post || post.hidden_by_reports_at || post.active !== 1 || post.status === 'cancelled') return false;
     const tally = hideTally(postId, now);
-    if (tally.circles.length < AUTO_HIDE.circles) return false;
+    if (tally.circles.length < tally.circlesNeeded) return false;
     const at = iso(now);
     const res = db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL')
         .run(at, at, postId);
@@ -337,7 +374,8 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
     if (!postId) return false;
     const post = postRow(postId);
     if (!post?.hidden_by_reports_at) return false;
-    if (hideTally(postId, now).circles.length >= AUTO_HIDE.circles) return false;
+    const tally = hideTally(postId, now);
+    if (tally.circles.length >= tally.circlesNeeded) return false;
     return unhide(cb, post, now);
 }
 

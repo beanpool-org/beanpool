@@ -5,7 +5,8 @@
  *
  *   1. A fresh local node with `nodeProfile.beans=false`: Beans really are off (the override works where nothing
  *      has ever moved), and escrow goes with them.
- *   2. The global profile on a fresh node. The boot log lists every switch still pinned by NOT_BUILT_YET.
+ *   2. The global profile on a fresh node. The boot log lists no switch as pinned: every one is built (the last,
+ *      ssoRequiredForJoin, with the 12-words door).
  *      /api/community/info reports beans, escrow and enterprises off. A send is 403 profile_no_beans before any
  *      other check; a post with a Beans price is 403 and one without is stored at 0, as is an edit; every escrow,
  *      treasury/enterprise, crowdfund/Commons-project and federation purchase route is 404 feature_off, reads
@@ -129,8 +130,8 @@ async function main() {
     const boot2 = await capture(() => mirrorNodeProfileAtBoot());
     assert(!boot2.error, `the global node boots (${String(boot2.error ?? 'ok')})`);
     const pinnedLine = boot2.logs.find(l => l.includes('Not built yet, so these run as on any node today')) ?? '';
-    assert(pinnedLine.includes('ssoRequiredForJoin=true'),
-        `the boot log lists every switch still pinned, and what the profile wants (${pinnedLine})`);
+    assert(pinnedLine === '',
+        `no switch is pinned any more, ssoRequiredForJoin included (the 12-words door built it), so the boot log lists none (${pinnedLine})`);
     assert(!/\bknocks=/.test(pinnedLine), 'nor knocks, which G6 built');
     assert(!/\bdirectoryMirror=|publishToDirectory=/.test(pinnedLine), 'nor the directory mirror and publishToDirectory, which G5 built');
     assert(!/\bbeans=|\bescrow=|enterprises=|treasuries=|crowdfund=/.test(pinnedLine), 'and the money switches are no longer among them');

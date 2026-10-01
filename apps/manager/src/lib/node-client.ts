@@ -190,6 +190,8 @@ export interface NodeReport {
     postTitle?: string | null;
     title?: string | null;
     postAuthorCallsign?: string | null;
+    /** The reported post's author's key, read by the node from the post (null when no post is reported). */
+    postAuthorPubkey?: string | null;
     postRemoved?: boolean | null;
     targetPulseItemId?: string;
     /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
@@ -825,6 +827,7 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                 postTitle: r.postTitle ?? r.title ?? null,
                 postId: typeof r.postId === 'string' ? r.postId : null,
                 postAuthorCallsign: r.postAuthorCallsign ?? null,
+                postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
                 postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
             };
         });
@@ -1116,6 +1119,7 @@ export async function fetchReports(
             postTitle: r.postTitle ?? r.title ?? null,
             postId: typeof r.postId === 'string' ? r.postId : null,
             postAuthorCallsign: r.postAuthorCallsign ?? null,
+            postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
             postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
         };
     }) : [];
@@ -1158,6 +1162,147 @@ export async function actionNodeReport(
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     return data;
+}
+
+// ── Clean-up by burst (server: engine/burst-cleanup.ts) ─────────────────────────────────────────────────────────────
+// From one account, the others that joined through the open door from the same connection within a day of it. The node
+// says nothing about the connection itself: only which accounts share one.
+
+export interface BurstAccount {
+    publicKey: string;
+    callsign: string | null;
+    /** When they joined through the door. */
+    joinedAt: string;
+    status: 'active' | 'suspended' | 'removed';
+    standing: number;
+    standingParts: { weeks: number; keptPosts: number; dealPartners: number };
+    /** Standing at or above the node's `establishedStanding`: an action names them only when told so. */
+    established: boolean;
+    postsUp: number;
+    postsHidden: number;
+    openReports: number;
+    /** Owner, admin or moderator: never part of an action. */
+    holdsRole: boolean;
+}
+
+export interface Burst {
+    account: BurstAccount;
+    joinedThroughDoor: boolean;
+    others: BurstAccount[];
+    count: number;
+    removedAlready: number;
+    establishedStanding: number;
+}
+
+export interface BurstDigestLine {
+    accounts: number;
+    stillHere: number;
+    removed: number;
+    reported: number;
+    postsHidden: number;
+    firstJoinAt: string;
+    lastJoinAt: string;
+    open: { publicKey: string; callsign: string | null } | null;
+}
+
+export interface BurstActionLine {
+    id: string;
+    kind: 'hide' | 'remove';
+    at: string;
+    by: 'owner' | 'admin' | 'moderator';
+    accounts: number;
+    posts: number;
+    undoneAt: string | null;
+    account: { publicKey: string; callsign: string | null } | null;
+}
+
+export interface BurstDigest {
+    bursts: BurstDigestLine[];
+    actions: BurstActionLine[];
+    minAccounts: number;
+    days: number;
+}
+
+/** A refusal from the node, with its code, and for `established` the accounts it means. */
+export class BurstRequestError extends Error {
+    constructor(message: string, readonly status: number, readonly code?: string, readonly established?: string[]) {
+        super(message);
+        this.name = 'BurstRequestError';
+    }
+}
+
+async function burstRequest<T>(nodeUrl: string, path: string, method: 'GET' | 'POST', body: unknown, adminPassword?: string, tfaToken?: string): Promise<T> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, path), {
+        method,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
+        ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new BurstRequestError(data?.error || `HTTP ${res.status}: ${res.statusText}`, res.status, data?.code,
+            Array.isArray(data?.established) ? data.established : undefined);
+    }
+    return data as T;
+}
+
+/**
+ * The digest: recent bursts and the actions taken. Null where there are none to have: a node whose door labels no joins
+ * (every local community, 404), or one from before this (404 or 403).
+ */
+export async function fetchBurstDigest(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<BurstDigest | null> {
+    try {
+        const d = await burstRequest<Partial<BurstDigest>>(nodeUrl, '/api/local/admin/bursts', 'GET', undefined, adminPassword, tfaToken);
+        return {
+            bursts: Array.isArray(d.bursts) ? d.bursts : [],
+            actions: Array.isArray(d.actions) ? d.actions : [],
+            minAccounts: typeof d.minAccounts === 'number' ? d.minAccounts : 5,
+            days: typeof d.days === 'number' ? d.days : 7,
+        };
+    } catch (e: unknown) {
+        if (e instanceof BurstRequestError && (e.status === 404 || e.status === 403)) return null;
+        throw e;
+    }
+}
+
+/**
+ * The member a report is about, to open "Who joined with them" from. A report on a post is about the post's author, as
+ * the node reads it from the post (`postAuthorPubkey`), never the key the reporter sent (`targetPubkey`): a crafted report
+ * could name anyone beside a real spam post. A node that doesn't say who wrote it gets null, so nothing is offered.
+ * Otherwise (a member, or a Pulse item, whose owner the node sets) the report's target.
+ */
+export function reportBurstSubject(report: NodeReport): string | null {
+    if (report.postId) return typeof report.postAuthorPubkey === 'string' && report.postAuthorPubkey ? report.postAuthorPubkey : null;
+    const target = typeof report.targetPubkey === 'string' && report.targetPubkey ? report.targetPubkey
+        : (typeof report.target_pubkey === 'string' ? report.target_pubkey : '');
+    return target || null;
+}
+
+/** One account's burst: the account, and the others still here, oldest join first. */
+export async function fetchBurst(nodeUrl: string, pubkey: string, adminPassword?: string, tfaToken?: string): Promise<Burst> {
+    return burstRequest<Burst>(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/burst`, 'GET', undefined, adminPassword, tfaToken);
+}
+
+/** Exactly these accounts, and how many, as the node's guard asks. `includeEstablished` only once the screen has said so. */
+function selection(members: string[], includeEstablished: boolean) {
+    return { members, count: members.length, ...(includeEstablished ? { includeEstablished: true } : {}) };
+}
+
+export async function hideBurstPosts(
+    nodeUrl: string, anchor: string, members: string[], includeEstablished: boolean, adminPassword?: string, tfaToken?: string,
+): Promise<{ action: { id: string; kind: 'hide'; accounts: number; posts: number } }> {
+    return burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(anchor)}/burst/hide`, 'POST', selection(members, includeEstablished), adminPassword, tfaToken);
+}
+
+/** Owners and admins only: the node refuses a moderator. */
+export async function removeBurstAccounts(
+    nodeUrl: string, anchor: string, members: string[], includeEstablished: boolean, adminPassword?: string, tfaToken?: string,
+): Promise<{ removed: number; failed: { publicKey: string; error: string }[] }> {
+    return burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(anchor)}/burst/remove`, 'POST', selection(members, includeEstablished), adminPassword, tfaToken);
+}
+
+export async function undoBurstHide(nodeUrl: string, actionId: string, adminPassword?: string, tfaToken?: string): Promise<{ restored: number; keptHidden: number }> {
+    return burstRequest(nodeUrl, `/api/local/admin/bursts/${encodeURIComponent(actionId)}/undo`, 'POST', {}, adminPassword, tfaToken);
 }
 
 export async function generateNodeInvite(

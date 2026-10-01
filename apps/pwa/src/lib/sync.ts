@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs } from '@beanpool/core';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -51,6 +51,11 @@ let pingIntervalId: ReturnType<typeof setInterval> | null = null;
 let reconnectAttempt = 0;
 /** True while the connection being made is a retry after a drop, not a start or the tab coming back. */
 let isRetry = false;
+/**
+ * The node's "no room" closes in a row (@beanpool/core WS_NO_ROOM_CLOSE_CODE: a full node lets the socket in and closes
+ * it at once, saying when to come back). Sizes the wait, which grows with each; any other close ends the run.
+ */
+let noRoomRefusals = 0;
 let reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** The member this socket signed in as, so a pushed change about their own listing takes the full refresh. */
 let memberPubkey: string | null = null;
@@ -312,7 +317,7 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         } catch { /* ignore malformed messages */ }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (e?: CloseEvent) => {
         if (ws === socket) {
             ws = null;
             stopHeartbeat();
@@ -325,7 +330,16 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             }
             currentState = { ...currentState, connected: false };
             notify();
-            scheduleReconnect(originalUrl);
+            // A full node: wait what it asked (5 minutes, growing) instead of coming back within 30 s. The catch-up
+            // sync each try opens with keeps the page current over HTTP meanwhile.
+            const askedSec = wsNoRoomRetrySec(e?.code, e?.reason);
+            if (askedSec !== null) {
+                noRoomRefusals++;
+                scheduleReconnect(originalUrl, wsNoRoomDelayMs(noRoomRefusals, askedSec));
+            } else {
+                noRoomRefusals = 0;
+                scheduleReconnect(originalUrl);
+            }
         }
     };
 
@@ -414,12 +428,13 @@ export function reconnectToAnchor(): void {
     connectToAnchor(currentUrl ?? undefined);
 }
 
-function scheduleReconnect(url: string): void {
+/** `delayMs`: the node's own wait (a "no room" close); without it, the backoff below. */
+function scheduleReconnect(url: string, delayMs?: number): void {
     if (reconnectTimeoutId) return;
 
     // Full jitter over a window that starts at 5 s and grows to 30 s. When Cloudflare restarts an edge server,
     // every tab on it drops at once; 1 s plus up to 1 s of jitter brought them all back inside two seconds.
-    const delay = reconnectDelayMs(reconnectAttempt);
+    const delay = delayMs ?? reconnectDelayMs(reconnectAttempt);
 
     reconnectTimeoutId = setTimeout(() => {
         reconnectTimeoutId = null;
@@ -543,6 +558,7 @@ export function resetSyncForTest(): void {
     lastPongAt = null;
     reconnectAttempt = 0;
     isRetry = false;
+    noRoomRefusals = 0;
     memberPubkey = null;
     visitorSocket = false;
     visitorDoorbells.reset();

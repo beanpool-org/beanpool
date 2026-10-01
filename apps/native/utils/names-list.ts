@@ -230,18 +230,26 @@ export function traceFor(state: NamesState, identity: Pick<BeanPoolIdentity, 'pr
 
 /** Why this phone won't use the list's current key, in a form the screen says plainly. */
 export interface NamesRefusal {
-    reason: 'other_community' | 'rolled_back' | 'unsigned' | 'untrusted';
+    /**
+     * `old_key`: the current key was made with a key this phone saw replaced under an admin's name (`makerCallsign`),
+     * newer than any this phone had taken when it saw the change: their lost phone before it was lost, or whoever has it
+     * since. This phone can't tell which (PR #1411's fourth deciding review).
+     */
+    reason: 'other_community' | 'rolled_back' | 'unsigned' | 'untrusted' | 'old_key';
     /** Who the key says made it (its signer, or whom the node names), and their callsign where they are an admin here. */
     maker: string | null;
     makerCallsign: string | null;
     /** The admin may check the maker in person and then trust them: a real signature, by a key that is an admin here. */
     canTrust: boolean;
     /**
-     * `rolled_back` only: this phone holds the key the server now calls current, so it may make a new one past the newest it
-     * took (for itself alone, asked first); the server's old key is used for nothing.
+     * `rolled_back`: this phone holds the key the server now calls current, so it may make a new one past the newest it
+     * took (for itself alone, asked first); the server's old key is used for nothing. `old_key`: this phone holds a wrap of
+     * the current key and opens it apart (the walk's salvage), so it may make a new key of its own, asked first, and seal
+     * again under it the names the old key's generation opens ({@link makeNewKeyOnThisPhone}); nothing new is sealed
+     * under the old key's generation, and it is never counted as taken.
      */
     canMakeNew?: boolean;
-    /** `rolled_back` only: the generation the server offers, and the newest this phone took. */
+    /** `rolled_back` and `old_key`: the generation the server offers, and the newest this phone took. */
     offered?: number;
     newest?: number;
 }
@@ -264,6 +272,15 @@ export function namesRefusal(state: NamesState, trace: NamesTrustTrace, hadPin: 
     const mine = trace.refused.find((r) => r.generation === state.generation && r.reason !== 'did_not_open');
     const hasBasis = hadPin || !!trace.pin;
     if (!mine && (!hasBasis || trace.currentTraced)) return null;
+    const kept = pin ?? trace.pin;
+    const old = mine?.reason === 'untrusted' ? kept?.replaced[mine.wrappedBy] : undefined;
+    if (mine && old) {
+        const iHold = state.admins.some((a) => a.pubkey === state.me.pubkey && a.holdsKey);
+        return {
+            reason: 'old_key', maker: mine.wrappedBy, makerCallsign: old.callsign, canTrust: false,
+            canMakeNew: iHold && trace.salvage.has(state.generation), offered: state.generation, newest: kept?.newest ?? 0,
+        };
+    }
     let maker = mine?.wrappedBy ?? null;
     let signed = mine ? mine.reason === 'untrusted' : false;
     if (!mine) {
@@ -341,6 +358,11 @@ export function keyPlan(state: NamesState, myPubkey: string, trace: NamesTrustTr
     if (state.newKeyNeeded) {
         return iHold ? { kind: 'make_new' } : { kind: 'wait', holders, newKeyNeeded: true };
     }
+    // A key this phone saw replaced under an admin's name, and no key of the list made since without it: whoever has the
+    // lost phone may hold the current key. A phone that holds it makes a new one, whatever the server says (PR #1411's
+    // fourth deciding review: a server that kept quiet about the re-key let the old key read what was added after).
+    const kept = pin ?? trace.pin;
+    if (iHold && kept && Object.keys(kept.replaced).some((k) => !(k in kept.dropped))) return { kind: 'make_new' };
     return iHold ? { kind: 'ready' } : { kind: 'wait', holders, newKeyNeeded: false };
 }
 
@@ -384,6 +406,34 @@ export async function installKeyFor(
     if (!sent.ok) return sent;
     await pinSelf(store, identity, anchor, state.communityId);
     return { ok: true, value: { generation, key } };
+}
+
+/**
+ * The admin's "Make a new key" on a refusal that offers one (asked first on the screen): the new key, made as
+ * {@link installKeyFor} makes it. After an `old_key` refusal, the names the old key's generation opens (the walk's
+ * salvage) are sealed again under this new key, and only under it; `carried` counts them, for the screen to say so.
+ */
+export async function makeNewKeyOnThisPhone(
+    anchor: string, identity: BeanPoolIdentity, state: NamesState, plan: KeyPlan, store: NamesTrustStore,
+): Promise<NamesResult<{ generation: number; carried: number }>> {
+    const made = await installKeyFor(anchor, identity, state, plan, store);
+    if (!made.ok) return made;
+    const generation = made.value.generation;
+    if (plan.kind !== 'refused' || plan.refusal.reason !== 'old_key') return { ok: true, value: { generation, carried: 0 } };
+    const s = await fetchNamesState(anchor, identity);
+    if (!s.ok || s.value.generation !== generation) return { ok: true, value: { generation, carried: 0 } };
+    const trace = traceFor(s.value, identity, await readNamesTrust(store, identity.publicKey, anchor));
+    if (!trace.keys.has(generation) || !trace.currentTraced) return { ok: true, value: { generation, carried: 0 } };
+    const l = await fetchNamesList(anchor, identity);
+    if (!l.ok) return l;
+    // The salvaged keys open the old key's generation; the walk's keys open the rest. Sealed under the new key only.
+    const batches = reEncryptBatches(l.value, new Map([...trace.salvage, ...trace.keys]), generation);
+    if (batches.length === 0) return { ok: true, value: { generation, carried: 0 } };
+    const salvaged = new Set((l.value.entries ?? []).filter((e) => trace.salvage.has(e.keyGeneration) && !trace.keys.has(e.keyGeneration)).map((e) => e.id));
+    const carried = batches.flat().filter((e) => salvaged.has(e.id)).length;
+    const sent = await sendReEncrypted(anchor, identity, generation, batches);
+    if (!sent.ok) return sent;
+    return { ok: true, value: { generation, carried } };
 }
 
 /**
@@ -523,7 +573,7 @@ export interface NamesOpened {
     notice: string | null;
     /** This phone's pin after opening: whom it trusts, for the screen's Share rows. */
     pin: NamesTrustPin | null;
-    /** Admins whose key changed under their name since this phone last looked: it trusts neither key until checked. */
+    /** Admins whose key changed under their name, not checked in person yet: said on every open until they are. */
     keyChanged: string[];
 }
 
@@ -564,8 +614,12 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         s = await fetchNamesState(anchor, identity);
         if (!s.ok) return s;
         ({ trace, plan, pin } = await look(s.value));
-        notice = was === 'make_new' ? NAMES_COPY.newKeyMade : notice;
+        // Both: the new key, and whom this phone trusted on first use (with their code), if it did.
+        if (was === 'make_new') notice = [notice, NAMES_COPY.newKeyMade].filter(Boolean).join('\n\n');
     }
+    // Said on every open until checked in person: an admin the server lists under a callsign whose key this phone saw
+    // replaced, on a key it doesn't trust yet.
+    if (s.ok) for (const a of s.value.admins) if (namesShareCheck(pin, a) === 'changed' && !keyChanged.includes(a.callsign)) keyChanged.push(a.callsign);
     if (keyChanged.length) notice = [notice, ...keyChanged.map((c) => NAMES_COPY.keyChanged(c))].filter(Boolean).join('\n\n');
     if (plan.kind !== 'ready') return { ok: true, value: { state: s.value, plan, keys: trace.keys, list: null, notice, pin, keyChanged } };
     const l = await fetchNamesList(anchor, identity);
@@ -701,14 +755,14 @@ export const NAMES_COPY = {
         + 'a check made with the wrong person, a phone someone else gets into, and the first key this phone took.',
     notShownToMembers: 'Members don’t see these names. Showing real names to members isn’t available yet.',
     makingKey: 'Setting up the list’s key on this phone…',
-    newKeyMade: 'Someone stopped being an admin, so this phone made the list a new key. They can’t read anything written from now on. '
+    newKeyMade: 'An admin left, or an admin’s phone key changed, so this phone made the list a new key. Their old key can’t read anything written from now on. '
         + 'Share the new key with each of the other admins below. Where it asks, check their phone in person first.',
     firstTrust: (callsign: string | null, code: string) => `This phone now trusts ${callsign ? `@${callsign}` : 'the admin'} for the names list: `
         + `they shared its key with you. Check it in person: their code is ${code}, and it should match “Your code” on their phone. `
         + 'If it doesn’t, don’t add names, and tell your other admins.',
     keyChanged: (callsign: string) => `@${callsign}’s phone key changed: check it with @${callsign} in person before sharing. `
         + 'A new phone does that, and so can whoever runs the server, so this phone trusts neither key until you check. '
-        + 'It takes nothing new the old key signs: a lost phone still has it.',
+        + 'A lost phone still has the old key, so this phone takes nothing new it signs, and makes the list a new key before it writes anything more.',
     refusedTitle: 'This phone refused the list’s key',
     refused: (r: NamesRefusal, trusted: string[]) => {
         const who = r.makerCallsign ? `@${r.makerCallsign}` : 'a key that isn’t an admin here';
@@ -721,6 +775,16 @@ export const NAMES_COPY = {
                 + 'A server put back to an older copy does that, and an admin who was removed may hold that older key. This phone used nothing '
                 + 'under it and changed nothing.' + (r.canMakeNew ? ' You can make a new key on this phone: the older entries it can open are sealed again under it.' : ask);
         }
+        if (r.reason === 'old_key') {
+            const whose = r.makerCallsign ? `@${r.makerCallsign}’s old phone key` : 'an admin’s old phone key';
+            return `The list’s newest key (number ${r.offered ?? 0}) was made with ${whose}, and it is newer than any key this phone had taken `
+                + `when it saw that key change. ${r.makerCallsign ? `@${r.makerCallsign}’s` : 'Their'} lost phone may have made it before it was lost, or `
+                + 'someone who has that phone may have made it since: this phone can’t tell, so it used nothing under it and changed nothing.'
+                + (r.canMakeNew
+                    ? ' You can make a new key on this phone: it opens the names under that key and seals them again under the new one. Names '
+                        + 'written under it can’t be told from ones someone else wrote in, so check the list afterwards.'
+                    : ask);
+        }
         if (r.reason === 'unsigned') {
             return `The list’s newest key says it was made by ${who}, but it isn’t signed by them. Whoever runs the server, or anyone `
                 + 'with its database, could have written it in. This phone used nothing under it and changed nothing: no name was sealed under it.' + ask;
@@ -728,6 +792,9 @@ export const NAMES_COPY = {
         return `The list’s newest key was made by ${who}, and no admin this phone trusts added them. Whoever runs the server can make any key `
             + 'an admin, so this phone used nothing under it and changed nothing: no name was sealed under it.' + ask;
     },
+    carriedOver: (callsign: string | null, generation: number, count: number) => `This phone made the list a new key and sealed ${count} `
+        + `${count === 1 ? 'name' : 'names'} from ${callsign ? `@${callsign}’s` : 'an admin’s'} old phone key (number ${generation}) again under it. `
+        + 'Names written under that key can’t be told from ones someone else wrote in: check the list, and delete any you don’t know.',
     makeNewTitle: 'Make a new key on this phone?',
     makeNew: 'This phone makes the list a new key for you alone, and seals the entries it can open again under it. Every other admin '
         + 'then waits for you to share it, after checking their phone in person where the app asks.',

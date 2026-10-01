@@ -211,9 +211,16 @@ describe('the walk', () => {
     it('reads back a stored pin (and the first version’s, which knew only whom it trusted), and nothing else', () => {
         const a = admin();
         expect(readNamesTrustPin({ v: 1, communityId: COMMUNITY, trusted: [a.publicKey, 'junk'] }))
-            .toEqual({ v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: {}, newest: 0, dropped: {}, replaced: {} });
-        const kept = { v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada', junk: 'x' }, newest: 3, dropped: { [a.publicKey]: 2, bad: 1 }, replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 }, [admin().publicKey]: 'old form' } };
-        expect(readNamesTrustPin(kept)).toEqual({ v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada' }, newest: 3, dropped: { [a.publicKey]: 2 }, replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 } } });
+            .toEqual({ v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: {}, newest: 0, dropped: {}, replaced: {}, took: {} });
+        const digest = 'ab'.repeat(32);
+        const kept = {
+            v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada', junk: 'x' }, newest: 3, dropped: { [a.publicKey]: 2, bad: 1 },
+            replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 }, [admin().publicKey]: 'old form' }, took: { 3: digest, 0: digest, x: digest, 2: 'short' },
+        };
+        expect(readNamesTrustPin(kept)).toEqual({
+            v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada' }, newest: 3, dropped: { [a.publicKey]: 2 },
+            replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 } }, took: { 3: digest },
+        });
         expect(readNamesTrustPin({ v: 3, communityId: COMMUNITY, trusted: [] })).toBeNull();
         expect(readNamesTrustPin(null)).toBeNull();
     });
@@ -277,8 +284,15 @@ describe('what the pin remembers (PR #1411, second deciding review)', () => {
     it('A KEY CHANGED UNDER AN ADMIN’S NAME: the old key is dropped for good; the new one is trusted only once checked in person', () => {
         const [owen, ada, op] = [admin(), admin(), admin()];
         // Owen's phone had taken generation 2 (Ada made it) when it noticed.
-        let pin = pinCallsigns({ ...emptyNamesTrustPin(COMMUNITY, owen.publicKey), trusted: [owen.publicKey, ada.publicKey].sort(), newest: 2 },
+        const s = new FakeServer();
+        const [k1, k2, k3] = [newNamesListKey(), newNamesListKey(), newNamesListKey()];
+        s.wrapBy(owen, k1, owen.publicKey, 1);
+        s.wrapBy(owen, k1, ada.publicKey, 1);
+        s.wrapBy(ada, k2, ada.publicKey, 2);
+        s.wrapBy(ada, k2, owen.publicKey, 2);
+        let pin = pinCallsigns(trace(s, owen, emptyNamesTrustPin(COMMUNITY, owen.publicKey)).pin!,
             [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
+        expect(pin.newest).toBe(2);
         expect(pin.names[ada.publicKey]).toBe('Ada');
         // The server moved Ada's account to a key of its own.
         const admins = [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: op.publicKey, callsign: 'ada' }];
@@ -290,12 +304,6 @@ describe('what the pin remembers (PR #1411, second deciding review)', () => {
         expect(namesShareCheck(pin, admins[1])).toBe('changed');
         // The old key never comes back from an old wrap: a share Owen made to it before is ignored. What it signed up to
         // generation 2 (the key Owen's phone holds came from Ada) still counts; what it signs for 3 doesn't.
-        const s = new FakeServer();
-        const [k1, k2, k3] = [newNamesListKey(), newNamesListKey(), newNamesListKey()];
-        s.wrapBy(owen, k1, owen.publicKey, 1);
-        s.wrapBy(owen, k1, ada.publicKey, 1);
-        s.wrapBy(ada, k2, ada.publicKey, 2);
-        s.wrapBy(ada, k2, owen.publicKey, 2);
         const t2 = trace(s, owen, pin);
         expect(t2.trusted.has(ada.publicKey)).toBe(false);
         expect(t2.keys.has(2) && t2.currentTraced).toBe(true);
@@ -374,6 +382,83 @@ describe('what the pin remembers (PR #1411, second deciding review)', () => {
         // And a change noticed now is kept at what this phone took (1), not at anything the server says.
         const changes = namesKeyChanges(seen, [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: adaNew.publicKey, callsign: 'Ada' }]);
         expect(pinKeyChanges(seen, changes).replaced).toEqual({ [ada.publicKey]: { callsign: 'Ada', at: 1 } });
+    });
+
+    /** Owen and Ada hold 1 (Owen's) and 2 (Ada's), and Owen's phone took both; then Ada's account moves to a new key. */
+    function replacedAda(extra: Admin[] = []) {
+        const [owen, ada] = [admin(), admin()];
+        const s = new FakeServer();
+        const [k1, k2] = [newNamesListKey(), newNamesListKey()];
+        for (const h of [owen, ada, ...extra]) s.wrapBy(owen, k1, h.publicKey, 1);
+        for (const h of [ada, owen, ...extra]) s.wrapBy(ada, k2, h.publicKey, 2);
+        const seen = pinCallsigns(trace(s, owen, null).pin!, [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
+        const pin = pinKeyChanges(seen, [{ callsign: 'Ada', was: ada.publicKey }]);
+        return { owen, ada, s, k1, k2, seen, pin };
+    }
+
+    it('THE FOURTH REVIEW’S RE-SIGNED WRAP: the old key puts another key in a generation this phone took: refused', () => {
+        const { owen, ada, s, k2, seen, pin } = replacedAda();
+        const tookDigest = namesWrapDigest(s.myKeys(owen.publicKey).find((w) => w.generation === 2)!);
+        expect(pin.replaced[ada.publicKey].at).toBe(2);
+        expect(trace(s, owen, pin).keys.get(2)).toEqual(k2);
+        // Whoever has Ada's lost phone, with whoever runs the server: Owen's wrap of generation 2, signed again with the old
+        // key, now holding a key of theirs.
+        const theirs = newNamesListKey();
+        s.wrapBy(ada, theirs, owen.publicKey, 2);
+        const t = trace(s, owen, pin);
+        expect(t.keys.has(2)).toBe(false);
+        expect(t.refused).toContainEqual({ generation: 2, wrappedBy: ada.publicKey, reason: 'untrusted' });
+        expect(t.salvage.has(2)).toBe(false);
+        // What the pin kept, that this rests on: the digest of the wrap of generation 2 this phone took.
+        expect(seen.took[2]).toBe(tookDigest);
+    });
+
+    it('a replaced key drops no one: an admin it names as dropped stays trusted, and their new key is taken', () => {
+        const cy = admin();
+        const { owen, ada, s, k2, pin } = replacedAda([cy]);
+        expect(pin.trusted).toContain(cy.publicKey);
+        // The old key signs Ada's own wrap of generation 2 again, now naming Cy as dropped.
+        s.wrapBy(ada, k2, ada.publicKey, 2, [cy.publicKey]);
+        // Cy makes generation 3 for real (dropping Ada's old key), for Cy and Owen.
+        const k3 = newNamesListKey();
+        s.wrapBy(cy, k3, cy.publicKey, 3, [ada.publicKey]);
+        s.wrapBy(cy, k3, owen.publicKey, 3);
+        for (const p of [pin, pinCheckedKey(pin, cy.publicKey, 'Cy')]) {
+            const t = trace(s, owen, p);
+            expect(t.trusted.has(cy.publicKey)).toBe(true);
+            expect(t.keys.has(3) && t.currentTraced).toBe(true);
+            expect(t.pin!.dropped).toEqual({ [ada.publicKey]: 3 });
+        }
+    });
+
+    it('SALVAGE: a generation the old key made past what this phone took is opened apart, never used, sealed under or counted as taken', () => {
+        const { owen, ada, s, pin } = replacedAda();
+        // Ada's old phone made generation 3 and shared it with Owen before it was lost; Owen's phone never took it.
+        const k3 = newNamesListKey();
+        s.wrapBy(ada, k3, ada.publicKey, 3);
+        s.wrapBy(ada, k3, owen.publicKey, 3);
+        const t = trace(s, owen, pin);
+        expect([...t.keys.keys()].sort()).toEqual([1, 2]);
+        expect(t.currentTraced).toBe(false);
+        expect(t.refused[0]).toMatchObject({ generation: 3, wrappedBy: ada.publicKey, reason: 'untrusted' });
+        expect([...t.salvage.keys()]).toEqual([3]);
+        expect(t.salvage.get(3)).toEqual(k3);
+        expect(t.pin!.newest).toBe(2);
+        expect(t.pin!.took[3]).toBeUndefined();
+        // Signed by a key that was never replaced (one this phone never trusted): no salvage, only a refusal.
+        const other = admin();
+        s.wrapBy(other, newNamesListKey(), owen.publicKey, 4);
+        const t4 = trace(s, owen, pin);
+        expect(t4.salvage.has(4)).toBe(false);
+        expect(t4.refused[0]).toMatchObject({ generation: 4, reason: 'untrusted' });
+        // Once this phone dropped the old key (its own new key, 5), nothing the old key signs at or past 5 is salvage.
+        const k5 = newNamesListKey();
+        s.wrapBy(owen, k5, owen.publicKey, 5, [ada.publicKey]);
+        const t5 = trace(s, owen, pin);
+        s.wrapBy(ada, newNamesListKey(), owen.publicKey, 6);
+        const t6 = trace(s, owen, t5.pin!, 6);
+        expect(t6.salvage.has(6)).toBe(false);
+        expect(t6.salvage.has(3)).toBe(true);
     });
 
     it('a key’s code: 20 digits in five groups, the same typed any way, and different for another key', () => {

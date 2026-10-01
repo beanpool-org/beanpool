@@ -32,7 +32,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    NAMES_COPY as COPY, openNamesList, fetchNamesList, fetchNamesLog, installKeyFor, waitingAdmins, checkAdminInPerson, inPersonResult,
+    NAMES_COPY as COPY, openNamesList, fetchNamesList, fetchNamesLog, installKeyFor, makeNewKeyOnThisPhone, waitingAdmins, checkAdminInPerson, inPersonResult,
     myKeyCheck, shareKeyWith, openEntries, filterEntries, sealedFor, addNamesEntry, editNamesEntry, deleteNamesEntry,
     confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine,
     confirmationActions, logLineText, namesListHtml, setNamesSettings,
@@ -212,18 +212,25 @@ export default function NamesListScreen() {
         startCheck({ pubkey: plan.refusal.maker, callsign: plan.refusal.makerCallsign ?? 'this admin' }, 'trust');
     };
 
-    /** A server put back to an older copy: this phone makes a new key past the newest it took, asked first. */
+    /**
+     * A server put back to an older copy, or a key made with an admin's old phone key: this phone makes a new key past the
+     * newest it took, asked first (for an old phone key, the names under it are sealed again under the new one, and said).
+     */
     const makeNewKey = () => {
         if (!anchor || !identity || !state || plan?.kind !== 'refused' || !plan.refusal.canMakeNew) return;
+        const { refusal } = plan;
         Alert.alert(COPY.makeNewTitle, COPY.makeNew, [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Make a new key', style: 'destructive', onPress: async () => {
                     setBusy(true);
-                    const made = await installKeyFor(anchor, identity, state, plan, AsyncStorage);
+                    const made = await makeNewKeyOnThisPhone(anchor, identity, state, plan, AsyncStorage);
                     setBusy(false);
                     if (!made.ok) { setError(made.message); return; }
-                    void load();
+                    await load();
+                    // After the open's own notice (a key still to check in person, say), so neither hides the other.
+                    const carried = made.value.carried > 0 ? COPY.carriedOver(refusal.makerCallsign, refusal.offered ?? 0, made.value.carried) : null;
+                    if (carried) setNotice((said) => [carried, said].filter(Boolean).join('\n\n'));
                 },
             },
         ]);

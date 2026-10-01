@@ -47,12 +47,24 @@
  *   callsign on a new key and the key this phone trusted under it is gone (a re-key after a lost phone, or whoever runs
  *   the server moving the account to a key of its own), the old key is dropped for good and the new one is trusted only
  *   after an in-person check on this phone, or a trusted admin's signed share. Whoever has the lost phone still has the
- *   old key and can sign anything with it, at any generation, so (PR #1411's third deciding review) what it signs
- *   counts only for this phone's own wraps, at a generation no newer than the newest this phone had taken when it
- *   noticed (`at`, from the pin, never the server's number): the key this phone already holds may have come from them.
- *   It vouches for no one else, at any generation (no holder is added by it), and for nothing past `at` or at or after
- *   the generation this phone dropped it at; no wrap makes it a holder again.
+ *   old key and can sign anything with it, at any generation, so (PR #1411's third and fourth deciding reviews) what it
+ *   signs counts only for this phone's own wraps that this phone already took (`took`: the same wrap, by its digest),
+ *   at a generation no newer than the newest this phone had taken when it noticed (`at`, from the pin, never the
+ *   server's number), and before the generation this phone dropped it at: the key this phone already holds may have
+ *   come from them. It vouches for no one else at any generation, drops no one (its real earlier drops are already
+ *   in `dropped`), and no wrap makes it a holder again. A phone that holds the current key makes a new one as soon as
+ *   it sees the change, whatever the server says (the native keyPlan), so the old key reads nothing written after.
+ * - **This phone's own wraps it took, by generation** (`took`: each one's digest), for the rule above: a wrap a
+ *   replaced key signs again at a generation this phone took, with another key in it, is refused.
  * - **The callsign each trusted key had** (`names`), to notice that.
+ *
+ * ## Salvage (PR #1411's fourth deciding review)
+ *
+ * An admin's old phone may have made a generation this phone never took before it saw their key change (a lost phone's
+ * last new key, with every entry sealed again under it). The walk can't tell that from one made with the lost phone
+ * since, so it never takes it ({@link NamesTrustTrace.salvage} holds it apart): never a key this phone uses, seals
+ * under, or counts as taken. The phone may only make a new key of its own, asked first, and seal again under that new
+ * key what the salvaged key opens, saying that those names can't be told from ones someone else wrote in.
  *
  * ## Checking a key in person (the director's decision on PR #1411, under Marty's delegation, 2026-10-02)
  *
@@ -129,11 +141,16 @@ export interface NamesTrustPin {
      * wraps up to `at`, and add no one.
      */
     replaced: Record<string, { callsign: string; at: number }>;
+    /** This phone's own wraps it took, by generation: each one's digest ({@link namesWrapDigest}). */
+    took: Record<string, string>;
 }
+
+/** How many generations `took` keeps (the newest ones): a generation is made only when an admin goes or a key changes. */
+const TOOK_KEPT = 256;
 
 /** A pin that trusts no one yet but this phone. */
 export function emptyNamesTrustPin(communityId: string, me: string): NamesTrustPin {
-    return { v: 2, communityId, trusted: [me.toLowerCase()], names: {}, newest: 0, dropped: {}, replaced: {} };
+    return { v: 2, communityId, trusted: [me.toLowerCase()], names: {}, newest: 0, dropped: {}, replaced: {}, took: {} };
 }
 
 export function isNamesCommunityId(id: unknown): id is string {
@@ -229,6 +246,12 @@ export interface NamesTrustTrace {
     otherCommunity: boolean;
     /** The server's current generation is older than the newest this phone accepted: a copy rolled back. */
     rolledBack: boolean;
+    /**
+     * This phone's own wraps refused only because a key replaced under an admin's name signed them, past what this phone
+     * took before it saw the change (see the header's Salvage): opened, by generation, but never in `keys`, never
+     * `currentTraced`, never `newest`. Only for sealing again under a new key this phone makes, asked first.
+     */
+    salvage: Map<number, Uint8Array>;
 }
 
 export interface NamesTrustInput {
@@ -267,6 +290,7 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     const me = input.me.publicKey.toLowerCase();
     const none = (otherCommunity: boolean): NamesTrustTrace => ({
         keys: new Map(), trusted: new Set([me]), currentTraced: false, refused: [], firstTrust: null, pin: null, otherCommunity, rolledBack: false,
+        salvage: new Map(),
     });
     if (!isNamesCommunityId(input.communityId)) return none(true);
     if (input.pin && input.pin.communityId !== input.communityId) return none(true);
@@ -298,16 +322,18 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     // that kept the server's number there (PR #1411 before its third review) is held to the phone's own.
     const replaced = new Map<string, number>(Object.entries(input.pin?.replaced ?? {}).filter(([k]) => HEX_KEY.test(k) && k !== me)
         .map(([k, r]) => [k, Math.max(0, Math.min(r.at, pinnedNewest))]));
+    /** This phone's own wraps it took before, by generation: their digests. */
+    const took = new Map<number, string>(Object.entries(tookOf(input.pin?.took)).map(([g, d]) => [Number(g), d]));
     /** Whether a replaced key `k` still counts at generation `g`: up to its `at`, and before this phone dropped it. */
     const replacedReach = (k: string, g: number) => replaced.has(k) && g <= replaced.get(k)! && !(droppedAt.has(k) && droppedAt.get(k)! <= g);
-    /** Whether `k` drops admins at generation `g`: trusted now, or a replaced key within its reach (a drop only takes trust away). */
-    const mayDrop = (k: string, g: number) => trusted.has(k) || replacedReach(k, g);
     /**
-     * Whether `k`'s wrap of generation `g` to `holder` is accepted: signed by a key trusted now; or by a replaced key, for
-     * this phone's own wrap within its reach only. Whoever has the lost phone signs anything with the old key: it
-     * vouches for no one else (PR #1411's third deciding review).
+     * Whether `r` is accepted: signed by a key trusted now; or by a replaced key, for one of this phone's own wraps within
+     * its reach that this phone already took, the same wrap. Whoever has the lost phone signs anything with the old key:
+     * it vouches for no one else, and can't put another key in a generation this phone took (PR #1411's third and
+     * fourth deciding reviews). A replaced key drops no one: only a trusted key's drops count.
      */
-    const vouches = (k: string, g: number, holder: string) => trusted.has(k) || (holder === me && replacedReach(k, g));
+    const vouches = (r: NamesKeyRecord) => trusted.has(r.wrappedBy)
+        || (r.holder === me && replacedReach(r.wrappedBy, r.generation) && took.get(r.generation) === r.wrapDigest);
     const trusted = new Set<string>(input.pin ? input.pin.trusted.map((k) => k.toLowerCase()).filter((k) => HEX_KEY.test(k) && !replaced.has(k) && !droppedAt.has(k)) : []);
     trusted.add(me);
     let firstTrust: string | null = null;
@@ -327,7 +353,7 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     for (const g of generations) {
         const here = valid.filter((r) => r.generation === g);
         for (const r of here) {
-            if (!mayDrop(r.wrappedBy, g)) continue;
+            if (!trusted.has(r.wrappedBy)) continue;
             // A maker naming itself as dropped means nothing: it signs the key it holds.
             for (const d of r.drops) {
                 if (d === me || d === r.wrappedBy) continue;
@@ -340,7 +366,7 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
             changed = false;
             for (const r of here) {
                 const id = `${r.holder}|${r.generation}`;
-                if (accepted.has(id) || !vouches(r.wrappedBy, g, r.holder)) continue;
+                if (accepted.has(id) || !vouches(r)) continue;
                 // A dropped key comes back only by a trusted admin's wrap made at or after its drop; a replaced key, never here.
                 if (r.holder !== me && (replaced.has(r.holder) || (droppedAt.get(r.holder) ?? 0) > g)) continue;
                 accepted.add(id);
@@ -352,12 +378,20 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     }
 
     const keys = new Map<number, Uint8Array>();
+    const salvage = new Map<number, Uint8Array>();
     const refused: NamesTrustTrace['refused'] = [];
     for (const [g, w] of [...mine.entries()].sort((a, b) => b[0] - a[0])) {
         const id = `${me}|${g}`;
         const wrappedBy = byKey.get(id)!.wrappedBy;
         if (!validKeys.has(id)) { refused.push({ generation: g, wrappedBy, reason: 'unsigned' }); continue; }
-        if (!accepted.has(id)) { refused.push({ generation: g, wrappedBy, reason: 'untrusted' }); continue; }
+        if (!accepted.has(id)) {
+            refused.push({ generation: g, wrappedBy, reason: 'untrusted' });
+            // Salvage: refused only for being past what this phone took from that key before it saw the change.
+            if (replaced.has(wrappedBy) && g > replaced.get(wrappedBy)! && !took.has(g) && !((droppedAt.get(wrappedBy) ?? Infinity) <= g)) {
+                try { salvage.set(g, unwrapNamesListKey(w, input.me.privateKey, me, g)); } catch { /* opens nothing */ }
+            }
+            continue;
+        }
         try {
             keys.set(g, unwrapNamesListKey(w, input.me.privateKey, me, g));
         } catch {
@@ -371,6 +405,9 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     if (!learnt) firstTrust = null;
     const names: Record<string, string> = {};
     for (const [k, n] of Object.entries(input.pin?.names ?? {})) if (trusted.has(k)) names[k] = n;
+    // The own wraps taken now join those taken before (the newest generations, a few hundred at most).
+    for (const g of keys.keys()) took.set(g, byKey.get(`${me}|${g}`)!.wrapDigest);
+    const tookKept = Object.fromEntries([...took.entries()].sort((a, b) => b[0] - a[0]).slice(0, TOOK_KEPT).map(([g, d]) => [String(g), d]));
     return {
         keys,
         trusted,
@@ -383,10 +420,22 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
             dropped: Object.fromEntries([...droppedAt.entries()].filter(([k]) => !trusted.has(k)).sort()),
             replaced: Object.fromEntries(Object.entries(input.pin?.replaced ?? {})
                 .map(([k, r]) => [k, { ...r, at: Math.max(0, Math.min(r.at, pinnedNewest)) }])),
+            took: tookKept,
         } : null,
         otherCommunity: false,
         rolledBack: !!input.pin && input.generation < pinnedNewest,
+        salvage,
     };
+}
+
+/** A pin's `took`, keeping only generations and digests. */
+function tookOf(raw: unknown): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    for (const [g, d] of Object.entries(raw)) {
+        if (/^[1-9]\d{0,15}$/.test(g) && Number.isSafeInteger(Number(g)) && typeof d === 'string' && HEX_DIGEST.test(d)) out[g] = d;
+    }
+    return out;
 }
 
 /** A pin read back from storage (this version's, or the first version's, which knew only whom it trusted), or null. */
@@ -409,6 +458,7 @@ export function readNamesTrustPin(raw: unknown): NamesTrustPin | null {
         newest: Number.isSafeInteger(p.newest) && (p.newest as number) > 0 ? p.newest as number : 0,
         dropped: record(p.dropped, isGeneration),
         replaced: record(p.replaced, isReplaced),
+        took: tookOf((p as { took?: unknown }).took),
     };
 }
 

@@ -18,7 +18,7 @@ A floor never stops anyone the store cannot help. Your server reads Google Play'
 In .env:
 
 - **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.2.60. Unset, it is 1.0.75, below every app in use.
-- **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION.
+- **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.
 - **MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.
 - **MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone.
 
@@ -34,7 +34,7 @@ A floor that is not a version is ignored. A grace date that is not a date turns 
 - **One kind of phone at a time** when the stores differ. If the App Store does not have the new version yet, give iPhones a later grace date of their own (MIN_APP_VERSION_FROM_IOS): an iPhone floor that waited for the store applies as soon as the store has the version, so without a later date iPhones would stop with no banner first.
 - **Watch the card.** After the date, members update at their next start, and the numbers below the floor fall.
 
-Apps from before the full-screen update show the banner only, whatever the date. They do not say their version, so the card does not count them.
+Apps from before the full-screen update show the banner only, whatever the date. They do not say their version, so the card does not count them, and they do not say which kind of phone they are on, so your server gives them the lower of the two floors: MIN_APP_VERSION, until you have raised both kinds of phone past it. While you raise one kind of phone at a time, they see no banner; once both are raised, they see it with the lower of the two numbers.
 
 ## Undoing it
 

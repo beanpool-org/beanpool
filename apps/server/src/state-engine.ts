@@ -21,7 +21,7 @@ import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
-import { getAppStoreVersions, getMinAppVersion, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
+import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
@@ -6395,7 +6395,9 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
         // the app says so and will not let you dismiss it. `appVersions` is what the
         // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
         // downloaded onto a phone on a metered off-grid connection to learn one number.
-        minAppVersion: getMinAppVersion(),
+        // An app that names its platform gets that platform's floor here instead (routes/community.ts); one that
+        // doesn't (every build before the full-screen update) gets the lower of the two, never one above its own.
+        minAppVersion: getUnnamedAppFloor(),
         // From the build that has the full-screen block (apps/native/utils/force-update.ts): each phone platform's floor
         // as enforced (only once that store has the build), and whether it stops an app yet (the grace date,
         // `minAppVersionFrom`, on this node's clock). Builds before it read `minAppVersion` above, as a banner.

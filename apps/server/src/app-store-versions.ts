@@ -67,6 +67,20 @@ export function getPlatformFloor(platform: AppPlatform): string {
 }
 
 /**
+ * The banner's number for an app that does not say which kind of phone it is on (health's `minAppVersion` without an
+ * X-BeanPool-App header): every phone app from before the full-screen update, and anything else that reads health. The
+ * lower of the two platforms' floors, so no app is ever shown a floor above its own platform's: an operator raising
+ * one kind of phone at a time (MIN_APP_VERSION_ANDROID / _IOS) leaves these apps' banner where it was until both are
+ * raised, and then they see it too. With MIN_APP_VERSION alone (or both platforms at one floor) it is that floor, as it
+ * always was. A banner only: those builds have no full-screen update.
+ */
+export function getUnnamedAppFloor(): string {
+    const android = getPlatformFloor('android');
+    const ios = getPlatformFloor('ios');
+    return isOlder(ios, android) ? ios : android;
+}
+
+/**
  * When a floor starts to stop apps below it (the grace window): MIN_APP_VERSION_FROM_IOS / _ANDROID, else
  * MIN_APP_VERSION_FROM, as a date or a date and time ("2026-10-15", "2026-10-15T09:00:00+10:00"; a bare date is
  * midnight UTC). Before it the app shows its banner only; from it, the full-screen "Update required" at its next safe

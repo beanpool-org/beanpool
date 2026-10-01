@@ -880,7 +880,9 @@ router.get('/api/community/health', async (ctx) => {
     // An app that names its platform (X-BeanPool-App, app-version-counts.ts) gets that platform's floor as `minAppVersion`:
     // the number its banner reads (apps/native GlobalHeader, utils/app-version.ts evaluateUpdate), so a floor set for one
     // platform (MIN_APP_VERSION_IOS / _ANDROID) shows its "required" banner in the grace window before the full-screen
-    // update. Anything else (an older app, the web app, a monitor) gets MIN_APP_VERSION, as always.
+    // update. Anything else (an older app, the web app, a monitor) can't say which kind of phone it is on, and gets the
+    // lower of the two platforms' floors (getUnnamedAppFloor): MIN_APP_VERSION, as always, unless both platforms have
+    // been raised past it.
     const health = getPublicCommunityHealth();
     const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
     ctx.vary(APP_VERSION_HEADER);

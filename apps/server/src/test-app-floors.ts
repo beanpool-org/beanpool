@@ -33,7 +33,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { logger } from './logger.js';
 import {
     applyCheckResult, getPlatformFloor, getFloorFrom, getMinAppVersionFrom, getPlatformFloorDetail, getAppFloors,
-    __resetAppStoreVersionsForTest,
+    getUnnamedAppFloor, __resetAppStoreVersionsForTest,
 } from './app-store-versions.js';
 import {
     parseAppVersionHeader, noteAppVersion, getAppVersionCounts, __resetAppVersionCountsForTest, APP_VERSION_HEADER,
@@ -115,6 +115,22 @@ async function main(): Promise<void> {
     assert(getPlatformFloor('android') === '1.2.40', 'and Android keeps MIN_APP_VERSION');
     setEnv({ MIN_APP_VERSION_ANDROID: 'soon' });
     assert(getPlatformFloor('android') === '1.2.40', 'a platform floor that is not a version is ignored: the generic one stands');
+    setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_ANDROID: undefined });
+
+    // An app that can't say which kind of phone it is on (every build before the full-screen update): the lower of the
+    // two platforms' floors, never one above its own platform's (#1415's deciding review: with only per-platform floors
+    // set, those apps got no banner at all).
+    assert(getUnnamedAppFloor() === '1.0.75', 'no floor set: an app that names no platform has the default');
+    setEnv({ MIN_APP_VERSION: '1.2.40' });
+    assert(getUnnamedAppFloor() === '1.2.40', 'MIN_APP_VERSION alone: it, as always');
+    setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_ANDROID: '1.2.60' });
+    assert(getUnnamedAppFloor() === '1.0.75', 'Android raised alone: an app that names no platform may be an iPhone, so its floor stays');
+    setEnv({ MIN_APP_VERSION_IOS: '1.2.58' });
+    assert(getUnnamedAppFloor() === '1.2.58', 'both raised: the lower of the two, which every platform has reached');
+    setEnv({ MIN_APP_VERSION_IOS: '1.2.61' });
+    assert(getUnnamedAppFloor() === '1.2.60', 'whichever platform is the lower one');
+    setEnv({ MIN_APP_VERSION: '1.3.0', MIN_APP_VERSION_ANDROID: undefined, MIN_APP_VERSION_IOS: '1.2.50' });
+    assert(getUnnamedAppFloor() === '1.2.50', 'a platform held below MIN_APP_VERSION: the unnamed app is held to no more than it');
     setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_ANDROID: undefined });
 
     assert(getFloorFrom().iso === null && !getFloorFrom().invalid && getMinAppVersionFrom() === null, 'no grace date: null, and not invalid');
@@ -244,7 +260,7 @@ async function main(): Promise<void> {
 
     let r = await get('/api/community/health', null);
     assert(r.status === 200, `health answers (got ${r.status})`);
-    assert(r.body.minAppVersion === '1.0.75', 'minAppVersion, for builds before this one, is unchanged');
+    assert(r.body.minAppVersion === '1.2.60', `minAppVersion, for builds before this one: both platforms raised to 1.2.60, so 1.2.60 (got ${r.body.minAppVersion})`);
     assert(r.body.minAppVersionFrom === '2026-01-01T00:00:00.000Z', 'minAppVersionFrom is served');
     assert(JSON.stringify(r.body.appFloors?.android) === '{"min":"1.2.60","blocking":true}',
         `Android: enforced and blocking (got ${JSON.stringify(r.body.appFloors?.android)})`);
@@ -259,9 +275,14 @@ async function main(): Promise<void> {
     assert(r.body.minAppVersion === '1.2.59', `an iPhone app's is the iOS floor (got ${r.body.minAppVersion})`);
     assert(String(r.headers?.vary ?? '').toLowerCase().includes('x-beanpool-app'), `the answer varies by the header (Vary: ${r.headers?.vary})`);
     r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: 'nonsense' });
-    assert(r.body.minAppVersion === '1.0.75', `a garbled header gets MIN_APP_VERSION (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.2.59', `a garbled header gets the lower of the two floors (got ${r.body.minAppVersion})`);
     r = await get('/api/community/health', null);
-    assert(r.body.minAppVersion === '1.0.75', 'and so does a request without one (an older app, the web app)');
+    assert(r.body.minAppVersion === '1.2.59', `and so does a request without one (an older app, the web app) (got ${r.body.minAppVersion})`);
+    setEnv({ MIN_APP_VERSION_IOS: undefined });
+    r = await get('/api/community/health', null);
+    assert(r.body.minAppVersion === '1.0.75', `Android alone raised: an app that names no platform keeps MIN_APP_VERSION (got ${r.body.minAppVersion})`);
+    r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 android' });
+    assert(r.body.minAppVersion === '1.2.60', `while an Android app that names itself gets Android's (got ${r.body.minAppVersion})`);
     setEnv({ MIN_APP_VERSION_IOS: '1.2.60' });
     assert(r.body.flags === undefined, 'and still carries no flags');
 

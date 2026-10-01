@@ -858,7 +858,7 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             const key = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id=? AND order_num=?`)
                 .get(postId, Number(orderNum)) as any)?.storage_key as string | undefined;
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
-            if (r.changes > 0 && key) afterTransactionCommit(() => deleteStoredObjects([key]));
+            if (r.changes > 0 && key) afterTransactionCommit(() => deleteStoredObjects(db, [key]));
             return r.changes > 0;
         }
         case 'event_rsvps': {
@@ -889,7 +889,7 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
                 `SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id=?)`
             ).all(rowKey) as any[]).map(r => r.storage_key as string);
             db.prepare(`DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=?)`).run(rowKey);
-            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomedObjects));
             db.prepare(`DELETE FROM messages WHERE conversation_id=?`).run(rowKey);
             db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=?`).run(rowKey);
             const r = db.prepare(`DELETE FROM conversations WHERE id=?`).run(rowKey);

@@ -77,7 +77,7 @@ export function writeMessageTombstone(messageId: string, row: any, removedBy: st
     let written!: MessageTombstone;
     db.transaction(() => {
         const { tombstone, photoKey } = tombstoneRow(s, messageId, row, removedBy, markerText, {});
-        if (photoKey) afterTransactionCommit(() => deleteStoredObjects([photoKey]));
+        if (photoKey) afterTransactionCommit(() => deleteStoredObjects(db, [photoKey]));
         written = tombstone;
     })();
     return written;
@@ -125,7 +125,7 @@ export function blankMessagesOf(authorPubkey: string): number {
             db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE author_pubkey = ?)').run(authorPubkey);
             for (const { storage_key } of stray) if (storage_key) photoKeys.push(storage_key);
         }
-        if (photoKeys.length > 0) afterTransactionCommit(() => deleteStoredObjects(photoKeys));
+        if (photoKeys.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, photoKeys));
     })();
     return lines.length;
 }

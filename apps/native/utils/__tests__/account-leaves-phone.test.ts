@@ -304,9 +304,13 @@ describe('each community\'s cached copy', () => {
         const removed = vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => uri);
         // The database file goes last: a WAL or journal it left behind would be replayed into the next copy of that name.
         const files = (name: string) => ['-wal', '-shm', '-journal', ''].map((s) => `${dir}/${name}${s}`);
-        // Each community once, and a file that can't be removed doesn't stop the rest.
+        // Each community once, and a file that can't be removed doesn't stop the rest. Each under its own name
+        // (nodes.ts getDatabaseFilenameForNode) and under the name from before every community had a file of its own,
+        // in case that copy never moved (cache-file-migration.ts).
         expect(removed).toEqual([
+            ...files('community_mullum.beanpool.org_0f80ace00fd23a4b8c3a33f625a40a87.db'),
             ...files('beanpool_https___mullum_beanpool_org.db'),
+            ...files('community_bellingen.beanpool.org_d648adb8e6407e3d5a3dc5448b440b2a.db'),
             ...files('beanpool_https___bellingen_beanpool_org.db'),
         ]);
         for (const [, options] of vi.mocked(FileSystem.deleteAsync).mock.calls) expect(options).toEqual({ idempotent: true });
